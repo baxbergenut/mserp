@@ -1,0 +1,73 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/joho/godotenv"
+
+	"mserp/internal/config"
+	"mserp/internal/datatruck"
+	"mserp/internal/db"
+	"mserp/internal/httpapi"
+	"mserp/internal/jobs"
+	"mserp/internal/repository"
+)
+
+func main() {
+	_ = godotenv.Load()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("load config", "error", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("connect database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
+	repo := repository.NewLoadRepository(pool)
+	job := jobs.NewSyncLoadsJob(client, repo, logger)
+	router := httpapi.NewRouter(logger, job, pool)
+
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		logger.Info("http server starting", "addr", server.Addr)
+		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			logger.Error("http server failed", "error", serveErr)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
+		logger.Error("shutdown server", "error", shutdownErr)
+	}
+}

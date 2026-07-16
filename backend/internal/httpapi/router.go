@@ -1,0 +1,44 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"mserp/internal/jobs"
+)
+
+func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool) http.Handler {
+	r := chi.NewRouter()
+
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := pool.Ping(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	})
+
+	r.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) {
+		result, err := job.Run(r.Context())
+		if err != nil {
+			logger.Error("sync loads failed", "error", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	})
+
+	return r
+}
