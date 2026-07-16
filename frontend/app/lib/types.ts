@@ -30,3 +30,15 @@ export type SortKey =
   | "PerMileRevenue";
 
 export type SortDir = "asc" | "desc";
+
+export type PeriodKey =
+  | "today"
+  | "thisWeek"
+  | "thisMonth"
+  | "lastMonth"
+  | "allTime";
+
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+}

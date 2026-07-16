@@ -1,6 +1,7 @@
-import type { Load } from "../types";
+import type { Load } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_LOADS_API_URL ?? "http://localhost:8080";
+const API_BASE =
+  process.env.NEXT_PUBLIC_LOADS_API_URL ?? "http://localhost:8080";
 
 export async function fetchLoads(): Promise<Load[]> {
   const res = await fetch(`${API_BASE}/loads`, { cache: "no-store" });

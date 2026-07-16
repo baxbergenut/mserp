@@ -1,24 +1,10 @@
 "use client";
 
-import { statusLabel } from "../utils";
+import { X } from "lucide-react";
+import { statusLabel, type Filters, EMPTY_FILTERS } from "../lib/utils";
 
-export interface Filters {
-  status: string;
-  customer: string;
-  dispatcher: string;
-  driver: string;
-  pickupFrom: string;
-  pickupTo: string;
-}
-
-export const EMPTY_FILTERS: Filters = {
-  status: "",
-  customer: "",
-  dispatcher: "",
-  driver: "",
-  pickupFrom: "",
-  pickupTo: "",
-};
+export type { Filters };
+export { EMPTY_FILTERS };
 
 interface FilterBarProps {
   filters: Filters;
@@ -46,7 +32,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600"
+      className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600"
     >
       <option value="">{placeholder}</option>
       {options.map((opt) => (
@@ -102,23 +88,24 @@ export function FilterBar({
           type="date"
           value={filters.pickupFrom}
           onChange={(e) => set({ pickupFrom: e.target.value })}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600 [color-scheme:dark]"
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600"
         />
         <span className="text-[13px] text-zinc-700">–</span>
         <input
           type="date"
           value={filters.pickupTo}
           onChange={(e) => set({ pickupTo: e.target.value })}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600 [color-scheme:dark]"
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600"
         />
       </div>
 
       {hasActiveFilters && (
         <button
           onClick={() => onChange(EMPTY_FILTERS)}
-          className="text-[13px] text-zinc-500 underline decoration-zinc-700 underline-offset-2 transition-colors hover:text-zinc-300"
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
         >
-          Clear filters
+          <X className="h-3 w-3" />
+          Clear
         </button>
       )}
     </div>

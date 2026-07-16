@@ -1,15 +1,14 @@
-import { statusKey, statusLabel } from "../utils";
+import { statusKey, statusLabel } from "../lib/utils";
 
-// Ordered keyword -> color rules. First match wins, so put more specific
-// keywords first. Anything unmatched falls back to neutral gray.
+// Ordered keyword -> color rules. First match wins.
 const STATUS_COLOR_RULES: Array<[string, string]> = [
-  ["cancel", "#E0776D"], // muted red
-  ["invoice", "#5FA8A0"], // teal
+  ["cancel", "#E0776D"],
+  ["invoice", "#5FA8A0"],
   ["paid", "#5FA8A0"],
-  ["deliver", "#7FB37A"], // muted green
-  ["transit", "#D9A75B"], // muted amber
+  ["deliver", "#7FB37A"],
+  ["transit", "#D9A75B"],
   ["progress", "#D9A75B"],
-  ["dispatch", "#6C8EEF"], // steel blue
+  ["dispatch", "#6C8EEF"],
   ["book", "#8A8A93"],
   ["pending", "#8A8A93"],
 ];

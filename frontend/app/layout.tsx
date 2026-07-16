@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Sidebar } from "./components/Sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "mserp",
-  description: "mserp",
+  title: "MSERP",
+  description: "MS Express ERP — Loads, dispatch & revenue management",
 };
 
 export default function RootLayout({
@@ -27,7 +28,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="h-full flex flex-col">{children}</body>
+      <body className="h-full">
+        <div className="flex h-full">
+          <Sidebar />
+          <main className="flex-1 overflow-auto">
+            <div className="mx-auto max-w-7xl px-6 py-6">{children}</div>
+          </main>
+        </div>
+      </body>
     </html>
   );
 }
