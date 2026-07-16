@@ -36,11 +36,11 @@ type Load struct {
 	LoadID                  *string               `json:"load_id"`
 	ShipmentID              *string               `json:"shipment_id"`
 	Status                  string                `json:"status"`
-	LoadPay                 *string               `json:"load_pay"`
-	TotalOtherPay           *string               `json:"total_other_pay"`
-	TotalPay                *string               `json:"total_pay"`
-	TotalMiles              *string               `json:"total_miles"`
-	PerMileRevenue          *string               `json:"per_mile_revenue"`
+	LoadPay                 *FlexibleString       `json:"load_pay"`
+	TotalOtherPay           *FlexibleString       `json:"total_other_pay"`
+	TotalPay                *FlexibleString       `json:"total_pay"`
+	TotalMiles              *FlexibleString       `json:"total_miles"`
+	PerMileRevenue          *FlexibleString       `json:"per_mile_revenue"`
 	DispatcherFullName      *string               `json:"dispatcher__full_name"`
 	CustomerCompanyName     *string               `json:"customer__company_name"`
 	PickupAppointmentTime   *time.Time            `json:"pickup_appointment_time"`
@@ -62,6 +62,30 @@ type Trip struct {
 type AssignedDriverNTruck struct {
 	DriverFullName  *string `json:"driver_full_name"`
 	TruckUnitNumber *string `json:"truck_unit_number"`
+}
+
+type FlexibleString string
+
+func (f *FlexibleString) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "null" {
+		*f = ""
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		*f = FlexibleString(value)
+		return nil
+	}
+	*f = FlexibleString(trimmed)
+	return nil
+}
+
+func (f FlexibleString) String() string {
+	return string(f)
 }
 
 func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, error) {

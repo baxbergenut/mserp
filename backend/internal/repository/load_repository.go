@@ -101,11 +101,11 @@ func LoadToRecord(load datatruck.Load, payload []byte, syncedAt time.Time) (Load
 		ID:                      load.ID,
 		LoadID:                  strings.TrimSpace(*load.LoadID),
 		Status:                  load.Status,
-		LoadPay:                 stringOrDefault(load.LoadPay, "0"),
-		TotalOtherPay:           stringOrDefault(load.TotalOtherPay, "0"),
-		TotalPay:                stringOrDefault(load.TotalPay, "0"),
-		TotalMiles:              load.TotalMiles,
-		PerMileRevenue:          load.PerMileRevenue,
+		LoadPay:                 flexibleStringOrDefault(load.LoadPay, "0"),
+		TotalOtherPay:           flexibleStringOrDefault(load.TotalOtherPay, "0"),
+		TotalPay:                flexibleStringOrDefault(load.TotalPay, "0"),
+		TotalMiles:              flexibleStringPtr(load.TotalMiles),
+		PerMileRevenue:          flexibleStringPtr(load.PerMileRevenue),
 		DispatcherName:          load.DispatcherFullName,
 		CustomerName:            load.CustomerCompanyName,
 		PickupTime:              load.PickupTime,
@@ -180,6 +180,28 @@ func nullableString(value *string) any {
 	trimmed := strings.TrimSpace(*value)
 	if trimmed == "" {
 		return nil
+	}
+	return trimmed
+}
+
+func flexibleStringPtr(value *datatruck.FlexibleString) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(value.String())
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func flexibleStringOrDefault(value *datatruck.FlexibleString, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	trimmed := strings.TrimSpace(value.String())
+	if trimmed == "" {
+		return fallback
 	}
 	return trimmed
 }
