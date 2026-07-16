@@ -9,9 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mserp/internal/jobs"
+	"mserp/internal/repository"
 )
 
-func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool) http.Handler {
+func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool, loadRepo *repository.LoadRepository) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +39,17 @@ func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool) 
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)
+	})
+	r.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
+		loads, err := loadRepo.GetLoads(r.Context())
+		if err != nil {
+			logger.Error("get loads failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(loads)
 	})
 
 	return r

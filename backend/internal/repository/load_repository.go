@@ -216,5 +216,58 @@ func stringOrDefault(value *string, fallback string) string {
 	}
 	return trimmed
 }
+func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
+	rows, err := r.pool.Query(ctx, selectLoadsSQL)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []LoadRecord
+	for rows.Next() {
+		var rec LoadRecord
+		if err := rows.Scan(
+			&rec.ID,
+			&rec.LoadID,
+			&rec.ShipmentID,
+			&rec.Status,
+			&rec.LoadPay,
+			&rec.TotalOtherPay,
+			&rec.TotalPay,
+			&rec.TotalMiles,
+			&rec.PerMileRevenue,
+			&rec.DispatcherName,
+			&rec.DriverName,
+			&rec.TeamDriverName,
+			&rec.TruckUnit,
+			&rec.CustomerName,
+			&rec.PickupTime,
+			&rec.DeliveryTime,
+			&rec.PickupAppointmentTime,
+			&rec.DeliveryAppointmentTime,
+			&rec.CreatedDatetime,
+			&rec.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+const selectLoadsSQL = `
+SELECT
+	id, load_id, shipment_id, status,
+	load_pay, total_other_pay, total_pay, total_miles, per_mile_revenue,
+	dispatcher_name, driver_name, team_driver_name, truck_unit, customer_name,
+	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
+	created_datetime, synced_at
+FROM loads
+ORDER BY id`
 
 var ErrMissingLoadID = errors.New("datatruck load is missing load_id")

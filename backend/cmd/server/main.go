@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
 	"mserp/internal/config"
@@ -43,11 +44,17 @@ func main() {
 	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
 	repo := repository.NewLoadRepository(pool)
 	job := jobs.NewSyncLoadsJob(client, repo, logger)
-	router := httpapi.NewRouter(logger, job, pool)
+	router := httpapi.NewRouter(logger, job, pool, repo)
+	handler := cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+	})(router)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           router,
+		Handler:           handler,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
