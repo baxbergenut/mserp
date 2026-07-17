@@ -5,14 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Truck,
+  Users,
   PanelLeftClose,
   PanelLeftOpen,
+  Truck,
+  Package,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/loads", label: "Loads", icon: Truck },
+  { href: "/loads", label: "Loads", icon: Package },
+  { href: "/drivers", label: "Drivers", icon: Users },
+  { href: "/trucks", label: "Trucks", icon: Truck },
 ] as const;
 
 export function Sidebar() {
@@ -64,7 +68,9 @@ export function Sidebar() {
             >
               <Icon
                 className={`h-[18px] w-[18px] shrink-0 ${
-                  active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"
+                  active
+                    ? "text-accent"
+                    : "text-zinc-500 group-hover:text-zinc-300"
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
