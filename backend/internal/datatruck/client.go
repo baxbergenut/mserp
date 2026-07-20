@@ -3,11 +3,19 @@ package datatruck
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	maxRequestAttempts = 5
+	maxRetryDelay      = 60 * time.Second
 )
 
 type Client struct {
@@ -99,7 +107,7 @@ func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, 
 	}
 
 	query := url.Values{}
-	query.Set("page_size", "10")
+	query.Set("page_size", "100")
 	query.Set("ordering", "-created_datetime")
 	query.Set("filter", string(filter))
 
@@ -124,29 +132,75 @@ func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, 
 }
 
 func (c *Client) doRequest(ctx context.Context, requestURL string) (*LoadListResponse, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Authorization", "Token "+c.apiKey)
-	request.Header.Set("Content-Type", "application/json")
+	for attempt := 0; attempt < maxRequestAttempts; attempt++ {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set("Authorization", "Token "+c.apiKey)
+		request.Header.Set("Content-Type", "application/json")
 
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
+		response, err := c.httpClient.Do(request)
+		if err != nil {
+			return nil, err
+		}
 
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("datatruck request failed: %s", response.Status)
+		if response.StatusCode == http.StatusOK {
+			var payload LoadListResponse
+			decodeErr := json.NewDecoder(response.Body).Decode(&payload)
+			closeErr := response.Body.Close()
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
+			if closeErr != nil {
+				return nil, closeErr
+			}
+			return &payload, nil
+		}
+
+		status := response.Status
+		retryAfter := response.Header.Get("Retry-After")
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+		_ = response.Body.Close()
+
+		if !isRetryableStatus(response.StatusCode) || attempt == maxRequestAttempts-1 {
+			return nil, fmt.Errorf("datatruck request failed: %s", status)
+		}
+		if err := waitForRetry(ctx, retryDelay(retryAfter, attempt)); err != nil {
+			return nil, err
+		}
 	}
 
-	var payload LoadListResponse
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
+	return nil, errors.New("datatruck request retry limit reached")
+}
 
-	return &payload, nil
+func isRetryableStatus(status int) bool {
+	return status == http.StatusTooManyRequests ||
+		status == http.StatusBadGateway ||
+		status == http.StatusServiceUnavailable ||
+		status == http.StatusGatewayTimeout
+}
+
+func retryDelay(retryAfter string, attempt int) time.Duration {
+	trimmed := strings.TrimSpace(retryAfter)
+	if seconds, err := strconv.Atoi(trimmed); err == nil && seconds >= 0 {
+		return min(time.Duration(seconds)*time.Second, maxRetryDelay)
+	}
+	if retryAt, err := http.ParseTime(trimmed); err == nil {
+		return min(max(time.Until(retryAt), 0), maxRetryDelay)
+	}
+	return min(time.Second*time.Duration(1<<attempt), maxRetryDelay)
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func resolveNextURL(baseURL, nextURL string) string {

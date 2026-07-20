@@ -42,9 +42,10 @@ func main() {
 	defer pool.Close()
 
 	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
-	repo := repository.NewLoadRepository(pool)
-	job := jobs.NewSyncLoadsJob(client, repo, logger)
-	router := httpapi.NewRouter(logger, job, pool, repo)
+	loadRepo := repository.NewLoadRepository(pool)
+	fleetRepo := repository.NewFleetRepository(pool)
+	job := jobs.NewSyncLoadsJob(client, loadRepo, logger)
+	router := httpapi.NewRouter(logger, job, pool, loadRepo, fleetRepo)
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -53,10 +54,13 @@ func main() {
 	})(router)
 
 	server := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           handler,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		Addr:        ":" + cfg.Port,
+		Handler:     handler,
+		ReadTimeout: 15 * time.Second,
+		// DataTruck sync is currently synchronous and may span several API
+		// pages or a rate-limit retry. Keep the connection open long enough to
+		// return the real result instead of surfacing "Failed to fetch".
+		WriteTimeout:      5 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}

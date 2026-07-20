@@ -17,8 +17,9 @@ type SyncLoadsJob struct {
 }
 
 type SyncLoadsResult struct {
-	Fetched int `json:"fetched"`
-	Saved   int `json:"saved"`
+	Fetched int       `json:"fetched"`
+	Saved   int       `json:"saved"`
+	Since   time.Time `json:"since"`
 }
 
 func NewSyncLoadsJob(client *datatruck.Client, repo *repository.LoadRepository, logger *slog.Logger) *SyncLoadsJob {
@@ -26,6 +27,8 @@ func NewSyncLoadsJob(client *datatruck.Client, repo *repository.LoadRepository, 
 }
 
 func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
+	// Re-fetch a rolling one-week window so recent changes in DataTruck are
+	// reflected locally as well as newly created loads.
 	since := time.Now().UTC().AddDate(0, 0, -7)
 	loads, err := j.client.FetchLoadsSince(ctx, since)
 	if err != nil {
@@ -51,7 +54,7 @@ func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
 		return SyncLoadsResult{}, err
 	}
 
-	result := SyncLoadsResult{Fetched: len(loads), Saved: len(records)}
-	j.logger.Info("sync loads complete", "fetched", result.Fetched, "saved", result.Saved)
+	result := SyncLoadsResult{Fetched: len(loads), Saved: len(records), Since: since}
+	j.logger.Info("sync loads complete", "since", since, "fetched", result.Fetched, "saved", result.Saved)
 	return result, nil
 }

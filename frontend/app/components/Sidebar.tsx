@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   Truck,
   Package,
+  Headset,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/trucks", label: "Trucks", icon: Truck },
+  { href: "/dispatchers", label: "Dispatchers", icon: Headset },
 ] as const;
 
 export function Sidebar() {

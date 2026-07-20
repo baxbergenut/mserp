@@ -12,7 +12,13 @@ import (
 	"mserp/internal/repository"
 )
 
-func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool, loadRepo *repository.LoadRepository) http.Handler {
+func NewRouter(
+	logger *slog.Logger,
+	job *jobs.SyncLoadsJob,
+	pool *pgxpool.Pool,
+	loadRepo *repository.LoadRepository,
+	fleetRepo *repository.FleetRepository,
+) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -33,12 +39,11 @@ func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool, 
 		result, err := job.Run(r.Context())
 		if err != nil {
 			logger.Error("sync loads failed", "error", err)
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			writeAPIError(w, http.StatusBadGateway, "DataTruck load sync failed: "+err.Error())
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(result)
+		writeJSON(w, http.StatusOK, result)
 	})
 	r.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
 		loads, err := loadRepo.GetLoads(r.Context())
@@ -51,6 +56,8 @@ func NewRouter(logger *slog.Logger, job *jobs.SyncLoadsJob, pool *pgxpool.Pool, 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(loads)
 	})
+
+	registerFleetRoutes(r, logger, fleetRepo)
 
 	return r
 }
