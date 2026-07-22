@@ -14,9 +14,11 @@ MSERP is an internal ERP for MS Express Inc. It has two independently run apps:
 - `frontend/`: Next.js 16 App Router UI using React 19, TypeScript, Tailwind CSS
   4, and Lucide icons.
 
-The browser talks directly to the Go API. Authentication uses database-backed
-users and opaque HttpOnly-cookie sessions. There is no container setup,
-migration runner, or generated API client in this repository.
+In local development the browser talks directly to the Go API. Production uses
+the same-origin Nginx `/api/` reverse proxy. Authentication uses database-backed
+users and opaque HttpOnly-cookie sessions. There is no container setup or
+generated API client. The API does not run migrations on startup; the production
+deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Start every task here
 
@@ -278,13 +280,98 @@ Prefer these targeted searches over recursively reading the repository.
 
 ## VPS deployment
 
-- `deploy/mserp-api.service` is the hardened systemd unit for the Go API.
-- `deploy/nginx-mserp.conf` serves the static frontend and proxies `/api/` to
-  the loopback-only API. Its IP address, port, and TLS paths are deployment
-  specific and must be reviewed before reuse on another host.
-- `.github/workflows/ci-deploy.yml` tests pull requests and deploys pushes to
-  `main`. GitHub builds artifacts; production does not build from a Git checkout.
-- `deploy/mserp-deploy` verifies release archives, backs up PostgreSQL, applies
-  migrations recorded in `schema_migrations`, atomically activates the release,
-  and performs health-check rollback. Keep migrations backward-compatible with
-  the previous release because application rollback does not reverse migrations.
+### Production topology
+
+- Canonical URL: `https://erp.msexpressinc.net`.
+- VPS: `137.184.102.22`. DNS is managed by Wix; the `erp` A record points to
+  this address.
+- Nginx listens on ports 80 and 443, redirects HTTP to HTTPS, serves the static
+  frontend from `/opt/mserp/current/frontend`, and proxies `/api/` to
+  `127.0.0.1:18080`. The original self-signed IP endpoint on port 8443 remains
+  available only as a legacy fallback.
+- The domain certificate is managed by Certbot/Let's Encrypt under
+  `/etc/letsencrypt/live/erp.msexpressinc.net`. Renewal uses the webroot
+  `/var/www/letsencrypt`, the enabled `certbot.timer`, and the root-owned deploy
+  hook `/usr/local/sbin/mserp-certbot-deploy` to validate and reload Nginx.
+- The Go API is `mserp-api.service`, bound only to `127.0.0.1:18080`. Its
+  working directory is `/etc/mserp` so runtime environment files stay outside
+  releases.
+- PostgreSQL 16 is the existing `postgresql@16-main` service. MSERP uses database
+  `mserp` and application role `mserp_app`; never record its password here.
+- `fuelbot.service` on port 5000 is an unrelated production service. Do not
+  restart, reconfigure, move, or reuse its port. Do not alter other VPS services
+  unless the user explicitly expands the task.
+- UFW allows SSH, ports 80/443, the legacy 8443 endpoint, and PostgreSQL only
+  from its existing private-network rule. Preserve this boundary.
+
+### Releases, configuration, and database safety
+
+- Releases live at `/opt/mserp/releases/<40-character-git-sha>` and
+  `/opt/mserp/current` is the atomically updated symlink. Production does not
+  contain or deploy from a Git checkout; do not SSH in and run `git pull`.
+- Runtime environment and secret files live under `/etc/mserp`, primarily
+  `/etc/mserp/mserp.env`. Never copy them into a release, artifact, log, commit,
+  or tool output. Production `FRONTEND_ORIGIN` is
+  `https://erp.msexpressinc.net`.
+- The live Nginx site is `/etc/nginx/sites-available/mserp`, enabled through
+  `/etc/nginx/sites-enabled/mserp`. Keep `deploy/nginx-mserp.conf` as its
+  version-controlled source. Always back up the live file, run `nginx -t`, and
+  reload rather than restart Nginx when applying a manual configuration update.
+- The production frontend must be built with `NEXT_PUBLIC_API_URL=/api`. A
+  direct IP API URL breaks host-only SameSite authentication cookies and causes
+  CORS/login loops. Nginx requires frontend asset revalidation because release
+  archives normalize timestamps to the Unix epoch; preserve the `expires epoch`
+  directives.
+- Migration `009_add_schema_migrations.sql` created the migration ledger. The
+  deploy helper applies only unrecorded numbered migrations. New schema changes
+  must update `init.sql`, add the next numbered migration, and remain compatible
+  with the previous app release because app rollback does not undo migrations.
+- Each deployment creates a custom-format PostgreSQL backup in
+  `/var/backups/mserp` before migrations or release activation. Do not delete
+  backups casually.
+
+### CI/CD and access model
+
+- `.github/workflows/ci-deploy.yml` runs all tests/builds on pull requests.
+  Every push or merge to `main` automatically builds and deploys production;
+  `workflow_dispatch` redeploys the selected `main` commit. App updates should
+  normally go through a branch and PR, then be verified through the resulting
+  `main` Actions run.
+- GitHub Actions builds the Linux API and static frontend, packages numbered SQL
+  migrations, uploads the checksum-verified artifact, and connects as the
+  restricted `mserp-deploy` user. Repository secrets are
+  `MSERP_DEPLOY_SSH_KEY` and `MSERP_DEPLOY_KNOWN_HOSTS`; never print or replace
+  them during routine work.
+- The deploy user owns only `/var/lib/mserp-deploy/incoming`, uses a restricted
+  SSH key, and may sudo only `/usr/local/sbin/mserp-deploy`. Do not broaden its
+  filesystem ownership or sudo permissions.
+- `deploy/mserp-deploy` validates the SHA/checksum and archive paths, takes the
+  database backup, applies migrations, switches `/opt/mserp/current`, restarts
+  only `mserp-api`, reloads Nginx, runs health checks, and rolls the application
+  symlink back if activation fails.
+- Operator SSH access from this workstation is already configured with a key.
+  Resolve exact targets before changing remote files and preserve unrelated
+  services and configuration.
+
+### Production verification
+
+After a deployment, do not stop at a green Actions badge. Confirm the deployed
+SHA, service boundaries, HTTPS, API health, and authentication behavior:
+
+```powershell
+# GitHub Actions result for the main deployment
+gh run list --repo baxbergenut/mserp --workflow "CI and deploy" --branch main --limit 1
+
+# Active release and all services that must remain healthy
+ssh root@137.184.102.22 'readlink -f /opt/mserp/current; systemctl is-active mserp-api nginx fuelbot postgresql@16-main'
+
+# Public routing and trusted TLS (do not use -k for the domain check)
+curl.exe -sS https://erp.msexpressinc.net/api/healthz
+curl.exe -sSI https://erp.msexpressinc.net/login
+```
+
+For authentication-related deployments, use a temporary test session to verify
+login -> `/auth/session` -> authenticated page -> logout. Confirm browser
+requests stay on `https://erp.msexpressinc.net/api/...`; any request to the IP
+endpoint indicates a stale or incorrectly built frontend. Never expose session
+cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
