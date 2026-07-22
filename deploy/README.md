@@ -26,7 +26,9 @@ transition.
 
 The production frontend is built with `NEXT_PUBLIC_API_URL=/api` so browser
 requests, authentication cookies, and CSRF protection remain same-origin behind
-Nginx. Do not build production against the direct IP endpoint.
+Nginx. Do not build production against the direct IP endpoint. Nginx requires
+revalidation for frontend assets because deterministic release archives use an
+epoch modification time and must not trigger heuristic browser caching.
 
 Database migrations should remain backward-compatible with the previous
 application release because an application rollback does not automatically
