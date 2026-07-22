@@ -1,0 +1,136 @@
+name: CI and deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mserp-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION_FILE: backend/go.mod
+  NODE_VERSION: "22"
+  PRODUCTION_API_URL: https://137.184.102.22:8443/api
+  DEPLOY_HOST: 137.184.102.22
+  DEPLOY_USER: mserp-deploy
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: false
+
+      - name: Test backend
+        working-directory: backend
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build Linux API
+        working-directory: backend
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -trimpath -ldflags="-s -w" -o mserp-api ./cmd/server
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build static frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ env.PRODUCTION_API_URL }}
+        run: npm run build
+
+      - name: Package release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/backend release/frontend release/migrations artifact
+          install -m 0750 backend/mserp-api release/backend/mserp-api
+          cp -a frontend/out/. release/frontend/
+          cp backend/sql/[0-9][0-9][0-9]_*.sql release/migrations/
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf artifact/mserp-${GITHUB_SHA}.tar.gz -C release .
+          sha256sum artifact/mserp-${GITHUB_SHA}.tar.gz \
+            > artifact/mserp-${GITHUB_SHA}.sha256
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mserp-${{ github.sha }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy production
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: mserp-${{ github.sha }}
+          path: artifact
+
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.MSERP_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.MSERP_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/mserp_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/mserp_deploy ~/.ssh/known_hosts
+
+      - name: Upload and activate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="artifact/mserp-${GITHUB_SHA}.tar.gz"
+          checksum=$(cut -d ' ' -f 1 "artifact/mserp-${GITHUB_SHA}.sha256")
+          ssh_options=(
+            -i ~/.ssh/mserp_deploy
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=15
+          )
+          scp "${ssh_options[@]}" "$archive" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/var/lib/mserp-deploy/incoming/${GITHUB_SHA}.tar.gz"
+          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "sudo /usr/local/sbin/mserp-deploy '${GITHUB_SHA}' '${checksum}'"

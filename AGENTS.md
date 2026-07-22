@@ -62,7 +62,7 @@ migration runner, or generated API client in this repository.
   cab cards and driver CDLs.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
-- `backend/sql/002_add_tolls.sql` through `008_normalize_fuel_timezones.sql`:
+- `backend/sql/002_add_tolls.sql` through `009_add_schema_migrations.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -282,3 +282,9 @@ Prefer these targeted searches over recursively reading the repository.
 - `deploy/nginx-mserp.conf` serves the static frontend and proxies `/api/` to
   the loopback-only API. Its IP address, port, and TLS paths are deployment
   specific and must be reviewed before reuse on another host.
+- `.github/workflows/ci-deploy.yml` tests pull requests and deploys pushes to
+  `main`. GitHub builds artifacts; production does not build from a Git checkout.
+- `deploy/mserp-deploy` verifies release archives, backs up PostgreSQL, applies
+  migrations recorded in `schema_migrations`, atomically activates the release,
+  and performs health-check rollback. Keep migrations backward-compatible with
+  the previous release because application rollback does not reverse migrations.
