@@ -17,7 +17,7 @@ concurrency:
 env:
   GO_VERSION_FILE: backend/go.mod
   NODE_VERSION: "22"
-  PRODUCTION_API_URL: https://137.184.102.22:8443/api
+  PRODUCTION_API_URL: /api
   DEPLOY_HOST: 137.184.102.22
   DEPLOY_USER: mserp-deploy
 

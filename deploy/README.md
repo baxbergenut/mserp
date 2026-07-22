@@ -24,6 +24,10 @@ the certificate automatically through the Nginx ACME webroot at
 original IP endpoint on port 8443 remains available during the domain
 transition.
 
+The production frontend is built with `NEXT_PUBLIC_API_URL=/api` so browser
+requests, authentication cookies, and CSRF protection remain same-origin behind
+Nginx. Do not build production against the direct IP endpoint.
+
 Database migrations should remain backward-compatible with the previous
 application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally
