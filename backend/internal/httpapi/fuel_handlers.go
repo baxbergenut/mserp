@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -17,6 +18,47 @@ func registerFuelRoutes(
 	job *jobs.SyncFuelJob,
 	repo *repository.FuelRepository,
 ) {
+	r.Get("/fuel-dashboard", func(w http.ResponseWriter, r *http.Request) {
+		dateFrom, err := parseOptionalDate(r.URL.Query().Get("dateFrom"), "dateFrom")
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		dateTo, err := parseOptionalDate(r.URL.Query().Get("dateTo"), "dateTo")
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		location, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			logger.Error("load reporting timezone failed", "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "Failed to load fuel dashboard.")
+			return
+		}
+		today := time.Now().In(location)
+		if dateFrom == nil {
+			value := time.Date(today.Year(), time.January, 1, 0, 0, 0, 0, location)
+			dateFrom = &value
+		}
+		if dateTo == nil {
+			value := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, location)
+			dateTo = &value
+		}
+		if dateFrom.After(*dateTo) {
+			writeAPIError(w, http.StatusBadRequest, "dateFrom cannot be after dateTo")
+			return
+		}
+		dashboard, err := repo.GetDashboard(r.Context(), repository.FuelDashboardQuery{
+			Year: today.Year(), MapDateFrom: *dateFrom, MapDateTo: *dateTo,
+		})
+		if err != nil {
+			logger.Error("load fuel dashboard failed", "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "Failed to load fuel dashboard.")
+			return
+		}
+		writeJSON(w, http.StatusOK, dashboard)
+	})
+
 	r.Get("/fuel-transactions", func(w http.ResponseWriter, r *http.Request) {
 		if wantsPagination(r) {
 			pagination, err := parsePagination(r)

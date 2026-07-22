@@ -14,8 +14,9 @@ MSERP is an internal ERP for MS Express Inc. It has two independently run apps:
 - `frontend/`: Next.js 16 App Router UI using React 19, TypeScript, Tailwind CSS
   4, and Lucide icons.
 
-The browser talks directly to the Go API. There is no authentication layer,
-container setup, migration runner, or generated API client in this repository.
+The browser talks directly to the Go API. Authentication uses database-backed
+users and opaque HttpOnly-cookie sessions. There is no container setup,
+migration runner, or generated API client in this repository.
 
 ## Start every task here
 
@@ -61,12 +62,13 @@ container setup, migration runner, or generated API client in this repository.
   cab cards and driver CDLs.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
-- `backend/sql/002_add_tolls.sql` through `006_allow_multiple_relay_driver_ids.sql`:
+- `backend/sql/002_add_tolls.sql` through `008_normalize_fuel_timezones.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
 
-- `frontend/app/layout.tsx`: global shell and sidebar.
+- `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
+  shell and sidebar; `frontend/app/login/` owns the login page.
 - `frontend/app/page.tsx`: redirects `/` to `/dashboard`.
 - `frontend/app/dashboard/`: load-derived metrics and charting.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
@@ -103,20 +105,36 @@ Optional:
 
 ```dotenv
 PORT=8080
+BIND_ADDRESS=127.0.0.1
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.6-27b
 RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
 RELAY_FUEL_SYNC_START_DATE=2026-01-01
+FRONTEND_ORIGIN=http://localhost:3000
+AUTH_COOKIE_SECURE=false
+AUTH_SESSION_TTL=12h
 ```
 
-`GROQ_API_KEY` is only required when document extraction is used. CORS currently
-allows `http://localhost:3000` only.
+`GROQ_API_KEY` is only required when document extraction is used. CORS allows
+only `FRONTEND_ORIGIN`. `AUTH_COOKIE_SECURE` defaults to true for an HTTPS
+frontend origin and false for HTTP; production must use HTTPS and secure cookies.
 
 For a new database, apply `backend/sql/init.sql`. For an existing database, apply
 the numbered SQL files in order as needed. There is no automatic migration tool,
 so schema changes must update `init.sql` and add a new incremental SQL file.
+
+To provision a user, generate a bcrypt hash without exposing the password in
+shell history, then insert it directly:
+
+```powershell
+cd backend
+go run ./cmd/hash-password
+# Use the printed hash as <bcrypt-hash>:
+# INSERT INTO app_users (username, password_hash)
+# VALUES ('admin', '<bcrypt-hash>');
+```
 
 ### Run locally
 
@@ -135,15 +153,20 @@ Frontend defaults to `http://localhost:8080`. Override with
 `NEXT_PUBLIC_API_URL`; `NEXT_PUBLIC_LOADS_API_URL` remains a legacy fallback.
 The UI runs at `http://localhost:3000`.
 
+`npm run build` produces a static frontend in `frontend/out/`; set
+`NEXT_PUBLIC_API_URL` at build time because the API URL is embedded in the
+browser bundle.
+
 ## Current API surface
 
 - Health: `GET /healthz`, `GET /readyz`
+- Auth: `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
 - Drivers: `GET/POST /drivers`, `PUT/DELETE /drivers/{id}`
 - Trucks: `GET/POST /trucks`, `PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `POST /toll-reports` (multipart CSV)
-- Fuel: `GET /fuel-transactions`, `POST /jobs/sync-fuel`
+- Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
 
 Backend JSON is intentionally not uniform: loads retain exported Go field names
@@ -182,9 +205,18 @@ assignment lookup lists.
   cents before persistence. Avoid binary floating-point for new financial logic.
 - Fuel report dates use each transaction's Relay merchant timezone rather than
   the browser timezone or a single UTC offset so ERP totals reconcile with Relay.
+  Legacy `US/*` timezone aliases are normalized to canonical IANA names, and
+  reporting falls back to `America/New_York` for an unrecognized source value.
+- Fuel dashboard spend, gallons, prices, and discounts use diesel fuel line items
+  only. Weekly gross and RPM use invoiced loads grouped Monday-first by delivery
+  date, falling back to pickup date when delivery is missing.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
+- Except for health, readiness, and login, every API route requires a valid
+  database session. State-changing requests also require the session's CSRF
+  token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;
+  only SHA-256 token digests are stored in PostgreSQL.
 
 ## Implementation conventions
 
@@ -243,3 +275,10 @@ rg -n '<field_name>' backend/sql backend/internal frontend/app/lib
 ```
 
 Prefer these targeted searches over recursively reading the repository.
+
+## VPS deployment
+
+- `deploy/mserp-api.service` is the hardened systemd unit for the Go API.
+- `deploy/nginx-mserp.conf` serves the static frontend and proxies `/api/` to
+  the loopback-only API. Its IP address, port, and TLS paths are deployment
+  specific and must be reviewed before reuse on another host.

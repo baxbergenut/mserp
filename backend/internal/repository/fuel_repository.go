@@ -233,7 +233,7 @@ func upsertFuelTransaction(
 		strings.TrimSpace(transaction.Location.ZipCode),
 		transaction.Location.Latitude,
 		transaction.Location.Longitude,
-		strings.TrimSpace(transaction.Location.Timezone),
+		normalizeFuelTimezone(transaction.Location.Timezone),
 		fuelPolicyID,
 		fuelPolicyName,
 		prompts,
@@ -460,8 +460,228 @@ type FuelPage struct {
 	Summary FuelSummary       `json:"summary"`
 }
 
+type FuelDashboardQuery struct {
+	Year        int
+	MapDateFrom time.Time
+	MapDateTo   time.Time
+}
+
+type FuelDashboardTotals struct {
+	Spend   float64 `json:"spend"`
+	Gallons float64 `json:"gallons"`
+	Saved   float64 `json:"saved"`
+}
+
+type FuelMonthlyPoint struct {
+	Month             string  `json:"month"`
+	Spend             float64 `json:"spend"`
+	Gallons           float64 `json:"gallons"`
+	PricePerGallon    float64 `json:"pricePerGallon"`
+	DiscountPerGallon float64 `json:"discountPerGallon"`
+}
+
+type FuelWeeklyPoint struct {
+	WeekStart        string   `json:"weekStart"`
+	FuelSpend        float64  `json:"fuelSpend"`
+	GrossRevenue     float64  `json:"grossRevenue"`
+	Miles            float64  `json:"miles"`
+	FuelToGrossRatio *float64 `json:"fuelToGrossRatio"`
+	AverageFuelPrice *float64 `json:"averageFuelPrice"`
+	RevenuePerMile   *float64 `json:"revenuePerMile"`
+}
+
+type FuelStatePrice struct {
+	State            string  `json:"state"`
+	AveragePrice     float64 `json:"averagePrice"`
+	Gallons          float64 `json:"gallons"`
+	TransactionCount int     `json:"transactionCount"`
+}
+
+type FuelDashboardMethodology struct {
+	FuelScope        string `json:"fuelScope"`
+	RevenueScope     string `json:"revenueScope"`
+	RevenueDate      string `json:"revenueDate"`
+	WeekStartsOn     string `json:"weekStartsOn"`
+	FuelDateTimezone string `json:"fuelDateTimezone"`
+}
+
+type FuelDashboard struct {
+	Year        int                      `json:"year"`
+	Totals      FuelDashboardTotals      `json:"totals"`
+	Monthly     []FuelMonthlyPoint       `json:"monthly"`
+	Weekly      []FuelWeeklyPoint        `json:"weekly"`
+	StatePrices []FuelStatePrice         `json:"statePrices"`
+	Methodology FuelDashboardMethodology `json:"methodology"`
+}
+
+func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQuery) (FuelDashboard, error) {
+	dashboard := FuelDashboard{
+		Year:        query.Year,
+		Monthly:     make([]FuelMonthlyPoint, 0, 12),
+		Weekly:      make([]FuelWeeklyPoint, 0),
+		StatePrices: make([]FuelStatePrice, 0),
+		Methodology: FuelDashboardMethodology{
+			FuelScope:        "Fuel line items only; DEF, other products, cash advances, and fees are excluded.",
+			RevenueScope:     "Loads whose normalized status is invoiced; reporting begins with the first full load-data week.",
+			RevenueDate:      "Delivery date, falling back to pickup date when delivery is missing.",
+			WeekStartsOn:     "Monday",
+			FuelDateTimezone: "Each merchant location's timezone, falling back to America/New_York.",
+		},
+	}
+
+	monthRows, err := r.pool.Query(ctx, fuelDashboardBaseSQL+`
+		, months AS (
+			SELECT generate_series(make_date($1, 1, 1), make_date($1, 12, 1), interval '1 month')::date AS month
+		), monthly AS (
+			SELECT date_trunc('month', purchased_on)::date AS month,
+				SUM(spend) AS spend, SUM(gallons) AS gallons, SUM(saved) AS saved
+			FROM fuel_purchase_totals
+			WHERE purchased_on >= make_date($1, 1, 1)
+			  AND purchased_on < make_date($1 + 1, 1, 1)
+			GROUP BY 1
+		)
+		SELECT months.month,
+			COALESCE(monthly.spend, 0)::float8,
+			COALESCE(monthly.gallons, 0)::float8,
+			COALESCE(monthly.saved, 0)::float8,
+			CASE WHEN monthly.gallons > 0 THEN (monthly.spend / monthly.gallons)::float8 ELSE 0 END,
+			CASE WHEN monthly.gallons > 0 THEN (monthly.saved / monthly.gallons)::float8 ELSE 0 END
+		FROM months LEFT JOIN monthly USING (month)
+		ORDER BY months.month`, query.Year)
+	if err != nil {
+		return FuelDashboard{}, err
+	}
+	defer monthRows.Close()
+	for monthRows.Next() {
+		var month time.Time
+		var point FuelMonthlyPoint
+		var saved float64
+		if err := monthRows.Scan(&month, &point.Spend, &point.Gallons, &saved, &point.PricePerGallon, &point.DiscountPerGallon); err != nil {
+			return FuelDashboard{}, err
+		}
+		point.Month = month.Format("2006-01")
+		dashboard.Monthly = append(dashboard.Monthly, point)
+		dashboard.Totals.Spend += point.Spend
+		dashboard.Totals.Gallons += point.Gallons
+		dashboard.Totals.Saved += saved
+	}
+	if err := monthRows.Err(); err != nil {
+		return FuelDashboard{}, err
+	}
+
+	weekRows, err := r.pool.Query(ctx, fuelDashboardBaseSQL+`
+		, fuel_weeks AS (
+			SELECT date_trunc('week', purchased_on::timestamp)::date AS week_start,
+				SUM(spend) AS spend, SUM(gallons) AS gallons
+			FROM fuel_purchase_totals
+			WHERE purchased_on >= make_date($1, 1, 1)
+			  AND purchased_on < make_date($1 + 1, 1, 1)
+			GROUP BY 1
+		), load_events AS (
+			SELECT (COALESCE(delivery_time, delivery_appointment_time,
+				pickup_time, pickup_appointment_time) AT TIME ZONE 'America/New_York')::date AS service_date,
+				total_pay, COALESCE(total_miles, 0) AS total_miles
+			FROM loads
+			WHERE lower(trim(status)) = 'invoiced'
+			  AND COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time) IS NOT NULL
+			  AND (COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time)
+				AT TIME ZONE 'America/New_York')::date >= make_date($1, 1, 1)
+			  AND (COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time)
+				AT TIME ZONE 'America/New_York')::date < make_date($1 + 1, 1, 1)
+		), load_coverage AS (
+			SELECT MIN(service_date) AS first_date FROM load_events
+		), weeks AS (
+			SELECT generate_series(
+				GREATEST(
+					date_trunc('week', make_date($1, 1, 1)::timestamp)::date,
+					CASE
+						WHEN first_date = date_trunc('week', first_date::timestamp)::date
+						THEN first_date
+						ELSE date_trunc('week', first_date::timestamp)::date + 7
+					END
+				),
+				date_trunc('week', LEAST(CURRENT_DATE, make_date($1, 12, 31))::timestamp)::date,
+				interval '1 week'
+			)::date AS week_start
+			FROM load_coverage
+		), load_weeks AS (
+			SELECT date_trunc('week', service_date::timestamp)::date AS week_start,
+				SUM(total_pay) AS gross, SUM(total_miles) AS miles
+			FROM load_events
+			GROUP BY 1
+		)
+		SELECT weeks.week_start,
+			COALESCE(fuel_weeks.spend, 0)::float8,
+			COALESCE(load_weeks.gross, 0)::float8,
+			COALESCE(load_weeks.miles, 0)::float8,
+			CASE WHEN load_weeks.gross > 0 THEN (COALESCE(fuel_weeks.spend, 0) / load_weeks.gross * 100)::float8 END,
+			CASE WHEN fuel_weeks.gallons > 0 THEN (fuel_weeks.spend / fuel_weeks.gallons)::float8 END,
+			CASE WHEN load_weeks.miles > 0 THEN (load_weeks.gross / load_weeks.miles)::float8 END
+		FROM weeks
+		LEFT JOIN fuel_weeks USING (week_start)
+		LEFT JOIN load_weeks USING (week_start)
+		ORDER BY weeks.week_start`, query.Year)
+	if err != nil {
+		return FuelDashboard{}, err
+	}
+	defer weekRows.Close()
+	for weekRows.Next() {
+		var week time.Time
+		var point FuelWeeklyPoint
+		if err := weekRows.Scan(&week, &point.FuelSpend, &point.GrossRevenue, &point.Miles,
+			&point.FuelToGrossRatio, &point.AverageFuelPrice, &point.RevenuePerMile); err != nil {
+			return FuelDashboard{}, err
+		}
+		point.WeekStart = week.Format(time.DateOnly)
+		dashboard.Weekly = append(dashboard.Weekly, point)
+	}
+	if err := weekRows.Err(); err != nil {
+		return FuelDashboard{}, err
+	}
+
+	stateRows, err := r.pool.Query(ctx, fuelDashboardBaseSQL+`
+		SELECT state, (SUM(spend) / NULLIF(SUM(gallons), 0))::float8,
+			SUM(gallons)::float8, SUM(transaction_count)::int
+		FROM fuel_purchase_totals
+		WHERE purchased_on BETWEEN $1 AND $2
+		  AND state <> '' AND gallons > 0
+		GROUP BY state
+		ORDER BY state`, query.MapDateFrom, query.MapDateTo)
+	if err != nil {
+		return FuelDashboard{}, err
+	}
+	defer stateRows.Close()
+	for stateRows.Next() {
+		var price FuelStatePrice
+		if err := stateRows.Scan(&price.State, &price.AveragePrice, &price.Gallons, &price.TransactionCount); err != nil {
+			return FuelDashboard{}, err
+		}
+		dashboard.StatePrices = append(dashboard.StatePrices, price)
+	}
+	if err := stateRows.Err(); err != nil {
+		return FuelDashboard{}, err
+	}
+
+	return dashboard, nil
+}
+
+var fuelDashboardBaseSQL = `
+WITH fuel_purchase_totals AS (
+	SELECT t.id,
+		(t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date AS purchased_on,
+		t.state,
+		COALESCE(SUM(i.total_amount_paid), 0) AS spend,
+		COALESCE(SUM(i.quantity) FILTER (WHERE lower(COALESCE(i.unit_of_measure, '')) = 'gallons'), 0) AS gallons,
+		COALESCE(SUM(GREATEST(COALESCE(i.total_retail_price, i.total_amount_paid) - i.total_amount_paid, 0)), 0) AS saved,
+		1 AS transaction_count
+	FROM fuel_transactions t
+	JOIN fuel_transaction_items i ON i.fuel_transaction_id = t.id
+	WHERE i.item_kind = 'fuel' AND lower(i.category) <> 'def'
+	GROUP BY t.id, purchased_on, t.state
+)`
+
 func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPageQuery) (FuelPage, error) {
-	const where = `
+	where := `
 	WHERE ($1 = '' OR concat_ws(' ', driver_name, relay_integration_id,
 		merchant_name, location_name, city, state, relay_transaction_id)
 		ILIKE '%' || $1 || '%')
@@ -469,8 +689,8 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	AND ($3 = '' OR state = $3)
 	AND ($4 = '' OR ($4 = 'fuel' AND fuel_amount > 0)
 		OR ($4 = 'def' AND def_amount > 0) OR ($4 = 'other' AND other_amount > 0))
-	AND ($5::date IS NULL OR (purchased_at AT TIME ZONE COALESCE(NULLIF(timezone, ''), 'America/New_York'))::date >= $5)
-	AND ($6::date IS NULL OR (purchased_at AT TIME ZONE COALESCE(NULLIF(timezone, ''), 'America/New_York'))::date <= $6)`
+	AND ($5::date IS NULL OR (purchased_at AT TIME ZONE ` + fuelTimezoneExpression("timezone") + `)::date >= $5)
+	AND ($6::date IS NULL OR (purchased_at AT TIME ZONE ` + fuelTimezoneExpression("timezone") + `)::date <= $6)`
 	args := []any{query.Search, query.Driver, query.State, query.Category, query.DateFrom, query.DateTo}
 	cte := "WITH transactions AS (" + fuelTransactionsSQL + ")"
 	var total int
@@ -592,4 +812,48 @@ func amountOrZero(value string) string {
 		return "0"
 	}
 	return trimmed
+}
+
+func normalizeFuelTimezone(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if canonical, ok := legacyFuelTimezones[trimmed]; ok {
+		return canonical
+	}
+	return trimmed
+}
+
+func fuelTimezoneExpression(column string) string {
+	return `(CASE ` + column + `
+		WHEN 'US/Eastern' THEN 'America/New_York'
+		WHEN 'US/Central' THEN 'America/Chicago'
+		WHEN 'US/Mountain' THEN 'America/Denver'
+		WHEN 'US/Pacific' THEN 'America/Los_Angeles'
+		WHEN 'US/Arizona' THEN 'America/Phoenix'
+		WHEN 'US/Alaska' THEN 'America/Anchorage'
+		WHEN 'US/Aleutian' THEN 'America/Adak'
+		WHEN 'US/Hawaii' THEN 'Pacific/Honolulu'
+		WHEN 'US/East-Indiana' THEN 'America/Indiana/Indianapolis'
+		WHEN 'US/Indiana-Starke' THEN 'America/Indiana/Knox'
+		WHEN 'US/Michigan' THEN 'America/Detroit'
+		WHEN 'US/Samoa' THEN 'Pacific/Pago_Pago'
+		ELSE COALESCE(
+			(SELECT z.name FROM pg_timezone_names z WHERE z.name = NULLIF(` + column + `, '') LIMIT 1),
+			'America/New_York'
+		)
+	END)`
+}
+
+var legacyFuelTimezones = map[string]string{
+	"US/Eastern":        "America/New_York",
+	"US/Central":        "America/Chicago",
+	"US/Mountain":       "America/Denver",
+	"US/Pacific":        "America/Los_Angeles",
+	"US/Arizona":        "America/Phoenix",
+	"US/Alaska":         "America/Anchorage",
+	"US/Aleutian":       "America/Adak",
+	"US/Hawaii":         "Pacific/Honolulu",
+	"US/East-Indiana":   "America/Indiana/Indianapolis",
+	"US/Indiana-Starke": "America/Indiana/Knox",
+	"US/Michigan":       "America/Detroit",
+	"US/Samoa":          "Pacific/Pago_Pago",
 }

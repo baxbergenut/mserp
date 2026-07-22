@@ -79,6 +79,40 @@ export interface FuelTransactionPage extends PaginatedResponse<FuelTransaction> 
   summary: { spend: number; saved: number; gallons: number };
 }
 
+export interface FuelDashboard {
+  year: number;
+  totals: { spend: number; gallons: number; saved: number };
+  monthly: Array<{
+    month: string;
+    spend: number;
+    gallons: number;
+    pricePerGallon: number;
+    discountPerGallon: number;
+  }>;
+  weekly: Array<{
+    weekStart: string;
+    fuelSpend: number;
+    grossRevenue: number;
+    miles: number;
+    fuelToGrossRatio: number | null;
+    averageFuelPrice: number | null;
+    revenuePerMile: number | null;
+  }>;
+  statePrices: Array<{
+    state: string;
+    averagePrice: number;
+    gallons: number;
+    transactionCount: number;
+  }>;
+  methodology: {
+    fuelScope: string;
+    revenueScope: string;
+    revenueDate: string;
+    weekStartsOn: string;
+    fuelDateTimezone: string;
+  };
+}
+
 export interface SyncFuelResult {
   fetched: number;
   saved: number;
@@ -331,4 +365,15 @@ export interface TollImportResult {
   importedAmount: number;
   postingDateStart: string;
   postingDateEnd: string;
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+}
+
+export interface AuthSession {
+  user: AuthUser;
+  csrfToken: string;
+  expiresAt: string;
 }

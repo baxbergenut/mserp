@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,6 +50,7 @@ func main() {
 	tollRepo := repository.NewTollRepository(pool)
 	fileRepo := repository.NewFileRepository(pool)
 	fuelRepo := repository.NewFuelRepository(pool)
+	authRepo := repository.NewAuthRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	job := jobs.NewSyncLoadsJob(client, loadRepo, logger)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
@@ -69,17 +71,22 @@ func main() {
 		tollRepo,
 		fileRepo,
 		fuelRepo,
+		authRepo,
 		cabCardExtractor,
+		httpapi.AuthOptions{
+			CookieSecure: cfg.AuthCookieSecure,
+			SessionTTL:   cfg.AuthSessionTTL,
+		},
 	)
 	handler := cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedOrigins:   []string{cfg.FrontendOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true,
 	})(router)
 
 	server := &http.Server{
-		Addr:        ":" + cfg.Port,
+		Addr:        net.JoinHostPort(cfg.BindAddress, cfg.Port),
 		Handler:     handler,
 		ReadTimeout: 15 * time.Second,
 		// DataTruck and Relay syncs are currently synchronous. A first Relay

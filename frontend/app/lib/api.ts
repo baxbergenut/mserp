@@ -4,6 +4,7 @@ import type {
   CDLFileUploadResult,
   Driver,
   DriverInput,
+  FuelDashboard,
   FuelTransaction,
   FuelTransactionPage,
   Load,
@@ -17,6 +18,7 @@ import type {
   TollImportResult,
   Truck,
   TruckInput,
+  AuthSession,
 } from "./types";
 
 type PageQuery = {
@@ -60,18 +62,21 @@ const API_BASE =
   process.env.NEXT_PUBLIC_LOADS_API_URL ??
   "http://localhost:8080";
 
+let csrfToken = "";
+
 export async function fetchLoads(): Promise<Load[]> {
-  const res = await fetch(`${API_BASE}/loads`, { cache: "no-store" });
+	const json = await apiRequest<unknown>("/loads");
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch loads (${res.status} ${res.statusText})`);
-  }
-
-  const json = await res.json();
-
-  // Defensive: handle either a raw array or a { data: [...] } wrapper.
-  if (Array.isArray(json)) return json as Load[];
-  if (Array.isArray(json?.data)) return json.data as Load[];
+	// Defensive: handle either a raw array or a { data: [...] } wrapper.
+	if (Array.isArray(json)) return json as Load[];
+	if (
+		typeof json === "object" &&
+		json !== null &&
+		"data" in json &&
+		Array.isArray(json.data)
+	) {
+		return json.data as Load[];
+	}
 
   return [];
 }
@@ -99,23 +104,40 @@ export const fetchFuelTransactionsPage = (query: PageQuery & {
   dateFrom?: string;
   dateTo?: string;
 }) => paginatedRequest<FuelTransactionPage>(withQuery("/fuel-transactions", query));
+export const fetchFuelDashboard = (query: {
+  dateFrom?: string;
+  dateTo?: string;
+}) => apiRequest<FuelDashboard>(withQuery("/fuel-dashboard", query));
 export const syncFuelTransactions = () =>
   apiRequest<SyncFuelResult>("/jobs/sync-fuel", { method: "POST" });
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    cache: "no-store",
-    ...init,
+	const method = (init?.method ?? "GET").toUpperCase();
+	const needsCSRF = !["GET", "HEAD", "OPTIONS"].includes(method);
+	const response = await fetch(`${API_BASE}${path}`, {
+		cache: "no-store",
+		credentials: "include",
+		...init,
     headers: {
       ...(typeof init?.body === "string"
         ? { "Content-Type": "application/json" }
-        : {}),
-      ...init?.headers,
+			: {}),
+		...(needsCSRF && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+		...init?.headers,
     },
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
+	if (!response.ok) {
+		const body = await response.json().catch(() => null);
+		if (
+			response.status === 401 &&
+			path !== "/auth/login" &&
+			path !== "/auth/session" &&
+			typeof window !== "undefined"
+		) {
+			const next = `${window.location.pathname}${window.location.search}`;
+			window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+		}
     throw new Error(
       body?.error ??
         `Request failed (${response.status} ${response.statusText})`,
@@ -124,6 +146,29 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+export async function fetchAuthSession(): Promise<AuthSession> {
+	const session = await apiRequest<AuthSession>("/auth/session");
+	csrfToken = session.csrfToken;
+	return session;
+}
+
+export async function login(username: string, password: string): Promise<AuthSession> {
+	const session = await apiRequest<AuthSession>("/auth/login", {
+		method: "POST",
+		body: JSON.stringify({ username, password }),
+	});
+	csrfToken = session.csrfToken;
+	return session;
+}
+
+export async function logout(): Promise<void> {
+	try {
+		await apiRequest<void>("/auth/logout", { method: "POST" });
+	} finally {
+		csrfToken = "";
+	}
 }
 
 export const fetchDrivers = () => apiRequest<Driver[]>("/drivers");

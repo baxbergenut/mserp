@@ -5,6 +5,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Fuel,
+  LayoutDashboard,
+  List,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import {
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
+import { FuelOverview } from "./FuelOverview";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
@@ -85,6 +88,8 @@ function productSummary(transaction: FuelTransaction) {
 }
 
 export default function FuelPage() {
+  const [activeTab, setActiveTab] = useState<"overview" | "transactions">("overview");
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [transactions, setTransactions] = useState<FuelTransaction[]>([]);
   const [search, setSearch] = useState("");
   const [driver, setDriver] = useState("");
@@ -145,6 +150,7 @@ export default function FuelPage() {
     try {
       const result = await syncFuelTransactions();
       await loadData();
+      setDashboardRefreshKey((value) => value + 1);
       setMessage({
         type: "success",
         text: `Checked ${result.daysFetched} missing/current day${result.daysFetched === 1 ? "" : "s"} and synced ${result.saved} fuel transaction${result.saved === 1 ? "" : "s"}${result.excluded > 0 ? `; excluded ${result.excluded} non-fuel financial entr${result.excluded === 1 ? "y" : "ies"}` : ""}. ${result.daysSkipped} completed day${result.daysSkipped === 1 ? " was" : "s were"} already up to date.`,
@@ -177,7 +183,7 @@ export default function FuelPage() {
           <div className="flex items-center gap-3">
             <Fuel className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Fuel</h1>
-            {!isLoading && (
+            {activeTab === "transactions" && !isLoading && (
               <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">
                 {hasFilters
                   ? `${total.toLocaleString()} matching`
@@ -186,7 +192,7 @@ export default function FuelPage() {
             )}
           </div>
           <p className="mt-1 text-[13px] text-zinc-600">
-            Relay fuel, DEF, and other driver purchases.
+            Fuel performance, pricing, and Relay purchase data.
           </p>
         </div>
         <button
@@ -225,6 +231,36 @@ export default function FuelPage() {
           </button>
         </div>
       )}
+
+      <div className="flex w-fit rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5">
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+            activeTab === "overview"
+              ? "bg-zinc-800 text-zinc-100 shadow-sm"
+              : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <LayoutDashboard className="h-3.5 w-3.5" /> Overview
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("transactions")}
+          className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+            activeTab === "transactions"
+              ? "bg-zinc-800 text-zinc-100 shadow-sm"
+              : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <List className="h-3.5 w-3.5" /> Transactions
+        </button>
+      </div>
+
+      {activeTab === "overview" ? (
+        <FuelOverview refreshKey={dashboardRefreshKey} />
+      ) : (
+        <>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
@@ -417,6 +453,8 @@ export default function FuelPage() {
           onPageChange={setPage}
           onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
         />
+      )}
+        </>
       )}
     </div>
   );

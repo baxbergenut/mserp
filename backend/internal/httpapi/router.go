@@ -23,9 +23,12 @@ func NewRouter(
 	tollRepo *repository.TollRepository,
 	fileRepo *repository.FileRepository,
 	fuelRepo *repository.FuelRepository,
+	authRepo *repository.AuthRepository,
 	documentExtractor groq.DocumentExtractor,
+	authOptions AuthOptions,
 ) http.Handler {
 	r := chi.NewRouter()
+	auth := newAuthHandler(logger, authRepo, authOptions)
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -40,8 +43,15 @@ func NewRouter(
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
+	r.Post("/auth/login", auth.login)
 
-	r.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) {
+	protected := chi.NewRouter()
+	protected.Use(auth.requireSession)
+	protected.Use(auth.requireCSRF)
+	protected.Get("/auth/session", auth.session)
+	protected.Post("/auth/logout", auth.logout)
+
+	protected.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) {
 		result, err := job.Run(r.Context())
 		if err != nil {
 			logger.Error("sync loads failed", "error", err)
@@ -51,7 +61,7 @@ func NewRouter(
 
 		writeJSON(w, http.StatusOK, result)
 	})
-	r.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
+	protected.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
 		if wantsPagination(r) {
 			pagination, err := parsePagination(r)
 			if err != nil {
@@ -94,10 +104,11 @@ func NewRouter(
 		_ = json.NewEncoder(w).Encode(loads)
 	})
 
-	registerFleetRoutes(r, logger, fleetRepo)
-	registerTollRoutes(r, logger, tollRepo)
-	registerFileRoutes(r, logger, fileRepo, documentExtractor)
-	registerFuelRoutes(r, logger, fuelJob, fuelRepo)
+	registerFleetRoutes(protected, logger, fleetRepo)
+	registerTollRoutes(protected, logger, tollRepo)
+	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
+	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
+	r.Mount("/", protected)
 
 	return r
 }
