@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"mserp/internal/groq"
 	"mserp/internal/jobs"
 	"mserp/internal/repository"
 )
@@ -15,9 +16,14 @@ import (
 func NewRouter(
 	logger *slog.Logger,
 	job *jobs.SyncLoadsJob,
+	fuelJob *jobs.SyncFuelJob,
 	pool *pgxpool.Pool,
 	loadRepo *repository.LoadRepository,
 	fleetRepo *repository.FleetRepository,
+	tollRepo *repository.TollRepository,
+	fileRepo *repository.FileRepository,
+	fuelRepo *repository.FuelRepository,
+	documentExtractor groq.DocumentExtractor,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -46,6 +52,37 @@ func NewRouter(
 		writeJSON(w, http.StatusOK, result)
 	})
 	r.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
+		if wantsPagination(r) {
+			pagination, err := parsePagination(r)
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			pickupFrom, err := parseOptionalDate(r.URL.Query().Get("pickupFrom"), "pickupFrom")
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			pickupTo, err := parseOptionalDate(r.URL.Query().Get("pickupTo"), "pickupTo")
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			loads, err := loadRepo.GetLoadsPage(r.Context(), repository.LoadPageQuery{
+				Pagination: pagination,
+				Search:     r.URL.Query().Get("search"), Status: r.URL.Query().Get("status"),
+				Customer: r.URL.Query().Get("customer"), Dispatcher: r.URL.Query().Get("dispatcher"),
+				Driver: r.URL.Query().Get("driver"), PickupFrom: pickupFrom, PickupTo: pickupTo,
+				Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"),
+			})
+			if err != nil {
+				logger.Error("get paginated loads failed", "error", err)
+				writeAPIError(w, http.StatusInternalServerError, "the loads could not be loaded")
+				return
+			}
+			writeJSON(w, http.StatusOK, loads)
+			return
+		}
 		loads, err := loadRepo.GetLoads(r.Context())
 		if err != nil {
 			logger.Error("get loads failed", "error", err)
@@ -58,6 +95,9 @@ func NewRouter(
 	})
 
 	registerFleetRoutes(r, logger, fleetRepo)
+	registerTollRoutes(r, logger, tollRepo)
+	registerFileRoutes(r, logger, fileRepo, documentExtractor)
+	registerFuelRoutes(r, logger, fuelJob, fuelRepo)
 
 	return r
 }

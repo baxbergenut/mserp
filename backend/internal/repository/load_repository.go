@@ -309,7 +309,7 @@ func stringOrDefault(value *string, fallback string) string {
 	return trimmed
 }
 func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
-	rows, err := r.pool.Query(ctx, selectLoadsSQL)
+	rows, err := r.pool.Query(ctx, selectLoadsSQL+" ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -317,37 +317,10 @@ func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
 
 	var records []LoadRecord
 	for rows.Next() {
-		var rec LoadRecord
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.LoadID,
-			&rec.DriverID,
-			&rec.DispatcherID,
-			&rec.ShipmentID,
-			&rec.Status,
-			&rec.LoadPay,
-			&rec.TotalOtherPay,
-			&rec.TotalPay,
-			&rec.TotalMiles,
-			&rec.PerMileRevenue,
-			&rec.DispatcherName,
-			&rec.DriverName,
-			&rec.TeamDriverName,
-			&rec.TruckUnit,
-			&rec.CustomerName,
-			&rec.PickupTime,
-			&rec.DeliveryTime,
-			&rec.PickupAppointmentTime,
-			&rec.DeliveryAppointmentTime,
-			&rec.CreatedDatetime,
-			&rec.SyncedAt,
-		); err != nil {
+		rec, err := scanLoad(rows)
+		if err != nil {
 			return nil, err
 		}
-		rec.DispatcherName = formatPersonNamePtr(rec.DispatcherName)
-		rec.DriverName = formatPersonNamePtr(rec.DriverName)
-		rec.TeamDriverName = formatPersonNamePtr(rec.TeamDriverName)
-		rec.TruckUnit = normalizeTruckUnitPtr(rec.TruckUnit)
 		records = append(records, rec)
 	}
 
@@ -358,6 +331,114 @@ func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
 	return records, nil
 }
 
+type LoadPageQuery struct {
+	Pagination Pagination
+	Search     string
+	Status     string
+	Customer   string
+	Dispatcher string
+	Driver     string
+	PickupFrom *time.Time
+	PickupTo   *time.Time
+	Sort       string
+	Direction  string
+}
+
+type LoadFilterOptions struct {
+	Statuses    []string `json:"statuses"`
+	Customers   []string `json:"customers"`
+	Dispatchers []string `json:"dispatchers"`
+	Drivers     []string `json:"drivers"`
+}
+
+type LoadPage struct {
+	Page[LoadRecord]
+	Options LoadFilterOptions `json:"options"`
+}
+
+func (r *LoadRepository) GetLoadsPage(ctx context.Context, query LoadPageQuery) (LoadPage, error) {
+	const where = `
+WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
+	driver_name, truck_unit, dispatcher_name) ILIKE '%' || $1 || '%')
+	AND ($2 = '' OR lower(trim(status)) = $2)
+	AND ($3 = '' OR customer_name = $3)
+	AND ($4 = '' OR dispatcher_name = $4)
+	AND ($5 = '' OR driver_name = $5)
+	AND ($6::date IS NULL OR pickup_time >= $6)
+	AND ($7::date IS NULL OR pickup_time < $7 + interval '1 day')`
+	args := []any{
+		query.Search, query.Status, query.Customer, query.Dispatcher, query.Driver,
+		query.PickupFrom, query.PickupTo,
+	}
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM loads "+where, args...).Scan(&total); err != nil {
+		return LoadPage{}, err
+	}
+	query.Pagination = query.Pagination.Normalize(total)
+
+	orderColumn := map[string]string{
+		"PickupTime":     "pickup_time",
+		"DeliveryTime":   "delivery_time",
+		"TotalPay":       "total_pay",
+		"TotalMiles":     "total_miles",
+		"PerMileRevenue": "per_mile_revenue",
+	}[query.Sort]
+	if orderColumn == "" {
+		orderColumn = "pickup_time"
+	}
+	direction := "DESC"
+	if strings.EqualFold(query.Direction, "asc") {
+		direction = "ASC"
+	}
+	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
+	rows, err := r.pool.Query(ctx, selectLoadsSQL+where+" ORDER BY "+orderColumn+" "+direction+" NULLS LAST, id DESC LIMIT $8 OFFSET $9", pageArgs...)
+	if err != nil {
+		return LoadPage{}, err
+	}
+	defer rows.Close()
+	records := make([]LoadRecord, 0, query.Pagination.PageSize)
+	for rows.Next() {
+		record, scanErr := scanLoad(rows)
+		if scanErr != nil {
+			return LoadPage{}, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return LoadPage{}, err
+	}
+
+	options := LoadFilterOptions{}
+	err = r.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE(array_agg(DISTINCT lower(trim(status)) ORDER BY lower(trim(status))) FILTER (WHERE trim(status) <> ''), '{}'),
+			COALESCE(array_agg(DISTINCT customer_name ORDER BY customer_name) FILTER (WHERE customer_name IS NOT NULL AND customer_name <> ''), '{}'),
+			COALESCE(array_agg(DISTINCT dispatcher_name ORDER BY dispatcher_name) FILTER (WHERE dispatcher_name IS NOT NULL AND dispatcher_name <> ''), '{}'),
+			COALESCE(array_agg(DISTINCT driver_name ORDER BY driver_name) FILTER (WHERE driver_name IS NOT NULL AND driver_name <> ''), '{}')
+		FROM loads`).Scan(&options.Statuses, &options.Customers, &options.Dispatchers, &options.Drivers)
+	if err != nil {
+		return LoadPage{}, err
+	}
+	return LoadPage{Page: NewPage(records, total, query.Pagination), Options: options}, nil
+}
+
+func scanLoad(row rowScanner) (LoadRecord, error) {
+	var rec LoadRecord
+	err := row.Scan(
+		&rec.ID, &rec.LoadID, &rec.DriverID, &rec.DispatcherID, &rec.ShipmentID,
+		&rec.Status, &rec.LoadPay, &rec.TotalOtherPay, &rec.TotalPay,
+		&rec.TotalMiles, &rec.PerMileRevenue, &rec.DispatcherName, &rec.DriverName,
+		&rec.TeamDriverName, &rec.TruckUnit, &rec.CustomerName, &rec.PickupTime,
+		&rec.DeliveryTime, &rec.PickupAppointmentTime, &rec.DeliveryAppointmentTime,
+		&rec.CreatedDatetime, &rec.SyncedAt,
+	)
+	rec.DispatcherName = formatPersonNamePtr(rec.DispatcherName)
+	rec.DriverName = formatPersonNamePtr(rec.DriverName)
+	rec.TeamDriverName = formatPersonNamePtr(rec.TeamDriverName)
+	rec.TruckUnit = normalizeTruckUnitPtr(rec.TruckUnit)
+	return rec, err
+}
+
 const selectLoadsSQL = `
 SELECT
 	id, load_id, driver_id, dispatcher_id, shipment_id, status,
@@ -366,7 +447,7 @@ SELECT
 	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
 	created_datetime, synced_at
 FROM loads
-ORDER BY id`
+`
 
 var ErrMissingLoadID = errors.New("datatruck load is missing load_id")
 
@@ -422,8 +503,8 @@ func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *str
 		if dispatcherID != nil {
 			_, err = tx.Exec(ctx, `
 				UPDATE drivers
-				SET dispatcher_id = COALESCE(dispatcher_id, $2), updated_at = now()
-				WHERE id = $1 AND dispatcher_id IS NULL`, id, *dispatcherID)
+				SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
+				WHERE id = $1`, id, *dispatcherID)
 		}
 		return id, err
 	}
@@ -431,13 +512,57 @@ func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *str
 		return "", err
 	}
 
+	permutationID, found, err := findDriverByTokenSignature(ctx, tx, displayName)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		if dispatcherID != nil {
+			_, err = tx.Exec(ctx, `
+				UPDATE drivers
+				SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
+				WHERE id = $1`, permutationID, *dispatcherID)
+		}
+		return permutationID, err
+	}
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO drivers (
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			dispatcher_id, active
-		) VALUES ($1, $2, false, 'cpm', 0, $3, true)
-		RETURNING id`, displayName, normalizedName, dispatcherID).Scan(&id)
+		) VALUES ($1, $2, false, 'cpm', 0, $3, $4)
+		RETURNING id`, displayName, normalizedName, dispatcherID, dispatcherID != nil).Scan(&id)
 	return id, err
+}
+
+func findDriverByTokenSignature(ctx context.Context, tx pgx.Tx, name string) (string, bool, error) {
+	signature := personNameTokenSignature(name)
+	if signature == "" {
+		return "", false, nil
+	}
+
+	rows, err := tx.Query(ctx, `SELECT id, full_name FROM drivers ORDER BY created_at, id`)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+
+	var matchedID string
+	matches := 0
+	for rows.Next() {
+		var candidateID, candidateName string
+		if err := rows.Scan(&candidateID, &candidateName); err != nil {
+			return "", false, err
+		}
+		if personNameTokenSignature(candidateName) == signature {
+			matchedID = candidateID
+			matches++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	return matchedID, matches == 1, nil
 }
 
 type truckAssignment struct {

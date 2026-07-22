@@ -5,6 +5,10 @@ import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertCircle,
+  ChevronFirst,
+  ChevronLast,
+  ChevronLeft,
+  ChevronRight,
   LoaderCircle,
   Pencil,
   Plus,
@@ -12,6 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { PAGE_SIZE_OPTIONS } from "../../lib/pagination";
 
 export const controlClass =
   "w-full rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2 text-[13px] text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
@@ -228,6 +233,69 @@ export function TableShell({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800/60 bg-card">
       <div className="overflow-x-auto">{children}</div>
+    </div>
+  );
+}
+
+export function TablePagination({
+  page,
+  pageSize,
+  totalItems,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  if (totalItems === 0) return null;
+
+  const firstItem = (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, totalItems);
+  const buttonClass =
+    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 text-zinc-500 transition hover:border-zinc-700 hover:bg-zinc-800/60 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-zinc-800 disabled:hover:bg-transparent disabled:hover:text-zinc-500";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-zinc-800/60 bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-[12px] text-zinc-500">
+        Showing <span className="font-medium text-zinc-300">{firstItem.toLocaleString()}–{lastItem.toLocaleString()}</span> of{" "}
+        <span className="font-medium text-zinc-300">{totalItems.toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-[12px] text-zinc-500">
+          Rows per page
+          <select
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[12px] text-zinc-300 outline-none focus:border-blue-500/60"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </label>
+        <span className="min-w-20 text-center text-[12px] text-zinc-500">
+          Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+        </span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onPageChange(1)} disabled={page === 1} className={buttonClass} aria-label="First page">
+            <ChevronFirst className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => onPageChange(page - 1)} disabled={page === 1} className={buttonClass} aria-label="Previous page">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className={buttonClass} aria-label="Next page">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => onPageChange(totalPages)} disabled={page === totalPages} className={buttonClass} aria-label="Last page">
+            <ChevronLast className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

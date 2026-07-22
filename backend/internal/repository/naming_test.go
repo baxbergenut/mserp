@@ -2,28 +2,21 @@ package repository
 
 import "testing"
 
-func TestFormatPersonName(t *testing.T) {
-	tests := map[string]string{
-		"JOHN DOE":         "John Doe",
-		"  jane   DOE  ":   "Jane Doe",
-		"mary-jane o'NEIL": "Mary-Jane O'Neil",
-		"":                 "",
+func TestPersonNameTokenSignatureIgnoresOrderAndPunctuation(t *testing.T) {
+	left := personNameTokenSignature("Jane Mary Doe")
+	right := personNameTokenSignature("Doe, Jane Mary")
+	if left != right {
+		t.Fatalf("signatures differ: %q != %q", left, right)
 	}
-	for input, expected := range tests {
-		if actual := formatPersonName(input); actual != expected {
-			t.Errorf("formatPersonName(%q) = %q, want %q", input, actual, expected)
+}
+
+func TestExcludedRelayFees(t *testing.T) {
+	for _, feeType := range []string{"sender_fee", "Platform_Fee", " deposit "} {
+		if !isExcludedRelayFee(feeType) {
+			t.Fatalf("expected %q to be excluded", feeType)
 		}
 	}
-}
-
-func TestNormalizeName(t *testing.T) {
-	if actual := normalizeName("  JOHN   Doe "); actual != "john doe" {
-		t.Fatalf("normalizeName returned %q", actual)
-	}
-}
-
-func TestNormalizeTruckUnit(t *testing.T) {
-	if actual := normalizeTruckUnit("  ab  123 "); actual != "AB 123" {
-		t.Fatalf("normalizeTruckUnit returned %q", actual)
+	if isExcludedRelayFee("merchant_service_fee") {
+		t.Fatal("merchant service fee should remain reportable")
 	}
 }

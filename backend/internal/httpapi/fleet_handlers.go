@@ -59,6 +59,7 @@ type driverRequest struct {
 	TruckID          *string `json:"truckId"`
 	Active           bool    `json:"active"`
 	Notes            string  `json:"notes"`
+	CDLFileID        *string `json:"cdlFileId"`
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
@@ -81,6 +82,9 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	if err := validateOptionalUUID(request.TruckID, "truck id"); err != nil {
 		return repository.DriverInput{}, err
 	}
+	if err := validateOptionalUUID(request.CDLFileID, "CDL file id"); err != nil {
+		return repository.DriverInput{}, err
+	}
 	licenseExpires, err := parseOptionalDate(request.LicenseExpires, "license expiration")
 	if err != nil {
 		return repository.DriverInput{}, err
@@ -98,6 +102,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		City: optionalString(request.City), State: optionalString(request.State), PostalCode: optionalString(request.PostalCode),
 		EmergencyContact: optionalString(request.EmergencyContact), DispatcherID: request.DispatcherID,
 		TruckID: request.TruckID, Active: request.Active, Notes: optionalString(request.Notes),
+		CDLFileID: request.CDLFileID,
 	}, nil
 }
 
@@ -119,6 +124,7 @@ type truckRequest struct {
 	DriverID            *string `json:"driverId"`
 	Active              bool    `json:"active"`
 	Notes               string  `json:"notes"`
+	IRPFileID           *string `json:"irpFileId"`
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
@@ -144,6 +150,9 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 	if err := validateOptionalUUID(request.DriverID, "driver id"); err != nil {
 		return repository.TruckInput{}, err
 	}
+	if err := validateOptionalUUID(request.IRPFileID, "IRP file id"); err != nil {
+		return repository.TruckInput{}, err
+	}
 	registrationExpires, err := parseOptionalDate(request.RegistrationExpires, "registration expiration")
 	if err != nil {
 		return repository.TruckInput{}, err
@@ -164,6 +173,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		RegistrationExpires: registrationExpires, InsuranceExpires: insuranceExpires,
 		LastServiceDate: lastServiceDate, NextServiceMiles: request.NextServiceMiles,
 		DriverID: request.DriverID, Active: request.Active, Notes: optionalString(request.Notes),
+		IRPFileID: request.IRPFileID,
 	}, nil
 }
 
@@ -204,6 +214,23 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 }
 
 func (handler fleetHandler) listDrivers(w http.ResponseWriter, r *http.Request) {
+	if wantsPagination(r) {
+		pagination, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		value, err := handler.repo.ListDriversPage(
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
+			strings.EqualFold(r.URL.Query().Get("includeInactive"), "true"),
+		)
+		if err != nil {
+			handler.writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, value)
+		return
+	}
 	values, err := handler.repo.ListDrivers(r.Context())
 	if err != nil {
 		handler.writeError(w, err)
@@ -267,6 +294,22 @@ func (handler fleetHandler) deleteDriver(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
+	if wantsPagination(r) {
+		pagination, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		value, err := handler.repo.ListTrucksPage(
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
+		)
+		if err != nil {
+			handler.writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, value)
+		return
+	}
 	values, err := handler.repo.ListTrucks(r.Context())
 	if err != nil {
 		handler.writeError(w, err)
@@ -330,12 +373,33 @@ func (handler fleetHandler) deleteTruck(w http.ResponseWriter, r *http.Request) 
 }
 
 func (handler fleetHandler) listDispatchers(w http.ResponseWriter, r *http.Request) {
+	if wantsPagination(r) {
+		pagination, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		value, err := handler.repo.ListDispatchersPage(
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
+		)
+		if err != nil {
+			handler.writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, value)
+		return
+	}
 	values, err := handler.repo.ListDispatchers(r.Context())
 	if err != nil {
 		handler.writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, values)
+}
+
+func wantsPagination(r *http.Request) bool {
+	query := r.URL.Query()
+	return query.Has("page") || query.Has("pageSize")
 }
 
 func (handler fleetHandler) createDispatcher(w http.ResponseWriter, r *http.Request) {

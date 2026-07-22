@@ -1,6 +1,8 @@
 "use client";
 
+import { ExternalLink, FileBadge, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import type { Dispatcher, Driver, DriverInput, Truck } from "../lib/types";
+import { fileDownloadUrl } from "../lib/api";
 import {
   controlClass,
   Field,
@@ -28,6 +30,7 @@ export const emptyDriverInput: DriverInput = {
   truckId: null,
   active: true,
   notes: "",
+  cdlFileId: null,
 };
 
 export function driverToInput(driver: Driver): DriverInput {
@@ -51,6 +54,7 @@ export function driverToInput(driver: Driver): DriverInput {
     truckId: driver.truckId,
     active: driver.active,
     notes: driver.notes ?? "",
+    cdlFileId: driver.cdlFileId,
   };
 }
 
@@ -59,17 +63,98 @@ export function DriverForm({
   dispatchers,
   trucks,
   onChange,
+  cdlFileName,
+  isUploadingCDL,
+  onUploadCDL,
+  onRemoveCDL,
 }: {
   value: DriverInput;
   dispatchers: Dispatcher[];
   trucks: Truck[];
   onChange: (value: DriverInput) => void;
+  cdlFileName: string | null;
+  isUploadingCDL: boolean;
+  onUploadCDL: (file: File) => Promise<void>;
+  onRemoveCDL: () => void;
 }) {
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
     onChange({ ...value, [key]: next });
 
   return (
     <div className="space-y-6">
+      <FormSection title="Commercial driver's license">
+        <div className="sm:col-span-2">
+          <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/[0.04] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
+                  {isUploadingCDL ? (
+                    <LoaderCircle className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <FileBadge className="h-5 w-5" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-zinc-200">
+                    {isUploadingCDL
+                      ? "Reading CDL with GROQ…"
+                      : cdlFileName ?? "Upload a driver's CDL"}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-zinc-500">
+                    PDF, PNG, JPEG, or WEBP, up to 10 MB. Include front and back in one PDF when available.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {value.cdlFileId && (
+                  <a
+                    href={fileDownloadUrl(value.cdlFileId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-2 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800/60 hover:text-zinc-200"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open
+                  </a>
+                )}
+                {value.cdlFileId && (
+                  <button
+                    type="button"
+                    onClick={onRemoveCDL}
+                    disabled={isUploadingCDL}
+                    className="rounded-lg border border-zinc-800 p-2 text-zinc-500 transition hover:bg-zinc-800/60 hover:text-zinc-200 disabled:opacity-50"
+                    aria-label="Remove CDL from this driver"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 has-[:disabled]:cursor-wait has-[:disabled]:opacity-60">
+                  <Upload className="h-3.5 w-3.5" />
+                  {value.cdlFileId ? "Replace" : "Upload"}
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept="application/pdf,image/png,image/jpeg,image/webp"
+                    disabled={isUploadingCDL}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      if (file) void onUploadCDL(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {value.cdlFileId && !isUploadingCDL && (
+              <div className="mt-3 flex items-center gap-1.5 border-t border-blue-500/10 pt-3 text-[11px] text-emerald-400">
+                <Sparkles className="h-3.5 w-3.5" />
+                CDL stored. Review the extracted identity, license, and address fields below.
+              </div>
+            )}
+          </div>
+        </div>
+      </FormSection>
+
       <FormSection title="Driver profile">
         <Field label="Full name" wide>
           <input

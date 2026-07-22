@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"sort"
 	"strings"
+	"unicode"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -25,6 +27,22 @@ func formatPersonName(value string) string {
 
 func normalizeName(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
+}
+
+// personNameTokenSignature matches high-confidence upstream name permutations
+// such as "Jane Mary Doe" and "Doe Jane Mary" without treating partial names
+// as the same person. Punctuation and token order are ignored; every token must
+// still be present with the same multiplicity.
+func personNameTokenSignature(value string) string {
+	normalized := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			return unicode.ToLower(r)
+		}
+		return ' '
+	}, value)
+	tokens := strings.Fields(normalized)
+	sort.Strings(tokens)
+	return strings.Join(tokens, " ")
 }
 
 // normalizeTruckUnit keeps truck identifiers visually consistent and makes

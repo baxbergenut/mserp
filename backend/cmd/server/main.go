@@ -16,13 +16,15 @@ import (
 	"mserp/internal/config"
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
+	"mserp/internal/groq"
 	"mserp/internal/httpapi"
 	"mserp/internal/jobs"
+	"mserp/internal/relay"
 	"mserp/internal/repository"
 )
 
 func main() {
-	_ = godotenv.Load()
+	_ = godotenv.Load(".env.relay.local", ".env.local", ".env")
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg, err := config.Load()
@@ -44,8 +46,31 @@ func main() {
 	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
 	loadRepo := repository.NewLoadRepository(pool)
 	fleetRepo := repository.NewFleetRepository(pool)
+	tollRepo := repository.NewTollRepository(pool)
+	fileRepo := repository.NewFileRepository(pool)
+	fuelRepo := repository.NewFuelRepository(pool)
+	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	job := jobs.NewSyncLoadsJob(client, loadRepo, logger)
-	router := httpapi.NewRouter(logger, job, pool, loadRepo, fleetRepo)
+	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
+	fuelJob := jobs.NewSyncFuelJob(
+		relayClient,
+		fuelRepo,
+		cfg.RelayEnvironment,
+		cfg.RelayFuelSyncStart,
+		logger,
+	)
+	router := httpapi.NewRouter(
+		logger,
+		job,
+		fuelJob,
+		pool,
+		loadRepo,
+		fleetRepo,
+		tollRepo,
+		fileRepo,
+		fuelRepo,
+		cabCardExtractor,
+	)
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -57,10 +82,10 @@ func main() {
 		Addr:        ":" + cfg.Port,
 		Handler:     handler,
 		ReadTimeout: 15 * time.Second,
-		// DataTruck sync is currently synchronous and may span several API
-		// pages or a rate-limit retry. Keep the connection open long enough to
-		// return the real result instead of surfacing "Failed to fetch".
-		WriteTimeout:      5 * time.Minute,
+		// DataTruck and Relay syncs are currently synchronous. A first Relay
+		// backfill can cover months of daily requests, while later runs skip
+		// completed dates. Keep the connection open for the initial pass.
+		WriteTimeout:      15 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}

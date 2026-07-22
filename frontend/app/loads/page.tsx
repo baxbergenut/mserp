@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Package, RefreshCw } from "lucide-react";
-import { fetchLoads, syncLoads } from "../lib/api";
-import type { Load, SortKey, SortDir } from "../lib/types";
-import {
-  statusKey,
-  filterLoads,
-  sortLoads,
-  type Filters,
-  EMPTY_FILTERS,
-} from "../lib/utils";
+import { fetchLoadsPage, syncLoads } from "../lib/api";
+import type { Load, SortDir, SortKey } from "../lib/types";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
+import { type Filters, EMPTY_FILTERS } from "../lib/utils";
 import { SearchBar } from "../components/SearchBar";
 import { FilterBar } from "../components/FilterBar";
+import { TablePagination } from "../components/management/ManagementUI";
 import { LoadsTable } from "./LoadsTable";
 
 export default function LoadsPage() {
@@ -22,65 +18,73 @@ export default function LoadsPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sortKey, setSortKey] = useState<SortKey>("PickupTime");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<string[]>([]);
+  const [driverOptions, setDriverOptions] = useState<string[]>([]);
+  const [dispatcherOptions, setDispatcherOptions] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const debouncedSearch = useDebouncedValue(search);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await fetchLoadsPage({
+        page,
+        pageSize,
+        search: debouncedSearch,
+        ...filters,
+        sort: sortKey,
+        direction: sortDir,
+      });
+      setLoads(result.items);
+      setPage(result.page);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+      setStatusOptions(result.options.statuses);
+      setCustomerOptions(result.options.customers);
+      setDriverOptions(result.options.drivers);
+      setDispatcherOptions(result.options.dispatchers);
+    } catch (reason) {
+      setMessage({
+        type: "error",
+        text: reason instanceof Error ? reason.message : "Failed to load loads.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [debouncedSearch, filters, page, pageSize, sortDir, sortKey]);
 
   useEffect(() => {
-    fetchLoads()
-      .then(setLoads)
-      .catch((reason: unknown) =>
-        setMessage({
-          type: "error",
-          text: reason instanceof Error ? reason.message : "Failed to load loads.",
-        }),
-      )
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  // Derive unique filter options from loaded data
-  const statusOptions = useMemo(
-    () => [...new Set(loads.map((l) => statusKey(l.Status)))].sort(),
-    [loads],
-  );
-  const customerOptions = useMemo(
-    () =>
-      [...new Set(loads.map((l) => l.CustomerName).filter(Boolean))].sort(),
-    [loads],
-  );
-  const driverOptions = useMemo(
-    () => [...new Set(loads.map((l) => l.DriverName).filter(Boolean))].sort(),
-    [loads],
-  );
-  const dispatcherOptions = useMemo(
-    () =>
-      [...new Set(loads.map((l) => l.DispatcherName).filter(Boolean))].sort(),
-    [loads],
-  );
-
-  // Apply search → filter → sort pipeline
-  const displayed = useMemo(() => {
-    const filtered = filterLoads(loads, search, filters);
-    return sortLoads(filtered, sortKey, sortDir);
-  }, [loads, search, filters, sortKey, sortDir]);
+    const timeout = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadData]);
 
   const handleSort = (key: SortKey) => {
+    setPage(1);
     if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir((direction) => (direction === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
       setSortDir("desc");
     }
   };
 
-  const isFiltered = search || Object.values(filters).some(Boolean);
+  const isFiltered = Boolean(search || Object.values(filters).some(Boolean));
 
   const handleSync = async () => {
     setIsSyncing(true);
     setMessage(null);
     try {
       const result = await syncLoads();
-      const refreshedLoads = await fetchLoads();
-      setLoads(refreshedLoads);
+      await loadData();
       setMessage({
         type: "success",
         text: `Synced ${result.saved} load${result.saved === 1 ? "" : "s"} from DataTruck for the last week.`,
@@ -97,16 +101,13 @@ export default function LoadsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Package className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">Loads</h1>
           {!isLoading && (
             <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">
-              {isFiltered
-                ? `${displayed.length} of ${loads.length}`
-                : loads.length}
+              {isFiltered ? `${total.toLocaleString()} matching` : total.toLocaleString()}
             </span>
           )}
         </div>
@@ -139,16 +140,15 @@ export default function LoadsPage() {
         </div>
       )}
 
-      {/* Search + Filters */}
       <div className="flex flex-wrap items-start gap-3">
         <SearchBar
           value={search}
-          onChange={setSearch}
+          onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search by load, customer, driver, truck…"
         />
         <FilterBar
           filters={filters}
-          onChange={setFilters}
+          onChange={(value) => { setFilters(value); setPage(1); }}
           statusOptions={statusOptions}
           customerOptions={customerOptions}
           dispatcherOptions={dispatcherOptions}
@@ -156,14 +156,23 @@ export default function LoadsPage() {
         />
       </div>
 
-      {/* Table */}
       <LoadsTable
-        loads={displayed}
+        loads={loads}
         isLoading={isLoading}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
       />
+      {!isLoading && (
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalItems={total}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
+        />
+      )}
     </div>
   );
 }

@@ -11,11 +11,15 @@ import {
   Truck,
   Package,
   Headset,
+  Receipt,
+  Fuel,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/loads", label: "Loads", icon: Package },
+  { href: "/fuel", label: "Fuel", icon: Fuel },
+  { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers", icon: Headset },
