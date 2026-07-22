@@ -52,7 +52,7 @@ func main() {
 	fuelRepo := repository.NewFuelRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
-	job := jobs.NewSyncLoadsJob(client, loadRepo, logger)
+	loadJob := jobs.NewSyncLoadsJob(client, loadRepo, logger)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
 	fuelJob := jobs.NewSyncFuelJob(
 		relayClient,
@@ -63,7 +63,7 @@ func main() {
 	)
 	router := httpapi.NewRouter(
 		logger,
-		job,
+		loadJob,
 		fuelJob,
 		pool,
 		loadRepo,
@@ -97,6 +97,39 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	schedulerDone := make(chan struct{})
+	if cfg.ScheduledSyncsEnabled {
+		go func() {
+			defer close(schedulerDone)
+			jobs.RunDailyScheduler(
+				ctx,
+				logger,
+				cfg.ScheduledSyncsLocation,
+				jobs.DailyJob{
+					Name:   "loads",
+					Hour:   cfg.ScheduledLoadsSyncTime.Hour,
+					Minute: cfg.ScheduledLoadsSyncTime.Minute,
+					Run: func(ctx context.Context) error {
+						_, err := loadJob.Run(ctx)
+						return err
+					},
+				},
+				jobs.DailyJob{
+					Name:   "fuel",
+					Hour:   cfg.ScheduledFuelSyncTime.Hour,
+					Minute: cfg.ScheduledFuelSyncTime.Minute,
+					Run: func(ctx context.Context) error {
+						_, err := fuelJob.Run(ctx)
+						return err
+					},
+				},
+			)
+		}()
+	} else {
+		close(schedulerDone)
+		logger.Info("scheduled syncs disabled")
+	}
+
 	go func() {
 		logger.Info("http server starting", "addr", server.Addr)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
@@ -112,5 +145,11 @@ func main() {
 
 	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
 		logger.Error("shutdown server", "error", shutdownErr)
+	}
+
+	select {
+	case <-schedulerDone:
+	case <-shutdownCtx.Done():
+		logger.Warn("scheduled syncs did not stop before shutdown timeout")
 	}
 }

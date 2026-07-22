@@ -117,6 +117,10 @@ RELAY_FUEL_SYNC_START_DATE=2026-01-01
 FRONTEND_ORIGIN=http://localhost:3000
 AUTH_COOKIE_SECURE=false
 AUTH_SESSION_TTL=12h
+SCHEDULED_SYNCS_ENABLED=true
+SCHEDULED_SYNCS_TIMEZONE=America/New_York
+SCHEDULED_LOADS_SYNC_TIME=06:00
+SCHEDULED_FUEL_SYNC_TIME=06:30
 ```
 
 `GROQ_API_KEY` is only required when document extraction is used. CORS allows
@@ -184,9 +188,11 @@ assignment lookup lists.
 ## Domain invariants and data flows
 
 - DataTruck and Relay fuel syncs are initiated by the frontend and remain
-  synchronous. DataTruck fetches the last seven days and upserts by the upstream
-  integer load record ID. The server write timeout is fifteen minutes to permit
-  pagination, rate-limit retry, and an initial Relay historical backfill.
+  synchronous when manually triggered. The API process also schedules loads at
+  6:00 AM and fuel at 6:30 AM America/New_York by default. DataTruck fetches the
+  last seven days and upserts by the upstream integer load record ID. The server
+  write timeout is fifteen minutes to permit pagination, rate-limit retry, and
+  an initial Relay historical backfill.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.

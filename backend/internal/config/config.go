@@ -11,20 +11,29 @@ import (
 )
 
 type Config struct {
-	BindAddress          string
-	Port                 string
-	DatabaseURL          string
-	DataTruckAPIKey      string
-	DataTruckCompanyName string
-	GroqAPIKey           string
-	GroqModel            string
-	RelayEnvironment     string
-	RelayAPIURL          string
-	RelayAPIKey          string
-	RelayFuelSyncStart   time.Time
-	FrontendOrigin       string
-	AuthCookieSecure     bool
-	AuthSessionTTL       time.Duration
+	BindAddress            string
+	Port                   string
+	DatabaseURL            string
+	DataTruckAPIKey        string
+	DataTruckCompanyName   string
+	GroqAPIKey             string
+	GroqModel              string
+	RelayEnvironment       string
+	RelayAPIURL            string
+	RelayAPIKey            string
+	RelayFuelSyncStart     time.Time
+	FrontendOrigin         string
+	AuthCookieSecure       bool
+	AuthSessionTTL         time.Duration
+	ScheduledSyncsEnabled  bool
+	ScheduledSyncsLocation *time.Location
+	ScheduledLoadsSyncTime DailySyncTime
+	ScheduledFuelSyncTime  DailySyncTime
+}
+
+type DailySyncTime struct {
+	Hour   int
+	Minute int
 }
 
 func Load() (Config, error) {
@@ -78,22 +87,42 @@ func Load() (Config, error) {
 	if err != nil || authSessionTTL < 15*time.Minute || authSessionTTL > 7*24*time.Hour {
 		return Config{}, errors.New("AUTH_SESSION_TTL must be a duration between 15m and 168h")
 	}
+	scheduledSyncsEnabled, err := strconv.ParseBool(envOrDefault("SCHEDULED_SYNCS_ENABLED", "true"))
+	if err != nil {
+		return Config{}, errors.New("SCHEDULED_SYNCS_ENABLED must be true or false")
+	}
+	scheduledSyncsLocation, err := time.LoadLocation(envOrDefault("SCHEDULED_SYNCS_TIMEZONE", "America/New_York"))
+	if err != nil {
+		return Config{}, fmt.Errorf("load SCHEDULED_SYNCS_TIMEZONE: %w", err)
+	}
+	scheduledLoadsSyncTime, err := parseDailySyncTime("SCHEDULED_LOADS_SYNC_TIME", "06:00")
+	if err != nil {
+		return Config{}, err
+	}
+	scheduledFuelSyncTime, err := parseDailySyncTime("SCHEDULED_FUEL_SYNC_TIME", "06:30")
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
-		BindAddress:          envOrDefault("BIND_ADDRESS", "127.0.0.1"),
-		Port:                 envOrDefault("PORT", "8080"),
-		DatabaseURL:          strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		DataTruckAPIKey:      strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
-		DataTruckCompanyName: strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
-		GroqAPIKey:           strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
-		GroqModel:            envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
-		RelayEnvironment:     relayEnvironment,
-		RelayAPIURL:          relayAPIURL,
-		RelayAPIKey:          relayAPIKey,
-		RelayFuelSyncStart:   relaySyncStart,
-		FrontendOrigin:       frontendOrigin,
-		AuthCookieSecure:     authCookieSecure,
-		AuthSessionTTL:       authSessionTTL,
+		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
+		Port:                   envOrDefault("PORT", "8080"),
+		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		DataTruckAPIKey:        strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
+		DataTruckCompanyName:   strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
+		GroqAPIKey:             strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
+		GroqModel:              envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
+		RelayEnvironment:       relayEnvironment,
+		RelayAPIURL:            relayAPIURL,
+		RelayAPIKey:            relayAPIKey,
+		RelayFuelSyncStart:     relaySyncStart,
+		FrontendOrigin:         frontendOrigin,
+		AuthCookieSecure:       authCookieSecure,
+		AuthSessionTTL:         authSessionTTL,
+		ScheduledSyncsEnabled:  scheduledSyncsEnabled,
+		ScheduledSyncsLocation: scheduledSyncsLocation,
+		ScheduledLoadsSyncTime: scheduledLoadsSyncTime,
+		ScheduledFuelSyncTime:  scheduledFuelSyncTime,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -125,4 +154,13 @@ func envOrDefault(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func parseDailySyncTime(key, fallback string) (DailySyncTime, error) {
+	value := envOrDefault(key, fallback)
+	parsed, err := time.Parse("15:04", value)
+	if err != nil {
+		return DailySyncTime{}, fmt.Errorf("%s must use 24-hour HH:MM format: %w", key, err)
+	}
+	return DailySyncTime{Hour: parsed.Hour(), Minute: parsed.Minute()}, nil
 }
