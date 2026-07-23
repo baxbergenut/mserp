@@ -50,7 +50,7 @@ const number = new Intl.NumberFormat("en-US", {
 });
 
 const PIE_COLORS: Record<string, string> = {
-  "Driver pay": "#3b82f6",
+  "Driver pay / shares": "#3b82f6",
   Fuel: "#f59e0b",
   Tolls: "#a78bfa",
 };
@@ -76,10 +76,16 @@ function weekLabel(value: string, includeYear = true) {
   return `${startText} – ${endText}`;
 }
 
-function payPlan(type: "cpm" | "gross_percentage", rate: number) {
+function payPlan(
+  type: "cpm" | "gross_percentage",
+  rate: number,
+  isOwnerOperator: boolean,
+) {
   return type === "cpm"
     ? `${preciseMoney.format(rate)} / mile`
-    : `${rate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% of gross`;
+    : `${rate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% ${
+        isOwnerOperator ? "gross share" : "of gross"
+      }`;
 }
 
 function KpiCard({
@@ -165,7 +171,7 @@ function ExpenseBreakdown({ dashboard }: { dashboard: FinancialDashboard }) {
         <div>
           <h2 className="text-sm font-medium text-zinc-200">Expense breakdown</h2>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Known operating costs in this report.
+            Company-borne costs only; owner-operator deductions are excluded.
           </p>
         </div>
         <Receipt className="h-4 w-4 text-zinc-600" />
@@ -271,7 +277,7 @@ function PerformanceSummary({
       color: "bg-blue-500",
     },
     {
-      label: "Fuel to gross",
+      label: "Company fuel to gross",
       value: `${fuelRatio.toFixed(1)}%`,
       width: Math.min(fuelRatio, 100),
       color: "bg-amber-500",
@@ -320,8 +326,13 @@ function PerformanceSummary({
       <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2.5">
         <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
         <p className="text-[11px] leading-relaxed text-amber-200/70">
-          Estimated profit does not include maintenance or dispatcher pay yet.
-          Add those sources later for a true net-profit figure.
+          Owner-operator deductions:{" "}
+          <span className="font-mono text-amber-200">
+            {money.format(dashboard.totals.ownerOperatorFuel)} fuel +{" "}
+            {money.format(dashboard.totals.ownerOperatorTolls)} tolls
+          </span>
+          . They reduce owner-operator settlement, not company profit.
+          Maintenance and dispatcher pay are still untracked.
         </p>
       </div>
     </section>
@@ -354,7 +365,8 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
             </span>
           </div>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Pay, fuel, tolls, miles, and loads attributed to each driver.
+            Owner-operator fuel and tolls reduce settlement; company-driver costs
+            reduce company contribution.
           </p>
         </div>
         <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 focus-within:border-zinc-600">
@@ -374,18 +386,19 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-left text-[12px]">
+          <table className="w-full min-w-[1280px] text-left text-[12px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-600">
                 <th className="px-4 py-3 font-medium sm:px-5">Driver / loads</th>
                 <th className="px-4 py-3 font-medium">Pay plan</th>
                 <th className="px-4 py-3 text-right font-medium">Gross</th>
-                <th className="px-4 py-3 text-right font-medium">Driver pay</th>
+                <th className="px-4 py-3 text-right font-medium">Pay / share</th>
                 <th className="px-4 py-3 text-right font-medium">Fuel</th>
                 <th className="px-4 py-3 text-right font-medium">Tolls</th>
+                <th className="px-4 py-3 text-right font-medium">Net settlement</th>
                 <th className="px-4 py-3 text-right font-medium">Miles</th>
                 <th className="px-4 py-3 text-right font-medium">RPM</th>
-                <th className="px-4 py-3 text-right font-medium sm:pr-5">Contribution</th>
+                <th className="px-4 py-3 text-right font-medium sm:pr-5">Company contribution</th>
               </tr>
             </thead>
             <tbody>
@@ -395,8 +408,13 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
                   className="border-b border-zinc-900/80 text-zinc-400 transition-colors last:border-0 hover:bg-zinc-800/15"
                 >
                   <td className="px-4 py-3 sm:px-5">
-                    <div className="font-medium text-zinc-200">
-                      {driver.driverName}
+                    <div className="flex items-center gap-2 font-medium text-zinc-200">
+                      <span>{driver.driverName}</span>
+                      {driver.isOwnerOperator && (
+                        <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-blue-400">
+                          Owner-op
+                        </span>
+                      )}
                     </div>
                     <details className="group mt-1">
                       <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400">
@@ -417,7 +435,11 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
                     </details>
                   </td>
                   <td className="px-4 py-3 text-zinc-500">
-                    {payPlan(driver.payType, driver.payRate)}
+                    {payPlan(
+                      driver.payType,
+                      driver.payRate,
+                      driver.isOwnerOperator,
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums text-zinc-200">
                     {money.format(driver.gross)}
@@ -426,10 +448,23 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
                     {money.format(driver.pay)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {money.format(driver.fuel)}
+                    <div>{money.format(driver.fuel)}</div>
+                    {driver.isOwnerOperator && driver.fuel > 0 && (
+                      <div className="mt-0.5 text-[9px] text-blue-500">
+                        deducted
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {money.format(driver.tolls)}
+                    <div>{money.format(driver.tolls)}</div>
+                    {driver.isOwnerOperator && driver.tolls > 0 && (
+                      <div className="mt-0.5 text-[9px] text-blue-500">
+                        deducted
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-medium tabular-nums text-zinc-200">
+                    {money.format(driver.settlement)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     {number.format(driver.miles)}
@@ -680,7 +715,7 @@ export default function DashboardPage() {
             <KpiCard
               label="Known expenses"
               value={money.format(dashboard.totals.knownExpenses)}
-              detail="Driver pay + diesel + tolls"
+              detail="Pay/shares + company-paid diesel and tolls"
               icon={Receipt}
               tone="text-amber-400"
             />
@@ -714,7 +749,12 @@ export default function DashboardPage() {
                 <div className="font-mono text-sm font-semibold text-zinc-200">
                   {money.format(dashboard.totals.fuel)}
                 </div>
-                <div className="text-[10px] text-zinc-600">Diesel</div>
+                <div className="text-[10px] text-zinc-600">
+                  Company diesel
+                  {dashboard.totals.ownerOperatorFuel > 0
+                    ? ` · ${money.format(dashboard.totals.ownerOperatorFuel)} owner-op`
+                    : ""}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-xl border border-zinc-800/50 bg-zinc-950/25 px-4 py-3">
@@ -724,7 +764,10 @@ export default function DashboardPage() {
                   {money.format(dashboard.totals.tolls)}
                 </div>
                 <div className="text-[10px] text-zinc-600">
-                  Tolls
+                  Company tolls
+                  {dashboard.totals.ownerOperatorTolls > 0
+                    ? ` · ${money.format(dashboard.totals.ownerOperatorTolls)} owner-op`
+                    : ""}
                   {dashboard.totals.unattributedTolls > 0
                     ? ` · ${money.format(dashboard.totals.unattributedTolls)} unassigned`
                     : ""}

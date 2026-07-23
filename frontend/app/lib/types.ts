@@ -125,6 +125,8 @@ export interface FinancialDashboard {
     driverPay: number;
     fuel: number;
     tolls: number;
+    ownerOperatorFuel: number;
+    ownerOperatorTolls: number;
     knownExpenses: number;
     estimatedProfit: number;
     estimatedProfitMargin: number;
@@ -142,6 +144,7 @@ export interface FinancialDashboard {
   drivers: Array<{
     driverId: string;
     driverName: string;
+    isOwnerOperator: boolean;
     payType: PayType;
     payRate: number;
     gross: number;
@@ -152,6 +155,7 @@ export interface FinancialDashboard {
     loadCount: number;
     loadNumbers: string[];
     revenuePerMile: number;
+    settlement: number;
     contribution: number;
   }>;
   dispatchers: Array<{

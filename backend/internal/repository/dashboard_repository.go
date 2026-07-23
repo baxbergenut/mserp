@@ -31,6 +31,8 @@ type FinancialDashboardTotals struct {
 	DriverPay             float64 `json:"driverPay"`
 	Fuel                  float64 `json:"fuel"`
 	Tolls                 float64 `json:"tolls"`
+	OwnerOperatorFuel     float64 `json:"ownerOperatorFuel"`
+	OwnerOperatorTolls    float64 `json:"ownerOperatorTolls"`
 	KnownExpenses         float64 `json:"knownExpenses"`
 	EstimatedProfit       float64 `json:"estimatedProfit"`
 	EstimatedProfitMargin float64 `json:"estimatedProfitMargin"`
@@ -48,19 +50,21 @@ type FinancialExpense struct {
 }
 
 type DriverFinancialBreakdown struct {
-	DriverID       string   `json:"driverId"`
-	DriverName     string   `json:"driverName"`
-	PayType        string   `json:"payType"`
-	PayRate        float64  `json:"payRate"`
-	Gross          float64  `json:"gross"`
-	Pay            float64  `json:"pay"`
-	Fuel           float64  `json:"fuel"`
-	Tolls          float64  `json:"tolls"`
-	Miles          float64  `json:"miles"`
-	LoadCount      int      `json:"loadCount"`
-	LoadNumbers    []string `json:"loadNumbers"`
-	RevenuePerMile float64  `json:"revenuePerMile"`
-	Contribution   float64  `json:"contribution"`
+	DriverID        string   `json:"driverId"`
+	DriverName      string   `json:"driverName"`
+	IsOwnerOperator bool     `json:"isOwnerOperator"`
+	PayType         string   `json:"payType"`
+	PayRate         float64  `json:"payRate"`
+	Gross           float64  `json:"gross"`
+	Pay             float64  `json:"pay"`
+	Fuel            float64  `json:"fuel"`
+	Tolls           float64  `json:"tolls"`
+	Miles           float64  `json:"miles"`
+	LoadCount       int      `json:"loadCount"`
+	LoadNumbers     []string `json:"loadNumbers"`
+	RevenuePerMile  float64  `json:"revenuePerMile"`
+	Settlement      float64  `json:"settlement"`
+	Contribution    float64  `json:"contribution"`
 }
 
 type DispatcherFinancialBreakdown struct {
@@ -101,10 +105,10 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		Dispatchers:    make([]DispatcherFinancialBreakdown, 0),
 		Methodology: FinancialDashboardMethodology{
 			Gross:     "Invoiced loads only. Weekly reports include pickups from Monday through Sunday when delivery is no later than the following Monday.",
-			DriverPay: "Configured driver pay: miles multiplied by CPM, or load gross multiplied by gross percentage.",
-			Fuel:      "Diesel fuel line items only; DEF, other products, cash advances, and fees are excluded.",
-			Tolls:     "Tolls are assigned using truck assignment history, then a nearby load on the same truck when needed.",
-			Profit:    "Estimated profit subtracts driver pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
+			DriverPay: "Company drivers use configured CPM or gross percentage. An owner-operator's percentage is their gross share; fuel and tolls are deducted from that share to produce their net settlement.",
+			Fuel:      "Diesel only. Owner-operator fuel is a settlement deduction, not a company expense. DEF, other products, cash advances, and fees are excluded.",
+			Tolls:     "Owner-operator tolls are settlement deductions, not company expenses. Tolls are assigned using truck history, then a nearby load when needed.",
+			Profit:    "Owner-operator contribution is the company's retained gross percentage. Company-driver contribution also subtracts driver pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
 			Week:      "Weekly reports run Monday through Sunday in America/New_York.",
 		},
 	}
@@ -146,9 +150,9 @@ func (r *DashboardRepository) GetFinancialDashboard(
 	fuel := totals.Fuel
 	tolls := totals.Tolls
 	dashboard.Expenses = []FinancialExpense{
-		{Category: "Driver pay", Amount: &driverPay, Available: true, Note: "Calculated from each driver's configured pay plan."},
-		{Category: "Fuel", Amount: &fuel, Available: true, Note: "Diesel purchases only."},
-		{Category: "Tolls", Amount: &tolls, Available: true, Note: "All imported toll charges."},
+		{Category: "Driver pay / shares", Amount: &driverPay, Available: true, Note: "Company-driver pay plus owner-operator gross shares before their deductions."},
+		{Category: "Fuel", Amount: &fuel, Available: true, Note: "Company-paid diesel only; owner-operator fuel reduces their settlement."},
+		{Category: "Tolls", Amount: &tolls, Available: true, Note: "Company-paid tolls only; owner-operator tolls reduce their settlement."},
 		{Category: "Maintenance", Available: false, Note: "Maintenance costs are not tracked yet."},
 		{Category: "Dispatcher pay", Available: false, Note: "Waiting for the dispatcher pay formula."},
 	}
@@ -203,8 +207,30 @@ func (r *DashboardRepository) loadFinancialTotals(
 				FROM period_loads pl
 				LEFT JOIN drivers d ON d.id = pl.driver_id
 			), 0)::float8,
-			COALESCE((SELECT SUM(spend) FROM period_fuel), 0)::float8,
-			COALESCE((SELECT SUM(amount) FROM period_tolls), 0)::float8,
+			COALESCE((
+				SELECT SUM(pf.spend)
+				FROM period_fuel pf
+				LEFT JOIN drivers d ON d.id = pf.driver_id
+				WHERE NOT COALESCE(d.is_owner_operator, false)
+			), 0)::float8,
+			COALESCE((
+				SELECT SUM(pt.amount)
+				FROM period_tolls pt
+				LEFT JOIN drivers d ON d.id = pt.driver_id
+				WHERE NOT COALESCE(d.is_owner_operator, false)
+			), 0)::float8,
+			COALESCE((
+				SELECT SUM(pf.spend)
+				FROM period_fuel pf
+				JOIN drivers d ON d.id = pf.driver_id
+				WHERE d.is_owner_operator
+			), 0)::float8,
+			COALESCE((
+				SELECT SUM(pt.amount)
+				FROM period_tolls pt
+				JOIN drivers d ON d.id = pt.driver_id
+				WHERE d.is_owner_operator
+			), 0)::float8,
 			COALESCE((SELECT SUM(total_miles) FROM period_loads), 0)::float8,
 			(SELECT COUNT(*) FROM period_loads)::int,
 			COALESCE((SELECT SUM(amount) FROM period_tolls WHERE driver_id IS NULL), 0)::float8`,
@@ -215,6 +241,8 @@ func (r *DashboardRepository) loadFinancialTotals(
 		&dashboard.Totals.DriverPay,
 		&dashboard.Totals.Fuel,
 		&dashboard.Totals.Tolls,
+		&dashboard.Totals.OwnerOperatorFuel,
+		&dashboard.Totals.OwnerOperatorTolls,
 		&dashboard.Totals.Miles,
 		&dashboard.Totals.LoadCount,
 		&dashboard.Totals.UnattributedTolls,
@@ -253,7 +281,7 @@ func (r *DashboardRepository) loadDriverFinancials(
 			UNION
 			SELECT driver_id FROM toll_by_driver
 		)
-		SELECT d.id, d.full_name, d.pay_type, d.pay_rate::float8,
+		SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate::float8,
 			COALESCE(l.gross, 0)::float8,
 			CASE
 				WHEN d.pay_type = 'cpm' THEN COALESCE(l.miles, 0) * d.pay_rate
@@ -284,6 +312,7 @@ func (r *DashboardRepository) loadDriverFinancials(
 		if err := rows.Scan(
 			&driver.DriverID,
 			&driver.DriverName,
+			&driver.IsOwnerOperator,
 			&driver.PayType,
 			&driver.PayRate,
 			&driver.Gross,
@@ -299,10 +328,29 @@ func (r *DashboardRepository) loadDriverFinancials(
 		if driver.Miles > 0 {
 			driver.RevenuePerMile = driver.Gross / driver.Miles
 		}
-		driver.Contribution = driver.Gross - driver.Pay - driver.Fuel - driver.Tolls
+		driver.Settlement, driver.Contribution = driverSettlementAndContribution(
+			driver.IsOwnerOperator,
+			driver.Gross,
+			driver.Pay,
+			driver.Fuel,
+			driver.Tolls,
+		)
 		dashboard.Drivers = append(dashboard.Drivers, driver)
 	}
 	return rows.Err()
+}
+
+func driverSettlementAndContribution(
+	isOwnerOperator bool,
+	gross float64,
+	pay float64,
+	fuel float64,
+	tolls float64,
+) (settlement float64, contribution float64) {
+	if isOwnerOperator {
+		return pay - fuel - tolls, gross - pay
+	}
+	return pay, gross - pay - fuel - tolls
 }
 
 func (r *DashboardRepository) loadDispatcherFinancials(
