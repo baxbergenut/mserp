@@ -5,6 +5,7 @@ import type {
   Driver,
   DriverInput,
   FuelDashboard,
+  FinancialDashboard,
   FuelTransaction,
   FuelTransactionPage,
   Load,
@@ -108,6 +109,8 @@ export const fetchFuelDashboard = (query: {
   dateFrom?: string;
   dateTo?: string;
 }) => apiRequest<FuelDashboard>(withQuery("/fuel-dashboard", query));
+export const fetchFinancialDashboard = (query: { weekStart?: string }) =>
+  apiRequest<FinancialDashboard>(withQuery("/financial-dashboard", query));
 export const syncFuelTransactions = () =>
   apiRequest<SyncFuelResult>("/jobs/sync-fuel", { method: "POST" });
 

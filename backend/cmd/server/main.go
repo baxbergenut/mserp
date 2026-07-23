@@ -50,6 +50,7 @@ func main() {
 	tollRepo := repository.NewTollRepository(pool)
 	fileRepo := repository.NewFileRepository(pool)
 	fuelRepo := repository.NewFuelRepository(pool)
+	dashboardRepo := repository.NewDashboardRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	loadJob := jobs.NewSyncLoadsJob(client, loadRepo, logger)
@@ -71,6 +72,7 @@ func main() {
 		tollRepo,
 		fileRepo,
 		fuelRepo,
+		dashboardRepo,
 		authRepo,
 		cabCardExtractor,
 		httpapi.AuthOptions{
