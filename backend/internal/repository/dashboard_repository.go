@@ -113,19 +113,40 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		},
 	}
 
-	if query.DateFrom == nil {
-		dashboard.Period = FinancialDashboardPeriod{Kind: "allTime"}
-	} else {
-		dateFrom := query.DateFrom.Format(time.DateOnly)
-		dateTo := query.DateTo.AddDate(0, 0, -1).Format(time.DateOnly)
-		dashboard.Period = FinancialDashboardPeriod{
-			Kind: "week", DateFrom: &dateFrom, DateTo: &dateTo,
-		}
-	}
-
 	if err := r.loadAvailableWeeks(ctx, &dashboard); err != nil {
 		return FinancialDashboard{}, err
 	}
+
+	if query.DateFrom == nil {
+		var weekStart time.Time
+		if len(dashboard.AvailableWeeks) > 0 {
+			var err error
+			weekStart, err = time.Parse(time.DateOnly, dashboard.AvailableWeeks[0])
+			if err != nil {
+				return FinancialDashboard{}, err
+			}
+		} else {
+			location, err := time.LoadLocation("America/New_York")
+			if err != nil {
+				return FinancialDashboard{}, err
+			}
+			now := time.Now().In(location)
+			daysSinceMonday := (int(now.Weekday()) + 6) % 7
+			weekStart = time.Date(now.Year(), now.Month(), now.Day()-daysSinceMonday, 0, 0, 0, 0, location)
+		}
+		query.DateFrom = &weekStart
+	}
+	if query.DateTo == nil {
+		dateTo := query.DateFrom.AddDate(0, 0, 7)
+		query.DateTo = &dateTo
+	}
+
+	dateFrom := query.DateFrom.Format(time.DateOnly)
+	dateTo := query.DateTo.AddDate(0, 0, -1).Format(time.DateOnly)
+	dashboard.Period = FinancialDashboardPeriod{
+		Kind: "week", DateFrom: &dateFrom, DateTo: &dateTo,
+	}
+
 	if err := r.loadFinancialTotals(ctx, query, &dashboard); err != nil {
 		return FinancialDashboard{}, err
 	}
@@ -165,15 +186,11 @@ func (r *DashboardRepository) loadAvailableWeeks(
 	dashboard *FinancialDashboard,
 ) error {
 	rows, err := r.pool.Query(ctx, financialDashboardBaseSQL+`
-		SELECT DISTINCT date_trunc('week', activity_date::timestamp)::date AS week_start
-		FROM (
-			SELECT pickup_date AS activity_date FROM load_events
-			UNION ALL
-			SELECT purchased_on FROM fuel_events
-			UNION ALL
-			SELECT exit_date FROM toll_events
-		) activity
-		WHERE activity_date IS NOT NULL
+		SELECT DISTINCT date_trunc('week', pickup_date::timestamp)::date AS week_start
+		FROM load_events
+		WHERE pickup_date IS NOT NULL
+		  AND delivery_date IS NOT NULL
+		  AND delivery_date <= date_trunc('week', pickup_date::timestamp)::date + 7
 		ORDER BY week_start DESC`, nil, nil)
 	if err != nil {
 		return err

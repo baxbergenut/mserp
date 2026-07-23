@@ -173,7 +173,8 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `POST /toll-reports` (multipart CSV)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
-- Financial reporting: `GET /financial-dashboard` (all time or `weekStart=YYYY-MM-DD`)
+- Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
+  `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
 
 Backend JSON is intentionally not uniform: loads retain exported Go field names

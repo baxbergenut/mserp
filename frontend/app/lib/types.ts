@@ -115,7 +115,7 @@ export interface FuelDashboard {
 
 export interface FinancialDashboard {
   period: {
-    kind: "allTime" | "week";
+    kind: "week";
     dateFrom: string | null;
     dateTo: string | null;
   };

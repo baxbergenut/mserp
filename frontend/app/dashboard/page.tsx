@@ -30,8 +30,6 @@ import {
 import { fetchFinancialDashboard } from "../lib/api";
 import type { FinancialDashboard } from "../lib/types";
 
-type DashboardView = "allTime" | "weekly";
-
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -564,23 +562,18 @@ function DispatcherSkeleton({
 }
 
 export default function DashboardPage() {
-  const [view, setView] = useState<DashboardView>("allTime");
   const [weekStart, setWeekStart] = useState("");
   const [dashboard, setDashboard] = useState<FinancialDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const requestWeekStart = view === "weekly" ? weekStart : "";
 
   useEffect(() => {
-    if (view === "weekly" && !requestWeekStart) return;
     let cancelled = false;
-    fetchFinancialDashboard(
-      view === "weekly" ? { weekStart: requestWeekStart } : {},
-    )
+    fetchFinancialDashboard({})
       .then((result) => {
         if (cancelled) return;
         setDashboard(result);
-        setWeekStart((current) => current || result.availableWeeks[0] || "");
+        setWeekStart(result.period.dateFrom ?? "");
         setError("");
       })
       .catch((reason) => {
@@ -597,14 +590,24 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [view, requestWeekStart]);
+  }, []);
 
-  const selectView = (next: DashboardView) => {
-    if (next === view) return;
+  const selectWeek = async (value: string) => {
+    if (!value || value === weekStart) return;
     setIsLoading(true);
-    setView(next);
-    if (next === "weekly" && !weekStart && dashboard?.availableWeeks[0]) {
-      setWeekStart(dashboard.availableWeeks[0]);
+    setWeekStart(value);
+    try {
+      const result = await fetchFinancialDashboard({ weekStart: value });
+      setDashboard(result);
+      setError("");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The weekly financial report could not be loaded.",
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -615,61 +618,31 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2.5">
             <Landmark className="h-5 w-5 text-blue-400" />
             <h1 className="text-lg font-semibold text-zinc-100">
-              Financial dashboard
+              Weekly financial dashboard
             </h1>
           </div>
           <p className="mt-1.5 text-[12px] text-zinc-600">
-            Gross, known expenses, estimated profit, and team performance.
+            Reliable Monday–Sunday reporting for qualified invoiced loads.
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {view === "weekly" && dashboard && (
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
-              <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
-              <select
-                value={weekStart}
-                onChange={(event) => {
-                  setIsLoading(true);
-                  setWeekStart(event.target.value);
-                }}
-                className="bg-transparent text-[12px] text-zinc-300 outline-none"
-                aria-label="Select weekly report"
-              >
-                {dashboard.availableWeeks.map((week) => (
-                  <option key={week} value={week}>
-                    {weekLabel(week)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div className="flex rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5">
-            <button
-              type="button"
-              onClick={() => selectView("allTime")}
-              className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all ${
-                view === "allTime"
-                  ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
+        {dashboard && dashboard.availableWeeks.length > 0 && (
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
+            <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
+            <select
+              value={weekStart}
+              onChange={(event) => void selectWeek(event.target.value)}
+              className="bg-transparent text-[12px] text-zinc-300 outline-none"
+              aria-label="Select weekly report"
             >
-              All time
-            </button>
-            <button
-              type="button"
-              onClick={() => selectView("weekly")}
-              disabled={!weekStart && !dashboard?.availableWeeks.length}
-              className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-                view === "weekly"
-                  ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Weekly report
-            </button>
-          </div>
-        </div>
+              {dashboard.availableWeeks.map((week) => (
+                <option key={week} value={week}>
+                  {weekLabel(week)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </header>
 
       {error && (
@@ -688,9 +661,9 @@ export default function DashboardPage() {
         <div className={`space-y-4 ${isLoading ? "opacity-60" : ""}`}>
           <div className="flex items-center gap-2 text-[11px] text-zinc-600">
             <CalendarDays className="h-3.5 w-3.5" />
-            {dashboard.period.kind === "week" && dashboard.period.dateFrom
+            {dashboard.period.dateFrom
               ? `Weekly report · ${weekLabel(dashboard.period.dateFrom)} · Monday–Sunday`
-              : "All recorded invoiced activity"}
+              : "No qualifying report weeks yet"}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
