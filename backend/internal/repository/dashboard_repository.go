@@ -31,8 +31,8 @@ type FinancialDashboardTotals struct {
 	DriverPay             float64 `json:"driverPay"`
 	Fuel                  float64 `json:"fuel"`
 	Tolls                 float64 `json:"tolls"`
-	OwnerOperatorFuel     float64 `json:"ownerOperatorFuel"`
-	OwnerOperatorTolls    float64 `json:"ownerOperatorTolls"`
+	DeductedFuel          float64 `json:"deductedFuel"`
+	DeductedTolls         float64 `json:"deductedTolls"`
 	KnownExpenses         float64 `json:"knownExpenses"`
 	EstimatedProfit       float64 `json:"estimatedProfit"`
 	EstimatedProfitMargin float64 `json:"estimatedProfitMargin"`
@@ -53,6 +53,7 @@ type DriverFinancialBreakdown struct {
 	DriverID        string   `json:"driverId"`
 	DriverName      string   `json:"driverName"`
 	IsOwnerOperator bool     `json:"isOwnerOperator"`
+	DeductsExpenses bool     `json:"deductsExpenses"`
 	PayType         string   `json:"payType"`
 	PayRate         float64  `json:"payRate"`
 	Gross           float64  `json:"gross"`
@@ -105,10 +106,10 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		Dispatchers:    make([]DispatcherFinancialBreakdown, 0),
 		Methodology: FinancialDashboardMethodology{
 			Gross:     "Invoiced loads only. Weekly reports include pickups from Monday through Sunday when delivery is no later than the following Monday.",
-			DriverPay: "Company drivers use configured CPM or gross percentage. An owner-operator's percentage is their gross share; fuel and tolls are deducted from that share to produce their net settlement.",
-			Fuel:      "Diesel only. Owner-operator fuel is a settlement deduction, not a company expense. DEF, other products, cash advances, and fees are excluded.",
-			Tolls:     "Owner-operator tolls are settlement deductions, not company expenses. Tolls are assigned using truck history, then a nearby load when needed.",
-			Profit:    "Owner-operator contribution is the company's retained gross percentage. Company-driver contribution also subtracts driver pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
+			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
+			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
+			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
+			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
 			Week:      "Weekly reports run Monday through Sunday in America/New_York.",
 		},
 	}
@@ -171,9 +172,9 @@ func (r *DashboardRepository) GetFinancialDashboard(
 	fuel := totals.Fuel
 	tolls := totals.Tolls
 	dashboard.Expenses = []FinancialExpense{
-		{Category: "Driver pay / shares", Amount: &driverPay, Available: true, Note: "Company-driver pay plus owner-operator gross shares before their deductions."},
-		{Category: "Fuel", Amount: &fuel, Available: true, Note: "Company-paid diesel only; owner-operator fuel reduces their settlement."},
-		{Category: "Tolls", Amount: &tolls, Available: true, Note: "Company-paid tolls only; owner-operator tolls reduce their settlement."},
+		{Category: "Driver pay / shares", Amount: &driverPay, Available: true, Note: "CPM and company-driver pay plus percentage owner-operator gross shares before deductions."},
+		{Category: "Fuel", Amount: &fuel, Available: true, Note: "Company-paid diesel, including CPM owner-operators. Percentage owner-operator fuel reduces their settlement."},
+		{Category: "Tolls", Amount: &tolls, Available: true, Note: "Company-paid tolls, including CPM owner-operators. Percentage owner-operator tolls reduce their settlement."},
 		{Category: "Maintenance", Available: false, Note: "Maintenance costs are not tracked yet."},
 		{Category: "Dispatcher pay", Available: false, Note: "Waiting for the dispatcher pay formula."},
 	}
@@ -228,25 +229,27 @@ func (r *DashboardRepository) loadFinancialTotals(
 				SELECT SUM(pf.spend)
 				FROM period_fuel pf
 				LEFT JOIN drivers d ON d.id = pf.driver_id
-				WHERE NOT COALESCE(d.is_owner_operator, false)
+				WHERE NOT COALESCE(d.is_owner_operator AND d.pay_type = 'gross_percentage', false)
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pt.amount)
 				FROM period_tolls pt
 				LEFT JOIN drivers d ON d.id = pt.driver_id
-				WHERE NOT COALESCE(d.is_owner_operator, false)
+				WHERE NOT COALESCE(d.is_owner_operator AND d.pay_type = 'gross_percentage', false)
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pf.spend)
 				FROM period_fuel pf
 				JOIN drivers d ON d.id = pf.driver_id
 				WHERE d.is_owner_operator
+				  AND d.pay_type = 'gross_percentage'
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pt.amount)
 				FROM period_tolls pt
 				JOIN drivers d ON d.id = pt.driver_id
 				WHERE d.is_owner_operator
+				  AND d.pay_type = 'gross_percentage'
 			), 0)::float8,
 			COALESCE((SELECT SUM(total_miles) FROM period_loads), 0)::float8,
 			(SELECT COUNT(*) FROM period_loads)::int,
@@ -258,8 +261,8 @@ func (r *DashboardRepository) loadFinancialTotals(
 		&dashboard.Totals.DriverPay,
 		&dashboard.Totals.Fuel,
 		&dashboard.Totals.Tolls,
-		&dashboard.Totals.OwnerOperatorFuel,
-		&dashboard.Totals.OwnerOperatorTolls,
+		&dashboard.Totals.DeductedFuel,
+		&dashboard.Totals.DeductedTolls,
 		&dashboard.Totals.Miles,
 		&dashboard.Totals.LoadCount,
 		&dashboard.Totals.UnattributedTolls,
@@ -345,8 +348,9 @@ func (r *DashboardRepository) loadDriverFinancials(
 		if driver.Miles > 0 {
 			driver.RevenuePerMile = driver.Gross / driver.Miles
 		}
+		driver.DeductsExpenses = driver.IsOwnerOperator && driver.PayType == "gross_percentage"
 		driver.Settlement, driver.Contribution = driverSettlementAndContribution(
-			driver.IsOwnerOperator,
+			driver.DeductsExpenses,
 			driver.Gross,
 			driver.Pay,
 			driver.Fuel,
@@ -358,13 +362,13 @@ func (r *DashboardRepository) loadDriverFinancials(
 }
 
 func driverSettlementAndContribution(
-	isOwnerOperator bool,
+	deductsExpenses bool,
 	gross float64,
 	pay float64,
 	fuel float64,
 	tolls float64,
 ) (settlement float64, contribution float64) {
-	if isOwnerOperator {
+	if deductsExpenses {
 		return pay - fuel - tolls, gross - pay
 	}
 	return pay, gross - pay - fuel - tolls

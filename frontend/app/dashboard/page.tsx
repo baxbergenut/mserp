@@ -169,7 +169,7 @@ function ExpenseBreakdown({ dashboard }: { dashboard: FinancialDashboard }) {
         <div>
           <h2 className="text-sm font-medium text-zinc-200">Expense breakdown</h2>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Company-borne costs only; owner-operator deductions are excluded.
+            Company-borne costs only; percentage owner-operator deductions are excluded.
           </p>
         </div>
         <Receipt className="h-4 w-4 text-zinc-600" />
@@ -324,13 +324,14 @@ function PerformanceSummary({
       <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2.5">
         <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
         <p className="text-[11px] leading-relaxed text-amber-200/70">
-          Owner-operator deductions:{" "}
+          Driver-paid deductions:{" "}
           <span className="font-mono text-amber-200">
-            {money.format(dashboard.totals.ownerOperatorFuel)} fuel +{" "}
-            {money.format(dashboard.totals.ownerOperatorTolls)} tolls
+            {money.format(dashboard.totals.deductedFuel)} fuel +{" "}
+            {money.format(dashboard.totals.deductedTolls)} tolls
           </span>
-          . They reduce owner-operator settlement, not company profit.
-          Maintenance and dispatcher pay are still untracked.
+          . These apply only to percentage-based owner-operators. CPM
+          owner-operator expenses remain company-paid. Maintenance and
+          dispatcher pay are still untracked.
         </p>
       </div>
     </section>
@@ -363,8 +364,8 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
             </span>
           </div>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Owner-operator fuel and tolls reduce settlement; company-driver costs
-            reduce company contribution.
+            Only percentage owner-operators have fuel and tolls deducted. CPM
+            owner-operators follow the company-paid expense model.
           </p>
         </div>
         <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 focus-within:border-zinc-600">
@@ -447,7 +448,7 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     <div>{money.format(driver.fuel)}</div>
-                    {driver.isOwnerOperator && driver.fuel > 0 && (
+                    {driver.deductsExpenses && driver.fuel > 0 && (
                       <div className="mt-0.5 text-[9px] text-blue-500">
                         deducted
                       </div>
@@ -455,7 +456,7 @@ function DriverTable({ dashboard }: { dashboard: FinancialDashboard }) {
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     <div>{money.format(driver.tolls)}</div>
-                    {driver.isOwnerOperator && driver.tolls > 0 && (
+                    {driver.deductsExpenses && driver.tolls > 0 && (
                       <div className="mt-0.5 text-[9px] text-blue-500">
                         deducted
                       </div>
@@ -724,8 +725,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-[10px] text-zinc-600">
                   Company diesel
-                  {dashboard.totals.ownerOperatorFuel > 0
-                    ? ` · ${money.format(dashboard.totals.ownerOperatorFuel)} owner-op`
+                  {dashboard.totals.deductedFuel > 0
+                    ? ` · ${money.format(dashboard.totals.deductedFuel)} deducted`
                     : ""}
                 </div>
               </div>
@@ -738,8 +739,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-[10px] text-zinc-600">
                   Company tolls
-                  {dashboard.totals.ownerOperatorTolls > 0
-                    ? ` · ${money.format(dashboard.totals.ownerOperatorTolls)} owner-op`
+                  {dashboard.totals.deductedTolls > 0
+                    ? ` · ${money.format(dashboard.totals.deductedTolls)} deducted`
                     : ""}
                   {dashboard.totals.unattributedTolls > 0
                     ? ` · ${money.format(dashboard.totals.unattributedTolls)} unassigned`

@@ -220,10 +220,11 @@ assignment lookup lists.
 - Fuel dashboard spend, gallons, prices, and discounts use diesel fuel line items
   only. Weekly gross and RPM use invoiced loads grouped Monday-first by delivery
   date, falling back to pickup date when delivery is missing.
-- Owner-operator gross-percentage pay is their gross share. Their fuel and tolls
+- Percentage-based owner-operator pay is their gross share. Their fuel and tolls
   reduce their net settlement and must not also reduce company profit; company
-  contribution is the retained gross percentage. Company-driver fuel and tolls
-  remain company expenses.
+  contribution is the retained gross percentage. CPM owner-operators do not pay
+  fuel or tolls, so those costs remain company expenses, as they do for company
+  drivers.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
