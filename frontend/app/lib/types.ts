@@ -113,6 +113,65 @@ export interface FuelDashboard {
   };
 }
 
+export interface FinancialDashboard {
+  period: {
+    kind: "allTime" | "week";
+    dateFrom: string | null;
+    dateTo: string | null;
+  };
+  availableWeeks: string[];
+  totals: {
+    gross: number;
+    driverPay: number;
+    fuel: number;
+    tolls: number;
+    knownExpenses: number;
+    estimatedProfit: number;
+    estimatedProfitMargin: number;
+    miles: number;
+    loadCount: number;
+    revenuePerMile: number;
+    unattributedTolls: number;
+  };
+  expenses: Array<{
+    category: string;
+    amount: number | null;
+    available: boolean;
+    note: string;
+  }>;
+  drivers: Array<{
+    driverId: string;
+    driverName: string;
+    payType: PayType;
+    payRate: number;
+    gross: number;
+    pay: number;
+    fuel: number;
+    tolls: number;
+    miles: number;
+    loadCount: number;
+    loadNumbers: string[];
+    revenuePerMile: number;
+    contribution: number;
+  }>;
+  dispatchers: Array<{
+    dispatcherId: string | null;
+    dispatcherName: string;
+    gross: number;
+    driverCount: number;
+    loadCount: number;
+    pay: number | null;
+  }>;
+  methodology: {
+    gross: string;
+    driverPay: string;
+    fuel: string;
+    tolls: string;
+    profit: string;
+    week: string;
+  };
+}
+
 export interface SyncFuelResult {
   fetched: number;
   saved: number;

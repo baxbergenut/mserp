@@ -23,6 +23,7 @@ func NewRouter(
 	tollRepo *repository.TollRepository,
 	fileRepo *repository.FileRepository,
 	fuelRepo *repository.FuelRepository,
+	dashboardRepo *repository.DashboardRepository,
 	authRepo *repository.AuthRepository,
 	documentExtractor groq.DocumentExtractor,
 	authOptions AuthOptions,
@@ -108,6 +109,7 @@ func NewRouter(
 	registerTollRoutes(protected, logger, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
+	registerDashboardRoutes(protected, logger, dashboardRepo)
 	r.Mount("/", protected)
 
 	return r
