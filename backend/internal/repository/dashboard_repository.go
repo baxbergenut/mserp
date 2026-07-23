@@ -478,19 +478,19 @@ WITH load_events AS (
 	WHERE (
 		$1::date IS NULL
 		OR (
-			pickup_date >= $1
-			AND pickup_date < $2
-			AND delivery_date <= $2
+			pickup_date >= ($1 AT TIME ZONE 'America/New_York')::date
+			AND pickup_date < ($2 AT TIME ZONE 'America/New_York')::date
+			AND delivery_date <= ($2 AT TIME ZONE 'America/New_York')::date
 		)
 	  )
 ), period_fuel AS (
 	SELECT *
 	FROM fuel_events
-	WHERE ($1::date IS NULL OR purchased_on >= $1)
-	  AND ($2::date IS NULL OR purchased_on < $2)
+	WHERE ($1::date IS NULL OR purchased_on >= ($1 AT TIME ZONE 'America/New_York')::date)
+	  AND ($2::date IS NULL OR purchased_on < ($2 AT TIME ZONE 'America/New_York')::date)
 ), period_tolls AS (
 	SELECT *
 	FROM toll_events
-	WHERE ($1::date IS NULL OR exit_date >= $1)
-	  AND ($2::date IS NULL OR exit_date < $2)
+	WHERE ($1::date IS NULL OR exit_date >= ($1 AT TIME ZONE 'America/New_York')::date)
+	  AND ($2::date IS NULL OR exit_date < ($2 AT TIME ZONE 'America/New_York')::date)
 )`
