@@ -125,8 +125,8 @@ export interface FinancialDashboard {
     driverPay: number;
     fuel: number;
     tolls: number;
-    deductedFuel: number;
-    deductedTolls: number;
+    ownerOperatorFuel: number;
+    ownerOperatorTolls: number;
     knownExpenses: number;
     estimatedProfit: number;
     estimatedProfitMargin: number;
@@ -145,7 +145,6 @@ export interface FinancialDashboard {
     driverId: string;
     driverName: string;
     isOwnerOperator: boolean;
-    deductsExpenses: boolean;
     payType: PayType;
     payRate: number;
     gross: number;

@@ -5,7 +5,7 @@ import "testing"
 func TestDriverSettlementAndContribution(t *testing.T) {
 	tests := []struct {
 		name             string
-		deductsExpenses  bool
+		isOwnerOperator  bool
 		gross            float64
 		pay              float64
 		fuel             float64
@@ -15,7 +15,7 @@ func TestDriverSettlementAndContribution(t *testing.T) {
 	}{
 		{
 			name:             "owner operator deductions reduce settlement",
-			deductsExpenses:  true,
+			isOwnerOperator:  true,
 			gross:            10_000,
 			pay:              8_800,
 			fuel:             2_000,
@@ -32,22 +32,12 @@ func TestDriverSettlementAndContribution(t *testing.T) {
 			wantSettlement:   3_000,
 			wantContribution: 4_700,
 		},
-		{
-			name:             "cpm owner operator does not pay expenses",
-			deductsExpenses:  false,
-			gross:            10_000,
-			pay:              3_000,
-			fuel:             2_000,
-			tolls:            300,
-			wantSettlement:   3_000,
-			wantContribution: 4_700,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			settlement, contribution := driverSettlementAndContribution(
-				test.deductsExpenses,
+				test.isOwnerOperator,
 				test.gross,
 				test.pay,
 				test.fuel,
