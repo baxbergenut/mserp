@@ -234,6 +234,10 @@ assignment lookup lists.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
+  A new Relay identity first resolves against a unique local driver using
+  normalized phone/email evidence and high-confidence name variants (including
+  order, middle-name, suffix, punctuation, diacritic, and small-typo changes)
+  before a driver row may be created.
 - Except for health, readiness, and login, every API route requires a valid
   database session. State-changing requests also require the session's CSRF
   token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;
