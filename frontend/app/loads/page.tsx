@@ -87,7 +87,7 @@ export default function LoadsPage() {
       await loadData();
       setMessage({
         type: "success",
-        text: `Synced ${result.saved} load${result.saved === 1 ? "" : "s"} from DataTruck for the last week.`,
+        text: `Synced ${result.saved} DataTruck load${result.saved === 1 ? "" : "s"}, including new records and recent changes.`,
       });
     } catch (reason) {
       setMessage({
@@ -118,7 +118,7 @@ export default function LoadsPage() {
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"
         >
           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-          {isSyncing ? "Syncing one week…" : "Sync last week"}
+          {isSyncing ? "Syncing loads…" : "Sync DataTruck"}
         </button>
       </div>
 

@@ -579,7 +579,7 @@ func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQu
 			GROUP BY 1
 		), load_events AS (
 			SELECT (COALESCE(delivery_time, delivery_appointment_time,
-				pickup_time, pickup_appointment_time) AT TIME ZONE 'America/New_York')::date AS service_date,
+				pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date AS service_date,
 				total_pay, COALESCE(total_miles, 0) AS total_miles
 			FROM loads
 			WHERE lower(trim(status)) = 'invoiced'

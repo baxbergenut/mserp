@@ -1,6 +1,9 @@
 package repository
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDriverSettlementAndContribution(t *testing.T) {
 	tests := []struct {
@@ -60,5 +63,11 @@ func TestDriverSettlementAndContribution(t *testing.T) {
 				t.Fatalf("contribution = %v, want %v", contribution, test.wantContribution)
 			}
 		})
+	}
+}
+
+func TestFinancialDashboardUsesDataTruckUTCDateEncoding(t *testing.T) {
+	if count := strings.Count(financialDashboardBaseSQL, "AT TIME ZONE 'UTC'"); count != 3 {
+		t.Fatalf("DataTruck UTC date expressions = %d, want 3", count)
 	}
 }

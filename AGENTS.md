@@ -191,10 +191,12 @@ assignment lookup lists.
 
 - DataTruck and Relay fuel syncs are initiated by the frontend and remain
   synchronous when manually triggered. The API process also schedules loads at
-  6:00 AM and fuel at 6:30 AM America/New_York by default. DataTruck fetches the
-  last seven days and upserts by the upstream integer load record ID. The server
-  write timeout is fifteen minutes to permit pagination, rate-limit retry, and
-  an initial Relay historical backfill.
+  6:00 AM and fuel at 6:30 AM America/New_York by default. DataTruck load sync
+  fetches every upstream ID newer than the local maximum, plus a rolling 45-day
+  reconciliation over pickup/delivery actual and appointment dates, then
+  upserts by the upstream integer load record ID. DataTruck does not expose an
+  order last-modified timestamp. The server write timeout is fifteen minutes to
+  permit pagination, rate-limit retry, and an initial Relay historical backfill.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
@@ -217,6 +219,10 @@ assignment lookup lists.
   the browser timezone or a single UTC offset so ERP totals reconcile with Relay.
   Legacy `US/*` timezone aliases are normalized to canonical IANA names, and
   reporting falls back to `America/New_York` for an unrecognized source value.
+- DataTruck load timestamps frequently encode schedule dates at `00:01 UTC`.
+  Load reporting must use the encoded UTC calendar date; converting those values
+  to America/New_York shifts them to the prior day. This rule is load-specific:
+  fuel remains merchant-local and toll dates remain their stored date values.
 - Fuel dashboard spend, gallons, prices, and discounts use diesel fuel line items
   only. Weekly gross and RPM use invoiced loads grouped Monday-first by delivery
   date, falling back to pickup date when delivery is missing.

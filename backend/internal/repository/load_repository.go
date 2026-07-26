@@ -171,6 +171,12 @@ func (r *LoadRepository) HealthCheck(ctx context.Context) error {
 	return r.pool.Ping(ctx)
 }
 
+func (r *LoadRepository) MaxLoadID(ctx context.Context) (int, error) {
+	var id int
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE(MAX(id), 0) FROM loads`).Scan(&id)
+	return id, err
+}
+
 func LoadToRecord(load datatruck.Load, payload []byte, syncedAt time.Time) (LoadRecord, error) {
 	if load.LoadID == nil || strings.TrimSpace(*load.LoadID) == "" {
 		return LoadRecord{}, ErrMissingLoadID
