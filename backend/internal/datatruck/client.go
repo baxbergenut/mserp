@@ -74,6 +74,14 @@ type AssignedDriverNTruck struct {
 
 type FlexibleString string
 
+var syncDateFilterColumns = map[string]struct{}{
+	"pickup_time":               {},
+	"pickup_appointment_time":   {},
+	"delivery_time":             {},
+	"delivery_appointment_time": {},
+	"created_datetime":          {},
+}
+
 func (f *FlexibleString) UnmarshalJSON(data []byte) error {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "null" {
@@ -97,18 +105,45 @@ func (f FlexibleString) String() string {
 }
 
 func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, error) {
-	filter, err := json.Marshal([]map[string]string{{
-		"column":   "created_datetime",
+	return c.FetchLoadsByDateSince(ctx, "created_datetime", since)
+}
+
+func (c *Client) FetchLoadsAfterID(ctx context.Context, afterID int) ([]Load, error) {
+	return c.fetchLoads(ctx, []map[string]string{{
+		"column":   "id",
+		"value":    strconv.Itoa(afterID),
+		"contains": "after",
+	}}, "id")
+}
+
+func (c *Client) FetchLoadsByDateSince(
+	ctx context.Context,
+	column string,
+	since time.Time,
+) ([]Load, error) {
+	if _, ok := syncDateFilterColumns[column]; !ok {
+		return nil, fmt.Errorf("unsupported datatruck load date filter %q", column)
+	}
+	return c.fetchLoads(ctx, []map[string]string{{
+		"column":   column,
 		"value":    since.UTC().Format(time.RFC3339Nano),
 		"contains": "after",
-	}})
+	}}, "-"+column)
+}
+
+func (c *Client) fetchLoads(
+	ctx context.Context,
+	filters []map[string]string,
+	ordering string,
+) ([]Load, error) {
+	filter, err := json.Marshal(filters)
 	if err != nil {
 		return nil, err
 	}
 
 	query := url.Values{}
 	query.Set("page_size", "100")
-	query.Set("ordering", "-created_datetime")
+	query.Set("ordering", ordering)
 	query.Set("filter", string(filter))
 
 	requestURL := c.baseURL + "/orders/?" + query.Encode()
@@ -208,11 +243,13 @@ func resolveNextURL(baseURL, nextURL string) string {
 	if trimmed == "" {
 		return ""
 	}
-	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+	base, err := url.Parse(strings.TrimRight(baseURL, "/") + "/")
+	if err != nil {
 		return trimmed
 	}
-	if strings.HasPrefix(trimmed, "/") {
-		return strings.TrimRight(baseURL, "/") + trimmed
+	next, err := url.Parse(trimmed)
+	if err != nil {
+		return trimmed
 	}
-	return strings.TrimRight(baseURL, "/") + "/" + trimmed
+	return base.ResolveReference(next).String()
 }

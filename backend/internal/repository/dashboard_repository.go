@@ -105,12 +105,12 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		Drivers:        make([]DriverFinancialBreakdown, 0),
 		Dispatchers:    make([]DispatcherFinancialBreakdown, 0),
 		Methodology: FinancialDashboardMethodology{
-			Gross:     "Invoiced loads only. Weekly reports include pickups from Monday through Sunday when delivery is no later than the following Monday.",
+			Gross:     "Invoiced loads only. Weekly reports use DataTruck's encoded pickup calendar date from Monday through Sunday when delivery is no later than the following Monday.",
 			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
 			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
 			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
 			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
-			Week:      "Weekly reports run Monday through Sunday in America/New_York.",
+			Week:      "Weekly reports run Monday through Sunday. DataTruck load timestamps use their encoded UTC calendar date so midnight schedule values do not shift to the prior day.",
 		},
 	}
 
@@ -418,17 +418,17 @@ WITH load_events AS (
 		(COALESCE(
 			l.pickup_time,
 			l.pickup_appointment_time
-		) AT TIME ZONE 'America/New_York')::date AS pickup_date,
+		) AT TIME ZONE 'UTC')::date AS pickup_date,
 		(COALESCE(
 			l.delivery_time,
 			l.delivery_appointment_time
-		) AT TIME ZONE 'America/New_York')::date AS delivery_date,
+		) AT TIME ZONE 'UTC')::date AS delivery_date,
 		(COALESCE(
 			l.delivery_time,
 			l.delivery_appointment_time,
 			l.pickup_time,
 			l.pickup_appointment_time
-		) AT TIME ZONE 'America/New_York')::date AS activity_date
+		) AT TIME ZONE 'UTC')::date AS activity_date
 	FROM loads l
 	WHERE lower(trim(l.status)) = 'invoiced'
 	  AND COALESCE(
