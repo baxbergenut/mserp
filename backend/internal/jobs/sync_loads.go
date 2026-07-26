@@ -11,7 +11,7 @@ import (
 	"mserp/internal/repository"
 )
 
-const loadReconciliationLookbackDays = 45
+const loadReconciliationLookbackDays = 21
 
 var loadReconciliationDateColumns = []string{
 	"pickup_time",

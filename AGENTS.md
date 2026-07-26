@@ -192,7 +192,7 @@ assignment lookup lists.
 - DataTruck and Relay fuel syncs are initiated by the frontend and remain
   synchronous when manually triggered. The API process also schedules loads at
   6:00 AM and fuel at 6:30 AM America/New_York by default. DataTruck load sync
-  fetches every upstream ID newer than the local maximum, plus a rolling 45-day
+  fetches every upstream ID newer than the local maximum, plus a rolling 21-day
   reconciliation over pickup/delivery actual and appointment dates, then
   upserts by the upstream integer load record ID. DataTruck does not expose an
   order last-modified timestamp. The server write timeout is fifteen minutes to
