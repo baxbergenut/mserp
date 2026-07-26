@@ -105,7 +105,7 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		Drivers:        make([]DriverFinancialBreakdown, 0),
 		Dispatchers:    make([]DispatcherFinancialBreakdown, 0),
 		Methodology: FinancialDashboardMethodology{
-			Gross:     "Invoiced loads only. Weekly reports use DataTruck's encoded pickup calendar date from Monday through Sunday when delivery is no later than the following Monday.",
+			Gross:     "Invoiced loads only. Weekly reports use DataTruck's encoded pickup calendar date from Monday through Sunday, regardless of delivery date.",
 			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
 			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
 			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
@@ -190,8 +190,6 @@ func (r *DashboardRepository) loadAvailableWeeks(
 		SELECT DISTINCT date_trunc('week', pickup_date::timestamp)::date AS week_start
 		FROM load_events
 		WHERE pickup_date IS NOT NULL
-		  AND delivery_date IS NOT NULL
-		  AND delivery_date <= date_trunc('week', pickup_date::timestamp)::date + 7
 		ORDER BY week_start DESC`, nil, nil)
 	if err != nil {
 		return err
@@ -480,7 +478,6 @@ WITH load_events AS (
 		OR (
 			pickup_date >= $1
 			AND pickup_date < $2
-			AND delivery_date <= $2
 		)
 	  )
 ), period_fuel AS (

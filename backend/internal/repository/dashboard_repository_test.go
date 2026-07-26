@@ -71,3 +71,13 @@ func TestFinancialDashboardUsesDataTruckUTCDateEncoding(t *testing.T) {
 		t.Fatalf("DataTruck UTC date expressions = %d, want 3", count)
 	}
 }
+
+func TestFinancialDashboardPeriodUsesPickupDateOnly(t *testing.T) {
+	if !strings.Contains(financialDashboardBaseSQL, "pickup_date >= $1") ||
+		!strings.Contains(financialDashboardBaseSQL, "pickup_date < $2") {
+		t.Fatal("period loads must be selected by pickup date")
+	}
+	if strings.Contains(financialDashboardBaseSQL, "delivery_date <= $2") {
+		t.Fatal("period loads must not be limited by delivery date")
+	}
+}
