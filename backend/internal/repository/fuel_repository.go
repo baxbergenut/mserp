@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -329,9 +330,16 @@ func ensureRelayDriver(
 		fullName = "Relay Driver " + relayDriverID
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		driverID, err = ensureDriver(ctx, tx, fullName, nil)
+		var found bool
+		driverID, found, err = findRelayDriverCandidate(ctx, tx, driver, fullName)
 		if err != nil {
 			return "", err
+		}
+		if !found {
+			driverID, err = ensureDriver(ctx, tx, fullName, nil)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -377,6 +385,157 @@ func ensureRelayDriver(
 		email,
 	)
 	return driverID, err
+}
+
+type relayDriverCandidate struct {
+	id               string
+	fullName         string
+	phone            *string
+	email            *string
+	hasFleetEvidence bool
+}
+
+func findRelayDriverCandidate(
+	ctx context.Context,
+	tx pgx.Tx,
+	driver relay.TransactionDriver,
+	fullName string,
+) (string, bool, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT d.id, d.full_name, d.phone, d.email,
+			d.active
+				OR d.dispatcher_id IS NOT NULL
+				OR EXISTS (
+					SELECT 1 FROM truck_driver_assignments a
+					WHERE a.driver_id = d.id AND a.unassigned_at IS NULL
+				)
+				OR EXISTS (SELECT 1 FROM loads l WHERE l.driver_id = d.id)
+		FROM drivers d
+		ORDER BY d.created_at, d.id`)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+
+	candidates := make([]relayDriverCandidate, 0)
+	for rows.Next() {
+		var candidate relayDriverCandidate
+		if err := rows.Scan(
+			&candidate.id,
+			&candidate.fullName,
+			&candidate.phone,
+			&candidate.email,
+			&candidate.hasFleetEvidence,
+		); err != nil {
+			return "", false, err
+		}
+		candidates = append(candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+
+	return chooseRelayDriverCandidate(driver, fullName, candidates)
+}
+
+func chooseRelayDriverCandidate(
+	driver relay.TransactionDriver,
+	fullName string,
+	candidates []relayDriverCandidate,
+) (string, bool, error) {
+	relayEmail := ""
+	if driver.Email != nil {
+		relayEmail = normalizeEmail(*driver.Email)
+	}
+	relayPhones := phoneKeys(driver.Phone)
+
+	bestScore := -1
+	bestID := ""
+	tied := false
+	for _, candidate := range candidates {
+		nameQuality := relayDriverNameMatchQuality(fullName, candidate.fullName)
+		phoneMatch := phoneSetsOverlap(relayPhones, phoneKeys(stringValue(candidate.phone)))
+		emailMatch := relayEmail != "" && relayEmail == normalizeEmail(stringValue(candidate.email))
+
+		contactScore := 0
+		if phoneMatch {
+			contactScore += 300
+		}
+		if emailMatch {
+			contactScore += 250
+		}
+		strongNameMatch := nameQuality >= 80
+		contactBackedMatch := contactScore > 0 && nameQuality > 0
+		twoContactMatch := phoneMatch && emailMatch
+		if !strongNameMatch && !contactBackedMatch && !twoContactMatch {
+			continue
+		}
+
+		score := nameQuality*10 + contactScore
+		if candidate.hasFleetEvidence {
+			score += 150
+		}
+		switch {
+		case score > bestScore:
+			bestScore = score
+			bestID = candidate.id
+			tied = false
+		case score == bestScore:
+			tied = true
+		}
+	}
+
+	if bestID == "" || tied {
+		return "", false, nil
+	}
+	return bestID, true, nil
+}
+
+func normalizeEmail(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func phoneKeys(value string) map[string]struct{} {
+	result := make(map[string]struct{})
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		switch r {
+		case '/', ',', ';':
+			return true
+		default:
+			return false
+		}
+	})
+	for _, part := range parts {
+		digits := strings.Map(func(r rune) rune {
+			if unicode.IsNumber(r) {
+				return r
+			}
+			return -1
+		}, part)
+		if len(digits) == 11 && strings.HasPrefix(digits, "1") {
+			digits = digits[1:]
+		}
+		if len(digits) == 10 {
+			result[digits] = struct{}{}
+		}
+	}
+	return result
+}
+
+func phoneSetsOverlap(left, right map[string]struct{}) bool {
+	for phone := range left {
+		if _, ok := right[phone]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func insertFuelFees(
