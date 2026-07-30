@@ -68,7 +68,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   cab cards and driver CDLs.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
-- `backend/sql/002_add_tolls.sql` through `009_add_schema_migrations.sql`:
+- `backend/sql/002_add_tolls.sql` through
+  `011_fix_prepass_sync_table_owner.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
