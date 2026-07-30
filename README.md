@@ -64,7 +64,8 @@ PREPASS_TOLL_SYNC_START_DATE=2024-07-30
 Completed UTC posting dates are skipped on later runs. The current UTC date is
 rechecked, and unmatched vehicle numbers remain stored until a matching truck is
 added. Existing databases must apply
-`backend/sql/010_add_prepass_toll_sync.sql`.
+`backend/sql/010_add_prepass_toll_sync.sql` and
+`backend/sql/011_fix_prepass_sync_table_owner.sql`.
 
 ## Scheduled data syncs
 
