@@ -17,6 +17,7 @@ func NewRouter(
 	logger *slog.Logger,
 	job *jobs.SyncLoadsJob,
 	fuelJob *jobs.SyncFuelJob,
+	tollJob *jobs.SyncTollsJob,
 	pool *pgxpool.Pool,
 	loadRepo *repository.LoadRepository,
 	fleetRepo *repository.FleetRepository,
@@ -106,7 +107,7 @@ func NewRouter(
 	})
 
 	registerFleetRoutes(protected, logger, fleetRepo)
-	registerTollRoutes(protected, logger, tollRepo)
+	registerTollRoutes(protected, logger, tollJob, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
 	registerDashboardRoutes(protected, logger, dashboardRepo)

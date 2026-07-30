@@ -2,15 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
+  AlertCircle,
   CheckCircle2,
-  FileText,
   Receipt,
-  Upload,
   X,
 } from "lucide-react";
-import { fetchTollsPage, uploadTollReport } from "../lib/api";
-import type { Toll, TollImportResult } from "../lib/types";
+import { fetchTollsPage, syncTolls } from "../lib/api";
+import type { Toll } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   EmptyState,
@@ -18,7 +16,6 @@ import {
   LoadingTable,
   ManagementHeader,
   ManagementSearch,
-  Modal,
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
@@ -64,11 +61,11 @@ export default function TollsPage() {
   const [displayedTrucks, setDisplayedTrucks] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [uploadError, setUploadError] = useState("");
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<TollImportResult | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const loadData = useCallback(async () => {
@@ -99,29 +96,24 @@ export default function TollsPage() {
   }, [loadData]);
   const hasFilters = Boolean(search || unit || agency || postFrom || postTo);
 
-  const openUpload = () => {
-    setFile(null);
-    setUploadError("");
-    setIsUploadOpen(true);
-  };
-
-  const upload = async () => {
-    if (!file) {
-      setUploadError("Choose a PrePass CSV report to upload.");
-      return;
-    }
-    setIsUploading(true);
-    setUploadError("");
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    setMessage(null);
     try {
-      const importResult = await uploadTollReport(file);
-      setResult(importResult);
-      setIsUploadOpen(false);
-      setFile(null);
+      const result = await syncTolls();
       await loadData();
+      setMessage({
+        type: "success",
+        text: `Checked ${result.daysFetched} missing/current day${result.daysFetched === 1 ? "" : "s"} and synced ${result.saved} toll transaction${result.saved === 1 ? "" : "s"}. ${result.daysSkipped} completed day${result.daysSkipped === 1 ? " was" : "s were"} already up to date.${result.unmatched > 0 ? ` ${result.unmatched} transaction${result.unmatched === 1 ? "" : "s"} could not yet be matched to a truck.` : ""}`,
+      });
     } catch (reason) {
-      setUploadError(reason instanceof Error ? reason.message : "Failed to upload toll report");
+      setMessage({
+        type: "error",
+        text: reason instanceof Error ? reason.message : "PrePass toll sync failed.",
+      });
     } finally {
-      setIsUploading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -139,43 +131,33 @@ export default function TollsPage() {
       <ManagementHeader
         icon={Receipt}
         title="Tolls"
-        description="Review truck toll charges by Post Date and import weekly PrePass reports."
+        description="Review truck toll charges fetched automatically from PrePass each day."
         count={total}
-        actionLabel="Add toll report"
-        onAction={openUpload}
+        actionLabel={isSyncing ? "Syncing…" : "Sync tolls"}
+        onAction={() => void handleSync()}
       />
 
       {loadError && <ErrorBanner message={loadError} />}
-      {result && (
+      {message && (
         <div
           className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-[13px] ${
-            result.unmatchedCount > 0
-              ? "border-amber-500/20 bg-amber-500/5 text-amber-200"
-              : "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+            message.type === "success"
+              ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+              : "border-red-500/20 bg-red-500/5 text-red-300"
           }`}
           role="status"
         >
-          {result.unmatchedCount > 0 ? (
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
+          {message.type === "success" ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           )}
-          <div className="min-w-0 flex-1">
-            <div>
-              Imported {result.importedCount} of {result.rowCount} rows from {result.fileName}
-              {result.duplicateCount > 0 && `; ${result.duplicateCount} duplicate rows skipped`}.
-            </div>
-            {result.unmatchedCount > 0 && (
-              <div className="mt-1 text-amber-300/80">
-                {result.unmatchedCount} rows were skipped because these truck units do not exist: {result.unmatchedUnits.map((item) => `${item.unitNumber} (${item.rowCount})`).join(", ")}. Add the trucks, then upload the same report again.
-              </div>
-            )}
-          </div>
+          <div className="min-w-0 flex-1">{message.text}</div>
           <button
             type="button"
-            onClick={() => setResult(null)}
+            onClick={() => setMessage(null)}
             className="rounded p-0.5 opacity-60 transition hover:bg-white/5 hover:opacity-100"
-            aria-label="Dismiss import result"
+            aria-label="Dismiss sync result"
           >
             <X className="h-4 w-4" />
           </button>
@@ -223,7 +205,7 @@ export default function TollsPage() {
         {isLoading ? (
           <LoadingTable columns={6} />
         ) : tolls.length === 0 ? (
-          <EmptyState message={hasFilters ? "No tolls match these filters." : "No tolls yet. Upload a PrePass report to get started."} />
+          <EmptyState message={hasFilters ? "No tolls match these filters." : "No PrePass tolls have synced yet."} />
         ) : (
           <table className="w-full min-w-[980px] text-left text-[13px]">
             <thead>
@@ -278,50 +260,6 @@ export default function TollsPage() {
         />
       )}
 
-      {isUploadOpen && (
-        <Modal
-          title="Add toll report"
-          description="Upload the weekly Toll Details CSV exported from PrePass."
-          isSaving={isUploading}
-          submitLabel="Import report"
-          onClose={() => setIsUploadOpen(false)}
-          onSubmit={(event) => { event.preventDefault(); void upload(); }}
-        >
-          <div className="space-y-4">
-            {uploadError && <ErrorBanner message={uploadError} />}
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/40 px-6 py-10 text-center transition hover:border-blue-500/50 hover:bg-blue-500/[0.03]">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="sr-only"
-                disabled={isUploading}
-                onChange={(event) => {
-                  setFile(event.target.files?.[0] ?? null);
-                  setUploadError("");
-                }}
-              />
-              {file ? (
-                <>
-                  <FileText className="h-8 w-8 text-blue-400" />
-                  <span className="mt-3 max-w-full truncate text-[13px] font-medium text-zinc-200">{file.name}</span>
-                  <span className="mt-1 text-[11px] text-zinc-600">{(file.size / 1024).toFixed(1)} KB · Click to choose another file</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 text-zinc-600" />
-                  <span className="mt-3 text-[13px] font-medium text-zinc-300">Choose a PrePass CSV report</span>
-                  <span className="mt-1 text-[11px] text-zinc-600">CSV only, up to 10 MB</span>
-                </>
-              )}
-            </label>
-            <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/30 px-3.5 py-3 text-[12px] leading-5 text-zinc-500">
-              <div><span className="font-medium text-zinc-400">Truck matching:</span> EquipID must exactly match an existing truck unit number.</div>
-              <div><span className="font-medium text-zinc-400">Accounting date:</span> Totals and filters use PostingDate.</div>
-              <div><span className="font-medium text-zinc-400">Duplicate safety:</span> Rows already imported are skipped automatically.</div>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

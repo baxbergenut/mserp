@@ -22,6 +22,11 @@ type Config struct {
 	RelayAPIURL            string
 	RelayAPIKey            string
 	RelayFuelSyncStart     time.Time
+	PrePassEnvironment     string
+	PrePassAPIURL          string
+	PrePassClientID        string
+	PrePassClientSecret    string
+	PrePassTollSyncStart   time.Time
 	FrontendOrigin         string
 	AuthCookieSecure       bool
 	AuthSessionTTL         time.Duration
@@ -29,6 +34,7 @@ type Config struct {
 	ScheduledSyncsLocation *time.Location
 	ScheduledLoadsSyncTime DailySyncTime
 	ScheduledFuelSyncTime  DailySyncTime
+	ScheduledTollsSyncTime DailySyncTime
 }
 
 type DailySyncTime struct {
@@ -63,6 +69,40 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("RELAY_FUEL_SYNC_START_DATE must use YYYY-MM-DD: %w", err)
 		}
 		relaySyncStart = parsed
+	}
+
+	prePassEnvironment := strings.ToLower(envOrDefault("PREPASS_ENVIRONMENT", "production"))
+	prePassAPIURL := strings.TrimSpace(os.Getenv("PREPASS_API_URL"))
+	prePassClientID := strings.TrimSpace(os.Getenv("PREPASS_CLIENT_ID"))
+	prePassClientSecret := strings.TrimSpace(os.Getenv("PREPASS_CLIENT_SECRET"))
+	if prePassEnvironment == "nonproduction" {
+		if prePassAPIURL == "" {
+			prePassAPIURL = "https://api-npr.prepass.com"
+		}
+		if prePassClientID == "" {
+			prePassClientID = strings.TrimSpace(os.Getenv("PREPASS_NONPRODUCTION_CLIENT_ID"))
+		}
+		if prePassClientSecret == "" {
+			prePassClientSecret = strings.TrimSpace(os.Getenv("PREPASS_NONPRODUCTION_CLIENT_SECRET"))
+		}
+	} else if prePassEnvironment == "production" {
+		if prePassAPIURL == "" {
+			prePassAPIURL = "https://api.prepass.com"
+		}
+		if prePassClientID == "" {
+			prePassClientID = strings.TrimSpace(os.Getenv("PREPASS_PRODUCTION_CLIENT_ID"))
+		}
+		if prePassClientSecret == "" {
+			prePassClientSecret = strings.TrimSpace(os.Getenv("PREPASS_PRODUCTION_CLIENT_SECRET"))
+		}
+	}
+	prePassSyncStart := utcDate(time.Now().UTC().AddDate(-2, 0, 0))
+	if value := strings.TrimSpace(os.Getenv("PREPASS_TOLL_SYNC_START_DATE")); value != "" {
+		parsed, err := time.Parse(time.DateOnly, value)
+		if err != nil {
+			return Config{}, fmt.Errorf("PREPASS_TOLL_SYNC_START_DATE must use YYYY-MM-DD: %w", err)
+		}
+		prePassSyncStart = parsed
 	}
 
 	frontendOrigin := strings.TrimRight(envOrDefault("FRONTEND_ORIGIN", "http://localhost:3000"), "/")
@@ -103,6 +143,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	scheduledTollsSyncTime, err := parseDailySyncTime("SCHEDULED_TOLLS_SYNC_TIME", "07:00")
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
@@ -116,6 +160,11 @@ func Load() (Config, error) {
 		RelayAPIURL:            relayAPIURL,
 		RelayAPIKey:            relayAPIKey,
 		RelayFuelSyncStart:     relaySyncStart,
+		PrePassEnvironment:     prePassEnvironment,
+		PrePassAPIURL:          prePassAPIURL,
+		PrePassClientID:        prePassClientID,
+		PrePassClientSecret:    prePassClientSecret,
+		PrePassTollSyncStart:   prePassSyncStart,
 		FrontendOrigin:         frontendOrigin,
 		AuthCookieSecure:       authCookieSecure,
 		AuthSessionTTL:         authSessionTTL,
@@ -123,6 +172,7 @@ func Load() (Config, error) {
 		ScheduledSyncsLocation: scheduledSyncsLocation,
 		ScheduledLoadsSyncTime: scheduledLoadsSyncTime,
 		ScheduledFuelSyncTime:  scheduledFuelSyncTime,
+		ScheduledTollsSyncTime: scheduledTollsSyncTime,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -139,6 +189,12 @@ func Load() (Config, error) {
 	}
 	if cfg.RelayAPIKey == "" {
 		return Config{}, errors.New("Relay API key is required for the selected environment")
+	}
+	if cfg.PrePassEnvironment != "nonproduction" && cfg.PrePassEnvironment != "production" {
+		return Config{}, errors.New("PREPASS_ENVIRONMENT must be nonproduction or production")
+	}
+	if cfg.PrePassClientID == "" || cfg.PrePassClientSecret == "" {
+		return Config{}, errors.New("PrePass client ID and secret are required for the selected environment")
 	}
 
 	return cfg, nil

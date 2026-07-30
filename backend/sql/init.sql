@@ -278,9 +278,8 @@ CREATE TABLE relay_fuel_sync_days (
     PRIMARY KEY (relay_environment, sync_date)
 );
 
--- Every upload is recorded for auditability. Re-uploading a report is allowed:
--- toll-level fingerprints prevent duplicate charges while allowing rows whose
--- truck was initially missing to be picked up on a later attempt.
+-- Historical CSV uploads remain for auditability after toll ingestion moved
+-- to the PrePass API.
 CREATE TABLE toll_reports (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     file_name           TEXT NOT NULL,
@@ -302,8 +301,8 @@ CREATE INDEX toll_reports_file_sha256_idx ON toll_reports (file_sha256);
 
 CREATE TABLE tolls (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    report_id               UUID NOT NULL REFERENCES toll_reports(id) ON DELETE RESTRICT,
-    truck_id                UUID NOT NULL REFERENCES trucks(id) ON DELETE RESTRICT,
+    report_id               UUID REFERENCES toll_reports(id) ON DELETE RESTRICT,
+    truck_id                UUID REFERENCES trucks(id) ON DELETE RESTRICT,
     posting_date            DATE NOT NULL,
     invoice_date            DATE NOT NULL,
     customer_id             TEXT NOT NULL,
@@ -323,11 +322,29 @@ CREATE TABLE tolls (
     miles                   NUMERIC(10,2),
     amount                  NUMERIC(12,2) NOT NULL,
     row_fingerprint         CHAR(64) NOT NULL UNIQUE,
+    prepass_environment     TEXT CHECK (
+        prepass_environment IS NULL
+        OR prepass_environment IN ('nonproduction', 'production')
+    ),
+    prepass_toll_id         BIGINT,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX tolls_posting_date_idx ON tolls (posting_date DESC);
 CREATE INDEX tolls_truck_posting_date_idx ON tolls (truck_id, posting_date DESC);
 CREATE INDEX tolls_report_id_idx ON tolls (report_id);
+CREATE UNIQUE INDEX tolls_prepass_transaction_idx
+    ON tolls (prepass_environment, prepass_toll_id);
+
+-- Completed UTC posting dates are recorded even when PrePass returns no
+-- transactions. The current UTC date remains open for same-day additions.
+CREATE TABLE prepass_toll_sync_days (
+    prepass_environment TEXT NOT NULL
+        CHECK (prepass_environment IN ('nonproduction', 'production')),
+    sync_date          DATE NOT NULL,
+    transaction_count INTEGER NOT NULL CHECK (transaction_count >= 0),
+    fetched_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (prepass_environment, sync_date)
+);
 
 COMMIT;

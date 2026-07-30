@@ -48,8 +48,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   group registration.
 - `backend/internal/httpapi/fleet_handlers.go`: driver, truck, and dispatcher
   JSON CRUD handlers and input validation.
-- `backend/internal/httpapi/toll_handlers.go` and `toll_import.go`: toll listing
-  and strict PrePass-style CSV upload/parsing.
+- `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
+  API sync.
 - `backend/internal/httpapi/file_handlers.go`: IRP/cab-card and CDL uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`
@@ -57,9 +57,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   naming; `load_repository.go` maps DataTruck records to local loads.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
 - `backend/internal/relay/`: Relay Payments fuel transaction client.
+- `backend/internal/prepass/`: authenticated PrePass account discovery and
+  paginated toll transaction client.
 - `backend/internal/jobs/sync_loads.go`: synchronous load sync over a rolling
   seven-day window.
 - `backend/internal/jobs/sync_fuel.go`: synchronous missing-day Relay fuel sync.
+- `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
+  sync in API-compatible date windows.
 - `backend/internal/groq/`: vision extraction client and normalization for truck
   cab cards and driver CDLs.
 - `backend/internal/db/pool.go`: pgx pool configuration.
@@ -74,7 +78,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/page.tsx`: redirects `/` to `/dashboard`.
 - `frontend/app/dashboard/`: load-derived metrics and charting.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
-- `frontend/app/tolls/`: toll table and CSV import UX.
+- `frontend/app/tolls/`: toll table and manual PrePass sync UX.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults.
 - `frontend/app/components/management/ManagementUI.tsx`: shared management page,
@@ -114,6 +118,12 @@ RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
 RELAY_FUEL_SYNC_START_DATE=2026-01-01
+PREPASS_ENVIRONMENT=production
+PREPASS_PRODUCTION_CLIENT_ID=...
+PREPASS_PRODUCTION_CLIENT_SECRET=...
+PREPASS_NONPRODUCTION_CLIENT_ID=...
+PREPASS_NONPRODUCTION_CLIENT_SECRET=...
+PREPASS_TOLL_SYNC_START_DATE=2024-07-30
 FRONTEND_ORIGIN=http://localhost:3000
 AUTH_COOKIE_SECURE=false
 AUTH_SESSION_TTL=12h
@@ -121,6 +131,7 @@ SCHEDULED_SYNCS_ENABLED=true
 SCHEDULED_SYNCS_TIMEZONE=America/New_York
 SCHEDULED_LOADS_SYNC_TIME=06:00
 SCHEDULED_FUEL_SYNC_TIME=06:30
+SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
 
 `GROQ_API_KEY` is only required when document extraction is used. CORS allows
@@ -171,7 +182,7 @@ browser bundle.
 - Drivers: `GET/POST /drivers`, `PUT/DELETE /drivers/{id}`
 - Trucks: `GET/POST /trucks`, `PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
-- Tolls: `GET /tolls`, `POST /toll-reports` (multipart CSV)
+- Tolls: `GET /tolls`, `POST /jobs/sync-tolls`
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
@@ -189,9 +200,10 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
-- DataTruck and Relay fuel syncs are initiated by the frontend and remain
-  synchronous when manually triggered. The API process also schedules loads at
-  6:00 AM and fuel at 6:30 AM America/New_York by default. DataTruck load sync
+- DataTruck, Relay fuel, and PrePass toll syncs are initiated by the frontend
+  and remain synchronous when manually triggered. The API process also
+  schedules loads at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM
+  America/New_York by default. DataTruck load sync
   fetches every upstream ID newer than the local maximum, plus a rolling 21-day
   reconciliation over pickup/delivery actual and appointment dates, then
   upserts by the upstream integer load record ID. DataTruck does not expose an
@@ -209,10 +221,15 @@ assignment lookup lists.
   original with rendered pages.
 - GROQ-extracted fields are suggestions: the frontend fills the form and the user
   reviews before saving the truck or driver.
-- Toll CSV headers and date/time formats are deliberately strict. Imports match
-  `EquipID` to normalized truck units, report unmatched units, and use stable row
-  fingerprints to avoid duplicate charges while allowing later re-imports after
-  missing trucks are added.
+- PrePass toll sync discovers active accounts from the authenticated Account
+  API, fetches posting-date ranges of at most 31 days with pagination, and
+  upserts by the stable PrePass toll ID. Completed UTC posting dates are
+  recorded, while the current UTC date is rechecked. Vehicle numbers are matched
+  to normalized truck units; unmatched tolls remain stored and are reconciled
+  after the truck is added. PrePass timestamps may omit a timezone; toll dates
+  and times use the calendar and clock fields encoded by PrePass so they remain
+  compatible with historical CSV values. Historical CSV report records remain
+  read-only.
 - Database money/rates use PostgreSQL numeric values. Toll parsing uses integer
   cents before persistence. Avoid binary floating-point for new financial logic.
 - Fuel report dates use each transaction's Relay merchant timezone rather than
@@ -252,7 +269,7 @@ assignment lookup lists.
   the existing API helpers and log operational failures with `slog`.
 - Add focused Go tests beside the package as `*_test.go`. Existing tests cover
   DataTruck retry, load mapping, naming, document extraction, file validation,
-  and toll CSV parsing.
+  and PrePass client/sync mapping.
 - Frontend pages that fetch or mutate data are client components. Keep request
   code centralized in `app/lib/api.ts` and shared contracts in `app/lib/types.ts`.
 - Follow the existing dark zinc/blue visual language and reuse management
@@ -293,7 +310,7 @@ rg -n 'r\.(Get|Post|Put|Patch|Delete)\(' backend/internal/httpapi
 rg -n '^func \(.*Repository\)|^type ' backend/internal/repository
 
 # Find frontend API usage
-rg -n 'fetchLoads|createDriver|uploadTollReport' frontend/app
+rg -n 'fetchLoads|createDriver|syncTolls' frontend/app
 
 # Find schema ownership for a field
 rg -n '<field_name>' backend/sql backend/internal frontend/app/lib
