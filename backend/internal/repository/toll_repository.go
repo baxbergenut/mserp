@@ -331,41 +331,65 @@ func mapPrePassToll(environment string, transaction prepass.Transaction) (prepas
 	if err != nil {
 		return prepassTollValue{}, err
 	}
-	invoiceAt, err := requiredPrePassTime(transaction.InvoiceDateTime, "invoiceDateTime")
-	if err != nil {
-		return prepassTollValue{}, err
-	}
-	exitAt, err := requiredPrePassTime(transaction.ExitDateTime, "exitDateTime")
-	if err != nil {
-		return prepassTollValue{}, err
-	}
 
 	var entryDate *time.Time
 	var entryTime *string
+	var entryAt *time.Time
 	if strings.TrimSpace(transaction.EntryDateTime) != "" {
-		entryAt, err := requiredPrePassTime(transaction.EntryDateTime, "entryDateTime")
+		parsedEntryAt, err := requiredPrePassTime(transaction.EntryDateTime, "entryDateTime")
 		if err != nil {
 			return prepassTollValue{}, err
 		}
-		value := encodedDateOnly(entryAt)
-		clock := entryAt.Format("15:04:05")
+		entryAt = &parsedEntryAt
+		value := encodedDateOnly(parsedEntryAt)
+		clock := parsedEntryAt.Format("15:04:05")
 		entryDate = &value
 		entryTime = &clock
 	}
+	invoiceAt, err := optionalPrePassTime(
+		transaction.InvoiceDateTime,
+		postingAt,
+		"invoiceDateTime",
+	)
+	if err != nil {
+		return prepassTollValue{}, err
+	}
+	exitFallback := postingAt
+	if entryAt != nil {
+		exitFallback = *entryAt
+	}
+	exitAt, err := optionalPrePassTime(
+		transaction.ExitDateTime,
+		exitFallback,
+		"exitDateTime",
+	)
+	if err != nil {
+		return prepassTollValue{}, err
+	}
 
-	customerID := strings.TrimSpace(transaction.AccountNumber.String())
+	customerID := firstNonEmpty(transaction.AccountNumber.String(), "Unknown")
 	equipmentUnit := normalizeTruckUnit(transaction.VehicleNumber)
+	if equipmentUnit == "" {
+		unassignedID := firstNonEmpty(
+			transaction.PlateNumber,
+			transaction.DeviceNumber,
+			transaction.PPDeviceID,
+			"Unknown",
+		)
+		equipmentUnit = normalizeTruckUnit("Unassigned " + unassignedID)
+	}
 	transponderOrPlate := firstNonEmpty(
 		transaction.DeviceNumber,
 		transaction.PlateNumber,
 		transaction.PPDeviceID,
+		"Unknown",
 	)
-	agency := firstNonEmpty(transaction.TollAgencyCode, transaction.TollAgencyName)
-	if customerID == "" || equipmentUnit == "" || transponderOrPlate == "" || agency == "" {
-		return prepassTollValue{}, errors.New(
-			"accountNumber, vehicleNumber, device/plate, and toll agency are required",
-		)
-	}
+	agency := firstNonEmpty(
+		transaction.TollAgencyCode,
+		transaction.TollAgencyName,
+		transaction.BillingAgencyCode,
+		"Unknown",
+	)
 	amountCents, err := decimalToCents(transaction.TollCharge.String())
 	if err != nil {
 		return prepassTollValue{}, fmt.Errorf("tollCharge: %w", err)
@@ -511,6 +535,17 @@ func requiredPrePassTime(value, field string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%s has invalid timestamp %q", field, value)
 	}
 	return parsed, nil
+}
+
+func optionalPrePassTime(
+	value string,
+	fallback time.Time,
+	field string,
+) (time.Time, error) {
+	if strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+	return requiredPrePassTime(value, field)
 }
 
 func encodedDateOnly(value time.Time) time.Time {

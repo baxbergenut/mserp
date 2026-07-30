@@ -57,8 +57,8 @@ PREPASS_PRODUCTION_CLIENT_ID=your-client-id
 PREPASS_PRODUCTION_CLIENT_SECRET=your-client-secret
 PREPASS_NONPRODUCTION_CLIENT_ID=your-nonproduction-client-id
 PREPASS_NONPRODUCTION_CLIENT_SECRET=your-nonproduction-client-secret
-# Optional; defaults to the maximum two-year PrePass history.
-PREPASS_TOLL_SYNC_START_DATE=2024-07-30
+# Optional; defaults to January 1 of the current UTC year.
+PREPASS_TOLL_SYNC_START_DATE=2026-01-01
 ```
 
 Completed UTC posting dates are skipped on later runs. The current UTC date is

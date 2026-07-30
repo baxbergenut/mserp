@@ -67,10 +67,10 @@ func NewSyncTollsJob(
 
 func (j *SyncTollsJob) Run(ctx context.Context) (SyncTollsResult, error) {
 	today := utcDay(j.now())
-	earliestAllowed := today.AddDate(-2, 0, 0)
+	currentYearStart := time.Date(today.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
 	startDate := j.startDate
-	if startDate.Before(earliestAllowed) {
-		startDate = earliestAllowed
+	if startDate.Before(currentYearStart) {
+		startDate = currentYearStart
 	}
 	if startDate.After(today) {
 		startDate = today

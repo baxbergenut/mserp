@@ -124,7 +124,7 @@ PREPASS_PRODUCTION_CLIENT_ID=...
 PREPASS_PRODUCTION_CLIENT_SECRET=...
 PREPASS_NONPRODUCTION_CLIENT_ID=...
 PREPASS_NONPRODUCTION_CLIENT_SECRET=...
-PREPASS_TOLL_SYNC_START_DATE=2024-07-30
+PREPASS_TOLL_SYNC_START_DATE=2026-01-01
 FRONTEND_ORIGIN=http://localhost:3000
 AUTH_COOKIE_SECURE=false
 AUTH_SESSION_TTL=12h
@@ -224,7 +224,8 @@ assignment lookup lists.
   reviews before saving the truck or driver.
 - PrePass toll sync discovers active accounts from the authenticated Account
   API, fetches posting-date ranges of at most 31 days with pagination, and
-  upserts by the stable PrePass toll ID. Completed UTC posting dates are
+  never fetches earlier than January 1 of the current UTC year. It upserts by
+  the stable PrePass toll ID. Completed UTC posting dates are
   recorded, while the current UTC date is rechecked. Vehicle numbers are matched
   to normalized truck units; unmatched tolls remain stored and are reconciled
   after the truck is added. PrePass timestamps may omit a timezone; toll dates
