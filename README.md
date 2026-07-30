@@ -44,12 +44,34 @@ later same-day purchases are included. Existing databases must apply
 `backend/sql/005_add_fuel.sql` and
 `backend/sql/006_allow_multiple_relay_driver_ids.sql`.
 
+## PrePass toll integration
+
+Tolls are fetched directly from the PrePass Account and Toll Transaction APIs.
+The sync discovers active accounts automatically, retrieves posting-date ranges
+with pagination, and upserts by PrePass toll ID. Add credentials to the
+Git-ignored `backend/.env.local`:
+
+```dotenv
+PREPASS_ENVIRONMENT=production # or nonproduction
+PREPASS_PRODUCTION_CLIENT_ID=your-client-id
+PREPASS_PRODUCTION_CLIENT_SECRET=your-client-secret
+PREPASS_NONPRODUCTION_CLIENT_ID=your-nonproduction-client-id
+PREPASS_NONPRODUCTION_CLIENT_SECRET=your-nonproduction-client-secret
+# Optional; defaults to the maximum two-year PrePass history.
+PREPASS_TOLL_SYNC_START_DATE=2024-07-30
+```
+
+Completed UTC posting dates are skipped on later runs. The current UTC date is
+rechecked, and unmatched vehicle numbers remain stored until a matching truck is
+added. Existing databases must apply
+`backend/sql/010_add_prepass_toll_sync.sql`.
+
 ## Scheduled data syncs
 
-The API process runs the load and fuel sync jobs every day. By default, loads
-sync at 6:00 AM and fuel syncs at 6:30 AM in `America/New_York`. The scheduler
-uses the same in-process jobs as the manual API actions, so it does not require
-an application user session.
+The API process runs the load, fuel, and toll sync jobs every day. By default,
+loads sync at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM in
+`America/New_York`. The scheduler uses the same in-process jobs as the manual
+API actions, so it does not require an application user session.
 
 The schedule can be customized in the backend environment:
 
@@ -58,7 +80,8 @@ SCHEDULED_SYNCS_ENABLED=true
 SCHEDULED_SYNCS_TIMEZONE=America/New_York
 SCHEDULED_LOADS_SYNC_TIME=06:00
 SCHEDULED_FUEL_SYNC_TIME=06:30
+SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
 
 Times use 24-hour `HH:MM` format. Set `SCHEDULED_SYNCS_ENABLED=false` to disable
-both scheduled jobs for a local or secondary API process.
+the scheduled jobs for a local or secondary API process.

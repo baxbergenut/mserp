@@ -14,9 +14,9 @@ import type {
   IRPFileUploadResult,
   SyncLoadsResult,
   SyncFuelResult,
+  SyncTollsResult,
   Toll,
   TollPage,
-  TollImportResult,
   Truck,
   TruckInput,
   AuthSession,
@@ -257,11 +257,5 @@ export const fetchTollsPage = (query: PageQuery & {
   postFrom?: string;
   postTo?: string;
 }) => paginatedRequest<TollPage>(withQuery("/tolls", query));
-export const uploadTollReport = (file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return apiRequest<TollImportResult>("/toll-reports", {
-    method: "POST",
-    body: form,
-  });
-};
+export const syncTolls = () =>
+  apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });

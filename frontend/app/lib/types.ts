@@ -187,6 +187,16 @@ export interface SyncFuelResult {
   endDate: string;
 }
 
+export interface SyncTollsResult {
+  fetched: number;
+  saved: number;
+  unmatched: number;
+  daysFetched: number;
+  daysSkipped: number;
+  startDate: string;
+  endDate: string;
+}
+
 export type SortKey =
   | "PickupTime"
   | "DeliveryTime"
@@ -384,7 +394,7 @@ export interface DispatcherInput {
 
 export interface Toll {
   id: string;
-  truckId: string;
+  truckId: string | null;
   truckUnit: string;
   postingDate: string;
   invoiceDate: string;
@@ -410,25 +420,6 @@ export interface Toll {
 export interface TollPage extends PaginatedResponse<Toll> {
   options: { units: string[]; agencies: string[] };
   summary: { amount: number; truckCount: number };
-}
-
-export interface UnmatchedTollUnit {
-  unitNumber: string;
-  rowCount: number;
-}
-
-export interface TollImportResult {
-  reportId: string;
-  fileName: string;
-  rowCount: number;
-  importedCount: number;
-  duplicateCount: number;
-  unmatchedCount: number;
-  unmatchedUnits: UnmatchedTollUnit[];
-  totalAmount: number;
-  importedAmount: number;
-  postingDateStart: string;
-  postingDateEnd: string;
 }
 
 export interface AuthUser {

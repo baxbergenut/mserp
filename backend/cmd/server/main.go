@@ -20,6 +20,7 @@ import (
 	"mserp/internal/groq"
 	"mserp/internal/httpapi"
 	"mserp/internal/jobs"
+	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
 )
@@ -62,10 +63,23 @@ func main() {
 		cfg.RelayFuelSyncStart,
 		logger,
 	)
+	prePassClient := prepass.NewClient(
+		cfg.PrePassAPIURL,
+		cfg.PrePassClientID,
+		cfg.PrePassClientSecret,
+	)
+	tollJob := jobs.NewSyncTollsJob(
+		prePassClient,
+		tollRepo,
+		cfg.PrePassEnvironment,
+		cfg.PrePassTollSyncStart,
+		logger,
+	)
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,
 		fuelJob,
+		tollJob,
 		pool,
 		loadRepo,
 		fleetRepo,
@@ -91,9 +105,9 @@ func main() {
 		Addr:        net.JoinHostPort(cfg.BindAddress, cfg.Port),
 		Handler:     handler,
 		ReadTimeout: 15 * time.Second,
-		// DataTruck and Relay syncs are currently synchronous. A first Relay
-		// backfill can cover months of daily requests, while later runs skip
-		// completed dates. Keep the connection open for the initial pass.
+		// DataTruck, Relay, and PrePass syncs are currently synchronous. Initial
+		// backfills can cover months of data, while later runs skip completed
+		// dates. Keep the connection open for the initial pass.
 		WriteTimeout:      15 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -122,6 +136,15 @@ func main() {
 					Minute: cfg.ScheduledFuelSyncTime.Minute,
 					Run: func(ctx context.Context) error {
 						_, err := fuelJob.Run(ctx)
+						return err
+					},
+				},
+				jobs.DailyJob{
+					Name:   "tolls",
+					Hour:   cfg.ScheduledTollsSyncTime.Hour,
+					Minute: cfg.ScheduledTollsSyncTime.Minute,
+					Run: func(ctx context.Context) error {
+						_, err := tollJob.Run(ctx)
 						return err
 					},
 				},
