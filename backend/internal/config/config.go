@@ -96,7 +96,8 @@ func Load() (Config, error) {
 			prePassClientSecret = strings.TrimSpace(os.Getenv("PREPASS_PRODUCTION_CLIENT_SECRET"))
 		}
 	}
-	prePassSyncStart := utcDate(time.Now().UTC().AddDate(-2, 0, 0))
+	nowUTC := time.Now().UTC()
+	prePassSyncStart := time.Date(nowUTC.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
 	if value := strings.TrimSpace(os.Getenv("PREPASS_TOLL_SYNC_START_DATE")); value != "" {
 		parsed, err := time.Parse(time.DateOnly, value)
 		if err != nil {

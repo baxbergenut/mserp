@@ -147,3 +147,31 @@ func TestSyncTollsLimitsFetchRangesToThirtyOneDays(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncTollsDoesNotFetchBeforeCurrentYear(t *testing.T) {
+	client := &fakeTollClient{}
+	store := &fakeTollStore{completed: map[string]struct{}{}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	job := NewSyncTollsJob(
+		client,
+		store,
+		"production",
+		time.Date(2024, time.July, 30, 0, 0, 0, 0, time.UTC),
+		logger,
+	)
+	job.now = func() time.Time {
+		return time.Date(2026, time.January, 2, 12, 0, 0, 0, time.UTC)
+	}
+
+	result, err := job.Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStart := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if len(client.calls) != 1 || !client.calls[0].start.Equal(wantStart) {
+		t.Fatalf("fetch calls = %#v, want one call starting %s", client.calls, wantStart)
+	}
+	if result.StartDate != "2026-01-01" {
+		t.Fatalf("start date = %q, want 2026-01-01", result.StartDate)
+	}
+}

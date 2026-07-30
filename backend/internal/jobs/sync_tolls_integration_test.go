@@ -23,7 +23,7 @@ func TestSyncTollsAgainstPrePass(t *testing.T) {
 		t.Skip("PrePass integration test credentials are not configured")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -35,9 +35,16 @@ func TestSyncTollsAgainstPrePass(t *testing.T) {
 	repo := repository.NewTollRepository(pool)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	startDate := time.Now().UTC().AddDate(0, 0, -7)
+	if value := os.Getenv("PREPASS_INTEGRATION_START_DATE"); value != "" {
+		startDate, err = time.Parse(time.DateOnly, value)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	seedStart := utcDay(time.Now().UTC().AddDate(0, 0, -7))
 	transactions, err := client.FetchTransactions(
 		ctx,
-		utcDay(startDate),
+		seedStart,
 		utcDay(time.Now()).AddDate(0, 0, 1),
 	)
 	if err != nil {

@@ -43,3 +43,22 @@ func TestDecimalToCentsRejectsFractionalCents(t *testing.T) {
 		t.Fatal("decimalToCents() error = nil, want an error")
 	}
 }
+
+func TestMapPrePassTollKeepsUnassignedHistoricalTransaction(t *testing.T) {
+	value, err := mapPrePassToll("production", prepass.Transaction{
+		TollID:        43,
+		AccountNumber: json.Number("123456"),
+		PostDateTime:  "2024-07-30T02:21:01",
+		TollCharge:    json.Number("8.25"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.EquipmentUnit != "UNASSIGNED UNKNOWN" ||
+		value.TransponderOrPlate != "Unknown" ||
+		value.Agency != "Unknown" ||
+		value.InvoiceDate != value.PostingDate ||
+		value.ExitDate != value.PostingDate {
+		t.Fatalf("mapped toll = %+v", value)
+	}
+}
