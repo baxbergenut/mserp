@@ -682,7 +682,7 @@ func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQu
 		Methodology: FuelDashboardMethodology{
 			FuelScope:        "Fuel line items only; DEF, other products, cash advances, and fees are excluded.",
 			RevenueScope:     "Loads whose normalized status is invoiced; reporting begins with the first full load-data week.",
-			RevenueDate:      "Delivery date, falling back to pickup date when delivery is missing.",
+			RevenueDate:      "Pickup date using DataTruck's encoded UTC calendar date.",
 			WeekStartsOn:     "Monday",
 			FuelDateTimezone: "Each merchant location's timezone, falling back to America/New_York.",
 		},
@@ -728,58 +728,7 @@ func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQu
 		return FuelDashboard{}, err
 	}
 
-	weekRows, err := r.pool.Query(ctx, fuelDashboardBaseSQL+`
-		, fuel_weeks AS (
-			SELECT date_trunc('week', purchased_on::timestamp)::date AS week_start,
-				SUM(spend) AS spend, SUM(gallons) AS gallons
-			FROM fuel_purchase_totals
-			WHERE purchased_on >= make_date($1, 1, 1)
-			  AND purchased_on < make_date($1 + 1, 1, 1)
-			GROUP BY 1
-		), load_events AS (
-			SELECT (COALESCE(delivery_time, delivery_appointment_time,
-				pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date AS service_date,
-				total_pay, COALESCE(total_miles, 0) AS total_miles
-			FROM loads
-			WHERE lower(trim(status)) = 'invoiced'
-			  AND COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time) IS NOT NULL
-			  AND (COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time)
-				AT TIME ZONE 'America/New_York')::date >= make_date($1, 1, 1)
-			  AND (COALESCE(delivery_time, delivery_appointment_time, pickup_time, pickup_appointment_time)
-				AT TIME ZONE 'America/New_York')::date < make_date($1 + 1, 1, 1)
-		), load_coverage AS (
-			SELECT MIN(service_date) AS first_date FROM load_events
-		), weeks AS (
-			SELECT generate_series(
-				GREATEST(
-					date_trunc('week', make_date($1, 1, 1)::timestamp)::date,
-					CASE
-						WHEN first_date = date_trunc('week', first_date::timestamp)::date
-						THEN first_date
-						ELSE date_trunc('week', first_date::timestamp)::date + 7
-					END
-				),
-				date_trunc('week', LEAST(CURRENT_DATE, make_date($1, 12, 31))::timestamp)::date,
-				interval '1 week'
-			)::date AS week_start
-			FROM load_coverage
-		), load_weeks AS (
-			SELECT date_trunc('week', service_date::timestamp)::date AS week_start,
-				SUM(total_pay) AS gross, SUM(total_miles) AS miles
-			FROM load_events
-			GROUP BY 1
-		)
-		SELECT weeks.week_start,
-			COALESCE(fuel_weeks.spend, 0)::float8,
-			COALESCE(load_weeks.gross, 0)::float8,
-			COALESCE(load_weeks.miles, 0)::float8,
-			CASE WHEN load_weeks.gross > 0 THEN (COALESCE(fuel_weeks.spend, 0) / load_weeks.gross * 100)::float8 END,
-			CASE WHEN fuel_weeks.gallons > 0 THEN (fuel_weeks.spend / fuel_weeks.gallons)::float8 END,
-			CASE WHEN load_weeks.miles > 0 THEN (load_weeks.gross / load_weeks.miles)::float8 END
-		FROM weeks
-		LEFT JOIN fuel_weeks USING (week_start)
-		LEFT JOIN load_weeks USING (week_start)
-		ORDER BY weeks.week_start`, query.Year)
+	weekRows, err := r.pool.Query(ctx, fuelDashboardWeeklySQL, query.Year)
 	if err != nil {
 		return FuelDashboard{}, err
 	}
@@ -823,6 +772,64 @@ func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQu
 
 	return dashboard, nil
 }
+
+var fuelDashboardWeeklySQL = fuelDashboardBaseSQL + `
+		, fuel_weeks AS (
+			SELECT date_trunc('week', purchased_on::timestamp)::date AS week_start,
+				SUM(spend) AS spend, SUM(gallons) AS gallons
+			FROM fuel_purchase_totals
+			WHERE purchased_on >= make_date($1, 1, 1)
+			  AND purchased_on < make_date($1 + 1, 1, 1)
+			GROUP BY 1
+		), load_events AS (
+			SELECT (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date AS service_date,
+				total_pay, COALESCE(total_miles, 0) AS total_miles
+			FROM loads
+			WHERE lower(trim(status)) = 'invoiced'
+			  AND COALESCE(pickup_time, pickup_appointment_time) IS NOT NULL
+			  AND (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date >= make_date($1, 1, 1)
+			  AND (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date < make_date($1 + 1, 1, 1)
+		), load_weeks AS (
+			SELECT date_trunc('week', service_date::timestamp)::date AS week_start,
+				SUM(total_pay) AS gross, SUM(total_miles) AS miles
+			FROM load_events
+			GROUP BY 1
+		), load_week_groups AS (
+			SELECT week_start,
+				week_start - (row_number() OVER (ORDER BY week_start)::int * 7) AS coverage_group
+			FROM load_weeks
+			WHERE week_start <= date_trunc('week', LEAST(CURRENT_DATE, make_date($1, 12, 31))::timestamp)::date
+		), load_coverage AS (
+			SELECT MIN(week_start) AS first_week
+			FROM load_week_groups
+			WHERE coverage_group = (
+				SELECT coverage_group
+				FROM load_week_groups
+				ORDER BY week_start DESC
+				LIMIT 1
+			)
+		), weeks AS (
+			SELECT generate_series(
+				GREATEST(
+					date_trunc('week', make_date($1, 1, 1)::timestamp)::date,
+					first_week + 7
+				),
+				date_trunc('week', LEAST(CURRENT_DATE, make_date($1, 12, 31))::timestamp)::date,
+				interval '1 week'
+			)::date AS week_start
+			FROM load_coverage
+		)
+		SELECT weeks.week_start,
+			COALESCE(fuel_weeks.spend, 0)::float8,
+			COALESCE(load_weeks.gross, 0)::float8,
+			COALESCE(load_weeks.miles, 0)::float8,
+			CASE WHEN load_weeks.gross > 0 THEN (COALESCE(fuel_weeks.spend, 0) / load_weeks.gross * 100)::float8 END,
+			CASE WHEN fuel_weeks.gallons > 0 THEN (fuel_weeks.spend / fuel_weeks.gallons)::float8 END,
+			CASE WHEN load_weeks.miles > 0 THEN (load_weeks.gross / load_weeks.miles)::float8 END
+		FROM weeks
+		LEFT JOIN fuel_weeks USING (week_start)
+		LEFT JOIN load_weeks USING (week_start)
+		ORDER BY weeks.week_start`
 
 var fuelDashboardBaseSQL = `
 WITH fuel_purchase_totals AS (
