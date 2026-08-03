@@ -283,6 +283,9 @@ assignment lookup lists.
   code centralized in `app/lib/api.ts` and shared contracts in `app/lib/types.ts`.
 - Follow the existing dark zinc/blue visual language and reuse management
   primitives. Preserve loading, empty, error, confirmation, and responsive states.
+- Authenticated pages use the full width available beside the sidebar. Keep the
+  global shell fluid and apply horizontal scrolling only at individual tables
+  when the viewport is narrower than their readable minimum width.
 - Use the `@/*` TypeScript alias when it improves readability; strict TypeScript
   and no emit are enabled.
 - No frontend test framework is configured. For behavior-heavy frontend changes,
