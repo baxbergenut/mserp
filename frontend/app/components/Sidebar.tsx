@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Banknote,
+  ChevronDown,
   LayoutDashboard,
   Users,
   PanelLeftClose,
@@ -13,6 +15,7 @@ import {
   Headset,
   Receipt,
   Fuel,
+  Landmark,
   LogOut,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
@@ -22,6 +25,10 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
+  { href: "/accounting", label: "Accounting", icon: Landmark, children: [
+    { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
+    { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
+  ] },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers", icon: Headset },
@@ -30,6 +37,9 @@ const NAV_ITEMS = [
 export function Sidebar({ username }: { username: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [accountingOpen, setAccountingOpen] = useState(
+    pathname.startsWith("/accounting"),
+  );
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -67,6 +77,68 @@ export function Sidebar({ username }: { username: string }) {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+
+          if ("children" in item) {
+            if (collapsed) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.children[0].href}
+                  className={`group flex items-center justify-center rounded-lg py-2 text-[13px] font-medium transition-all duration-150 ${
+                    active
+                      ? "bg-accent/10 text-accent"
+                      : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className={`h-[18px] w-[18px] ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
+                </Link>
+              );
+            }
+
+            const accountingExpanded = accountingOpen || active;
+
+            return (
+              <div key={item.href}>
+                <button
+                  type="button"
+                  onClick={() => setAccountingOpen((open) => !open)}
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                    active
+                      ? "text-accent"
+                      : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
+                  }`}
+                  aria-expanded={accountingExpanded}
+                >
+                  <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${accountingExpanded ? "rotate-180" : ""}`} />
+                </button>
+                {accountingExpanded && (
+                  <div className="mt-1 space-y-1 pl-5">
+                    {item.children.map((child) => {
+                      const childActive = pathname === child.href;
+                      const ChildIcon = child.icon;
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`group flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                            childActive
+                              ? "bg-accent/10 text-accent"
+                              : "text-zinc-600 hover:bg-zinc-800/40 hover:text-zinc-300"
+                          }`}
+                        >
+                          <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{child.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
 
           return (
             <Link

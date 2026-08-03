@@ -90,3 +90,12 @@ func TestFinancialDashboardPeriodUsesPickupDateOnly(t *testing.T) {
 		t.Fatal("period loads must not be limited by delivery date")
 	}
 }
+
+func TestDispatcherPayUsesConfiguredGrossPercentage(t *testing.T) {
+	if !strings.Contains(dispatcherFinancialsSQL, "SUM(pl.total_pay) * d.pay_percentage / 100") {
+		t.Fatal("dispatcher pay must be the configured percentage of weekly managed gross")
+	}
+	if !strings.Contains(dispatcherFinancialsSQL, "WHEN d.pay_percentage IS NULL THEN NULL") {
+		t.Fatal("dispatcher pay must remain unset when no percentage is configured")
+	}
+}

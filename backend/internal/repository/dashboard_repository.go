@@ -74,6 +74,7 @@ type DispatcherFinancialBreakdown struct {
 	Gross          float64  `json:"gross"`
 	DriverCount    int      `json:"driverCount"`
 	LoadCount      int      `json:"loadCount"`
+	PayPercentage  *float64 `json:"payPercentage"`
 	Pay            *float64 `json:"pay"`
 }
 
@@ -109,7 +110,7 @@ func (r *DashboardRepository) GetFinancialDashboard(
 			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
 			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
 			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
-			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Dispatcher pay and maintenance are not included yet.",
+			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Dispatcher pay is reported separately under Accounting; dispatcher pay and maintenance are not deducted here.",
 			Week:      "Weekly reports run Monday through Sunday. DataTruck load timestamps use their encoded UTC calendar date so midnight schedule values do not shift to the prior day.",
 		},
 	}
@@ -176,7 +177,6 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		{Category: "Fuel", Amount: &fuel, Available: true, Note: "Company-paid diesel, including CPM owner-operators. Percentage owner-operator fuel reduces their settlement."},
 		{Category: "Tolls", Amount: &tolls, Available: true, Note: "Company-paid tolls, including CPM owner-operators. Percentage owner-operator tolls reduce their settlement."},
 		{Category: "Maintenance", Available: false, Note: "Maintenance costs are not tracked yet."},
-		{Category: "Dispatcher pay", Available: false, Note: "Waiting for the dispatcher pay formula."},
 	}
 
 	return dashboard, nil
@@ -377,15 +377,7 @@ func (r *DashboardRepository) loadDispatcherFinancials(
 	query FinancialDashboardQuery,
 	dashboard *FinancialDashboard,
 ) error {
-	rows, err := r.pool.Query(ctx, financialDashboardBaseSQL+`
-		SELECT pl.dispatcher_id,
-			COALESCE(NULLIF(MAX(pl.dispatcher_name), ''), 'Unassigned') AS dispatcher_name,
-			SUM(pl.total_pay)::float8 AS gross,
-			COUNT(DISTINCT pl.driver_id)::int AS driver_count,
-			COUNT(*)::int AS load_count
-		FROM period_loads pl
-		GROUP BY pl.dispatcher_id
-		ORDER BY gross DESC, dispatcher_name`,
+	rows, err := r.pool.Query(ctx, dispatcherFinancialsSQL,
 		query.DateFrom,
 		query.DateTo,
 	)
@@ -402,6 +394,8 @@ func (r *DashboardRepository) loadDispatcherFinancials(
 			&dispatcher.Gross,
 			&dispatcher.DriverCount,
 			&dispatcher.LoadCount,
+			&dispatcher.PayPercentage,
+			&dispatcher.Pay,
 		); err != nil {
 			return err
 		}
@@ -409,6 +403,22 @@ func (r *DashboardRepository) loadDispatcherFinancials(
 	}
 	return rows.Err()
 }
+
+var dispatcherFinancialsSQL = financialDashboardBaseSQL + `
+		SELECT pl.dispatcher_id,
+			COALESCE(NULLIF(MAX(pl.dispatcher_name), ''), 'Unassigned') AS dispatcher_name,
+			SUM(pl.total_pay)::float8 AS gross,
+			COUNT(DISTINCT pl.driver_id)::int AS driver_count,
+			COUNT(*)::int AS load_count,
+			d.pay_percentage::float8,
+			CASE
+				WHEN d.pay_percentage IS NULL THEN NULL
+				ELSE (SUM(pl.total_pay) * d.pay_percentage / 100)::float8
+			END AS pay
+		FROM period_loads pl
+		LEFT JOIN dispatchers d ON d.id = pl.dispatcher_id
+		GROUP BY pl.dispatcher_id, d.pay_percentage
+		ORDER BY gross DESC, dispatcher_name`
 
 var financialDashboardBaseSQL = `
 WITH load_events AS (

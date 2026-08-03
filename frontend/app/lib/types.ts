@@ -165,6 +165,7 @@ export interface FinancialDashboard {
     gross: number;
     driverCount: number;
     loadCount: number;
+    payPercentage: number | null;
     pay: number | null;
   }>;
   methodology: {
