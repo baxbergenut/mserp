@@ -57,8 +57,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full">
       <Sidebar username={session.user.username} />
-      <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-7xl px-6 py-6">{children}</div>
+      <main className="min-w-0 flex-1 overflow-auto">
+        <div className="w-full px-4 py-6 sm:px-6 xl:px-8">{children}</div>
       </main>
     </div>
   );
