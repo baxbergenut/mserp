@@ -78,6 +78,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   shell and sidebar; `frontend/app/login/` owns the login page.
 - `frontend/app/page.tsx`: redirects `/` to `/dashboard`.
 - `frontend/app/dashboard/`: load-derived metrics and charting.
+- `frontend/app/accounting/`: weekly driver settlement and dispatcher commission
+  reports, selected by Monday-start report week.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/tolls/`: toll table and manual PrePass sync UX.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
@@ -251,6 +253,10 @@ assignment lookup lists.
   contribution is the retained gross percentage. CPM owner-operators do not pay
   fuel or tolls, so those costs remain company expenses, as they do for company
   drivers.
+- Dispatcher pay is calculated weekly as the dispatcher's configured commission
+  percentage multiplied by managed gross for qualified loads in that Monday–
+  Sunday pickup-date week. Unassigned loads and dispatchers without a configured
+  percentage remain visible but do not contribute to calculated dispatcher pay.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
