@@ -105,7 +105,7 @@ func (r *DashboardRepository) GetFinancialDashboard(
 		Drivers:        make([]DriverFinancialBreakdown, 0),
 		Dispatchers:    make([]DispatcherFinancialBreakdown, 0),
 		Methodology: FinancialDashboardMethodology{
-			Gross:     "Invoiced loads only. Weekly reports use DataTruck's encoded pickup calendar date from Monday through Sunday, regardless of delivery date.",
+			Gross:     "Invoiced and delivered loads. Weekly reports use DataTruck's encoded pickup calendar date from Monday through Sunday, regardless of delivery date.",
 			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
 			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
 			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
@@ -428,7 +428,7 @@ WITH load_events AS (
 			l.pickup_appointment_time
 		) AT TIME ZONE 'UTC')::date AS activity_date
 	FROM loads l
-	WHERE lower(trim(l.status)) = 'invoiced'
+	WHERE lower(trim(l.status)) IN ('invoiced', 'delivered')
 	  AND COALESCE(
 			l.delivery_time,
 			l.delivery_appointment_time,

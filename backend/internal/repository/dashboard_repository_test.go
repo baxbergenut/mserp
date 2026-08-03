@@ -72,6 +72,15 @@ func TestFinancialDashboardUsesDataTruckUTCDateEncoding(t *testing.T) {
 	}
 }
 
+func TestFinancialDashboardGrossIncludesInvoicedAndDeliveredLoads(t *testing.T) {
+	if !strings.Contains(
+		financialDashboardBaseSQL,
+		"lower(trim(l.status)) IN ('invoiced', 'delivered')",
+	) {
+		t.Fatal("financial dashboard gross must include invoiced and delivered loads")
+	}
+}
+
 func TestFinancialDashboardPeriodUsesPickupDateOnly(t *testing.T) {
 	if !strings.Contains(financialDashboardBaseSQL, "pickup_date >= $1") ||
 		!strings.Contains(financialDashboardBaseSQL, "pickup_date < $2") {

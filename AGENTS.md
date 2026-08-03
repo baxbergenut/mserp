@@ -243,8 +243,9 @@ assignment lookup lists.
   to America/New_York shifts them to the prior day. This rule is load-specific:
   fuel remains merchant-local and toll dates remain their stored date values.
 - Fuel dashboard spend, gallons, prices, and discounts use diesel fuel line items
-  only. Weekly gross and RPM use invoiced loads grouped Monday-first solely by
-  DataTruck's encoded UTC pickup calendar date, regardless of delivery date.
+  only. Weekly gross and RPM use invoiced and delivered loads grouped
+  Monday-first solely by DataTruck's encoded UTC pickup calendar date,
+  regardless of delivery date.
 - Percentage-based owner-operator pay is their gross share. Their fuel and tolls
   reduce their net settlement and must not also reduce company profit; company
   contribution is the retained gross percentage. CPM owner-operators do not pay

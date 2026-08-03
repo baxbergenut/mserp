@@ -18,6 +18,15 @@ func TestFuelDashboardGrossUsesPickupDateOnly(t *testing.T) {
 	}
 }
 
+func TestFuelDashboardGrossIncludesInvoicedAndDeliveredLoads(t *testing.T) {
+	if !strings.Contains(
+		fuelDashboardWeeklySQL,
+		"lower(trim(status)) IN ('invoiced', 'delivered')",
+	) {
+		t.Fatal("fuel dashboard gross must include invoiced and delivered loads")
+	}
+}
+
 func TestFuelDashboardUsesCurrentContinuousLoadCoverage(t *testing.T) {
 	if !strings.Contains(fuelDashboardWeeklySQL, "AS coverage_group") ||
 		!strings.Contains(fuelDashboardWeeklySQL, "ORDER BY week_start DESC") {

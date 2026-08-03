@@ -681,7 +681,7 @@ func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQu
 		StatePrices: make([]FuelStatePrice, 0),
 		Methodology: FuelDashboardMethodology{
 			FuelScope:        "Fuel line items only; DEF, other products, cash advances, and fees are excluded.",
-			RevenueScope:     "Loads whose normalized status is invoiced; reporting begins with the first full load-data week.",
+			RevenueScope:     "Loads whose normalized status is invoiced or delivered; reporting begins with the first full load-data week.",
 			RevenueDate:      "Pickup date using DataTruck's encoded UTC calendar date.",
 			WeekStartsOn:     "Monday",
 			FuelDateTimezone: "Each merchant location's timezone, falling back to America/New_York.",
@@ -785,7 +785,7 @@ var fuelDashboardWeeklySQL = fuelDashboardBaseSQL + `
 			SELECT (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date AS service_date,
 				total_pay, COALESCE(total_miles, 0) AS total_miles
 			FROM loads
-			WHERE lower(trim(status)) = 'invoiced'
+			WHERE lower(trim(status)) IN ('invoiced', 'delivered')
 			  AND COALESCE(pickup_time, pickup_appointment_time) IS NOT NULL
 			  AND (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date >= make_date($1, 1, 1)
 			  AND (COALESCE(pickup_time, pickup_appointment_time) AT TIME ZONE 'UTC')::date < make_date($1 + 1, 1, 1)
