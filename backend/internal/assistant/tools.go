@@ -55,7 +55,11 @@ func NewToolExecutor(repo *repository.AssistantRepository, fleet *repository.Fle
 
 func ToolDefinitions() []groq.AssistantTool {
 	object := func(properties map[string]any, required ...string) map[string]any {
-		return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+		schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+		if len(required) > 0 {
+			schema["required"] = required
+		}
+		return schema
 	}
 	stringField := func(description string) map[string]any {
 		return map[string]any{"type": "string", "description": description}

@@ -31,6 +31,23 @@ func TestResolveDateRangeMondaySunday(t *testing.T) {
 	}
 }
 
+func TestToolDefinitionsNeverEncodeNullRequired(t *testing.T) {
+	definitions := ToolDefinitions()
+	encoded, err := json.Marshal(definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"required":null`) {
+		t.Fatalf("tool schema contains invalid null required array: %s", encoded)
+	}
+	for _, definition := range definitions {
+		required, exists := definition.Function.Parameters["required"]
+		if exists && required == nil {
+			t.Fatalf("tool %s has a nil required value", definition.Function.Name)
+		}
+	}
+}
+
 func TestParseDatesRejectsInvalidRanges(t *testing.T) {
 	if _, _, err := parseDates("2026-09-02", "2026-09-01", false); err == nil {
 		t.Fatal("expected reversed range error")
