@@ -392,7 +392,7 @@ func (r *AssistantRepository) ClaimNextUpdate(ctx context.Context) (TelegramUpda
 	return value, err
 }
 
-func (r *AssistantRepository) FinishUpdate(ctx context.Context, updateID int64, status string, processErr error) error {
+func (r *AssistantRepository) FinishUpdate(ctx context.Context, updateID int64, status string, processErr error, retryDelay time.Duration) error {
 	var message *string
 	if processErr != nil {
 		value := processErr.Error()
@@ -401,7 +401,10 @@ func (r *AssistantRepository) FinishUpdate(ctx context.Context, updateID int64, 
 		}
 		message = &value
 	}
-	next := time.Now().Add(5 * time.Second)
+	if retryDelay <= 0 {
+		retryDelay = 5 * time.Second
+	}
+	next := time.Now().Add(retryDelay)
 	_, err := r.pool.Exec(ctx, `
 		UPDATE telegram_updates SET status=$2, last_error=$3,
 			next_attempt_at=$4, completed_at=CASE WHEN $2 IN ('completed','rejected') THEN now() END

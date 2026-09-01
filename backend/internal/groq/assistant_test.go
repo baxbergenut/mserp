@@ -2,9 +2,11 @@ package groq
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestCompleteWithToolsDecodesStringArguments(t *testing.T) {
@@ -21,5 +23,24 @@ func TestCompleteWithToolsDecodesStringArguments(t *testing.T) {
 	}
 	if len(completion.Message.ToolCalls) != 1 || completion.Message.ToolCalls[0].Function.Arguments != `{"period":"last_week"}` {
 		t.Fatalf("unexpected tool call: %#v", completion.Message.ToolCalls)
+	}
+}
+
+func TestCompleteWithToolsReturnsRateLimitDelay(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"Rate limit reached. Please try again in 13.6425s."}}`))
+	}))
+	defer server.Close()
+	client := NewClient("secret", "openai/gpt-oss-120b")
+	client.baseURL = server.URL
+	_, err := client.CompleteWithTools(context.Background(), []AssistantMessage{{Role: "user", Content: "last week"}}, nil)
+	var rateErr *RateLimitError
+	if !errors.As(err, &rateErr) {
+		t.Fatalf("expected RateLimitError, got %v", err)
+	}
+	if rateErr.RetryAfter != 13*time.Second+642500*time.Microsecond {
+		t.Fatalf("unexpected retry delay: %v", rateErr.RetryAfter)
 	}
 }

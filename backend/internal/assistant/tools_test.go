@@ -2,10 +2,12 @@ package assistant
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"mserp/internal/groq"
 	"mserp/internal/repository"
 )
 
@@ -57,6 +59,16 @@ func TestParseDatesRejectsInvalidRanges(t *testing.T) {
 	}
 	if _, _, err := parseDates("09/01/2026", "09/02/2026", false); err == nil {
 		t.Fatal("expected date format error")
+	}
+}
+
+func TestRetryDelayHonorsGroqCooldownAndBackoff(t *testing.T) {
+	rateErr := &groq.RateLimitError{Message: "limited", RetryAfter: 18 * time.Second}
+	if got := retryDelay(rateErr, 1); got != 20*time.Second {
+		t.Fatalf("rate-limit retry delay = %v, want 20s", got)
+	}
+	if got := retryDelay(errors.New("temporary"), 4); got != 40*time.Second {
+		t.Fatalf("fourth retry delay = %v, want 40s", got)
 	}
 }
 

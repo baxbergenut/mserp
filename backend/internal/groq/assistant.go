@@ -7,8 +7,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
+
+var retryAfterPattern = regexp.MustCompile(`(?i)try again in ([0-9]+(?:\.[0-9]+)?)s`)
+
+type RateLimitError struct {
+	Message    string
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string { return e.Message }
 
 type AssistantMessage struct {
 	Role       string              `json:"role"`
@@ -52,7 +64,7 @@ func (client *Client) CompleteWithTools(ctx context.Context, messages []Assistan
 	payload := map[string]any{
 		"model": client.model, "messages": messages, "tools": tools,
 		"tool_choice": "auto", "parallel_tool_calls": false,
-		"temperature": 0.1, "max_completion_tokens": 1600,
+		"temperature": 0.1, "max_completion_tokens": 800,
 		"reasoning_effort": "medium", "reasoning_format": "hidden", "store": false,
 	}
 	body, err := json.Marshal(payload)
@@ -86,7 +98,11 @@ func (client *Client) CompleteWithTools(ctx context.Context, messages []Assistan
 		if message == "" {
 			message = response.Status
 		}
-		return AssistantCompletion{}, fmt.Errorf("Groq assistant rejected request: %s", message)
+		rejected := "Groq assistant rejected request: " + message
+		if response.StatusCode == http.StatusTooManyRequests {
+			return AssistantCompletion{}, &RateLimitError{Message: rejected, RetryAfter: parseRetryAfter(response.Header.Get("Retry-After"), message)}
+		}
+		return AssistantCompletion{}, fmt.Errorf("%s", rejected)
 	}
 	var completion struct {
 		Choices []struct {
@@ -101,4 +117,17 @@ func (client *Client) CompleteWithTools(ctx context.Context, messages []Assistan
 		return AssistantCompletion{}, fmt.Errorf("Groq assistant returned no choices")
 	}
 	return AssistantCompletion{Message: completion.Choices[0].Message, FinishReason: completion.Choices[0].FinishReason}, nil
+}
+
+func parseRetryAfter(header, message string) time.Duration {
+	if seconds, err := strconv.ParseFloat(strings.TrimSpace(header), 64); err == nil && seconds > 0 {
+		return time.Duration(seconds * float64(time.Second))
+	}
+	match := retryAfterPattern.FindStringSubmatch(message)
+	if len(match) == 2 {
+		if seconds, err := strconv.ParseFloat(match[1], 64); err == nil && seconds > 0 {
+			return time.Duration(seconds * float64(time.Second))
+		}
+	}
+	return 0
 }

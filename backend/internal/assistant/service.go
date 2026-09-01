@@ -48,6 +48,7 @@ type Service struct {
 	now       func() time.Time
 	rateMu    sync.Mutex
 	rate      map[int64][]time.Time
+	modelMu   sync.Mutex
 	queueMu   sync.Mutex
 	userLocks map[int64]*sync.Mutex
 }
@@ -158,7 +159,7 @@ func (s *Service) runWorker(ctx context.Context) {
 				_ = s.telegram.SendMessage(ctx, *update.TelegramChatID, message, nil)
 			}
 		}
-		if err := s.repo.FinishUpdate(ctx, update.UpdateID, status, processErr); err != nil {
+		if err := s.repo.FinishUpdate(ctx, update.UpdateID, status, processErr, retryDelay(processErr, update.Attempts)); err != nil {
 			s.logger.Error("finish Telegram update", "update_id", update.UpdateID, "error", err)
 		}
 	}
@@ -280,7 +281,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 		}
 	}()
 	for iteration := 0; iteration < 5; iteration++ {
-		completion, err := s.model.CompleteWithTools(ctx, messages, ToolDefinitions())
+		completion, err := s.completeWithRateLimitRetry(ctx, messages, ToolDefinitions())
 		if err != nil {
 			return err
 		}
@@ -375,6 +376,53 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 		}
 	}
 	return errors.New("assistant exceeded the five-tool iteration limit")
+}
+
+func (s *Service) completeWithRateLimitRetry(ctx context.Context, messages []groq.AssistantMessage, tools []groq.AssistantTool) (groq.AssistantCompletion, error) {
+	s.modelMu.Lock()
+	defer s.modelMu.Unlock()
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		completion, err := s.model.CompleteWithTools(ctx, messages, tools)
+		if err == nil {
+			return completion, nil
+		}
+		lastErr = err
+		var rateErr *groq.RateLimitError
+		if !errors.As(err, &rateErr) || attempt == 2 {
+			return groq.AssistantCompletion{}, err
+		}
+		delay := rateErr.RetryAfter + time.Second
+		if delay < 5*time.Second {
+			delay = 5 * time.Second
+		}
+		if delay > 45*time.Second {
+			delay = 45 * time.Second
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return groq.AssistantCompletion{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return groq.AssistantCompletion{}, lastErr
+}
+
+func retryDelay(err error, attempts int) time.Duration {
+	if err == nil {
+		return 0
+	}
+	if attempts < 1 {
+		attempts = 1
+	}
+	delay := 5 * time.Second * time.Duration(1<<min(attempts-1, 3))
+	var rateErr *groq.RateLimitError
+	if errors.As(err, &rateErr) && rateErr.RetryAfter+2*time.Second > delay {
+		delay = rateErr.RetryAfter + 2*time.Second
+	}
+	return delay
 }
 
 func (s *Service) processCallback(ctx context.Context, updateID int64, callback *telegram.CallbackQuery) error {
