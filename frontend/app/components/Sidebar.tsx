@@ -17,6 +17,7 @@ import {
   Fuel,
   Landmark,
   LogOut,
+  Bot,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
 
@@ -34,7 +35,7 @@ const NAV_ITEMS = [
   { href: "/dispatchers", label: "Dispatchers", icon: Headset },
 ] as const;
 
-export function Sidebar({ username }: { username: string }) {
+export function Sidebar({ username, telegramApproved }: { username: string; telegramApproved: boolean }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(
@@ -167,6 +168,16 @@ export function Sidebar({ username }: { username: string }) {
             </Link>
           );
         })}
+        {telegramApproved && (
+          <Link
+            href="/settings/telegram"
+            className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 ${pathname.startsWith("/settings/telegram") ? "bg-accent/10 text-accent" : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"} ${collapsed ? "justify-center px-0" : ""}`}
+            title={collapsed ? "Telegram Bot" : undefined}
+          >
+            <Bot className="h-[18px] w-[18px] shrink-0" />
+            {!collapsed && <span>Telegram Bot</span>}
+          </Link>
+        )}
       </nav>
 
       {/* ── Collapse toggle ── */}

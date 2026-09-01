@@ -20,6 +20,8 @@ import type {
   Truck,
   TruckInput,
   AuthSession,
+  TelegramManager,
+  AssistantAuditEntry,
 } from "./types";
 
 type PageQuery = {
@@ -259,3 +261,18 @@ export const fetchTollsPage = (query: PageQuery & {
 }) => paginatedRequest<TollPage>(withQuery("/tolls", query));
 export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
+
+export const fetchTelegramManagers = () =>
+  apiRequest<TelegramManager[]>("/telegram/managers");
+export const setTelegramManagerApproval = (userId: string, approved: boolean) =>
+  apiRequest<void>(`/telegram/managers/${encodeURIComponent(userId)}`, {
+    method: "PUT", body: JSON.stringify({ approved }),
+  });
+export const revokeTelegramManagerLink = (userId: string) =>
+  apiRequest<void>(`/telegram/managers/${encodeURIComponent(userId)}/link`, { method: "DELETE" });
+export const createTelegramLink = () =>
+  apiRequest<{ url: string; expiresAt: string }>("/telegram/link", { method: "POST" });
+export const revokeOwnTelegramLink = () =>
+  apiRequest<void>("/telegram/link", { method: "DELETE" });
+export const fetchAssistantAudit = (limit = 50) =>
+  apiRequest<AssistantAuditEntry[]>(withQuery("/telegram/audit", { limit }));

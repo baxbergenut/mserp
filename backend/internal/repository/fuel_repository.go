@@ -673,6 +673,166 @@ type FuelDashboard struct {
 	Methodology FuelDashboardMethodology `json:"methodology"`
 }
 
+type DriverFuelReportTransaction struct {
+	ID           string `json:"id"`
+	RelayID      string `json:"relayTransactionId"`
+	Date         string `json:"date"`
+	PurchasedAt  string `json:"purchasedAt"`
+	Merchant     string `json:"merchant"`
+	Location     string `json:"location"`
+	City         string `json:"city"`
+	State        string `json:"state"`
+	Timezone     string `json:"timezone"`
+	TotalCharged string `json:"totalCharged"`
+	FuelAmount   string `json:"fuelAmount"`
+	FuelGallons  string `json:"fuelGallons"`
+	DEFAmount    string `json:"defAmount"`
+	DEFGallons   string `json:"defGallons"`
+	OtherAmount  string `json:"otherAmount"`
+	Fees         string `json:"fees"`
+	CashAdvance  string `json:"cashAdvance"`
+	RetailValue  string `json:"retailValue"`
+	Savings      string `json:"savings"`
+	Reconciles   bool   `json:"reconciles"`
+}
+
+type DriverFuelReportDay struct {
+	Date         string `json:"date"`
+	TotalCharged string `json:"totalCharged"`
+	FuelAmount   string `json:"fuelAmount"`
+	FuelGallons  string `json:"fuelGallons"`
+	DEFAmount    string `json:"defAmount"`
+	DEFGallons   string `json:"defGallons"`
+	OtherAmount  string `json:"otherAmount"`
+	Fees         string `json:"fees"`
+}
+
+type DriverFuelReport struct {
+	DriverID         string                        `json:"driverId"`
+	DriverName       string                        `json:"driverName"`
+	DateFrom         string                        `json:"dateFrom"`
+	DateTo           string                        `json:"dateTo"`
+	DataFreshAsOf    *time.Time                    `json:"dataFreshAsOf"`
+	TransactionCount int                           `json:"transactionCount"`
+	TotalCharged     string                        `json:"totalCharged"`
+	FuelAmount       string                        `json:"fuelAmount"`
+	FuelGallons      string                        `json:"fuelGallons"`
+	AverageFuelPrice string                        `json:"averageFuelPrice"`
+	DEFAmount        string                        `json:"defAmount"`
+	DEFGallons       string                        `json:"defGallons"`
+	OtherAmount      string                        `json:"otherAmount"`
+	Fees             string                        `json:"fees"`
+	CashAdvance      string                        `json:"cashAdvance"`
+	RetailValue      string                        `json:"retailValue"`
+	Savings          string                        `json:"savings"`
+	Days             []DriverFuelReportDay         `json:"days"`
+	Transactions     []DriverFuelReportTransaction `json:"transactions"`
+}
+
+func (r *FuelRepository) GetDriverFuelReport(ctx context.Context, driverID string, dateFrom, dateTo time.Time) (DriverFuelReport, error) {
+	report := DriverFuelReport{
+		DriverID: driverID, DateFrom: dateFrom.Format(time.DateOnly), DateTo: dateTo.Format(time.DateOnly),
+		Days: make([]DriverFuelReportDay, 0), Transactions: make([]DriverFuelReportTransaction, 0),
+	}
+	if err := r.pool.QueryRow(ctx, `SELECT full_name FROM drivers WHERE id=$1`, driverID).Scan(&report.DriverName); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DriverFuelReport{}, ErrNotFound
+		}
+		return DriverFuelReport{}, err
+	}
+	report.DriverName = formatPersonName(report.DriverName)
+	base := fuelDriverReportCTE + `
+		SELECT count(*)::int, COALESCE(sum(total_charged),0)::text,
+			COALESCE(sum(fuel_amount),0)::text, COALESCE(sum(fuel_gallons),0)::text,
+			COALESCE(sum(fuel_amount)/NULLIF(sum(fuel_gallons),0),0)::text,
+			COALESCE(sum(def_amount),0)::text, COALESCE(sum(def_gallons),0)::text,
+			COALESCE(sum(other_amount),0)::text, COALESCE(sum(fees),0)::text,
+			COALESCE(sum(cash_advance),0)::text, COALESCE(sum(retail_value),0)::text,
+			COALESCE(sum(savings),0)::text, max(synced_at)
+		FROM transaction_totals WHERE purchased_on BETWEEN $2 AND $3`
+	if err := r.pool.QueryRow(ctx, base, driverID, dateFrom, dateTo).Scan(
+		&report.TransactionCount, &report.TotalCharged, &report.FuelAmount, &report.FuelGallons,
+		&report.AverageFuelPrice, &report.DEFAmount, &report.DEFGallons, &report.OtherAmount,
+		&report.Fees, &report.CashAdvance, &report.RetailValue, &report.Savings, &report.DataFreshAsOf,
+	); err != nil {
+		return DriverFuelReport{}, err
+	}
+	dayRows, err := r.pool.Query(ctx, fuelDriverReportCTE+`
+		SELECT purchased_on::text, sum(total_charged)::text, sum(fuel_amount)::text,
+			sum(fuel_gallons)::text, sum(def_amount)::text, sum(def_gallons)::text,
+			sum(other_amount)::text, sum(fees)::text
+		FROM transaction_totals WHERE purchased_on BETWEEN $2 AND $3
+		GROUP BY purchased_on ORDER BY purchased_on`, driverID, dateFrom, dateTo)
+	if err != nil {
+		return DriverFuelReport{}, err
+	}
+	defer dayRows.Close()
+	for dayRows.Next() {
+		var day DriverFuelReportDay
+		if err := dayRows.Scan(&day.Date, &day.TotalCharged, &day.FuelAmount, &day.FuelGallons,
+			&day.DEFAmount, &day.DEFGallons, &day.OtherAmount, &day.Fees); err != nil {
+			return DriverFuelReport{}, err
+		}
+		report.Days = append(report.Days, day)
+	}
+	if err := dayRows.Err(); err != nil {
+		return DriverFuelReport{}, err
+	}
+	rows, err := r.pool.Query(ctx, fuelDriverReportCTE+`
+		SELECT id::text, relay_transaction_id, purchased_on::text, purchased_at::text,
+			merchant_name, location_name, city, state, timezone, total_charged::text,
+			fuel_amount::text, fuel_gallons::text, def_amount::text, def_gallons::text,
+			other_amount::text, fees::text, cash_advance::text, retail_value::text,
+			savings::text,
+			abs(total_charged-(fuel_amount+def_amount+other_amount+fees+cash_advance)) < 0.02
+		FROM transaction_totals WHERE purchased_on BETWEEN $2 AND $3
+		ORDER BY purchased_at, relay_transaction_id`, driverID, dateFrom, dateTo)
+	if err != nil {
+		return DriverFuelReport{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var value DriverFuelReportTransaction
+		if err := rows.Scan(&value.ID, &value.RelayID, &value.Date, &value.PurchasedAt,
+			&value.Merchant, &value.Location, &value.City, &value.State, &value.Timezone,
+			&value.TotalCharged, &value.FuelAmount, &value.FuelGallons, &value.DEFAmount,
+			&value.DEFGallons, &value.OtherAmount, &value.Fees, &value.CashAdvance,
+			&value.RetailValue, &value.Savings, &value.Reconciles); err != nil {
+			return DriverFuelReport{}, err
+		}
+		report.Transactions = append(report.Transactions, value)
+	}
+	return report, rows.Err()
+}
+
+var fuelDriverReportCTE = `
+WITH transaction_totals AS (
+	SELECT t.id, t.relay_transaction_id, t.purchased_at,
+		(t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date AS purchased_on,
+		t.merchant_name, t.location_name, t.city, t.state, t.timezone, t.synced_at,
+		t.total_amount_paid AS total_charged, t.total_retail_price AS retail_value,
+		t.total_amount_saved AS savings, COALESCE(t.cash_advance,0) AS cash_advance,
+		COALESCE(items.fuel_amount,0) AS fuel_amount,
+		COALESCE(items.fuel_gallons,0) AS fuel_gallons,
+		COALESCE(items.def_amount,0) AS def_amount,
+		COALESCE(items.def_gallons,0) AS def_gallons,
+		COALESCE(items.other_amount,0) AS other_amount,
+		COALESCE(fee_totals.fees,0) AS fees
+	FROM fuel_transactions t
+	LEFT JOIN LATERAL (
+		SELECT sum(total_amount_paid) FILTER (WHERE item_kind='fuel' AND lower(category)<>'def') AS fuel_amount,
+			sum(quantity) FILTER (WHERE item_kind='fuel' AND lower(category)<>'def' AND lower(COALESCE(unit_of_measure,''))='gallons') AS fuel_gallons,
+			sum(total_amount_paid) FILTER (WHERE item_kind='fuel' AND lower(category)='def') AS def_amount,
+			sum(quantity) FILTER (WHERE item_kind='fuel' AND lower(category)='def' AND lower(COALESCE(unit_of_measure,''))='gallons') AS def_gallons,
+			sum(total_amount_paid) FILTER (WHERE item_kind='product') AS other_amount
+		FROM fuel_transaction_items WHERE fuel_transaction_id=t.id
+	) items ON true
+	LEFT JOIN LATERAL (
+		SELECT sum(amount) AS fees FROM fuel_transaction_fees WHERE fuel_transaction_id=t.id
+	) fee_totals ON true
+	WHERE t.driver_id=$1
+)`
+
 func (r *FuelRepository) GetDashboard(ctx context.Context, query FuelDashboardQuery) (FuelDashboard, error) {
 	dashboard := FuelDashboard{
 		Year:        query.Year,

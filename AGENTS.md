@@ -66,6 +66,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   sync in API-compatible date windows.
 - `backend/internal/groq/`: vision extraction client and normalization for truck
   cab cards and driver CDLs.
+- `backend/internal/assistant/` and `backend/internal/telegram/`: permission-
+  checked Groq tool orchestration, Telegram delivery, durable queue processing,
+  report exports, and confirmed management actions.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
 - `backend/sql/002_add_tolls.sql` through
@@ -117,6 +120,12 @@ PORT=8080
 BIND_ADDRESS=127.0.0.1
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.6-27b
+GROQ_ASSISTANT_API_KEY=...
+GROQ_ASSISTANT_MODEL=openai/gpt-oss-120b
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_WEBHOOK_SECRET=...
+TELEGRAM_WEBHOOK_URL=https://erp.msexpressinc.net/api/telegram/webhook
 RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
@@ -137,7 +146,8 @@ SCHEDULED_FUEL_SYNC_TIME=06:30
 SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
 
-`GROQ_API_KEY` is only required when document extraction is used. CORS allows
+`GROQ_API_KEY` is required for document extraction and is the assistant fallback
+when `GROQ_ASSISTANT_API_KEY` is unset. CORS allows
 only `FRONTEND_ORIGIN`. `AUTH_COOKIE_SECURE` defaults to true for an HTTPS
 frontend origin and false for HTTP; production must use HTTPS and secure cookies.
 
@@ -155,6 +165,21 @@ go run ./cmd/hash-password
 # INSERT INTO app_users (username, password_hash)
 # VALUES ('admin', '<bcrypt-hash>');
 ```
+
+After migration `012`, bootstrap the first Telegram manager from `backend/`:
+
+```powershell
+go run ./cmd/telegram-manager <existing-active-username>
+```
+
+That manager can approve other existing ERP users from the Telegram Bot
+settings page. Telegram remains disabled unless `TELEGRAM_ENABLED=true` and all
+Telegram/Groq assistant settings are present.
+
+Production releases also include `/opt/mserp/current/backend/mserp-telegram-manager`,
+which loads `/etc/mserp/mserp.env` for the same bootstrap operation.
+The already-executable API binary provides the equivalent fallback command:
+`/opt/mserp/current/backend/mserp-api telegram-manager <existing-active-username>`.
 
 ### Run locally
 
@@ -190,6 +215,8 @@ browser bundle.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
+- Telegram: public `POST /telegram/webhook`; authenticated manager settings under
+  `/telegram/managers`, `/telegram/link`, and `/telegram/audit`
 
 Backend JSON is intentionally not uniform: loads retain exported Go field names
 such as `LoadID`, while fleet/toll/file responses use lower camel case JSON tags.

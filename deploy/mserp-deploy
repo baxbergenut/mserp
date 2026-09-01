@@ -72,7 +72,7 @@ fi
 extract_dir=$(mktemp -d "$release_root/.extract-$release_id.XXXXXX")
 tar -xzf "$staged_archive" -C "$extract_dir" --no-same-owner --no-same-permissions
 
-if [[ ! -f $extract_dir/backend/mserp-api || ! -f $extract_dir/frontend/login.html || ! -d $extract_dir/migrations ]]; then
+if [[ ! -f $extract_dir/backend/mserp-api || ! -f $extract_dir/backend/mserp-telegram-manager || ! -f $extract_dir/frontend/login.html || ! -d $extract_dir/migrations ]]; then
     echo "release archive does not contain the expected MSERP artifacts" >&2
     exit 1
 fi
@@ -82,6 +82,8 @@ find "$extract_dir" -type d -exec chmod 0755 {} +
 find "$extract_dir" -type f -exec chmod 0644 {} +
 chown root:mserp "$extract_dir/backend/mserp-api"
 chmod 0750 "$extract_dir/backend/mserp-api"
+chown root:mserp "$extract_dir/backend/mserp-telegram-manager"
+chmod 0750 "$extract_dir/backend/mserp-telegram-manager"
 mv "$extract_dir" "$release_dir"
 extract_dir=
 
