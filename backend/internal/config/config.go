@@ -18,6 +18,12 @@ type Config struct {
 	DataTruckCompanyName   string
 	GroqAPIKey             string
 	GroqModel              string
+	GroqAssistantAPIKey    string
+	GroqAssistantModel     string
+	TelegramEnabled        bool
+	TelegramBotToken       string
+	TelegramWebhookSecret  string
+	TelegramWebhookURL     string
 	RelayEnvironment       string
 	RelayAPIURL            string
 	RelayAPIKey            string
@@ -128,6 +134,18 @@ func Load() (Config, error) {
 	if err != nil || authSessionTTL < 15*time.Minute || authSessionTTL > 7*24*time.Hour {
 		return Config{}, errors.New("AUTH_SESSION_TTL must be a duration between 15m and 168h")
 	}
+	telegramEnabled, err := strconv.ParseBool(envOrDefault("TELEGRAM_ENABLED", "false"))
+	if err != nil {
+		return Config{}, errors.New("TELEGRAM_ENABLED must be true or false")
+	}
+	telegramWebhookURL := strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_URL"))
+	if telegramEnabled {
+		parsedWebhook, parseErr := url.Parse(telegramWebhookURL)
+		if parseErr != nil || parsedWebhook.Scheme != "https" || parsedWebhook.Host == "" ||
+			parsedWebhook.RawQuery != "" || parsedWebhook.Fragment != "" || parsedWebhook.User != nil {
+			return Config{}, errors.New("TELEGRAM_WEBHOOK_URL must be an HTTPS URL without a query or fragment")
+		}
+	}
 	scheduledSyncsEnabled, err := strconv.ParseBool(envOrDefault("SCHEDULED_SYNCS_ENABLED", "true"))
 	if err != nil {
 		return Config{}, errors.New("SCHEDULED_SYNCS_ENABLED must be true or false")
@@ -157,6 +175,12 @@ func Load() (Config, error) {
 		DataTruckCompanyName:   strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
 		GroqAPIKey:             strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
 		GroqModel:              envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
+		GroqAssistantAPIKey:    strings.TrimSpace(os.Getenv("GROQ_ASSISTANT_API_KEY")),
+		GroqAssistantModel:     envOrDefault("GROQ_ASSISTANT_MODEL", "openai/gpt-oss-120b"),
+		TelegramEnabled:        telegramEnabled,
+		TelegramBotToken:       strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
+		TelegramWebhookSecret:  strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")),
+		TelegramWebhookURL:     telegramWebhookURL,
 		RelayEnvironment:       relayEnvironment,
 		RelayAPIURL:            relayAPIURL,
 		RelayAPIKey:            relayAPIKey,
@@ -184,6 +208,26 @@ func Load() (Config, error) {
 	}
 	if cfg.DataTruckCompanyName == "" {
 		return Config{}, errors.New("DATATRUCK_COMPANY_NAME is required")
+	}
+	if cfg.GroqAssistantAPIKey == "" {
+		cfg.GroqAssistantAPIKey = cfg.GroqAPIKey
+	}
+	if cfg.TelegramEnabled {
+		if cfg.TelegramBotToken == "" {
+			return Config{}, errors.New("TELEGRAM_BOT_TOKEN is required when Telegram is enabled")
+		}
+		if strings.Contains(cfg.TelegramWebhookURL, cfg.TelegramBotToken) {
+			return Config{}, errors.New("TELEGRAM_WEBHOOK_URL must not contain the bot token")
+		}
+		if cfg.TelegramWebhookSecret == "" || len(cfg.TelegramWebhookSecret) > 256 ||
+			strings.ContainsFunc(cfg.TelegramWebhookSecret, func(r rune) bool {
+				return !(r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z')
+			}) {
+			return Config{}, errors.New("TELEGRAM_WEBHOOK_SECRET must contain 1-256 letters, digits, underscores, or hyphens")
+		}
+		if cfg.GroqAssistantAPIKey == "" {
+			return Config{}, errors.New("GROQ_ASSISTANT_API_KEY or GROQ_API_KEY is required when Telegram is enabled")
+		}
 	}
 	if cfg.RelayEnvironment != "staging" && cfg.RelayEnvironment != "production" {
 		return Config{}, errors.New("RELAY_ENVIRONMENT must be staging or production")

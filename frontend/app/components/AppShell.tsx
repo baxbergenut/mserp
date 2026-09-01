@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full">
-      <Sidebar username={session.user.username} />
+      <Sidebar username={session.user.username} telegramApproved={session.telegram.approved} />
       <main className="min-w-0 flex-1 overflow-auto">
         <div className="w-full px-4 py-6 sm:px-6 xl:px-8">{children}</div>
       </main>

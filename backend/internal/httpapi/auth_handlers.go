@@ -30,8 +30,9 @@ type authStore interface {
 }
 
 type AuthOptions struct {
-	CookieSecure bool
-	SessionTTL   time.Duration
+	CookieSecure   bool
+	SessionTTL     time.Duration
+	TelegramStatus func(context.Context, string) (repository.TelegramManager, error)
 }
 
 type authHandler struct {
@@ -56,9 +57,16 @@ type authUserResponse struct {
 }
 
 type sessionResponse struct {
-	User      authUserResponse `json:"user"`
-	CSRFToken string           `json:"csrfToken"`
-	ExpiresAt time.Time        `json:"expiresAt"`
+	User      authUserResponse        `json:"user"`
+	CSRFToken string                  `json:"csrfToken"`
+	ExpiresAt time.Time               `json:"expiresAt"`
+	Telegram  telegramSessionResponse `json:"telegram"`
+}
+
+type telegramSessionResponse struct {
+	Approved      bool       `json:"approved"`
+	Linked        bool       `json:"linked"`
+	LinkExpiresAt *time.Time `json:"linkExpiresAt"`
 }
 
 func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *authHandler {
@@ -136,7 +144,7 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 
 	h.limiter.succeed(limiterKey)
 	h.setSessionCookie(w, token, expiresAt)
-	writeJSON(w, http.StatusOK, makeSessionResponse(user, csrfToken, expiresAt))
+	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), user, csrfToken, expiresAt))
 }
 
 func (h *authHandler) session(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +154,7 @@ func (h *authHandler) session(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
-	writeJSON(w, http.StatusOK, makeSessionResponse(session.User, session.CSRFToken, session.ExpiresAt))
+	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), session.User, session.CSRFToken, session.ExpiresAt))
 }
 
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
@@ -220,12 +228,20 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 	return session, ok
 }
 
-func makeSessionResponse(user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
-	return sessionResponse{
+func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
+	response := sessionResponse{
 		User:      authUserResponse{ID: user.ID, Username: user.Username},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
 	}
+	if h.options.TelegramStatus != nil {
+		if status, err := h.options.TelegramStatus(ctx, user.ID); err == nil {
+			response.Telegram = telegramSessionResponse{Approved: status.Approved,
+				Linked:        status.TelegramUserID != nil && status.LinkExpiresAt != nil && status.LinkExpiresAt.After(h.now()),
+				LinkExpiresAt: status.LinkExpiresAt}
+		}
+	}
+	return response
 }
 
 func randomToken() (string, error) {

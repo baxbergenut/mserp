@@ -432,4 +432,34 @@ export interface AuthSession {
   user: AuthUser;
   csrfToken: string;
   expiresAt: string;
+  telegram: {
+    approved: boolean;
+    linked: boolean;
+    linkExpiresAt: string | null;
+  };
+}
+
+export interface TelegramManager {
+  userId: string;
+  username: string;
+  active: boolean;
+  approved: boolean;
+  telegramUserId: number | null;
+  telegramUsername: string | null;
+  displayName: string | null;
+  linkedAt: string | null;
+  linkExpiresAt: string | null;
+}
+
+export interface AssistantAuditEntry {
+  id: string;
+  username: string | null;
+  eventType: string;
+  prompt: string | null;
+  response: string | null;
+  toolCalls: unknown[];
+  toolResults: unknown[];
+  outcome: string;
+  errorMessage: string | null;
+  createdAt: string;
 }

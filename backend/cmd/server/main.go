@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
+	"mserp/internal/assistant"
 	"mserp/internal/config"
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
@@ -23,12 +25,21 @@ import (
 	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
+	"mserp/internal/telegram"
 )
 
 func main() {
-	_ = godotenv.Load(".env.relay.local", ".env.local", ".env")
+	_ = godotenv.Load(".env.relay.local", ".env.local", ".env", "/etc/mserp/mserp.env")
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	if len(os.Args) > 1 {
+		if len(os.Args) == 3 && os.Args[1] == "telegram-manager" {
+			runTelegramManagerCommand(logger, os.Args[2])
+			return
+		}
+		logger.Error("usage: mserp-api [telegram-manager <existing-username>]")
+		os.Exit(2)
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("load config", "error", err)
@@ -53,6 +64,7 @@ func main() {
 	fuelRepo := repository.NewFuelRepository(pool)
 	dashboardRepo := repository.NewDashboardRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
+	assistantRepo := repository.NewAssistantRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	loadJob := jobs.NewSyncLoadsJob(client, loadRepo, logger)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
@@ -75,6 +87,44 @@ func main() {
 		cfg.PrePassTollSyncStart,
 		logger,
 	)
+	var telegramService *assistant.Service
+	telegramBotUsername := ""
+	if cfg.TelegramEnabled {
+		telegramClient := telegram.NewClient(cfg.TelegramBotToken)
+		botUser, telegramErr := telegramClient.GetMe(ctx)
+		if telegramErr != nil {
+			logger.Error("validate Telegram bot", "error", telegramErr)
+			os.Exit(1)
+		}
+		telegramBotUsername = botUser.Username
+		if telegramErr := telegramClient.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); telegramErr != nil {
+			logger.Error("register Telegram webhook", "error", telegramErr)
+			os.Exit(1)
+		}
+		assistantModel := groq.NewClient(cfg.GroqAssistantAPIKey, cfg.GroqAssistantModel)
+		toolExecutor := assistant.NewToolExecutor(assistantRepo, fleetRepo, loadRepo, fuelRepo,
+			tollRepo, dashboardRepo, loadJob, fuelJob, tollJob)
+		telegramService = assistant.NewService(assistantRepo, toolExecutor, assistantModel, telegramClient, logger)
+		go telegramService.Run(ctx, 4)
+		logger.Info("Telegram assistant enabled", "bot_username", telegramBotUsername)
+	}
+	go func() {
+		if cleanupErr := assistantRepo.Cleanup(ctx); cleanupErr != nil {
+			logger.Error("clean Telegram assistant data", "error", cleanupErr)
+		}
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if cleanupErr := assistantRepo.Cleanup(ctx); cleanupErr != nil {
+					logger.Error("clean Telegram assistant data", "error", cleanupErr)
+				}
+			}
+		}
+	}()
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,
@@ -90,8 +140,13 @@ func main() {
 		authRepo,
 		cabCardExtractor,
 		httpapi.AuthOptions{
-			CookieSecure: cfg.AuthCookieSecure,
-			SessionTTL:   cfg.AuthSessionTTL,
+			CookieSecure:   cfg.AuthCookieSecure,
+			SessionTTL:     cfg.AuthSessionTTL,
+			TelegramStatus: assistantRepo.ManagerStatus,
+		},
+		httpapi.TelegramOptions{
+			Enabled: cfg.TelegramEnabled, WebhookSecret: cfg.TelegramWebhookSecret,
+			BotUsername: telegramBotUsername, Service: telegramService, Repository: assistantRepo,
 		},
 	)
 	handler := cors.Handler(cors.Options{
@@ -177,4 +232,26 @@ func main() {
 	case <-shutdownCtx.Done():
 		logger.Warn("scheduled syncs did not stop before shutdown timeout")
 	}
+}
+
+func runTelegramManagerCommand(logger *slog.Logger, username string) {
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	username = strings.TrimSpace(username)
+	if databaseURL == "" || username == "" {
+		logger.Error("DATABASE_URL and an existing username are required")
+		os.Exit(2)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := db.NewPool(ctx, databaseURL)
+	if err != nil {
+		logger.Error("connect database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+	if err := repository.NewAssistantRepository(pool).BootstrapManager(ctx, username); err != nil {
+		logger.Error("approve Telegram manager", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("Telegram manager approved", "username", username)
 }
