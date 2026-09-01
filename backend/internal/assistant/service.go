@@ -25,7 +25,8 @@ Reporting weeks are Monday through Sunday in America/New_York. "Last week" is th
 For every relative date phrase, call resolve_date_range and use its returned dates in reporting tools.
 Fuel transaction dates use each merchant's timezone. Load reporting uses DataTruck's encoded UTC pickup calendar date. Tolls use stored dates.
 For read-only questions, use a reasonable documented default and state it. For any write, ask a concise follow-up if the entity, intended fields, or values are ambiguous. Questions like "can you" or "what would happen" are not commands and must not call mutation tools.
-Use IDs returned by list_fleet; never guess an entity ID. Be concise but include methodology/freshness when returned. English only.`
+Use IDs returned by list_fleet; never guess an entity ID. If a user provides a truck unit to clarify a driver, resolve the truck with list_fleet and use its current driver assignment.
+Be concise but include methodology/freshness when returned. English only.`
 
 var errMutationCompleted = errors.New("mutation completed; do not retry update")
 

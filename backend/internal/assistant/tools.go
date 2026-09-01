@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"mserp/internal/groq"
 	"mserp/internal/jobs"
@@ -220,18 +221,6 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 	if err := json.Unmarshal(raw, &args); err != nil {
 		return ToolResult{}, err
 	}
-	search := strings.ToLower(strings.TrimSpace(args.Search))
-	match := func(values ...string) bool {
-		if search == "" {
-			return true
-		}
-		for _, v := range values {
-			if strings.Contains(strings.ToLower(v), search) {
-				return true
-			}
-		}
-		return false
-	}
 	switch args.Entity {
 	case "driver":
 		values, err := e.fleet.ListDrivers(ctx)
@@ -240,7 +229,7 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 		}
 		filtered := values[:0]
 		for _, v := range values {
-			if (args.IncludeInactive || v.Active) && match(v.FullName, v.ID) {
+			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.FullName, v.ID) {
 				filtered = append(filtered, v)
 			}
 		}
@@ -252,7 +241,7 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 		}
 		filtered := values[:0]
 		for _, v := range values {
-			if (args.IncludeInactive || v.Active) && match(v.UnitNumber, v.ID) {
+			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.UnitNumber, v.ID) {
 				filtered = append(filtered, v)
 			}
 		}
@@ -264,7 +253,7 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 		}
 		filtered := values[:0]
 		for _, v := range values {
-			if (args.IncludeInactive || v.Active) && match(v.FullName, v.ID) {
+			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.FullName, v.ID) {
 				filtered = append(filtered, v)
 			}
 		}
@@ -272,6 +261,39 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 	default:
 		return ToolResult{}, errors.New("entity must be driver, truck, or dispatcher")
 	}
+}
+
+func fleetSearchMatches(search string, values ...string) bool {
+	search = strings.ToLower(strings.TrimSpace(search))
+	if search == "" {
+		return true
+	}
+	queryTokens := strings.FieldsFunc(search, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) })
+	for _, value := range values {
+		candidate := strings.ToLower(value)
+		if strings.Contains(candidate, search) {
+			return true
+		}
+		candidateTokens := strings.FieldsFunc(candidate, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) })
+		allMatch := len(queryTokens) > 0
+		for _, queryToken := range queryTokens {
+			matched := false
+			for _, candidateToken := range candidateTokens {
+				if strings.HasPrefix(candidateToken, queryToken) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return true
+		}
+	}
+	return false
 }
 
 func parseDates(from, to string, optional bool) (*time.Time, *time.Time, error) {

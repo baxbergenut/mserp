@@ -50,6 +50,18 @@ func TestToolDefinitionsNeverEncodeNullRequired(t *testing.T) {
 	}
 }
 
+func TestFleetSearchMatchesFirstAndLastAroundMiddleName(t *testing.T) {
+	if !fleetSearchMatches("Roderick Nunn", "Roderick Earl Nunn") {
+		t.Fatal("expected first and last name to match stored middle name")
+	}
+	if !fleetSearchMatches("Rod Nun", "Roderick Earl Nunn") {
+		t.Fatal("expected partial name tokens to match")
+	}
+	if fleetSearchMatches("Roderick Smith", "Roderick Earl Nunn") {
+		t.Fatal("unexpected mismatched last name")
+	}
+}
+
 func TestParseDatesRejectsInvalidRanges(t *testing.T) {
 	if _, _, err := parseDates("2026-09-02", "2026-09-01", false); err == nil {
 		t.Fatal("expected reversed range error")
