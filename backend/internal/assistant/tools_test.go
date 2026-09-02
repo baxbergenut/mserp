@@ -84,6 +84,44 @@ func TestRetryDelayHonorsGroqCooldownAndBackoff(t *testing.T) {
 	}
 }
 
+func TestCompactFuelModelDataKeepsCompleteCountAndSmallPreview(t *testing.T) {
+	rows := make([]repository.FuelTransaction, 100)
+	for index := range rows {
+		rows[index] = repository.FuelTransaction{
+			DriverName: "Driver Name", MerchantName: "Merchant", LocationName: "Location",
+			PurchasedAt:     time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC),
+			TotalAmountPaid: 100.25, FuelAmount: 95.25, FuelVolume: 25.5, DEFAmount: 5,
+		}
+	}
+	freshness := time.Date(2026, time.August, 31, 0, 0, 0, 0, time.UTC)
+	data := compactFuelModelData(rows, "2026-08-24", "2026-08-30", &freshness)
+	if data["transactionCount"] != 100 || data["previewCount"] != 10 {
+		t.Fatalf("unexpected compact report counts: %#v", data)
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 8000 {
+		t.Fatalf("compact model payload is too large: %d bytes", len(encoded))
+	}
+	totals := data["totals"].(map[string]string)
+	if totals["totalCharged"] != "10025.00" || totals["fuelGallons"] != "2550.000" {
+		t.Fatalf("unexpected totals: %#v", totals)
+	}
+}
+
+func TestTrimConversationHistoryUsesCharacterBudget(t *testing.T) {
+	history := make([]groq.AssistantMessage, 10)
+	for index := range history {
+		history[index] = groq.AssistantMessage{Role: "assistant", Content: strings.Repeat("x", 2000)}
+	}
+	trimmed := trimConversationHistory(history)
+	if len(trimmed) != 3 {
+		t.Fatalf("trimmed history length = %d, want 3", len(trimmed))
+	}
+}
+
 func TestHighRiskChanges(t *testing.T) {
 	cases := []struct {
 		entity, key string

@@ -171,7 +171,120 @@ func (e *ToolExecutor) fuelReport(ctx context.Context, raw json.RawMessage) (Too
 	}
 	attachment, _ := csvAttachment(allRows, "fuel-"+args.DateFrom+"-"+args.DateTo+".csv", "Complete matching fuel report")
 	fresh, _ := e.repo.DataFreshness(ctx, "fuel")
-	return ToolResult{Data: map[string]any{"report": page, "dataFreshAsOf": fresh}, Attachment: attachment}, nil
+	return ToolResult{Data: compactFuelModelData(allRows, args.DateFrom, args.DateTo, fresh), Attachment: attachment}, nil
+}
+
+type fuelModelTransaction struct {
+	Date         string `json:"date"`
+	Driver       string `json:"driver"`
+	Merchant     string `json:"merchant"`
+	Location     string `json:"location"`
+	State        string `json:"state"`
+	TotalCharged string `json:"totalCharged"`
+	FuelAmount   string `json:"fuelAmount"`
+	FuelGallons  string `json:"fuelGallons"`
+	DEFAmount    string `json:"defAmount"`
+	DEFGallons   string `json:"defGallons"`
+	OtherAmount  string `json:"otherAmount"`
+}
+
+func compactFuelModelData(rows []repository.FuelTransaction, dateFrom, dateTo string, freshness *time.Time) map[string]any {
+	const previewLimit = 10
+	previewCount := min(len(rows), previewLimit)
+	preview := make([]fuelModelTransaction, 0, previewCount)
+	for _, row := range rows[:previewCount] {
+		preview = append(preview, fuelModelTransaction{
+			Date:         fuelMerchantDate(row.PurchasedAt, row.Timezone),
+			Driver:       row.DriverName,
+			Merchant:     row.MerchantName,
+			Location:     row.LocationName,
+			State:        row.State,
+			TotalCharged: formatFuelValue(row.TotalAmountPaid, 2),
+			FuelAmount:   formatFuelValue(row.FuelAmount, 2),
+			FuelGallons:  formatFuelValue(row.FuelVolume, 3),
+			DEFAmount:    formatFuelValue(row.DEFAmount, 2),
+			DEFGallons:   formatFuelValue(row.DEFVolume, 3),
+			OtherAmount:  formatFuelValue(row.OtherAmount, 2),
+		})
+	}
+	return map[string]any{
+		"period":             map[string]string{"dateFrom": dateFrom, "dateTo": dateTo},
+		"totals":             summarizeFuelTransactions(rows),
+		"transactionCount":   len(rows),
+		"transactionPreview": preview,
+		"previewCount":       previewCount,
+		"completeReport":     "attached as CSV",
+		"dataFreshAsOf":      freshness,
+	}
+}
+
+func fuelMerchantDate(purchasedAt time.Time, timezone string) string {
+	aliases := map[string]string{
+		"US/Eastern": "America/New_York", "US/Central": "America/Chicago",
+		"US/Mountain": "America/Denver", "US/Pacific": "America/Los_Angeles",
+		"US/Arizona": "America/Phoenix", "US/Alaska": "America/Anchorage",
+		"US/Aleutian": "America/Adak", "US/Hawaii": "Pacific/Honolulu",
+		"US/East-Indiana": "America/Indiana/Indianapolis", "US/Indiana-Starke": "America/Indiana/Knox",
+		"US/Michigan": "America/Detroit", "US/Samoa": "Pacific/Pago_Pago",
+	}
+	if canonical, ok := aliases[timezone]; ok {
+		timezone = canonical
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		location, _ = time.LoadLocation("America/New_York")
+	}
+	if location == nil {
+		location = time.UTC
+	}
+	return purchasedAt.In(location).Format(time.DateOnly)
+}
+
+func summarizeFuelTransactions(rows []repository.FuelTransaction) map[string]string {
+	total := new(big.Rat)
+	retail := new(big.Rat)
+	saved := new(big.Rat)
+	cash := new(big.Rat)
+	fuelAmount := new(big.Rat)
+	defAmount := new(big.Rat)
+	otherAmount := new(big.Rat)
+	fuelGallons := new(big.Rat)
+	defGallons := new(big.Rat)
+	for _, row := range rows {
+		addFuelValue(total, row.TotalAmountPaid)
+		addFuelValue(retail, row.TotalRetailPrice)
+		addFuelValue(saved, row.TotalAmountSaved)
+		if row.CashAdvance != nil {
+			addFuelValue(cash, *row.CashAdvance)
+		}
+		addFuelValue(fuelAmount, row.FuelAmount)
+		addFuelValue(defAmount, row.DEFAmount)
+		addFuelValue(otherAmount, row.OtherAmount)
+		addFuelValue(fuelGallons, row.FuelVolume)
+		addFuelValue(defGallons, row.DEFVolume)
+	}
+	averageFuelPrice := "0.000"
+	if fuelGallons.Sign() != 0 {
+		averageFuelPrice = new(big.Rat).Quo(fuelAmount, fuelGallons).FloatString(3)
+	}
+	return map[string]string{
+		"totalCharged": total.FloatString(2), "retailValue": retail.FloatString(2),
+		"savings": saved.FloatString(2), "cashAdvances": cash.FloatString(2),
+		"fuelAmount": fuelAmount.FloatString(2), "fuelGallons": fuelGallons.FloatString(3),
+		"averageFuelPrice": averageFuelPrice, "defAmount": defAmount.FloatString(2),
+		"defGallons": defGallons.FloatString(3), "otherAmount": otherAmount.FloatString(2),
+	}
+}
+
+func addFuelValue(total *big.Rat, value float64) {
+	part, ok := new(big.Rat).SetString(strconv.FormatFloat(value, 'f', 6, 64))
+	if ok {
+		total.Add(total, part)
+	}
+}
+
+func formatFuelValue(value float64, precision int) string {
+	return strconv.FormatFloat(value, 'f', precision, 64)
 }
 
 func (e *ToolExecutor) resolveDateRange(raw json.RawMessage) (ToolResult, error) {

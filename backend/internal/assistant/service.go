@@ -255,9 +255,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 	}
 	var history []groq.AssistantMessage
 	_ = json.Unmarshal(stored, &history)
-	if len(history) > 12 {
-		history = history[len(history)-12:]
-	}
+	history = trimConversationHistory(history)
 	messages := []groq.AssistantMessage{{Role: "system", Content: systemPrompt + "\nCurrent company date: " + companyToday(s.now()).Format(time.DateOnly)}}
 	messages = append(messages, history...)
 	messages = append(messages, groq.AssistantMessage{Role: "user", Content: prompt})
@@ -310,9 +308,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 				}
 			}
 			history = append(history, groq.AssistantMessage{Role: "user", Content: prompt}, groq.AssistantMessage{Role: "assistant", Content: response})
-			if len(history) > 12 {
-				history = history[len(history)-12:]
-			}
+			history = trimConversationHistory(history)
 			encoded, _ := json.Marshal(history)
 			return s.repo.SaveConversation(ctx, identity.AppUserID, encoded)
 		}
@@ -351,9 +347,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 					return sendErr
 				}
 				history = append(history, groq.AssistantMessage{Role: "user", Content: prompt}, groq.AssistantMessage{Role: "assistant", Content: finalResponse})
-				if len(history) > 12 {
-					history = history[len(history)-12:]
-				}
+				history = trimConversationHistory(history)
 				encoded, _ := json.Marshal(history)
 				return s.repo.SaveConversation(ctx, identity.AppUserID, encoded)
 			}
@@ -369,14 +363,31 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 				return err
 			}
 			history = append(history, groq.AssistantMessage{Role: "user", Content: prompt}, groq.AssistantMessage{Role: "assistant", Content: response})
-			if len(history) > 12 {
-				history = history[len(history)-12:]
-			}
+			history = trimConversationHistory(history)
 			encoded, _ := json.Marshal(history)
 			return s.repo.SaveConversation(ctx, identity.AppUserID, encoded)
 		}
 	}
 	return errors.New("assistant exceeded the five-tool iteration limit")
+}
+
+func trimConversationHistory(history []groq.AssistantMessage) []groq.AssistantMessage {
+	const maxMessages = 8
+	const maxCharacters = 6000
+	if len(history) > maxMessages {
+		history = history[len(history)-maxMessages:]
+	}
+	characters := 0
+	start := len(history)
+	for index := len(history) - 1; index >= 0; index-- {
+		length := len([]rune(history[index].Content))
+		if characters+length > maxCharacters && start < len(history) {
+			break
+		}
+		characters += length
+		start = index
+	}
+	return history[start:]
 }
 
 func (s *Service) completeWithRateLimitRetry(ctx context.Context, messages []groq.AssistantMessage, tools []groq.AssistantTool) (groq.AssistantCompletion, error) {
