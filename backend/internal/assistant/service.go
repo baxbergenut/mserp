@@ -26,6 +26,7 @@ For every relative date phrase, call resolve_date_range and use its returned dat
 Fuel transaction dates use each merchant's timezone. Load reporting uses DataTruck's encoded UTC pickup calendar date. Tolls use stored dates.
 For read-only questions, use a reasonable documented default and state it. For any write, ask a concise follow-up if the entity, intended fields, or values are ambiguous. Questions like "can you" or "what would happen" are not commands and must not call mutation tools.
 Use IDs returned by list_fleet; never guess an entity ID. If a user provides a truck unit to clarify a driver, resolve the truck with list_fleet and use its current driver assignment.
+Action and synchronization tools are available only when the current user message is an explicit imperative command. Never attempt a sync to improve freshness unless the user explicitly commands that sync. If a follow-up does not restate an explicit action, ask the user to state the complete command.
 Be concise but include methodology/freshness when returned. English only.`
 
 var errMutationCompleted = errors.New("mutation completed; do not retry update")
@@ -265,6 +266,11 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 	var pending *repository.AssistantActionRequest
 	finalResponse := ""
 	mutationExecuted := false
+	availableTools := ToolDefinitionsForPrompt(prompt)
+	allowedTools := make(map[string]bool, len(availableTools))
+	for _, definition := range availableTools {
+		allowedTools[definition.Function.Name] = true
+	}
 	defer func() {
 		outcome := "success"
 		if processErr != nil {
@@ -280,7 +286,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 		}
 	}()
 	for iteration := 0; iteration < 5; iteration++ {
-		completion, err := s.completeWithRateLimitRetry(ctx, messages, ToolDefinitions())
+		completion, err := s.completeWithRateLimitRetry(ctx, boundedModelMessages(messages), availableTools)
 		if err != nil {
 			return err
 		}
@@ -315,7 +321,14 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 		for _, call := range completion.Message.ToolCalls {
 			calls = append(calls, call)
 			arguments := json.RawMessage(call.Function.Arguments)
-			result, err := s.tools.Execute(ctx, identity, call.Function.Name, arguments, false)
+			var result ToolResult
+			var err error
+			if !allowedTools[call.Function.Name] {
+				err = fmt.Errorf("tool %q is not authorized by an explicit command in the current message", call.Function.Name)
+				result.Data = map[string]any{"error": err.Error()}
+			} else {
+				result, err = s.tools.Execute(ctx, identity, call.Function.Name, arguments, false)
+			}
 			if err != nil {
 				result.Data = map[string]any{"error": err.Error()}
 			}
@@ -337,7 +350,7 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 			if result.Pending != nil {
 				pending = result.Pending
 			}
-			content, _ := json.Marshal(result.Data)
+			content := modelToolContent(result.Data, result.Attachment != nil)
 			messages = append(messages, groq.AssistantMessage{Role: "tool", ToolCallID: call.ID,
 				Name: call.Function.Name, Content: string(content)})
 			if result.Action && err == nil {
@@ -369,6 +382,55 @@ func (s *Service) runAssistant(ctx context.Context, updateID int64, identity rep
 		}
 	}
 	return errors.New("assistant exceeded the five-tool iteration limit")
+}
+
+func boundedModelMessages(messages []groq.AssistantMessage) []groq.AssistantMessage {
+	const maxBytes = 18 << 10
+	encoded, err := json.Marshal(messages)
+	if err == nil && len(encoded) <= maxBytes {
+		return messages
+	}
+	bounded := append([]groq.AssistantMessage(nil), messages...)
+	latestTool := -1
+	for index := len(bounded) - 1; index >= 0; index-- {
+		if bounded[index].Role == "tool" {
+			latestTool = index
+			break
+		}
+	}
+	for index := 1; index < len(bounded); index++ {
+		if index == latestTool {
+			continue
+		}
+		switch bounded[index].Role {
+		case "tool":
+			bounded[index].Content = `{"omitted":"earlier tool result omitted to stay within the model context limit"}`
+		case "assistant":
+			if len(bounded[index].ToolCalls) == 0 && len(bounded[index].Content) > 256 {
+				bounded[index].Content = "[Earlier assistant response omitted to stay within the model context limit.]"
+			}
+		}
+		encoded, err = json.Marshal(bounded)
+		if err == nil && len(encoded) <= maxBytes {
+			return bounded
+		}
+	}
+	return bounded
+}
+
+func modelToolContent(data any, hasAttachment bool) []byte {
+	const maxBytes = 8 << 10
+	content, err := json.Marshal(data)
+	if err == nil && len(content) <= maxBytes {
+		return content
+	}
+	fallback := map[string]any{
+		"error":             "tool result exceeded the safe model payload limit; narrow the query or use deterministic summary fields",
+		"completeCSVReady":  hasAttachment,
+		"originalByteCount": len(content),
+	}
+	encoded, _ := json.Marshal(fallback)
+	return encoded
 }
 
 func trimConversationHistory(history []groq.AssistantMessage) []groq.AssistantMessage {

@@ -106,6 +106,56 @@ func ToolDefinitions() []groq.AssistantTool {
 	}
 }
 
+func ToolDefinitionsForPrompt(prompt string) []groq.AssistantTool {
+	allowedActions := map[string]bool{}
+	switch explicitCommandVerb(prompt) {
+	case "sync", "synchronize", "refresh":
+		allowedActions["sync_data"] = true
+	case "create", "add", "register", "hire":
+		allowedActions["create_fleet_record"] = true
+	case "update", "change", "set", "edit", "rename", "assign", "unassign", "activate", "deactivate", "mark":
+		allowedActions["update_fleet_record"] = true
+	case "delete":
+		allowedActions["delete_fleet_record"] = true
+	case "remove":
+		if strings.Contains(strings.ToLower(prompt), "permanently") {
+			allowedActions["delete_fleet_record"] = true
+		} else {
+			allowedActions["update_fleet_record"] = true
+		}
+	}
+	definitions := ToolDefinitions()
+	filtered := make([]groq.AssistantTool, 0, len(definitions))
+	for _, definition := range definitions {
+		name := definition.Function.Name
+		if !isActionTool(name) || allowedActions[name] {
+			filtered = append(filtered, definition)
+		}
+	}
+	return filtered
+}
+
+func explicitCommandVerb(prompt string) string {
+	value := strings.ToLower(strings.TrimSpace(prompt))
+	for _, prefix := range []string{"please ", "go ahead and ", "go ahead, ", "kindly "} {
+		value = strings.TrimSpace(strings.TrimPrefix(value, prefix))
+	}
+	words := strings.FieldsFunc(value, func(r rune) bool { return !unicode.IsLetter(r) })
+	if len(words) == 0 {
+		return ""
+	}
+	return words[0]
+}
+
+func isActionTool(name string) bool {
+	switch name {
+	case "sync_data", "create_fleet_record", "update_fleet_record", "delete_fleet_record":
+		return true
+	default:
+		return false
+	}
+}
+
 func tool(name, description string, parameters map[string]any) groq.AssistantTool {
 	return groq.AssistantTool{Type: "function", Function: groq.AssistantToolDefinition{Name: name, Description: description, Parameters: parameters}}
 }
@@ -327,6 +377,7 @@ func (e *ToolExecutor) ExecuteConfirmed(ctx context.Context, identity repository
 }
 
 func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	const resultLimit = 20
 	var args struct {
 		Entity, Search  string
 		IncludeInactive bool `json:"include_inactive"`
@@ -340,39 +391,68 @@ func (e *ToolExecutor) listFleet(ctx context.Context, raw json.RawMessage) (Tool
 		if err != nil {
 			return ToolResult{}, err
 		}
-		filtered := values[:0]
+		filtered := make([]map[string]any, 0, min(len(values), resultLimit))
+		count := 0
 		for _, v := range values {
 			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.FullName, v.ID) {
-				filtered = append(filtered, v)
+				count++
+				if len(filtered) < resultLimit {
+					filtered = append(filtered, map[string]any{
+						"id": v.ID, "fullName": v.FullName, "active": v.Active,
+						"truckId": v.TruckID, "truckUnit": v.TruckUnit,
+						"dispatcherId": v.DispatcherID, "dispatcherName": v.DispatcherName,
+						"payType": v.PayType, "isOwnerOperator": v.IsOwnerOperator,
+					})
+				}
 			}
 		}
-		return ToolResult{Data: filtered}, nil
+		return ToolResult{Data: fleetListResult("driver", count, filtered)}, nil
 	case "truck":
 		values, err := e.fleet.ListTrucks(ctx)
 		if err != nil {
 			return ToolResult{}, err
 		}
-		filtered := values[:0]
+		filtered := make([]map[string]any, 0, min(len(values), resultLimit))
+		count := 0
 		for _, v := range values {
 			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.UnitNumber, v.ID) {
-				filtered = append(filtered, v)
+				count++
+				if len(filtered) < resultLimit {
+					filtered = append(filtered, map[string]any{
+						"id": v.ID, "unitNumber": v.UnitNumber, "active": v.Active,
+						"status": v.Status, "driverId": v.DriverID, "driverName": v.DriverName,
+					})
+				}
 			}
 		}
-		return ToolResult{Data: filtered}, nil
+		return ToolResult{Data: fleetListResult("truck", count, filtered)}, nil
 	case "dispatcher":
 		values, err := e.fleet.ListDispatchers(ctx)
 		if err != nil {
 			return ToolResult{}, err
 		}
-		filtered := values[:0]
+		filtered := make([]map[string]any, 0, min(len(values), resultLimit))
+		count := 0
 		for _, v := range values {
 			if (args.IncludeInactive || v.Active) && fleetSearchMatches(args.Search, v.FullName, v.ID) {
-				filtered = append(filtered, v)
+				count++
+				if len(filtered) < resultLimit {
+					filtered = append(filtered, map[string]any{
+						"id": v.ID, "fullName": v.FullName, "active": v.Active, "driverCount": v.DriverCount,
+					})
+				}
 			}
 		}
-		return ToolResult{Data: filtered}, nil
+		return ToolResult{Data: fleetListResult("dispatcher", count, filtered)}, nil
 	default:
 		return ToolResult{}, errors.New("entity must be driver, truck, or dispatcher")
+	}
+}
+
+func fleetListResult(entity string, count int, matches []map[string]any) map[string]any {
+	return map[string]any{
+		"entity": entity, "count": count, "returned": len(matches),
+		"truncated": count > len(matches), "matches": matches,
 	}
 }
 

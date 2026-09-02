@@ -50,6 +50,70 @@ func TestToolDefinitionsNeverEncodeNullRequired(t *testing.T) {
 	}
 }
 
+func TestReadOnlyPromptCannotAccessActionTools(t *testing.T) {
+	for _, definition := range ToolDefinitionsForPrompt("how much gross did he do last week?") {
+		if isActionTool(definition.Function.Name) {
+			t.Fatalf("read-only prompt exposed action tool %s", definition.Function.Name)
+		}
+	}
+	definitions := ToolDefinitionsForPrompt("please sync loads")
+	foundSync := false
+	for _, definition := range definitions {
+		if definition.Function.Name == "sync_data" {
+			foundSync = true
+		}
+		if definition.Function.Name != "sync_data" && isActionTool(definition.Function.Name) {
+			t.Fatalf("sync prompt exposed unrelated action tool %s", definition.Function.Name)
+		}
+	}
+	if !foundSync {
+		t.Fatal("explicit sync prompt did not expose sync_data")
+	}
+}
+
+func TestModelToolContentRejectsOversizedResult(t *testing.T) {
+	content := modelToolContent(map[string]string{"records": strings.Repeat("x", 9000)}, true)
+	if len(content) > 1000 || !strings.Contains(string(content), "safe model payload limit") || !strings.Contains(string(content), "completeCSVReady") {
+		t.Fatalf("unexpected oversized fallback: %s", content)
+	}
+}
+
+func TestBoundedModelMessagesCompactsEarlierToolResults(t *testing.T) {
+	messages := []groq.AssistantMessage{
+		{Role: "system", Content: "system"},
+		{Role: "assistant", ToolCalls: []groq.AssistantToolCall{{ID: "first"}}},
+		{Role: "tool", ToolCallID: "first", Content: strings.Repeat("a", 12000)},
+		{Role: "assistant", ToolCalls: []groq.AssistantToolCall{{ID: "latest"}}},
+		{Role: "tool", ToolCallID: "latest", Content: strings.Repeat("b", 7000)},
+	}
+	bounded := boundedModelMessages(messages)
+	encoded, err := json.Marshal(bounded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 18<<10 {
+		t.Fatalf("bounded messages are still too large: %d", len(encoded))
+	}
+	if !strings.Contains(bounded[2].Content, "omitted") || bounded[4].Content != messages[4].Content {
+		t.Fatalf("wrong tool result was compacted: %#v", bounded)
+	}
+}
+
+func TestFleetListResultIsBounded(t *testing.T) {
+	matches := make([]map[string]any, 20)
+	for index := range matches {
+		matches[index] = map[string]any{"id": strings.Repeat("a", 36), "fullName": "Driver Name"}
+	}
+	result := fleetListResult("driver", 175, matches)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 4096 || result["count"] != 175 || result["returned"] != 20 || result["truncated"] != true {
+		t.Fatalf("unexpected bounded fleet result: size=%d result=%#v", len(encoded), result)
+	}
+}
+
 func TestFleetSearchMatchesFirstAndLastAroundMiddleName(t *testing.T) {
 	if !fleetSearchMatches("Roderick Nunn", "Roderick Earl Nunn") {
 		t.Fatal("expected first and last name to match stored middle name")
