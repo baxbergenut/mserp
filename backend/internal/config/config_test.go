@@ -21,3 +21,14 @@ func TestParseDailySyncTimeRejectsInvalidValue(t *testing.T) {
 		t.Fatal("parseDailySyncTime() error = nil, want an error")
 	}
 }
+
+func TestParseInt64List(t *testing.T) {
+	t.Setenv("TEST_CHAT_IDS", "-1001, 42, -1001")
+	values, err := parseInt64List("TEST_CHAT_IDS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 2 || values[0] != -1001 || values[1] != 42 {
+		t.Fatalf("parseInt64List() = %#v", values)
+	}
+}

@@ -11,30 +11,37 @@ import (
 )
 
 type Config struct {
-	BindAddress            string
-	Port                   string
-	DatabaseURL            string
-	DataTruckAPIKey        string
-	DataTruckCompanyName   string
-	GroqAPIKey             string
-	GroqModel              string
-	RelayEnvironment       string
-	RelayAPIURL            string
-	RelayAPIKey            string
-	RelayFuelSyncStart     time.Time
-	PrePassEnvironment     string
-	PrePassAPIURL          string
-	PrePassClientID        string
-	PrePassClientSecret    string
-	PrePassTollSyncStart   time.Time
-	FrontendOrigin         string
-	AuthCookieSecure       bool
-	AuthSessionTTL         time.Duration
-	ScheduledSyncsEnabled  bool
-	ScheduledSyncsLocation *time.Location
-	ScheduledLoadsSyncTime DailySyncTime
-	ScheduledFuelSyncTime  DailySyncTime
-	ScheduledTollsSyncTime DailySyncTime
+	BindAddress             string
+	Port                    string
+	DatabaseURL             string
+	DataTruckAPIKey         string
+	DataTruckCompanyName    string
+	GroqAPIKey              string
+	GroqModel               string
+	GeminiAPIKey            string
+	GeminiExpenseModel      string
+	TelegramExpensesEnabled bool
+	TelegramBotToken        string
+	TelegramWebhookSecret   string
+	TelegramWebhookURL      string
+	TelegramAllowedChatIDs  []int64
+	RelayEnvironment        string
+	RelayAPIURL             string
+	RelayAPIKey             string
+	RelayFuelSyncStart      time.Time
+	PrePassEnvironment      string
+	PrePassAPIURL           string
+	PrePassClientID         string
+	PrePassClientSecret     string
+	PrePassTollSyncStart    time.Time
+	FrontendOrigin          string
+	AuthCookieSecure        bool
+	AuthSessionTTL          time.Duration
+	ScheduledSyncsEnabled   bool
+	ScheduledSyncsLocation  *time.Location
+	ScheduledLoadsSyncTime  DailySyncTime
+	ScheduledFuelSyncTime   DailySyncTime
+	ScheduledTollsSyncTime  DailySyncTime
 }
 
 type DailySyncTime struct {
@@ -128,6 +135,39 @@ func Load() (Config, error) {
 	if err != nil || authSessionTTL < 15*time.Minute || authSessionTTL > 7*24*time.Hour {
 		return Config{}, errors.New("AUTH_SESSION_TTL must be a duration between 15m and 168h")
 	}
+	telegramExpensesEnabled, err := strconv.ParseBool(envOrDefault("TELEGRAM_EXPENSES_ENABLED", "false"))
+	if err != nil {
+		return Config{}, errors.New("TELEGRAM_EXPENSES_ENABLED must be true or false")
+	}
+	telegramBotToken := firstEnv("TELEGRAM_EXPENSE_BOT_TOKEN", "TELEGRAM_BOT_TOKEN")
+	telegramWebhookSecret := firstEnv("TELEGRAM_EXPENSE_WEBHOOK_SECRET", "TELEGRAM_WEBHOOK_SECRET")
+	telegramWebhookURL := firstEnv("TELEGRAM_EXPENSE_WEBHOOK_URL", "TELEGRAM_WEBHOOK_URL")
+	telegramAllowedChatIDs, err := parseInt64List("TELEGRAM_EXPENSE_ALLOWED_CHAT_IDS")
+	if err != nil {
+		return Config{}, err
+	}
+	if telegramExpensesEnabled {
+		parsedWebhook, parseErr := url.Parse(telegramWebhookURL)
+		if parseErr != nil || parsedWebhook.Scheme != "https" || parsedWebhook.Host == "" ||
+			parsedWebhook.RawQuery != "" || parsedWebhook.Fragment != "" || parsedWebhook.User != nil {
+			return Config{}, errors.New("TELEGRAM_EXPENSE_WEBHOOK_URL (or TELEGRAM_WEBHOOK_URL) must be an HTTPS URL without a query or fragment")
+		}
+		if telegramBotToken == "" {
+			return Config{}, errors.New("TELEGRAM_EXPENSE_BOT_TOKEN or TELEGRAM_BOT_TOKEN is required when Telegram expenses are enabled")
+		}
+		if strings.Contains(telegramWebhookURL, telegramBotToken) {
+			return Config{}, errors.New("Telegram expense webhook URL must not contain the bot token")
+		}
+		if telegramWebhookSecret == "" || len(telegramWebhookSecret) > 256 ||
+			strings.ContainsFunc(telegramWebhookSecret, func(r rune) bool {
+				return !(r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z')
+			}) {
+			return Config{}, errors.New("Telegram expense webhook secret must contain 1-256 letters, digits, underscores, or hyphens")
+		}
+		if strings.TrimSpace(os.Getenv("GEMINI_API_KEY")) == "" {
+			return Config{}, errors.New("GEMINI_API_KEY is required when Telegram expenses are enabled")
+		}
+	}
 	scheduledSyncsEnabled, err := strconv.ParseBool(envOrDefault("SCHEDULED_SYNCS_ENABLED", "true"))
 	if err != nil {
 		return Config{}, errors.New("SCHEDULED_SYNCS_ENABLED must be true or false")
@@ -150,30 +190,37 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
-		Port:                   envOrDefault("PORT", "8080"),
-		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		DataTruckAPIKey:        strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
-		DataTruckCompanyName:   strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
-		GroqAPIKey:             strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
-		GroqModel:              envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
-		RelayEnvironment:       relayEnvironment,
-		RelayAPIURL:            relayAPIURL,
-		RelayAPIKey:            relayAPIKey,
-		RelayFuelSyncStart:     relaySyncStart,
-		PrePassEnvironment:     prePassEnvironment,
-		PrePassAPIURL:          prePassAPIURL,
-		PrePassClientID:        prePassClientID,
-		PrePassClientSecret:    prePassClientSecret,
-		PrePassTollSyncStart:   prePassSyncStart,
-		FrontendOrigin:         frontendOrigin,
-		AuthCookieSecure:       authCookieSecure,
-		AuthSessionTTL:         authSessionTTL,
-		ScheduledSyncsEnabled:  scheduledSyncsEnabled,
-		ScheduledSyncsLocation: scheduledSyncsLocation,
-		ScheduledLoadsSyncTime: scheduledLoadsSyncTime,
-		ScheduledFuelSyncTime:  scheduledFuelSyncTime,
-		ScheduledTollsSyncTime: scheduledTollsSyncTime,
+		BindAddress:             envOrDefault("BIND_ADDRESS", "127.0.0.1"),
+		Port:                    envOrDefault("PORT", "8080"),
+		DatabaseURL:             strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		DataTruckAPIKey:         strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
+		DataTruckCompanyName:    strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
+		GroqAPIKey:              strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
+		GroqModel:               envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
+		GeminiAPIKey:            strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiExpenseModel:      envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.6-flash"),
+		TelegramExpensesEnabled: telegramExpensesEnabled,
+		TelegramBotToken:        telegramBotToken,
+		TelegramWebhookSecret:   telegramWebhookSecret,
+		TelegramWebhookURL:      telegramWebhookURL,
+		TelegramAllowedChatIDs:  telegramAllowedChatIDs,
+		RelayEnvironment:        relayEnvironment,
+		RelayAPIURL:             relayAPIURL,
+		RelayAPIKey:             relayAPIKey,
+		RelayFuelSyncStart:      relaySyncStart,
+		PrePassEnvironment:      prePassEnvironment,
+		PrePassAPIURL:           prePassAPIURL,
+		PrePassClientID:         prePassClientID,
+		PrePassClientSecret:     prePassClientSecret,
+		PrePassTollSyncStart:    prePassSyncStart,
+		FrontendOrigin:          frontendOrigin,
+		AuthCookieSecure:        authCookieSecure,
+		AuthSessionTTL:          authSessionTTL,
+		ScheduledSyncsEnabled:   scheduledSyncsEnabled,
+		ScheduledSyncsLocation:  scheduledSyncsLocation,
+		ScheduledLoadsSyncTime:  scheduledLoadsSyncTime,
+		ScheduledFuelSyncTime:   scheduledFuelSyncTime,
+		ScheduledTollsSyncTime:  scheduledTollsSyncTime,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -211,6 +258,37 @@ func envOrDefault(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func parseInt64List(key string) ([]int64, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]int64, 0, len(parts))
+	seen := make(map[int64]struct{}, len(parts))
+	for _, part := range parts {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil || parsed == 0 {
+			return nil, fmt.Errorf("%s must be a comma-separated list of non-zero Telegram chat IDs", key)
+		}
+		if _, ok := seen[parsed]; ok {
+			continue
+		}
+		seen[parsed] = struct{}{}
+		result = append(result, parsed)
+	}
+	return result, nil
 }
 
 func parseDailySyncTime(key, fallback string) (DailySyncTime, error) {
