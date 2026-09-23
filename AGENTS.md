@@ -61,8 +61,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/relay/`: Relay Payments fuel transaction client.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
-- `backend/internal/jobs/sync_loads.go`: synchronous load sync over a rolling
-  seven-day window.
+- `backend/internal/jobs/sync_loads.go`: synchronous load sync for new upstream
+  record IDs plus a rolling 21-day service-date reconciliation.
 - `backend/internal/jobs/sync_fuel.go`: synchronous missing-day Relay fuel sync.
 - `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
   sync in API-compatible date windows.
@@ -230,7 +230,14 @@ assignment lookup lists.
   America/New_York by default. DataTruck load sync
   fetches every upstream ID newer than the local maximum, plus a rolling 21-day
   reconciliation over pickup/delivery actual and appointment dates, then
-  upserts by the upstream integer load record ID. DataTruck does not expose an
+  upserts by the upstream integer load record ID. Numeric ID filters must use
+  DataTruck's inclusive `greater_than`/`less_than` operators (`after` is a date
+  operator and is ignored for IDs). New-ID requests start at maximum ID + 1;
+  reconciliation is capped at the pre-sync maximum to avoid fetching new loads
+  repeatedly. The upstream page-size limit is 25. Loads without a business
+  `load_id` retain their upstream identity and display as `DataTruck #<id>` until
+  a subsequent sync supplies the number; they must not block the whole import.
+  DataTruck does not expose an
   order last-modified timestamp. The server write timeout is fifteen minutes to
   permit pagination, rate-limit retry, and an initial Relay historical backfill.
 - Person names are title-cased for display and normalized for matching. Truck
@@ -441,6 +448,23 @@ Prefer these targeted searches over recursively reading the repository.
   services and configuration.
 
 ### Production verification
+
+For an operator-triggered load recovery that may exceed the HTTP timeout, the
+deployed API binary supports `-sync-loads-once`. It uses the same job and runtime
+configuration, has a 45-minute timeout, and exits without starting HTTP or other
+jobs. Run it as `mserp` from `/etc/mserp` with the service environment file, using
+a uniquely named transient systemd service so an SSH disconnect cannot interrupt
+the import. Avoid overlapping another load sync. For example:
+
+```bash
+systemd-run --unit=mserp-load-recovery-YYYYMMDD-HHMMSS \
+  --uid=mserp --gid=mserp --working-directory=/etc/mserp \
+  --property=EnvironmentFile=/etc/mserp/mserp.env \
+  /opt/mserp/current/backend/mserp-api -sync-loads-once
+```
+
+Check that unit's exit status, its `sync loads complete` journal entry, and the
+database load count/latest `synced_at`; process startup alone is not success.
 
 After a deployment, do not stop at a green Actions badge. Confirm the deployed
 SHA, service boundaries, HTTPS, API health, and authentication behavior:

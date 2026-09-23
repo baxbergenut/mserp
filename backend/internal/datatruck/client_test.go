@@ -110,11 +110,14 @@ func TestFetchLoadsAfterIDPaginatesAndUsesNumericWatermark(t *testing.T) {
 		if err := json.Unmarshal([]byte(r.URL.Query().Get("filter")), &filters); err != nil {
 			t.Fatal(err)
 		}
-		if len(filters) != 1 || filters[0]["column"] != "id" || filters[0]["value"] != "100" {
+		if len(filters) != 1 || filters[0]["column"] != "id" || filters[0]["value"] != "101" || filters[0]["contains"] != "greater_than" {
 			t.Fatalf("filters = %#v", filters)
 		}
 		if r.URL.Query().Get("ordering") != "id" {
 			t.Fatalf("ordering = %q", r.URL.Query().Get("ordering"))
+		}
+		if r.URL.Query().Get("page_size") != "25" {
+			t.Fatalf("page_size = %q", r.URL.Query().Get("page_size"))
 		}
 		next := serverURLWithQuery(r, "page", "2")
 		_, _ = w.Write([]byte(`{"count":2,"next":` + mustJSON(t, next) + `,"results":[{"id":101,"load_id":"A"}]}`))
@@ -131,6 +134,42 @@ func TestFetchLoadsAfterIDPaginatesAndUsesNumericWatermark(t *testing.T) {
 	}
 	if requests.Load() != 2 {
 		t.Fatalf("requests = %d", requests.Load())
+	}
+}
+
+func TestFetchLoadsAfterIDStopsIfNumericFilterIsIgnored(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"count":35000,"next":"?page=2","results":[{"id":1}]}`))
+	}))
+	defer server.Close()
+	client := &Client{httpClient: server.Client(), baseURL: server.URL}
+	if _, err := client.FetchLoadsAfterID(context.Background(), 100); err == nil {
+		t.Fatal("expected an error for ignored numeric filter")
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("requested %d pages after detecting an ignored filter", requests.Load())
+	}
+}
+
+func TestDateReconciliationExcludesAlreadyFetchedNewIDs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var filters []map[string]string
+		if err := json.Unmarshal([]byte(r.URL.Query().Get("filter")), &filters); err != nil {
+			t.Fatal(err)
+		}
+		if len(filters) != 2 || filters[0]["column"] != "delivery_time" || filters[0]["contains"] != "after" ||
+			filters[1]["column"] != "id" || filters[1]["contains"] != "less_than" || filters[1]["value"] != "100" {
+			t.Fatalf("filters = %#v", filters)
+		}
+		_, _ = w.Write([]byte(`{"count":1,"results":[{"id":100}]}`))
+	}))
+	defer server.Close()
+	client := &Client{httpClient: server.Client(), baseURL: server.URL}
+	loads, err := client.FetchLoadsByDateSinceThroughID(context.Background(), "delivery_time", time.Now(), 100)
+	if err != nil || len(loads) != 1 || loads[0].ID != 100 {
+		t.Fatalf("loads = %+v, error = %v", loads, err)
 	}
 }
 

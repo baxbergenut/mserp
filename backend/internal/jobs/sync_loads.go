@@ -3,8 +3,10 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"mserp/internal/datatruck"
@@ -22,7 +24,7 @@ var loadReconciliationDateColumns = []string{
 
 type loadSyncClient interface {
 	FetchLoadsAfterID(context.Context, int) ([]datatruck.Load, error)
-	FetchLoadsByDateSince(context.Context, string, time.Time) ([]datatruck.Load, error)
+	FetchLoadsByDateSinceThroughID(context.Context, string, time.Time, int) ([]datatruck.Load, error)
 }
 
 type loadSyncRepository interface {
@@ -60,16 +62,21 @@ func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
 	loadsByID := make(map[int]datatruck.Load)
 	newLoads, err := j.client.FetchLoadsAfterID(ctx, maxLoadID)
 	if err != nil {
-		return SyncLoadsResult{}, err
+		return SyncLoadsResult{}, fmt.Errorf("fetch loads after record %d: %w", maxLoadID, err)
 	}
 	addLoadsByID(loadsByID, newLoads)
+	j.logger.Info("sync loads fetched new records", "after_id", maxLoadID, "fetched", len(newLoads))
 
 	for _, column := range loadReconciliationDateColumns {
-		loads, fetchErr := j.client.FetchLoadsByDateSince(ctx, column, since)
+		if maxLoadID == 0 {
+			break // The initial fetch already includes every upstream ID.
+		}
+		loads, fetchErr := j.client.FetchLoadsByDateSinceThroughID(ctx, column, since, maxLoadID)
 		if fetchErr != nil {
-			return SyncLoadsResult{}, fetchErr
+			return SyncLoadsResult{}, fmt.Errorf("reconcile loads by %s: %w", column, fetchErr)
 		}
 		addLoadsByID(loadsByID, loads)
+		j.logger.Info("sync loads reconciled records", "column", column, "fetched", len(loads))
 	}
 
 	loadIDs := make([]int, 0, len(loadsByID))
@@ -84,12 +91,15 @@ func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
 		load := loadsByID[id]
 		payload, err := json.Marshal(load)
 		if err != nil {
-			return SyncLoadsResult{}, err
+			return SyncLoadsResult{}, fmt.Errorf("encode datatruck load %d: %w", id, err)
 		}
 
 		record, err := repository.LoadToRecord(load, payload, syncedAt)
 		if err != nil {
-			return SyncLoadsResult{}, err
+			return SyncLoadsResult{}, fmt.Errorf("map datatruck load %d: %w", id, err)
+		}
+		if load.LoadID == nil || strings.TrimSpace(*load.LoadID) == "" {
+			j.logger.Warn("sync load missing display number; using upstream record ID", "record_id", id)
 		}
 		records = append(records, record)
 	}

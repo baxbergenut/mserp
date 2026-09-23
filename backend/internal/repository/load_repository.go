@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -178,13 +179,19 @@ func (r *LoadRepository) MaxLoadID(ctx context.Context) (int, error) {
 }
 
 func LoadToRecord(load datatruck.Load, payload []byte, syncedAt time.Time) (LoadRecord, error) {
-	if load.LoadID == nil || strings.TrimSpace(*load.LoadID) == "" {
-		return LoadRecord{}, ErrMissingLoadID
+	if load.ID <= 0 {
+		return LoadRecord{}, ErrMissingLoadRecordID
+	}
+	// load_id is a display number, not the upstream identity. Unnumbered
+	// orders must not block the entire sync or disappear from reporting.
+	loadID := fmt.Sprintf("DataTruck #%d", load.ID)
+	if load.LoadID != nil && strings.TrimSpace(*load.LoadID) != "" {
+		loadID = strings.TrimSpace(*load.LoadID)
 	}
 
 	record := LoadRecord{
 		ID:                      load.ID,
-		LoadID:                  strings.TrimSpace(*load.LoadID),
+		LoadID:                  loadID,
 		Status:                  load.Status,
 		LoadPay:                 flexibleStringOrDefault(load.LoadPay, "0"),
 		TotalOtherPay:           flexibleStringOrDefault(load.TotalOtherPay, "0"),
@@ -455,7 +462,7 @@ SELECT
 FROM loads
 `
 
-var ErrMissingLoadID = errors.New("datatruck load is missing load_id")
+var ErrMissingLoadRecordID = errors.New("datatruck load is missing a positive record id")
 
 func ensureDispatcher(ctx context.Context, tx pgx.Tx, name string) (string, error) {
 	displayName := formatPersonName(name)

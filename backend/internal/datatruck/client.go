@@ -110,10 +110,19 @@ func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, 
 
 func (c *Client) FetchLoadsAfterID(ctx context.Context, afterID int) ([]Load, error) {
 	return c.fetchLoads(ctx, []map[string]string{{
-		"column":   "id",
-		"value":    strconv.Itoa(afterID),
-		"contains": "after",
-	}}, "id")
+		"column": "id",
+		// DataTruck's numeric greater_than operator is inclusive; the date
+		// operator "after" is silently ignored for IDs by the upstream API.
+		"value":    strconv.Itoa(afterID + 1),
+		"contains": "greater_than",
+	}}, "id", func(loads []Load) error {
+		for _, load := range loads {
+			if load.ID <= afterID {
+				return fmt.Errorf("datatruck numeric filter returned record %d at or below watermark %d", load.ID, afterID)
+			}
+		}
+		return nil
+	})
 }
 
 func (c *Client) FetchLoadsByDateSince(
@@ -121,20 +130,37 @@ func (c *Client) FetchLoadsByDateSince(
 	column string,
 	since time.Time,
 ) ([]Load, error) {
+	return c.fetchLoadsByDateSince(ctx, column, since, nil)
+}
+
+// FetchLoadsByDateSinceThroughID reconciles only previously imported IDs.
+// Newer IDs are already fetched by FetchLoadsAfterID in the same sync.
+func (c *Client) FetchLoadsByDateSinceThroughID(ctx context.Context, column string, since time.Time, throughID int) ([]Load, error) {
+	return c.fetchLoadsByDateSince(ctx, column, since, &throughID)
+}
+
+func (c *Client) fetchLoadsByDateSince(ctx context.Context, column string, since time.Time, throughID *int) ([]Load, error) {
 	if _, ok := syncDateFilterColumns[column]; !ok {
 		return nil, fmt.Errorf("unsupported datatruck load date filter %q", column)
 	}
-	return c.fetchLoads(ctx, []map[string]string{{
+	filters := []map[string]string{{
 		"column":   column,
 		"value":    since.UTC().Format(time.RFC3339Nano),
 		"contains": "after",
-	}}, "-"+column)
+	}}
+	if throughID != nil {
+		filters = append(filters, map[string]string{
+			"column": "id", "value": strconv.Itoa(*throughID), "contains": "less_than",
+		})
+	}
+	return c.fetchLoads(ctx, filters, "-"+column, nil)
 }
 
 func (c *Client) fetchLoads(
 	ctx context.Context,
 	filters []map[string]string,
 	ordering string,
+	validatePage func([]Load) error,
 ) ([]Load, error) {
 	filter, err := json.Marshal(filters)
 	if err != nil {
@@ -142,7 +168,7 @@ func (c *Client) fetchLoads(
 	}
 
 	query := url.Values{}
-	query.Set("page_size", "100")
+	query.Set("page_size", "25")
 	query.Set("ordering", ordering)
 	query.Set("filter", string(filter))
 
@@ -155,6 +181,11 @@ func (c *Client) fetchLoads(
 			return nil, err
 		}
 
+		if validatePage != nil {
+			if err := validatePage(response.Results); err != nil {
+				return nil, err
+			}
+		}
 		loads = append(loads, response.Results...)
 
 		if response.Next == nil || strings.TrimSpace(*response.Next) == "" {
