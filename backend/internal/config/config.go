@@ -198,7 +198,7 @@ func Load() (Config, error) {
 		GroqAPIKey:              strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
 		GroqModel:               envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
 		GeminiAPIKey:            strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiExpenseModel:      envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.6-flash"),
+		GeminiExpenseModel:      envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.1-flash-lite"),
 		TelegramExpensesEnabled: telegramExpensesEnabled,
 		TelegramBotToken:        telegramBotToken,
 		TelegramWebhookSecret:   telegramWebhookSecret,
