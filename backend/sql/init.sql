@@ -398,13 +398,14 @@ CREATE TABLE telegram_expense_updates (
     chat_type       TEXT NOT NULL CHECK (chat_type IN ('group', 'supergroup')),
     raw_update      JSONB NOT NULL,
     status          TEXT NOT NULL DEFAULT 'queued' CHECK (
-        status IN ('queued', 'processing', 'retry', 'completed', 'ignored', 'failed')
+        status IN ('queued', 'processing', 'retry', 'completed', 'ignored', 'needs_review', 'failed')
     ),
     attempts        INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     started_at      TIMESTAMPTZ,
     completed_at    TIMESTAMPTZ,
     last_error      TEXT,
+    extracted_data  JSONB,
     expense_id      UUID REFERENCES expenses(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -417,5 +418,7 @@ CREATE INDEX telegram_expense_updates_work_idx
 CREATE INDEX telegram_expense_updates_expense_idx
     ON telegram_expense_updates (expense_id)
     WHERE expense_id IS NOT NULL;
+CREATE INDEX telegram_expense_updates_status_created_idx
+    ON telegram_expense_updates (status, created_at DESC);
 
 COMMIT;

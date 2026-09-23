@@ -23,7 +23,7 @@ func TestExtractExpenseUsesStructuredMultimodalRequest(t *testing.T) {
 			t.Errorf("response format = %#v, store = %#v", format, request["store"])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":true,\"confidence\":0.97,\"company\":\"MS Express\",\"category\":\"Safety\",\"expenseDate\":\"2026-09-23\",\"unitNumber\":\"101\",\"driverName\":null,\"amount\":\"15.00\",\"paymentType\":\"EFS\",\"expenseType\":\"Scale\",\"referenceNumber\":null,\"description\":\"Scale ticket\",\"coveredBy\":\"Company\",\"paidBy\":null,\"evidence\":[\"$15 scale\"]}"}]}]}`))
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":true,\"containsMultipleExpenses\":false,\"confidence\":0.97,\"company\":\"MS Express\",\"category\":\"Safety\",\"expenseDate\":\"2026-09-23\",\"unitNumber\":\"101\",\"driverName\":null,\"amount\":\"15.00\",\"paymentType\":\"EFS\",\"expenseType\":\"Scale\",\"referenceNumber\":null,\"description\":\"Scale ticket\",\"coveredBy\":\"Company\",\"paidBy\":null,\"evidence\":[\"$15 scale\"]}"}]}]}`))
 	}))
 	defer server.Close()
 
@@ -60,7 +60,7 @@ func TestExtractExpenseFallsBackOnCapacityFailure(t *testing.T) {
 		if request["model"] != "gemini-3-flash-preview" {
 			t.Fatalf("fallback model = %#v", request["model"])
 		}
-		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":false,\"confidence\":0,\"company\":null,\"category\":null,\"expenseDate\":null,\"unitNumber\":null,\"driverName\":null,\"amount\":null,\"paymentType\":null,\"expenseType\":null,\"referenceNumber\":null,\"description\":null,\"coveredBy\":null,\"paidBy\":null,\"evidence\":[]}"}]}]}`))
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":false,\"containsMultipleExpenses\":false,\"confidence\":0,\"company\":null,\"category\":null,\"expenseDate\":null,\"unitNumber\":null,\"driverName\":null,\"amount\":null,\"paymentType\":null,\"expenseType\":null,\"referenceNumber\":null,\"description\":null,\"coveredBy\":null,\"paidBy\":null,\"evidence\":[]}"}]}]}`))
 	}))
 	defer server.Close()
 
