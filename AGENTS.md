@@ -246,7 +246,8 @@ assignment lookup lists.
   Gemini extracts text/PDF/image fields; high-confidence fleet matches populate
   foreign keys while raw extracted names/units remain available when unmatched.
   Gemini capacity/quota responses use a compatible Flash fallback before the
-  queue's capped retry backoff.
+  queue's non-expiring, capped retry backoff so upstream outages or daily quota
+  resets cannot drop a Telegram expense.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored
