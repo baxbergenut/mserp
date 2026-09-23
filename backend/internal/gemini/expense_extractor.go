@@ -78,7 +78,6 @@ func (c *Client) ExtractExpense(ctx context.Context, input ExpenseInput) (Expens
 	}
 	parts = append(parts, map[string]any{"type": "text", "text": expensePrompt(input)})
 	payload := map[string]any{
-		"model": c.model,
 		"input": parts,
 		"store": false,
 		"response_format": map[string]any{
@@ -86,25 +85,39 @@ func (c *Client) ExtractExpense(ctx context.Context, input ExpenseInput) (Expens
 		},
 		"generation_config": map[string]any{"thinking_level": "minimal"},
 	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return ExpenseExtraction{}, err
+	var data []byte
+	var status string
+	models := uniqueModels(c.model, "gemini-3-flash-preview")
+	for index, model := range models {
+		payload["model"] = model
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return ExpenseExtraction{}, err
+		}
+		endpoint := strings.TrimRight(c.baseURL, "/") + "/interactions"
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(encoded))
+		if err != nil {
+			return ExpenseExtraction{}, errors.New("create Gemini request failed")
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("x-goog-api-key", c.apiKey)
+		response, err := c.httpClient.Do(request)
+		if err != nil {
+			return ExpenseExtraction{}, errors.New("Gemini expense extraction request failed")
+		}
+		data, _ = io.ReadAll(io.LimitReader(response.Body, 2<<20))
+		response.Body.Close()
+		status = response.Status
+		if response.StatusCode >= 200 && response.StatusCode < 300 {
+			break
+		}
+		isCapacityFailure := response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusServiceUnavailable
+		if !isCapacityFailure || index == len(models)-1 {
+			return ExpenseExtraction{}, fmt.Errorf("Gemini expense extraction failed: %s: %s", status, compactError(data))
+		}
 	}
-	endpoint := strings.TrimRight(c.baseURL, "/") + "/interactions"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(encoded))
-	if err != nil {
-		return ExpenseExtraction{}, errors.New("create Gemini request failed")
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("x-goog-api-key", c.apiKey)
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return ExpenseExtraction{}, errors.New("Gemini expense extraction request failed")
-	}
-	defer response.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(response.Body, 2<<20))
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return ExpenseExtraction{}, fmt.Errorf("Gemini expense extraction failed: %s: %s", response.Status, compactError(data))
+	if len(data) == 0 {
+		return ExpenseExtraction{}, fmt.Errorf("Gemini expense extraction failed: %s", status)
 	}
 	var result struct {
 		Status string `json:"status"`
@@ -207,4 +220,21 @@ func compactError(data []byte) string {
 		value = value[:500]
 	}
 	return value
+}
+
+func uniqueModels(values ...string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
