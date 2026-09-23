@@ -24,6 +24,7 @@ import {
   TableShell,
 } from "../components/management/ManagementUI";
 import { FuelOverview } from "./FuelOverview";
+import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
@@ -364,7 +365,7 @@ export default function FuelPage() {
 
       <TableShell>
         {isLoading ? (
-          <LoadingTable columns={7} />
+          <LoadingTable columns={8} />
         ) : transactions.length === 0 ? (
           <EmptyState
             message={
@@ -384,6 +385,7 @@ export default function FuelPage() {
                 <th className="px-4 py-3 text-right font-medium">Fuel</th>
                 <th className="px-4 py-3 text-right font-medium">DEF / other</th>
                 <th className="px-4 py-3 text-right font-medium">Paid</th>
+                <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>
               </tr>
             </thead>
             <tbody>
@@ -438,6 +440,7 @@ export default function FuelPage() {
                       </div>
                     )}
                   </td>
+                  <td className="px-2 py-3 text-right"><TransactionFlagIcon flag={transaction.flag} kind="fuel" /></td>
                 </tr>
               ))}
             </tbody>

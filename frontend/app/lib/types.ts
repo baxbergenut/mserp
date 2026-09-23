@@ -47,7 +47,30 @@ export interface SyncLoadsResult {
   since: string;
 }
 
+export interface TransactionLoadEvidence {
+  id: number;
+  loadId: string;
+  truckUnit: string;
+  driverName: string;
+  pickupDate: string;
+  deliveryDate: string;
+  appointmentFallback: boolean;
+}
+
+export interface TransactionFlag {
+  status: "review" | "data_issue";
+  reason: string;
+  truckUnit: string;
+  transactionDate: string;
+  bufferDays: number;
+  previousLoad: TransactionLoadEvidence | null;
+  nextLoad: TransactionLoadEvidence | null;
+  relatedLoad: TransactionLoadEvidence | null;
+  loadsSyncedAt: string | null;
+}
+
 export interface FuelTransaction {
+  flag?: TransactionFlag;
   id: string;
   relayTransactionId: string;
   driverId: string;
@@ -394,6 +417,7 @@ export interface DispatcherInput {
 }
 
 export interface Toll {
+  flag?: TransactionFlag;
   id: string;
   truckId: string | null;
   truckUnit: string;

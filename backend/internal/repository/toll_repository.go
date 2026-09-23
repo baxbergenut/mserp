@@ -24,28 +24,29 @@ func NewTollRepository(pool *pgxpool.Pool) *TollRepository {
 }
 
 type Toll struct {
-	ID                 string   `json:"id"`
-	TruckID            *string  `json:"truckId"`
-	TruckUnit          string   `json:"truckUnit"`
-	PostingDate        string   `json:"postingDate"`
-	InvoiceDate        string   `json:"invoiceDate"`
-	CustomerID         string   `json:"customerId"`
-	Source             string   `json:"source"`
-	ReadType           string   `json:"readType"`
-	PrePassTagID       *string  `json:"prePassTagId"`
-	TransponderOrPlate string   `json:"transponderOrPlate"`
-	EquipmentUnit      string   `json:"equipmentUnit"`
-	Agency             string   `json:"agency"`
-	EntryPlaza         *string  `json:"entryPlaza"`
-	EntryDate          *string  `json:"entryDate"`
-	EntryTime          *string  `json:"entryTime"`
-	ExitPlaza          string   `json:"exitPlaza"`
-	ExitDate           string   `json:"exitDate"`
-	ExitTime           string   `json:"exitTime"`
-	TollClass          string   `json:"tollClass"`
-	Miles              *float64 `json:"miles"`
-	Amount             float64  `json:"amount"`
-	ReportFileName     string   `json:"reportFileName"`
+	Flag               *TransactionFlag `json:"flag,omitempty"`
+	ID                 string           `json:"id"`
+	TruckID            *string          `json:"truckId"`
+	TruckUnit          string           `json:"truckUnit"`
+	PostingDate        string           `json:"postingDate"`
+	InvoiceDate        string           `json:"invoiceDate"`
+	CustomerID         string           `json:"customerId"`
+	Source             string           `json:"source"`
+	ReadType           string           `json:"readType"`
+	PrePassTagID       *string          `json:"prePassTagId"`
+	TransponderOrPlate string           `json:"transponderOrPlate"`
+	EquipmentUnit      string           `json:"equipmentUnit"`
+	Agency             string           `json:"agency"`
+	EntryPlaza         *string          `json:"entryPlaza"`
+	EntryDate          *string          `json:"entryDate"`
+	EntryTime          *string          `json:"entryTime"`
+	ExitPlaza          string           `json:"exitPlaza"`
+	ExitDate           string           `json:"exitDate"`
+	ExitTime           string           `json:"exitTime"`
+	TollClass          string           `json:"tollClass"`
+	Miles              *float64         `json:"miles"`
+	Amount             float64          `json:"amount"`
+	ReportFileName     string           `json:"reportFileName"`
 }
 
 func (r *TollRepository) ListTolls(ctx context.Context) ([]Toll, error) {
@@ -135,6 +136,17 @@ func (r *TollRepository) ListTollsPage(ctx context.Context, query TollPageQuery)
 		return TollPage{}, err
 	}
 	options := TollFilterOptions{}
+	ids := make([]string, len(values))
+	for i := range values {
+		ids[i] = values[i].ID
+	}
+	flags, err := transactionFlags(ctx, r.pool, "toll", ids, time.Now().UTC())
+	if err != nil {
+		return TollPage{}, fmt.Errorf("assess toll load coverage: %w", err)
+	}
+	for i := range values {
+		values[i].Flag = flags[values[i].ID]
+	}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
 			COALESCE(array_agg(
