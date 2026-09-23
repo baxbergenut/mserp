@@ -67,6 +67,7 @@ const emptySummary = {
   ignored: 0,
   failed: 0,
   unmatched: 0,
+  missingExpense: 0,
   lastCompletedAt: null as string | null,
 };
 
@@ -263,7 +264,7 @@ export default function TelegramExpenseActivityPage() {
     }
   }
 
-  const attention = summary.needsReview + summary.failed + summary.unmatched;
+  const attention = summary.needsReview + summary.failed + summary.unmatched + summary.missingExpense;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -333,7 +334,8 @@ export default function TelegramExpenseActivityPage() {
             <tbody>
               {items.map((item) => {
                 const extraction = item.extractedData;
-                const canRetry = ["retry", "ignored", "failed"].includes(item.status);
+                const isMissingExpense = item.status === "completed" && !item.expenseId;
+                const canRetry = isMissingExpense || ["retry", "ignored", "failed"].includes(item.status);
                 const unitNumber = item.unitNumber || extraction?.unitNumber;
                 const driverName = item.driverName || extraction?.driverName;
                 const amount = item.amount || extraction?.amount;
@@ -351,7 +353,11 @@ export default function TelegramExpenseActivityPage() {
                       {item.mediaGroupId && <div className="mt-1 text-[11px] text-amber-500/80">Media album</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={item.status} />
+                      {isMissingExpense ? (
+                        <span className="inline-flex rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-300">
+                          Expense missing
+                        </span>
+                      ) : <StatusBadge status={item.status} />}
                       <div className="mt-1 text-[11px] text-zinc-600">{item.attempts} attempt{item.attempts === 1 ? "" : "s"}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -367,7 +373,12 @@ export default function TelegramExpenseActivityPage() {
                       </div>
                     </td>
                     <td className="max-w-[360px] px-4 py-3">
-                      {item.status === "completed" ? (
+                      {isMissingExpense ? (
+                        <div className="flex items-start gap-2 text-amber-300">
+                          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>The linked expense was deleted or is unavailable.</span>
+                        </div>
+                      ) : item.status === "completed" ? (
                         <div className="flex items-start gap-2 text-emerald-400">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                           <span>{item.description || extraction?.description || "Expense created"}</span>
