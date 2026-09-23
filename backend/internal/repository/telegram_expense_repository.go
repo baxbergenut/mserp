@@ -87,9 +87,9 @@ func (r *ExpenseRepository) RetryTelegramUpdate(ctx context.Context, updateID in
 	}
 	_, err := r.pool.Exec(ctx, `
 		UPDATE telegram_expense_updates
-		SET status = CASE WHEN attempts >= 5 THEN 'failed' ELSE 'retry' END,
-			next_attempt_at = CASE WHEN attempts >= 5 THEN next_attempt_at
-				ELSE now() + (interval '30 seconds' * attempts) END,
+		SET status = CASE WHEN attempts >= 20 THEN 'failed' ELSE 'retry' END,
+			next_attempt_at = CASE WHEN attempts >= 20 THEN next_attempt_at
+				ELSE now() + (interval '30 seconds' * least(attempts, 10)) END,
 			last_error = $2, updated_at = now()
 		WHERE update_id = $1`, updateID, message)
 	return err
