@@ -26,10 +26,12 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	handler := fleetHandler{logger: logger, repo: repo}
 
 	r.Get("/drivers", handler.listDrivers)
+	r.Get("/drivers/{id}", handler.getDriver)
 	r.Post("/drivers", handler.createDriver)
 	r.Put("/drivers/{id}", handler.updateDriver)
 	r.Delete("/drivers/{id}", handler.deleteDriver)
 	r.Get("/trucks", handler.listTrucks)
+	r.Get("/trucks/{id}", handler.getTruck)
 	r.Post("/trucks", handler.createTruck)
 	r.Put("/trucks/{id}", handler.updateTruck)
 	r.Delete("/trucks/{id}", handler.deleteTruck)
@@ -37,6 +39,32 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Post("/dispatchers", handler.createDispatcher)
 	r.Put("/dispatchers/{id}", handler.updateDispatcher)
 	r.Delete("/dispatchers/{id}", handler.deleteDispatcher)
+}
+
+func (handler fleetHandler) getDriver(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	value, err := handler.repo.GetDriver(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
+func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	value, err := handler.repo.GetTruck(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
 }
 
 type driverRequest struct {

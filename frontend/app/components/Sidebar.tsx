@@ -17,6 +17,7 @@ import {
   Fuel,
   Landmark,
   LogOut,
+  WalletCards,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
+  { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },

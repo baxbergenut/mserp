@@ -423,6 +423,73 @@ export interface TollPage extends PaginatedResponse<Toll> {
   summary: { amount: number; truckCount: number };
 }
 
+export interface Expense {
+  id: string;
+  truckId: string | null;
+  driverId: string | null;
+  company: string;
+  category: ExpenseCategory;
+  weekStart: string | null;
+  expenseDate: string | null;
+  unitNumber: string | null;
+  driverName: string | null;
+  amount: string | null;
+  paymentType: string | null;
+  expenseType: string | null;
+  referenceNumber: string | null;
+  description: string | null;
+  coveredBy: string | null;
+  paidBy: string | null;
+  managerVerified: boolean;
+  accountingVerified: boolean;
+  sourceSpreadsheetId: string | null;
+  sourceSheet: string | null;
+  sourceRow: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExpenseCategory =
+  | "Maintenance"
+  | "Other"
+  | "Safety"
+  | "HR"
+  | "Administrative";
+
+export interface ExpenseInput {
+  company: string;
+  category: ExpenseCategory;
+  expenseDate: string;
+  truckId: string | null;
+  driverId: string | null;
+  unitNumber: string;
+  driverName: string;
+  amount: string;
+  paymentType: string;
+  expenseType: string;
+  referenceNumber: string;
+  description: string;
+  coveredBy: string;
+  paidBy: string;
+  managerVerified: boolean;
+  accountingVerified: boolean;
+}
+
+export interface ExpensePage extends PaginatedResponse<Expense> {
+  options: {
+    categories: string[];
+    companies: string[];
+    paymentTypes: string[];
+    expenseTypes: string[];
+    paidBy: string[];
+    coveredBy: string[];
+  };
+  summary: {
+    amount: string;
+    incompleteCount: number;
+  };
+}
+
 export interface AuthUser {
   id: string;
   username: string;
