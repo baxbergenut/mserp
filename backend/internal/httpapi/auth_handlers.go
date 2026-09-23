@@ -30,9 +30,8 @@ type authStore interface {
 }
 
 type AuthOptions struct {
-	CookieSecure   bool
-	SessionTTL     time.Duration
-	TelegramStatus func(context.Context, string) (repository.TelegramManager, error)
+	CookieSecure bool
+	SessionTTL   time.Duration
 }
 
 type authHandler struct {
@@ -57,16 +56,9 @@ type authUserResponse struct {
 }
 
 type sessionResponse struct {
-	User      authUserResponse        `json:"user"`
-	CSRFToken string                  `json:"csrfToken"`
-	ExpiresAt time.Time               `json:"expiresAt"`
-	Telegram  telegramSessionResponse `json:"telegram"`
-}
-
-type telegramSessionResponse struct {
-	Approved      bool       `json:"approved"`
-	Linked        bool       `json:"linked"`
-	LinkExpiresAt *time.Time `json:"linkExpiresAt"`
+	User      authUserResponse `json:"user"`
+	CSRFToken string           `json:"csrfToken"`
+	ExpiresAt time.Time        `json:"expiresAt"`
 }
 
 func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *authHandler {
@@ -233,13 +225,6 @@ func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.A
 		User:      authUserResponse{ID: user.ID, Username: user.Username},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
-	}
-	if h.options.TelegramStatus != nil {
-		if status, err := h.options.TelegramStatus(ctx, user.ID); err == nil {
-			response.Telegram = telegramSessionResponse{Approved: status.Approved,
-				Linked:        status.TelegramUserID != nil && status.LinkExpiresAt != nil && status.LinkExpiresAt.After(h.now()),
-				LinkExpiresAt: status.LinkExpiresAt}
-		}
 	}
 	return response
 }
