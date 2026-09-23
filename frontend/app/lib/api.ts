@@ -23,6 +23,7 @@ import type {
   Expense,
   ExpenseInput,
   ExpensePage,
+  TelegramExpenseActivityPage,
 } from "./types";
 
 type PageQuery = {
@@ -285,3 +286,18 @@ export const updateExpense = (id: string, input: ExpenseInput) =>
   });
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
+export const fetchTelegramExpenseActivity = (query: PageQuery & {
+  status?: string;
+}) => paginatedRequest<TelegramExpenseActivityPage>(
+  withQuery("/telegram-expense-updates", query),
+);
+export const retryTelegramExpenseUpdate = (updateId: number) =>
+  apiRequest<{ updateId: number; status: "queued" }>(
+    `/telegram-expense-updates/${updateId}/retry`,
+    { method: "POST" },
+  );
+export const resolveTelegramExpenseUpdate = (updateId: number, input: ExpenseInput) =>
+  apiRequest<Expense>(`/telegram-expense-updates/${updateId}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });

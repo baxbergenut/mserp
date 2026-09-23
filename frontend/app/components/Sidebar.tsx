@@ -18,6 +18,7 @@ import {
   Landmark,
   LogOut,
   WalletCards,
+  Bot,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
 
@@ -26,7 +27,8 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
-  { href: "/expenses", label: "Expenses", icon: WalletCards },
+  { href: "/expenses", label: "Expenses", icon: WalletCards, exact: true },
+  { href: "/expenses/bot", label: "Bot Activity", icon: Bot },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
@@ -77,7 +79,8 @@ export function Sidebar({ username }: { username: string }) {
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
           const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+            pathname === item.href ||
+            (!("exact" in item) && pathname.startsWith(item.href + "/"));
           const Icon = item.icon;
 
           if ("children" in item) {

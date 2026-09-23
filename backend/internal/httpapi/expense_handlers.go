@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -34,6 +35,14 @@ func registerExpenseRoutes(r chi.Router, logger *slog.Logger, repo *repository.E
 	r.Post("/expenses", handler.createExpense)
 	r.Put("/expenses/{id}", handler.updateExpense)
 	r.Delete("/expenses/{id}", handler.deleteExpense)
+	r.Get("/telegram-expense-updates", handler.listTelegramExpenseUpdates)
+	r.Post("/telegram-expense-updates/{updateID}/retry", handler.retryTelegramExpenseUpdate)
+	r.Post("/telegram-expense-updates/{updateID}/resolve", handler.resolveTelegramExpenseUpdate)
+}
+
+var telegramExpenseStatuses = map[string]struct{}{
+	"queued": {}, "processing": {}, "retry": {}, "completed": {},
+	"ignored": {}, "needs_review": {}, "failed": {},
 }
 
 type expenseRequest struct {
@@ -199,6 +208,78 @@ func (handler expenseHandler) deleteExpense(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (handler expenseHandler) listTelegramExpenseUpdates(w http.ResponseWriter, r *http.Request) {
+	pagination, err := parsePagination(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		if _, ok := telegramExpenseStatuses[status]; !ok {
+			writeAPIError(w, http.StatusBadRequest, "invalid Telegram expense status")
+			return
+		}
+	}
+	value, err := handler.repo.ListTelegramExpenseActivities(
+		r.Context(), pagination, status, strings.TrimSpace(r.URL.Query().Get("search")),
+	)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
+func (handler expenseHandler) retryTelegramExpenseUpdate(w http.ResponseWriter, r *http.Request) {
+	updateID, ok := telegramUpdateID(w, r)
+	if !ok {
+		return
+	}
+	retried, err := handler.repo.RetryTelegramUpdateNow(r.Context(), updateID)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	if !retried {
+		writeAPIError(w, http.StatusConflict, "this update is already completed or cannot be retried")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"updateId": updateID, "status": "queued"})
+}
+
+func (handler expenseHandler) resolveTelegramExpenseUpdate(w http.ResponseWriter, r *http.Request) {
+	updateID, ok := telegramUpdateID(w, r)
+	if !ok {
+		return
+	}
+	var request expenseRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	input, err := request.validate()
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	value, err := handler.repo.ResolveTelegramExpense(r.Context(), updateID, input)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, value)
+}
+
+func telegramUpdateID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	updateID, err := strconv.ParseInt(strings.TrimSpace(chi.URLParam(r, "updateID")), 10, 64)
+	if err != nil || updateID <= 0 {
+		writeAPIError(w, http.StatusBadRequest, "update id must be a positive integer")
+		return 0, false
+	}
+	return updateID, true
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {

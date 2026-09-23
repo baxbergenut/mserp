@@ -33,6 +33,7 @@ export function ManagementHeader({
   count,
   actionLabel,
   onAction,
+  actionIcon: ActionIcon = Plus,
 }: {
   icon: LucideIcon;
   title: string;
@@ -40,6 +41,7 @@ export function ManagementHeader({
   count: number;
   actionLabel: string;
   onAction: () => void;
+  actionIcon?: LucideIcon;
 }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -58,7 +60,7 @@ export function ManagementHeader({
         onClick={onAction}
         className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
       >
-        <Plus className="h-4 w-4" />
+        <ActionIcon className="h-4 w-4" />
         {actionLabel}
       </button>
     </div>

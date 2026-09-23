@@ -33,6 +33,55 @@ type TelegramExpenseDraft struct {
 	PaidBy          *string
 }
 
+type TelegramExpenseActivity struct {
+	UpdateID      int64           `json:"updateId"`
+	ChatID        int64           `json:"chatId"`
+	MessageID     int64           `json:"messageId"`
+	ChatType      string          `json:"chatType"`
+	ChatTitle     *string         `json:"chatTitle"`
+	SenderName    *string         `json:"senderName"`
+	MessageText   *string         `json:"messageText"`
+	FileName      *string         `json:"fileName"`
+	MIMEType      *string         `json:"mimeType"`
+	MediaGroupID  *string         `json:"mediaGroupId"`
+	Status        string          `json:"status"`
+	Attempts      int             `json:"attempts"`
+	NextAttemptAt time.Time       `json:"nextAttemptAt"`
+	StartedAt     *time.Time      `json:"startedAt"`
+	CompletedAt   *time.Time      `json:"completedAt"`
+	LastError     *string         `json:"lastError"`
+	ExtractedData json.RawMessage `json:"extractedData"`
+	ExpenseID     *string         `json:"expenseId"`
+	ExpenseDate   *string         `json:"expenseDate"`
+	Company       *string         `json:"company"`
+	Category      *string         `json:"category"`
+	Amount        *string         `json:"amount"`
+	UnitNumber    *string         `json:"unitNumber"`
+	DriverName    *string         `json:"driverName"`
+	TruckID       *string         `json:"truckId"`
+	DriverID      *string         `json:"driverId"`
+	ExpenseType   *string         `json:"expenseType"`
+	Description   *string         `json:"description"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+}
+
+type TelegramExpenseActivitySummary struct {
+	Received24Hours int        `json:"received24Hours"`
+	Completed       int        `json:"completed"`
+	InProgress      int        `json:"inProgress"`
+	NeedsReview     int        `json:"needsReview"`
+	Ignored         int        `json:"ignored"`
+	Failed          int        `json:"failed"`
+	Unmatched       int        `json:"unmatched"`
+	LastCompletedAt *time.Time `json:"lastCompletedAt"`
+}
+
+type TelegramExpenseActivityPage struct {
+	Page[TelegramExpenseActivity]
+	Summary TelegramExpenseActivitySummary `json:"summary"`
+}
+
 func (r *ExpenseRepository) EnqueueTelegramUpdate(
 	ctx context.Context,
 	updateID, chatID, messageID int64,
@@ -105,6 +154,208 @@ func (r *ExpenseRepository) IgnoreTelegramUpdate(ctx context.Context, updateID i
 			completed_at = now(), updated_at = now()
 		WHERE update_id = $1`, updateID, reason)
 	return err
+}
+
+func (r *ExpenseRepository) StoreTelegramExtraction(ctx context.Context, updateID int64, extraction json.RawMessage) error {
+	if len(extraction) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `
+		UPDATE telegram_expense_updates
+		SET extracted_data = $2::jsonb, updated_at = now()
+		WHERE update_id = $1`, updateID, string(extraction))
+	return err
+}
+
+func (r *ExpenseRepository) ReviewTelegramUpdate(ctx context.Context, updateID int64, reason string) error {
+	reason = strings.TrimSpace(reason)
+	if len(reason) > 1000 {
+		reason = reason[:1000]
+	}
+	_, err := r.pool.Exec(ctx, `
+		UPDATE telegram_expense_updates
+		SET status = 'needs_review', last_error = NULLIF($2, ''),
+			completed_at = now(), updated_at = now()
+		WHERE update_id = $1`, updateID, reason)
+	return err
+}
+
+func (r *ExpenseRepository) RetryTelegramUpdateNow(ctx context.Context, updateID int64) (bool, error) {
+	command, err := r.pool.Exec(ctx, `
+		UPDATE telegram_expense_updates
+		SET status = 'queued', next_attempt_at = now(), started_at = NULL,
+			completed_at = NULL, last_error = NULL, updated_at = now()
+		WHERE update_id = $1
+			AND status IN ('queued', 'retry', 'ignored', 'needs_review', 'failed')
+			AND expense_id IS NULL`, updateID)
+	return err == nil && command.RowsAffected() == 1, err
+}
+
+func (r *ExpenseRepository) ResolveTelegramExpense(
+	ctx context.Context,
+	updateID int64,
+	input ExpenseInput,
+) (Expense, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Expense{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	var existingID *string
+	if err := tx.QueryRow(ctx, `
+		SELECT status, expense_id
+		FROM telegram_expense_updates
+		WHERE update_id = $1
+		FOR UPDATE`, updateID).Scan(&status, &existingID); err != nil {
+		return Expense{}, mapNotFound(err)
+	}
+	if status == "completed" && existingID != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return Expense{}, err
+		}
+		return r.GetExpense(ctx, *existingID)
+	}
+	if existingID != nil {
+		return Expense{}, errors.New("Telegram update is already linked to an expense")
+	}
+
+	expenseID, err := insertExpense(ctx, tx, input)
+	if err != nil {
+		return Expense{}, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE telegram_expense_updates
+		SET status = 'completed', expense_id = $2, completed_at = now(),
+			last_error = NULL, updated_at = now()
+		WHERE update_id = $1`, updateID, expenseID); err != nil {
+		return Expense{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Expense{}, err
+	}
+	return r.GetExpense(ctx, expenseID)
+}
+
+func (r *ExpenseRepository) ListTelegramExpenseActivities(
+	ctx context.Context,
+	pagination Pagination,
+	status, search string,
+) (TelegramExpenseActivityPage, error) {
+	status = strings.TrimSpace(status)
+	search = strings.TrimSpace(search)
+	const where = `
+	WHERE ($1 = '' OR u.status = $1)
+		AND ($2 = '' OR concat_ws(' ',
+			u.raw_update #>> '{message,chat,title}',
+			u.raw_update #>> '{message,from,first_name}',
+			u.raw_update #>> '{message,from,last_name}',
+			u.raw_update #>> '{message,from,username}',
+			u.raw_update #>> '{message,text}',
+			u.raw_update #>> '{message,caption}',
+			u.raw_update #>> '{message,document,file_name}',
+			e.company, e.category, e.unit_number, e.driver_name, e.amount::text,
+			e.expense_type, e.description, u.last_error
+		) ILIKE '%' || $2 || '%')`
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM telegram_expense_updates u
+		LEFT JOIN expenses e ON e.id = u.expense_id `+where, status, search).Scan(&total); err != nil {
+		return TelegramExpenseActivityPage{}, err
+	}
+	pagination = pagination.Normalize(total)
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.update_id, u.chat_id, u.message_id, u.chat_type,
+			nullif(u.raw_update #>> '{message,chat,title}', ''),
+			nullif(btrim(concat_ws(' ',
+				u.raw_update #>> '{message,from,first_name}',
+				u.raw_update #>> '{message,from,last_name}',
+				CASE WHEN coalesce(u.raw_update #>> '{message,from,username}', '') <> ''
+					THEN '@' || (u.raw_update #>> '{message,from,username}') END
+			)), ''),
+			nullif(coalesce(u.raw_update #>> '{message,text}', u.raw_update #>> '{message,caption}'), ''),
+			nullif(coalesce(
+				u.raw_update #>> '{message,document,file_name}',
+				CASE WHEN jsonb_typeof(u.raw_update #> '{message,photo}') = 'array'
+					THEN 'Telegram photo' END
+			), ''),
+			nullif(coalesce(
+				u.raw_update #>> '{message,document,mime_type}',
+				CASE WHEN jsonb_typeof(u.raw_update #> '{message,photo}') = 'array'
+					THEN 'image/jpeg' END
+			), ''),
+			nullif(u.raw_update #>> '{message,media_group_id}', ''),
+			u.status, u.attempts, u.next_attempt_at, u.started_at, u.completed_at,
+			u.last_error, u.extracted_data, u.expense_id,
+			to_char(e.expense_date, 'YYYY-MM-DD'), e.company, e.category, e.amount::text,
+			coalesce(t.unit_number, e.unit_number), coalesce(d.full_name, e.driver_name),
+			e.truck_id, e.driver_id, e.expense_type, e.description,
+			u.created_at, u.updated_at
+		FROM telegram_expense_updates u
+		LEFT JOIN expenses e ON e.id = u.expense_id
+		LEFT JOIN trucks t ON t.id = e.truck_id
+		LEFT JOIN drivers d ON d.id = e.driver_id `+where+`
+		ORDER BY u.created_at DESC, u.update_id DESC
+		LIMIT $3 OFFSET $4`, status, search, pagination.PageSize, pagination.Offset())
+	if err != nil {
+		return TelegramExpenseActivityPage{}, err
+	}
+	defer rows.Close()
+	items := make([]TelegramExpenseActivity, 0, pagination.PageSize)
+	for rows.Next() {
+		var item TelegramExpenseActivity
+		var extracted []byte
+		if err := rows.Scan(
+			&item.UpdateID, &item.ChatID, &item.MessageID, &item.ChatType,
+			&item.ChatTitle, &item.SenderName, &item.MessageText, &item.FileName,
+			&item.MIMEType, &item.MediaGroupID, &item.Status, &item.Attempts,
+			&item.NextAttemptAt, &item.StartedAt, &item.CompletedAt, &item.LastError,
+			&extracted, &item.ExpenseID, &item.ExpenseDate, &item.Company,
+			&item.Category, &item.Amount, &item.UnitNumber, &item.DriverName,
+			&item.TruckID, &item.DriverID, &item.ExpenseType, &item.Description,
+			&item.CreatedAt, &item.UpdatedAt,
+		); err != nil {
+			return TelegramExpenseActivityPage{}, err
+		}
+		if len(extracted) > 0 {
+			item.ExtractedData = json.RawMessage(extracted)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return TelegramExpenseActivityPage{}, err
+	}
+
+	var summary TelegramExpenseActivitySummary
+	if err := r.pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE u.created_at >= now() - interval '24 hours'),
+			count(*) FILTER (WHERE u.status = 'completed'),
+			count(*) FILTER (WHERE u.status IN ('queued', 'processing', 'retry')),
+			count(*) FILTER (WHERE u.status = 'needs_review'),
+			count(*) FILTER (WHERE u.status = 'ignored'),
+			count(*) FILTER (WHERE u.status = 'failed'),
+			count(*) FILTER (WHERE u.status = 'completed' AND (
+				(e.unit_number IS NOT NULL AND e.truck_id IS NULL)
+				OR (e.driver_name IS NOT NULL AND e.driver_id IS NULL)
+			)),
+			max(u.completed_at) FILTER (WHERE u.status = 'completed')
+		FROM telegram_expense_updates u
+		LEFT JOIN expenses e ON e.id = u.expense_id`).Scan(
+		&summary.Received24Hours, &summary.Completed, &summary.InProgress,
+		&summary.NeedsReview, &summary.Ignored, &summary.Failed,
+		&summary.Unmatched, &summary.LastCompletedAt,
+	); err != nil {
+		return TelegramExpenseActivityPage{}, err
+	}
+
+	return TelegramExpenseActivityPage{
+		Page:    NewPage(items, total, pagination),
+		Summary: summary,
+	}, nil
 }
 
 func (r *ExpenseRepository) CompleteTelegramExpense(

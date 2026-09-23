@@ -75,7 +75,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `016_add_telegram_expense_ingestion.sql`:
+  `017_add_telegram_expense_monitoring.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -89,7 +89,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/tolls/`: toll table and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
-  assignments, and CRUD forms.
+  assignments, CRUD forms, and Telegram bot activity/review monitoring.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults. Driver and
   truck detail pages include expenses linked to that record.
@@ -203,7 +203,10 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `POST /jobs/sync-tolls`
 - Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
-- Telegram expenses: `POST /telegram/expenses/webhook` (Telegram-signed, no app session)
+- Telegram expenses: `POST /telegram/expenses/webhook` (Telegram-signed, no app
+  session), `GET /telegram-expense-updates`,
+  `POST /telegram-expense-updates/{updateID}/retry`,
+  `POST /telegram-expense-updates/{updateID}/resolve`
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
@@ -247,7 +250,9 @@ assignment lookup lists.
   foreign keys while raw extracted names/units remain available when unmatched.
   Gemini capacity/quota responses use a compatible Flash fallback before the
   queue's non-expiring, capped retry backoff so upstream outages or daily quota
-  resets cannot drop a Telegram expense.
+  resets cannot drop a Telegram expense. Low-confidence, multi-expense,
+  unsupported-document, and captionless media-album updates remain visible as
+  `needs_review` records instead of being silently discarded.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored

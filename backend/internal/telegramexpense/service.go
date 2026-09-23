@@ -25,6 +25,8 @@ type Store interface {
 	ClaimTelegramUpdate(context.Context) (*repository.TelegramExpenseUpdate, error)
 	RetryTelegramUpdate(context.Context, int64, error) error
 	IgnoreTelegramUpdate(context.Context, int64, string) error
+	ReviewTelegramUpdate(context.Context, int64, string) error
+	StoreTelegramExtraction(context.Context, int64, json.RawMessage) error
 	CompleteTelegramExpense(context.Context, int64, repository.TelegramExpenseDraft) (string, error)
 }
 
@@ -78,11 +80,6 @@ func (s *Service) AcceptUpdate(ctx context.Context, payload []byte) (bool, error
 		if _, ok := s.allowedChats[message.Chat.ID]; !ok {
 			return false, nil
 		}
-	}
-	// Telegram repeats the caption on only one item in most media albums. Processing
-	// captionless siblings would create duplicate expenses from the same receipt.
-	if message.MediaGroupID != "" && strings.TrimSpace(message.Caption) == "" {
-		return false, nil
 	}
 	if message.TextContent() == "" && message.Document == nil && message.LargestPhoto() == nil {
 		return false, nil
@@ -145,6 +142,13 @@ func (s *Service) process(ctx context.Context, queued *repository.TelegramExpens
 	if message == nil {
 		return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, "update has no message")
 	}
+	if message.MediaGroupID != "" && strings.TrimSpace(message.Caption) == "" {
+		return s.store.ReviewTelegramUpdate(
+			ctx,
+			queued.UpdateID,
+			"Captionless media-album item needs review so a multi-image receipt is not duplicated or partially imported",
+		)
+	}
 
 	input := gemini.ExpenseInput{Text: message.TextContent()}
 	if message.Date > 0 {
@@ -155,7 +159,7 @@ func (s *Service) process(ctx context.Context, queued *repository.TelegramExpens
 	if message.Document != nil {
 		mimeType := supportedMIME(message.Document.MIMEType, message.Document.FileName)
 		if mimeType == "" {
-			return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, "unsupported document type")
+			return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Unsupported document type needs manual review")
 		}
 		data, err := s.telegram.DownloadFile(ctx, message.Document.FileID)
 		if err != nil {
@@ -174,12 +178,25 @@ func (s *Service) process(ctx context.Context, queued *repository.TelegramExpens
 	if err != nil {
 		return err
 	}
-	if !extraction.IsExpense || extraction.Confidence < 0.40 {
-		return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, "Gemini did not identify a sufficiently confident expense")
+	extractedData, err := json.Marshal(extraction)
+	if err != nil {
+		return err
+	}
+	if err := s.store.StoreTelegramExtraction(ctx, queued.UpdateID, extractedData); err != nil {
+		return err
+	}
+	if !extraction.IsExpense {
+		return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, "Gemini did not identify an expense")
+	}
+	if extraction.ContainsMultipleExpenses {
+		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Message appears to contain multiple expenses")
+	}
+	if extraction.Confidence < 0.40 {
+		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Gemini identified an expense with low confidence")
 	}
 	draft, reason := buildDraft(extraction, input)
 	if reason != "" {
-		return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, reason)
+		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, reason)
 	}
 	expenseID, err := s.store.CompleteTelegramExpense(ctx, queued.UpdateID, draft)
 	if err != nil {

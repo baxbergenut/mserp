@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -178,8 +179,20 @@ func (r *ExpenseRepository) GetExpense(ctx context.Context, id string) (Expense,
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {
+	id, err := insertExpense(ctx, r.pool, input)
+	if err != nil {
+		return Expense{}, err
+	}
+	return r.GetExpense(ctx, id)
+}
+
+type expenseQueryer interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInput) (string, error) {
 	var id string
-	err := r.pool.QueryRow(ctx, `
+	err := queryer.QueryRow(ctx, `
 		INSERT INTO expenses (
 			company, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
@@ -195,10 +208,7 @@ func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInpu
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.ManagerVerified, input.AccountingVerified,
 	).Scan(&id)
-	if err != nil {
-		return Expense{}, err
-	}
-	return r.GetExpense(ctx, id)
+	return id, err
 }
 
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
