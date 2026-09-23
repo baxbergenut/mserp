@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net"
 	"net/http"
@@ -29,6 +30,8 @@ import (
 )
 
 func main() {
+	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
+	flag.Parse()
 	_ = godotenv.Load(".env.relay.local", ".env.local", ".env", "/etc/mserp/mserp.env")
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -50,6 +53,18 @@ func main() {
 
 	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
 	loadRepo := repository.NewLoadRepository(pool)
+	loadJob := jobs.NewSyncLoadsJob(client, loadRepo, logger)
+	if *syncLoadsOnly {
+		// Operator recovery runs can outlast the HTTP request timeout after
+		// a long outage. Use the same job and configuration as the scheduler.
+		syncCtx, cancel := context.WithTimeout(ctx, 45*time.Minute)
+		defer cancel()
+		if _, err := loadJob.Run(syncCtx); err != nil {
+			logger.Error("one-time load sync failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	fleetRepo := repository.NewFleetRepository(pool)
 	tollRepo := repository.NewTollRepository(pool)
 	fileRepo := repository.NewFileRepository(pool)
@@ -58,7 +73,6 @@ func main() {
 	expenseRepo := repository.NewExpenseRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
-	loadJob := jobs.NewSyncLoadsJob(client, loadRepo, logger)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
 	fuelJob := jobs.NewSyncFuelJob(
 		relayClient,
