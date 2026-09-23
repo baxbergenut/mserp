@@ -337,7 +337,7 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
 			count(*) FILTER (WHERE u.created_at >= now() - interval '24 hours'),
-			count(*) FILTER (WHERE u.status = 'completed'),
+			count(*) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NOT NULL),
 			count(*) FILTER (WHERE u.status IN ('queued', 'processing', 'retry')),
 			count(*) FILTER (WHERE u.status = 'needs_review'),
 			count(*) FILTER (WHERE u.status = 'ignored'),
@@ -347,7 +347,7 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 				OR (e.driver_name IS NOT NULL AND e.driver_id IS NULL)
 			)),
 			count(*) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NULL),
-			max(u.completed_at) FILTER (WHERE u.status = 'completed')
+			max(u.completed_at) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NOT NULL)
 		FROM telegram_expense_updates u
 		LEFT JOIN expenses e ON e.id = u.expense_id`).Scan(
 		&summary.Received24Hours, &summary.Completed, &summary.InProgress,
