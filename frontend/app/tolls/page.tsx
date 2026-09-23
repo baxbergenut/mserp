@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { fetchTollsPage, syncTolls } from "../lib/api";
 import type { Toll } from "../lib/types";
+import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   EmptyState,
@@ -203,7 +204,7 @@ export default function TollsPage() {
 
       <TableShell>
         {isLoading ? (
-          <LoadingTable columns={6} />
+          <LoadingTable columns={7} />
         ) : tolls.length === 0 ? (
           <EmptyState message={hasFilters ? "No tolls match these filters." : "No PrePass tolls have synced yet."} />
         ) : (
@@ -216,6 +217,7 @@ export default function TollsPage() {
                 <th className="px-4 py-3 font-medium">Agency</th>
                 <th className="px-4 py-3 font-medium">Class / miles</th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>
               </tr>
             </thead>
             <tbody>
@@ -243,6 +245,7 @@ export default function TollsPage() {
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${toll.amount < 0 ? "text-emerald-400" : "text-zinc-200"}`}>
                     {formatMoney(toll.amount)}
                   </td>
+                  <td className="px-2 py-3 text-right"><TransactionFlagIcon flag={toll.flag} kind="toll" /></td>
                 </tr>
               ))}
             </tbody>

@@ -24,30 +24,31 @@ func NewFuelRepository(pool *pgxpool.Pool) *FuelRepository {
 }
 
 type FuelTransaction struct {
-	ID                 string    `json:"id"`
-	RelayTransactionID string    `json:"relayTransactionId"`
-	DriverID           string    `json:"driverId"`
-	DriverName         string    `json:"driverName"`
-	RelayDriverID      string    `json:"relayDriverId"`
-	RelayIntegrationID *string   `json:"relayIntegrationId"`
-	PurchasedAt        time.Time `json:"purchasedAt"`
-	MerchantName       string    `json:"merchantName"`
-	LocationName       string    `json:"locationName"`
-	City               string    `json:"city"`
-	State              string    `json:"state"`
-	Timezone           string    `json:"timezone"`
-	TotalAmountPaid    float64   `json:"totalAmountPaid"`
-	TotalRetailPrice   float64   `json:"totalRetailPrice"`
-	TotalAmountSaved   float64   `json:"totalAmountSaved"`
-	CashAdvance        *float64  `json:"cashAdvance"`
-	CurrencyCode       string    `json:"currencyCode"`
-	FuelAmount         float64   `json:"fuelAmount"`
-	DEFAmount          float64   `json:"defAmount"`
-	OtherAmount        float64   `json:"otherAmount"`
-	FuelVolume         float64   `json:"fuelVolume"`
-	DEFVolume          float64   `json:"defVolume"`
-	FuelCodeType       *string   `json:"fuelCodeType"`
-	IsDirectBill       bool      `json:"isDirectBill"`
+	Flag               *TransactionFlag `json:"flag,omitempty"`
+	ID                 string           `json:"id"`
+	RelayTransactionID string           `json:"relayTransactionId"`
+	DriverID           string           `json:"driverId"`
+	DriverName         string           `json:"driverName"`
+	RelayDriverID      string           `json:"relayDriverId"`
+	RelayIntegrationID *string          `json:"relayIntegrationId"`
+	PurchasedAt        time.Time        `json:"purchasedAt"`
+	MerchantName       string           `json:"merchantName"`
+	LocationName       string           `json:"locationName"`
+	City               string           `json:"city"`
+	State              string           `json:"state"`
+	Timezone           string           `json:"timezone"`
+	TotalAmountPaid    float64          `json:"totalAmountPaid"`
+	TotalRetailPrice   float64          `json:"totalRetailPrice"`
+	TotalAmountSaved   float64          `json:"totalAmountSaved"`
+	CashAdvance        *float64         `json:"cashAdvance"`
+	CurrencyCode       string           `json:"currencyCode"`
+	FuelAmount         float64          `json:"fuelAmount"`
+	DEFAmount          float64          `json:"defAmount"`
+	OtherAmount        float64          `json:"otherAmount"`
+	FuelVolume         float64          `json:"fuelVolume"`
+	DEFVolume          float64          `json:"defVolume"`
+	FuelCodeType       *string          `json:"fuelCodeType"`
+	IsDirectBill       bool             `json:"isDirectBill"`
 }
 
 func (r *FuelRepository) CompletedDays(
@@ -1051,6 +1052,17 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 		return FuelPage{}, err
 	}
 	options := FuelFilterOptions{}
+	ids := make([]string, len(transactions))
+	for i := range transactions {
+		ids[i] = transactions[i].ID
+	}
+	flags, err := transactionFlags(ctx, r.pool, "fuel", ids, time.Now().UTC())
+	if err != nil {
+		return FuelPage{}, fmt.Errorf("assess fuel load coverage: %w", err)
+	}
+	for i := range transactions {
+		transactions[i].Flag = flags[transactions[i].ID]
+	}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
 			COALESCE(array_agg(DISTINCT d.full_name ORDER BY d.full_name), '{}'),

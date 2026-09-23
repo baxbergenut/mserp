@@ -224,6 +224,16 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
+- Paginated fuel and toll transactions derive optional load-coverage flags on
+  each read; the existing tables show an icon in their final column. A load
+  covers one calendar day before pickup through one day after delivery, using
+  actual dates with appointment fallback. Fuel uses merchant-local purchase
+  dates and reported Truck # prompts; tolls use stored crossing dates and source
+  equipment units. Never substitute current fleet assignments. Credits and test
+  data are excluded. Ambiguous units, incomplete history/dates, conflicting
+  driver loads, and load data older than 48 hours show data-quality hints instead
+  of review flags. Flags indicate a need for review, not confirmed fraud.
+
 - DataTruck, Relay fuel, and PrePass toll syncs are initiated by the frontend
   and remain synchronous when manually triggered. The API process also
   schedules loads at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM
