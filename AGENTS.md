@@ -50,6 +50,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   JSON CRUD handlers and input validation.
 - `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
   API sync.
+- `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
+  validation, and CRUD handlers.
 - `backend/internal/httpapi/file_handlers.go`: IRP/cab-card and CDL uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`
@@ -68,8 +70,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   cab cards and driver CDLs.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
+- `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
+  CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `014_remove_telegram_feature.sql`:
+  `015_add_expenses.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -82,8 +86,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   reports, selected by Monday-start report week.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/tolls/`: toll table and manual PrePass sync UX.
+- `frontend/app/expenses/`: paginated expense management, filters, linked fleet
+  assignments, and CRUD forms.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
-  their colocated `*Form.tsx` files own form conversion/defaults.
+  their colocated `*Form.tsx` files own form conversion/defaults. Driver and
+  truck detail pages include expenses linked to that record.
 - `frontend/app/components/management/ManagementUI.tsx`: shared management page,
   modal, form, table, empty/error, and confirmation primitives. Reuse these
   before creating parallel UI patterns.
@@ -182,10 +189,11 @@ browser bundle.
 - Health: `GET /healthz`, `GET /readyz`
 - Auth: `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
-- Drivers: `GET/POST /drivers`, `PUT/DELETE /drivers/{id}`
-- Trucks: `GET/POST /trucks`, `PUT/DELETE /trucks/{id}`
+- Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
+- Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `POST /jobs/sync-tolls`
+- Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
@@ -218,6 +226,11 @@ assignment lookup lists.
 - Driver/truck assignment history lives in `truck_driver_assignments`. Partial
   unique indexes enforce at most one current truck per driver and one current
   driver per truck. Assignment changes must remain transactional.
+- Expenses optionally link to existing drivers and trucks with `ON DELETE SET
+  NULL` while retaining imported unit/name snapshots for historical display.
+  The Google Sheets import is idempotent by spreadsheet, sheet, and source row;
+  exact normalized unit/name matches populate the foreign keys and unmatched
+  values remain visible for later manual linking.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored
