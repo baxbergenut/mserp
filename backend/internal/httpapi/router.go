@@ -29,6 +29,7 @@ func NewRouter(
 	authRepo *repository.AuthRepository,
 	documentExtractor groq.DocumentExtractor,
 	authOptions AuthOptions,
+	telegramExpenseOptions TelegramExpenseOptions,
 ) http.Handler {
 	r := chi.NewRouter()
 	auth := newAuthHandler(logger, authRepo, authOptions)
@@ -47,6 +48,7 @@ func NewRouter(
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 	r.Post("/auth/login", auth.login)
+	registerTelegramExpenseWebhook(r, logger, telegramExpenseOptions)
 
 	protected := chi.NewRouter()
 	protected.Use(auth.requireSession)

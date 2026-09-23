@@ -68,12 +68,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   sync in API-compatible date windows.
 - `backend/internal/groq/`: vision extraction client and normalization for truck
   cab cards and driver CDLs.
+- `backend/internal/gemini/` and `backend/internal/telegramexpense/`: structured
+  expense extraction and durable, silent Telegram group ingestion.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `015_add_expenses.sql`:
+  `016_add_telegram_expense_ingestion.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -124,6 +126,13 @@ PORT=8080
 BIND_ADDRESS=127.0.0.1
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.6-27b
+GEMINI_API_KEY=...
+GEMINI_EXPENSE_MODEL=gemini-3.6-flash
+TELEGRAM_EXPENSES_ENABLED=false
+TELEGRAM_EXPENSE_BOT_TOKEN=...
+TELEGRAM_EXPENSE_WEBHOOK_URL=https://erp.example.com/api/telegram/expenses/webhook
+TELEGRAM_EXPENSE_WEBHOOK_SECRET=...
+TELEGRAM_EXPENSE_ALLOWED_CHAT_IDS=-1001234567890
 RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
@@ -194,6 +203,7 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `POST /jobs/sync-tolls`
 - Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
+- Telegram expenses: `POST /telegram/expenses/webhook` (Telegram-signed, no app session)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
@@ -231,6 +241,10 @@ assignment lookup lists.
   The Google Sheets import is idempotent by spreadsheet, sheet, and source row;
   exact normalized unit/name matches populate the foreign keys and unmatched
   values remain visible for later manual linking.
+- Telegram expense updates are accepted only from groups/supergroups, validated
+  with Telegram's secret webhook header, durably queued, and processed silently.
+  Gemini extracts text/PDF/image fields; high-confidence fleet matches populate
+  foreign keys while raw extracted names/units remain available when unmatched.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored

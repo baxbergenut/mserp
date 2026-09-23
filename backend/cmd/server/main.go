@@ -17,12 +17,15 @@ import (
 	"mserp/internal/config"
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
+	"mserp/internal/gemini"
 	"mserp/internal/groq"
 	"mserp/internal/httpapi"
 	"mserp/internal/jobs"
 	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
+	"mserp/internal/telegram"
+	"mserp/internal/telegramexpense"
 )
 
 func main() {
@@ -76,6 +79,30 @@ func main() {
 		cfg.PrePassTollSyncStart,
 		logger,
 	)
+	var telegramExpenseService *telegramexpense.Service
+	if cfg.TelegramExpensesEnabled {
+		telegramClient := telegram.NewClient(cfg.TelegramBotToken)
+		bot, telegramErr := telegramClient.GetMe(ctx)
+		if telegramErr != nil {
+			logger.Error("validate Telegram expense bot", "error", telegramErr)
+			os.Exit(1)
+		}
+		if telegramErr := telegramClient.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); telegramErr != nil {
+			logger.Error("register Telegram expense webhook", "error", telegramErr)
+			os.Exit(1)
+		}
+		geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiExpenseModel)
+		telegramExpenseService = telegramexpense.NewService(
+			expenseRepo,
+			telegramClient,
+			geminiClient,
+			cfg.TelegramAllowedChatIDs,
+			cfg.ScheduledSyncsLocation,
+			logger,
+		)
+		telegramExpenseService.Run(ctx, 2)
+		logger.Info("Telegram expense ingestion enabled", "bot_username", bot.Username)
+	}
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,
@@ -94,6 +121,11 @@ func main() {
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,
 			SessionTTL:   cfg.AuthSessionTTL,
+		},
+		httpapi.TelegramExpenseOptions{
+			Enabled:       cfg.TelegramExpensesEnabled,
+			WebhookSecret: cfg.TelegramWebhookSecret,
+			Service:       telegramExpenseService,
 		},
 	)
 	handler := cors.Handler(cors.Options{
