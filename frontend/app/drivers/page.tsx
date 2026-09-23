@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { FileBadge, Users } from "lucide-react";
 import {
   createDriver,
@@ -226,7 +227,7 @@ export default function DriversPage() {
               {drivers.map((driver) => (
                 <tr key={driver.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-zinc-200">{driver.fullName}</div>
+                    <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{driver.phone || driver.email || "No contact info"}</div>
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{driver.isOwnerOperator ? "Owner-operator" : "Company"}</td>

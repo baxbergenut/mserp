@@ -20,6 +20,9 @@ import type {
   Truck,
   TruckInput,
   AuthSession,
+  Expense,
+  ExpenseInput,
+  ExpensePage,
 } from "./types";
 
 type PageQuery = {
@@ -175,6 +178,7 @@ export async function logout(): Promise<void> {
 }
 
 export const fetchDrivers = () => apiRequest<Driver[]>("/drivers");
+export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }) =>
   paginatedRequest<PaginatedResponse<Driver>>(withQuery("/drivers", query));
 export const createDriver = (input: DriverInput) =>
@@ -203,6 +207,7 @@ export const uploadCDLFile = (file: File, renderedPages: Blob[] = []) => {
 };
 
 export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
+export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);
 export const fetchTrucksPage = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<Truck>>(withQuery("/trucks", query));
 export const createTruck = (input: TruckInput) =>
@@ -259,3 +264,24 @@ export const fetchTollsPage = (query: PageQuery & {
 }) => paginatedRequest<TollPage>(withQuery("/tolls", query));
 export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
+
+export const fetchExpensesPage = (query: PageQuery & {
+  category?: string;
+  company?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  truckId?: string;
+  driverId?: string;
+}) => paginatedRequest<ExpensePage>(withQuery("/expenses", query));
+export const createExpense = (input: ExpenseInput) =>
+  apiRequest<Expense>("/expenses", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+export const updateExpense = (id: string, input: ExpenseInput) =>
+  apiRequest<Expense>(`/expenses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+export const deleteExpense = (id: string) =>
+  apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });

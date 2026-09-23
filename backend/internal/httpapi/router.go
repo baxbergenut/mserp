@@ -25,6 +25,7 @@ func NewRouter(
 	fileRepo *repository.FileRepository,
 	fuelRepo *repository.FuelRepository,
 	dashboardRepo *repository.DashboardRepository,
+	expenseRepo *repository.ExpenseRepository,
 	authRepo *repository.AuthRepository,
 	documentExtractor groq.DocumentExtractor,
 	authOptions AuthOptions,
@@ -111,6 +112,7 @@ func NewRouter(
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
 	registerDashboardRoutes(protected, logger, dashboardRepo)
+	registerExpenseRoutes(protected, logger, expenseRepo)
 	r.Mount("/", protected)
 
 	return r

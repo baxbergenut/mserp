@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { FileText, Truck as TruckIcon } from "lucide-react";
 import {
   createTruck,
@@ -206,7 +207,7 @@ export default function TrucksPage() {
             </tr></thead>
             <tbody>{trucks.map((truck) => (
               <tr key={truck.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
-                <td className="px-4 py-3"><div className="font-mono font-medium text-zinc-200">{truck.unitNumber}</div><div className="mt-0.5 text-[11px] text-zinc-600">{truck.isCompanyOwned ? "Company owned" : "Owner / leased"}</div></td>
+                <td className="px-4 py-3"><Link href={`/trucks/detail?id=${truck.id}`} className="font-mono font-medium text-zinc-200 transition hover:text-blue-400">{truck.unitNumber}</Link><div className="mt-0.5 text-[11px] text-zinc-600">{truck.isCompanyOwned ? "Company owned" : "Owner / leased"}</div></td>
                 <td className="px-4 py-3"><div className="text-zinc-300">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—"}</div><div className="mt-0.5 font-mono text-[11px] text-zinc-600">{truck.vin ?? truck.licensePlate ?? "No VIN or plate"}</div></td>
                 <td className="px-4 py-3 text-zinc-400">{truck.driverName ?? "Unassigned"}</td>
                 <td className="px-4 py-3 font-mono tabular-nums text-zinc-400">{truck.mileage?.toLocaleString() ?? "—"}</td>
