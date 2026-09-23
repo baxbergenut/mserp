@@ -40,3 +40,36 @@ func TestExtractExpenseUsesStructuredMultimodalRequest(t *testing.T) {
 		t.Fatalf("extraction = %#v", extraction)
 	}
 }
+
+func TestExtractExpenseFallsBackOnCapacityFailure(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if requests == 1 {
+			if request["model"] != "primary-model" {
+				t.Fatalf("first model = %#v", request["model"])
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":{"message":"high demand"}}`))
+			return
+		}
+		if request["model"] != "gemini-3-flash-preview" {
+			t.Fatalf("fallback model = %#v", request["model"])
+		}
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":false,\"confidence\":0,\"company\":null,\"category\":null,\"expenseDate\":null,\"unitNumber\":null,\"driverName\":null,\"amount\":null,\"paymentType\":null,\"expenseType\":null,\"referenceNumber\":null,\"description\":null,\"coveredBy\":null,\"paidBy\":null,\"evidence\":[]}"}]}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("secret", "primary-model")
+	client.baseURL = server.URL
+	if _, err := client.ExtractExpense(context.Background(), ExpenseInput{MessageDate: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+}
