@@ -561,6 +561,7 @@ export interface TelegramExpenseActivityPage
     ignored: number;
     failed: number;
     unmatched: number;
+    missingExpense: number;
     lastCompletedAt: string | null;
   };
 }

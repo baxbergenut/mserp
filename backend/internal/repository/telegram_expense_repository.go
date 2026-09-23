@@ -74,6 +74,7 @@ type TelegramExpenseActivitySummary struct {
 	Ignored         int        `json:"ignored"`
 	Failed          int        `json:"failed"`
 	Unmatched       int        `json:"unmatched"`
+	MissingExpense  int        `json:"missingExpense"`
 	LastCompletedAt *time.Time `json:"lastCompletedAt"`
 }
 
@@ -186,8 +187,11 @@ func (r *ExpenseRepository) RetryTelegramUpdateNow(ctx context.Context, updateID
 		SET status = 'queued', next_attempt_at = now(), started_at = NULL,
 			completed_at = NULL, last_error = NULL, updated_at = now()
 		WHERE update_id = $1
-			AND status IN ('queued', 'retry', 'ignored', 'needs_review', 'failed')
-			AND expense_id IS NULL`, updateID)
+			AND expense_id IS NULL
+			AND (
+				status IN ('queued', 'retry', 'ignored', 'needs_review', 'failed')
+				OR status = 'completed'
+			)`, updateID)
 	return err == nil && command.RowsAffected() == 1, err
 }
 
@@ -342,12 +346,13 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 				(e.unit_number IS NOT NULL AND e.truck_id IS NULL)
 				OR (e.driver_name IS NOT NULL AND e.driver_id IS NULL)
 			)),
+			count(*) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NULL),
 			max(u.completed_at) FILTER (WHERE u.status = 'completed')
 		FROM telegram_expense_updates u
 		LEFT JOIN expenses e ON e.id = u.expense_id`).Scan(
 		&summary.Received24Hours, &summary.Completed, &summary.InProgress,
 		&summary.NeedsReview, &summary.Ignored, &summary.Failed,
-		&summary.Unmatched, &summary.LastCompletedAt,
+		&summary.Unmatched, &summary.MissingExpense, &summary.LastCompletedAt,
 	); err != nil {
 		return TelegramExpenseActivityPage{}, err
 	}
