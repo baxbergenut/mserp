@@ -461,6 +461,8 @@ export interface TollDashboard {
   weekly: TollDashboardPoint[];
   agencies: TollDashboardPoint[];
   trucks: TollDashboardPoint[];
+  states: TollDashboardPoint[];
+  unmapped: TollDashboardPoint[];
 }
 
 export interface Expense {

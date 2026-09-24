@@ -7,6 +7,7 @@ import { fetchTollDashboard } from "../lib/api";
 import type { TollDashboard, TollDashboardPoint } from "../lib/types";
 import { EmptyState, ErrorBanner } from "../components/management/ManagementUI";
 import { ChartCard, KpiCard } from "../components/OverviewCards";
+import { TollSpendingMap } from "./TollSpendingMap";
 
 const inputClass = "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -119,6 +120,8 @@ export function TollOverview({ refreshKey }: { refreshKey: number }) {
           {dashboard.totals.transactionCount === 0 ? (
             <EmptyState message="No toll transactions in this date range. Adjust the dates or sync tolls to get started." />
           ) : (
+            <>
+            <TollSpendingMap dashboard={dashboard} />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <ChartCard title="Monthly toll spending" description="Net posted charges by month for the selected dates.">
                 <SpendingChart points={dashboard.monthly.map((point) => ({ ...point, label: periodLabel(point.label, true) }))} color="#3b82f6" />
@@ -133,6 +136,7 @@ export function TollOverview({ refreshKey }: { refreshKey: number }) {
                 <SpendingChart points={[...dashboard.trucks].sort((a, b) => b.spend - a.spend)} color="#3b82f6" horizontal />
               </ChartCard>
             </div>
+            </>
           )}
           <details className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3 text-[12px] text-zinc-500">
             <summary className="cursor-pointer font-medium text-zinc-400">How these numbers are calculated</summary>

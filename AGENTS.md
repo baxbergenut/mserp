@@ -229,6 +229,10 @@ assignment lookup lists.
   Credits reduce net spend, weeks begin Monday, and truck breakdowns use source
   equipment units, including unmatched units. SQL numeric aggregation preserves
   cent precision. All overview cards and charts share the same date range.
+  The state spending map infers geography only from verified single-state toll
+  agencies; cross-state and unknown agencies stay in an explicit unmapped bucket.
+  Never infer toll location from truck registration, fleet assignments, or the
+  billing network. Agency mapping sources live beside the dashboard query.
 
 - Paginated fuel and toll transactions derive optional load-coverage flags on
   each read; the existing tables show an icon in their final column. A load
