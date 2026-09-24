@@ -75,7 +75,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `018_add_telegram_multi_expense_links.sql`:
+  `019_fix_telegram_multi_expense_table_owner.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
