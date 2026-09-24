@@ -17,6 +17,7 @@ import type {
   SyncTollsResult,
   Toll,
   TollPage,
+  TollDashboard,
   Truck,
   TruckInput,
   AuthSession,
@@ -257,6 +258,8 @@ export const deleteDispatcher = (id: string) =>
   apiRequest<void>(`/dispatchers/${id}`, { method: "DELETE" });
 
 export const fetchTolls = () => apiRequest<Toll[]>("/tolls");
+export const fetchTollDashboard = (query: { dateFrom: string; dateTo: string }) =>
+  apiRequest<TollDashboard>(withQuery("/toll-dashboard", query));
 export const fetchTollsPage = (query: PageQuery & {
   unit?: string;
   agency?: string;

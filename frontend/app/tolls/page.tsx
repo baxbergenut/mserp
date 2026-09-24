@@ -5,8 +5,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Receipt,
+  LayoutDashboard,
+  List,
+  RefreshCw,
   X,
 } from "lucide-react";
+import { TollOverview } from "./TollOverview";
 import { fetchTollsPage, syncTolls } from "../lib/api";
 import type { Toll } from "../lib/types";
 import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
@@ -46,6 +50,8 @@ function routeLabel(toll: Toll) {
 }
 
 export default function TollsPage() {
+  const [activeTab, setActiveTab] = useState<"overview" | "transactions">("overview");
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [tolls, setTolls] = useState<Toll[]>([]);
   const [search, setSearch] = useState("");
   const [unit, setUnit] = useState("");
@@ -104,6 +110,7 @@ export default function TollsPage() {
     try {
       const result = await syncTolls();
       await loadData();
+      setDashboardRefreshKey((value) => value + 1);
       setMessage({
         type: "success",
         text: `Checked ${result.daysFetched} missing/current day${result.daysFetched === 1 ? "" : "s"} and synced ${result.saved} toll transaction${result.saved === 1 ? "" : "s"}. ${result.daysSkipped} completed day${result.daysSkipped === 1 ? " was" : "s were"} already up to date.${result.unmatched > 0 ? ` ${result.unmatched} transaction${result.unmatched === 1 ? "" : "s"} could not yet be matched to a truck.` : ""}`,
@@ -132,13 +139,13 @@ export default function TollsPage() {
       <ManagementHeader
         icon={Receipt}
         title="Tolls"
-        description="Review truck toll charges fetched automatically from PrePass each day."
+        description="Toll spending, agency trends, and PrePass transaction data."
         count={total}
         actionLabel={isSyncing ? "Syncing…" : "Sync tolls"}
         onAction={() => void handleSync()}
+        actionIcon={RefreshCw}
       />
 
-      {loadError && <ErrorBanner message={loadError} />}
       {message && (
         <div
           className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-[13px] ${
@@ -165,6 +172,19 @@ export default function TollsPage() {
         </div>
       )}
 
+      <div className="flex w-fit rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
+        {(["overview", "transactions"] as const).map((tab) => (
+          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={activeTab === tab}
+            className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === tab ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
+            {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
+            {tab === "overview" ? "Overview" : "Transactions"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
+        <>
+      {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Displayed tolls</div>
@@ -263,6 +283,8 @@ export default function TollsPage() {
         />
       )}
 
+        </>
+      )}
     </div>
   );
 }

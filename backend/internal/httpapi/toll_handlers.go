@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -25,7 +26,51 @@ func registerTollRoutes(
 ) {
 	handler := tollHandler{logger: logger, repo: repo, job: job}
 	r.Get("/tolls", handler.listTolls)
+	r.Get("/toll-dashboard", handler.tollDashboard)
 	r.Post("/jobs/sync-tolls", handler.syncTolls)
+}
+
+func (handler tollHandler) tollDashboard(w http.ResponseWriter, r *http.Request) {
+	dateFrom, err := parseOptionalDate(r.URL.Query().Get("dateFrom"), "dateFrom")
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	dateTo, err := parseOptionalDate(r.URL.Query().Get("dateTo"), "dateTo")
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		handler.logger.Error("load reporting timezone failed", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "Failed to load toll overview.")
+		return
+	}
+	now := time.Now().In(location)
+	if dateFrom == nil {
+		value := time.Date(now.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
+		dateFrom = &value
+	}
+	if dateTo == nil {
+		value := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		dateTo = &value
+	}
+	if dateFrom.After(*dateTo) {
+		writeAPIError(w, http.StatusBadRequest, "dateFrom cannot be after dateTo")
+		return
+	}
+	if dateTo.After(dateFrom.AddDate(5, 0, 0)) {
+		writeAPIError(w, http.StatusBadRequest, "Select a date range of five years or less")
+		return
+	}
+	dashboard, err := handler.repo.GetDashboard(r.Context(), *dateFrom, *dateTo)
+	if err != nil {
+		handler.logger.Error("load toll dashboard failed", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "Failed to load toll overview.")
+		return
+	}
+	writeJSON(w, http.StatusOK, dashboard)
 }
 
 func (handler tollHandler) listTolls(w http.ResponseWriter, r *http.Request) {

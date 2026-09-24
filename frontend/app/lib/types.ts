@@ -447,6 +447,22 @@ export interface TollPage extends PaginatedResponse<Toll> {
   summary: { amount: number; truckCount: number };
 }
 
+export interface TollDashboardPoint {
+  label: string;
+  spend: number;
+  transactionCount: number;
+}
+
+export interface TollDashboard {
+  dateFrom: string;
+  dateTo: string;
+  totals: { spend: number; transactionCount: number; truckCount: number };
+  monthly: TollDashboardPoint[];
+  weekly: TollDashboardPoint[];
+  agencies: TollDashboardPoint[];
+  trucks: TollDashboardPoint[];
+}
+
 export interface Expense {
   id: string;
   truckId: string | null;

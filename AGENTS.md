@@ -87,7 +87,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/accounting/`: weekly driver settlement and dispatcher commission
   reports, selected by Monday-start report week.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
-- `frontend/app/tolls/`: toll table and manual PrePass sync UX.
+- `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and Telegram bot activity/review monitoring.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
@@ -201,7 +201,7 @@ browser bundle.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
-- Tolls: `GET /tolls`, `POST /jobs/sync-tolls`
+- Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
 - Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
 - Telegram expenses: `POST /telegram/expenses/webhook` (Telegram-signed, no app
   session), `GET /telegram-expense-updates`,
@@ -223,6 +223,12 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Toll overview aggregates production PrePass and historical imported records by
+  stored posting date (inclusive range, year-to-date default, maximum five years).
+  Credits reduce net spend, weeks begin Monday, and truck breakdowns use source
+  equipment units, including unmatched units. SQL numeric aggregation preserves
+  cent precision. All overview cards and charts share the same date range.
 
 - Paginated fuel and toll transactions derive optional load-coverage flags on
   each read; the existing tables show an icon in their final column. A load
