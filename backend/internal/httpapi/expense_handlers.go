@@ -64,6 +64,10 @@ type expenseRequest struct {
 	AccountingVerified bool    `json:"accountingVerified"`
 }
 
+type telegramExpenseResolutionRequest struct {
+	Expenses []expenseRequest `json:"expenses"`
+}
+
 func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	request.Company = strings.TrimSpace(request.Company)
 	request.Category = strings.TrimSpace(request.Category)
@@ -255,22 +259,30 @@ func (handler expenseHandler) resolveTelegramExpenseUpdate(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	var request expenseRequest
+	var request telegramExpenseResolutionRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	input, err := request.validate()
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if len(request.Expenses) == 0 || len(request.Expenses) > 25 {
+		writeAPIError(w, http.StatusBadRequest, "expenses must contain between 1 and 25 records")
 		return
 	}
-	value, err := handler.repo.ResolveTelegramExpense(r.Context(), updateID, input)
+	inputs := make([]repository.ExpenseInput, 0, len(request.Expenses))
+	for index, expense := range request.Expenses {
+		input, err := expense.validate()
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "expense "+strconv.Itoa(index+1)+": "+err.Error())
+			return
+		}
+		inputs = append(inputs, input)
+	}
+	values, err := handler.repo.ResolveTelegramExpenses(r.Context(), updateID, inputs)
 	if err != nil {
 		handler.writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, value)
+	writeJSON(w, http.StatusCreated, values)
 }
 
 func telegramUpdateID(w http.ResponseWriter, r *http.Request) (int64, bool) {

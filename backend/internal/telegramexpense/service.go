@@ -27,7 +27,7 @@ type Store interface {
 	IgnoreTelegramUpdate(context.Context, int64, string) error
 	ReviewTelegramUpdate(context.Context, int64, string) error
 	StoreTelegramExtraction(context.Context, int64, json.RawMessage) error
-	CompleteTelegramExpense(context.Context, int64, repository.TelegramExpenseDraft) (string, error)
+	CompleteTelegramExpenses(context.Context, int64, []repository.TelegramExpenseDraft) ([]string, error)
 }
 
 type FileDownloader interface {
@@ -57,6 +57,9 @@ func NewService(
 	}
 	if location == nil {
 		location = time.UTC
+	}
+	if logger == nil {
+		logger = slog.Default()
 	}
 	return &Service{
 		store: store, telegram: telegramClient, extractor: extractor,
@@ -188,25 +191,29 @@ func (s *Service) process(ctx context.Context, queued *repository.TelegramExpens
 	if !extraction.IsExpense {
 		return s.store.IgnoreTelegramUpdate(ctx, queued.UpdateID, "Gemini did not identify an expense")
 	}
-	if extraction.ContainsMultipleExpenses {
-		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Message appears to contain multiple expenses")
+	if len(extraction.Expenses) == 0 {
+		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Gemini identified an expense but returned no expense records")
 	}
-	if extraction.Confidence < 0.40 {
-		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Gemini identified an expense with low confidence")
+	drafts := make([]repository.TelegramExpenseDraft, 0, len(extraction.Expenses))
+	for index, extractedExpense := range extraction.Expenses {
+		if extractedExpense.Confidence < 0.40 {
+			return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, fmt.Sprintf("Expense %d has low extraction confidence", index+1))
+		}
+		draft, reason := buildDraft(extractedExpense, input)
+		if reason != "" {
+			return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, fmt.Sprintf("Expense %d: %s", index+1, reason))
+		}
+		drafts = append(drafts, draft)
 	}
-	draft, reason := buildDraft(extraction, input)
-	if reason != "" {
-		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, reason)
-	}
-	expenseID, err := s.store.CompleteTelegramExpense(ctx, queued.UpdateID, draft)
+	expenseIDs, err := s.store.CompleteTelegramExpenses(ctx, queued.UpdateID, drafts)
 	if err != nil {
 		return err
 	}
-	s.logger.Info("Telegram expense created", "update_id", queued.UpdateID, "expense_id", expenseID)
+	s.logger.Info("Telegram expenses created", "update_id", queued.UpdateID, "expense_count", len(expenseIDs), "expense_ids", expenseIDs)
 	return nil
 }
 
-func buildDraft(extraction gemini.ExpenseExtraction, input gemini.ExpenseInput) (repository.TelegramExpenseDraft, string) {
+func buildDraft(extraction gemini.ExpenseItem, input gemini.ExpenseInput) (repository.TelegramExpenseDraft, string) {
 	amount, ok := normalizeAmount(extraction.Amount)
 	if !ok {
 		return repository.TelegramExpenseDraft{}, "expense amount was missing or invalid"

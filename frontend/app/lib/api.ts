@@ -296,8 +296,8 @@ export const retryTelegramExpenseUpdate = (updateId: number) =>
     `/telegram-expense-updates/${updateId}/retry`,
     { method: "POST" },
   );
-export const resolveTelegramExpenseUpdate = (updateId: number, input: ExpenseInput) =>
-  apiRequest<Expense>(`/telegram-expense-updates/${updateId}/resolve`, {
+export const resolveTelegramExpenseUpdate = (updateId: number, expenses: ExpenseInput[]) =>
+  apiRequest<Expense[]>(`/telegram-expense-updates/${updateId}/resolve`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ expenses }),
   });

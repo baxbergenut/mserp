@@ -130,6 +130,11 @@ function normalized(value: string | null | undefined) {
   return (value || "").trim().toLocaleLowerCase();
 }
 
+function primaryExtraction(item: TelegramExpenseActivity) {
+  const extraction = item.extractedData;
+  return extraction?.expenses?.[0] || extraction;
+}
+
 export default function TelegramExpenseActivityPage() {
   const [items, setItems] = useState<TelegramExpenseActivity[]>([]);
   const [summary, setSummary] = useState(emptySummary);
@@ -143,7 +148,8 @@ export default function TelegramExpenseActivityPage() {
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState<TelegramExpenseActivity | null>(null);
-  const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
+  const [reviewForms, setReviewForms] = useState<ExpenseInput[]>([]);
+  const [reviewIndex, setReviewIndex] = useState(0);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [options, setOptions] = useState(emptyOptions);
@@ -221,31 +227,36 @@ export default function TelegramExpenseActivityPage() {
   }
 
   function openReview(item: TelegramExpenseActivity) {
-    const extraction = item.extractedData;
-    const unitNumber = extraction?.unitNumber || item.unitNumber || "";
-    const driverName = extraction?.driverName || item.driverName || "";
-    const truck = trucks.find((value) => normalized(value.unitNumber) === normalized(unitNumber));
-    const driver = drivers.find((value) => normalized(value.fullName) === normalized(driverName));
-    const category = EXPENSE_CATEGORIES.includes(extraction?.category as ExpenseCategory)
-      ? extraction?.category as ExpenseCategory
-      : "Other";
-    setForm({
-      ...emptyExpenseInput,
-      company: extraction?.company || item.company || "MS Express",
-      category,
-      expenseDate: extraction?.expenseDate || item.expenseDate || item.createdAt.slice(0, 10),
-      truckId: truck?.id || null,
-      driverId: driver?.id || null,
-      unitNumber,
-      driverName,
-      amount: extraction?.amount || item.amount || "",
-      paymentType: extraction?.paymentType || "",
-      expenseType: extraction?.expenseType || item.expenseType || "",
-      referenceNumber: extraction?.referenceNumber || "",
-      description: extraction?.description || item.description || item.messageText || "",
-      coveredBy: extraction?.coveredBy || "Company",
-      paidBy: extraction?.paidBy || "",
-    });
+    const candidates = item.extractedData?.expenses?.length
+      ? item.extractedData.expenses
+      : [primaryExtraction(item)];
+    setReviewForms(candidates.map((extraction, index) => {
+      const unitNumber = extraction?.unitNumber || (index === 0 ? item.unitNumber : "") || "";
+      const driverName = extraction?.driverName || (index === 0 ? item.driverName : "") || "";
+      const truck = trucks.find((value) => normalized(value.unitNumber) === normalized(unitNumber));
+      const driver = drivers.find((value) => normalized(value.fullName) === normalized(driverName));
+      const category = EXPENSE_CATEGORIES.includes(extraction?.category as ExpenseCategory)
+        ? extraction?.category as ExpenseCategory
+        : "Other";
+      return {
+        ...emptyExpenseInput,
+        company: extraction?.company || (index === 0 ? item.company : null) || "MS Express",
+        category,
+        expenseDate: extraction?.expenseDate || (index === 0 ? item.expenseDate : null) || item.createdAt.slice(0, 10),
+        truckId: truck?.id || null,
+        driverId: driver?.id || null,
+        unitNumber,
+        driverName,
+        amount: extraction?.amount || (index === 0 ? item.amount : null) || "",
+        paymentType: extraction?.paymentType || "",
+        expenseType: extraction?.expenseType || (index === 0 ? item.expenseType : null) || "",
+        referenceNumber: extraction?.referenceNumber || "",
+        description: extraction?.description || (index === 0 ? item.description : null) || item.messageText || "",
+        coveredBy: extraction?.coveredBy || "Company",
+        paidBy: extraction?.paidBy || "",
+      };
+    }));
+    setReviewIndex(0);
     setReviewing(item);
   }
 
@@ -254,7 +265,7 @@ export default function TelegramExpenseActivityPage() {
     setIsSaving(true);
     setError("");
     try {
-      await resolveTelegramExpenseUpdate(reviewing.updateId, form);
+      await resolveTelegramExpenseUpdate(reviewing.updateId, reviewForms);
       setReviewing(null);
       await loadData(true);
     } catch (reason) {
@@ -333,8 +344,9 @@ export default function TelegramExpenseActivityPage() {
             </thead>
             <tbody>
               {items.map((item) => {
-                const extraction = item.extractedData;
-                const isMissingExpense = item.status === "completed" && !item.expenseId;
+                const extraction = primaryExtraction(item);
+                const expenseCount = item.expenseCount || (item.expenseId ? 1 : 0);
+                const isMissingExpense = item.status === "completed" && expenseCount === 0;
                 const canRetry = isMissingExpense || ["retry", "ignored", "failed"].includes(item.status);
                 const unitNumber = item.unitNumber || extraction?.unitNumber;
                 const driverName = item.driverName || extraction?.driverName;
@@ -362,6 +374,7 @@ export default function TelegramExpenseActivityPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-mono font-medium text-zinc-100">{formatMoney(amount ?? null)}</div>
+                      {expenseCount > 1 && <div className="mt-1 text-[11px] font-medium text-blue-400">+ {expenseCount - 1} more expense{expenseCount === 2 ? "" : "s"}</div>}
                       <div className="mt-1 text-[11px] text-zinc-500">{item.category || extraction?.category || "Unclassified"} · {item.expenseType || extraction?.expenseType || "Unknown type"}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -381,7 +394,7 @@ export default function TelegramExpenseActivityPage() {
                       ) : item.status === "completed" ? (
                         <div className="flex items-start gap-2 text-emerald-400">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span>{item.description || extraction?.description || "Expense created"}</span>
+                          <span>{expenseCount > 1 ? `${expenseCount} expenses created` : item.description || extraction?.description || "Expense created"}</span>
                         </div>
                       ) : item.lastError ? (
                         <div className="flex items-start gap-2 text-amber-300">
@@ -414,9 +427,10 @@ export default function TelegramExpenseActivityPage() {
                           Retry
                         </button>
                       ) : item.status === "completed" ? (
-                        <span className="font-mono text-[11px] text-zinc-600" title={item.expenseId || undefined}>
-                          {item.expenseId?.slice(0, 8)}
-                        </span>
+                        <div className="text-right">
+                          <div className="font-mono text-[11px] text-zinc-600" title={item.expenseId || undefined}>{item.expenseId?.slice(0, 8)}</div>
+                          {expenseCount > 1 && <div className="mt-1 text-[11px] text-blue-400">{expenseCount} linked</div>}
+                        </div>
                       ) : (
                         <SearchX className="ml-auto h-4 w-4 text-zinc-700" />
                       )}
@@ -443,19 +457,33 @@ export default function TelegramExpenseActivityPage() {
       {reviewing && (
         <Modal
           title="Review Telegram expense"
-          description={`Confirm or correct the extracted fields from message ${reviewing.messageId}. Saving creates the expense and closes this review item.`}
+          description={`Confirm or correct the extracted fields from message ${reviewing.messageId}. Saving creates ${reviewForms.length === 1 ? "the expense" : `all ${reviewForms.length} expenses`} and closes this review item.`}
           isSaving={isSaving}
-          submitLabel="Create expense"
+          submitLabel={reviewForms.length === 1 ? "Create expense" : `Create ${reviewForms.length} expenses`}
           onClose={() => setReviewing(null)}
           onSubmit={(event) => { event.preventDefault(); void saveReview(); }}
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+          {reviewForms.length > 1 && (
+            <div className="mb-4 flex flex-wrap gap-2" aria-label="Extracted expenses">
+              {reviewForms.map((value, index) => (
+                <button
+                  key={`${index}-${value.amount}-${value.expenseType}`}
+                  type="button"
+                  onClick={() => setReviewIndex(index)}
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] transition ${reviewIndex === index ? "border-blue-500/40 bg-blue-500/10 text-blue-300" : "border-zinc-800 text-zinc-500 hover:text-zinc-200"}`}
+                >
+                  Expense {index + 1}{value.amount ? ` · ${formatMoney(value.amount)}` : ""}
+                </button>
+              ))}
+            </div>
+          )}
           <ExpenseForm
-            value={form}
+            value={reviewForms[reviewIndex] || emptyExpenseInput}
             options={options}
             drivers={drivers}
             trucks={trucks}
-            onChange={setForm}
+            onChange={(value) => setReviewForms((current) => current.map((form, index) => index === reviewIndex ? value : form))}
           />
         </Modal>
       )}

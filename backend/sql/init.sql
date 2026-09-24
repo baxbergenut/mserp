@@ -421,4 +421,16 @@ CREATE INDEX telegram_expense_updates_expense_idx
 CREATE INDEX telegram_expense_updates_status_created_idx
     ON telegram_expense_updates (status, created_at DESC);
 
+-- A single Telegram message may contain several independent expenses. The
+-- ordered links keep batch insertion idempotent while expense_id above remains
+-- the first expense for compatibility with older releases.
+CREATE TABLE telegram_expense_update_expenses (
+    update_id     BIGINT NOT NULL REFERENCES telegram_expense_updates(update_id) ON DELETE CASCADE,
+    expense_index INTEGER NOT NULL CHECK (expense_index >= 0),
+    expense_id    UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (update_id, expense_index),
+    UNIQUE (expense_id)
+);
+
 COMMIT;
