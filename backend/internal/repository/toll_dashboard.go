@@ -55,12 +55,15 @@ WITH agency_states(agency, state) AS (
 		('NTTA', 'TX'), ('HCTRA', 'TX'), ('CTRMA', 'TX'), ('FBCTRA', 'TX'),
 		('KTA', 'KS'), ('OTA', 'OK'), ('COEXP', 'CO')
 ), filtered AS (
-	SELECT posting_date, amount, equipment_unit, agency
+	SELECT posting_date, amount, equipment_unit, agency, toll_agency_state
 	FROM tolls
 	WHERE posting_date BETWEEN $1::date AND $2::date
 		AND (prepass_environment IS NULL OR prepass_environment = 'production')
 ), geography AS (
-	SELECT COALESCE(s.state, '') AS state, f.agency, f.amount
+	SELECT CASE
+		WHEN NULLIF(trim(f.toll_agency_state), '') IS NULL THEN COALESCE(s.state, '')
+		WHEN upper(trim(f.toll_agency_state)) = ANY(string_to_array('AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY', ' ')) THEN upper(trim(f.toll_agency_state))
+		ELSE '' END AS state, f.agency, f.amount
 	FROM filtered f LEFT JOIN agency_states s ON s.agency = upper(trim(f.agency))
 ), monthly AS (
 	SELECT date_trunc('month', posting_date)::date AS period,

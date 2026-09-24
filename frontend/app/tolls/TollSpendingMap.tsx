@@ -87,10 +87,10 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
           </div>
         </div>
       </div>
-      <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">State locations are inferred from verified single-state toll agencies. Cross-state agencies and unknown codes are listed below instead of being assigned to a state.</p>
+      <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">Uses the toll agency state supplied by PrePass. Older records without a state use verified single-state agency locations. Records that still cannot be located are listed below.</p>
       {unmappedCount > 0 && (
         <details className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px]">
-          <summary className="cursor-pointer text-amber-200/80">Cross-state / unmapped: {money.format(unmappedCents / 100)} · {unmappedCount.toLocaleString()} transactions</summary>
+          <summary className="cursor-pointer text-amber-200/80">Unmapped location: {money.format(unmappedCents / 100)} · {unmappedCount.toLocaleString()} transactions</summary>
           <div className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {[...dashboard.unmapped].sort((a, b) => b.spend - a.spend).map((point) => <div key={point.label} className="flex justify-between gap-3 py-1 text-zinc-400"><span>{point.label || "Unknown agency"}</span><span className="font-mono">{money.format(point.spend)}</span></div>)}
           </div>

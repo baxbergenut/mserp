@@ -430,6 +430,10 @@ export interface Toll {
   transponderOrPlate: string;
   equipmentUnit: string;
   agency: string;
+  tollAgencyState: string | null;
+  tollAgencyName: string | null;
+  entryPlazaName: string | null;
+  exitPlazaName: string | null;
   entryPlaza: string | null;
   entryDate: string | null;
   entryTime: string | null;

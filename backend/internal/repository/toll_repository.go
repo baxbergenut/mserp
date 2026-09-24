@@ -37,6 +37,10 @@ type Toll struct {
 	TransponderOrPlate string           `json:"transponderOrPlate"`
 	EquipmentUnit      string           `json:"equipmentUnit"`
 	Agency             string           `json:"agency"`
+	TollAgencyState    *string          `json:"tollAgencyState"`
+	TollAgencyName     *string          `json:"tollAgencyName"`
+	EntryPlazaName     *string          `json:"entryPlazaName"`
+	ExitPlazaName      *string          `json:"exitPlazaName"`
 	EntryPlaza         *string          `json:"entryPlaza"`
 	EntryDate          *string          `json:"entryDate"`
 	EntryTime          *string          `json:"entryTime"`
@@ -100,7 +104,7 @@ func (r *TollRepository) ListTollsPage(ctx context.Context, query TollPageQuery)
 		LEFT JOIN toll_reports report ON report.id = t.report_id`
 	const where = `
 	WHERE ($1 = '' OR concat_ws(' ', COALESCE(tr.unit_number, t.equipment_unit),
-		t.agency, t.entry_plaza, t.exit_plaza, t.prepass_tag_id,
+		t.agency, t.toll_agency_state, t.toll_agency_name, t.entry_plaza, t.entry_plaza_name, t.exit_plaza, t.exit_plaza_name, t.prepass_tag_id,
 		t.transponder_or_plate, COALESCE(report.file_name, 'PrePass API'))
 		ILIKE '%' || $1 || '%')
 	AND ($2 = '' OR COALESCE(tr.unit_number, t.equipment_unit) = $2)
@@ -170,7 +174,8 @@ SELECT t.id, t.truck_id, COALESCE(tr.unit_number, t.equipment_unit),
 	to_char(t.entry_date, 'YYYY-MM-DD'), to_char(t.entry_time, 'HH24:MI:SS'),
 	t.exit_plaza, to_char(t.exit_date, 'YYYY-MM-DD'),
 	to_char(t.exit_time, 'HH24:MI:SS'), t.toll_class,
-	t.miles::float8, t.amount::float8, COALESCE(report.file_name, 'PrePass API')
+	t.miles::float8, t.amount::float8, COALESCE(report.file_name, 'PrePass API'),
+	t.toll_agency_state, t.toll_agency_name, t.entry_plaza_name, t.exit_plaza_name
 FROM tolls t
 LEFT JOIN trucks tr ON tr.id = t.truck_id
 LEFT JOIN toll_reports report ON report.id = t.report_id`
@@ -185,6 +190,7 @@ func scanToll(row rowScanner) (Toll, error) {
 		&value.EntryPlaza, &value.EntryDate, &value.EntryTime,
 		&value.ExitPlaza, &value.ExitDate, &value.ExitTime,
 		&value.TollClass, &value.Miles, &value.Amount, &value.ReportFileName,
+		&value.TollAgencyState, &value.TollAgencyName, &value.EntryPlazaName, &value.ExitPlazaName,
 	)
 	return value, err
 }
@@ -289,6 +295,9 @@ func (r *TollRepository) UpsertDay(
 			)
 		}
 		result.Saved++
+		if _, err := tx.Exec(ctx, updateTollLocationSQL, tollLocationArgs(environment, transaction, syncedAt)...); err != nil {
+			return TollSyncDayResult{}, fmt.Errorf("save PrePass toll location: %w", err)
+		}
 	}
 
 	if markComplete {

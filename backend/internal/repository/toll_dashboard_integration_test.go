@@ -42,6 +42,9 @@ func TestTollDashboardDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE pg_temp.tolls ADD COLUMN toll_agency_state text`); err != nil {
+		t.Fatal(err)
+	}
 	date := func(value string) time.Time {
 		parsed, err := time.Parse(time.DateOnly, value)
 		if err != nil {
@@ -95,10 +98,10 @@ func TestTollDashboardDatabase(t *testing.T) {
 		t.Fatal("empty geography must serialize as arrays")
 	}
 	_, err = pool.Exec(ctx, `TRUNCATE pg_temp.tolls;
-		INSERT INTO pg_temp.tolls
+		INSERT INTO pg_temp.tolls (posting_date,amount,equipment_unit,agency,prepass_environment)
 		SELECT '2026-01-01', 1, n::text, code, 'production'
 		FROM unnest(ARRAY['PTC','WVPEDTA','ILTOLL','ITRCC','OTC','MDTA','NYSTA','NJTP','NTTA','CFX','NCTA','VDOT']) WITH ORDINALITY AS codes(code,n);
-		INSERT INTO pg_temp.tolls VALUES ('2026-01-01', 2, '99', 'NEW-AGENCY', 'production');`)
+		INSERT INTO pg_temp.tolls (posting_date,amount,equipment_unit,agency,prepass_environment) VALUES ('2026-01-01', 2, '99', 'NEW-AGENCY', 'production');`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,5 +111,20 @@ func TestTollDashboardDatabase(t *testing.T) {
 	}
 	if len(all.Agencies) != 10 || len(all.States) != 12 || len(all.Unmapped) != 1 || all.Unmapped[0].Spend != 2 {
 		t.Fatalf("map must include agencies outside the top ten: %+v", all)
+	}
+	_, err = pool.Exec(ctx, `TRUNCATE pg_temp.tolls;
+		INSERT INTO pg_temp.tolls VALUES
+		('2026-01-01', 10, '1', 'PTC', 'production', 'NY'),
+		('2026-01-01', 20, '2', 'RIVE', 'production', 'KY'),
+		('2026-01-01', 30, '3', 'NEW', 'production', 'XX');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := repo.GetDashboard(ctx, date("2026-01-01"), date("2026-01-01"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(source.States) != 2 || source.States[0].Label != "KY" || source.States[0].Spend != 20 || source.States[1].Label != "NY" || source.States[1].Spend != 10 || len(source.Unmapped) != 1 || source.Unmapped[0].Spend != 30 {
+		t.Fatalf("source state must win over inferred state: %+v", source)
 	}
 }

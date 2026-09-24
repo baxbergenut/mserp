@@ -45,8 +45,10 @@ function formatDate(value: string | null) {
 }
 
 function routeLabel(toll: Toll) {
-  if (!toll.entryPlaza) return toll.exitPlaza;
-  return `${toll.entryPlaza} → ${toll.exitPlaza}`;
+  const entry = toll.entryPlazaName || toll.entryPlaza;
+  const exit = toll.exitPlazaName || toll.exitPlaza;
+  if (!entry) return exit;
+  return `${entry} → ${exit}`;
 }
 
 export default function TollsPage() {
@@ -256,8 +258,8 @@ export default function TollsPage() {
                     <div className="mt-0.5 font-mono text-[11px] tabular-nums text-zinc-600">{formatDate(toll.exitDate)} {toll.exitTime}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-zinc-300">{toll.agency}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">{toll.source}</div>
+                    <div className="text-zinc-300">{toll.agency}{toll.tollAgencyState ? ` · ${toll.tollAgencyState}` : ""}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-600">{toll.tollAgencyName || toll.source}</div>
                   </td>
                   <td className="px-4 py-3 text-zinc-400">
                     Class {toll.tollClass}{toll.miles !== null ? ` · ${toll.miles.toLocaleString()} mi` : ""}

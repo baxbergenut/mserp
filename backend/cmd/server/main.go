@@ -31,6 +31,7 @@ import (
 
 func main() {
 	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
+	backfillTollLocations := flag.Bool("backfill-toll-locations", false, "refresh current-year PrePass location metadata and exit")
 	flag.Parse()
 	_ = godotenv.Load(".env.relay.local", ".env.local", ".env", "/etc/mserp/mserp.env")
 
@@ -86,6 +87,15 @@ func main() {
 		cfg.PrePassClientID,
 		cfg.PrePassClientSecret,
 	)
+	if *backfillTollLocations {
+		backfillCtx, cancel := context.WithTimeout(ctx, 45*time.Minute)
+		defer cancel()
+		if err := jobs.BackfillTollLocations(backfillCtx, prePassClient, tollRepo, cfg.PrePassEnvironment, time.Now().UTC(), logger); err != nil {
+			logger.Error("toll location backfill failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	tollJob := jobs.NewSyncTollsJob(
 		prePassClient,
 		tollRepo,

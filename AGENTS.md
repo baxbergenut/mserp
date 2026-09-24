@@ -75,7 +75,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `019_fix_telegram_multi_expense_table_owner.sql`:
+  `020_add_toll_locations.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -229,10 +229,15 @@ assignment lookup lists.
   Credits reduce net spend, weeks begin Monday, and truck breakdowns use source
   equipment units, including unmatched units. SQL numeric aggregation preserves
   cent precision. All overview cards and charts share the same date range.
-  The state spending map infers geography only from verified single-state toll
-  agencies; cross-state and unknown agencies stay in an explicit unmapped bucket.
+  The state spending map uses PrePass `tollAgencyState` first; only records
+  without source state fall back to verified single-state agency locations.
+  Unrecognized states and unresolved agencies stay in an explicit unmapped bucket.
   Never infer toll location from truck registration, fleet assignments, or the
   billing network. Agency mapping sources live beside the dashboard query.
+  Toll sync preserves agency state/name and entry/exit plaza names separately
+  from plaza codes. `-backfill-toll-locations` refreshes existing current-year
+  toll location metadata in 31-day API windows without changing amounts,
+  assignments, or completed sync days; it exits without HTTP or scheduled jobs.
 
 - Paginated fuel and toll transactions derive optional load-coverage flags on
   each read; the existing tables show an icon in their final column. A load
