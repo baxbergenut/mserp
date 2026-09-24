@@ -17,6 +17,7 @@ type testStore struct {
 	ignoredReason string
 	stored        json.RawMessage
 	completed     int
+	drafts        []repository.TelegramExpenseDraft
 }
 
 func (s *testStore) EnqueueTelegramUpdate(_ context.Context, _, chatID, _ int64, _ string, _ []byte) (bool, error) {
@@ -40,9 +41,11 @@ func (s *testStore) StoreTelegramExtraction(_ context.Context, _ int64, value js
 	s.stored = value
 	return nil
 }
-func (s *testStore) CompleteTelegramExpense(context.Context, int64, repository.TelegramExpenseDraft) (string, error) {
+func (s *testStore) CompleteTelegramExpenses(_ context.Context, _ int64, drafts []repository.TelegramExpenseDraft) ([]string, error) {
 	s.completed++
-	return "", nil
+	s.drafts = append(s.drafts, drafts...)
+	ids := make([]string, len(drafts))
+	return ids, nil
 }
 
 type testDownloader struct{}
@@ -90,8 +93,8 @@ func TestBuildDraftDefaultsAndNormalizes(t *testing.T) {
 	amount := "$1,234.5"
 	badDate := "not-a-date"
 	category := "Maintenance"
-	draft, reason := buildDraft(gemini.ExpenseExtraction{
-		IsExpense: true, Confidence: 0.9, Amount: &amount, ExpenseDate: &badDate, Category: &category,
+	draft, reason := buildDraft(gemini.ExpenseItem{
+		Confidence: 0.9, Amount: &amount, ExpenseDate: &badDate, Category: &category,
 	}, gemini.ExpenseInput{Text: "oil change", MessageDate: time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)})
 	if reason != "" {
 		t.Fatal(reason)
@@ -104,10 +107,16 @@ func TestBuildDraftDefaultsAndNormalizes(t *testing.T) {
 	}
 }
 
-func TestProcessRoutesMultipleExpensesToReview(t *testing.T) {
+func TestProcessCreatesMultipleExpensesAsOneAtomicBatch(t *testing.T) {
+	firstAmount, secondAmount := "15.00", "30.00"
+	firstType, secondType := "Scale", "Permit"
 	store := &testStore{}
 	service := NewService(store, testDownloader{}, testExtractor{value: gemini.ExpenseExtraction{
-		IsExpense: true, ContainsMultipleExpenses: true, Confidence: 0.95,
+		IsExpense: true,
+		Expenses: []gemini.ExpenseItem{
+			{Confidence: 0.95, Amount: &firstAmount, ExpenseType: &firstType},
+			{Confidence: 0.93, Amount: &secondAmount, ExpenseType: &secondType},
+		},
 	}}, nil, time.UTC, nil)
 	queued := &repository.TelegramExpenseUpdate{
 		UpdateID: 11,
@@ -117,8 +126,34 @@ func TestProcessRoutesMultipleExpensesToReview(t *testing.T) {
 	if err := service.process(context.Background(), queued); err != nil {
 		t.Fatal(err)
 	}
-	if store.reviewReason == "" || store.completed != 0 || len(store.stored) == 0 {
-		t.Fatalf("review=%q completed=%d stored=%s", store.reviewReason, store.completed, store.stored)
+	if store.reviewReason != "" || store.completed != 1 || len(store.drafts) != 2 || len(store.stored) == 0 {
+		t.Fatalf("review=%q completed=%d drafts=%d stored=%s", store.reviewReason, store.completed, len(store.drafts), store.stored)
+	}
+	if store.drafts[0].Amount != "15.00" || store.drafts[1].Amount != "30.00" {
+		t.Fatalf("drafts = %#v", store.drafts)
+	}
+}
+
+func TestProcessDoesNotPartiallyInsertLowConfidenceBatch(t *testing.T) {
+	firstAmount, secondAmount := "15.00", "30.00"
+	store := &testStore{}
+	service := NewService(store, testDownloader{}, testExtractor{value: gemini.ExpenseExtraction{
+		IsExpense: true,
+		Expenses: []gemini.ExpenseItem{
+			{Confidence: 0.95, Amount: &firstAmount},
+			{Confidence: 0.20, Amount: &secondAmount},
+		},
+	}}, nil, time.UTC, nil)
+	queued := &repository.TelegramExpenseUpdate{
+		UpdateID: 13,
+		Payload:  json.RawMessage(`{"update_id":13,"message":{"message_id":24,"date":1,"chat":{"id":-7,"type":"group"},"text":"scale $15 and permit $30"}}`),
+	}
+
+	if err := service.process(context.Background(), queued); err != nil {
+		t.Fatal(err)
+	}
+	if store.reviewReason == "" || store.completed != 0 || len(store.drafts) != 0 {
+		t.Fatalf("review=%q completed=%d drafts=%d", store.reviewReason, store.completed, len(store.drafts))
 	}
 }
 

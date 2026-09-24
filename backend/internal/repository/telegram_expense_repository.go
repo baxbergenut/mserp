@@ -52,6 +52,7 @@ type TelegramExpenseActivity struct {
 	LastError     *string         `json:"lastError"`
 	ExtractedData json.RawMessage `json:"extractedData"`
 	ExpenseID     *string         `json:"expenseId"`
+	ExpenseCount  int             `json:"expenseCount"`
 	ExpenseDate   *string         `json:"expenseDate"`
 	Company       *string         `json:"company"`
 	Category      *string         `json:"category"`
@@ -188,6 +189,10 @@ func (r *ExpenseRepository) RetryTelegramUpdateNow(ctx context.Context, updateID
 			completed_at = NULL, last_error = NULL, updated_at = now()
 		WHERE update_id = $1
 			AND expense_id IS NULL
+			AND NOT EXISTS (
+				SELECT 1 FROM telegram_expense_update_expenses l
+				WHERE l.update_id = telegram_expense_updates.update_id
+			)
 			AND (
 				status IN ('queued', 'retry', 'ignored', 'needs_review', 'failed')
 				OR status = 'completed'
@@ -195,51 +200,75 @@ func (r *ExpenseRepository) RetryTelegramUpdateNow(ctx context.Context, updateID
 	return err == nil && command.RowsAffected() == 1, err
 }
 
-func (r *ExpenseRepository) ResolveTelegramExpense(
+func (r *ExpenseRepository) ResolveTelegramExpenses(
 	ctx context.Context,
 	updateID int64,
-	input ExpenseInput,
-) (Expense, error) {
+	inputs []ExpenseInput,
+) ([]Expense, error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("at least one reviewed expense is required")
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return Expense{}, err
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	var status string
 	var existingID *string
 	if err := tx.QueryRow(ctx, `
-		SELECT status, expense_id
+		SELECT expense_id
 		FROM telegram_expense_updates
 		WHERE update_id = $1
-		FOR UPDATE`, updateID).Scan(&status, &existingID); err != nil {
-		return Expense{}, mapNotFound(err)
+		FOR UPDATE`, updateID).Scan(&existingID); err != nil {
+		return nil, mapNotFound(err)
 	}
-	if status == "completed" && existingID != nil {
-		if err := tx.Commit(ctx); err != nil {
-			return Expense{}, err
-		}
-		return r.GetExpense(ctx, *existingID)
-	}
-	if existingID != nil {
-		return Expense{}, errors.New("Telegram update is already linked to an expense")
-	}
-
-	expenseID, err := insertExpense(ctx, tx, input)
+	expenseIDs, err := telegramExpenseIDs(ctx, tx, updateID)
 	if err != nil {
-		return Expense{}, err
+		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE telegram_expense_updates
-		SET status = 'completed', expense_id = $2, completed_at = now(),
-			last_error = NULL, updated_at = now()
-		WHERE update_id = $1`, updateID, expenseID); err != nil {
-		return Expense{}, err
+	if len(expenseIDs) == 0 && existingID != nil {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO telegram_expense_update_expenses (update_id, expense_index, expense_id)
+			VALUES ($1, 0, $2)
+			ON CONFLICT DO NOTHING`, updateID, *existingID); err != nil {
+			return nil, err
+		}
+		expenseIDs = []string{*existingID}
+	}
+	if len(expenseIDs) == 0 {
+		expenseIDs = make([]string, 0, len(inputs))
+		for index, input := range inputs {
+			expenseID, err := insertExpense(ctx, tx, input)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO telegram_expense_update_expenses (update_id, expense_index, expense_id)
+				VALUES ($1, $2, $3)`, updateID, index, expenseID); err != nil {
+				return nil, err
+			}
+			expenseIDs = append(expenseIDs, expenseID)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE telegram_expense_updates
+			SET status = 'completed', expense_id = $2, completed_at = now(),
+				last_error = NULL, updated_at = now()
+			WHERE update_id = $1`, updateID, expenseIDs[0]); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return Expense{}, err
+		return nil, err
 	}
-	return r.GetExpense(ctx, expenseID)
+	values := make([]Expense, 0, len(expenseIDs))
+	for _, expenseID := range expenseIDs {
+		value, err := r.GetExpense(ctx, expenseID)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
 }
 
 func (r *ExpenseRepository) ListTelegramExpenseActivities(
@@ -259,15 +288,23 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 			u.raw_update #>> '{message,text}',
 			u.raw_update #>> '{message,caption}',
 			u.raw_update #>> '{message,document,file_name}',
-			e.company, e.category, e.unit_number, e.driver_name, e.amount::text,
-			e.expense_type, e.description, u.last_error
-		) ILIKE '%' || $2 || '%')`
+			u.last_error
+		) ILIKE '%' || $2 || '%'
+		OR EXISTS (
+			SELECT 1
+			FROM telegram_expense_update_expenses search_link
+			JOIN expenses search_expense ON search_expense.id = search_link.expense_id
+			WHERE search_link.update_id = u.update_id
+				AND concat_ws(' ', search_expense.company, search_expense.category,
+					search_expense.unit_number, search_expense.driver_name, search_expense.amount::text,
+					search_expense.expense_type, search_expense.description
+				) ILIKE '%' || $2 || '%'
+		))`
 
 	var total int
 	if err := r.pool.QueryRow(ctx, `
 		SELECT count(*)
-		FROM telegram_expense_updates u
-		LEFT JOIN expenses e ON e.id = u.expense_id `+where, status, search).Scan(&total); err != nil {
+		FROM telegram_expense_updates u `+where, status, search).Scan(&total); err != nil {
 		return TelegramExpenseActivityPage{}, err
 	}
 	pagination = pagination.Normalize(total)
@@ -293,13 +330,24 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 			), ''),
 			nullif(u.raw_update #>> '{message,media_group_id}', ''),
 			u.status, u.attempts, u.next_attempt_at, u.started_at, u.completed_at,
-			u.last_error, u.extracted_data, u.expense_id,
+			u.last_error, u.extracted_data, primary_expense.expense_id,
+			(SELECT count(*) FROM telegram_expense_update_expenses count_link
+			 JOIN expenses count_expense ON count_expense.id = count_link.expense_id
+			 WHERE count_link.update_id = u.update_id),
 			to_char(e.expense_date, 'YYYY-MM-DD'), e.company, e.category, e.amount::text,
 			coalesce(t.unit_number, e.unit_number), coalesce(d.full_name, e.driver_name),
 			e.truck_id, e.driver_id, e.expense_type, e.description,
 			u.created_at, u.updated_at
 		FROM telegram_expense_updates u
-		LEFT JOIN expenses e ON e.id = u.expense_id
+		LEFT JOIN LATERAL (
+			SELECT l.expense_id
+			FROM telegram_expense_update_expenses l
+			JOIN expenses linked_expense ON linked_expense.id = l.expense_id
+			WHERE l.update_id = u.update_id
+			ORDER BY l.expense_index
+			LIMIT 1
+		) primary_expense ON true
+		LEFT JOIN expenses e ON e.id = primary_expense.expense_id
 		LEFT JOIN trucks t ON t.id = e.truck_id
 		LEFT JOIN drivers d ON d.id = e.driver_id `+where+`
 		ORDER BY u.created_at DESC, u.update_id DESC
@@ -317,7 +365,7 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 			&item.ChatTitle, &item.SenderName, &item.MessageText, &item.FileName,
 			&item.MIMEType, &item.MediaGroupID, &item.Status, &item.Attempts,
 			&item.NextAttemptAt, &item.StartedAt, &item.CompletedAt, &item.LastError,
-			&extracted, &item.ExpenseID, &item.ExpenseDate, &item.Company,
+			&extracted, &item.ExpenseID, &item.ExpenseCount, &item.ExpenseDate, &item.Company,
 			&item.Category, &item.Amount, &item.UnitNumber, &item.DriverName,
 			&item.TruckID, &item.DriverID, &item.ExpenseType, &item.Description,
 			&item.CreatedAt, &item.UpdatedAt,
@@ -337,19 +385,34 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
 			count(*) FILTER (WHERE u.created_at >= now() - interval '24 hours'),
-			count(*) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NOT NULL),
+			count(*) FILTER (WHERE u.status = 'completed' AND EXISTS (
+				SELECT 1 FROM telegram_expense_update_expenses l
+				JOIN expenses e ON e.id = l.expense_id
+				WHERE l.update_id = u.update_id
+			)),
 			count(*) FILTER (WHERE u.status IN ('queued', 'processing', 'retry')),
 			count(*) FILTER (WHERE u.status = 'needs_review'),
 			count(*) FILTER (WHERE u.status = 'ignored'),
 			count(*) FILTER (WHERE u.status = 'failed'),
-			count(*) FILTER (WHERE u.status = 'completed' AND (
-				(e.unit_number IS NOT NULL AND e.truck_id IS NULL)
-				OR (e.driver_name IS NOT NULL AND e.driver_id IS NULL)
+			count(*) FILTER (WHERE u.status = 'completed' AND EXISTS (
+				SELECT 1 FROM telegram_expense_update_expenses l
+				JOIN expenses e ON e.id = l.expense_id
+				WHERE l.update_id = u.update_id AND (
+					(e.unit_number IS NOT NULL AND e.truck_id IS NULL)
+					OR (e.driver_name IS NOT NULL AND e.driver_id IS NULL)
+				)
 			)),
-			count(*) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NULL),
-			max(u.completed_at) FILTER (WHERE u.status = 'completed' AND u.expense_id IS NOT NULL)
-		FROM telegram_expense_updates u
-		LEFT JOIN expenses e ON e.id = u.expense_id`).Scan(
+			count(*) FILTER (WHERE u.status = 'completed' AND NOT EXISTS (
+				SELECT 1 FROM telegram_expense_update_expenses l
+				JOIN expenses e ON e.id = l.expense_id
+				WHERE l.update_id = u.update_id
+			)),
+			max(u.completed_at) FILTER (WHERE u.status = 'completed' AND EXISTS (
+				SELECT 1 FROM telegram_expense_update_expenses l
+				JOIN expenses e ON e.id = l.expense_id
+				WHERE l.update_id = u.update_id
+			))
+		FROM telegram_expense_updates u`).Scan(
 		&summary.Received24Hours, &summary.Completed, &summary.InProgress,
 		&summary.NeedsReview, &summary.Ignored, &summary.Failed,
 		&summary.Unmatched, &summary.MissingExpense, &summary.LastCompletedAt,
@@ -363,30 +426,92 @@ func (r *ExpenseRepository) ListTelegramExpenseActivities(
 	}, nil
 }
 
-func (r *ExpenseRepository) CompleteTelegramExpense(
+func (r *ExpenseRepository) CompleteTelegramExpenses(
 	ctx context.Context,
 	updateID int64,
-	draft TelegramExpenseDraft,
-) (string, error) {
+	drafts []TelegramExpenseDraft,
+) ([]string, error) {
+	if len(drafts) == 0 {
+		return nil, errors.New("at least one Telegram expense is required")
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	var status string
 	var existingID *string
 	if err := tx.QueryRow(ctx, `
-		SELECT status, expense_id
+		SELECT expense_id
 		FROM telegram_expense_updates
 		WHERE update_id = $1
-		FOR UPDATE`, updateID).Scan(&status, &existingID); err != nil {
-		return "", err
-	}
-	if status == "completed" && existingID != nil {
-		return *existingID, tx.Commit(ctx)
+		FOR UPDATE`, updateID).Scan(&existingID); err != nil {
+		return nil, err
 	}
 
+	existingIDs, err := telegramExpenseIDs(ctx, tx, updateID)
+	if err != nil {
+		return nil, err
+	}
+	if len(existingIDs) > 0 {
+		return existingIDs, tx.Commit(ctx)
+	}
+	if existingID != nil {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO telegram_expense_update_expenses (update_id, expense_index, expense_id)
+			VALUES ($1, 0, $2)
+			ON CONFLICT DO NOTHING`, updateID, *existingID); err != nil {
+			return nil, err
+		}
+		return []string{*existingID}, tx.Commit(ctx)
+	}
+
+	expenseIDs := make([]string, 0, len(drafts))
+	for index, draft := range drafts {
+		expenseID, err := insertTelegramExpenseDraft(ctx, tx, draft)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO telegram_expense_update_expenses (update_id, expense_index, expense_id)
+			VALUES ($1, $2, $3)`, updateID, index, expenseID); err != nil {
+			return nil, err
+		}
+		expenseIDs = append(expenseIDs, expenseID)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE telegram_expense_updates
+		SET status = 'completed', expense_id = $2, completed_at = now(),
+			last_error = NULL, updated_at = now()
+		WHERE update_id = $1`, updateID, expenseIDs[0]); err != nil {
+		return nil, err
+	}
+	return expenseIDs, tx.Commit(ctx)
+}
+
+func telegramExpenseIDs(ctx context.Context, tx pgx.Tx, updateID int64) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT l.expense_id
+		FROM telegram_expense_update_expenses l
+		JOIN expenses e ON e.id = l.expense_id
+		WHERE l.update_id = $1
+		ORDER BY l.expense_index`, updateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func insertTelegramExpenseDraft(ctx context.Context, tx pgx.Tx, draft TelegramExpenseDraft) (string, error) {
 	truckID, driverID, err := resolveTelegramExpenseLinks(ctx, tx, draft.UnitNumber, draft.DriverName)
 	if err != nil {
 		return "", err
@@ -410,14 +535,7 @@ func (r *ExpenseRepository) CompleteTelegramExpense(
 	if err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE telegram_expense_updates
-		SET status = 'completed', expense_id = $2, completed_at = now(),
-			last_error = NULL, updated_at = now()
-		WHERE update_id = $1`, updateID, expenseID); err != nil {
-		return "", err
-	}
-	return expenseID, tx.Commit(ctx)
+	return expenseID, nil
 }
 
 func resolveTelegramExpenseLinks(

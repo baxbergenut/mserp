@@ -523,9 +523,7 @@ export type TelegramExpenseStatus =
   | "needs_review"
   | "failed";
 
-export interface TelegramExpenseExtraction {
-  isExpense: boolean;
-  containsMultipleExpenses: boolean;
+export interface TelegramExpenseCandidate {
   confidence: number;
   company: string | null;
   category: string | null;
@@ -540,6 +538,12 @@ export interface TelegramExpenseExtraction {
   coveredBy: string | null;
   paidBy: string | null;
   evidence: string[];
+}
+
+export interface TelegramExpenseExtraction extends Partial<TelegramExpenseCandidate> {
+  isExpense: boolean;
+  expenses?: TelegramExpenseCandidate[];
+  containsMultipleExpenses?: boolean;
 }
 
 export interface TelegramExpenseActivity {
@@ -561,6 +565,7 @@ export interface TelegramExpenseActivity {
   lastError: string | null;
   extractedData: TelegramExpenseExtraction | null;
   expenseId: string | null;
+  expenseCount: number;
   expenseDate: string | null;
   company: string | null;
   category: string | null;

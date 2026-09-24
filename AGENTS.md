@@ -75,7 +75,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `017_add_telegram_expense_monitoring.sql`:
+  `018_add_telegram_multi_expense_links.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -267,7 +267,9 @@ assignment lookup lists.
   foreign keys while raw extracted names/units remain available when unmatched.
   Gemini capacity/quota responses use a compatible Flash fallback before the
   queue's non-expiring, capped retry backoff so upstream outages or daily quota
-  resets cannot drop a Telegram expense. Low-confidence, multi-expense,
+  resets cannot drop a Telegram expense. A message containing multiple distinct
+  charges creates separate expense rows atomically and retains ordered links
+  from the Telegram activity record to every expense. Low-confidence,
   unsupported-document, and captionless media-album updates remain visible as
   `needs_review` records instead of being silently discarded.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
