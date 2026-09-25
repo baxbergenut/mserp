@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,7 +24,7 @@ func TestExtractExpenseUsesStructuredMultimodalRequest(t *testing.T) {
 			t.Errorf("response format = %#v, store = %#v", format, request["store"])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":true,\"expenses\":[{\"confidence\":0.97,\"company\":\"MS Express\",\"category\":\"Safety\",\"expenseDate\":\"2026-09-23\",\"unitNumber\":\"101\",\"driverName\":null,\"amount\":\"15.00\",\"paymentType\":\"EFS\",\"expenseType\":\"Scale\",\"referenceNumber\":null,\"description\":\"Scale ticket\",\"coveredBy\":\"Company\",\"paidBy\":null,\"evidence\":[\"$15 scale\"]}]}"}]}]}`))
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"ok\":true,\"items\":[{\"conf\":0.97,\"co\":\"MS Express\",\"cat\":\"Safety\",\"date\":\"2026-09-23\",\"unit\":\"101\",\"driver\":null,\"amt\":\"15.00\",\"pay\":\"EFS\",\"kind\":\"Scale\",\"ref\":null,\"desc\":\"Scale ticket\",\"cover\":\"Company\",\"paid\":null,\"ev\":[\"$15 scale\"]}]}"}]}]}`))
 	}))
 	defer server.Close()
 
@@ -60,7 +61,7 @@ func TestExtractExpenseFallsBackOnCapacityFailure(t *testing.T) {
 		if request["model"] != "gemini-3-flash-preview" {
 			t.Fatalf("fallback model = %#v", request["model"])
 		}
-		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"isExpense\":false,\"expenses\":[]}"}]}]}`))
+		_, _ = w.Write([]byte(`{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"ok\":false,\"items\":[]}"}]}]}`))
 	}))
 	defer server.Close()
 
@@ -71,5 +72,22 @@ func TestExtractExpenseFallsBackOnCapacityFailure(t *testing.T) {
 	}
 	if requests != 2 {
 		t.Fatalf("requests = %d, want 2", requests)
+	}
+}
+
+func TestExpenseSchemaStaysWithinGeminiComplexityLimit(t *testing.T) {
+	encoded, err := json.Marshal(expenseSchema())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 1800 {
+		t.Fatalf("expense schema is %d bytes; keep the Gemini wire schema compact", len(encoded))
+	}
+	value := string(encoded)
+	if strings.Contains(value, `"description"`) || strings.Contains(value, `"company"`) {
+		t.Fatalf("expense schema contains verbose wire fields: %s", value)
+	}
+	if !strings.Contains(value, `"items"`) || !strings.Contains(value, `"amt"`) {
+		t.Fatalf("expense schema is missing compact batch fields: %s", value)
 	}
 }

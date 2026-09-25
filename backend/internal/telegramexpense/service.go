@@ -194,9 +194,12 @@ func (s *Service) process(ctx context.Context, queued *repository.TelegramExpens
 	if len(extraction.Expenses) == 0 {
 		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Gemini identified an expense but returned no expense records")
 	}
+	if len(extraction.Expenses) > 25 {
+		return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, "Gemini returned more than 25 expenses for one message")
+	}
 	drafts := make([]repository.TelegramExpenseDraft, 0, len(extraction.Expenses))
 	for index, extractedExpense := range extraction.Expenses {
-		if extractedExpense.Confidence < 0.40 {
+		if extractedExpense.Confidence < 0.40 || extractedExpense.Confidence > 1 {
 			return s.store.ReviewTelegramUpdate(ctx, queued.UpdateID, fmt.Sprintf("Expense %d has low extraction confidence", index+1))
 		}
 		draft, reason := buildDraft(extractedExpense, input)
