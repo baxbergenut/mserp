@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `028_add_gross_board_day_status.sql`:
+  `029_add_driver_pay.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -90,8 +90,16 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   shell and sidebar; `frontend/app/login/` owns the login page.
 - `frontend/app/page.tsx`: redirects `/` to `/dashboard`.
 - `frontend/app/dashboard/`: load-derived metrics and charting.
-- `frontend/app/accounting/`: weekly driver settlement and dispatcher commission
-  reports, selected by Monday-start report week.
+- `frontend/app/accounting/driver-pay/`: collapsed weekly driver accordions sourced
+  from Gross Board, system load details, profile tariffs, comments and adjustments.
+  Driver summaries form a connected compact table; comments use hover previews and
+  modal editing. Weekly adjustment name/amount columns follow the driver fee, independent of
+  load rows, and scroll after seven 32px entries. Names and signed amounts edit
+  inline in blank table rows; clearing both removes an entry. Partially filled
+  adjustments block autosave/navigation until completed or cleared.
+  `backend/internal/repository/driver_pay_repository.go` and
+  `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
+- `frontend/app/accounting/dispatcher-pay/`: weekly dispatcher commission reports.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
@@ -206,6 +214,10 @@ browser bundle.
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
+- Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`.
+  GET accepts Monday `weekStart`; PUT saves one driver's versioned weekly notes,
+  per-entry comments and adjustments. Refresh accepts `weekStart` and updates
+  source details of already-linked loads only, including older report weeks.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
@@ -265,7 +277,7 @@ assignment lookup lists.
   after driver deletion so retries cannot recreate it. Tests use the isolated
   `MSERP_FLEETSCOPE_TEST_DATABASE_URL`; never load production credentials for them.
 
-- Gross board plans persist one entry per driver and calendar day, separately
+- Gross board plans persist up to 100 load slots per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers and inactive
   drivers with saved entries through the selected week appear, grouped by current
   dispatcher and showing current truck assignments. Weeks start Monday.
@@ -299,11 +311,33 @@ assignment lookup lists.
   The visible idle board refreshes every 30 seconds and on focus, discarding
   responses if editing or saving occurred during the request. Cards
   and row totals include planned and confirmed entries in the selected view,
-  accumulated as integer hundredths. Autosave submits only changed days in an
+  accumulated as integer hundredths. Slot zero remains in `gross_board_entries`
+  for rollback compatibility; additional slots use `gross_board_extra_entries`.
+  Each slot has its own optimistic version; removed extra slots keep tombstones.
+  Autosave submits only changed slots in an
   atomic version-checked batch; stale saves return 409. Cleared days retain
-  their version to prevent lost updates. Autosave waits for a five-second pause
+  their version to prevent lost updates. The grid keeps one row per driver: multi-load days show slash-separated
+  references and summed amounts, with a hover breakdown and staged modal editor.
+  Autosave waits for a five-second pause
   in editing; week navigation flushes pending changes immediately. Memoized day
   cells and a stable edit callback keep typing from re-rendering the whole grid.
+
+- Driver Pay follows Gross Board placement, including unmatched plans, all load
+  statuses, and inactive drivers with entries. Driver sections start collapsed.
+  Percentage fees use Gross Board driver gross times the current driver profile
+  percentage; CPM fees use system total miles times the profile tariff. Exact
+  decimals round each fee to cents, and totals sum visible rounded fees. Missing
+  source details stay blank; unmatched/incomplete rows and provisional totals
+  are marked for review. No fuel/toll deductions or finalization are included.
+  Notes, load comments, and named additions/reimbursements/deductions belong to
+  a driver/week in `driver_pay_weeks`, with version checks and five-second autosave.
+  Comments are keyed by date, slot, and normalized load number so replacing a
+  load does not reuse its old comment. DataTruck stop ordering selects the first
+  pickup and final delivery; trip `mile`/`empty_mile` supply loaded/deadhead miles.
+  These source fields survive sync serialization. Historical payloads may need
+  Refresh load details; that action never imports new loads or changes assignments.
+  Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
+  verify fresh schema and migration 029 as `mserp_app`.
 
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).
@@ -467,6 +501,7 @@ go vet ./...
 # frontend/
 npm run lint
 node scripts/test-gross-board.mjs
+node scripts/test-driver-pay.mjs
 npm run build
 ```
 

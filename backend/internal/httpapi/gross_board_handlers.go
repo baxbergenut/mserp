@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +35,7 @@ func (request *grossBoardRequest) validate() error {
 		return err
 	}
 	if len(request.Entries) == 0 || len(request.Entries) > 1000 {
-		return errors.New("save between 1 and 1000 edited days at a time")
+		return errors.New("save between 1 and 1000 edited load slots at a time")
 	}
 	seen := map[string]bool{}
 	for i := range request.Entries {
@@ -49,9 +50,23 @@ func (request *grossBoardRequest) validate() error {
 		if err != nil || date.Before(week) || !date.Before(week.AddDate(0, 0, 7)) {
 			return errors.New("every edited day must belong to the selected week")
 		}
-		key := e.DriverID + e.Date
+		if e.Slot < 0 || e.Slot > 99 || (e.Slot == 0 && e.Deleted) {
+			return errors.New("invalid load slot")
+		}
+		if e.Deleted {
+			e.DayStatus = ""
+			e.EnteredOriginalRate = ""
+			e.EnteredMiles = ""
+			e.AcceptSystemValues = false
+			e.LoadNumber = ""
+			e.LoadRecordID = nil
+			e.OriginalRate = ""
+			e.DriverRate = ""
+			e.Miles = ""
+		}
+		key := e.DriverID + e.Date + ":" + strconv.Itoa(e.Slot)
 		if seen[key] {
-			return errors.New("a driver day can only appear once")
+			return errors.New("a driver load slot can only appear once")
 		}
 		seen[key] = true
 		e.LoadNumber = strings.TrimSpace(e.LoadNumber)

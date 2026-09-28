@@ -65,6 +65,11 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(statusMigration)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, `CREATE TEMP TABLE gross_board_extra_entries (LIKE pg_temp.gross_board_entries INCLUDING DEFAULTS);
+ ALTER TABLE pg_temp.gross_board_extra_entries ADD COLUMN slot integer NOT NULL, ADD COLUMN deleted boolean NOT NULL DEFAULT false,
+ ADD PRIMARY KEY(driver_id,service_date,slot);`); err != nil {
+		t.Fatal(err)
+	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
 	base := GrossBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "l100", OriginalRate: "999", Miles: "999", DriverRate: "1000.10"}
 	if err = repo.Save(ctx, []GrossBoardEntry{base}); err != nil {

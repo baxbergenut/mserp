@@ -124,3 +124,38 @@ func addLoadsByID(target map[int]datatruck.Load, loads []datatruck.Load) {
 		target[load.ID] = load
 	}
 }
+
+// Refresh only source fields of already-linked payroll loads, including older
+// weeks outside normal reconciliation. Never create records or change assignment.
+func (j *SyncLoadsJob) RefreshLoadDetails(ctx context.Context, ids []int) error {
+	client, ok := j.client.(interface {
+		FetchLoadByID(context.Context, int) (datatruck.Load, error)
+	})
+	if !ok {
+		return fmt.Errorf("load detail lookup unavailable")
+	}
+	repo, ok := j.repo.(interface {
+		UpdateLoadDetails(context.Context, repository.LoadRecord) error
+	})
+	if !ok {
+		return fmt.Errorf("load detail storage unavailable")
+	}
+	for _, id := range ids {
+		load, err := client.FetchLoadByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(load)
+		if err != nil {
+			return err
+		}
+		record, err := repository.LoadToRecord(load, payload, time.Now())
+		if err != nil {
+			return err
+		}
+		if err := repo.UpdateLoadDetails(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}

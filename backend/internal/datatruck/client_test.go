@@ -34,6 +34,36 @@ func TestDoRequestRetriesRateLimit(t *testing.T) {
 	}
 }
 
+func TestFetchPayrollLoadDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var filters []map[string]string
+		if err := json.Unmarshal([]byte(r.URL.Query().Get("filter")), &filters); err != nil {
+			t.Fatal(err)
+		}
+		if len(filters) != 2 || filters[0]["contains"] != "greater_than" || filters[1]["contains"] != "less_than" || filters[0]["value"] != "42" || filters[1]["value"] != "42" {
+			t.Errorf("incorrect exact ID filter: %+v", filters)
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":42,"load_id":"A","trip":{"mile":"100.25","empty_mile":12.5},"stops":[{"stop_type":"pickup","ordering":1,"location":{"city":"Columbus","state":"OH"}}]}]}`))
+	}))
+	defer server.Close()
+	client := &Client{baseURL: server.URL, httpClient: server.Client()}
+	load, err := client.FetchLoadByID(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored Load
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Trip == nil || stored.Trip.LoadedMiles.String() != "100.25" || stored.Trip.DeadheadMiles.String() != "12.5" || len(stored.Stops) != 1 || stored.Stops[0].Location.City != "Columbus" {
+		t.Fatalf("source details lost in persisted payload: %+v", stored)
+	}
+}
+
 func TestDoRequestDoesNotRetryBadRequest(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

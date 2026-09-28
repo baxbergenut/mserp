@@ -23,7 +23,8 @@ export function BalanceDetails({ driverId, driverName, week, opening, openingInc
   }, [driverId, week, attempt]);
   const balance = rateBalance(opening, entries);
   const incomplete = openingIncomplete + incompleteRates(entries);
-  const current: GrossBoardBalanceLine[] = entries.filter((entry) => !entry.dayStatus && (entry.loadNumber || entry.originalRate || entry.driverRate))
+  const current: GrossBoardBalanceLine[] = entries.filter((entry) => !entry.deleted && !entry.dayStatus && (entry.loadNumber || entry.originalRate || entry.driverRate))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot)
     .reduce<GrossBoardBalanceLine[]>((rows, entry) => {
       const change = rateChange(entry);
       const running = hundredths(rows.at(-1)?.balance ?? opening) + (change ?? BigInt(0));
@@ -45,7 +46,7 @@ export function BalanceDetails({ driverId, driverName, week, opening, openingInc
     {loading ? <p role="status" className="mt-5 text-zinc-500">Loading history…</p> : !error && <div className="mt-5 overflow-x-auto">
       <table className="w-full min-w-[560px] text-left text-xs">
         <thead className="text-zinc-500"><tr>{["Date", "Load", "Original", "Driver", "Change", "Balance"].map((label) => <th key={label} className="border-b border-zinc-800 px-2 py-2 font-medium">{label}</th>)}</tr></thead>
-        <tbody>{rows.map((line) => <tr key={line.date} className={line.date >= week ? "bg-blue-500/5" : ""}>
+        <tbody>{rows.map((line, index) => <tr key={`${line.date}:${index}`} className={line.date >= week ? "bg-blue-500/5" : ""}>
           <td className="border-b border-zinc-800/60 p-2 whitespace-nowrap">{line.date}</td>
           <td className="border-b border-zinc-800/60 p-2">{line.loadNumber || "No load number"}{line.duplicate && <div className="text-amber-300">Repeated load · counted on earliest date</div>}</td>
           <td className="border-b border-zinc-800/60 p-2 font-mono">{line.originalRate === "" ? "—" : decimalDisplay(hundredths(line.originalRate), true)}</td>

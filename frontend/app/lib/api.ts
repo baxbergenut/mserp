@@ -1,4 +1,6 @@
 import type {
+  DriverPayWeek,
+  DriverPayEdits,
   CustomTask,
   CustomTaskInput,
   RelayIdentityTask,
@@ -347,3 +349,7 @@ export const updateExpense = (id: string, input: ExpenseInput) =>
   });
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
+
+export const fetchDriverPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart }));
+export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });
+export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });

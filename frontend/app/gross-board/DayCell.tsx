@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
-import { mismatch, validDecimal } from "./board";
+import { Plus, X } from "lucide-react";
+import { emptyEntry, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 
@@ -10,10 +11,12 @@ type DayCellProps = {
   entry: GrossBoardEntry;
   driverName: string;
   disabled: boolean;
-  onChange: (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
+  onAdd?: (driverId: string, date: string) => void;
+  onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd }: DayCellProps) {
+  const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
   const confirmed = entry.loadRecordId !== null;
   const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.originalRate);
@@ -23,7 +26,13 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   return (
     <td className="border-r border-b border-zinc-800/70 p-0 align-top">
-      <LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={onChange} />
+      <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
+        <span>Load {entry.slot + 1}</span><div className="flex gap-1">
+          {onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
+          <button type="button" disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 }))}><X className="h-3 w-3" /></button>
+        </div>
+      </div>
+      <LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} />
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const locked = confirmed && field !== "driverRate";
         const valid = validDecimal(entry[field], field === "miles");
@@ -33,7 +42,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           aria-invalid={!valid} inputMode="decimal" value={entry[field]} readOnly={locked} disabled={disabled}
           title={different ? `Entered: ${entered}; system: ${entry[field] || "missing"}. Use the review icon for details.` : locked ? "Locked to the system load" : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder={locked ? "—" : "0.00"}
-          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, (current) => ({ ...current, [field]: value,
+          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, [field]: value,
             ...(field === "originalRate" ? { enteredOriginalRate: value } : field === "miles" ? { enteredMiles: value } : {}),
           })); }}
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : locked ? "text-emerald-200/70" : "text-zinc-300"}`}
@@ -48,7 +57,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         </table>
         <p className="mt-4 text-xs text-zinc-500">Driver rate stays as entered. If the imported data is wrong, correct the source load; the board will refresh automatically.</p>
         <button className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
-          onChange(entry.driverId, entry.date, (current) => ({ ...current, acceptSystemValues: true,
+          onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             enteredOriginalRate: current.originalRate, enteredMiles: current.miles }));
           setReviewing(false);
         }}>Accept system values</button>
@@ -56,6 +65,8 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
     </td>
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
+  && previous.onAdd === next.onAdd
+  && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date
   && previous.entry.dayStatus === next.entry.dayStatus
   && previous.entry.version === next.entry.version && previous.entry.loadNumber === next.entry.loadNumber

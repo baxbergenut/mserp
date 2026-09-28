@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { addDays, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 assert.equal(monday(new Date(2026, 8, 28)), "2026-09-28");
 assert.equal(monday(new Date(2026, 9, 4)), "2026-09-28");
@@ -81,3 +81,22 @@ assert.equal(totals([{...home, originalRate: "900"}]).original, 0n);
 assert.equal(matchLoad(home, {id:1, loadNumber:"L1", originalRate:"100", miles:"1"}).dayStatus, "");
 assert.deepEqual(reconcileAutosave({[key]:home}, {[key]:draft}, [confirmed])[key], home);
 console.log("Day status checks passed: aliases, partial suggestions, totals exclusions, replacement, and autosave races.");
+
+const extra = { ...emptyEntry("driver", "2026-09-28", 1), loadNumber: "SECOND", originalRate: "125.50", driverRate: "100.00" };
+const extraKey = entryKey(extra.driverId, extra.date, extra.slot);
+assert.notEqual(extraKey, key);
+assert.equal(totals([draft, extra, { ...extra, slot: 2, deleted: true }]).original, BigInt(12560));
+const edits = { [key]: later, [extraKey]: { ...extra, driverRate: "110.25" } };
+const extraRebased = reconcileAutosave(edits, { [extraKey]: extra }, [{ ...extra, version: 3 }]);
+assert.deepEqual(extraRebased[key], later);
+assert.equal(extraRebased[extraKey].driverRate, "110.25");
+assert.equal(extraRebased[extraKey].version, 3);
+const removed = { ...extra, deleted: true, loadNumber: "", originalRate: "", driverRate: "", miles: "" };
+assert.equal(reconcileAutosave({ [extraKey]: removed }, { [extraKey]: extra }, [{ ...extra, version: 2 }])[extraKey].deleted, true);
+console.log("Multiple-load checks passed: separate slots, removed-load totals, and independent save versions.");
+assert.deepEqual(additionalLoadEntries([], blank.driverId, blank.date).map(entry => entry.slot), [0, 1]);
+assert.deepEqual(additionalLoadEntries([draft, extra], blank.driverId, blank.date).map(entry => entry.slot), [2]);
+const reused = additionalLoadEntries([draft, { ...removed, version: 4 }], blank.driverId, blank.date);
+assert.equal(reused[0].slot, 1);
+assert.equal(reused[0].version, 4);
+assert.equal(reused[0].deleted, false);

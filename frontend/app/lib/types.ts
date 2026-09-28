@@ -604,6 +604,8 @@ export interface AuthSession {
 export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
 
 export interface GrossBoardEntry {
+  slot: number;
+  deleted: boolean;
   driverId: string;
   date: string;
   loadNumber: string;
@@ -666,4 +668,53 @@ export interface CustomTask {
 export interface CustomTaskInput {
   title: string;
   notes: string;
+}
+
+export interface DriverPayAdjustment {
+  id: string;
+  kind: "reimbursement" | "addition" | "deduction";
+  name: string;
+  note: string;
+  amount: string;
+}
+export interface DriverPayEdits {
+  driverId: string;
+  weekStart: string;
+  notes: string;
+  comments: Record<string, string>;
+  adjustments: DriverPayAdjustment[];
+  version: number;
+}
+export interface DriverPayLoad {
+  date: string;
+  slot: number;
+  loadNumber: string;
+  loadRecordId: number | null;
+  commentKey: string;
+  pickupDate: string;
+  pickupLocation: string;
+  deliveryLocation: string;
+  originalRate: string;
+  driverGross: string;
+  totalMiles: string;
+  loadedMiles: string;
+  deadheadMiles: string;
+  fee: string;
+  issues: string[];
+}
+export interface DriverPayDriver {
+  id: string;
+  isOwnerOperator: boolean;
+  fullName: string;
+  truckUnit: string;
+  dispatcherId: string;
+  dispatcherName: string;
+  payType: PayType;
+  payRate: string;
+  loads: DriverPayLoad[];
+  edits: DriverPayEdits;
+}
+export interface DriverPayWeek {
+  weekStart: string;
+  drivers: DriverPayDriver[];
 }

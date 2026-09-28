@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,6 +21,8 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
+	Slot                int    `json:"slot"`
+	Deleted             bool   `json:"deleted"`
 	DriverID            string `json:"driverId"`
 	Date                string `json:"date"`
 	LoadNumber          string `json:"loadNumber"`
@@ -76,12 +79,18 @@ type GrossBoardLoad struct {
 	PickupDate   string `json:"pickupDate"`
 }
 
+// Slot zero preserves compatibility with the original daily entry table.
+const grossBoardEntriesSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted,
+ load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status FROM gross_board_entries
+ UNION ALL SELECT driver_id,service_date,slot,deleted,
+ load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status FROM gross_board_extra_entries)`
+
 // Resolve an explicit selection, or a unique exact number. Ambiguous numbers
 // remain plans until a dispatcher chooses the intended upstream record.
 const grossBoardResolvedLoad = `
  LEFT JOIN LATERAL (
    SELECT min(l.id) AS id FROM loads l
-   WHERE e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
+   WHERE NOT e.deleted AND e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
       OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number))))
    HAVING count(*)=1
  ) matched ON true
@@ -96,11 +105,11 @@ const grossBoardEffective = `WITH resolved AS (
  CASE WHEN l.id IS NOT NULL THEN l.total_pay ELSE e.original_rate END AS effective_original,
  CASE WHEN l.id IS NOT NULL THEN l.total_miles ELSE e.miles END AS effective_miles,
  l.id IS NOT NULL AND row_number() OVER (
-   PARTITION BY e.driver_id, l.id ORDER BY e.service_date) > 1 AS duplicate
- FROM gross_board_entries e ` + grossBoardResolvedLoad + `
+   PARTITION BY e.driver_id, l.id ORDER BY e.service_date,e.slot) > 1 AS duplicate
+ FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
  WHERE e.service_date < $1::date+7
 ), effective AS (
- SELECT *, CASE WHEN day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
+ SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
  FROM resolved
@@ -109,12 +118,12 @@ const grossBoardEffective = `WITH resolved AS (
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
- coalesce(entered_miles::text,''), duplicate, day_status`
+ coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	return row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
-		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus)
+		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted)
 }
 
 func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBoard, error) {
@@ -129,7 +138,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id
- WHERE d.active OR EXISTS (SELECT 1 FROM gross_board_entries e WHERE e.driver_id=d.id
+ WHERE d.active OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
  AND e.service_date < $1::date+7)
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
@@ -150,7 +159,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 
 	rows, err = tx.Query(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+`
- FROM effective WHERE service_date >= $1::date ORDER BY driver_id,service_date`, week)
+ FROM effective WHERE service_date >= $1::date ORDER BY driver_id,service_date,slot`, week)
 	if err != nil {
 		return board, err
 	}
@@ -169,7 +178,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	rows, err = tx.Query(ctx, grossBoardEffective+`SELECT driver_id,
  coalesce(sum(balance_change),0)::text,
- count(*) FILTER (WHERE day_status='' AND balance_change IS NULL AND NOT duplicate
+ count(*) FILTER (WHERE NOT deleted AND day_status='' AND balance_change IS NULL AND NOT duplicate
  AND (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL))::int
  FROM effective WHERE service_date < $1::date GROUP BY driver_id`, week)
 	if err != nil {
@@ -195,10 +204,10 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 	rows, err := r.pool.Query(ctx, grossBoardEffective+`SELECT service_date::text, display_number,
  coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(balance_change::text,''),
- coalesce(sum(balance_change) OVER (ORDER BY service_date ROWS UNBOUNDED PRECEDING),0)::text, duplicate
- FROM effective WHERE driver_id=$2 AND day_status='' AND
+ coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0)::text, duplicate
+ FROM effective WHERE driver_id=$2 AND NOT deleted AND day_status='' AND
  (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL)
- ORDER BY service_date`, week, driverID)
+ ORDER BY service_date,slot`, week, driverID)
 	if err != nil {
 		return nil, err
 	}
@@ -247,8 +256,19 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID+entries[i].Date < entries[j].DriverID+entries[j].Date })
+	sort.Slice(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if a.DriverID+a.Date == b.DriverID+b.Date {
+			return a.Slot < b.Slot
+		}
+		return a.DriverID+a.Date < b.DriverID+b.Date
+	})
 	for index, e := range entries {
+		entryTable, slotPredicate := "gross_board_entries", ""
+		if e.Slot > 0 {
+			entryTable = "gross_board_extra_entries"
+			slotPredicate = " AND slot=" + strconv.Itoa(e.Slot)
+		}
 		var loadID *int
 		if e.LoadRecordID != nil {
 			var id int
@@ -280,7 +300,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			err = tx.QueryRow(ctx, `SELECT load_number,load_record_id,
               coalesce(entered_original_rate::text,original_rate::text,''),
               coalesce(entered_miles::text,miles::text,'')
-              FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date AND version=$3 FOR UPDATE`,
+              FROM `+entryTable+` WHERE driver_id=$1 AND service_date=$2::date AND version=$3`+slotPredicate+` FOR UPDATE`,
 				e.DriverID, e.Date, e.Version).Scan(&previousNumber, &previousID, &previousOriginal, &previousMiles)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, ErrGrossBoardConflict
@@ -324,7 +344,19 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			enteredOriginal, enteredMiles = original, miles
 		}
 		var version int
-		if e.Version == 0 {
+		if e.Slot > 0 {
+			if e.Version == 0 {
+				err = tx.QueryRow(ctx, `INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id,original_rate,driver_rate,miles,deleted,entered_original_rate,entered_miles,day_status)
+ VALUES($1,$2::date,$3,$4,$5,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,$9,NULLIF($10,'')::numeric,NULLIF($11,'')::numeric,$12)
+ ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, enteredOriginal, enteredMiles, e.DayStatus).Scan(&version)
+			} else {
+				err = tx.QueryRow(ctx, `UPDATE gross_board_extra_entries SET load_number=$4,load_record_id=$5,original_rate=NULLIF($6,'')::numeric,
+ driver_rate=NULLIF($7,'')::numeric,miles=NULLIF($8,'')::numeric,deleted=$9,version=version+1,updated_at=now(),
+ entered_original_rate=NULLIF($11,'')::numeric,entered_miles=NULLIF($12,'')::numeric,day_status=$13
+ WHERE driver_id=$1 AND service_date=$2::date AND slot=$3 AND version=$10 RETURNING version`,
+					e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, e.Version, enteredOriginal, enteredMiles, e.DayStatus).Scan(&version)
+			}
+		} else if e.Version == 0 {
 			err = tx.QueryRow(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles,entered_original_rate,entered_miles,day_status)
      VALUES($1,$2::date,$3,$4,NULLIF($5,'')::numeric,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,NULLIF($9,'')::numeric,$10)
      ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, enteredOriginal, enteredMiles, e.DayStatus).Scan(&version)
@@ -356,7 +388,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			return nil, err
 		}
 		err = scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+
-			" FROM effective WHERE driver_id=$2 AND service_date=$3::date", date, entries[i].DriverID, entries[i].Date), &entries[i])
+			" FROM effective WHERE driver_id=$2 AND service_date=$3::date AND slot=$4", date, entries[i].DriverID, entries[i].Date, entries[i].Slot), &entries[i])
 		if err != nil {
 			return nil, err
 		}

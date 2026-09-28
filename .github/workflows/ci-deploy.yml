@@ -70,6 +70,10 @@ jobs:
         working-directory: frontend
         run: node scripts/test-gross-board.mjs
 
+      - name: Check driver pay calculations and autosave
+        working-directory: frontend
+        run: node scripts/test-driver-pay.mjs
+
       - name: Build static frontend
         working-directory: frontend
         env:

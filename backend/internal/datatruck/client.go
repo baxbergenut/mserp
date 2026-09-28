@@ -59,12 +59,28 @@ type Load struct {
 	Trip                    *Trip                 `json:"trip"`
 	AssignedDriverNTruck    *AssignedDriverNTruck `json:"assigned_driver_n_truck"`
 	RawPayload              json.RawMessage       `json:"-"`
+	Stops                   []LoadStop            `json:"stops,omitempty"`
+}
+
+// Keep only the stop details used by payroll; source ordering determines the
+// first pickup and final delivery for multi-stop loads.
+type LoadStop struct {
+	StopType string `json:"stop_type"`
+	Ordering int    `json:"ordering"`
+	Location struct {
+		City    string `json:"city"`
+		State   string `json:"state"`
+		ZipCode string `json:"zip_code"`
+		Address string `json:"address1"`
+	} `json:"location"`
 }
 
 type Trip struct {
-	DriverFullName     *string `json:"driver__full_name"`
-	TeamDriverFullName *string `json:"team_driver__full_name"`
-	TruckUnitNumber    *string `json:"truck__unit_number"`
+	LoadedMiles        *FlexibleString `json:"mile,omitempty"`
+	DeadheadMiles      *FlexibleString `json:"empty_mile,omitempty"`
+	DriverFullName     *string         `json:"driver__full_name"`
+	TeamDriverFullName *string         `json:"team_driver__full_name"`
+	TruckUnitNumber    *string         `json:"truck__unit_number"`
 }
 
 type AssignedDriverNTruck struct {
@@ -106,6 +122,27 @@ func (f FlexibleString) String() string {
 
 func (c *Client) FetchLoadsSince(ctx context.Context, since time.Time) ([]Load, error) {
 	return c.FetchLoadsByDateSince(ctx, "created_datetime", since)
+}
+
+func (c *Client) FetchLoadByID(ctx context.Context, id int) (Load, error) {
+	loads, err := c.fetchLoads(ctx, []map[string]string{
+		{"column": "id", "value": strconv.Itoa(id), "contains": "greater_than"},
+		{"column": "id", "value": strconv.Itoa(id), "contains": "less_than"},
+	}, "id", func(loads []Load) error {
+		for _, l := range loads {
+			if l.ID != id {
+				return errors.New("load detail filter returned a different record")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Load{}, err
+	}
+	if len(loads) != 1 {
+		return Load{}, errors.New("load detail record not found")
+	}
+	return loads[0], nil
 }
 
 func (c *Client) FetchLoadsAfterID(ctx context.Context, afterID int) ([]Load, error) {

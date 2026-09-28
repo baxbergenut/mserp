@@ -6,7 +6,7 @@ import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { MetricCard } from "@/app/components/MetricCard";
 import { controlClass } from "@/app/components/management/ManagementUI";
-import { DayCell } from "./DayCell";
+import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
@@ -93,7 +93,7 @@ export default function GrossBoardPage() {
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
   }, [dirty]);
 
-  const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date), entry])), [board]);
+  const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => dispatcher === "all" || driver.dispatcherId === dispatcher), [board, dispatcher]);
@@ -106,7 +106,7 @@ export default function GrossBoardPage() {
   const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
   const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
   const endingBalances = drivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
-    dates.map((date) => allEntries[entryKey(driver.id, date)] ?? emptyEntry(driver.id, date))));
+    Object.values(allEntries).filter(entry => entry.driverId === driver.id)));
   const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
   const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
@@ -129,18 +129,18 @@ export default function GrossBoardPage() {
     }
   }, [pendingWeek, pendingLink, dirty, saving, loading, error]);
 
-  const edit = useCallback((driverId: string, date: string, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
+  const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     activityRef.current += 1;
-    const key = entryKey(driverId, date);
+    const key = entryKey(driverId, date, slot);
     setChanges((current) => {
-      const baseline = savedRef.current[key] ?? emptyEntry(driverId, date);
+      const baseline = savedRef.current[key] ?? emptyEntry(driverId, date, slot);
       const previous = current[key] ?? baseline;
       const next = update(previous);
       if (next === previous) return current;
       const result = { ...current, [key]: next };
       // A revert during an in-flight save is a new edit; the old saved value
       // will be replaced by that response, so it must remain queued.
-      if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
+      if (!(slot > 0 && baseline.version === 0) && !savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
       return result;
     });
     setMessage("");
@@ -157,8 +157,8 @@ export default function GrossBoardPage() {
       const committed = await saveGrossBoard(week, Object.values(snapshot));
       setBoard((current) => {
         if (!current) return current;
-        const entries = Object.fromEntries(current.entries.map((entry) => [entryKey(entry.driverId, entry.date), entry]));
-        committed.forEach((entry) => { entries[entryKey(entry.driverId, entry.date)] = entry; });
+        const entries = Object.fromEntries(current.entries.map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry]));
+        committed.forEach((entry) => { entries[entryKey(entry.driverId, entry.date, entry.slot)] = entry; });
         return { ...current, entries: Object.values(entries) };
       });
       setChanges((current) => reconcileAutosave(current, snapshot, committed));
@@ -234,7 +234,7 @@ export default function GrossBoardPage() {
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red rates/miles = entered values differ from the system</span>
         <span>Rate balance carries forward through the selected week · Click a balance for history</span>
         <span>Type a load or status · Use the dropdown to see all day statuses</span>
-        <span>{drivers.length} drivers · One load, plan, or status per driver per day</span>
+        <span>{drivers.length} drivers · Daily totals · Hover grouped loads for details; click to edit</span>
       </div>
 
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
@@ -252,18 +252,21 @@ export default function GrossBoardPage() {
           </thead>
           <tbody>
             {drivers.map((driver, index) => {
-              const entries = dates.map((date) => allEntries[entryKey(driver.id, date)] ?? emptyEntry(driver.id, date));
+              const dayEntries = dates.map(date => Object.values(allEntries).filter(entry => entry.driverId === driver.id && entry.date === date ).sort((a, b) => a.slot - b.slot));
+              dayEntries.forEach((entries, i) => { if (!entries.length) entries.push(emptyEntry(driver.id, dates[i])); });
+              const entries = dayEntries.flat();
               const sum = totals(entries);
               const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", entries);
               const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(entries);
+
               const groupStart = index === 0 || drivers[index - 1].dispatcherId !== driver.dispatcherId;
               return <Fragment key={driver.id}>
                 {groupStart && <tr><th colSpan={14} scope="rowgroup" className="border-b border-zinc-700 bg-blue-500/10 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th></tr>}
                 <tr>
                   <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200">{driver.fullName}{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckUnit || "—"}</td>
-                  <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 text-[10px] text-zinc-500">{["Load #", "Original", "Driver", "Miles"].map((field) => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {entries.map((entry) => <DayCell key={entry.date} entry={entry} driverName={driver.fullName} disabled={false} onChange={edit} />)}
+                  <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Original", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
+                  {dayEntries.map((entries, i) => <DaySummaryCell key={dates[i]} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
                   <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
@@ -286,7 +289,7 @@ export default function GrossBoardPage() {
       </div>}
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
         opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
-        entries={dates.map((date) => allEntries[entryKey(selectedDriver.id, date)] ?? emptyEntry(selectedDriver.id, date))} onClose={() => setBalanceDriver(null)} />}
+        entries={Object.values(allEntries).filter(entry => entry.driverId === selectedDriver.id)} onClose={() => setBalanceDriver(null)} />}
     </div>
   );
 }

@@ -20,7 +20,7 @@ export const exactDayStatus = (text: string) => dayStatuses.find((status) =>
 export const suggestedDayStatuses = (text: string) => dayStatuses.filter((status) =>
   [status.value, ...status.aliases].some((name) => statusText(name).includes(statusText(text))));
 export function setDayStatus(entry: GrossBoardEntry, dayStatus: GrossBoardDayStatus): GrossBoardEntry {
-  return { ...emptyEntry(entry.driverId, entry.date), version: entry.version, dayStatus };
+  return { ...emptyEntry(entry.driverId, entry.date, entry.slot), version: entry.version, dayStatus };
 }
 
 export function monday(date = new Date()) {
@@ -36,12 +36,21 @@ export function addDays(date: string, days: number) {
 }
 
 export const shortDate = (date: string) => `${date.slice(5, 7)}/${date.slice(8, 10)}`;
-export const entryKey = (driverId: string, date: string) => `${driverId}:${date}`;
-export const emptyEntry = (driverId: string, date: string): GrossBoardEntry => ({
-  driverId, date, loadNumber: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
-  enteredOriginalRate: "", enteredMiles: "", duplicate: false,
-  dayStatus: "",
+export const entryKey = (driverId: string, date: string, slot = 0) => `${driverId}:${date}:${slot}`;
+export const emptyEntry = (driverId: string, date: string, slot = 0): GrossBoardEntry => ({
+  driverId, date, slot, deleted: false, loadNumber: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
+  enteredOriginalRate: "", enteredMiles: "", duplicate: false, dayStatus: "",
 });
+
+export function additionalLoadEntries(existing: GrossBoardEntry[], driverId: string, date: string) {
+  const day = existing.filter(entry => entry.driverId === driverId && entry.date === date);
+  const removed = day.find(entry => entry.deleted);
+  const slot = removed?.slot ?? Math.max(0, ...day.map(entry => entry.slot)) + 1;
+  if (slot > 99) return [];
+  // An untouched day has a visible, unsaved slot zero. Keep it when adding.
+  const first = day.some(entry => !entry.deleted) ? [] : [emptyEntry(driverId, date)];
+  return [...first, { ...emptyEntry(driverId, date, slot), version: removed?.version ?? 0 }];
+}
 
 export function validDecimal(value: string, nonnegative = false) {
   return value === "" || (/^-?\d{1,10}(\.\d{1,2})?$/.test(value) && (!nonnegative || !value.startsWith("-")));
@@ -61,7 +70,7 @@ export function decimalDisplay(value: bigint, currency = false) {
 }
 
 export function totals(entries: GrossBoardEntry[]) {
-  return entries.filter((entry) => !entry.dayStatus).reduce((sum, entry) => ({
+  return entries.filter((entry) => !entry.dayStatus && !entry.deleted).reduce((sum, entry) => ({
     original: sum.original + hundredths(entry.originalRate),
     driver: sum.driver + hundredths(entry.driverRate),
     miles: sum.miles + hundredths(entry.miles),
@@ -80,7 +89,7 @@ export function mismatch(entered: string, actual: string) {
 }
 
 export function rateChange(entry: GrossBoardEntry): bigint | null {
-  if (entry.dayStatus || entry.duplicate || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
+  if (entry.deleted || entry.dayStatus || entry.duplicate || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
     || !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate)) return null;
   return hundredths(entry.originalRate) - hundredths(entry.driverRate);
 }
@@ -90,7 +99,7 @@ export function rateBalance(opening: string, entries: GrossBoardEntry[]) {
 }
 
 export function incompleteRates(entries: GrossBoardEntry[]) {
-  return entries.filter((entry) => !entry.dayStatus && !entry.duplicate && rateChange(entry) === null &&
+  return entries.filter((entry) => !entry.deleted && !entry.dayStatus && !entry.duplicate && rateChange(entry) === null &&
     (entry.loadNumber.trim() || entry.originalRate || entry.driverRate)).length;
 }
 
@@ -108,7 +117,7 @@ export function rpmDisplay(gross: bigint, miles: bigint) {
 export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snapshot: Record<string, GrossBoardEntry>, committed: GrossBoardEntry[]) {
   const remaining = { ...current };
   for (const entry of committed) {
-    const key = entryKey(entry.driverId, entry.date);
+    const key = entryKey(entry.driverId, entry.date, entry.slot);
     const draft = current[key];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[key])) { delete remaining[key]; continue; }
     const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId;
