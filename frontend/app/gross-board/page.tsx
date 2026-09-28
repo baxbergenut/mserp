@@ -231,9 +231,10 @@ export default function GrossBoardPage() {
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
       <div className="flex flex-wrap gap-4 text-[11px] text-zinc-500">
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Green = confirmed load; original rate and miles are locked</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red = entered original rate or miles differ from system values</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red rates/miles = entered values differ from the system</span>
         <span>Rate balance carries forward through the selected week · Click a balance for history</span>
-        <span>{drivers.length} drivers · One load or plan per driver per day</span>
+        <span>Type a load or status · Use the dropdown to see all day statuses</span>
+        <span>{drivers.length} drivers · One load, plan, or status per driver per day</span>
       </div>
 
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}

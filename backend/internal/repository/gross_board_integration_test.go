@@ -58,6 +58,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := NewGrossBoardRepository(pool)
+	statusMigration, err := os.ReadFile("../../sql/028_add_gross_board_day_status.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(statusMigration)); err != nil {
+		t.Fatal(err)
+	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
 	base := GrossBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "l100", OriginalRate: "999", Miles: "999", DriverRate: "1000.10"}
 	if err = repo.Save(ctx, []GrossBoardEntry{base}); err != nil {
@@ -255,5 +262,56 @@ func TestGrossBoardDatabase(t *testing.T) {
 		if balance.DriverID == carryDriver && (balance.OpeningBalance != "-249.50" || balance.OpeningIncomplete != 1) {
 			t.Fatal("next week did not carry corrected balance", balance)
 		}
+	}
+	// A status is distinct from load text, even when an imported load is named HOME.
+	statusDay := GrossBoardEntry{DriverID: carryDriver, Date: "2026-09-22", DayStatus: "HOME"}
+	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{statusDay})
+	if err != nil || saved[0].DayStatus != "HOME" || saved[0].LoadRecordID != nil || saved[0].OriginalRate != "" {
+		t.Fatal("status matched a load or failed to persist", saved, err)
+	}
+	statusDay = saved[0]
+	if err = repo.Save(ctx, []GrossBoardEntry{{DriverID: carryDriver, Date: "2026-09-22", DayStatus: "SHOP"}}); !errors.Is(err, ErrGrossBoardConflict) {
+		t.Fatal("status bypassed version check", err)
+	}
+	board, err = repo.Get(ctx, week.AddDate(0, 0, 7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, balance := range board.Balances {
+		if balance.DriverID == carryDriver && (balance.OpeningBalance != "-249.50" || balance.OpeningIncomplete != 1) {
+			t.Fatal("status affected carry or incomplete count", balance)
+		}
+	}
+	history, err = repo.BalanceHistory(ctx, carryDriver, week)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range history {
+		if line.Date == statusDay.Date {
+			t.Fatal("status appeared as incomplete rate history", line)
+		}
+	}
+	// Replacing and clearing statuses keep normal version semantics.
+	statusDay.DayStatus = ""
+	statusDay.LoadNumber = "STATUS-TO-PLAN"
+	statusDay.OriginalRate, statusDay.DriverRate = "10", "5"
+	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{statusDay})
+	if err != nil || saved[0].DayStatus != "" || saved[0].OriginalRate != "10.00" {
+		t.Fatal("status could not become a load plan", err, saved)
+	}
+	cleared := GrossBoardEntry{DriverID: carryDriver, Date: statusDay.Date, Version: saved[0].Version, DayStatus: "RESET"}
+	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{cleared})
+	if err != nil || saved[0].OriginalRate != "" || saved[0].DriverRate != "" {
+		t.Fatal("plan values leaked into status", err, saved)
+	}
+	cleared = saved[0]
+	cleared.DayStatus = ""
+	if err = repo.Save(ctx, []GrossBoardEntry{cleared}); err != nil {
+		t.Fatal(err)
+	}
+	// Database constraints also reject invalid status payloads outside HTTP.
+	bad := GrossBoardEntry{DriverID: carryDriver, Date: "2026-10-01", DayStatus: "HOME", OriginalRate: "1"}
+	if err = repo.Save(ctx, []GrossBoardEntry{bad}); err == nil {
+		t.Fatal("database accepted money on a status day")
 	}
 }

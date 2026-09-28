@@ -601,11 +601,14 @@ export interface AuthSession {
   expiresAt: string;
 }
 
+export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
+
 export interface GrossBoardEntry {
   driverId: string;
   date: string;
   loadNumber: string;
   loadRecordId: number | null;
+  dayStatus: GrossBoardDayStatus;
   originalRate: string;
   driverRate: string;
   miles: string;

@@ -23,7 +23,7 @@ export function BalanceDetails({ driverId, driverName, week, opening, openingInc
   }, [driverId, week, attempt]);
   const balance = rateBalance(opening, entries);
   const incomplete = openingIncomplete + incompleteRates(entries);
-  const current: GrossBoardBalanceLine[] = entries.filter((entry) => entry.loadNumber || entry.originalRate || entry.driverRate)
+  const current: GrossBoardBalanceLine[] = entries.filter((entry) => !entry.dayStatus && (entry.loadNumber || entry.originalRate || entry.driverRate))
     .reduce<GrossBoardBalanceLine[]>((rows, entry) => {
       const change = rateChange(entry);
       const running = hundredths(rows.at(-1)?.balance ?? opening) + (change ?? BigInt(0));

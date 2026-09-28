@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { addDays, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { addDays, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 assert.equal(monday(new Date(2026, 8, 28)), "2026-09-28");
 assert.equal(monday(new Date(2026, 9, 4)), "2026-09-28");
@@ -57,3 +57,27 @@ assert.equal(rebased.enteredMiles, "700");
 assert.equal(rebased.miles, "480.50");
 assert.equal(rebased.version, 2);
 console.log("Rate balance checks passed: carry, missing/zero rates, duplicates, comparison values, and confirmation races.");
+
+assert.equal(dayStatuses.length, 12);
+assert.equal(exactDayStatus("  in-transit ").value, "IN TRANSIT");
+assert.equal(exactDayStatus("late delivery").value, "LATE DEL");
+assert.equal(exactDayStatus("sh"), undefined);
+assert.equal(exactDayStatus("SHOP123"), undefined);
+assert.equal(exactDayStatus("LATE10I"), undefined);
+assert.equal(suggestedDayStatuses("shop")[0].value, "SHOP");
+assert.equal(suggestedDayStatuses("truck")[0].value, "TRUCK ISSUE");
+assert.equal(suggestedDayStatuses("").length, 12);
+const home = setDayStatus(confirmed, "HOME");
+assert.equal(home.version, confirmed.version);
+assert.equal(home.loadNumber, "");
+assert.equal(home.loadRecordId, null);
+assert.equal(home.originalRate, "");
+assert.equal(home.driverRate, "");
+assert.equal(home.miles, "");
+assert.equal(home.enteredOriginalRate, "");
+assert.equal(rateBalance("200", [home]), 20000n);
+assert.equal(incompleteRates([home]), 0);
+assert.equal(totals([{...home, originalRate: "900"}]).original, 0n);
+assert.equal(matchLoad(home, {id:1, loadNumber:"L1", originalRate:"100", miles:"1"}).dayStatus, "");
+assert.deepEqual(reconcileAutosave({[key]:home}, {[key]:draft}, [confirmed])[key], home);
+console.log("Day status checks passed: aliases, partial suggestions, totals exclusions, replacement, and autosave races.");

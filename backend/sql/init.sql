@@ -421,6 +421,7 @@ CREATE TABLE gross_board_entries (
     driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
     service_date DATE NOT NULL,
     load_number TEXT NOT NULL DEFAULT '' CHECK (length(load_number) <= 200),
+    day_status TEXT NOT NULL DEFAULT '' CHECK (day_status IN ('', 'SHOP', 'HOME', 'RESET', 'IN TRANSIT', 'REJECTED', 'NO LOAD', 'STUCK', 'LATE DEL', 'TRUCK ISSUE', 'LEFT', 'NEW DRIVER', 'DEADHEAD')),
     load_record_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
     original_rate NUMERIC(12,2),
     entered_original_rate NUMERIC(12,2),
@@ -429,7 +430,10 @@ CREATE TABLE gross_board_entries (
     miles NUMERIC(12,2) CHECK (miles >= 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (driver_id, service_date)
+    PRIMARY KEY (driver_id, service_date),
+    CHECK (day_status = '' OR (load_number = '' AND load_record_id IS NULL
+      AND original_rate IS NULL AND driver_rate IS NULL AND miles IS NULL
+      AND entered_original_rate IS NULL AND entered_miles IS NULL))
 );
 CREATE INDEX gross_board_entries_date_idx ON gross_board_entries(service_date);
 CREATE INDEX loads_gross_board_number_idx ON loads(lower(btrim(load_id)));

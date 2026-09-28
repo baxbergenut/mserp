@@ -1,4 +1,27 @@
-import type { GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
+import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
+
+export const dayStatuses: { value: Exclude<GrossBoardDayStatus, "">; aliases: string[]; color: string }[] = [
+  { value: "SHOP", aliases: ["in shop", "repair", "maintenance"], color: "bg-amber-500/15 text-amber-300" },
+  { value: "HOME", aliases: ["at home", "home time", "hometime"], color: "bg-violet-500/15 text-violet-300" },
+  { value: "RESET", aliases: ["34 hour reset", "34 hr reset", "34 reset", "rest"], color: "bg-indigo-500/15 text-indigo-300" },
+  { value: "IN TRANSIT", aliases: ["transit", "intransit", "on the road"], color: "bg-blue-500/15 text-blue-300" },
+  { value: "REJECTED", aliases: ["reject", "refused"], color: "bg-rose-500/15 text-rose-300" },
+  { value: "NO LOAD", aliases: ["no loads", "noload", "empty", "no load available"], color: "bg-zinc-500/15 text-zinc-300" },
+  { value: "STUCK", aliases: ["stranded"], color: "bg-orange-500/15 text-orange-300" },
+  { value: "LATE DEL", aliases: ["late delivery", "late del", "delayed delivery"], color: "bg-yellow-500/15 text-yellow-300" },
+  { value: "TRUCK ISSUE", aliases: ["truck issues", "breakdown", "broken down"], color: "bg-red-500/15 text-red-300" },
+  { value: "LEFT", aliases: ["driver left"], color: "bg-slate-500/15 text-slate-300" },
+  { value: "NEW DRIVER", aliases: ["new hire", "newdriver"], color: "bg-teal-500/15 text-teal-300" },
+  { value: "DEADHEAD", aliases: ["dead head", "deadheading"], color: "bg-cyan-500/15 text-cyan-300" },
+];
+const statusText = (text: string) => text.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+export const exactDayStatus = (text: string) => dayStatuses.find((status) =>
+  [status.value, ...status.aliases].some((name) => statusText(name) === statusText(text)));
+export const suggestedDayStatuses = (text: string) => dayStatuses.filter((status) =>
+  [status.value, ...status.aliases].some((name) => statusText(name).includes(statusText(text))));
+export function setDayStatus(entry: GrossBoardEntry, dayStatus: GrossBoardDayStatus): GrossBoardEntry {
+  return { ...emptyEntry(entry.driverId, entry.date), version: entry.version, dayStatus };
+}
 
 export function monday(date = new Date()) {
   const local = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -17,6 +40,7 @@ export const entryKey = (driverId: string, date: string) => `${driverId}:${date}
 export const emptyEntry = (driverId: string, date: string): GrossBoardEntry => ({
   driverId, date, loadNumber: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
   enteredOriginalRate: "", enteredMiles: "", duplicate: false,
+  dayStatus: "",
 });
 
 export function validDecimal(value: string, nonnegative = false) {
@@ -37,7 +61,7 @@ export function decimalDisplay(value: bigint, currency = false) {
 }
 
 export function totals(entries: GrossBoardEntry[]) {
-  return entries.reduce((sum, entry) => ({
+  return entries.filter((entry) => !entry.dayStatus).reduce((sum, entry) => ({
     original: sum.original + hundredths(entry.originalRate),
     driver: sum.driver + hundredths(entry.driverRate),
     miles: sum.miles + hundredths(entry.miles),
@@ -45,7 +69,7 @@ export function totals(entries: GrossBoardEntry[]) {
 }
 
 export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBoardEntry {
-  return { ...entry, loadNumber: load.loadNumber, loadRecordId: load.id,
+  return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
     originalRate: load.originalRate, miles: load.miles, acceptSystemValues: false };
@@ -56,7 +80,7 @@ export function mismatch(entered: string, actual: string) {
 }
 
 export function rateChange(entry: GrossBoardEntry): bigint | null {
-  if (entry.duplicate || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
+  if (entry.dayStatus || entry.duplicate || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
     || !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate)) return null;
   return hundredths(entry.originalRate) - hundredths(entry.driverRate);
 }
@@ -66,7 +90,7 @@ export function rateBalance(opening: string, entries: GrossBoardEntry[]) {
 }
 
 export function incompleteRates(entries: GrossBoardEntry[]) {
-  return entries.filter((entry) => !entry.duplicate && rateChange(entry) === null &&
+  return entries.filter((entry) => !entry.dayStatus && !entry.duplicate && rateChange(entry) === null &&
     (entry.loadNumber.trim() || entry.originalRate || entry.driverRate)).length;
 }
 
@@ -87,7 +111,7 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
     const key = entryKey(entry.driverId, entry.date);
     const draft = current[key];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[key])) { delete remaining[key]; continue; }
-    const sameLoad = draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId;
+    const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId;
     remaining[key] = { ...draft, version: entry.version,
       ...(sameLoad && entry.loadRecordId !== null ? {
         loadRecordId: entry.loadRecordId, originalRate: entry.originalRate, miles: entry.miles,

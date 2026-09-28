@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `027_add_gross_board_review_values.sql`:
+  `028_add_gross_board_day_status.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -269,6 +269,14 @@ assignment lookup lists.
   from imported loads and settlement accounting. Active drivers and inactive
   drivers with saved entries through the selected week appear, grouped by current
   dispatcher and showing current truck assignments. Weeks start Monday.
+  Day statuses are stored separately from load numbers (`day_status`, migration
+  028). Status days have no linked load, rates, or miles and never contribute to
+  totals, balance history, or incomplete-rate counts. The picker supports all 12
+  dispatcher statuses, exact names/aliases when no amounts are present, and
+  explicit suggestions for partial text. Replacing populated days requires a
+  clear-values confirmation. Statuses never auto-link to imported loads, even
+  when a load number happens to equal the status label. Existing free text is
+  not reclassified by migration. Clearing a status retains the entry version.
   Free text remains a plan; a unique exact load number (case-insensitive,
   trimmed) or explicit suggestion selection confirms it. Duplicate business
   load numbers require explicit selection. Confirmed original rate and miles

@@ -38,6 +38,8 @@ func TestGrossBoardValidation(t *testing.T) {
 			r.Entries = append(r.Entries, e)
 		}},
 		{"no changes", func(r *grossBoardRequest) { r.Entries = nil }},
+		{"unknown status", func(r *grossBoardRequest) { r.Entries[0].DayStatus = "BROKEN" }},
+		{"status with load values", func(r *grossBoardRequest) { r.Entries[0].DayStatus = "SHOP" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -47,5 +49,19 @@ func TestGrossBoardValidation(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestGrossBoardStatuses(t *testing.T) {
+	for _, status := range []string{"SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD"} {
+		r := grossBoardRequest{WeekStart: "2026-09-28", Entries: []repository.GrossBoardEntry{{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", DayStatus: status}}}
+		if err := r.validate(); err != nil {
+			t.Fatalf("valid status %s rejected: %v", status, err)
+		}
+		id := 1
+		r.Entries[0].LoadRecordID = &id
+		if r.validate() == nil {
+			t.Fatal("status with linked load accepted")
+		}
 	}
 }

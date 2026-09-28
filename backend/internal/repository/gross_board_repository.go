@@ -23,6 +23,7 @@ type GrossBoardEntry struct {
 	DriverID            string `json:"driverId"`
 	Date                string `json:"date"`
 	LoadNumber          string `json:"loadNumber"`
+	DayStatus           string `json:"dayStatus"`
 	LoadRecordID        *int   `json:"loadRecordId"`
 	OriginalRate        string `json:"originalRate"`
 	DriverRate          string `json:"driverRate"`
@@ -80,8 +81,8 @@ type GrossBoardLoad struct {
 const grossBoardResolvedLoad = `
  LEFT JOIN LATERAL (
    SELECT min(l.id) AS id FROM loads l
-   WHERE (e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
-      OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number)))
+   WHERE e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
+      OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number))))
    HAVING count(*)=1
  ) matched ON true
  LEFT JOIN loads l ON l.id=matched.id `
@@ -99,7 +100,7 @@ const grossBoardEffective = `WITH resolved AS (
  FROM gross_board_entries e ` + grossBoardResolvedLoad + `
  WHERE e.service_date < $1::date+7
 ), effective AS (
- SELECT *, CASE WHEN NOT duplicate AND btrim(load_number)<>'' AND
+ SELECT *, CASE WHEN day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
  FROM resolved
@@ -108,12 +109,12 @@ const grossBoardEffective = `WITH resolved AS (
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
- coalesce(entered_miles::text,''), duplicate`
+ coalesce(entered_miles::text,''), duplicate, day_status`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	return row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
-		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate)
+		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus)
 }
 
 func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBoard, error) {
@@ -168,7 +169,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	rows, err = tx.Query(ctx, grossBoardEffective+`SELECT driver_id,
  coalesce(sum(balance_change),0)::text,
- count(*) FILTER (WHERE balance_change IS NULL AND NOT duplicate
+ count(*) FILTER (WHERE day_status='' AND balance_change IS NULL AND NOT duplicate
  AND (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL))::int
  FROM effective WHERE service_date < $1::date GROUP BY driver_id`, week)
 	if err != nil {
@@ -195,7 +196,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
  coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(balance_change::text,''),
  coalesce(sum(balance_change) OVER (ORDER BY service_date ROWS UNBOUNDED PRECEDING),0)::text, duplicate
- FROM effective WHERE driver_id=$2 AND
+ FROM effective WHERE driver_id=$2 AND day_status='' AND
  (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL)
  ORDER BY service_date`, week, driverID)
 	if err != nil {
@@ -324,15 +325,15 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		}
 		var version int
 		if e.Version == 0 {
-			err = tx.QueryRow(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles,entered_original_rate,entered_miles)
-     VALUES($1,$2::date,$3,$4,NULLIF($5,'')::numeric,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,NULLIF($9,'')::numeric)
-     ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, enteredOriginal, enteredMiles).Scan(&version)
+			err = tx.QueryRow(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles,entered_original_rate,entered_miles,day_status)
+     VALUES($1,$2::date,$3,$4,NULLIF($5,'')::numeric,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,NULLIF($9,'')::numeric,$10)
+     ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, enteredOriginal, enteredMiles, e.DayStatus).Scan(&version)
 		} else {
 			err = tx.QueryRow(ctx, `UPDATE gross_board_entries SET load_number=$3,load_record_id=$4,
      original_rate=NULLIF($5,'')::numeric,driver_rate=NULLIF($6,'')::numeric,miles=NULLIF($7,'')::numeric,
-     entered_original_rate=NULLIF($9,'')::numeric,entered_miles=NULLIF($10,'')::numeric,
+     entered_original_rate=NULLIF($9,'')::numeric,entered_miles=NULLIF($10,'')::numeric,day_status=$11,
      version=version+1,updated_at=now() WHERE driver_id=$1 AND service_date=$2::date AND version=$8 RETURNING version`,
-				e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Version, enteredOriginal, enteredMiles).Scan(&version)
+				e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Version, enteredOriginal, enteredMiles, e.DayStatus).Scan(&version)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrGrossBoardConflict
