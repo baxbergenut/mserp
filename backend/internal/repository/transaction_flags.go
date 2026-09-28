@@ -157,6 +157,10 @@ func classifyTransaction(t coverageTransaction, byUnit, byDriver map[string][]co
 	}
 	f := &TransactionFlag{Status: "data_issue", BufferDays: transactionLoadBufferDays,
 		TransactionDate: t.date.Format(time.DateOnly), LoadsSyncedAt: syncedAt}
+	if t.kind == "fuel" && t.driverID == "" {
+		f.Reason = "Relay driver is unassigned. Link this account on the Tasks page."
+		return f
+	}
 	if len(units) != 1 {
 		f.Reason = "The transaction has no single reported truck unit to match to loads."
 		return f
@@ -221,7 +225,7 @@ func transactionFlags(ctx context.Context, pool *pgxpool.Pool, kind string, ids 
 	case "fuel":
 		query = `SELECT t.id::text, COALESCE((SELECT array_agg(p->>'value')
 			FROM jsonb_array_elements(t.prompts) p WHERE lower(trim(p->>'label')) = 'truck #'), '{}'),
-			t.driver_id::text, (t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date,
+			COALESCE(t.driver_id::text,''), (t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date,
 			EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = t.timezone),
 			t.total_amount_paid > 0, t.relay_environment = 'production'
 			FROM fuel_transactions t WHERE t.id = ANY($1::uuid[])`

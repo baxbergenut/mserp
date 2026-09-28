@@ -174,7 +174,7 @@ CREATE TABLE relay_driver_links (
     relay_environment    TEXT NOT NULL CHECK (relay_environment IN ('staging', 'production')),
     relay_driver_id      TEXT NOT NULL,
     relay_integration_id TEXT,
-    driver_id            UUID NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+    driver_id            UUID REFERENCES drivers(id) ON DELETE CASCADE,
     relay_first_name     TEXT,
     relay_last_name      TEXT,
     relay_phone          TEXT,
@@ -194,7 +194,7 @@ CREATE TABLE fuel_transactions (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     relay_environment     TEXT NOT NULL CHECK (relay_environment IN ('staging', 'production')),
     relay_transaction_id  TEXT NOT NULL,
-    driver_id             UUID NOT NULL REFERENCES drivers(id) ON DELETE RESTRICT,
+    driver_id             UUID REFERENCES drivers(id) ON DELETE RESTRICT,
     relay_driver_id       TEXT NOT NULL,
     relay_integration_id  TEXT,
     purchased_at          TIMESTAMPTZ NOT NULL,
@@ -233,6 +233,18 @@ CREATE INDEX fuel_transactions_driver_purchased_at_idx
     ON fuel_transactions (driver_id, purchased_at DESC);
 CREATE INDEX fuel_transactions_state_purchased_at_idx
     ON fuel_transactions (state, purchased_at DESC);
+
+CREATE INDEX relay_driver_links_pending_idx ON relay_driver_links(created_at, id) WHERE driver_id IS NULL;
+CREATE INDEX fuel_transactions_relay_identity_idx ON fuel_transactions(relay_environment, relay_driver_id);
+CREATE TABLE relay_identity_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identity_id UUID NOT NULL REFERENCES relay_driver_links(id) ON DELETE RESTRICT,
+    driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE RESTRICT,
+    action TEXT NOT NULL CHECK (action IN ('link', 'reject')),
+    reviewed_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(identity_id, driver_id, action)
+);
 
 -- Fuel, DEF, and non-fuel products share a line-item table so future reports
 -- can group every purchase category without schema changes.

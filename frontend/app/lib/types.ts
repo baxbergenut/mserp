@@ -69,11 +69,32 @@ export interface TransactionFlag {
   loadsSyncedAt: string | null;
 }
 
+export interface RelayIdentityTask {
+  id: string;
+  environment: "production" | "staging";
+  relayDriverId: string;
+  integrationId: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  transactionCount: number;
+  latestTransaction: string | null;
+  rejectedDriverIds: string[];
+  suggestions: {
+    driverId: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    active: boolean;
+    reasons: string[];
+  }[];
+}
+
 export interface FuelTransaction {
   flag?: TransactionFlag;
   id: string;
   relayTransactionId: string;
-  driverId: string;
+  driverId: string | null;
   driverName: string;
   relayDriverId: string;
   relayIntegrationId: string | null;
@@ -157,6 +178,7 @@ export interface FinancialDashboard {
     loadCount: number;
     revenuePerMile: number;
     unattributedTolls: number;
+    unattributedFuel: number;
   };
   expenses: Array<{
     category: string;

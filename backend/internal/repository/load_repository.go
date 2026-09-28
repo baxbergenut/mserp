@@ -86,24 +86,28 @@ func (r *LoadRepository) UpsertLoads(ctx context.Context, records []LoadRecord) 
 			record.DispatcherID = &dispatcherID
 		}
 		if record.DriverName != nil {
-			driverID, ensureErr := ensureDriver(ctx, tx, *record.DriverName, record.DispatcherID, true)
+			driverID, found, ensureErr := resolveDriver(ctx, tx, *record.DriverName, record.DispatcherID, true)
 			if ensureErr != nil {
 				return ensureErr
 			}
-			record.DriverID = &driverID
+			if found {
+				record.DriverID = &driverID
+			}
 		}
 		if record.TeamDriverName != nil {
-			if _, ensureErr := ensureDriver(ctx, tx, *record.TeamDriverName, record.DispatcherID, true); ensureErr != nil {
+			if _, _, ensureErr := resolveDriver(ctx, tx, *record.TeamDriverName, record.DispatcherID, true); ensureErr != nil {
 				return ensureErr
 			}
 		}
 		var truckID *string
 		if record.TruckUnit != nil {
-			ensuredTruckID, ensureErr := ensureTruck(ctx, tx, *record.TruckUnit)
+			resolvedTruckID, found, ensureErr := resolveTruck(ctx, tx, *record.TruckUnit)
 			if ensureErr != nil {
 				return ensureErr
 			}
-			truckID = &ensuredTruckID
+			if found {
+				truckID = &resolvedTruckID
+			}
 		}
 		if record.DriverID != nil && truckID != nil {
 			_, driverAlreadyAssigned := assignedDrivers[*record.DriverID]
@@ -494,11 +498,14 @@ func ensureDispatcher(ctx context.Context, tx pgx.Tx, name string) (string, erro
 	return id, err
 }
 
-func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *string, preferMoreCompleteName bool) (string, error) {
+// resolveDriver only links source data to a pre-existing fleet driver. Imports
+// must never create a driver, because an upstream spelling or name-order change
+// is not reliable proof that a new person joined the fleet.
+func resolveDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *string, preferMoreCompleteName bool) (string, bool, error) {
 	displayName := formatPersonName(name)
 	normalizedName := normalizeName(displayName)
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "driver:"+normalizedName); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	var id, existingName string
@@ -509,30 +516,26 @@ func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *str
 		LIMIT 1`, normalizedName).Scan(&id, &existingName)
 	if err == nil {
 		if err = enrichMatchedDriver(ctx, tx, id, existingName, displayName, dispatcherID, preferMoreCompleteName); err != nil {
-			return "", err
+			return "", false, err
 		}
-		return id, err
+		return id, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return "", false, err
 	}
 
 	compatibleID, existingName, found, err := findCompatibleDriver(ctx, tx, displayName)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if found {
 		err = enrichMatchedDriver(ctx, tx, compatibleID, existingName, displayName, dispatcherID, preferMoreCompleteName)
-		return compatibleID, err
+		if err != nil {
+			return "", false, err
+		}
+		return compatibleID, true, nil
 	}
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO drivers (
-			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
-			dispatcher_id, active
-		) VALUES ($1, $2, false, 'cpm', 0, $3, $4)
-		RETURNING id`, displayName, normalizedName, dispatcherID, dispatcherID != nil).Scan(&id)
-	return id, err
+	return "", false, nil
 }
 
 func enrichMatchedDriver(
@@ -601,11 +604,10 @@ type truckAssignment struct {
 	driverID string
 }
 
-func ensureTruck(ctx context.Context, tx pgx.Tx, unitNumber string) (string, error) {
+// resolveTruck only links source data to a pre-existing fleet truck. DataTruck
+// units stay on the load as raw source text when no managed truck matches.
+func resolveTruck(ctx context.Context, tx pgx.Tx, unitNumber string) (string, bool, error) {
 	canonicalUnit := normalizeTruckUnit(unitNumber)
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "truck:"+canonicalUnit); err != nil {
-		return "", err
-	}
 
 	var id string
 	err := tx.QueryRow(ctx, `
@@ -614,17 +616,12 @@ func ensureTruck(ctx context.Context, tx pgx.Tx, unitNumber string) (string, err
 		ORDER BY created_at, id
 		LIMIT 1`, canonicalUnit).Scan(&id)
 	if err == nil {
-		return id, nil
+		return id, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return "", false, err
 	}
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO trucks (unit_number, is_company_owned, status, active)
-		VALUES ($1, true, 'available', true)
-		RETURNING id`, canonicalUnit).Scan(&id)
-	return id, err
+	return "", false, nil
 }
 
 func syncTruckAssignment(ctx context.Context, tx pgx.Tx, truckID, driverID string) error {

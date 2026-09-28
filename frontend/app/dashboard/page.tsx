@@ -292,6 +292,11 @@ export default function DashboardPage() {
         <LoadingDashboard />
       ) : dashboard ? (
         <div className={`space-y-4 ${isLoading ? "opacity-60" : ""}`}>
+          {dashboard.totals.unattributedFuel !== 0 && dashboard.totals.unattributedFuel != null && (
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-300">
+              {money.format(dashboard.totals.unattributedFuel)} in diesel spend is unassigned. It is included in company costs for now; driver settlements and estimated profit may change after linking Relay accounts on the Tasks page.
+            </p>
+          )}
           <div className="flex items-center gap-2 text-[11px] text-zinc-600">
             <CalendarDays className="h-3.5 w-3.5" />
             {dashboard.period.dateFrom ? `Weekly report · ${weekLabel(dashboard.period.dateFrom)} · Monday–Sunday` : "No qualifying report weeks yet"}

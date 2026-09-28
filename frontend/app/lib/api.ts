@@ -1,4 +1,5 @@
 import type {
+  RelayIdentityTask,
   GrossBoard,
   GrossBoardEntry,
   GrossBoardLoad,
@@ -72,6 +73,13 @@ const API_BASE =
   "http://localhost:8080";
 
 let csrfToken = "";
+
+export const fetchRelayIdentityTasks = (query: PageQuery) =>
+  paginatedRequest<PaginatedResponse<RelayIdentityTask>>(withQuery("/tasks/relay-identities", query));
+export const reviewRelayIdentity = (id: string, driverId: string, action: "link" | "reject") =>
+  apiRequest<{ transactionsLinked: number }>(`/tasks/relay-identities/${id}/review`, {
+    method: "POST", body: JSON.stringify({ driverId, action }),
+  });
 
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));

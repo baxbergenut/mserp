@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
@@ -194,6 +196,7 @@ export default function FuelPage() {
           </div>
           <p className="mt-1 text-[13px] text-zinc-600">
             Fuel performance, pricing, and Relay purchase data.
+            {" "}<Link href="/tasks" className="text-blue-400 hover:underline">Review unassigned Relay accounts</Link>
           </p>
         </div>
         <button
@@ -405,6 +408,7 @@ export default function FuelPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-zinc-200">
                       {transaction.driverName}
+                      {!transaction.driverId && <Link href="/tasks" className="ml-2 text-xs text-amber-400 hover:underline">Link driver</Link>}
                     </div>
                     <div className="mt-0.5 font-mono text-[11px] text-zinc-600">
                       {cardLabel(transaction.relayIntegrationId)}

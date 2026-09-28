@@ -40,6 +40,7 @@ type FinancialDashboardTotals struct {
 	LoadCount             int     `json:"loadCount"`
 	RevenuePerMile        float64 `json:"revenuePerMile"`
 	UnattributedTolls     float64 `json:"unattributedTolls"`
+	UnattributedFuel      float64 `json:"unattributedFuel"`
 }
 
 type FinancialExpense struct {
@@ -251,7 +252,8 @@ func (r *DashboardRepository) loadFinancialTotals(
 			), 0)::float8,
 			COALESCE((SELECT SUM(total_miles) FROM period_loads), 0)::float8,
 			(SELECT COUNT(*) FROM period_loads)::int,
-			COALESCE((SELECT SUM(amount) FROM period_tolls WHERE driver_id IS NULL), 0)::float8`,
+			COALESCE((SELECT SUM(amount) FROM period_tolls WHERE driver_id IS NULL), 0)::float8,
+			COALESCE((SELECT SUM(spend) FROM period_fuel WHERE driver_id IS NULL), 0)::float8`,
 		query.DateFrom,
 		query.DateTo,
 	).Scan(
@@ -264,6 +266,7 @@ func (r *DashboardRepository) loadFinancialTotals(
 		&dashboard.Totals.Miles,
 		&dashboard.Totals.LoadCount,
 		&dashboard.Totals.UnattributedTolls,
+		&dashboard.Totals.UnattributedFuel,
 	)
 }
 

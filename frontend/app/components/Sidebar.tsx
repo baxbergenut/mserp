@@ -19,6 +19,7 @@ import {
   LogOut,
   WalletCards,
   CalendarRange,
+  ListChecks,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
 
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/fuel", label: "Fuel", icon: Fuel },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/expenses", label: "Expenses", icon: WalletCards, exact: true },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [

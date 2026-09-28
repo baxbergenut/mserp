@@ -78,7 +78,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `022_add_gross_board.sql`:
+  `024_add_relay_identity_review.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -208,6 +208,9 @@ browser bundle.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
+- Relay review: `GET /tasks/relay-identities` (pagination/search),
+  `POST /tasks/relay-identities/{id}/review` (`driverId`, `action: link|reject`).
+  `frontend/app/tasks/` owns the authenticated review queue.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
@@ -282,6 +285,10 @@ assignment lookup lists.
   DataTruck does not expose an
   order last-modified timestamp. The server write timeout is fifteen minutes to
   permit pagination, rate-limit retry, and an initial Relay historical backfill.
+- DataTruck imports never create managed `drivers` or `trucks`. They retain the
+  upstream driver name and truck unit on the load, link only to an existing
+  unambiguous fleet record, and create a current assignment only when both
+  links resolve. Add fleet master records through the management UI first.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
@@ -342,10 +349,21 @@ assignment lookup lists.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
-  A new Relay identity first resolves against a unique local driver using
-  normalized phone/email evidence and high-confidence name variants (including
-  order, middle-name, suffix, punctuation, diacritic, and small-typo changes)
-  before a driver row may be created.
+  New Relay identities and their purchases import with nullable `driver_id`;
+  they never create fleet drivers or block completion of a sync day. The Tasks
+  page suggests existing drivers using normalized phone/email and name variants.
+  Each new Relay ID requires explicit user confirmation, including changed IDs
+  for known drivers. Existing mappings remain authoritative. Multiple Relay IDs
+  may link to one driver, scoped by environment. Review and sync lock the same
+  identity row; confirmation atomically links all its unassigned historical
+  transactions and records the reviewer. Rejected suggestions remain dismissed.
+  Fuel lists use LEFT JOINs so unassigned spend remains visible. Financial totals
+  expose unassigned diesel separately (provisionally included in company costs);
+  no driver settlement receives those purchases until confirmed. Never use the
+  placeholder integration ID `0000000000000000` as identity evidence.
+  Migration 024 is additive/relaxes nullability; rollbacks to pre-review binaries
+  cannot safely display unassigned rows. Resolve pending accounts before such a
+  rollback or deploy a compatible forward fix; never manufacture placeholder drivers.
 - Except for health, readiness, and login, every API route requires a valid
   database session. State-changing requests also require the session's CSRF
   token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;

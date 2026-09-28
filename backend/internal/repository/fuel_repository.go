@@ -27,7 +27,7 @@ type FuelTransaction struct {
 	Flag               *TransactionFlag `json:"flag,omitempty"`
 	ID                 string           `json:"id"`
 	RelayTransactionID string           `json:"relayTransactionId"`
-	DriverID           string           `json:"driverId"`
+	DriverID           *string          `json:"driverId"`
 	DriverName         string           `json:"driverName"`
 	RelayDriverID      string           `json:"relayDriverId"`
 	RelayIntegrationID *string          `json:"relayIntegrationId"`
@@ -312,79 +312,39 @@ func ensureRelayDriver(
 	tx pgx.Tx,
 	environment string,
 	driver relay.TransactionDriver,
-) (string, error) {
+) (*string, error) {
 	relayDriverID := strings.TrimSpace(driver.ID)
 	integrationID := nullableRelayString(driver.IntegrationID)
 
-	var driverID string
-	err := tx.QueryRow(ctx, `
-		SELECT driver_id
-		FROM relay_driver_links
-		WHERE relay_environment = $1
-		  AND relay_driver_id = $2`, environment, relayDriverID).Scan(&driverID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
-	}
-
-	fullName := strings.TrimSpace(strings.Join([]string{driver.FirstName, driver.LastName}, " "))
-	if fullName == "" {
-		fullName = "Relay Driver " + relayDriverID
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		var found bool
-		driverID, found, err = findRelayDriverCandidate(ctx, tx, driver, fullName)
-		if err != nil {
-			return "", err
-		}
-		if !found {
-			driverID, err = ensureDriver(ctx, tx, fullName, nil, false)
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
+	// The upsert locks the identity until the fuel-day transaction commits.
+	// Review uses the same row lock, so a concurrent sync cannot undo a link.
+	var driverID *string
 	phone := nullIfBlank(driver.Phone)
 	var email any
 	if driver.Email != nil {
 		email = nullIfBlank(*driver.Email)
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE drivers
-		SET phone = COALESCE(phone, $2),
-			email = COALESCE(email, $3),
-			active = CASE WHEN dispatcher_id IS NULL THEN false ELSE active END,
-			updated_at = CASE
-				WHEN (phone IS NULL AND $2::text IS NOT NULL)
-				  OR (email IS NULL AND $3::text IS NOT NULL)
-				  OR (dispatcher_id IS NULL AND active)
-				THEN now() ELSE updated_at END
-		WHERE id = $1`, driverID, phone, email); err != nil {
-		return "", err
-	}
-
-	_, err = tx.Exec(ctx, `
+	err := tx.QueryRow(ctx, `
 		INSERT INTO relay_driver_links (
 			relay_environment, relay_driver_id, relay_integration_id, driver_id,
 			relay_first_name, relay_last_name, relay_phone, relay_email
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		) VALUES ($1, $2, $3, NULL, $4, $5, $6, $7)
 		ON CONFLICT (relay_environment, relay_driver_id) DO UPDATE SET
 			relay_integration_id = EXCLUDED.relay_integration_id,
-			driver_id = EXCLUDED.driver_id,
 			relay_first_name = EXCLUDED.relay_first_name,
 			relay_last_name = EXCLUDED.relay_last_name,
 			relay_phone = EXCLUDED.relay_phone,
 			relay_email = EXCLUDED.relay_email,
-			updated_at = now()`,
+			updated_at = now()
+		RETURNING driver_id`,
 		environment,
 		relayDriverID,
 		integrationID,
-		driverID,
 		nullIfBlank(driver.FirstName),
 		nullIfBlank(driver.LastName),
 		phone,
 		email,
-	)
+	).Scan(&driverID)
 	return driverID, err
 }
 
@@ -1065,9 +1025,9 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
-			COALESCE(array_agg(DISTINCT d.full_name ORDER BY d.full_name), '{}'),
+			COALESCE(array_agg(DISTINCT COALESCE(d.full_name, 'Unassigned')) , '{}'),
 			COALESCE(array_agg(DISTINCT t.state ORDER BY t.state) FILTER (WHERE t.state <> ''), '{}')
-		FROM fuel_transactions t JOIN drivers d ON d.id = t.driver_id`).Scan(
+		FROM fuel_transactions t LEFT JOIN drivers d ON d.id = t.driver_id`).Scan(
 		&options.Drivers, &options.States,
 	); err != nil {
 		return FuelPage{}, err
@@ -1080,7 +1040,7 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 
 const fuelTransactionsSQL = `
 SELECT
-	t.id, t.relay_transaction_id, t.driver_id, d.full_name AS driver_name,
+	t.id, t.relay_transaction_id, t.driver_id, COALESCE(d.full_name, 'Unassigned') AS driver_name,
 	t.relay_driver_id, t.relay_integration_id, t.purchased_at,
 	t.merchant_name, t.location_name, t.city, t.state, t.timezone,
 	t.total_amount_paid::float8, t.total_retail_price::float8,
@@ -1092,7 +1052,7 @@ SELECT
 	COALESCE(items.def_volume, 0)::float8 AS def_volume,
 	t.fuel_code_type, t.is_direct_bill
 FROM fuel_transactions t
-JOIN drivers d ON d.id = t.driver_id
+LEFT JOIN drivers d ON d.id = t.driver_id
 LEFT JOIN LATERAL (
 	SELECT
 		SUM(total_amount_paid) FILTER (WHERE item_kind = 'fuel' AND category <> 'def') AS fuel_amount,
