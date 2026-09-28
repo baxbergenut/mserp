@@ -50,7 +50,7 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
   };
   const open = focused && !confirmed && suggestions.length > 0;
   const label = `${driverName}, ${entry.date}`;
-  const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-right font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
+  const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   return (
     <td className="border-r border-b border-zinc-800/70 p-0 align-top">
       <div className="relative">
@@ -77,12 +77,12 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
             }
             if (event.key === "Enter") { event.preventDefault(); choose(suggestions[active]); }
           }}
-          className={`${fieldClass} !text-left !font-sans pr-6 ${confirmed ? "!bg-emerald-500/15 text-emerald-300" : "!bg-zinc-800/30 text-zinc-200"}`}
+          className={`${fieldClass} !font-sans !px-6 ${confirmed ? "!bg-emerald-500/15 text-emerald-300" : "!bg-zinc-800/30 text-zinc-200"}`}
           placeholder="Load # / plan"
         />
         {confirmed && <Check aria-label="Confirmed load" className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-emerald-400" />}
         {searchError && <span className="absolute right-1 top-1 text-amber-400" title="Load lookup unavailable. Save will verify this number." aria-label="Load lookup unavailable">!</span>}
-        {open && <ul id={id} role="listbox" aria-label="Matching loads" className="absolute left-0 top-8 z-40 max-h-56 w-72 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl">
+        {open && <ul id={id} role="listbox" aria-label="Matching loads" className="absolute left-0 top-8 z-40 max-h-56 w-72 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left shadow-xl">
           {suggestions.map((load, index) => <li key={load.id} id={`${id}-${index}`} role="option" aria-selected={index === active}
             onMouseDown={(event) => event.preventDefault()} onClick={() => choose(load)}
             className={`cursor-pointer rounded px-2 py-2 text-xs ${index === active ? "bg-blue-500/20" : "hover:bg-zinc-800"}`}>
