@@ -1,24 +1,24 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { Check } from "lucide-react";
 import { searchGrossBoardLoads } from "@/app/lib/api";
 import type { GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 import { validDecimal } from "./board";
 
-export function DayCell({ entry, driverName, disabled, onChange }: {
+type DayCellProps = {
   entry: GrossBoardEntry;
   driverName: string;
   disabled: boolean;
-  onChange: (update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
-}) {
+  onChange: (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
+};
+
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange }: DayCellProps) {
   const id = useId();
   const [suggestions, setSuggestions] = useState<GrossBoardLoad[]>([]);
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(0);
   const [searchError, setSearchError] = useState(false);
-  const changeRef = useRef(onChange);
-  useEffect(() => { changeRef.current = onChange; }, [onChange]);
   const query = entry.loadNumber.trim();
   const confirmed = entry.loadRecordId !== null;
 
@@ -34,7 +34,7 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
         const exact = loads.filter((load) => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
         if (exact.length === 1) {
           const load = exact[0];
-          changeRef.current((current) => current.loadNumber.trim() === query ? {
+          onChange(entry.driverId, entry.date, (current) => current.loadNumber.trim() === query ? {
             ...current, loadNumber: load.loadNumber, loadRecordId: load.id,
             originalRate: load.originalRate, miles: load.miles,
           } : current);
@@ -42,10 +42,10 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
       }).catch(() => { if (!cancelled) { setSuggestions([]); setSearchError(true); } });
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, confirmed, disabled]);
+  }, [query, confirmed, disabled, onChange, entry.driverId, entry.date]);
 
   const choose = (load: GrossBoardLoad) => {
-    onChange((current) => ({ ...current, loadNumber: load.loadNumber, loadRecordId: load.id, originalRate: load.originalRate, miles: load.miles }));
+    onChange(entry.driverId, entry.date, (current) => ({ ...current, loadNumber: load.loadNumber, loadRecordId: load.id, originalRate: load.originalRate, miles: load.miles }));
     setFocused(false);
   };
   const open = focused && !confirmed && suggestions.length > 0;
@@ -64,7 +64,7 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
           onChange={(event) => {
             const loadNumber = event.target.value;
             setSuggestions([]); setSearchError(false); setFocused(true);
-            onChange((current) => ({ ...current, loadNumber, loadRecordId: null,
+            onChange(entry.driverId, entry.date, (current) => ({ ...current, loadNumber, loadRecordId: null,
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
             }));
@@ -99,10 +99,14 @@ export function DayCell({ entry, driverName, disabled, onChange }: {
           aria-invalid={!valid} inputMode="decimal" value={entry[field]} readOnly={locked} disabled={disabled}
           title={locked ? "Locked to the system load" : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder={locked ? "—" : "0.00"}
-          onChange={(event) => { const value = event.target.value; onChange((current) => ({ ...current, [field]: value })); }}
+          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, (current) => ({ ...current, [field]: value })); }}
           className={`${fieldClass} ${locked ? "text-emerald-200/70" : "text-zinc-300"} ${!valid ? "bg-red-500/15 text-red-300" : ""}`}
         />;
       })}
     </td>
   );
-}
+}, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
+  && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date
+  && previous.entry.version === next.entry.version && previous.entry.loadNumber === next.entry.loadNumber
+  && previous.entry.loadRecordId === next.entry.loadRecordId && previous.entry.originalRate === next.entry.originalRate
+  && previous.entry.driverRate === next.entry.driverRate && previous.entry.miles === next.entry.miles);

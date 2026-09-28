@@ -237,7 +237,9 @@ assignment lookup lists.
   and row totals include planned and confirmed entries in the selected view,
   accumulated as integer hundredths. Autosave submits only changed days in an
   atomic version-checked batch; stale saves return 409. Cleared days retain
-  their version to prevent lost updates. Week navigation waits for autosave.
+  their version to prevent lost updates. Autosave waits for a five-second pause
+  in editing; week navigation flushes pending changes immediately. Memoized day
+  cells and a stable edit callback keep typing from re-rendering the whole grid.
 
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).

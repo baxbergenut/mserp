@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
@@ -29,6 +29,7 @@ export default function GrossBoardPage() {
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const savingRef = useRef(false);
+  const savedRef = useRef<Record<string, GrossBoardEntry>>({});
   const dirty = Object.keys(changes).length > 0;
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
 
@@ -62,6 +63,7 @@ export default function GrossBoardPage() {
   }, [dirty]);
 
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date), entry])), [board]);
+  useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => dispatcher === "all" || driver.dispatcherId === dispatcher), [board, dispatcher]);
   const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName])).entries()), [board]);
@@ -88,20 +90,21 @@ export default function GrossBoardPage() {
     }
   }, [pendingWeek, pendingLink, dirty, saving, loading, error]);
 
-  function edit(driverId: string, date: string, update: (entry: GrossBoardEntry) => GrossBoardEntry) {
+  const edit = useCallback((driverId: string, date: string, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     const key = entryKey(driverId, date);
     setChanges((current) => {
-      const previous = current[key] ?? saved[key] ?? emptyEntry(driverId, date);
+      const baseline = savedRef.current[key] ?? emptyEntry(driverId, date);
+      const previous = current[key] ?? baseline;
       const next = update(previous);
       if (next === previous) return current;
       const result = { ...current, [key]: next };
       // A revert during an in-flight save is a new edit; the old saved value
       // will be replaced by that response, so it must remain queued.
-      if (!savingRef.current && JSON.stringify(next) === JSON.stringify(saved[key] ?? emptyEntry(driverId, date))) delete result[key];
+      if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
       return result;
     });
     setMessage("");
-  }
+  }, []);
 
   const save = useCallback(async () => {
     if (savingRef.current || invalid || !dirty || loading) return;
@@ -124,7 +127,7 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (!dirty || saving || error || invalid || loading) return;
-    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 650);
+    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 5000);
     return () => clearTimeout(timer);
   }, [dirty, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
@@ -204,7 +207,7 @@ export default function GrossBoardPage() {
                   <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200">{driver.fullName}{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 text-[10px] text-zinc-500">{["Load #", "Original", "Driver", "Miles"].map((field) => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {entries.map((entry) => <DayCell key={entry.date} entry={entry} driverName={driver.fullName} disabled={false} onChange={(update) => edit(driver.id, entry.date, update)} />)}
+                  {entries.map((entry) => <DayCell key={entry.date} entry={entry} driverName={driver.fullName} disabled={false} onChange={edit} />)}
                   {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true), decimalDisplay(sum.original - sum.driver, true), decimalDisplay(sum.miles)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
                 </tr>
               </Fragment>;
