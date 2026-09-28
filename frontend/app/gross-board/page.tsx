@@ -129,22 +129,26 @@ export default function GrossBoardPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
-        <MetricCard label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
-        <MetricCard label="Original RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-5 animate-fade-in">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-zinc-100"><CalendarRange className="h-5 w-5 text-zinc-500" />Gross Board</h1>
-          <p className="mt-1 text-xs text-zinc-500">Plan the week by driver. Totals include plans and confirmed loads for the selected dispatcher.</p>
+          <div className="flex items-center gap-3">
+            <CalendarRange className="h-5 w-5 text-zinc-500" />
+            <h1 className="text-lg font-semibold text-zinc-100">Gross Board</h1>
+            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{drivers.length}</span>
+          </div>
+          <p className="mt-1.5 text-[13px] text-zinc-500">Weekly load planning, driver rates, and gross totals by dispatcher.</p>
         </div>
         <div className="flex items-center gap-2">
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : message || "Saved automatically"}</span>
           <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
+        <MetricCard compact label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
+        <MetricCard compact label="Original RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

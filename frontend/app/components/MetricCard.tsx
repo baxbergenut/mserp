@@ -7,6 +7,7 @@ interface MetricCardProps {
   icon: LucideIcon;
   delta?: number | null;
   delay?: number;
+  compact?: boolean;
 }
 
 export function MetricCard({
@@ -15,14 +16,15 @@ export function MetricCard({
   icon: Icon,
   delta,
   delay = 0,
+  compact = false,
 }: MetricCardProps) {
   return (
     <div
-      className="animate-fade-in rounded-xl border border-zinc-800/60 bg-card p-5 transition-colors hover:border-zinc-700/60 hover:bg-card-hover"
+      className={`animate-fade-in rounded-xl border border-zinc-800/60 bg-card transition-colors hover:border-zinc-700/60 hover:bg-card-hover ${compact ? "flex items-center justify-between gap-3 px-4 py-3" : "p-5"}`}
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800/50">
+      <div className={`flex items-start justify-between ${compact ? "order-2" : ""}`}>
+        <div className={`flex items-center justify-center rounded-lg bg-zinc-800/50 ${compact ? "h-8 w-8" : "h-9 w-9"}`}>
           <Icon className="h-[18px] w-[18px] text-zinc-400" />
         </div>
         {delta != null && delta !== 0 && (
@@ -43,11 +45,11 @@ export function MetricCard({
         )}
       </div>
 
-      <div className="mt-4">
-        <p className="font-mono text-2xl font-semibold tracking-tight text-zinc-100">
+      <div className={compact ? "order-1" : "mt-4"}>
+        <p className={`font-mono font-semibold tracking-tight text-zinc-100 ${compact ? "text-lg" : "text-2xl"}`}>
           {value}
         </p>
-        <p className="mt-1 text-[13px] text-zinc-500">{label}</p>
+        <p className={`text-zinc-500 ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[13px]"}`}>{label}</p>
       </div>
     </div>
   );
