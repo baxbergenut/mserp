@@ -143,8 +143,18 @@ export function ExpenseForm({
               <option key={truck.id} value={truck.id}>{truck.unitNumber}</option>
             ))}
           </select>
-          {!value.truckId && value.unitNumber && (
-            <p className="mt-1 text-[11px] text-amber-400">Imported unit {value.unitNumber} is not linked.</p>
+          {!value.truckId && (
+            <>
+              <input
+                value={value.unitNumber}
+                onChange={(event) => set("unitNumber", event.target.value)}
+                className={controlClass}
+                placeholder="Enter an unlinked unit number"
+              />
+              {value.unitNumber && (
+                <p className="mt-1 text-[11px] text-amber-400">Unit {value.unitNumber} is not linked to a truck.</p>
+              )}
+            </>
           )}
         </Field>
         <Field label="Driver">
@@ -162,8 +172,18 @@ export function ExpenseForm({
               <option key={driver.id} value={driver.id}>{driver.fullName}</option>
             ))}
           </select>
-          {!value.driverId && value.driverName && (
-            <p className="mt-1 text-[11px] text-amber-400">Imported driver {value.driverName} is not linked.</p>
+          {!value.driverId && (
+            <>
+              <input
+                value={value.driverName}
+                onChange={(event) => set("driverName", event.target.value)}
+                className={controlClass}
+                placeholder="Enter an unlinked driver name"
+              />
+              {value.driverName && (
+                <p className="mt-1 text-[11px] text-amber-400">Driver {value.driverName} is not linked.</p>
+              )}
+            </>
           )}
         </Field>
         <Field label="Expense type">

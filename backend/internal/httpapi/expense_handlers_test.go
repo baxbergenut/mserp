@@ -24,6 +24,27 @@ func TestExpenseRequestValidate(t *testing.T) {
 	}
 }
 
+func TestNormalizeExtractedExpenseValues(t *testing.T) {
+	t.Parallel()
+
+	amount := " $1,234.5 "
+	if got := validExtractedAmount(&amount); got != "1234.50" {
+		t.Fatalf("validExtractedAmount() = %q, want 1234.50", got)
+	}
+	negative := "-10.00"
+	if got := validExtractedAmount(&negative); got != "" {
+		t.Fatalf("validExtractedAmount(negative) = %q, want empty", got)
+	}
+	invalidDate := "09/23/2026"
+	if got := validExtractedDate(&invalidDate); got != "" {
+		t.Fatalf("validExtractedDate() = %q, want empty", got)
+	}
+	unknownCategory := "Fuel"
+	if got := validExtractedCategory(&unknownCategory); got != "Other" {
+		t.Fatalf("validExtractedCategory() = %q, want Other", got)
+	}
+}
+
 func TestExpenseRequestValidateRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 

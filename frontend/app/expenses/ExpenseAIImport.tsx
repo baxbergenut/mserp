@@ -1,0 +1,226 @@
+"use client";
+
+import { useState } from "react";
+import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
+import { extractExpenses } from "../lib/api";
+import type { AIExpenseDraft, Driver, ExpenseInput, Truck } from "../lib/types";
+import { controlClass } from "../components/management/ManagementUI";
+import { EXPENSE_CATEGORIES } from "./ExpenseForm";
+
+const compactControl = `${controlClass} min-w-32 px-2 py-1.5 text-[12px]`;
+
+function toInput(draft: AIExpenseDraft): ExpenseInput {
+  return {
+    company: draft.company,
+    category: draft.category,
+    expenseDate: draft.expenseDate,
+    truckId: draft.truckId,
+    driverId: draft.driverId,
+    unitNumber: draft.unitNumber,
+    driverName: draft.driverName,
+    amount: draft.amount,
+    paymentType: draft.paymentType,
+    expenseType: draft.expenseType,
+    referenceNumber: draft.referenceNumber,
+    description: draft.description,
+    coveredBy: draft.coveredBy,
+    paidBy: draft.paidBy,
+    managerVerified: false,
+    accountingVerified: false,
+  };
+}
+
+export function ExpenseAIImport({
+  onExtracted,
+  onError,
+}: {
+  onExtracted: (drafts: ExpenseInput[]) => void;
+  onError: (message: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  async function analyze() {
+    if (!text.trim() && !file) {
+      onError("Paste transaction text or choose a receipt, invoice, or transaction file.");
+      return;
+    }
+    setIsAnalyzing(true);
+    onError("");
+    try {
+      const result = await extractExpenses(text, file);
+      if (result.expenses.length === 0) {
+        onError("AI could not find an expense in that content. Add more detail or try a clearer file.");
+        return;
+      }
+      onExtracted(result.expenses.map(toInput));
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "The transaction could not be analyzed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-4">
+      <div className="flex items-start gap-3">
+        <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div>
+          <h3 className="text-[13px] font-semibold text-zinc-200">Fill with AI</h3>
+          <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">
+            Paste transaction details or attach a PDF, TXT, PNG, JPEG, or WEBP. Review every suggestion before saving.
+          </p>
+        </div>
+      </div>
+      <textarea
+        rows={3}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        className={`${controlClass} mt-3`}
+        placeholder="Paste one or more transactions, receipt text, invoice details…"
+      />
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-[12px] text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200">
+          <FileUp className="h-4 w-4" />
+          <span className="max-w-64 truncate">{file?.name ?? "Choose attachment"}</span>
+          <input
+            type="file"
+            accept="application/pdf,text/plain,image/png,image/jpeg,image/webp"
+            className="sr-only"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <div className="flex items-center justify-end gap-2">
+          {file && (
+            <button
+              type="button"
+              onClick={() => setFile(null)}
+              className="rounded-md p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+              aria-label="Remove attachment"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={isAnalyzing}
+            onClick={() => void analyze()}
+            className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
+          >
+            {isAnalyzing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {isAnalyzing ? "Analyzing…" : "Analyze"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ExpenseBatchEditor({
+  values,
+  drivers,
+  trucks,
+  onChange,
+}: {
+  values: ExpenseInput[];
+  drivers: Driver[];
+  trucks: Truck[];
+  onChange: (values: ExpenseInput[]) => void;
+}) {
+  function update(index: number, patch: Partial<ExpenseInput>) {
+    onChange(values.map((value, valueIndex) => valueIndex === index ? { ...value, ...patch } : value));
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-[13px] font-semibold text-zinc-200">Review {values.length} transactions</h3>
+        <p className="mt-1 text-[11px] text-zinc-500">Every cell is editable. Scroll horizontally to review all details before creating the expenses.</p>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-zinc-800/70">
+        <table className="min-w-[2500px] text-left text-[12px]">
+          <thead className="bg-zinc-950/70 text-zinc-500">
+            <tr>
+              <th className="px-2 py-2 font-medium">#</th>
+              <th className="px-2 py-2 font-medium">Company</th>
+              <th className="px-2 py-2 font-medium">Category</th>
+              <th className="px-2 py-2 font-medium">Date</th>
+              <th className="px-2 py-2 font-medium">Truck / unit</th>
+              <th className="px-2 py-2 font-medium">Driver</th>
+              <th className="px-2 py-2 font-medium">Amount</th>
+              <th className="px-2 py-2 font-medium">Payment</th>
+              <th className="px-2 py-2 font-medium">Expense type</th>
+              <th className="px-2 py-2 font-medium">Reference</th>
+              <th className="px-2 py-2 font-medium">Description</th>
+              <th className="px-2 py-2 font-medium">Covered by</th>
+              <th className="px-2 py-2 font-medium">Paid by</th>
+              <th className="px-2 py-2 font-medium">Verified</th>
+              <th className="w-10 px-2 py-2"><span className="sr-only">Remove</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {values.map((value, index) => (
+              <tr key={index} className="border-t border-zinc-800/60 align-top">
+                <td className="px-2 py-2 font-mono text-zinc-500">{index + 1}</td>
+                <td className="px-2 py-2"><input required value={value.company} onChange={(event) => update(index, { company: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2">
+                  <select required value={value.category} onChange={(event) => update(index, { category: event.target.value as ExpenseInput["category"] })} className={compactControl}>
+                    {EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
+                  </select>
+                </td>
+                <td className="px-2 py-2"><input required type="date" value={value.expenseDate} onChange={(event) => update(index, { expenseDate: event.target.value })} className={compactControl} /></td>
+                <td className="space-y-1 px-2 py-2">
+                  <select
+                    value={value.truckId ?? ""}
+                    onChange={(event) => {
+                      const truckId = event.target.value || null;
+                      update(index, { truckId, unitNumber: trucks.find((truck) => truck.id === truckId)?.unitNumber ?? value.unitNumber });
+                    }}
+                    className={compactControl}
+                  >
+                    <option value="">No linked truck</option>
+                    {trucks.map((truck) => <option key={truck.id} value={truck.id}>{truck.unitNumber}</option>)}
+                  </select>
+                  <input value={value.unitNumber} onChange={(event) => update(index, { truckId: null, unitNumber: event.target.value })} className={compactControl} placeholder="Raw unit" />
+                </td>
+                <td className="space-y-1 px-2 py-2">
+                  <select
+                    value={value.driverId ?? ""}
+                    onChange={(event) => {
+                      const driverId = event.target.value || null;
+                      update(index, { driverId, driverName: drivers.find((driver) => driver.id === driverId)?.fullName ?? value.driverName });
+                    }}
+                    className={`${compactControl} min-w-44`}
+                  >
+                    <option value="">No linked driver</option>
+                    {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}
+                  </select>
+                  <input value={value.driverName} onChange={(event) => update(index, { driverId: null, driverName: event.target.value })} className={`${compactControl} min-w-44`} placeholder="Raw driver" />
+                </td>
+                <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
+                <td className="px-2 py-2"><input value={value.coveredBy} onChange={(event) => update(index, { coveredBy: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input value={value.paidBy} onChange={(event) => update(index, { paidBy: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2">
+                  <label className="flex items-center gap-2 whitespace-nowrap text-zinc-400"><input type="checkbox" checked={value.managerVerified} onChange={(event) => update(index, { managerVerified: event.target.checked })} /> Manager</label>
+                  <label className="mt-2 flex items-center gap-2 whitespace-nowrap text-zinc-400"><input type="checkbox" checked={value.accountingVerified} onChange={(event) => update(index, { accountingVerified: event.target.checked })} /> Accounting</label>
+                </td>
+                <td className="px-2 py-2">
+                  <button type="button" disabled={values.length === 1} onClick={() => onChange(values.filter((_, valueIndex) => valueIndex !== index))} className="rounded-md p-2 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove transaction ${index + 1}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}

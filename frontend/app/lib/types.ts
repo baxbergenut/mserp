@@ -536,85 +536,13 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
   };
 }
 
-export type TelegramExpenseStatus =
-  | "queued"
-  | "processing"
-  | "retry"
-  | "completed"
-  | "ignored"
-  | "needs_review"
-  | "failed";
-
-export interface TelegramExpenseCandidate {
+export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified"> {
   confidence: number;
-  company: string | null;
-  category: string | null;
-  expenseDate: string | null;
-  unitNumber: string | null;
-  driverName: string | null;
-  amount: string | null;
-  paymentType: string | null;
-  expenseType: string | null;
-  referenceNumber: string | null;
-  description: string | null;
-  coveredBy: string | null;
-  paidBy: string | null;
   evidence: string[];
 }
 
-export interface TelegramExpenseExtraction extends Partial<TelegramExpenseCandidate> {
-  isExpense: boolean;
-  expenses?: TelegramExpenseCandidate[];
-  containsMultipleExpenses?: boolean;
-}
-
-export interface TelegramExpenseActivity {
-  updateId: number;
-  chatId: number;
-  messageId: number;
-  chatType: "group" | "supergroup";
-  chatTitle: string | null;
-  senderName: string | null;
-  messageText: string | null;
-  fileName: string | null;
-  mimeType: string | null;
-  mediaGroupId: string | null;
-  status: TelegramExpenseStatus;
-  attempts: number;
-  nextAttemptAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  lastError: string | null;
-  extractedData: TelegramExpenseExtraction | null;
-  expenseId: string | null;
-  expenseCount: number;
-  expenseDate: string | null;
-  company: string | null;
-  category: string | null;
-  amount: string | null;
-  unitNumber: string | null;
-  driverName: string | null;
-  truckId: string | null;
-  driverId: string | null;
-  expenseType: string | null;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TelegramExpenseActivityPage
-  extends PaginatedResponse<TelegramExpenseActivity> {
-  summary: {
-    received24Hours: number;
-    completed: number;
-    inProgress: number;
-    needsReview: number;
-    ignored: number;
-    failed: number;
-    unmatched: number;
-    missingExpense: number;
-    lastCompletedAt: string | null;
-  };
+export interface ExpenseExtraction {
+  expenses: AIExpenseDraft[];
 }
 
 export interface AuthUser {
