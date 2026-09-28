@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `025_fix_intake_and_review_table_owners.sql`:
+  `027_add_gross_board_review_values.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -204,7 +204,8 @@ browser bundle.
 - Auth: `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
-  `GET /gross-board/loads?search=...`
+  `GET /gross-board/loads?search=...`, and
+  `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
@@ -218,6 +219,9 @@ browser bundle.
 - Relay review: `GET /tasks/relay-identities` (pagination/search),
   `POST /tasks/relay-identities/{id}/review` (`driverId`, `action: link|reject`).
   `frontend/app/tasks/` owns the authenticated review queue.
+- Custom tasks: `GET/POST /tasks/custom`, `PUT/PATCH/DELETE /tasks/custom/{id}`.
+  GET accepts pagination, search, and status (`open`, `completed`, `all`);
+  PUT edits title/notes and PATCH sets `completed` without replacing content.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
@@ -233,6 +237,15 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Custom tasks are shared by all authenticated users, separate from generated
+  driver setup and Relay review tasks. Titles are required (200 characters max),
+  notes are optional (5,000 max), and completion is reversible. Creation records
+  the session user; editing content preserves completion and vice versa.
+  `custom_task_repository.go` and `custom_task_handlers.go` own persistence and
+  validation. Database tests use only `MSERP_CUSTOM_TASK_TEST_DATABASE_URL`, a
+  disposable administrator connection with an `mserp_app` role, and verify both
+  fresh schema and migration 026 as that application role.
 
 - FleetScope is a one-way new-hire handoff for the configured MS Express company
   UUID. Both `FLEETSCOPE_COMPANY_ID` and `FLEETSCOPE_WEBHOOK_SECRET` must be set
@@ -254,14 +267,29 @@ assignment lookup lists.
 
 - Gross board plans persist one entry per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers and inactive
-  drivers with saved entries in the selected week appear, grouped by current
+  drivers with saved entries through the selected week appear, grouped by current
   dispatcher and showing current truck assignments. Weeks start Monday.
   Free text remains a plan; a unique exact load number (case-insensitive,
   trimmed) or explicit suggestion selection confirms it. Duplicate business
   load numbers require explicit selection. Confirmed original rate and miles
   always come from the linked load's current `total_pay` and `total_miles`,
   including on writes; driver rate stays dispatcher-editable. No pay formula
-  is applied to driver rate. Cut is original gross minus driver gross. Cards
+  is applied to driver rate. Rate balance carries original minus driver rate
+  forward from the first saved board entry through the selected week's end,
+  including plans. Missing load numbers or rates are excluded and counted as
+  incomplete, never treated as zero. Repeated system loads for the same driver
+  contribute only on their earliest board date and are identified in history.
+  Future weeks never affect an earlier balance. Balances follow driver IDs across
+  dispatcher changes; source corrections and historical edits recalculate carry.
+  The grid and opening balances are read in one repeatable-read snapshot.
+  Migration 027 preserves entered original rates and miles separately from
+  authoritative source values. Differences show red and retain both values for
+  review; accepting system values resets the comparison only if the source still
+  matches the values reviewed. Driver-rate differences are intentional.
+  Exact unique load numbers resolve on every board read, including late imports;
+  unmatched or mistyped numbers remain unchanged. There is no fuzzy auto-linking.
+  The visible idle board refreshes every 30 seconds and on focus, discarding
+  responses if editing or saving occurred during the request. Cards
   and row totals include planned and confirmed entries in the selected view,
   accumulated as integer hundredths. Autosave submits only changed days in an
   atomic version-checked batch; stale saves return 409. Cleared days retain

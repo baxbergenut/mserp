@@ -7,7 +7,8 @@ import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { MetricCard } from "@/app/components/MetricCard";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { DayCell } from "./DayCell";
-import { addDays, decimalDisplay, emptyEntry, entryKey, monday, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { BalanceDetails } from "./BalanceDetails";
+import { addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 112, 112];
@@ -28,9 +29,14 @@ export default function GrossBoardPage() {
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const [balanceDriver, setBalanceDriver] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState("");
+  const activityRef = useRef(0);
+  const idleRef = useRef(false);
   const savingRef = useRef(false);
   const savedRef = useRef<Record<string, GrossBoardEntry>>({});
   const dirty = Object.keys(changes).length > 0;
+  useLayoutEffect(() => { idleRef.current = !dirty && !saving && !loading; }, [dirty, saving, loading]);
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
 
   const load = useCallback(async () => {
@@ -46,6 +52,31 @@ export default function GrossBoardPage() {
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load board"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, [week]);
+
+  // One board refresh, rather than one lookup per cell. Never replace edits,
+  // even if the user starts and finishes a save while this request is in flight.
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+    const refresh = async () => {
+      if (!idleRef.current || document.visibilityState !== "visible" || inFlight) return;
+      const revision = activityRef.current;
+      inFlight = true;
+      try {
+        const value = await fetchGrossBoard(week);
+        if (!cancelled && idleRef.current && revision === activityRef.current) {
+          setBoard(value); setRefreshError("");
+        }
+      } catch {
+        if (!cancelled) setRefreshError("Automatic load refresh is unavailable. Your edits still autosave; use Reload to retry.");
+      } finally { inFlight = false; }
+    };
+    const timer = setInterval(() => { void refresh(); }, 30000);
+    const focus = () => { void refresh(); };
+    window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", focus);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); };
   }, [week]);
 
   useEffect(() => {
@@ -72,10 +103,18 @@ export default function GrossBoardPage() {
     return Object.values(allEntries).filter((entry) => ids.has(entry.driverId));
   }, [allEntries, drivers]);
   const summary = totals(shownEntries);
+  const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
+  const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
+  const endingBalances = drivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
+    dates.map((date) => allEntries[entryKey(driver.id, date)] ?? emptyEntry(driver.id, date))));
+  const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
+  const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
 
   function switchWeek(next: string) {
     if (next === week || loading) return;
+    activityRef.current += 1;
+    setBalanceDriver(null);
     setPendingWeek(next);
   }
 
@@ -91,6 +130,7 @@ export default function GrossBoardPage() {
   }, [pendingWeek, pendingLink, dirty, saving, loading, error]);
 
   const edit = useCallback((driverId: string, date: string, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
+    activityRef.current += 1;
     const key = entryKey(driverId, date);
     setChanges((current) => {
       const baseline = savedRef.current[key] ?? emptyEntry(driverId, date);
@@ -109,6 +149,8 @@ export default function GrossBoardPage() {
   const save = useCallback(async () => {
     if (savingRef.current || invalid || !dirty || loading) return;
     savingRef.current = true;
+    activityRef.current += 1;
+    const saveRevision = activityRef.current;
     const snapshot = { ...changes };
     setSaving(true); setError(""); setMessage("");
     try {
@@ -121,8 +163,16 @@ export default function GrossBoardPage() {
       });
       setChanges((current) => reconcileAutosave(current, snapshot, committed));
       setMessage("All changes saved");
+      // Refresh carry and repeated-load metadata after a save, but never
+      // replace the baseline under a newer edit.
+      if (activityRef.current === saveRevision) {
+        try {
+          const fresh = await fetchGrossBoard(week);
+          if (activityRef.current === saveRevision) { setBoard(fresh); setRefreshError(""); }
+        } catch { setRefreshError("Saved. Automatic load refresh is unavailable; use Reload to retry."); }
+      }
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
-    finally { savingRef.current = false; setSaving(false); }
+    finally { activityRef.current += 1; savingRef.current = false; setSaving(false); }
   }, [changes, dirty, invalid, loading, week]);
 
   useEffect(() => {
@@ -133,7 +183,8 @@ export default function GrossBoardPage() {
 
   async function reload() {
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
-    setChanges({}); setMessage(""); setPendingWeek(null); setPendingLink(null); await load();
+    activityRef.current += 1;
+    setChanges({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
   }
 
   return (
@@ -180,10 +231,12 @@ export default function GrossBoardPage() {
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
       <div className="flex flex-wrap gap-4 text-[11px] text-zinc-500">
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Green = confirmed load; original rate and miles are locked</span>
-        <span>Cut = original gross − driver gross</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red = entered original rate or miles differ from system values</span>
+        <span>Rate balance carries forward through the selected week · Click a balance for history</span>
         <span>{drivers.length} drivers · One load or plan per driver per day</span>
       </div>
 
+      {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
       {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading gross board…</div> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers for this dispatcher.</div> : board && <div className="max-h-[70vh] overflow-auto rounded-xl border border-zinc-800" role="region" aria-label="Weekly gross board" tabIndex={0}>
         <table className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
@@ -193,13 +246,15 @@ export default function GrossBoardPage() {
               <th className="sticky z-30 border-b border-r border-zinc-700 bg-zinc-900 px-2" style={truckColumnStyle}>Truck</th>
               <th className="border-b border-r border-zinc-700" aria-label="Field" />
               {dates.map((date, i) => <th key={date} className="border-b border-r border-zinc-700 py-2"><div className="font-medium">{weekdays[i]}</div><div className="mt-1 font-mono text-[11px] font-normal text-zinc-500">{shortDate(date)}</div></th>)}
-              {["Original gross", "Driver gross", "Cut", "Total miles"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
+              {["Original gross", "Driver gross", "Rate balance", "Total miles"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
             </tr>
           </thead>
           <tbody>
             {drivers.map((driver, index) => {
               const entries = dates.map((date) => allEntries[entryKey(driver.id, date)] ?? emptyEntry(driver.id, date));
               const sum = totals(entries);
+              const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", entries);
+              const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(entries);
               const groupStart = index === 0 || drivers[index - 1].dispatcherId !== driver.dispatcherId;
               return <Fragment key={driver.id}>
                 {groupStart && <tr><th colSpan={14} scope="rowgroup" className="border-b border-zinc-700 bg-blue-500/10 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th></tr>}
@@ -208,14 +263,29 @@ export default function GrossBoardPage() {
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 text-[10px] text-zinc-500">{["Load #", "Original", "Driver", "Miles"].map((field) => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
                   {entries.map((entry) => <DayCell key={entry.date} entry={entry} driverName={driver.fullName} disabled={false} onChange={edit} />)}
-                  {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true), decimalDisplay(sum.original - sum.driver, true), decimalDisplay(sum.miles)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
+                  {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
+                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
+                    <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
+                      <span className="font-mono">{signedMoney(balance)}</span><span className="mt-1 block text-[10px]">{balanceLabel(balance)}</span>
+                      {incomplete > 0 && <span className="mt-1 block text-[10px] text-amber-300">{incomplete} incomplete</span>}
+                      {entries.some((entry) => entry.duplicate) && <span className="mt-1 block text-[10px] text-amber-300">Repeated load</span>}
+                    </button>
+                  </td>
+                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
                 </tr>
               </Fragment>;
             })}
           </tbody>
-          <tfoot><tr className="bg-zinc-900 font-mono text-zinc-200"><th colSpan={10} className="border-t border-zinc-700 p-3 text-left"><span className="sticky left-3">Week total</span></th>{[decimalDisplay(summary.original, true), decimalDisplay(summary.driver, true), decimalDisplay(summary.original - summary.driver, true), decimalDisplay(summary.miles)].map((value, i) => <td key={i} className="border-t border-zinc-700 px-2 py-3">{value}</td>)}</tr></tfoot>
+          <tfoot><tr className="bg-zinc-900 font-mono text-zinc-200"><th colSpan={10} className="border-t border-zinc-700 p-3 text-left"><span className="sticky left-3">Totals · balance through week end</span></th>
+            {[decimalDisplay(summary.original, true), decimalDisplay(summary.driver, true)].map((value, i) => <td key={i} className="border-t border-zinc-700 px-2 py-3">{value}</td>)}
+            <td className="border-t border-zinc-700 px-2 py-3">{signedMoney(balanceTotal)}{uncoveredTotal > BigInt(0) && <span className="mt-1 block text-[10px] text-red-300">{decimalDisplay(uncoveredTotal, true)} uncovered</span>}</td>
+            <td className="border-t border-zinc-700 px-2 py-3">{decimalDisplay(summary.miles)}</td>
+          </tr></tfoot>
         </table>
       </div>}
+      {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
+        opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
+        entries={dates.map((date) => allEntries[entryKey(selectedDriver.id, date)] ?? emptyEntry(selectedDriver.id, date))} onClose={() => setBalanceDriver(null)} />}
     </div>
   );
 }

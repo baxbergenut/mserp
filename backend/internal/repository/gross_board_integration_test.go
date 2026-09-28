@@ -28,6 +28,16 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal("test database unavailable")
 	}
 	defer pool.Close()
+	var appRoleExists bool
+	if err = pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app')").Scan(&appRoleExists); err != nil {
+		t.Fatal(err)
+	}
+	if appRoleExists {
+		if _, err = pool.Exec(ctx, "SET ROLE mserp_app"); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("Checking migration and repository queries as mserp_app")
+	}
 	_, err = pool.Exec(ctx, `CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text,dispatcher_id uuid,active boolean);
  CREATE TEMP TABLE trucks(id uuid PRIMARY KEY,unit_number text);
@@ -38,6 +48,13 @@ func TestGrossBoardDatabase(t *testing.T) {
  INSERT INTO drivers VALUES('00000000-0000-0000-0000-000000000001','Test Driver','00000000-0000-0000-0000-000000000010',true),('00000000-0000-0000-0000-000000000002','Inactive',null,false);
  INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);`)
 	if err != nil {
+		t.Fatal(err)
+	}
+	migration, err := os.ReadFile("../../sql/027_add_gross_board_review_values.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(migration)); err != nil {
 		t.Fatal(err)
 	}
 	repo := NewGrossBoardRepository(pool)
@@ -54,6 +71,9 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatalf("unexpected board: %+v", board)
 	}
 	entry := board.Entries[0]
+	if entry.EnteredOriginalRate != "999.00" || entry.EnteredMiles != "999.00" {
+		t.Fatalf("comparison values were discarded: %+v", entry)
+	}
 	if entry.LoadRecordID == nil || *entry.LoadRecordID != 1 || entry.OriginalRate != "1234.56" || entry.Miles != "500.25" || entry.DriverRate != "1000.10" || entry.Version != 1 {
 		t.Fatalf("source fields not enforced: %+v", entry)
 	}
@@ -137,5 +157,103 @@ func TestGrossBoardDatabase(t *testing.T) {
 	empty, err := repo.Get(ctx, week.AddDate(0, 0, 7))
 	if err != nil || len(empty.Entries) != 0 {
 		t.Fatal("week isolation failed", err)
+	}
+
+	// Cross-week history includes plans, not future weeks or incomplete rates.
+	const carryDriver = "00000000-0000-0000-0000-000000000003"
+	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.drivers VALUES($1,'Carry Driver',null,false)`, carryDriver); err != nil {
+		t.Fatal(err)
+	}
+	plans := []GrossBoardEntry{
+		{DriverID: carryDriver, Date: "2026-09-21", LoadNumber: "LATER-100", OriginalRate: "1000", DriverRate: "800", Miles: "400"},
+		{DriverID: carryDriver, Date: "2026-09-28", LoadNumber: "PLAN-2", OriginalRate: "400", DriverRate: "750"},
+		{DriverID: carryDriver, Date: "2026-09-29", LoadNumber: "INCOMPLETE", OriginalRate: "9999"},
+		{DriverID: carryDriver, Date: "2026-10-05", LoadNumber: "PLAN-3", OriginalRate: "500", DriverRate: "350"},
+	}
+	if err = repo.Save(ctx, plans); err != nil {
+		t.Fatal(err)
+	}
+	board, err = repo.Get(ctx, week)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, balance := range board.Balances {
+		if balance.DriverID == carryDriver {
+			found = true
+			if balance.OpeningBalance != "200.00" {
+				t.Fatalf("wrong carry: %+v", balance)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("inactive driver's carry was hidden")
+	}
+	history, err := repo.BalanceHistory(ctx, carryDriver, week)
+	if err != nil || len(history) != 3 || history[2].Balance != "-150.00" || history[2].Change != "" {
+		t.Fatalf("future or incomplete entry changed balance: %+v, %v", history, err)
+	}
+	// An unmatched number is retained exactly; no fuzzy linking.
+	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.loads(id,load_id,total_pay,total_miles) VALUES(10,'LATER-100',900.25,430),(11,'PLAN-22',999,200)`); err != nil {
+		t.Fatal(err)
+	}
+	board, err = repo.Get(ctx, week)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range board.Entries {
+		if e.DriverID == carryDriver && e.Date == "2026-09-28" && (e.LoadNumber != "PLAN-2" || e.LoadRecordID != nil) {
+			t.Fatal("near match changed the plan", e)
+		}
+	}
+	prior, err := repo.Get(ctx, week.AddDate(0, 0, -7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linked GrossBoardEntry
+	for _, e := range prior.Entries {
+		if e.DriverID == carryDriver {
+			linked = e
+		}
+	}
+	if linked.LoadRecordID == nil || linked.OriginalRate != "900.25" || linked.EnteredOriginalRate != "1000.00" || linked.EnteredMiles != "400.00" || linked.Miles != "430.00" {
+		t.Fatalf("late match lost reference or source values: %+v", linked)
+	}
+	// Ordinary autosaves must not dismiss a discrepancy.
+	saved, err := repo.SaveEntries(ctx, []GrossBoardEntry{linked})
+	if err != nil || saved[0].EnteredOriginalRate != "1000.00" {
+		t.Fatal("autosave erased comparison", err)
+	}
+	linked = saved[0]
+	linked.AcceptSystemValues = true
+	if _, err = pool.Exec(ctx, `UPDATE pg_temp.loads SET total_pay=900.50 WHERE id=10`); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.Save(ctx, []GrossBoardEntry{linked}); !errors.Is(err, ErrGrossBoardConflict) {
+		t.Fatal("stale source review accepted", err)
+	}
+	linked.OriginalRate = "900.50"
+	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{linked})
+	if err != nil || saved[0].EnteredOriginalRate != "900.50" || saved[0].EnteredMiles != "430.00" || saved[0].AcceptSystemValues {
+		t.Fatal("review did not record exact source values", err, saved)
+	}
+	// Repeating the same system load on another day never creates more balance.
+	duplicate := GrossBoardEntry{DriverID: carryDriver, Date: "2026-09-30", LoadNumber: "LATER-100", DriverRate: "100"}
+	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{duplicate})
+	if err != nil || !saved[0].Duplicate {
+		t.Fatal("repeated load was not identified", err)
+	}
+	history, err = repo.BalanceHistory(ctx, carryDriver, week)
+	if err != nil || history[len(history)-1].Balance != "-249.50" || history[len(history)-1].Change != "" {
+		t.Fatal("repeated load changed running balance", err, history)
+	}
+	board, err = repo.Get(ctx, week.AddDate(0, 0, 7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, balance := range board.Balances {
+		if balance.DriverID == carryDriver && (balance.OpeningBalance != "-249.50" || balance.OpeningIncomplete != 1) {
+			t.Fatal("next week did not carry corrected balance", balance)
+		}
 	}
 }

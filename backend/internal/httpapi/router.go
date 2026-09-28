@@ -30,6 +30,7 @@ func NewRouter(
 	expenseRepo *repository.ExpenseRepository,
 	grossBoardRepo *repository.GrossBoardRepository,
 	authRepo *repository.AuthRepository,
+	customTaskRepo *repository.CustomTaskRepository,
 	documentExtractor groq.DocumentExtractor,
 	expenseExtractor gemini.ExpenseExtractor,
 	authOptions AuthOptions,
@@ -119,6 +120,7 @@ func NewRouter(
 
 	registerFleetRoutes(protected, logger, fleetRepo)
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
+	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerTollRoutes(protected, logger, tollJob, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)

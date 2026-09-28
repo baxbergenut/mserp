@@ -610,6 +610,10 @@ export interface GrossBoardEntry {
   driverRate: string;
   miles: string;
   version: number;
+  enteredOriginalRate: string;
+  enteredMiles: string;
+  duplicate: boolean;
+  acceptSystemValues?: boolean;
 }
 
 export interface GrossBoardDriver {
@@ -625,6 +629,17 @@ export interface GrossBoard {
   weekStart: string;
   drivers: GrossBoardDriver[];
   entries: GrossBoardEntry[];
+  balances: { driverId: string; openingBalance: string; openingIncomplete: number }[];
+}
+
+export interface GrossBoardBalanceLine {
+  date: string;
+  loadNumber: string;
+  originalRate: string;
+  driverRate: string;
+  change: string;
+  balance: string;
+  duplicate: boolean;
 }
 
 export interface GrossBoardLoad {
@@ -634,4 +649,18 @@ export interface GrossBoardLoad {
   miles: string;
   driverName: string;
   pickupDate: string;
+}
+export interface CustomTask {
+  id: string;
+  title: string;
+  notes: string;
+  completedAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomTaskInput {
+  title: string;
+  notes: string;
 }

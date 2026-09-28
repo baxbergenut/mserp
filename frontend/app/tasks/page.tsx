@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DriverSetupTasks } from "../drivers/DriverSetupTasks";
+import { CustomTasks } from "./CustomTasks";
 import { ListChecks, RefreshCw } from "lucide-react";
 import { fetchDrivers, fetchRelayIdentityTasks, reviewRelayIdentity } from "../lib/api";
 import type { Driver, RelayIdentityTask, PaginatedResponse } from "../lib/types";
@@ -14,6 +15,8 @@ type Decision = { task: RelayIdentityTask; driver: { id: string; name: string };
 export default function TasksPage() {
   const [data, setData] = useState<PaginatedResponse<RelayIdentityTask> | null>(null);
   const [setupTotal, setSetupTotal] = useState(0);
+  const [customTotal, setCustomTotal] = useState(0);
+  const [creatingTask, setCreatingTask] = useState(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -59,14 +62,19 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ManagementHeader icon={ListChecks} title="Tasks" count={(data?.total ?? 0) + setupTotal}
-        description="Set up new drivers and review accounts that need your attention."
-        actionLabel="Refresh" actionIcon={RefreshCw} onAction={reload} />
+      <ManagementHeader icon={ListChecks} title="Tasks" count={(data?.total ?? 0) + setupTotal + customTotal}
+        description="Manage team tasks, set up new drivers and review accounts that need your attention."
+        actionLabel="Add task" onAction={() => setCreatingTask(true)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }}
-          placeholder="Search tasks by name, email, phone or ID…" />
-        <Link href="/drivers" className="text-sm text-blue-400 hover:underline">Manage drivers</Link>
+          placeholder="Search tasks, names, email, phone or ID…" />
+        <div className="flex items-center gap-5">
+          <button onClick={reload} className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"><RefreshCw className="h-4 w-4" />Refresh</button>
+          <Link href="/drivers" className="text-sm text-blue-400 hover:underline">Manage drivers</Link>
+        </div>
       </div>
+      <CustomTasks search={debouncedSearch} revision={revision} creating={creatingTask}
+        onCloseCreate={() => setCreatingTask(false)} onCount={setCustomTotal} />
       <DriverSetupTasks search={debouncedSearch} revision={revision} onCount={setSetupTotal} />
       {error && !decision && <ErrorBanner message={error} />}
       {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-300">{notice}</p>}

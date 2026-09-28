@@ -64,13 +64,13 @@ func (request *grossBoardRequest) validate() error {
 		if e.LoadRecordID != nil && (*e.LoadRecordID <= 0 || e.LoadNumber == "") {
 			return errors.New("a selected load requires a valid record id and load number")
 		}
-		for _, value := range []*string{&e.OriginalRate, &e.DriverRate, &e.Miles} {
+		for _, value := range []*string{&e.OriginalRate, &e.DriverRate, &e.Miles, &e.EnteredOriginalRate, &e.EnteredMiles} {
 			*value = strings.TrimSpace(*value)
 			if *value != "" && !grossBoardDecimal.MatchString(*value) {
 				return errors.New("rates and miles must be decimal numbers with at most 10 whole digits and 2 decimal places")
 			}
 		}
-		if strings.HasPrefix(e.Miles, "-") {
+		if strings.HasPrefix(e.Miles, "-") || strings.HasPrefix(e.EnteredMiles, "-") {
 			return errors.New("miles cannot be negative")
 		}
 	}
@@ -120,6 +120,24 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		writeJSON(w, http.StatusOK, loads)
+	})
+	r.Get("/gross-board/balance", func(w http.ResponseWriter, r *http.Request) {
+		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		driverID := r.URL.Query().Get("driverId")
+		if !isUUID(driverID) {
+			writeAPIError(w, http.StatusBadRequest, "invalid driver id")
+			return
+		}
+		history, err := repo.BalanceHistory(r.Context(), driverID, week)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, history)
 	})
 	r.Put("/gross-board", func(w http.ResponseWriter, r *http.Request) {
 		var request grossBoardRequest

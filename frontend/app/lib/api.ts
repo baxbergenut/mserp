@@ -1,7 +1,10 @@
 import type {
+  CustomTask,
+  CustomTaskInput,
   RelayIdentityTask,
   GrossBoard,
   GrossBoardEntry,
+  GrossBoardBalanceLine,
   GrossBoardLoad,
   Dispatcher,
   DispatcherInput,
@@ -76,6 +79,17 @@ const API_BASE =
 
 let csrfToken = "";
 
+export const fetchCustomTasks = (query: PageQuery & { status: "open" | "completed" | "all" }) =>
+  paginatedRequest<PaginatedResponse<CustomTask>>(withQuery("/tasks/custom", query));
+export const createCustomTask = (input: CustomTaskInput) =>
+  apiRequest<CustomTask>("/tasks/custom", { method: "POST", body: JSON.stringify(input) });
+export const updateCustomTask = (id: string, input: CustomTaskInput) =>
+  apiRequest<CustomTask>(`/tasks/custom/${id}`, { method: "PUT", body: JSON.stringify(input) });
+export const setCustomTaskCompleted = (id: string, completed: boolean) =>
+  apiRequest<CustomTask>(`/tasks/custom/${id}`, { method: "PATCH", body: JSON.stringify({ completed }) });
+export const deleteCustomTask = (id: string) =>
+  apiRequest<void>(`/tasks/custom/${id}`, { method: "DELETE" });
+
 export const fetchRelayIdentityTasks = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<RelayIdentityTask>>(withQuery("/tasks/relay-identities", query));
 export const reviewRelayIdentity = (id: string, driverId: string, action: "link" | "reject") =>
@@ -85,6 +99,8 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
+export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>
+  apiRequest<GrossBoardBalanceLine[]>(withQuery("/gross-board/balance", { driverId, weekStart }));
 export const searchGrossBoardLoads = (search: string) =>
   apiRequest<GrossBoardLoad[]>(withQuery("/gross-board/loads", { search }));
 export const saveGrossBoard = (weekStart: string, entries: GrossBoardEntry[]) =>

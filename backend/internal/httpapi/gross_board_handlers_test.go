@@ -24,6 +24,8 @@ func TestGrossBoardValidation(t *testing.T) {
 		{"outside week", func(r *grossBoardRequest) { r.Entries[0].Date = "2026-10-05" }},
 		{"bad date", func(r *grossBoardRequest) { r.Entries[0].Date = "2026-02-30" }},
 		{"negative mileage", func(r *grossBoardRequest) { r.Entries[0].Miles = "-1" }},
+		{"negative entered mileage", func(r *grossBoardRequest) { r.Entries[0].EnteredMiles = "-1" }},
+		{"invalid entered rate", func(r *grossBoardRequest) { r.Entries[0].EnteredOriginalRate = "NaN" }},
 		{"rounding", func(r *grossBoardRequest) { r.Entries[0].OriginalRate = "0.001" }},
 		{"overflow", func(r *grossBoardRequest) { r.Entries[0].OriginalRate = "10000000000" }},
 		{"NaN", func(r *grossBoardRequest) { r.Entries[0].DriverRate = "NaN" }},

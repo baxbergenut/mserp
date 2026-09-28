@@ -1,10 +1,11 @@
 "use client";
 
 import { memo, useEffect, useId, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, AlertCircle } from "lucide-react";
 import { searchGrossBoardLoads } from "@/app/lib/api";
 import type { GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
-import { validDecimal } from "./board";
+import { matchLoad, mismatch, validDecimal } from "./board";
+import { BoardDialog } from "./BoardDialog";
 
 type DayCellProps = {
   entry: GrossBoardEntry;
@@ -19,11 +20,15 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(0);
   const [searchError, setSearchError] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const query = entry.loadNumber.trim();
   const confirmed = entry.loadRecordId !== null;
+  const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.originalRate);
+  const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.miles);
+  const needsReview = rateMismatch || milesMismatch;
 
   useEffect(() => {
-    if (!query || confirmed || disabled) return;
+    if (!query || confirmed || disabled || !focused) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       searchGrossBoardLoads(query).then((loads) => {
@@ -34,18 +39,15 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const exact = loads.filter((load) => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
         if (exact.length === 1) {
           const load = exact[0];
-          onChange(entry.driverId, entry.date, (current) => current.loadNumber.trim() === query ? {
-            ...current, loadNumber: load.loadNumber, loadRecordId: load.id,
-            originalRate: load.originalRate, miles: load.miles,
-          } : current);
+          onChange(entry.driverId, entry.date, (current) => current.loadNumber.trim() === query ? matchLoad(current, load) : current);
         }
       }).catch(() => { if (!cancelled) { setSuggestions([]); setSearchError(true); } });
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, confirmed, disabled, onChange, entry.driverId, entry.date]);
+  }, [query, confirmed, disabled, focused, onChange, entry.driverId, entry.date]);
 
   const choose = (load: GrossBoardLoad) => {
-    onChange(entry.driverId, entry.date, (current) => ({ ...current, loadNumber: load.loadNumber, loadRecordId: load.id, originalRate: load.originalRate, miles: load.miles }));
+    onChange(entry.driverId, entry.date, (current) => matchLoad(current, load));
     setFocused(false);
   };
   const open = focused && !confirmed && suggestions.length > 0;
@@ -67,6 +69,9 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
             onChange(entry.driverId, entry.date, (current) => ({ ...current, loadNumber, loadRecordId: null,
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
+              enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate,
+              enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
+              duplicate: false, acceptSystemValues: false,
             }));
           }}
           onKeyDown={(event) => {
@@ -81,6 +86,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           placeholder="Load # / plan"
         />
         {confirmed && <Check aria-label="Confirmed load" className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-emerald-400" />}
+        {needsReview && <button aria-label={`Review rate and miles for ${label}`} title="Entered values differ from the system load" onClick={() => setReviewing(true)} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
         {searchError && <span className="absolute right-1 top-1 text-amber-400" title="Load lookup unavailable. Save will verify this number." aria-label="Load lookup unavailable">!</span>}
         {open && <ul id={id} role="listbox" aria-label="Matching loads" className="absolute left-0 top-8 z-40 max-h-56 w-72 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left shadow-xl">
           {suggestions.map((load, index) => <li key={load.id} id={`${id}-${index}`} role="option" aria-selected={index === active}
@@ -95,18 +101,38 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
       {(["originalRate", "driverRate", "miles"] as const).map((field) => {
         const locked = confirmed && field !== "driverRate";
         const valid = validDecimal(entry[field], field === "miles");
+        const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : false;
+        const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
         return <input key={field} aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal" value={entry[field]} readOnly={locked} disabled={disabled}
-          title={locked ? "Locked to the system load" : !valid ? "Enter a number with up to 2 decimal places" : undefined}
+          title={different ? `Entered: ${entered}; system: ${entry[field] || "missing"}. Use the review icon for details.` : locked ? "Locked to the system load" : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder={locked ? "—" : "0.00"}
-          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, (current) => ({ ...current, [field]: value })); }}
-          className={`${fieldClass} ${locked ? "text-emerald-200/70" : "text-zinc-300"} ${!valid ? "bg-red-500/15 text-red-300" : ""}`}
+          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, (current) => ({ ...current, [field]: value,
+            ...(field === "originalRate" ? { enteredOriginalRate: value } : field === "miles" ? { enteredMiles: value } : {}),
+          })); }}
+          className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : locked ? "text-emerald-200/70" : "text-zinc-300"}`}
         />;
       })}
+      {reviewing && <BoardDialog title={`Review load ${entry.loadNumber}`} onClose={() => setReviewing(false)}>
+        <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use the system values. Your entered values are retained below for comparison.</p>
+        <table className="w-full text-left text-sm">
+          <thead className="text-zinc-500"><tr><th className="p-2">Field</th><th>Entered</th><th>System</th></tr></thead>
+          <tbody>{[["Original rate", entry.enteredOriginalRate, entry.originalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.miles, milesMismatch]].map(([name, entered, actual, different]) =>
+            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{entered || "—"}</td><td>{actual || "—"}</td></tr>)}</tbody>
+        </table>
+        <p className="mt-4 text-xs text-zinc-500">Driver rate stays as entered. If the imported data is wrong, correct the source load; the board will refresh automatically.</p>
+        <button className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
+          onChange(entry.driverId, entry.date, (current) => ({ ...current, acceptSystemValues: true,
+            enteredOriginalRate: current.originalRate, enteredMiles: current.miles }));
+          setReviewing(false);
+        }}>Accept system values</button>
+      </BoardDialog>}
     </td>
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date
   && previous.entry.version === next.entry.version && previous.entry.loadNumber === next.entry.loadNumber
   && previous.entry.loadRecordId === next.entry.loadRecordId && previous.entry.originalRate === next.entry.originalRate
-  && previous.entry.driverRate === next.entry.driverRate && previous.entry.miles === next.entry.miles);
+  && previous.entry.driverRate === next.entry.driverRate && previous.entry.miles === next.entry.miles
+  && previous.entry.enteredOriginalRate === next.entry.enteredOriginalRate && previous.entry.enteredMiles === next.entry.enteredMiles
+  && previous.entry.acceptSystemValues === next.entry.acceptSystemValues && previous.entry.duplicate === next.entry.duplicate);
