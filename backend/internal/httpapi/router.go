@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"mserp/internal/fleetscope"
 	"mserp/internal/gemini"
 	"mserp/internal/groq"
 	"mserp/internal/jobs"
@@ -32,6 +33,7 @@ func NewRouter(
 	documentExtractor groq.DocumentExtractor,
 	expenseExtractor gemini.ExpenseExtractor,
 	authOptions AuthOptions,
+	fleetScopeOptions ...fleetscope.Options,
 ) http.Handler {
 	r := chi.NewRouter()
 	auth := newAuthHandler(logger, authRepo, authOptions)
@@ -50,6 +52,11 @@ func NewRouter(
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 	r.Post("/auth/login", auth.login)
+	var fleetScopeOption fleetscope.Options
+	if len(fleetScopeOptions) > 0 {
+		fleetScopeOption = fleetScopeOptions[0]
+	}
+	r.Post("/integrations/fleetscope/driver-hired", fleetScopeWebhook(logger, fleetRepo, fleetScopeOption))
 
 	protected := chi.NewRouter()
 	protected.Use(auth.requireSession)
@@ -111,6 +118,7 @@ func NewRouter(
 	})
 
 	registerFleetRoutes(protected, logger, fleetRepo)
+	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerTollRoutes(protected, logger, tollJob, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)

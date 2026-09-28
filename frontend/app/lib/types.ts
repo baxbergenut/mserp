@@ -325,6 +325,29 @@ export interface DriverInput {
   cdlFileId: string | null;
 }
 
+export type DriverDirectoryEntry = Driver & { intakeId?: string };
+
+export interface DriverIntake {
+  id: string;
+  receivedAt: string;
+  driver: {
+    id: string;
+    fullName: string;
+    driverType: "company" | "owner_operator";
+    hireDate: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    licenseNumber?: string;
+    licenseState?: string;
+    licenseExpires?: string;
+  };
+  candidates: Pick<Driver, "id" | "fullName" | "phone" | "email">[];
+}
+
 export interface Truck {
   id: string;
   unitNumber: string;

@@ -48,6 +48,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   group registration.
 - `backend/internal/httpapi/fleet_handlers.go`: driver, truck, and dispatcher
   JSON CRUD handlers and input validation.
+- `backend/internal/fleetscope/`, `backend/internal/httpapi/fleetscope_handlers.go`,
+  and `backend/internal/repository/fleetscope_repository.go`: signed new-hire
+  intake and setup tasks. See `docs/FLEETSCOPE_WEBHOOK.md` for configuration.
 - `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
   API sync.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
@@ -146,6 +149,8 @@ PREPASS_TOLL_SYNC_START_DATE=2026-01-01
 FRONTEND_ORIGIN=http://localhost:3000
 AUTH_COOKIE_SECURE=false
 AUTH_SESSION_TTL=12h
+FLEETSCOPE_COMPANY_ID=...
+FLEETSCOPE_WEBHOOK_SECRET=...
 SCHEDULED_SYNCS_ENABLED=true
 SCHEDULED_SYNCS_TIMEZONE=America/New_York
 SCHEDULED_LOADS_SYNC_TIME=06:00
@@ -201,6 +206,8 @@ browser bundle.
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
   `GET /gross-board/loads?search=...`
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
+- New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
+  `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
@@ -226,6 +233,23 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- FleetScope is a one-way new-hire handoff for the configured MS Express company
+  UUID. Both `FLEETSCOPE_COMPANY_ID` and `FLEETSCOPE_WEBHOOK_SECRET` must be set
+  together; both absent disables receipt. Verify HMAC-SHA256 of timestamp + dot
+  + exact body bytes and a five-minute delivery timestamp window. Pin the company
+  independently of the signature. Receipts commit before acknowledgment and
+  deduplicate by event ID plus company/driver ID; never overwrite the first
+  snapshot, import the historical fleet, or propagate later profile changes.
+  New hires appear as regular Drivers table rows with a small New badge and
+  a corresponding Set up [name] task. Both views refresh every 15 seconds while
+  visible. The driver-directory endpoint combines pending and configured drivers
+  with shared search/pagination; ordinary /drivers lookups exclude pending hires. They stay outside managed drivers/payroll until accounting completes
+  setup with a positive pay rate or explicitly links an existing record. Creation,
+  assignments, and intake completion are atomic. Linking preserves existing
+  profile, rates, assignments, and active status. Keep completed intake identity
+  after driver deletion so retries cannot recreate it. Tests use the isolated
+  `MSERP_FLEETSCOPE_TEST_DATABASE_URL`; never load production credentials for them.
 
 - Gross board plans persist one entry per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers and inactive
@@ -364,7 +388,7 @@ assignment lookup lists.
   Migration 024 is additive/relaxes nullability; rollbacks to pre-review binaries
   cannot safely display unassigned rows. Resolve pending accounts before such a
   rollback or deploy a compatible forward fix; never manufacture placeholder drivers.
-- Except for health, readiness, and login, every API route requires a valid
+- Except for health, readiness, login, and the HMAC-authenticated FleetScope webhook, every API route requires a valid
   database session. State-changing requests also require the session's CSRF
   token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;
   only SHA-256 token digests are stored in PostgreSQL.

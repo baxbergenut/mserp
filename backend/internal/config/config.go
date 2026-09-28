@@ -8,9 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"mserp/internal/fleetscope"
 )
 
 type Config struct {
+	FleetScope             fleetscope.Options
 	BindAddress            string
 	Port                   string
 	DatabaseURL            string
@@ -152,6 +155,7 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
+		FleetScope:             fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
 		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
 		Port:                   envOrDefault("PORT", "8080"),
 		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
@@ -180,6 +184,9 @@ func Load() (Config, error) {
 		ScheduledTollsSyncTime: scheduledTollsSyncTime,
 	}
 
+	if err := cfg.FleetScope.Validate(); err != nil {
+		return Config{}, err
+	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
 	}

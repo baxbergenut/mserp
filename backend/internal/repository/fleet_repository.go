@@ -217,9 +217,21 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 	}
 	defer tx.Rollback(ctx)
 
+	id, err := createDriverTx(ctx, tx, input)
+	if err != nil {
+		return Driver{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Driver{}, err
+	}
+	return r.GetDriver(ctx, id)
+}
+
+// Shared by manual entry and atomic completion of a FleetScope intake.
+func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
 	var id string
 	displayName := formatPersonName(input.FullName)
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		INSERT INTO drivers (
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			phone, email, license_number, license_state, license_expires, hire_date,
@@ -234,15 +246,12 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 		input.Active, input.Notes, input.CDLFileID,
 	).Scan(&id)
 	if err != nil {
-		return Driver{}, err
+		return "", err
 	}
 	if err = setDriverTruck(ctx, tx, id, input.TruckID); err != nil {
-		return Driver{}, err
+		return "", err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return Driver{}, err
-	}
-	return r.GetDriver(ctx, id)
+	return id, nil
 }
 
 func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input DriverInput) (Driver, error) {

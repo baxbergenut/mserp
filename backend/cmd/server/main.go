@@ -124,6 +124,7 @@ func main() {
 			CookieSecure: cfg.AuthCookieSecure,
 			SessionTTL:   cfg.AuthSessionTTL,
 		},
+		cfg.FleetScope,
 	)
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.FrontendOrigin},

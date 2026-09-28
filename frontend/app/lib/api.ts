@@ -8,6 +8,8 @@ import type {
   CDLFileUploadResult,
   Driver,
   DriverInput,
+  DriverIntake,
+  DriverDirectoryEntry,
   FuelDashboard,
   FinancialDashboard,
   FuelTransaction,
@@ -198,6 +200,14 @@ export async function logout(): Promise<void> {
 }
 
 export const fetchDrivers = () => apiRequest<Driver[]>("/drivers");
+export const fetchDriverDirectory = (query: PageQuery & { includeInactive?: boolean }) =>
+  paginatedRequest<PaginatedResponse<DriverDirectoryEntry>>(withQuery("/driver-directory", query));
+export const fetchDriverIntakeById = (id: string) => apiRequest<DriverIntake>(`/driver-intake/${id}`);
+export const fetchDriverIntake = (query: PageQuery) =>
+  paginatedRequest<PaginatedResponse<DriverIntake>>(withQuery("/driver-intake", query));
+export const completeDriverIntake = (id: string, input:
+  { driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) =>
+  apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify(input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }) =>
   paginatedRequest<PaginatedResponse<Driver>>(withQuery("/drivers", query));

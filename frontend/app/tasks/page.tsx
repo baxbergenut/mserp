@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { DriverSetupTasks } from "../drivers/DriverSetupTasks";
 import { ListChecks, RefreshCw } from "lucide-react";
 import { fetchDrivers, fetchRelayIdentityTasks, reviewRelayIdentity } from "../lib/api";
 import type { Driver, RelayIdentityTask, PaginatedResponse } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import { controlClass, EmptyState, ErrorBanner, ManagementHeader, ManagementSearch, Modal, TablePagination } from "../components/management/ManagementUI";
+import { controlClass, ErrorBanner, ManagementHeader, ManagementSearch, Modal, TablePagination } from "../components/management/ManagementUI";
 
 type Decision = { task: RelayIdentityTask; driver: { id: string; name: string }; action: "link" | "reject" };
 
 export default function TasksPage() {
   const [data, setData] = useState<PaginatedResponse<RelayIdentityTask> | null>(null);
+  const [setupTotal, setSetupTotal] = useState(0);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -56,19 +58,20 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      <ManagementHeader icon={ListChecks} title="Tasks" count={data?.total ?? 0}
-        description="Link unassigned Relay accounts to your drivers. Purchases are already imported and included in fuel spend."
+    <div className="space-y-5 animate-fade-in">
+      <ManagementHeader icon={ListChecks} title="Tasks" count={(data?.total ?? 0) + setupTotal}
+        description="Set up new drivers and review accounts that need your attention."
         actionLabel="Refresh" actionIcon={RefreshCw} onAction={reload} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search Relay name, email, phone or ID…" />
         <Link href="/drivers" className="text-sm text-blue-400 hover:underline">Manage drivers</Link>
       </div>
+      <DriverSetupTasks search={debouncedSearch} revision={revision} onCount={setSetupTotal} />
       {error && !decision && <ErrorBanner message={error} />}
       {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-300">{notice}</p>}
       {loading ? <p role="status" className="py-12 text-center text-sm text-zinc-400">Loading Relay tasks…</p>
-        : !error && data?.items.length === 0 ? <EmptyState message={search ? "No matching Relay accounts." : "All Relay accounts are linked. New accounts will appear here after fuel sync."} />
+        : !error && data?.items.length === 0 ? <p className="text-sm text-zinc-500">{search ? "No matching Relay accounts." : "No Relay accounts awaiting review."}</p>
         : !error && data?.items.map((task) => (
           <RelayTaskCard key={task.id} task={task} drivers={drivers} disabled={saving}
             onDecision={(driver, action) => setDecision({ task, driver, action })} />
