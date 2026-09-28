@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ClipboardEvent, DragEvent } from "react";
 import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
 import { extractExpenses } from "../lib/api";
 import type { AIExpenseDraft, Driver, ExpenseInput, Truck } from "../lib/types";
@@ -8,6 +9,22 @@ import { controlClass } from "../components/management/ManagementUI";
 import { EXPENSE_CATEGORIES } from "./ExpenseForm";
 
 const compactControl = `${controlClass} min-w-32 px-2 py-1.5 text-[12px]`;
+const MAX_ATTACHMENT_SIZE = 20 << 20;
+const SUPPORTED_ATTACHMENT_TYPES = new Set([
+  "application/pdf",
+  "text/plain",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+const SUPPORTED_ATTACHMENT_EXTENSIONS = [".pdf", ".txt", ".png", ".jpg", ".jpeg", ".webp"];
+
+function isSupportedAttachment(file: File) {
+  if (SUPPORTED_ATTACHMENT_TYPES.has(file.type)) return true;
+  const name = file.name.toLowerCase();
+  return (!file.type || file.type === "application/octet-stream") &&
+    SUPPORTED_ATTACHMENT_EXTENSIONS.some((extension) => name.endsWith(extension));
+}
 
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
@@ -40,6 +57,47 @@ export function ExpenseAIImport({
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  function selectFile(nextFile: File) {
+    if (!isSupportedAttachment(nextFile)) {
+      onError("Choose a PDF, TXT, PNG, JPEG, or WEBP file.");
+      return;
+    }
+    if (nextFile.size === 0) {
+      onError("The selected attachment is empty.");
+      return;
+    }
+    if (nextFile.size > MAX_ATTACHMENT_SIZE) {
+      onError("The expense attachment must be 20 MB or smaller.");
+      return;
+    }
+    setFile(nextFile);
+    onError("");
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    const droppedFiles = Array.from(event.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+    if (droppedFiles.length > 1) {
+      onError("Attach one file at a time. A single file can still contain several transactions.");
+      return;
+    }
+    selectFile(droppedFiles[0]);
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLElement>) {
+    const imageItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
+    const pastedImage = imageItem?.getAsFile();
+    if (!pastedImage) return;
+    const extension = pastedImage.type === "image/jpeg" ? "jpg" : pastedImage.type.split("/")[1] || "png";
+    const namedImage = pastedImage.name
+      ? pastedImage
+      : new File([pastedImage], `pasted-receipt.${extension}`, { type: pastedImage.type });
+    selectFile(namedImage);
+  }
 
   async function analyze() {
     if (!text.trim() && !file) {
@@ -63,7 +121,10 @@ export function ExpenseAIImport({
   }
 
   return (
-    <section className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-4">
+    <section
+      onPaste={handlePaste}
+      className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-4"
+    >
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
           <Sparkles className="h-4 w-4" />
@@ -71,7 +132,7 @@ export function ExpenseAIImport({
         <div>
           <h3 className="text-[13px] font-semibold text-zinc-200">Fill with AI</h3>
           <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">
-            Paste transaction details or attach a PDF, TXT, PNG, JPEG, or WEBP. Review every suggestion before saving.
+            Paste transaction details, paste an image, or attach a PDF, TXT, PNG, JPEG, or WEBP. Review every suggestion before saving.
           </p>
         </div>
       </div>
@@ -82,38 +143,62 @@ export function ExpenseAIImport({
         className={`${controlClass} mt-3`}
         placeholder="Paste one or more transactions, receipt text, invoice details…"
       />
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-[12px] text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200">
-          <FileUp className="h-4 w-4" />
-          <span className="max-w-64 truncate">{file?.name ?? "Choose attachment"}</span>
-          <input
-            type="file"
-            accept="application/pdf,text/plain,image/png,image/jpeg,image/webp"
-            className="sr-only"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        <div className="flex items-center justify-end gap-2">
-          {file && (
-            <button
-              type="button"
-              onClick={() => setFile(null)}
-              className="rounded-md p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
-              aria-label="Remove attachment"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={isAnalyzing}
-            onClick={() => void analyze()}
-            className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
-          >
-            {isAnalyzing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {isAnalyzing ? "Analyzing…" : "Analyze"}
-          </button>
+      <div
+        onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setIsDragging(true); }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+        }}
+        onDrop={handleDrop}
+        className={`mt-3 rounded-xl border border-dashed px-4 py-4 transition-colors ${isDragging ? "border-blue-400 bg-blue-500/10" : "border-zinc-700/80 bg-zinc-950/30"}`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <FileUp className={`h-5 w-5 shrink-0 ${isDragging ? "text-blue-400" : "text-zinc-500"}`} />
+            <div className="min-w-0">
+              <p aria-live="polite" className="truncate text-[12px] font-medium text-zinc-300">
+                {file?.name ?? (isDragging ? "Drop the file here" : "Drop a file here or paste an image")}
+              </p>
+              <p className="mt-0.5 text-[11px] text-zinc-600">One file, up to 20 MB</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <label className="cursor-pointer rounded-lg border border-zinc-700 px-3 py-2 text-[12px] font-medium text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800/60 hover:text-zinc-200">
+              Browse
+              <input
+                type="file"
+                accept="application/pdf,text/plain,image/png,image/jpeg,image/webp"
+                className="sr-only"
+                onChange={(event) => {
+                  const selected = event.target.files?.[0];
+                  if (selected) selectFile(selected);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            {file && (
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                className="rounded-md p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                aria-label="Remove attachment"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          disabled={isAnalyzing}
+          onClick={() => void analyze()}
+          className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
+        >
+          {isAnalyzing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {isAnalyzing ? "Analyzing…" : "Analyze"}
+        </button>
       </div>
     </section>
   );
