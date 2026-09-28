@@ -337,7 +337,7 @@ func ensureRelayDriver(
 			return "", err
 		}
 		if !found {
-			driverID, err = ensureDriver(ctx, tx, fullName, nil)
+			driverID, err = ensureDriver(ctx, tx, fullName, nil, false)
 			if err != nil {
 				return "", err
 			}

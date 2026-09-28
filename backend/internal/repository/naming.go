@@ -115,6 +115,15 @@ func meaningfulPersonNameTokens(value string) []string {
 	return meaningful
 }
 
+// shouldPreferMoreCompletePersonName lets a trusted source enrich a local
+// display name (for example, "James Lee Burligh" over "Burligh James") only
+// when it adds meaningful tokens without contradicting the existing name.
+func shouldPreferMoreCompletePersonName(incoming, existing string) bool {
+	incomingTokens := tokenSet(meaningfulPersonNameTokens(incoming))
+	existingTokens := tokenSet(meaningfulPersonNameTokens(existing))
+	return len(incomingTokens) > len(existingTokens) && isTokenSubset(existingTokens, incomingTokens)
+}
+
 func isNameSuffix(token string) bool {
 	switch token {
 	case "jr", "junior", "sr", "senior", "ii", "iii", "iv", "v":

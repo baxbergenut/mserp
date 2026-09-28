@@ -40,6 +40,34 @@ func TestRelayDriverNameMatchQuality(t *testing.T) {
 	}
 }
 
+func TestShouldPreferMoreCompletePersonName(t *testing.T) {
+	if !shouldPreferMoreCompletePersonName("James Lee Burligh", "Burligh James") {
+		t.Fatal("expected the DataTruck name with a middle name to be preferred")
+	}
+	if shouldPreferMoreCompletePersonName("Burligh James", "James Lee Burligh") {
+		t.Fatal("a shorter source name must not replace the canonical name")
+	}
+	if shouldPreferMoreCompletePersonName("Luis Figueredo", "Hector Torres Robles") {
+		t.Fatal("an unrelated source name must not replace the canonical name")
+	}
+}
+
+func TestChooseUniqueCompatibleDriver(t *testing.T) {
+	id, name, found, err := chooseUniqueCompatibleDriver([]driverNameCandidate{{
+		id:       "driver-1",
+		fullName: "James Lee Burligh",
+	}})
+	if err != nil || !found || id != "driver-1" || name != "James Lee Burligh" {
+		t.Fatalf("match = %q, %q, %v, %v", id, name, found, err)
+	}
+	if _, _, found, err := chooseUniqueCompatibleDriver([]driverNameCandidate{
+		{id: "driver-1", fullName: "James Lee Burligh"},
+		{id: "driver-2", fullName: "James Burligh"},
+	}); err != nil || found {
+		t.Fatalf("ambiguous compatible names must not auto-match: found=%v err=%v", found, err)
+	}
+}
+
 func TestChooseRelayDriverCandidateUsesContactAndFleetEvidence(t *testing.T) {
 	email := "driver@example.com"
 	phone := "(616) 306-3564"

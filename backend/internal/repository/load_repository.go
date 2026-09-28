@@ -86,14 +86,14 @@ func (r *LoadRepository) UpsertLoads(ctx context.Context, records []LoadRecord) 
 			record.DispatcherID = &dispatcherID
 		}
 		if record.DriverName != nil {
-			driverID, ensureErr := ensureDriver(ctx, tx, *record.DriverName, record.DispatcherID)
+			driverID, ensureErr := ensureDriver(ctx, tx, *record.DriverName, record.DispatcherID, true)
 			if ensureErr != nil {
 				return ensureErr
 			}
 			record.DriverID = &driverID
 		}
 		if record.TeamDriverName != nil {
-			if _, ensureErr := ensureDriver(ctx, tx, *record.TeamDriverName, record.DispatcherID); ensureErr != nil {
+			if _, ensureErr := ensureDriver(ctx, tx, *record.TeamDriverName, record.DispatcherID, true); ensureErr != nil {
 				return ensureErr
 			}
 		}
@@ -494,30 +494,22 @@ func ensureDispatcher(ctx context.Context, tx pgx.Tx, name string) (string, erro
 	return id, err
 }
 
-func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *string) (string, error) {
+func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *string, preferMoreCompleteName bool) (string, error) {
 	displayName := formatPersonName(name)
 	normalizedName := normalizeName(displayName)
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "driver:"+normalizedName); err != nil {
 		return "", err
 	}
 
-	var id string
+	var id, existingName string
 	err := tx.QueryRow(ctx, `
-		SELECT id FROM drivers
+		SELECT id, full_name FROM drivers
 		WHERE normalized_name = $1
 		ORDER BY created_at, id
-		LIMIT 1`, normalizedName).Scan(&id)
+		LIMIT 1`, normalizedName).Scan(&id, &existingName)
 	if err == nil {
-		if _, err = tx.Exec(ctx, `
-			UPDATE drivers SET full_name = $2, updated_at = now()
-			WHERE id = $1 AND full_name IS DISTINCT FROM $2`, id, displayName); err != nil {
+		if err = enrichMatchedDriver(ctx, tx, id, existingName, displayName, dispatcherID, preferMoreCompleteName); err != nil {
 			return "", err
-		}
-		if dispatcherID != nil {
-			_, err = tx.Exec(ctx, `
-				UPDATE drivers
-				SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
-				WHERE id = $1`, id, *dispatcherID)
 		}
 		return id, err
 	}
@@ -525,18 +517,13 @@ func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *str
 		return "", err
 	}
 
-	permutationID, found, err := findDriverByTokenSignature(ctx, tx, displayName)
+	compatibleID, existingName, found, err := findCompatibleDriver(ctx, tx, displayName)
 	if err != nil {
 		return "", err
 	}
 	if found {
-		if dispatcherID != nil {
-			_, err = tx.Exec(ctx, `
-				UPDATE drivers
-				SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
-				WHERE id = $1`, permutationID, *dispatcherID)
-		}
-		return permutationID, err
+		err = enrichMatchedDriver(ctx, tx, compatibleID, existingName, displayName, dispatcherID, preferMoreCompleteName)
+		return compatibleID, err
 	}
 
 	err = tx.QueryRow(ctx, `
@@ -548,34 +535,65 @@ func ensureDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *str
 	return id, err
 }
 
-func findDriverByTokenSignature(ctx context.Context, tx pgx.Tx, name string) (string, bool, error) {
-	signature := personNameTokenSignature(name)
-	if signature == "" {
-		return "", false, nil
+func enrichMatchedDriver(
+	ctx context.Context,
+	tx pgx.Tx,
+	id string,
+	existingName string,
+	incomingName string,
+	dispatcherID *string,
+	preferMoreCompleteName bool,
+) error {
+	if preferMoreCompleteName && shouldPreferMoreCompletePersonName(incomingName, existingName) {
+		if _, err := tx.Exec(ctx, `
+			UPDATE drivers SET full_name = $2, normalized_name = $3, updated_at = now()
+			WHERE id = $1`, id, incomingName, normalizeName(incomingName)); err != nil {
+			return err
+		}
 	}
+	if dispatcherID == nil {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `
+		UPDATE drivers
+		SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
+		WHERE id = $1`, id, *dispatcherID)
+	return err
+}
 
+type driverNameCandidate struct {
+	id       string
+	fullName string
+}
+
+func findCompatibleDriver(ctx context.Context, tx pgx.Tx, name string) (string, string, bool, error) {
 	rows, err := tx.Query(ctx, `SELECT id, full_name FROM drivers ORDER BY created_at, id`)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	defer rows.Close()
 
-	var matchedID string
-	matches := 0
+	candidates := make([]driverNameCandidate, 0)
 	for rows.Next() {
 		var candidateID, candidateName string
 		if err := rows.Scan(&candidateID, &candidateName); err != nil {
-			return "", false, err
+			return "", "", false, err
 		}
-		if personNameTokenSignature(candidateName) == signature {
-			matchedID = candidateID
-			matches++
+		if relayDriverNameMatchQuality(name, candidateName) >= 90 {
+			candidates = append(candidates, driverNameCandidate{id: candidateID, fullName: candidateName})
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
-	return matchedID, matches == 1, nil
+	return chooseUniqueCompatibleDriver(candidates)
+}
+
+func chooseUniqueCompatibleDriver(candidates []driverNameCandidate) (string, string, bool, error) {
+	if len(candidates) != 1 {
+		return "", "", false, nil
+	}
+	return candidates[0].id, candidates[0].fullName, true, nil
 }
 
 type truckAssignment struct {
