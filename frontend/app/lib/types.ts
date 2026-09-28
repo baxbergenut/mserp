@@ -555,3 +555,38 @@ export interface AuthSession {
   csrfToken: string;
   expiresAt: string;
 }
+
+export interface GrossBoardEntry {
+  driverId: string;
+  date: string;
+  loadNumber: string;
+  loadRecordId: number | null;
+  originalRate: string;
+  driverRate: string;
+  miles: string;
+  version: number;
+}
+
+export interface GrossBoardDriver {
+  id: string;
+  fullName: string;
+  truckUnit: string;
+  dispatcherId: string;
+  dispatcherName: string;
+  active: boolean;
+}
+
+export interface GrossBoard {
+  weekStart: string;
+  drivers: GrossBoardDriver[];
+  entries: GrossBoardEntry[];
+}
+
+export interface GrossBoardLoad {
+  id: number;
+  loadNumber: string;
+  originalRate: string;
+  miles: string;
+  driverName: string;
+  pickupDate: string;
+}

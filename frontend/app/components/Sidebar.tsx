@@ -18,12 +18,14 @@ import {
   Landmark,
   LogOut,
   WalletCards,
+  CalendarRange,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/loads", label: "Loads", icon: Package },
+  { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/expenses", label: "Expenses", icon: WalletCards, exact: true },

@@ -1,4 +1,7 @@
 import type {
+  GrossBoard,
+  GrossBoardEntry,
+  GrossBoardLoad,
   Dispatcher,
   DispatcherInput,
   CDLFileUploadResult,
@@ -69,6 +72,13 @@ const API_BASE =
   "http://localhost:8080";
 
 let csrfToken = "";
+
+export const fetchGrossBoard = (weekStart: string) =>
+  apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
+export const searchGrossBoardLoads = (search: string) =>
+  apiRequest<GrossBoardLoad[]>(withQuery("/gross-board/loads", { search }));
+export const saveGrossBoard = (weekStart: string, entries: GrossBoardEntry[]) =>
+  apiRequest<GrossBoardEntry[]>("/gross-board", { method: "PUT", body: JSON.stringify({ weekStart, entries }) });
 
 export async function fetchLoads(): Promise<Load[]> {
 	const json = await apiRequest<unknown>("/loads");

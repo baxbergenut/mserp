@@ -52,6 +52,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   API sync.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
+- `backend/internal/httpapi/gross_board_handlers.go` and
+  `backend/internal/repository/gross_board_repository.go`: weekly dispatch plans,
+  exact load matching, suggestions, and versioned atomic autosaves.
 - `backend/internal/httpapi/file_handlers.go`: IRP/cab-card and CDL uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`
@@ -75,7 +78,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `021_remove_telegram_expense_ingestion.sql`:
+  `022_add_gross_board.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -87,6 +90,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/accounting/`: weekly driver settlement and dispatcher commission
   reports, selected by Monday-start report week.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
+- `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
+  grouping/filtering, load suggestions, autosave, and exact-decimal totals.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and review-first AI transaction entry.
@@ -193,6 +198,8 @@ browser bundle.
 - Health: `GET /healthz`, `GET /readyz`
 - Auth: `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
+- Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
+  `GET /gross-board/loads?search=...`
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
@@ -216,6 +223,21 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Gross board plans persist one entry per driver and calendar day, separately
+  from imported loads and settlement accounting. Active drivers and inactive
+  drivers with saved entries in the selected week appear, grouped by current
+  dispatcher and showing current truck assignments. Weeks start Monday.
+  Free text remains a plan; a unique exact load number (case-insensitive,
+  trimmed) or explicit suggestion selection confirms it. Duplicate business
+  load numbers require explicit selection. Confirmed original rate and miles
+  always come from the linked load's current `total_pay` and `total_miles`,
+  including on writes; driver rate stays dispatcher-editable. No pay formula
+  is applied to driver rate. Cut is original gross minus driver gross. Cards
+  and row totals include planned and confirmed entries in the selected view,
+  accumulated as integer hundredths. Autosave submits only changed days in an
+  atomic version-checked batch; stale saves return 409. Cleared days retain
+  their version to prevent lost updates. Week navigation waits for autosave.
 
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).
@@ -362,6 +384,7 @@ go vet ./...
 
 # frontend/
 npm run lint
+node scripts/test-gross-board.mjs
 npm run build
 ```
 

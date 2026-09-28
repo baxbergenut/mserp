@@ -66,6 +66,10 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Check gross board calculations and autosave
+        working-directory: frontend
+        run: node scripts/test-gross-board.mjs
+
       - name: Build static frontend
         working-directory: frontend
         env:

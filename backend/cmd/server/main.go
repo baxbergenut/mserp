@@ -70,6 +70,7 @@ func main() {
 	fuelRepo := repository.NewFuelRepository(pool)
 	dashboardRepo := repository.NewDashboardRepository(pool)
 	expenseRepo := repository.NewExpenseRepository(pool)
+	grossBoardRepo := repository.NewGrossBoardRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
@@ -115,6 +116,7 @@ func main() {
 		fuelRepo,
 		dashboardRepo,
 		expenseRepo,
+		grossBoardRepo,
 		authRepo,
 		cabCardExtractor,
 		expenseExtractor,
