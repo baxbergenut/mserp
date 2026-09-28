@@ -500,7 +500,9 @@ Prefer these targeted searches over recursively reading the repository.
   direct IP API URL breaks host-only SameSite authentication cookies and causes
   CORS/login loops. Nginx requires frontend asset revalidation because release
   archives normalize timestamps to the Unix epoch; preserve the `expires epoch`
-  directives.
+  directives. Static responses also disable ETag and If-Modified-Since
+  validation: epoch timestamps plus unchanged file sizes would otherwise return
+  304 for outdated HTML that references removed JavaScript chunks.
 - Migration `009_add_schema_migrations.sql` created the migration ledger. The
   deploy helper applies only unrecorded numbered migrations. New schema changes
   must update `init.sql`, add the next numbered migration, and remain compatible
