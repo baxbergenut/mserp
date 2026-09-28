@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `024_add_relay_identity_review.sql`:
+  `025_fix_intake_and_review_table_owners.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -507,6 +507,10 @@ Prefer these targeted searches over recursively reading the repository.
   deploy helper applies only unrecorded numbered migrations. New schema changes
   must update `init.sql`, add the next numbered migration, and remain compatible
   with the previous app release because app rollback does not undo migrations.
+- Migrations execute as `postgres`, while the API runs as `mserp_app`. Every
+  newly created runtime table must transfer ownership to `mserp_app` when that
+  role exists, following migration 025. Verify queries as the application role;
+  an administrator-only database test cannot detect missing runtime permissions.
 - Each deployment creates a custom-format PostgreSQL backup in
   `/var/backups/mserp` before migrations or release activation. Do not delete
   backups casually.

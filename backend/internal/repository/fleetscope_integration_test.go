@@ -40,6 +40,10 @@ func TestFleetScopeDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ownership, err := os.ReadFile("../../sql/025_fix_intake_and_review_table_owners.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, incremental := range []bool{false, true} {
 		t.Run(fmt.Sprintf("incremental=%v", incremental), func(t *testing.T) {
 			schema := fmt.Sprintf("fleetscope_intake_test_%d", time.Now().UnixNano())
@@ -71,6 +75,38 @@ func TestFleetScopeDatabase(t *testing.T) {
 			}
 			if incremental {
 				if _, err = pool.Exec(ctx, string(migration)); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = pool.Exec(ctx, string(ownership)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var runtimeRoleExists bool
+			if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app')`).Scan(&runtimeRoleExists); err != nil {
+				t.Fatal(err)
+			}
+			if runtimeRoleExists {
+				if _, err = pool.Exec(ctx, "GRANT USAGE ON SCHEMA "+quoted+" TO mserp_app"); err != nil {
+					t.Fatal(err)
+				}
+				tx, err := pool.Begin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback(ctx)
+				if _, err = tx.Exec(ctx, `SET LOCAL ROLE mserp_app`); err != nil {
+					t.Fatal(err)
+				}
+				for _, table := range []string{"fleetscope_driver_intake", "fleetscope_webhook_receipts", "relay_identity_reviews"} {
+					var allowed bool
+					if err = tx.QueryRow(ctx, `SELECT has_table_privilege(current_user, $1, 'SELECT,INSERT,UPDATE,DELETE')`, table).Scan(&allowed); err != nil || !allowed {
+						t.Fatalf("runtime access to %s: %v", table, err)
+					}
+					if _, err = tx.Exec(ctx, "SELECT 1 FROM "+pgx.Identifier{table}.Sanitize()+" LIMIT 0"); err != nil {
+						t.Fatalf("runtime read of %s: %v", table, err)
+					}
+				}
+				if err = tx.Rollback(ctx); err != nil {
 					t.Fatal(err)
 				}
 			}
