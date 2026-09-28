@@ -64,7 +64,7 @@ export default function TasksPage() {
         actionLabel="Refresh" actionIcon={RefreshCw} onAction={reload} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }}
-          placeholder="Search Relay name, email, phone or ID…" />
+          placeholder="Search tasks by name, email, phone or ID…" />
         <Link href="/drivers" className="text-sm text-blue-400 hover:underline">Manage drivers</Link>
       </div>
       <DriverSetupTasks search={debouncedSearch} revision={revision} onCount={setSetupTotal} />

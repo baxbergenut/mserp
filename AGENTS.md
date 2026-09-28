@@ -244,7 +244,8 @@ assignment lookup lists.
   New hires appear as regular Drivers table rows with a small New badge and
   a corresponding Set up [name] task. Both views refresh every 15 seconds while
   visible. The driver-directory endpoint combines pending and configured drivers
-  with shared search/pagination; ordinary /drivers lookups exclude pending hires. They stay outside managed drivers/payroll until accounting completes
+  with shared search/pagination; ordinary /drivers lookups exclude pending hires.
+  They stay outside managed drivers/payroll until accounting completes
   setup with a positive pay rate or explicitly links an existing record. Creation,
   assignments, and intake completion are atomic. Linking preserves existing
   profile, rates, assignments, and active status. Keep completed intake identity
@@ -388,7 +389,8 @@ assignment lookup lists.
   Migration 024 is additive/relaxes nullability; rollbacks to pre-review binaries
   cannot safely display unassigned rows. Resolve pending accounts before such a
   rollback or deploy a compatible forward fix; never manufacture placeholder drivers.
-- Except for health, readiness, login, and the HMAC-authenticated FleetScope webhook, every API route requires a valid
+- Except for health, readiness, login, and the HMAC-authenticated FleetScope
+  webhook, every API route requires a valid
   database session. State-changing requests also require the session's CSRF
   token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;
   only SHA-256 token digests are stored in PostgreSQL.
