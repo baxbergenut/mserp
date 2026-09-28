@@ -97,6 +97,7 @@ export function Modal({
   submitLabel,
   onClose,
   onSubmit,
+  wide = false,
 }: {
   title: string;
   description?: string;
@@ -105,6 +106,7 @@ export function Modal({
   submitLabel: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  wide?: boolean;
 }) {
   return (
     <OverlayPortal>
@@ -120,7 +122,7 @@ export function Modal({
         >
           <form
             onSubmit={onSubmit}
-            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#111113] shadow-2xl animate-scale-in sm:max-h-[calc(100dvh-4rem)]"
+            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#111113] shadow-2xl animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
           >
             <div className="flex shrink-0 items-start justify-between border-b border-zinc-800/70 px-5 py-4">
               <div>

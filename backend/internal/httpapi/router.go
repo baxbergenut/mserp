@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"mserp/internal/gemini"
 	"mserp/internal/groq"
 	"mserp/internal/jobs"
 	"mserp/internal/repository"
@@ -28,8 +29,8 @@ func NewRouter(
 	expenseRepo *repository.ExpenseRepository,
 	authRepo *repository.AuthRepository,
 	documentExtractor groq.DocumentExtractor,
+	expenseExtractor gemini.ExpenseExtractor,
 	authOptions AuthOptions,
-	telegramExpenseOptions TelegramExpenseOptions,
 ) http.Handler {
 	r := chi.NewRouter()
 	auth := newAuthHandler(logger, authRepo, authOptions)
@@ -48,7 +49,6 @@ func NewRouter(
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 	r.Post("/auth/login", auth.login)
-	registerTelegramExpenseWebhook(r, logger, telegramExpenseOptions)
 
 	protected := chi.NewRouter()
 	protected.Use(auth.requireSession)
@@ -114,7 +114,7 @@ func NewRouter(
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
 	registerDashboardRoutes(protected, logger, dashboardRepo)
-	registerExpenseRoutes(protected, logger, expenseRepo)
+	registerExpenseRoutes(protected, logger, expenseRepo, expenseExtractor)
 	r.Mount("/", protected)
 
 	return r

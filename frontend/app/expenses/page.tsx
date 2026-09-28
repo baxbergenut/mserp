@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, WalletCards, X } from "lucide-react";
 import {
   createExpense,
+  createExpenses,
   deleteExpense,
   fetchExpensesPage,
   fetchDrivers,
@@ -31,6 +32,7 @@ import {
   ExpenseForm,
   expenseToInput,
 } from "./ExpenseForm";
+import { ExpenseAIImport, ExpenseBatchEditor } from "./ExpenseAIImport";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
@@ -98,6 +100,8 @@ export default function ExpensesPage() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
+  const [batchForms, setBatchForms] = useState<ExpenseInput[]>([]);
+  const [aiMessage, setAIMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -156,11 +160,16 @@ export default function ExpensesPage() {
 
   function openCreate() {
     setForm({ ...emptyExpenseInput, expenseDate: new Date().toISOString().slice(0, 10) });
+    setBatchForms([]);
+    setAIMessage("");
+    setError("");
     setEditing(null);
   }
 
   function openEdit(expense: Expense) {
     setForm(expenseToInput(expense));
+    setBatchForms([]);
+    setAIMessage("");
     setEditing(expense);
   }
 
@@ -169,6 +178,8 @@ export default function ExpensesPage() {
     setError("");
     try {
       if (editing) await updateExpense(editing.id, form);
+      else if (batchForms.length > 1) await createExpenses(batchForms);
+      else if (batchForms.length === 1) await createExpense(batchForms[0]);
       else await createExpense(form);
       setEditing(undefined);
       await loadData();
@@ -336,14 +347,42 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit expense" : "Add expense"}
-          description={editing?.sourceSheet ? `Imported from ${editing.sourceSheet}, row ${editing.sourceRow}.` : "Record an expense and its review status."}
+          description={editing?.sourceSheet ? `Imported from ${editing.sourceSheet}, row ${editing.sourceRow}.` : batchForms.length > 0 ? "Review every AI suggestion before creating these expenses." : "Enter an expense manually or use AI to fill the details."}
           isSaving={isSaving}
-          submitLabel={editing ? "Save changes" : "Create expense"}
+          submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} expenses` : "Create expense"}
+          wide={batchForms.length > 0}
           onClose={() => setEditing(undefined)}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-          <ExpenseForm value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+          {!editing && (
+            <div className="mb-5">
+              <ExpenseAIImport
+                onError={setError}
+                onExtracted={(drafts) => {
+                  setError("");
+                  if (drafts.length === 1) {
+                    setForm(drafts[0]);
+                    setBatchForms([]);
+                    setAIMessage("AI found one transaction and filled the form below.");
+                  } else {
+                    setBatchForms(drafts);
+                    setAIMessage(`AI found ${drafts.length} transactions. Review and edit them in the table below.`);
+                  }
+                }}
+              />
+              {aiMessage && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[12px] text-emerald-300">
+                  <Check className="h-4 w-4 shrink-0" /> {aiMessage}
+                </div>
+              )}
+            </div>
+          )}
+          {batchForms.length > 0 && !editing ? (
+            <ExpenseBatchEditor values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
+          ) : (
+            <ExpenseForm value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+          )}
         </Modal>
       )}
 

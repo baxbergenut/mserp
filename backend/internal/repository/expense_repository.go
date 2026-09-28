@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -184,6 +185,108 @@ func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInpu
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
+}
+
+func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []ExpenseInput) ([]Expense, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	values := make([]Expense, 0, len(inputs))
+	for _, input := range inputs {
+		id, insertErr := insertExpense(ctx, tx, input)
+		if insertErr != nil {
+			return nil, insertErr
+		}
+		value, scanErr := scanExpense(tx.QueryRow(ctx, selectExpensesSQL+" WHERE e.id = $1", id))
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		values = append(values, value)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func (r *ExpenseRepository) ResolveExpenseLinks(
+	ctx context.Context,
+	unitNumber, driverName *string,
+) (*string, *string, error) {
+	var truckID, driverID *string
+	if unitNumber != nil && normalizeTruckUnit(*unitNumber) != "" {
+		var id string
+		err := r.pool.QueryRow(ctx, `
+			SELECT id FROM trucks
+			WHERE upper(regexp_replace(trim(unit_number), '\s+', ' ', 'g')) = $1
+			LIMIT 1`, normalizeTruckUnit(*unitNumber)).Scan(&id)
+		if err == nil {
+			truckID = &id
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, err
+		}
+	}
+	if driverName != nil && normalizeName(*driverName) != "" {
+		rows, err := r.pool.Query(ctx, `SELECT id, full_name FROM drivers WHERE active = true`)
+		if err != nil {
+			return nil, nil, err
+		}
+		type candidate struct {
+			id      string
+			quality int
+		}
+		best := candidate{}
+		second := 0
+		for rows.Next() {
+			var id, name string
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			quality := relayDriverNameMatchQuality(*driverName, name)
+			if quality > best.quality {
+				second = best.quality
+				best = candidate{id: id, quality: quality}
+			} else if quality > second {
+				second = quality
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		rows.Close()
+		if best.quality >= 90 && best.quality > second {
+			driverID = &best.id
+		}
+	}
+
+	if truckID != nil && driverID == nil {
+		var id string
+		err := r.pool.QueryRow(ctx, `
+			SELECT driver_id FROM truck_driver_assignments
+			WHERE truck_id = $1 AND unassigned_at IS NULL`, *truckID).Scan(&id)
+		if err == nil {
+			driverID = &id
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, err
+		}
+	}
+	if driverID != nil && truckID == nil {
+		var id string
+		err := r.pool.QueryRow(ctx, `
+			SELECT truck_id FROM truck_driver_assignments
+			WHERE driver_id = $1 AND unassigned_at IS NULL`, *driverID).Scan(&id)
+		if err == nil {
+			truckID = &id
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, err
+		}
+	}
+	return truckID, driverID, nil
 }
 
 type expenseQueryer interface {

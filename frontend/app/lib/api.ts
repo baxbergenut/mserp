@@ -24,7 +24,7 @@ import type {
   Expense,
   ExpenseInput,
   ExpensePage,
-  TelegramExpenseActivityPage,
+  ExpenseExtraction,
 } from "./types";
 
 type PageQuery = {
@@ -282,6 +282,20 @@ export const createExpense = (input: ExpenseInput) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+export const createExpenses = (expenses: ExpenseInput[]) =>
+  apiRequest<Expense[]>("/expenses/bulk", {
+    method: "POST",
+    body: JSON.stringify({ expenses }),
+  });
+export const extractExpenses = (text: string, file: File | null) => {
+  const form = new FormData();
+  if (text.trim()) form.append("text", text.trim());
+  if (file) form.append("file", file);
+  return apiRequest<ExpenseExtraction>("/expenses/extract", {
+    method: "POST",
+    body: form,
+  });
+};
 export const updateExpense = (id: string, input: ExpenseInput) =>
   apiRequest<Expense>(`/expenses/${id}`, {
     method: "PUT",
@@ -289,18 +303,3 @@ export const updateExpense = (id: string, input: ExpenseInput) =>
   });
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
-export const fetchTelegramExpenseActivity = (query: PageQuery & {
-  status?: string;
-}) => paginatedRequest<TelegramExpenseActivityPage>(
-  withQuery("/telegram-expense-updates", query),
-);
-export const retryTelegramExpenseUpdate = (updateId: number) =>
-  apiRequest<{ updateId: number; status: "queued" }>(
-    `/telegram-expense-updates/${updateId}/retry`,
-    { method: "POST" },
-  );
-export const resolveTelegramExpenseUpdate = (updateId: number, expenses: ExpenseInput[]) =>
-  apiRequest<Expense[]>(`/telegram-expense-updates/${updateId}/resolve`, {
-    method: "POST",
-    body: JSON.stringify({ expenses }),
-  });

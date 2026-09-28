@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,5 +90,24 @@ func TestExpenseSchemaStaysWithinGeminiComplexityLimit(t *testing.T) {
 	}
 	if !strings.Contains(value, `"items"`) || !strings.Contains(value, `"amt"`) {
 		t.Fatalf("expense schema is missing compact batch fields: %s", value)
+	}
+}
+
+func TestExpensePromptUsesDirectSubmissionContext(t *testing.T) {
+	prompt := expensePrompt(ExpenseInput{
+		Text: "Oil change $125", MessageDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
+	})
+	if strings.Contains(strings.ToLower(prompt), "telegram") {
+		t.Fatalf("expense prompt still references Telegram: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Transaction text:") || !strings.Contains(prompt, "2026-09-28") {
+		t.Fatalf("expense prompt is missing submission context: %s", prompt)
+	}
+}
+
+func TestExtractExpenseRequiresConfiguration(t *testing.T) {
+	client := NewClient("", "gemini-test")
+	if _, err := client.ExtractExpense(context.Background(), ExpenseInput{Text: "test"}); !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("ExtractExpense() error = %v, want ErrNotConfigured", err)
 	}
 }
