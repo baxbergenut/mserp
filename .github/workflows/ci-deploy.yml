@@ -26,6 +26,20 @@ jobs:
     name: Test and build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mserp_assignment_history_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -36,8 +50,15 @@ jobs:
           go-version-file: ${{ env.GO_VERSION_FILE }}
           cache: false
 
+      - name: Prepare isolated assignment history database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -U postgres -d mserp_assignment_history_test -v ON_ERROR_STOP=1 -c 'CREATE ROLE mserp_app'
+
       - name: Test backend
         working-directory: backend
+        env:
+          MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: |
           go test ./...
           go vet ./...

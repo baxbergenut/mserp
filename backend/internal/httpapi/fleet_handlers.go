@@ -27,6 +27,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 
 	r.Get("/drivers", handler.listDrivers)
 	r.Get("/drivers/{id}", handler.getDriver)
+	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
 	r.Post("/drivers", handler.createDriver)
 	r.Put("/drivers/{id}", handler.updateDriver)
 	r.Delete("/drivers/{id}", handler.deleteDriver)
@@ -47,6 +48,19 @@ func (handler fleetHandler) getDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := handler.repo.GetDriver(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
+func (handler fleetHandler) getDriverAssignments(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	value, err := handler.repo.DriverAssignmentHistory(r.Context(), id)
 	if err != nil {
 		handler.writeError(w, err)
 		return

@@ -12,6 +12,7 @@ import type {
   DispatcherInput,
   CDLFileUploadResult,
   Driver,
+  AssignmentHistoryEntry,
   DriverInput,
   DriverIntake,
   DriverDirectoryEntry,
@@ -227,6 +228,7 @@ export const completeDriverIntake = (id: string, input:
   { driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) =>
   apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify(input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
+export const fetchDriverAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/drivers/${id}/assignments`);
 export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }) =>
   paginatedRequest<PaginatedResponse<Driver>>(withQuery("/drivers", query));
 export const createDriver = (input: DriverInput) =>

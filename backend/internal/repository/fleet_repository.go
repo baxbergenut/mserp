@@ -697,6 +697,14 @@ func setTruckDriver(ctx context.Context, tx pgx.Tx, truckID string, driverID *st
 }
 
 func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error {
+	var unchanged bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments
+ WHERE truck_id=$1 AND driver_id=$2 AND unassigned_at IS NULL)`, truckID, driverID).Scan(&unchanged); err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
+	}
 	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {
 		return err
 	}
