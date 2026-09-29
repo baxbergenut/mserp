@@ -7,6 +7,7 @@ import { fetchDriver } from "@/app/lib/api";
 import type { Driver } from "@/app/lib/types";
 import { ErrorBanner } from "@/app/components/management/ManagementUI";
 import { RelatedExpenses } from "@/app/components/expenses/RelatedExpenses";
+import { AssignmentHistory } from "./AssignmentHistory";
 
 export default function DriverDetailPage() {
   const [driver, setDriver] = useState<Driver | null>(null);
@@ -49,6 +50,7 @@ export default function DriverDetailPage() {
               <div><dt className="text-zinc-600">Status</dt><dd className="mt-1 text-zinc-300">{driver.active ? "Active" : "Inactive"}</dd></div>
             </dl>
           </div>
+          <AssignmentHistory key={driver.id} driverId={driver.id} />
           <RelatedExpenses driverId={driver.id} />
         </>
       )}

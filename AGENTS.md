@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `030_add_driver_pay_cost_overrides.sql`:
+  `031_add_dispatcher_assignment_history.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -219,6 +219,8 @@ browser bundle.
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
+- Driver assignment history: `GET /drivers/{id}/assignments` returns truck and
+  dispatcher periods, current links, source notes, and whether the start is known.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
@@ -399,6 +401,18 @@ assignment lookup lists.
 - Driver/truck assignment history lives in `truck_driver_assignments`. Partial
   unique indexes enforce at most one current truck per driver and one current
   driver per truck. Assignment changes must remain transactional.
+  Re-saving the same truck does not close/reopen its assignment. Driver detail
+  pages show both truck and dispatcher history. Migration 031 adds dispatcher
+  periods in `driver_dispatcher_assignments`; a database trigger captures driver
+  creation, reassignment, and unlinking from every write path, including dispatcher
+  deletion and direct imports. Existing dispatcher links have unknown start dates;
+  their migration timestamp is only the observation time. Historical sheet weeks
+  are source notes, never invented effective dates. Imports may set the local
+  `mserp.assignment_source` PostgreSQL setting for dispatcher provenance and the
+  truck assignment's `source` column. Dispatcher names survive dispatcher deletion.
+  Tests use only `MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL`, whose database name
+  must contain `_test`, and verify fresh schema and migration as `mserp_app`.
+  CI runs these checks against a disposable PostgreSQL service.
 - Expenses optionally link to existing drivers and trucks with `ON DELETE SET
   NULL` while retaining imported unit/name snapshots for historical display.
   The Google Sheets import is idempotent by spreadsheet, sheet, and source row;

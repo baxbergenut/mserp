@@ -722,3 +722,13 @@ export interface DriverPayWeek {
   weekStart: string;
   drivers: DriverPayDriver[];
 }
+export interface AssignmentHistoryEntry {
+  id: string;
+  kind: "truck" | "dispatcher";
+  relatedId: string | null;
+  name: string;
+  assignedAt: string;
+  unassignedAt: string | null;
+  startKnown: boolean;
+  source: string;
+}
