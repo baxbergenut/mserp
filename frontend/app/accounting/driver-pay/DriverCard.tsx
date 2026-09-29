@@ -26,6 +26,8 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 type Props = {
+ onSettlement?: (reopen: boolean) => void;
+ settlementDisabled?: boolean;
   driver: DriverPayDriver;
   edits: DriverPayEdits;
   disabled: boolean;
@@ -36,7 +38,7 @@ type Props = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload }: Props) {
+export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled }: Props) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const totals = driverTotals(driver, edits);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
@@ -87,7 +89,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
       <th scope="row" className="border-b border-zinc-800 px-3 py-0 text-left font-medium">
         <button type="button" aria-expanded={open} aria-controls={`driver-${driver.id}`} className="flex h-9 w-full items-center gap-2 text-left text-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-500">
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
-          <span className="truncate">{driver.fullName}</span>
+          <span className="truncate">{driver.fullName}</span>{driver.settlement?.finalized && <span className="text-[10px] text-emerald-400">Finalized</span>}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
         </button>
       </th>
@@ -99,7 +101,9 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
     </tr>
     {open && <tr><td colSpan={7} className="border-b border-zinc-700 p-0">
-      <div id={`driver-${driver.id}`}><ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
+      <div id={`driver-${driver.id}`}>
+        {onSettlement && <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2"><span className="text-xs text-zinc-500">{driver.settlement?.finalized ? `Finalized by ${driver.settlement.finalizedBy}` : driver.settlement ? "Reopened for corrections" : "Draft settlement"}</span><button type="button" disabled={settlementDisabled} className={payButtonClass} onClick={() => onSettlement(!!driver.settlement?.finalized)}>{driver.settlement?.finalized ? "Reopen driver" : "Finalize driver"}</button></div>}
+        <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — review deductions before confirming. Unpaid expense balances carry forward; other negative pay does not.</p>}
         <div className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 bg-zinc-950/30 text-left text-xs">

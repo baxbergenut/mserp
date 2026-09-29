@@ -37,7 +37,7 @@ func expenseDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]E
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$2::date
  LEFT JOIN LATERAL (SELECT sum(amount) FILTER (WHERE week_start<>$2::date) AS other,
  sum(amount) FILTER (WHERE week_start<$2::date) AS prior FROM expense_payments WHERE expense_id=e.id) p ON true
- WHERE e.driver_id=$1 AND lower(btrim(e.covered_by))='driver' AND NOT e.driver_settled
+ WHERE e.charge_driver_id=$1 AND NOT e.driver_settled
  AND e.expense_date<$2::date+7 AND e.amount>=0
  AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0))
  ORDER BY e.expense_date,e.id`, driver, week)
@@ -71,7 +71,7 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 			continue
 		}
 		var version int
-		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
+		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND charge_driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && version != item.Version) {
 			return nil, ErrDriverPayConflict
 		}

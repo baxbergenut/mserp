@@ -28,9 +28,11 @@ function formatDate(value: string | null) {
 export function RelatedExpenses({
   truckId,
   driverId,
+  scope,
 }: {
   truckId?: string;
   driverId?: string;
+  scope?: "personal" | "non_personal";
 }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [page, setPage] = useState(1);
@@ -44,7 +46,7 @@ export function RelatedExpenses({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchExpensesPage({ page, pageSize, truckId, driverId });
+      const response = await fetchExpensesPage({ page, pageSize, truckId, driverId: scope === "personal" ? undefined : driverId, chargeDriverId: scope === "personal" ? driverId : undefined, responsibility: scope === "non_personal" ? scope : undefined });
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -56,7 +58,7 @@ export function RelatedExpenses({
     } finally {
       setLoading(false);
     }
-  }, [driverId, page, pageSize, truckId]);
+  }, [driverId, page, pageSize, truckId, scope]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -69,10 +71,10 @@ export function RelatedExpenses({
         <div>
           <div className="flex items-center gap-2">
             <WalletCards className="h-4 w-4 text-zinc-500" />
-            <h2 className="text-sm font-semibold text-zinc-100">Expenses</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">{scope === "personal" ? "Personal expense charges" : scope === "non_personal" ? "Company & other-party expenses" : "Expenses"}</h2>
             <span className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-[11px] text-zinc-400">{total}</span>
           </div>
-          <p className="mt-1 text-[12px] text-zinc-500">Linked total: {formatMoney(amount)}</p>
+          <p className="mt-1 text-[12px] text-zinc-500">{scope === "personal" ? "Total charged" : "Linked total"}: {formatMoney(amount)}</p>
         </div>
         <Link href="/expenses" className="text-[12px] font-medium text-blue-400 transition hover:text-blue-300">Open expense manager</Link>
       </div>
@@ -90,7 +92,9 @@ export function RelatedExpenses({
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Description</th>
-                <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Responsibility</th>
+                <th className="px-4 py-3 text-right font-medium">Total</th>
+                {scope === "personal" && <><th className="px-4 py-3 text-right font-medium">Paid</th><th className="px-4 py-3 text-right font-medium">Remaining</th></>}
               </tr>
             </thead>
             <tbody>
@@ -99,8 +103,10 @@ export function RelatedExpenses({
                   <td className="px-4 py-3 font-mono tabular-nums">{formatDate(expense.expenseDate)}</td>
                   <td className="px-4 py-3">{expense.category}</td>
                   <td className="px-4 py-3 text-zinc-400">{expense.expenseType || "—"}</td>
-                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}</td>
+                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <details className="mt-1 whitespace-normal"><summary className="cursor-pointer text-xs text-blue-400">Payment history</summary>{expense.driverSettled ? <p className="py-2 text-xs">Opening balance marked fully paid.</p> : expense.payments.length ? expense.payments.map(p => <div className="flex gap-3 py-1 text-xs" key={p.weekStart}><Link className="text-blue-400" href={`/accounting/driver-pay?weekStart=${p.weekStart}&driverId=${driverId}`}>Week of {p.weekStart}</Link><span className="ml-auto font-mono">{formatMoney(p.amount)}</span></div>) : <p className="py-2 text-xs">No saved payments yet.</p>}</details>}</td>
+                  <td className="px-4 py-3">{expense.coveredBy || "Unspecified"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>{formatMoney(expense.amount)}</td>
+                  {scope === "personal" && <><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.paidAmount)}</td><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.remainingAmount)}</td></>}
                 </tr>
               ))}
             </tbody>

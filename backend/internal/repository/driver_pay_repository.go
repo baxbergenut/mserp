@@ -60,20 +60,22 @@ type DriverPayLoad struct {
 	Issues           []string `json:"issues"`
 }
 type DriverPayDriver struct {
-	ID              string          `json:"id"`
-	FullName        string          `json:"fullName"`
-	TruckUnit       string          `json:"truckUnit"`
-	DispatcherID    string          `json:"dispatcherId"`
-	DispatcherName  string          `json:"dispatcherName"`
-	IsOwnerOperator bool            `json:"isOwnerOperator"`
-	PayType         string          `json:"payType"`
-	PayRate         string          `json:"payRate"`
-	FuelTotal       string          `json:"fuelTotal"`
-	TollTotal       string          `json:"tollTotal"`
-	Loads           []DriverPayLoad `json:"loads"`
-	Edits           DriverPayEdits  `json:"edits"`
+	Settlement      *PayrollSettlement `json:"settlement,omitempty"`
+	ID              string             `json:"id"`
+	FullName        string             `json:"fullName"`
+	TruckUnit       string             `json:"truckUnit"`
+	DispatcherID    string             `json:"dispatcherId"`
+	DispatcherName  string             `json:"dispatcherName"`
+	IsOwnerOperator bool               `json:"isOwnerOperator"`
+	PayType         string             `json:"payType"`
+	PayRate         string             `json:"payRate"`
+	FuelTotal       string             `json:"fuelTotal"`
+	TollTotal       string             `json:"tollTotal"`
+	Loads           []DriverPayLoad    `json:"loads"`
+	Edits           DriverPayEdits     `json:"edits"`
 }
 type DriverPayWeek struct {
+	Revision  string            `json:"revision"`
 	WeekStart string            `json:"weekStart"`
 	Drivers   []DriverPayDriver `json:"drivers"`
 }
@@ -82,12 +84,23 @@ type DriverPayWeek struct {
 // source data, tariffs, accounting edits, and charge schedules. No load status
 // or active-driver filter.
 func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPayWeek, error) {
-	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
+	return r.GetDriverWeek(ctx, week, "")
+}
+
+func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time, driverID string) (DriverPayWeek, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return DriverPayWeek{}, err
+	}
+	defer tx.Rollback(ctx)
+	result, err := readDriverPayWeek(ctx, tx, week, driverID)
 	if err != nil {
 		return result, err
 	}
-	defer tx.Rollback(ctx)
+	return result, tx.Commit(ctx)
+}
+func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.unit_number,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
@@ -104,11 +117,11 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
- WHERE e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid) AND (e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
- OR EXISTS (SELECT 1 FROM expenses x WHERE x.driver_id=d.id AND lower(btrim(x.covered_by))='driver'
- AND NOT x.driver_settled AND x.expense_date<$1::date+7)
- ORDER BY d.full_name,d.id,e.service_date,e.slot`, week)
+ OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
+ AND NOT x.driver_settled AND x.expense_date<$1::date+7))
+ ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID)
 	if err != nil {
 		return result, err
 	}
@@ -174,7 +187,7 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
 		return result, err
 	}
 	rows.Close()
-	data, loads, err := chargeData(ctx, tx, "")
+	data, loads, err := chargeData(ctx, tx, driverID)
 	if err != nil {
 		return result, err
 	}
@@ -197,7 +210,7 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
 		}
 	}
 	result.Drivers = kept
-	return result, tx.Commit(ctx)
+	return overlayPayrollSettlements(ctx, tx, result, driverID)
 }
 
 func payLoadLocations(stops []datatruck.LoadStop) (string, string) {
@@ -266,6 +279,9 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	defer tx.Rollback(ctx)
 	if err = lockChargeDrivers(ctx, tx, []string{edits.DriverID}); err != nil {
+		return edits, err
+	}
+	if err = assertPayrollOpen(ctx, tx, edits.DriverID, edits.WeekStart); err != nil {
 		return edits, err
 	}
 	actor := ""

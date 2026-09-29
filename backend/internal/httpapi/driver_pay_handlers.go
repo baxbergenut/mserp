@@ -116,6 +116,72 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		logger.Error("driver pay request failed", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "driver pay could not be loaded or saved")
 	}
+	r.Get("/drivers/{id}/pay-history", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		page, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		page.PageSize = min(page.PageSize, 12)
+		result, err := repo.History(r.Context(), id, page)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Get("/drivers/{id}/settlement-history", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		result, err := repo.SettlementHistory(r.Context(), id, week.Format("2006-01-02"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	for _, action := range []string{"finalize", "reopen"} {
+		reopen := action == "reopen"
+		r.Post("/driver-pay/"+action, func(w http.ResponseWriter, r *http.Request) {
+			var input struct {
+				WeekStart string `json:"weekStart"`
+				DriverID  string `json:"driverId"`
+				Revision  string `json:"revision"`
+				Reason    string `json:"reason"`
+			}
+			if err := decodeJSON(r, &input); err != nil {
+				writeAPIError(w, 400, err.Error())
+				return
+			}
+			week, err := grossBoardWeek(input.WeekStart)
+			if err != nil {
+				writeAPIError(w, 400, err.Error())
+				return
+			}
+			if input.DriverID != "" && !isUUID(input.DriverID) {
+				writeAPIError(w, 400, "invalid driver id")
+				return
+			}
+			session, _ := authSessionFromContext(r.Context())
+			result, err := repo.Settle(r.Context(), week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			writeJSON(w, 200, result)
+		})
+	}
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {

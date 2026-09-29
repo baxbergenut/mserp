@@ -9,11 +9,20 @@ import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, shortDate } from "@/app/gross-board/board";
 import { DriverCard, payButtonClass } from "./DriverCard";
+import { SettlementDialog } from "./SettlementDialog";
 import { driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } from "./pay";
 
 export default function DriverPayPage() {
   const [week, setWeek] = useState(() => currentChargeWeek());
-  useEffect(() => { const timer = setTimeout(() => { const requested = new URLSearchParams(window.location.search).get("weekStart"); if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1) setWeek(requested); }, 0); return () => clearTimeout(timer); }, []);
+  const [driverFilter, setDriverFilter] = useState("");
+  const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean} | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+    const params = new URLSearchParams(window.location.search); const requested = params.get("weekStart");
+    if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1) setWeek(requested);
+    setDriverFilter(params.get("driverId") ?? "");
+    }, 0); return () => clearTimeout(timer);
+  }, []);
   const [report, setReport] = useState<DriverPayWeek | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverPayEdits>>({});
   const [search, setSearch] = useState("");
@@ -88,10 +97,21 @@ export default function DriverPayPage() {
     catch (err) { setError(err instanceof Error ? err.message : "Unable to reload this week"); }
     finally { setLoading(false); setRefreshing(false); }
   }
+  async function prepareSettlement(reopen: boolean, driverId?: string) {
+    if (dirty || saving || loading || refreshing) return;
+    setRefreshing(true); setError("");
+    try {
+      // Autosave changes the revision. Preview the latest complete report before
+      // accepting a finalization, including changes by other accounting users.
+      const current = await fetchDriverPay(week);
+      setReport(current); setSettlement({ driverId, reopen });
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to prepare settlement"); }
+    finally { setRefreshing(false); }
+  }
   const drivers = useMemo(() => (report?.drivers ?? []).filter(d => {
     const query = search.trim().toLowerCase();
-    return (dispatcher === "all" || d.dispatcherId === dispatcher) && (!query || d.fullName.toLowerCase().includes(query) || d.truckUnit.toLowerCase().includes(query) || d.loads.some(l => l.loadNumber.toLowerCase().includes(query)));
-  }), [report, dispatcher, search]);
+    return (!driverFilter || d.id === driverFilter) && (dispatcher === "all" || d.dispatcherId === dispatcher) && (!query || d.fullName.toLowerCase().includes(query) || d.truckUnit.toLowerCase().includes(query) || d.loads.some(l => l.loadNumber.toLowerCase().includes(query)));
+  }), [report, dispatcher, search, driverFilter]);
   const dispatchers = useMemo(() => Array.from(new Map((report?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName])).entries()), [report]);
   const summary = drivers.reduce((sum, d) => {
     const values = driverTotals(d, changes[d.id] ?? d.edits);
@@ -109,10 +129,12 @@ export default function DriverPayPage() {
       <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)}–{shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
       <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={payButtonClass} disabled={busy} onClick={() => switchWeek(currentChargeWeek())}>This week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Driver, truck, or load…" /></div><label className="flex items-center gap-2 text-xs text-zinc-400">Dispatcher<select className={`${controlClass} !w-44`} value={dispatcher} onChange={event => setDispatcher(event.target.value)}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>Collapse all</button>
     </div>
+    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500"><span>{report?.drivers.filter(d => d.settlement?.finalized).length ?? 0} of {report?.drivers.length ?? 0} driver settlements finalized</span><button className={payButtonClass} disabled={busy || dirty || saving || !report?.drivers.some(d => !d.settlement?.finalized) || week > currentChargeWeek()} onClick={() => void prepareSettlement(false)}>Finalize week</button><button className={payButtonClass} disabled={busy || dirty || saving || !report?.drivers.some(d => d.settlement?.finalized)} onClick={() => void prepareSettlement(true)}>Reopen week</button>{driverFilter && <button className="text-blue-400" onClick={() => setDriverFilter("")}>Show all drivers</button>}</div>
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid ? "Complete or remove unfinished adjustments; enter zero or reset Fuel/Toll before leaving this week." : "Saving edits before leaving this week…"}{error && " Resolve the save error to continue."}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
-    {refreshing && <p role="status" className="text-xs text-blue-300">Fetching current details for this week’s linked loads. This may take a few minutes.</p>}
+    {refreshing && <p role="status" className="text-xs text-blue-300">Refreshing this week’s report…</p>}
 
-    {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading driver pay…</div> : report && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? "No drivers match these filters." : "No loads or driver adjustments for this week."}</div> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label="Weekly driver pay"><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{["Driver", "Truck", "Driver type", "Tariff", "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{drivers.map(driver => <DriverCard key={`${week}:${driver.id}`} driver={driver} edits={changes[driver.id] ?? driver.edits} open={opened.has(driver.id)} onToggle={toggle} onEdit={edit} disabled={busy} chargeActionsDisabled={busy || dirty || saving} onReload={() => reload()} />)}</tbody></table></div>}
+    {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading driver pay…</div> : report && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? "No drivers match these filters." : "No loads or driver adjustments for this week."}</div> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label="Weekly driver pay"><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{["Driver", "Truck", "Driver type", "Tariff", "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{drivers.map(driver => <DriverCard key={`${week}:${driver.id}`} driver={driver} edits={changes[driver.id] ?? driver.edits} open={opened.has(driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, driver.id)} onReload={() => reload()} />)}</tbody></table></div>}
+    {settlement && report && <SettlementDialog report={report} {...settlement} onClose={() => setSettlement(null)} onSaved={value => { setReport(value); setSettlement(null); setMessage("Settlement updated"); }} />}
   </div>;
 }

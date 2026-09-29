@@ -17,36 +17,45 @@ func NewExpenseRepository(pool *pgxpool.Pool) *ExpenseRepository {
 	return &ExpenseRepository{pool: pool}
 }
 
+type ExpensePayment struct {
+	WeekStart string `json:"weekStart"`
+	Amount    string `json:"amount"`
+}
 type Expense struct {
-	PaidAmount          *string   `json:"paidAmount"`
-	RemainingAmount     *string   `json:"remainingAmount"`
-	DriverSettled       bool      `json:"driverSettled"`
-	ID                  string    `json:"id"`
-	TruckID             *string   `json:"truckId"`
-	DriverID            *string   `json:"driverId"`
-	Company             string    `json:"company"`
-	Category            string    `json:"category"`
-	WeekStart           *string   `json:"weekStart"`
-	ExpenseDate         *string   `json:"expenseDate"`
-	UnitNumber          *string   `json:"unitNumber"`
-	DriverName          *string   `json:"driverName"`
-	Amount              *string   `json:"amount"`
-	PaymentType         *string   `json:"paymentType"`
-	ExpenseType         *string   `json:"expenseType"`
-	ReferenceNumber     *string   `json:"referenceNumber"`
-	Description         *string   `json:"description"`
-	CoveredBy           *string   `json:"coveredBy"`
-	PaidBy              *string   `json:"paidBy"`
-	ManagerVerified     bool      `json:"managerVerified"`
-	AccountingVerified  bool      `json:"accountingVerified"`
-	SourceSpreadsheetID *string   `json:"sourceSpreadsheetId"`
-	SourceSheet         *string   `json:"sourceSheet"`
-	SourceRow           *int      `json:"sourceRow"`
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	Payments            []ExpensePayment `json:"payments"`
+	OwnerID             *string          `json:"ownerId"`
+	OwnerName           *string          `json:"ownerName"`
+	ChargeDriverID      *string          `json:"chargeDriverId"`
+	PaidAmount          *string          `json:"paidAmount"`
+	RemainingAmount     *string          `json:"remainingAmount"`
+	DriverSettled       bool             `json:"driverSettled"`
+	ID                  string           `json:"id"`
+	TruckID             *string          `json:"truckId"`
+	DriverID            *string          `json:"driverId"`
+	Company             string           `json:"company"`
+	Category            string           `json:"category"`
+	WeekStart           *string          `json:"weekStart"`
+	ExpenseDate         *string          `json:"expenseDate"`
+	UnitNumber          *string          `json:"unitNumber"`
+	DriverName          *string          `json:"driverName"`
+	Amount              *string          `json:"amount"`
+	PaymentType         *string          `json:"paymentType"`
+	ExpenseType         *string          `json:"expenseType"`
+	ReferenceNumber     *string          `json:"referenceNumber"`
+	Description         *string          `json:"description"`
+	CoveredBy           *string          `json:"coveredBy"`
+	PaidBy              *string          `json:"paidBy"`
+	ManagerVerified     bool             `json:"managerVerified"`
+	AccountingVerified  bool             `json:"accountingVerified"`
+	SourceSpreadsheetID *string          `json:"sourceSpreadsheetId"`
+	SourceSheet         *string          `json:"sourceSheet"`
+	SourceRow           *int             `json:"sourceRow"`
+	CreatedAt           time.Time        `json:"createdAt"`
+	UpdatedAt           time.Time        `json:"updatedAt"`
 }
 
 type ExpenseInput struct {
+	OwnerID            *string
 	Company            string
 	Category           string
 	ExpenseDate        time.Time
@@ -66,14 +75,16 @@ type ExpenseInput struct {
 }
 
 type ExpensePageQuery struct {
-	Pagination Pagination
-	Search     string
-	Category   string
-	Company    string
-	DateFrom   *time.Time
-	DateTo     *time.Time
-	TruckID    *string
-	DriverID   *string
+	Responsibility string
+	ChargeDriverID *string
+	Pagination     Pagination
+	Search         string
+	Category       string
+	Company        string
+	DateFrom       *time.Time
+	DateTo         *time.Time
+	TruckID        *string
+	DriverID       *string
 }
 
 type ExpenseFilterOptions struct {
@@ -107,10 +118,12 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	AND ($4::date IS NULL OR e.expense_date >= $4)
 	AND ($5::date IS NULL OR e.expense_date <= $5)
 	AND ($6::uuid IS NULL OR e.truck_id = $6)
-	AND ($7::uuid IS NULL OR e.driver_id = $7)`
+	AND ($7::uuid IS NULL OR e.driver_id = $7)
+ AND ($8::uuid IS NULL OR e.charge_driver_id=$8)
+ AND ($9='' OR ($9='non_personal' AND e.charge_driver_id IS DISTINCT FROM $7::uuid))`
 	args := []any{
 		query.Search, query.Category, query.Company, query.DateFrom, query.DateTo,
-		query.TruckID, query.DriverID,
+		query.TruckID, query.DriverID, query.ChargeDriverID, query.Responsibility,
 	}
 
 	var total int
@@ -130,7 +143,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
 		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		LIMIT $8 OFFSET $9`, pageArgs...)
+		LIMIT $10 OFFSET $11`, pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -302,17 +315,17 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 		INSERT INTO expenses (
 			company, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, manager_verified, accounting_verified
+			paid_by, manager_verified, accounting_verified, owner_id
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT unit_number FROM trucks WHERE id = $4) END,
 			CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
-			$8::numeric, $9, $10, $11, $12, $13, $14, $15, $16
+			$8::numeric, $9, $10, $11, $12, $13, $14, $15, $16, $17
 		) RETURNING id`,
 		input.Company, input.Category, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.ManagerVerified, input.AccountingVerified,
+		input.ManagerVerified, input.AccountingVerified, input.OwnerID,
 	).Scan(&id)
 	return id, err
 }
@@ -326,12 +339,12 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 			amount = $9::numeric, payment_type = $10,
 			expense_type = $11, reference_number = $12, description = $13,
 			covered_by = $14, paid_by = $15, manager_verified = $16,
-			accounting_verified = $17, updated_at = now()
+			accounting_verified = $17, owner_id = $18, updated_at = now()
 		WHERE id = $1`,
 		id, input.Company, input.Category, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.ManagerVerified, input.AccountingVerified,
+		input.ManagerVerified, input.AccountingVerified, input.OwnerID,
 	)
 	if err != nil {
 		return Expense{}, err
@@ -361,11 +374,12 @@ SELECT e.id, e.truck_id, e.driver_id, e.company, e.category,
 	e.expense_type, e.reference_number, e.description, e.covered_by, e.paid_by,
 	e.manager_verified, e.accounting_verified, e.source_spreadsheet_id,
 	e.source_sheet, e.source_row, e.created_at, e.updated_at,
- CASE WHEN lower(btrim(e.covered_by))='driver' THEN
+ CASE WHEN (lower(btrim(e.covered_by))='driver' OR e.charge_driver_id IS NOT NULL) THEN
    CASE WHEN e.driver_settled THEN e.amount ELSE coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
- CASE WHEN lower(btrim(e.covered_by))='driver' THEN
+ CASE WHEN (lower(btrim(e.covered_by))='driver' OR e.charge_driver_id IS NOT NULL) THEN
    CASE WHEN e.driver_settled THEN 0 ELSE e.amount-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
- e.driver_settled
+ e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
+ coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -379,7 +393,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.Description, &value.CoveredBy, &value.PaidBy,
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
-		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled,
+		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments,
 	)
 	return value, err
 }

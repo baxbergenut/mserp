@@ -154,6 +154,9 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 	if err = lockChargeDrivers(ctx, tx, []string{c.DriverID}); err != nil {
 		return err
 	}
+	if err = assertPayrollOpen(ctx, tx, c.DriverID, c.WeekStart); err != nil {
+		return err
+	}
 	data, loads, err := chargeData(ctx, tx, c.DriverID)
 	if err != nil {
 		return err

@@ -47,8 +47,11 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			costBody := strings.TrimSuffix(strings.TrimPrefix(strings.ReplaceAll(string(costMigration), "\r\n", "\n"), "BEGIN;\n"), "COMMIT;\n")
+            settlementMigration, err := os.ReadFile("../../sql/038_payroll_settlements.sql")
+            if err != nil { t.Fatal(err) }
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+ sql=strings.Replace(sql,strings.ReplaceAll(string(settlementMigration),"\r\n","\n"),"",1)
 				sql = strings.Replace(sql, costBody, "", 1)
 				sql = strings.Replace(sql, body, "", 1)
 				if strings.Contains(sql, "CREATE TABLE driver_pay_weeks") {
@@ -78,9 +81,10 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// Only grant legacy tables here: new table ownership must come from SQL.
+			if mode=="migration" {if _,err:=admin.Exec(ctx,string(settlementMigration));err!=nil{t.Fatal(err)}}
+            // Only grant legacy tables here: new table ownership must come from SQL.
 			if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app;
- GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,loads,dispatchers,truck_driver_assignments,trucks,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
+ GRANT SELECT ON app_users TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,loads,dispatchers,truck_driver_assignments,trucks,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}
 			config, err := pgxpool.ParseConfig(dsn)

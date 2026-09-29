@@ -9,10 +9,11 @@ import {
   deleteExpense,
   fetchExpensesPage,
   fetchDrivers,
+  fetchInvestors,
   fetchTrucks,
   updateExpense,
 } from "../lib/api";
-import type { Driver, Expense, ExpenseInput, Truck } from "../lib/types";
+import type { Driver, Expense, ExpenseInput, Investor, Truck } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -95,6 +96,7 @@ export default function ExpensesPage() {
   const [incompleteCount, setIncompleteCount] = useState(0);
   const [options, setOptions] = useState(emptyOptions);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [owners, setOwners] = useState<Investor[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -141,11 +143,12 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchDrivers(), fetchTrucks()])
-      .then(([driverValues, truckValues]) => {
+    Promise.all([fetchDrivers(), fetchTrucks(), fetchInvestors()])
+      .then(([driverValues, truckValues, ownerValues]) => {
         if (!cancelled) {
           setDrivers(driverValues);
           setTrucks(truckValues);
+          setOwners(ownerValues);
         }
       })
       .catch((reason) => {
@@ -317,7 +320,7 @@ export default function ExpensesPage() {
                     <div className="mt-0.5 text-[11px] text-zinc-600">Paid by {expense.paidBy || "—"}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-zinc-300">{expense.coveredBy || "—"}</div>
+                    <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
                     <div className="mt-1 flex gap-2">
                       <Verification checked={expense.managerVerified} label="Manager" />
                       <Verification checked={expense.accountingVerified} label="Accounting" />
@@ -382,9 +385,9 @@ export default function ExpensesPage() {
             </div>
           )}
           {batchForms.length > 0 && !editing ? (
-            <ExpenseBatchEditor values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
+            <ExpenseBatchEditor owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
           ) : (
-            <ExpenseForm value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+            <ExpenseForm owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
           )}
         </Modal>
       )}

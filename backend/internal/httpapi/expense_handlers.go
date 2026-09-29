@@ -50,6 +50,7 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
+	OwnerID            *string `json:"ownerId"`
 	Company            string  `json:"company"`
 	Category           string  `json:"category"`
 	ExpenseDate        string  `json:"expenseDate"`
@@ -130,7 +131,20 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			return repository.ExpenseInput{}, errors.New("driver expenses must have a nonnegative amount")
 		}
 	}
+	if err := validateOptionalUUID(request.OwnerID, "owner id"); err != nil {
+		return repository.ExpenseInput{}, err
+	}
+	if strings.EqualFold(strings.TrimSpace(request.CoveredBy), "Truck Owner") {
+		request.CoveredBy = "Truck Owner"
+		if request.OwnerID == nil {
+			return repository.ExpenseInput{}, errors.New("select the responsible truck owner")
+		}
+		if strings.HasPrefix(request.Amount, "-") {
+			return repository.ExpenseInput{}, errors.New("owner expenses must have a nonnegative amount")
+		}
+	}
 	return repository.ExpenseInput{
+		OwnerID: request.OwnerID,
 		Company: request.Company, Category: request.Category, ExpenseDate: *expenseDate,
 		TruckID: request.TruckID, DriverID: request.DriverID,
 		UnitNumber: optionalString(request.UnitNumber), DriverName: optionalString(request.DriverName),
@@ -168,15 +182,26 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	chargeDriverID, err := parseOptionalQueryUUID(r.URL.Query().Get("chargeDriverId"), "chargeDriverId")
+	if err != nil {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
+	responsibility := r.URL.Query().Get("responsibility")
+	if responsibility != "" && responsibility != "non_personal" {
+		writeAPIError(w, 400, "invalid responsibility filter")
+		return
+	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
-		Pagination: pagination,
-		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
-		Category:   strings.TrimSpace(r.URL.Query().Get("category")),
-		Company:    strings.TrimSpace(r.URL.Query().Get("company")),
-		DateFrom:   dateFrom,
-		DateTo:     dateTo,
-		TruckID:    truckID,
-		DriverID:   driverID,
+		Pagination:     pagination,
+		ChargeDriverID: chargeDriverID, Responsibility: responsibility,
+		Search:   strings.TrimSpace(r.URL.Query().Get("search")),
+		Category: strings.TrimSpace(r.URL.Query().Get("category")),
+		Company:  strings.TrimSpace(r.URL.Query().Get("company")),
+		DateFrom: dateFrom,
+		DateTo:   dateTo,
+		TruckID:  truckID,
+		DriverID: driverID,
 	})
 	if err != nil {
 		handler.writeError(w, err)

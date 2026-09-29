@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `036_driver_expense_balances.sql`:
+  `038_payroll_settlements.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -220,7 +220,10 @@ browser bundle.
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
-- Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`.
+- Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
+  `POST /driver-pay/finalize` and `/reopen` (optional driverId, report revision;
+  reopening requires a reason). `GET /drivers/{id}/pay-history` is paginated;
+  `GET /drivers/{id}/settlement-history?weekStart=...` returns the audit snapshots.
   GET accepts Monday `weekStart`; PUT saves one driver's versioned weekly notes,
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
@@ -302,7 +305,8 @@ assignment lookup lists.
   before future allocation; underpayments extend schedules. Confirming selected
   deductions is explicit and idempotent, records the session user, and locks
   those rows. Reopening requires a reason and reverses only collection status.
-  Viewing/autosave never collects money. Driver rows serialize charge writes;
+  Viewing/autosave never confirms generated installments; finalizing payroll does.
+  Driver rows serialize charge writes;
   schedule, type and occurrence versions reject stale edits. Money is integer cents
   in calculations and numeric/decimal strings at persistence/API boundaries.
   Driver deactivation requires chargePauseWeek when charges exist and pauses
@@ -417,7 +421,19 @@ assignment lookup lists.
   assignment using New York calendar dates, never today's assignment or guessed
   nearby loads. Unmatched/ambiguous tolls remain outside payroll. Source totals
   remain visible; null overrides follow current source totals, explicit zero or
-  signed overrides persist until reset. No finalization is included.
+  signed overrides persist until reset. Individual drivers or an entire week can
+  be finalized and reopened (migration 038). Finalization requires the current
+  report revision, rejects future weeks and unresolved loads, saves suggested
+  expense deductions, pins generated charges and confirms installment deductions.
+  payroll_settlements freezes the full report with actor/time; source or profile
+  changes do not change finalized history. Database guards reject payroll/payment
+  edits until reopened. A reason is required to reopen; audit events retain every
+  snapshot. Reopening reverses only installment confirmations made by finalization;
+  saved expense payments remain paid until corrected, matching payment-on-save.
+  Whole-week actions are atomic and ignore UI filters. Charge writes share an
+  advisory lock; finalization obtains its exclusive session counterpart before
+  opening a repeatable-read snapshot. Driver profiles expose editable details,
+  weekly pay history, personal balances, other expenses and assignment history.
   Notes, load comments, and named additions/reimbursements/deductions belong to
   a driver/week in `driver_pay_weeks`, with version checks and five-second autosave.
   Comments are keyed by date, slot, and normalized load number so replacing a
@@ -491,6 +507,16 @@ assignment lookup lists.
   Tests use only `MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL`, whose database name
   must contain `_test`, and verify fresh schema and migration as `mserp_app`.
   CI runs these checks against a disposable PostgreSQL service.
+- Expense responsibility is distinct from the operating driver. Migration 037
+  stores owner_id and charge_driver_id: Driver bills the linked driver; Truck
+  Owner bills the explicitly selected investor, entering driver payroll only when
+  that investor is driver-linked. Independent investors never bill the operating
+  driver. Current driver/truck selections fill their counterpart and default to
+  Company for company drivers or the actual truck owner for owner-operators.
+  Historical dates require explicit owner selection rather than guessing from
+  current ownership. Ownership changes never transfer an existing expense debt.
+  Historical Truck Owner expenses are settled without inferring a past owner.
+  Personal charges use charge_driver_id; other linked expenses remain separate.
 - Driver-covered expenses (coveredBy = Driver) require a linked driver and a
   nonnegative total. Penalties is an expense category. Migration 036 marks all
   pre-existing driver-covered expenses as settled with zero remaining balance.

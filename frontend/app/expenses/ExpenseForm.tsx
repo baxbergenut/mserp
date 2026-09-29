@@ -1,6 +1,9 @@
 "use client";
 
-import type { Driver, Expense, ExpenseCategory, ExpenseInput, Truck } from "../lib/types";
+import { expenseAssignment } from "./assignments";
+
+
+import type { Driver, Expense, ExpenseCategory, ExpenseInput, Investor, Truck } from "../lib/types";
 import {
   controlClass,
   Field,
@@ -20,7 +23,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
 export const emptyExpenseInput: ExpenseInput = {
   company: "MS Express",
   category: "Maintenance",
-  expenseDate: new Date().toISOString().slice(0, 10),
+  expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
   driverId: null,
   unitNumber: "",
@@ -38,6 +41,7 @@ export const emptyExpenseInput: ExpenseInput = {
 
 export function expenseToInput(expense: Expense): ExpenseInput {
   return {
+    ownerId: expense.ownerId,
     company: expense.company,
     category: expense.category,
     expenseDate: expense.expenseDate ?? "",
@@ -62,6 +66,7 @@ export function ExpenseForm({
   options,
   drivers,
   trucks,
+  owners,
   onChange,
 }: {
   value: ExpenseInput;
@@ -74,6 +79,7 @@ export function ExpenseForm({
   };
   drivers: Driver[];
   trucks: Truck[];
+  owners: Investor[];
   onChange: (value: ExpenseInput) => void;
 }) {
   const set = <K extends keyof ExpenseInput>(key: K, next: ExpenseInput[K]) =>
@@ -111,7 +117,7 @@ export function ExpenseForm({
             required
             type="date"
             value={value.expenseDate}
-            onChange={(event) => set("expenseDate", event.target.value)}
+            onChange={(event) => onChange({ ...value, expenseDate: event.target.value, ownerId: value.coveredBy === "Truck Owner" ? null : value.ownerId })}
             className={controlClass}
           />
         </Field>
@@ -130,12 +136,10 @@ export function ExpenseForm({
 
       <FormSection title="Assignment and classification">
         <Field label="Unit number">
-          <select
+          <select aria-label="Unit number"
             value={value.truckId ?? ""}
             onChange={(event) => {
-              const truckId = event.target.value || null;
-              const unitNumber = trucks.find((truck) => truck.id === truckId)?.unitNumber ?? value.unitNumber;
-              onChange({ ...value, truckId, unitNumber });
+              onChange(expenseAssignment(value, "truck", event.target.value, drivers, trucks, owners));
             }}
             className={controlClass}
           >
@@ -162,9 +166,7 @@ export function ExpenseForm({
           <select aria-label="Driver"
             value={value.driverId ?? ""}
             onChange={(event) => {
-              const driverId = event.target.value || null;
-              const driverName = drivers.find((driver) => driver.id === driverId)?.fullName ?? value.driverName;
-              onChange({ ...value, driverId, driverName });
+              onChange(expenseAssignment(value, "driver", event.target.value, drivers, trucks, owners));
             }}
             className={controlClass}
           >
@@ -186,6 +188,20 @@ export function ExpenseForm({
               )}
             </>
           )}
+        </Field>
+        <Field label="Who will cover" wide>
+          <select aria-label="Who will cover" value={value.coveredBy} onChange={event => onChange({ ...value, coveredBy: event.target.value, ownerId: event.target.value === "Truck Owner" ? value.ownerId ?? trucks.find(t => t.id === value.truckId)?.ownerId ?? null : null })} className={controlClass}>
+            {Array.from(new Set(["Company", "Driver", "Truck Owner", ...options.coveredBy, value.coveredBy])).filter(Boolean).map(option => <option key={option}>{option}</option>)}
+          </select>
+          {value.coveredBy === "Driver" && <p className="text-xs text-zinc-500">Deduct from the linked driver&apos;s pay. Unpaid amounts carry forward.</p>}
+          {value.coveredBy === "Truck Owner" && <div className="mt-2 space-y-1">
+            <select aria-label="Responsible truck owner" required value={value.ownerId ?? ""} onChange={event => onChange({...value, ownerId:event.target.value || null})} className={controlClass}>
+              <option value="">Select the responsible owner</option>
+              {owners.filter(o => !o.isCompany && (o.active || o.id === value.ownerId)).map(o => <option key={o.id} value={o.id}>{o.fullName}{o.driverId ? " · Driver" : " · Investor"}</option>)}
+            </select>
+            <p className="text-xs text-zinc-500">{owners.find(o => o.id === value.ownerId)?.driverId ? "Deduct from this owner's Driver Pay, regardless of who operates the truck." : "Investor responsibility. This will not be deducted from the operating driver's pay."}</p>
+            <p className="text-xs text-amber-300">Confirm the owner responsible on the expense date. For historical expenses, select the owner explicitly.</p>
+          </div>}
         </Field>
         <Field label="Expense type">
           <input aria-label="Expense type"
@@ -231,18 +247,6 @@ export function ExpenseForm({
       </FormSection>
 
       <FormSection title="Responsibility and verification">
-        <Field label="Who will cover" hint="Choose Driver to deduct this expense in Driver Pay. A linked driver is required; the unpaid balance carries forward.">
-          <input aria-label="Who will cover"
-            list="expense-covered-by"
-            value={value.coveredBy}
-            onChange={(event) => set("coveredBy", event.target.value)}
-            className={controlClass}
-            placeholder="Company, Driver, Truck Owner…"
-          />
-          <datalist id="expense-covered-by">
-            {Array.from(new Set(["Company", "Driver", ...options.coveredBy])).map((option) => <option key={option} value={option} />)}
-          </datalist>
-        </Field>
         <Field label="Paid by">
           <input
             list="expense-paid-by"

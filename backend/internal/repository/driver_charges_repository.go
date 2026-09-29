@@ -178,6 +178,9 @@ func chargeAudit(ctx context.Context, tx pgx.Tx, schedule, typeID, actor, action
 	return err
 }
 func lockChargeDrivers(ctx context.Context, tx pgx.Tx, ids []string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+		return err
+	}
 	rows, err := tx.Query(ctx, `SELECT id FROM drivers WHERE id::text=ANY($1::text[]) ORDER BY id FOR UPDATE`, ids)
 	if err != nil {
 		return err

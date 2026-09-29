@@ -519,6 +519,10 @@ export interface TollDashboard {
 }
 
 export interface Expense {
+ payments: {weekStart: string; amount: string}[];
+ ownerId: string | null;
+ ownerName: string | null;
+ chargeDriverId: string | null;
   paidAmount: string | null;
   remainingAmount: string | null;
   driverSettled: boolean;
@@ -556,6 +560,7 @@ export type ExpenseCategory =
   | "Administrative";
 
 export interface ExpenseInput {
+ ownerId?: string | null;
   company: string;
   category: ExpenseCategory;
   expenseDate: string;
@@ -728,6 +733,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+ settlement?: PayrollSettlement;
   id: string;
   isOwnerOperator: boolean;
   fullName: string;
@@ -742,6 +748,7 @@ export interface DriverPayDriver {
   edits: DriverPayEdits;
 }
 export interface DriverPayWeek {
+ revision: string;
   weekStart: string;
   drivers: DriverPayDriver[];
 }
@@ -811,3 +818,7 @@ export interface ChargeBulk {
   targets: {id: string; version: number}[]; action: "amount" | "pause" | "resume" | "end"; weekStart: string; amount: string;
 }
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
+
+export interface PayrollSettlement { finalized: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
+export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
+export interface SettlementEvent { action: string; version: number; actor: string; reason: string; createdAt: string; report: DriverPayDriver }

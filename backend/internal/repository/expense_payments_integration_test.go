@@ -49,8 +49,18 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			ownerMigration, err := os.ReadFile("../../sql/037_expense_responsibility.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			settlementMigration, err := os.ReadFile("../../sql/038_payroll_settlements.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(settlementMigration), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(ownerMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(sql)
@@ -66,8 +76,10 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(migration))
+				exec(string(ownerMigration))
+				exec(string(settlementMigration))
 			}
-			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`)
+			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT ON app_users TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`)
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)
@@ -198,6 +210,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatalf("legacy settlement %+v %v", x, err)
 				}
 			}
+			testOwnerSettlements(t, ctx, admin, pool, driver, other)
 		})
 	}
 }

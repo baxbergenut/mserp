@@ -53,9 +53,12 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+            settlementMigration, err := os.ReadFile("../../sql/038_payroll_settlements.sql")
+            if err != nil { t.Fatal(err) }
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
+ source=strings.Replace(source,strings.ReplaceAll(string(settlementMigration),"\r\n","\n"),"",1)
 				source = strings.Replace(source, strings.ReplaceAll(string(matrix), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(backdated), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, body, "", 1)
@@ -101,8 +104,9 @@ func TestDriverChargesDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// Do not grant charge tables here: migration ownership must provide access.
-			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,gross_board_entries,gross_board_extra_entries,loads,driver_pay_weeks,fuel_transactions,fuel_transaction_items,tolls,app_users,files TO mserp_app`); err != nil {
+			if mode=="migration" {if _,err:=admin.Exec(ctx,string(settlementMigration));err!=nil{t.Fatal(err)}}
+            // Do not grant charge tables here: migration ownership must provide access.
+			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app;GRANT SELECT ON app_users TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,gross_board_entries,gross_board_extra_entries,loads,driver_pay_weeks,fuel_transactions,fuel_transaction_items,tolls,app_users,files TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)

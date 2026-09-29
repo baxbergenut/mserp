@@ -6,6 +6,8 @@ import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
 import { extractExpenses } from "../lib/api";
 import type { AIExpenseDraft, Driver, ExpenseInput, Truck } from "../lib/types";
 import { controlClass } from "../components/management/ManagementUI";
+import { expenseAssignment } from "./assignments";
+import type { Investor } from "../lib/types";
 import { EXPENSE_CATEGORIES } from "./ExpenseForm";
 
 const compactControl = `${controlClass} min-w-32 px-2 py-1.5 text-[12px]`;
@@ -208,11 +210,13 @@ export function ExpenseBatchEditor({
   values,
   drivers,
   trucks,
+  owners,
   onChange,
 }: {
   values: ExpenseInput[];
   drivers: Driver[];
   trucks: Truck[];
+  owners: Investor[];
   onChange: (values: ExpenseInput[]) => void;
 }) {
   function update(index: number, patch: Partial<ExpenseInput>) {
@@ -261,8 +265,7 @@ export function ExpenseBatchEditor({
                   <select
                     value={value.truckId ?? ""}
                     onChange={(event) => {
-                      const truckId = event.target.value || null;
-                      update(index, { truckId, unitNumber: trucks.find((truck) => truck.id === truckId)?.unitNumber ?? value.unitNumber });
+                      update(index, expenseAssignment(value,"truck",event.target.value,drivers,trucks,owners));
                     }}
                     className={compactControl}
                   >
@@ -275,8 +278,7 @@ export function ExpenseBatchEditor({
                   <select
                     value={value.driverId ?? ""}
                     onChange={(event) => {
-                      const driverId = event.target.value || null;
-                      update(index, { driverId, driverName: drivers.find((driver) => driver.id === driverId)?.fullName ?? value.driverName });
+                      update(index, expenseAssignment(value,"driver",event.target.value,drivers,trucks,owners));
                     }}
                     className={`${compactControl} min-w-44`}
                   >
@@ -290,7 +292,7 @@ export function ExpenseBatchEditor({
                 <td className="px-2 py-2"><input value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
-                <td className="px-2 py-2"><input value={value.coveredBy} onChange={(event) => update(index, { coveredBy: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><select aria-label={`Transaction ${index + 1} responsibility`} value={value.coveredBy} onChange={event => update(index, {coveredBy:event.target.value,ownerId:null})} className={compactControl}>{Array.from(new Set(["Company","Driver","Truck Owner",value.coveredBy])).filter(Boolean).map(v => <option key={v}>{v}</option>)}</select>{value.coveredBy === "Truck Owner" && <select required aria-label={`Transaction ${index + 1} owner`} value={value.ownerId ?? ""} onChange={event => update(index,{ownerId:event.target.value || null})} className={compactControl}><option value="">Select responsible owner</option>{owners.filter(o => !o.isCompany).map(o => <option key={o.id} value={o.id}>{o.fullName}</option>)}</select>}</td>
                 <td className="px-2 py-2"><input value={value.paidBy} onChange={(event) => update(index, { paidBy: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2">
                   <label className="flex items-center gap-2 whitespace-nowrap text-zinc-400"><input type="checkbox" checked={value.managerVerified} onChange={(event) => update(index, { managerVerified: event.target.checked })} /> Manager</label>

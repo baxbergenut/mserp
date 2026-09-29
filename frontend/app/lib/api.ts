@@ -1,3 +1,4 @@
+import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import type {
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
@@ -148,6 +149,8 @@ export const fetchFuelTransactions = () =>
 export const fetchFuelTransactionsPage = (query: PageQuery & {
   driver?: string;
   state?: string;
+  responsibility?: "non_personal";
+  chargeDriverId?: string;
   category?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -321,6 +324,8 @@ export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
 export const fetchExpensesPage = (query: PageQuery & {
+  responsibility?: "non_personal";
+  chargeDriverId?: string;
   category?: string;
   company?: string;
   dateFrom?: string;
@@ -378,3 +383,7 @@ export const confirmDriverCharges = (driverId: string, weekStart: string, rows: 
   apiRequest<void>(`/driver-charges/${reason === undefined ? "confirm" : "reopen"}`, { method: "POST", body: JSON.stringify({ driverId, weekStart, rows, reason: reason ?? "" }) });
 
 export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/driver-charges/recurring", { method: "PUT", body: JSON.stringify(input) });
+
+export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }));
+export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequest<SettlementEvent[]>(withQuery(`/drivers/${id}/settlement-history`, { weekStart }));
+export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason}) });
