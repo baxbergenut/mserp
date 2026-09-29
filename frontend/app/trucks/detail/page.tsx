@@ -46,7 +46,7 @@ export default function TruckDetailPage() {
               <div><dt className="text-zinc-600">Driver</dt><dd className="mt-1 text-zinc-300">{truck.driverName || "Unassigned"}</dd></div>
               <div><dt className="text-zinc-600">Status</dt><dd className="mt-1 capitalize text-zinc-300">{truck.status.replaceAll("_", " ")}</dd></div>
               <div><dt className="text-zinc-600">VIN</dt><dd className="mt-1 font-mono text-zinc-300">{truck.vin || "—"}</dd></div>
-              <div><dt className="text-zinc-600">Ownership</dt><dd className="mt-1 text-zinc-300">{truck.isCompanyOwned ? "Company" : "Owner-operator"}</dd></div>
+              <div><dt className="text-zinc-600">Ownership</dt><dd className="mt-1 text-zinc-300"><Link href="/investors" className="hover:text-blue-400">{truck.ownerName}</Link></dd></div>
             </dl>
           </div>
           <RelatedExpenses truckId={truck.id} />

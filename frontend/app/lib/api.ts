@@ -1,4 +1,6 @@
 import type {
+  Investor,
+  InvestorInput,
   DriverPayWeek,
   DriverPayEdits,
   CustomTask,
@@ -355,3 +357,11 @@ export const deleteExpense = (id: string) =>
 export const fetchDriverPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart }));
 export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
+
+export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
+export const fetchInvestorsPage = (query: PageQuery) =>
+  paginatedRequest<PaginatedResponse<Investor>>(withQuery("/investors", query));
+export const createInvestor = (input: InvestorInput) =>
+  apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(input) });
+export const updateInvestor = (id: string, input: InvestorInput) =>
+  apiRequest<Investor>(`/investors/${id}`, { method: "PUT", body: JSON.stringify(input) });

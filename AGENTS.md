@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `031_add_dispatcher_assignment_history.sql`:
+  `032_add_investors.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -106,6 +106,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and review-first AI transaction entry.
+- `frontend/app/investors/`: truck owners, independent investors and driver-linked
+  investors. Truck forms select explicit owners; ownership is separate from operation.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults. Driver and
   truck detail pages include expenses linked to that record.
@@ -223,6 +225,8 @@ browser bundle.
   dispatcher periods, current links, source notes, and whether the start is known.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
+- Investors: `GET/POST /investors`, `PUT /investors/{id}`. List supports search and
+  pagination; inactive investors retain ownership/history. Company identity is protected.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
@@ -251,6 +255,24 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Investors own trucks independently of operating-driver assignments. A driver may
+  have one investor profile, sharing live name/contact details; independent owners
+  have their own details. MS Express Inc. is the fixed company owner. Migration 032
+  initializes current owner-operator-assigned trucks to driver-linked investors and
+  all remaining trucks to the company. This is a one-time backfill; reassignment or
+  changing driver pay classification never transfers ownership. New trucks default
+  to the company unless an explicit active owner is selected. Omitted ownerId on
+  updates preserves ownership for older clients. The legacy is_company_owned flag
+  follows owner_id. Owners can be deactivated, not deleted; linked identity cannot
+  be replaced. Driver deletion retains the investor and last known contact details.
+  truck_ownership_history records changes and retains truck-unit snapshots after
+  deletion; migration starts are marked unknown, not invented effective dates.
+  Future charges/statements must use ownership periods and handle unknown starts
+  explicitly. No new charges, payroll changes or statement generation are included.
+  investor_repository.go and investor_handlers.go own the API. Tests use only
+  disposable MSERP_INVESTOR_TEST_DATABASE_URL (_test database), checking fresh and
+  migrated schemas as mserp_app. CI runs these and real-API Chromium E2E flows.
 
 - Custom tasks are shared by all authenticated users, separate from generated
   driver setup and Relay review tasks. Titles are required (200 characters max),
@@ -507,9 +529,9 @@ assignment lookup lists.
   when the viewport is narrower than their readable minimum width.
 - Use the `@/*` TypeScript alias when it improves readability; strict TypeScript
   and no emit are enabled.
-- No frontend test framework is configured. For behavior-heavy frontend changes,
-  add one only if the task calls for it; otherwise validate with lint, build, and
-  targeted browser checks.
+- Playwright verifies investor flows against an isolated real API/database through
+  scripts/test-investors-e2e.mjs. Other frontend changes use lint, build, existing
+  calculation scripts, and targeted browser checks.
 
 ## Validation
 
@@ -526,6 +548,9 @@ npm run lint
 node scripts/test-gross-board.mjs
 node scripts/test-driver-pay.mjs
 npm run build
+# E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
+npx playwright install chromium
+node scripts/test-investors-e2e.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build

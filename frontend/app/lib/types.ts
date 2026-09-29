@@ -349,6 +349,8 @@ export interface DriverIntake {
 }
 
 export interface Truck {
+  ownerId: string;
+  ownerName: string;
   id: string;
   unitNumber: string;
   vin: string | null;
@@ -377,6 +379,7 @@ export interface Truck {
 }
 
 export interface TruckInput {
+  ownerId: string | null;
   unitNumber: string;
   vin: string;
   year: number | null;
@@ -731,4 +734,26 @@ export interface AssignmentHistoryEntry {
   unassignedAt: string | null;
   startKnown: boolean;
   source: string;
+}
+
+export interface Investor {
+  id: string;
+  fullName: string;
+  driverId: string | null;
+  isCompany: boolean;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  active: boolean;
+  trucks: Array<{ id: string; unitNumber: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface InvestorInput {
+  fullName: string;
+  driverId: string | null;
+  email: string;
+  phone: string;
+  notes: string;
+  active: boolean;
 }

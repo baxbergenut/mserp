@@ -36,6 +36,7 @@ const NAV_ITEMS = [
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },
+  { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers", icon: Headset },
 ] as const;

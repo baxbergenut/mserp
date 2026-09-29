@@ -74,6 +74,8 @@ type DriverInput struct {
 }
 
 type Truck struct {
+	OwnerID             string     `json:"ownerId"`
+	OwnerName           string     `json:"ownerName"`
 	ID                  string     `json:"id"`
 	UnitNumber          string     `json:"unitNumber"`
 	VIN                 *string    `json:"vin"`
@@ -102,6 +104,7 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	OwnerID             *string
 	UnitNumber          string
 	VIN                 *string
 	Year                *int
@@ -416,6 +419,15 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 	}
 	defer tx.Rollback(ctx)
 
+	if input.OwnerID != nil {
+		var active bool
+		if err = tx.QueryRow(ctx, `SELECT active FROM investors WHERE id=$1 FOR SHARE`, *input.OwnerID).Scan(&active); err != nil {
+			return Truck{}, mapNotFound(err)
+		}
+		if !active {
+			return Truck{}, ErrInactiveOwner
+		}
+	}
 	var id string
 	unitNumber := normalizeTruckUnit(input.UnitNumber)
 	err = tx.QueryRow(ctx, `
@@ -423,14 +435,14 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 			unit_number, vin, year, make, model, license_plate, license_state,
 			is_company_owned, status, mileage, registration_expires,
 			insurance_expires, last_service_date, next_service_miles, active, notes,
-			irp_file_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			irp_file_id, owner_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::uuid,'00000000-0000-0000-0000-000000000001'))
 		RETURNING id`,
 		unitNumber, input.VIN, input.Year, input.Make, input.Model,
 		input.LicensePlate, input.LicenseState, input.IsCompanyOwned, input.Status,
 		input.Mileage, input.RegistrationExpires, input.InsuranceExpires,
 		input.LastServiceDate, input.NextServiceMiles, input.Active, input.Notes,
-		input.IRPFileID,
+		input.IRPFileID, input.OwnerID,
 	).Scan(&id)
 	if err != nil {
 		return Truck{}, err
@@ -472,6 +484,9 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 	if command.RowsAffected() == 0 {
 		return Truck{}, ErrNotFound
 	}
+	if err = setTruckOwner(ctx, tx, id, input.OwnerID); err != nil {
+		return Truck{}, err
+	}
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
 		return Truck{}, err
 	}
@@ -493,7 +508,7 @@ func (r *FleetRepository) DeleteTruck(ctx context.Context, id string) error {
 }
 
 const selectTrucksSQL = `
-SELECT t.id, t.unit_number, t.vin, t.year, t.make, t.model,
+SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.vin, t.year, t.make, t.model,
 	t.license_plate, t.license_state, t.is_company_owned, t.status, t.mileage,
 	t.registration_expires, t.insurance_expires, t.last_service_date,
 	t.next_service_miles, a.driver_id, d.full_name, t.active, t.notes,
@@ -502,12 +517,14 @@ SELECT t.id, t.unit_number, t.vin, t.year, t.make, t.model,
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
-LEFT JOIN files f ON f.id = t.irp_file_id`
+LEFT JOIN files f ON f.id = t.irp_file_id
+JOIN investors oi ON oi.id=t.owner_id
+LEFT JOIN drivers od ON od.id=oi.driver_id`
 
 func scanTruck(row rowScanner) (Truck, error) {
 	var value Truck
 	err := row.Scan(
-		&value.ID, &value.UnitNumber, &value.VIN, &value.Year, &value.Make,
+		&value.OwnerID, &value.OwnerName, &value.ID, &value.UnitNumber, &value.VIN, &value.Year, &value.Make,
 		&value.Model, &value.LicensePlate, &value.LicenseState,
 		&value.IsCompanyOwned, &value.Status, &value.Mileage,
 		&value.RegistrationExpires, &value.InsuranceExpires, &value.LastServiceDate,

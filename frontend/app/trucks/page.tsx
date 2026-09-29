@@ -9,12 +9,13 @@ import {
   fileDownloadUrl,
   fetchDrivers,
   fetchTrucksPage,
+  fetchInvestors,
   uploadIRPFile,
   updateTruck,
 } from "../lib/api";
 import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Driver, Truck, TruckInput, TruckStatus } from "../lib/types";
+import type { Driver, Investor, Truck, TruckInput, TruckStatus } from "../lib/types";
 import {
   ConfirmDialog,
   EmptyState,
@@ -45,6 +46,7 @@ const STATUS_CLASSES: Record<TruckStatus, string> = {
 };
 
 export default function TrucksPage() {
+  const [investors, setInvestors] = useState<Investor[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
@@ -79,11 +81,15 @@ export default function TrucksPage() {
     }
   }, [debouncedSearch, page, pageSize]);
 
-  const loadDrivers = async () => {
+  const loadOptions = async () => {
     try {
-      setDrivers(await fetchDrivers());
+      const [drivers, owners] = await Promise.all([fetchDrivers(), fetchInvestors()]);
+      setDrivers(drivers);
+      setInvestors(owners);
+      return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to load driver options");
+      setError(reason instanceof Error ? reason.message : "Failed to load truck options");
+      return false;
     }
   };
 
@@ -92,16 +98,16 @@ export default function TrucksPage() {
     return () => window.clearTimeout(timeout);
   }, [loadData]);
 
-  const openCreate = () => {
-    void loadDrivers();
+  const openCreate = async () => {
+    if (!await loadOptions()) return;
     setForm({ ...emptyTruckInput });
     setIRPFileName(null);
     setEditing(null);
     setError("");
   };
 
-  const openEdit = (truck: Truck) => {
-    void loadDrivers();
+  const openEdit = async (truck: Truck) => {
+    if (!await loadOptions()) return;
     setForm(truckToInput(truck));
     setIRPFileName(truck.irpFileName);
     setEditing(truck);
@@ -207,7 +213,7 @@ export default function TrucksPage() {
             </tr></thead>
             <tbody>{trucks.map((truck) => (
               <tr key={truck.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
-                <td className="px-4 py-3"><Link href={`/trucks/detail?id=${truck.id}`} className="font-mono font-medium text-zinc-200 transition hover:text-blue-400">{truck.unitNumber}</Link><div className="mt-0.5 text-[11px] text-zinc-600">{truck.isCompanyOwned ? "Company owned" : "Owner / leased"}</div></td>
+                <td className="px-4 py-3"><Link href={`/trucks/detail?id=${truck.id}`} className="font-mono font-medium text-zinc-200 transition hover:text-blue-400">{truck.unitNumber}</Link><div className="mt-0.5 text-[11px] text-zinc-600">{truck.ownerName}</div></td>
                 <td className="px-4 py-3"><div className="text-zinc-300">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—"}</div><div className="mt-0.5 font-mono text-[11px] text-zinc-600">{truck.vin ?? truck.licensePlate ?? "No VIN or plate"}</div></td>
                 <td className="px-4 py-3 text-zinc-400">{truck.driverName ?? "Unassigned"}</td>
                 <td className="px-4 py-3 font-mono tabular-nums text-zinc-400">{truck.mileage?.toLocaleString() ?? "—"}</td>
@@ -257,6 +263,7 @@ export default function TrucksPage() {
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
           <TruckForm
+            investors={investors}
             value={form}
             onChange={setForm}
             drivers={drivers}

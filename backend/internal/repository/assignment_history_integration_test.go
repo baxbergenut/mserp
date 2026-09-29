@@ -39,6 +39,7 @@ func TestAssignmentHistoryDatabase(t *testing.T) {
 				}
 			}
 			exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public`)
+			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app`)
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public; DROP SCHEMA `+quoted+` CASCADE`) }()
 			source, err := os.ReadFile("../../sql/init.sql")
 			if err != nil {

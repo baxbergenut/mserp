@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, FileText, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
-import type { Driver, Truck, TruckInput } from "../lib/types";
+import type { Driver, Investor, Truck, TruckInput } from "../lib/types";
 import { fileDownloadUrl } from "../lib/api";
 import {
   controlClass,
@@ -11,6 +11,7 @@ import {
 } from "../components/management/ManagementUI";
 
 export const emptyTruckInput: TruckInput = {
+  ownerId: "00000000-0000-0000-0000-000000000001",
   unitNumber: "",
   vin: "",
   year: null,
@@ -33,6 +34,7 @@ export const emptyTruckInput: TruckInput = {
 
 export function truckToInput(truck: Truck): TruckInput {
   return {
+    ownerId: truck.ownerId,
     unitNumber: truck.unitNumber,
     vin: truck.vin ?? "",
     year: truck.year,
@@ -57,6 +59,7 @@ export function truckToInput(truck: Truck): TruckInput {
 export function TruckForm({
   value,
   drivers,
+  investors,
   onChange,
   irpFileName,
   isUploadingIRP,
@@ -65,6 +68,7 @@ export function TruckForm({
 }: {
   value: TruckInput;
   drivers: Driver[];
+  investors: Investor[];
   onChange: (value: TruckInput) => void;
   irpFileName: string | null;
   isUploadingIRP: boolean;
@@ -195,14 +199,13 @@ export function TruckForm({
             placeholder="Cascadia"
           />
         </Field>
-        <Field label="Ownership">
-          <select
-            value={value.isCompanyOwned ? "company" : "leased"}
-            onChange={(event) => set("isCompanyOwned", event.target.value === "company")}
-            className={controlClass}
-          >
-            <option value="company">Company owned</option>
-            <option value="leased">Owner / leased</option>
+        <Field label="Owner" hint="Ownership is separate from the operating driver. Add owners on the Investors page.">
+          <select required value={value.ownerId ?? ""}
+            onChange={(event) => onChange({ ...value, ownerId: event.target.value, isCompanyOwned: investors.find((i) => i.id === event.target.value)?.isCompany ?? false })}
+            className={controlClass}>
+            {investors.filter((i) => i.active || i.id === value.ownerId).map((i) => (
+              <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
+            ))}
           </select>
         </Field>
       </FormSection>

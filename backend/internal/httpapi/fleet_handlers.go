@@ -25,6 +25,9 @@ type fleetHandler struct {
 func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository) {
 	handler := fleetHandler{logger: logger, repo: repo}
 
+	r.Get("/investors", handler.listInvestors)
+	r.Post("/investors", handler.saveInvestor)
+	r.Put("/investors/{id}", handler.saveInvestor)
 	r.Get("/drivers", handler.listDrivers)
 	r.Get("/drivers/{id}", handler.getDriver)
 	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
@@ -149,6 +152,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	OwnerID             *string `json:"ownerId"`
 	UnitNumber          string  `json:"unitNumber"`
 	VIN                 string  `json:"vin"`
 	Year                *int    `json:"year"`
@@ -170,6 +174,9 @@ type truckRequest struct {
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
+	if err := validateOptionalUUID(request.OwnerID, "owner id"); err != nil {
+		return repository.TruckInput{}, err
+	}
 	request.UnitNumber = strings.TrimSpace(request.UnitNumber)
 	if request.UnitNumber == "" {
 		return repository.TruckInput{}, errors.New("unit number is required")
@@ -208,7 +215,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
-		UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
+		OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
 		Make: optionalString(request.Make), Model: optionalString(request.Model),
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,
@@ -499,6 +506,10 @@ func (handler fleetHandler) deleteDispatcher(w http.ResponseWriter, r *http.Requ
 }
 
 func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrInvestorConflict) || errors.Is(err, repository.ErrInactiveOwner) {
+		writeAPIError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "record not found")
 		return
