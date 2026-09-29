@@ -3,7 +3,7 @@
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
@@ -25,17 +25,18 @@ const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg bo
 
 export default function GrossBoardPage() {
   const router = useRouter();
-  const [loadTarget, setLoadTarget] = useState(() => typeof window === "undefined" ? null : parseBoardLoadTarget(window.location.search));
+  const searchParams = useSearchParams();
+  const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
   const [week, setWeek] = useViewState("page:week", () => monday(), loadTarget?.week);
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", loadTarget ? "all" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
   useEffect(() => {
-    const target = parseBoardLoadTarget(window.location.search);
+    const target = parseBoardLoadTarget(searchParams.toString());
     if (!target) return;
     const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher("all"); }, 0);
     return () => clearTimeout(timer);
-  }, [setDispatcher, setWeek]);
+  }, [setDispatcher, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
   const [loading, setLoading] = useState(true);
@@ -51,6 +52,8 @@ export default function GrossBoardPage() {
   const activityRef = useRef(0);
   const idleRef = useRef(false);
   const savingRef = useRef(false);
+  const leavingRef = useRef(false);
+  useLayoutEffect(() => { leavingRef.current = !!(pendingWeek || pendingLink); }, [pendingWeek, pendingLink]);
   const savedRef = useRef<Record<string, GrossBoardEntry>>({});
   const dirty = Object.keys(changes).length > 0;
   useLayoutEffect(() => { idleRef.current = !dirty && !saving && !loading; }, [dirty, saving, loading]);
@@ -189,8 +192,9 @@ export default function GrossBoardPage() {
       setChanges((current) => reconcileAutosave(current, snapshot, committed));
       setMessage("All changes saved");
       // Refresh carry and repeated-load metadata after a save, but never
-      // replace the baseline under a newer edit.
-      if (activityRef.current === saveRevision) {
+      // replace the baseline under a newer edit. Skip the refresh when leaving;
+      // the destination loads its own current data.
+      if (activityRef.current === saveRevision && !leavingRef.current) {
         try {
           const fresh = await fetchGrossBoard(week);
           if (activityRef.current === saveRevision) { setBoard(fresh); setRefreshError(""); }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +17,7 @@ import { driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } 
 
 export default function DriverPayPage() {
   const router = useRouter();
-  const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const params = useSearchParams();
   const requested = params.get("weekStart");
   const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? requested : undefined;
   const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
@@ -25,11 +25,10 @@ export default function DriverPayPage() {
   const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean} | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
-    const params = new URLSearchParams(window.location.search); const requested = params.get("weekStart");
-    if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1) setWeek(requested);
+    if (initialWeek) setWeek(initialWeek);
     if (params.has("driverId")) setDriverFilter(params.get("driverId") ?? "");
     }, 0); return () => clearTimeout(timer);
-  }, [setDriverFilter, setWeek]);
+  }, [setDriverFilter, setWeek, initialWeek, params]);
   const [report, setReport] = useState<DriverPayWeek | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverPayEdits>>({});
   const [search, setSearch] = useViewState("page:search", "");
