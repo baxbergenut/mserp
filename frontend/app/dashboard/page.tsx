@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
+import { useViewState } from "@/app/lib/viewMemory";
+
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CalendarDays,
@@ -218,14 +222,15 @@ function PerformanceSummary({ dashboard }: { dashboard: FinancialDashboard }) {
 }
 
 export default function DashboardPage() {
-  const [weekStart, setWeekStart] = useState("");
+  const [weekStart, setWeekStart] = useViewState("page:weekStart", "");
+  const initialWeek = useRef(weekStart);
   const [dashboard, setDashboard] = useState<FinancialDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    fetchFinancialDashboard({})
+    fetchFinancialDashboard({ weekStart: initialWeek.current || undefined })
       .then((result) => {
         if (cancelled) return;
         setDashboard(result);
@@ -242,7 +247,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setWeekStart]);
 
   const selectWeek = async (value: string) => {
     if (!value || value === weekStart) return;
@@ -333,7 +338,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <details className="group rounded-xl border border-zinc-800/60 bg-zinc-950/20 px-4 py-3">
+          <RememberedDetails memoryKey="dashboard-explanation" className="group rounded-xl border border-zinc-800/60 bg-zinc-950/20 px-4 py-3">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-medium text-zinc-400">
               <Info className="h-3.5 w-3.5 text-zinc-600" />
               How these numbers are calculated
@@ -346,7 +351,7 @@ export default function DashboardPage() {
               <p><span className="text-zinc-400">Profit:</span> {dashboard.methodology.profit}</p>
               <p><span className="text-zinc-400">Weekly reports:</span> {dashboard.methodology.week}</p>
             </div>
-          </details>
+          </RememberedDetails>
         </div>
       ) : null}
     </div>

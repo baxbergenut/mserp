@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Package, RefreshCw } from "lucide-react";
 import { fetchLoadsPage, syncLoads } from "../lib/api";
@@ -14,12 +16,12 @@ import { LoadsTable } from "./LoadsTable";
 export default function LoadsPage() {
   const [loads, setLoads] = useState<Load[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [sortKey, setSortKey] = useState<SortKey>("PickupTime");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [filters, setFilters] = useViewState<Filters>("page:filters", EMPTY_FILTERS);
+  const [sortKey, setSortKey] = useViewState<SortKey>("page:sortKey", "PickupTime");
+  const [sortDir, setSortDir] = useViewState<SortDir>("page:sortDir", "desc");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
@@ -60,7 +62,7 @@ export default function LoadsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, filters, page, pageSize, sortDir, sortKey]);
+  }, [setPage, debouncedSearch, filters, page, pageSize, sortDir, sortKey]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);

@@ -270,6 +270,17 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
+- Navigation preserves view state throughout the app. PageNavigation supplies a
+  shared Back link and restores main/nested scroll positions after data loads;
+  viewMemory.useViewState retains filters, sorting, weeks, pagination, tabs and
+  expanded rows in session storage, scoped by authenticated user, page and detail
+  record. RememberedDetails handles native expandable sections. Ordinary visits
+  append to the navigation trail; explicit Back and browser Back unwind it.
+  State survives reloads within that browser tab; records are fetched afresh.
+  Never persist fetched records, credentials, form drafts or pending financial
+  edits through this hook. New page view controls should use useViewState.
+  Explicit load deep links override the remembered Gross Board week/filter/scroll.
+
 - Driver charges use migration 033: charge types, schedules, effective Monday
   phases, weekly occurrences and append-only audit events. They are independent
   of freeform driver_pay_weeks.adjustments JSON, Expenses, investors, dispatcher
@@ -434,6 +445,12 @@ assignment lookup lists.
   advisory lock; finalization obtains its exclusive session counterpart before
   opening a repeatable-read snapshot. Driver profiles expose editable details,
   weekly pay history, personal balances, other expenses and assignment history.
+  Payroll load numbers deep-link to Gross Board by driver ID, service date and
+  slot, opening Daily loads with that exact entry highlighted. The load number
+  guards against replaced/deleted slots, which display an explicit missing-entry
+  notice. Pending payroll edits save before normal link navigation. The daily
+  editor applies valid edits and awaits Gross Board autosave before Back to
+  Driver Pay returns to the accountant's prior view.
   Notes, load comments, and named additions/reimbursements/deductions belong to
   a driver/week in `driver_pay_weeks`, with version checks and five-second autosave.
   Comments are keyed by date, slot, and normalized load number so replacing a

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, memo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
@@ -26,6 +27,7 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 type Props = {
+  returnToPay?: boolean;
  onSettlement?: (reopen: boolean) => void;
  settlementDisabled?: boolean;
   driver: DriverPayDriver;
@@ -38,7 +40,7 @@ type Props = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled }: Props) {
+export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay }: Props) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const totals = driverTotals(driver, edits);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
@@ -56,7 +58,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => load.date === addDays(edits.weekStart, index)).length), 0);
   const visibleCostRows = driver.payType === "cpm" ? [] : costRows;
   const adjustmentCells = <td colSpan={2} rowSpan={weekRowCount} className="border-b border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
-    <div className="h-56 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
+    <div data-payroll-scroll={`${driver.id}:adjustments`} className="h-56 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
         <tbody>{visibleCostRows.map(({ key, label }, index) => {
           const value = costAmount(driver, edits, key);
@@ -105,7 +107,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
         {onSettlement && <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2"><span className="text-xs text-zinc-500">{driver.settlement?.finalized ? `Finalized by ${driver.settlement.finalizedBy}` : driver.settlement ? "Reopened for corrections" : "Draft settlement"}</span><button type="button" disabled={settlementDisabled} className={payButtonClass} onClick={() => onSettlement(!!driver.settlement?.finalized)}>{driver.settlement?.finalized ? "Reopen driver" : "Finalize driver"}</button></div>}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — review deductions before confirming. Unpaid expense balances carry forward; other negative pay does not.</p>}
-        <div className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
+        <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 bg-zinc-950/30 text-left text-xs">
             <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>
             <thead className="bg-zinc-900 text-[10px] text-zinc-400"><tr>{columns.map(([label], index) => <th key={label}
@@ -119,7 +121,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
               const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
               return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
                 {index === 0 && <th rowSpan={loads.length} scope="rowgroup" className={`${cell} sticky left-0 z-10 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
-                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><span className="truncate" title={load.loadNumber}>{load.loadNumber}</span>{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}</div></td>
+                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: driver.id, date: load.date, slot: String(load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}</div></td>
                 <td className={`${cell} text-zinc-400`}>{load.pickupDate || "—"}</td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>

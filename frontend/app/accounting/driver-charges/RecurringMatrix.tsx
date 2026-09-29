@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useViewState } from "@/app/lib/viewMemory";
+
+import { useMemo } from "react";
 import Link from "next/link";
 import { History, LoaderCircle } from "lucide-react";
 import type { ChargeCell, ChargeData, ChargeSchedule, ChargeType, Driver } from "@/app/lib/types";
@@ -15,8 +17,8 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
   pending: Record<string, ChargeCell>; onSave: (input: ChargeCell, driverName: string, typeName: string) => void;
   showHistory: (schedule: ChargeSchedule) => void;
 }) {
-  const [week, setWeek] = useState(data.currentWeek);
-  const [archived, setArchived] = useState(false);
+  const [week, setWeek] = useViewState("RecurringMatrix:week", data.currentWeek);
+  const [archived, setArchived] = useViewState("RecurringMatrix:archived", false);
   const schedulesByDriver = useMemo(() => {
     const grouped = new Map<string, ChargeSchedule[]>();
     for (const schedule of data.schedules) {

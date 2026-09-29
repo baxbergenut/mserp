@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
@@ -249,8 +251,8 @@ function FuelMap({ dashboard }: { dashboard: FuelDashboard }) {
 
 export function FuelOverview({ refreshKey }: { refreshKey: number }) {
   const today = useMemo(() => new Date(), []);
-  const [dateFrom, setDateFrom] = useState(() => `${today.getFullYear()}-01-01`);
-  const [dateTo, setDateTo] = useState(() => isoDate(today));
+  const [dateFrom, setDateFrom] = useViewState("FuelOverview:dateFrom", () => `${today.getFullYear()}-01-01`);
+  const [dateTo, setDateTo] = useViewState("FuelOverview:dateTo", () => isoDate(today));
   const [dashboard, setDashboard] = useState<FuelDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");

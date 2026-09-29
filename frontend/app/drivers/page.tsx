@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -49,10 +51,10 @@ function DriversContent() {
   const [drivers, setDrivers] = useState<DriverDirectoryEntry[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [dispatchers, setDispatchers] = useState<Dispatcher[]>([]);
-  const [search, setSearch] = useState("");
-  const [showInactiveDrivers, setShowInactiveDrivers] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [showInactiveDrivers, setShowInactiveDrivers] = useViewState("page:showInactiveDrivers", false);
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,7 +91,7 @@ function DriversContent() {
     } finally {
       if (sequence === requestSequence.current) setIsLoading(false);
     }
-  }, [debouncedSearch, page, pageSize, showInactiveDrivers]);
+  }, [setPage, debouncedSearch, page, pageSize, showInactiveDrivers]);
 
   const loadLookups = useCallback(async () => {
     try {

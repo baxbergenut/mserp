@@ -1,5 +1,9 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
 import { useMemo, useState } from "react";
 import { geoAlbersUsa, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
@@ -14,7 +18,7 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const compactMoney = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
 
 export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useViewState<string | null>("TollSpendingMap:selected", null);
   const [hovered, setHovered] = useState<string | null>(null);
   const ranked = useMemo(() => [...dashboard.states].sort((a, b) => b.spend - a.spend || a.label.localeCompare(b.label)), [dashboard.states]);
   const byState = useMemo(() => new Map(ranked.map((point) => [point.label, point])), [ranked]);
@@ -89,12 +93,12 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">Uses the toll agency state supplied by PrePass. Older records without a state use verified single-state agency locations. Records that still cannot be located are listed below.</p>
       {unmappedCount > 0 && (
-        <details className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px]">
+        <RememberedDetails memoryKey="unmapped-states" className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px]">
           <summary className="cursor-pointer text-amber-200/80">Unmapped location: {money.format(unmappedCents / 100)} · {unmappedCount.toLocaleString()} transactions</summary>
           <div className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {[...dashboard.unmapped].sort((a, b) => b.spend - a.spend).map((point) => <div key={point.label} className="flex justify-between gap-3 py-1 text-zinc-400"><span>{point.label || "Unknown agency"}</span><span className="font-mono">{money.format(point.spend)}</span></div>)}
           </div>
-        </details>
+        </RememberedDetails>
       )}
     </section>
   );

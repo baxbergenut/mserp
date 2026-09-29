@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
 import { emptyEntry, mismatch, validDecimal } from "./board";
@@ -9,13 +9,21 @@ import { BoardDialog } from "./BoardDialog";
 
 type DayCellProps = {
   entry: GrossBoardEntry;
+  id?: string;
+  highlighted?: boolean;
   driverName: string;
   disabled: boolean;
   onAdd?: (driverId: string, date: string) => void;
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted }: DayCellProps) {
+  const cellRef = useRef<HTMLTableCellElement>(null);
+  useEffect(() => {
+    if (!highlighted) return;
+    cellRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
+    cellRef.current?.focus({ preventScroll: true });
+  }, [highlighted]);
   const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
   const confirmed = entry.loadRecordId !== null;
@@ -25,7 +33,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   return (
-    <td className="border-r border-b border-zinc-800/70 p-0 align-top">
+    <td id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
         <span>Load {entry.slot + 1}</span><div className="flex gap-1">
           {onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
@@ -65,7 +73,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
     </td>
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
-  && previous.onAdd === next.onAdd
+  && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
   && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date
   && previous.entry.dayStatus === next.entry.dayStatus

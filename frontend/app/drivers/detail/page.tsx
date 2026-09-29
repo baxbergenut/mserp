@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, UserRound, Truck as TruckIcon, Mail, Phone, FileBadge } from "lucide-react";
@@ -18,7 +20,7 @@ export default function DriverDetailPage() {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<Truck | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<typeof tabs[number]>("Overview");
+  const [tab, setTab] = useViewState<typeof tabs[number]>("page:tab", "Overview");
   const [editing, setEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {

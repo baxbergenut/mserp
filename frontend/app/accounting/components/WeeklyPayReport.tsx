@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
+import { useViewState } from "@/app/lib/viewMemory";
+
+import { useEffect, useRef, useMemo, useState } from "react";
 import {
   AlertCircle,
   Banknote,
@@ -117,7 +121,7 @@ function LoadingReport() {
 }
 
 function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useViewState("WeeklyPayReport:search", "");
   const drivers = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return dashboard.drivers;
@@ -230,7 +234,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
                           </span>
                         )}
                       </div>
-                      <details className="group mt-1">
+                      <RememberedDetails memoryKey={`driver-loads:${driver.driverName}`} className="group mt-1">
                         <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400">
                           <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
                           {driver.loadCount.toLocaleString()} load{driver.loadCount === 1 ? "" : "s"}
@@ -245,7 +249,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
                             </span>
                           ))}
                         </div>
-                      </details>
+                      </RememberedDetails>
                     </td>
                     <td className="px-4 py-3 text-zinc-500">
                       {payPlan(driver.payType, driver.payRate, driver.isOwnerOperator)}
@@ -274,7 +278,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
         )}
       </section>
 
-      <details className="group rounded-xl border border-zinc-800/60 bg-zinc-950/20 px-4 py-3">
+      <RememberedDetails memoryKey="pay-explanation" className="group rounded-xl border border-zinc-800/60 bg-zinc-950/20 px-4 py-3">
         <summary className="cursor-pointer list-none text-[11px] font-medium text-zinc-400">How driver pay is calculated</summary>
         <div className="mt-3 grid gap-2 text-[11px] leading-relaxed text-zinc-600 sm:grid-cols-2">
           <p><span className="text-zinc-400">Driver pay:</span> {dashboard.methodology.driverPay}</p>
@@ -282,7 +286,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
           <p><span className="text-zinc-400">Fuel:</span> {dashboard.methodology.fuel}</p>
           <p><span className="text-zinc-400">Tolls:</span> {dashboard.methodology.tolls}</p>
         </div>
-      </details>
+      </RememberedDetails>
     </>
   );
 }
@@ -361,14 +365,15 @@ function DispatcherPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
 }
 
 export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
-  const [weekStart, setWeekStart] = useState("");
+  const [weekStart, setWeekStart] = useViewState("WeeklyPayReport:weekStart", "");
+  const initialWeek = useRef(weekStart);
   const [dashboard, setDashboard] = useState<FinancialDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    fetchFinancialDashboard({})
+    fetchFinancialDashboard({ weekStart: initialWeek.current || undefined })
       .then((result) => {
         if (cancelled) return;
         setDashboard(result);
@@ -385,7 +390,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setWeekStart]);
 
   const selectWeek = async (value: string) => {
     if (!value || value === weekStart) return;

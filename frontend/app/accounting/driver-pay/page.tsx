@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound, UsersRound } from "lucide-react";
 import { fetchDriverPay, refreshDriverPayLoads, saveDriverPay } from "@/app/lib/api";
@@ -13,21 +15,21 @@ import { SettlementDialog } from "./SettlementDialog";
 import { driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } from "./pay";
 
 export default function DriverPayPage() {
-  const [week, setWeek] = useState(() => currentChargeWeek());
-  const [driverFilter, setDriverFilter] = useState("");
+  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek());
+  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "");
   const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean} | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
     const params = new URLSearchParams(window.location.search); const requested = params.get("weekStart");
     if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1) setWeek(requested);
-    setDriverFilter(params.get("driverId") ?? "");
+    if (params.has("driverId")) setDriverFilter(params.get("driverId") ?? "");
     }, 0); return () => clearTimeout(timer);
-  }, []);
+  }, [setDriverFilter, setWeek]);
   const [report, setReport] = useState<DriverPayWeek | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverPayEdits>>({});
-  const [search, setSearch] = useState("");
-  const [dispatcher, setDispatcher] = useState("all");
-  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useViewState("page:search", "");
+  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all");
+  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,7 +53,7 @@ export default function DriverPayPage() {
   const edit = useCallback((id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => {
     setChanges(current => ({ ...current, [id]: update(current[id] ?? savedRef.current[id]) })); setMessage("");
   }, []);
-  const toggle = useCallback((id: string) => setOpened(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }), []);
+  const toggle = useCallback((id: string) => setOpened(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }), [setOpened]);
 
   const save = useCallback(async () => {
     if (savingRef.current || invalid || !dirty || loading || refreshing) return;
@@ -72,13 +74,13 @@ export default function DriverPayPage() {
     return () => clearTimeout(timer);
   }, [dirty, invalid, saving, loading, refreshing, error, save, pendingWeek, pendingLink]);
   useEffect(() => {
-    if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     const leave = (event: MouseEvent) => {
       const link = (event.target as Element).closest?.("a[href]");
-      if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); setPendingLink(link.getAttribute("href")); }
+      if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+      if (dirty) { event.preventDefault(); event.stopPropagation(); setPendingLink(link.getAttribute("href")); }
     };
-    window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leave, true);
+    if (dirty) window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leave, true);
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
   }, [dirty]);
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function DriverPayPage() {
       const timer = setTimeout(() => { setReport(null); setLoading(true); setWeek(pendingWeek); setPendingWeek(null); setOpened(new Set()); setMessage(""); }, 0);
       return () => clearTimeout(timer);
     }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, refreshing, error]);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, refreshing, error, setOpened, setWeek]);
   async function reload(refreshSources = false) {
     if (dirty && !window.confirm("Discard unsaved payroll edits and reload this week?")) return;
     setChanges({}); setError(""); setMessage(""); setPendingWeek(null); setPendingLink(null);
@@ -134,7 +136,7 @@ export default function DriverPayPage() {
     {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid ? "Complete or remove unfinished adjustments; enter zero or reset Fuel/Toll before leaving this week." : "Saving edits before leaving this week…"}{error && " Resolve the save error to continue."}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
     {refreshing && <p role="status" className="text-xs text-blue-300">Refreshing this week’s report…</p>}
 
-    {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading driver pay…</div> : report && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? "No drivers match these filters." : "No loads or driver adjustments for this week."}</div> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label="Weekly driver pay"><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{["Driver", "Truck", "Driver type", "Tariff", "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{drivers.map(driver => <DriverCard key={`${week}:${driver.id}`} driver={driver} edits={changes[driver.id] ?? driver.edits} open={opened.has(driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, driver.id)} onReload={() => reload()} />)}</tbody></table></div>}
+    {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading driver pay…</div> : report && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? "No drivers match these filters." : "No loads or driver adjustments for this week."}</div> : <div data-payroll-scroll="drivers" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label="Weekly driver pay"><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{["Driver", "Truck", "Driver type", "Tariff", "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{drivers.map(driver => <DriverCard returnToPay key={`${week}:${driver.id}`} driver={driver} edits={changes[driver.id] ?? driver.edits} open={opened.has(driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, driver.id)} onReload={() => reload()} />)}</tbody></table></div>}
     {settlement && report && <SettlementDialog report={report} {...settlement} onClose={() => setSettlement(null)} onSaved={value => { setReport(value); setSettlement(null); setMessage("Settlement updated"); }} />}
   </div>;
 }

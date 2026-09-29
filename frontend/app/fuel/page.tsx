@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import Link from "next/link";
 
 import { useCallback, useEffect, useState } from "react";
@@ -91,17 +93,17 @@ function productSummary(transaction: FuelTransaction) {
 }
 
 export default function FuelPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "transactions">("overview");
+  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions">("page:activeTab", "overview");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [transactions, setTransactions] = useState<FuelTransaction[]>([]);
-  const [search, setSearch] = useState("");
-  const [driver, setDriver] = useState("");
-  const [state, setState] = useState("");
-  const [category, setCategory] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [driver, setDriver] = useViewState("page:driver", "");
+  const [state, setState] = useViewState("page:state", "");
+  const [category, setCategory] = useViewState("page:category", "");
+  const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
+  const [dateTo, setDateTo] = useViewState("page:dateTo", "");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [drivers, setDrivers] = useState<string[]>([]);
@@ -136,7 +138,7 @@ export default function FuelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [category, dateFrom, dateTo, debouncedSearch, driver, page, pageSize, state]);
+  }, [setPage, category, dateFrom, dateTo, debouncedSearch, driver, page, pageSize, state]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);

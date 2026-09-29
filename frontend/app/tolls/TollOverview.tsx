@@ -1,5 +1,9 @@
 "use client";
 
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useState } from "react";
 import { CalendarDays, CircleDollarSign, Receipt, Truck } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -63,8 +67,8 @@ function SpendingChart({ points, color, horizontal = false }: {
 }
 
 export function TollOverview({ refreshKey }: { refreshKey: number }) {
-  const [dateFrom, setDateFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
-  const [dateTo, setDateTo] = useState(todayDate);
+  const [dateFrom, setDateFrom] = useViewState("TollOverview:dateFrom", () => `${new Date().getFullYear()}-01-01`);
+  const [dateTo, setDateTo] = useViewState("TollOverview:dateTo", todayDate);
   const [retryKey, setRetryKey] = useState(0);
   const requestKey = `${dateFrom}/${dateTo}/${refreshKey}/${retryKey}`;
   const [result, setResult] = useState<{ key: string; dashboard?: TollDashboard; error?: string } | null>(null);
@@ -138,10 +142,10 @@ export function TollOverview({ refreshKey }: { refreshKey: number }) {
             </div>
             </>
           )}
-          <details className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3 text-[12px] text-zinc-500">
+          <RememberedDetails memoryKey="toll-explanation" className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3 text-[12px] text-zinc-500">
             <summary className="cursor-pointer font-medium text-zinc-400">How these numbers are calculated</summary>
             <p className="mt-3 leading-relaxed">All cards and charts use the selected posting dates, including both endpoints, without timezone conversion. Credits reduce net spend. Historical imports and production PrePass transactions are included; nonproduction transactions are excluded. Truck units come from the original toll records, including unmatched units, and do not use current driver assignments. Months and weeks without transactions show zero spending.</p>
-          </details>
+          </RememberedDetails>
         </>
       )}
     </div>

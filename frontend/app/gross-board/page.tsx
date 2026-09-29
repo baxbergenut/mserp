@@ -1,11 +1,15 @@
 "use client";
 
+import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
+
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { MetricCard } from "@/app/components/MetricCard";
 import { controlClass } from "@/app/components/management/ManagementUI";
+import { parseBoardLoadTarget } from "./loadLink";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
@@ -19,16 +23,27 @@ const truckColumnStyle = { left: `max(${columnWidths[0]}px, ${columnWidths[0] / 
 const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
 
 export default function GrossBoardPage() {
-  const [week, setWeek] = useState(() => monday());
+  const [week, setWeek] = useViewState("page:week", () => monday());
+  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all");
+  const previousHref = useBackHref();
+  const markBack = useMarkBack();
+  const [loadTarget, setLoadTarget] = useState<ReturnType<typeof parseBoardLoadTarget>>(null);
+  useEffect(() => {
+    const target = parseBoardLoadTarget(window.location.search);
+    if (!target) return;
+    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher("all"); }, 0);
+    return () => clearTimeout(timer);
+  }, [setDispatcher, setWeek]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
-  const [dispatcher, setDispatcher] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const payReturn = loadTarget?.fromPay ? (previousHref?.startsWith("/accounting/driver-pay") ? previousHref : `/accounting/driver-pay?weekStart=${loadTarget.week}`) : null;
+  const returnToPay = useCallback(() => { if (payReturn) { markBack(payReturn); setPendingLink(payReturn); } }, [payReturn, markBack]);
   const [balanceDriver, setBalanceDriver] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState("");
   const activityRef = useRef(0);
@@ -102,6 +117,10 @@ export default function GrossBoardPage() {
     const ids = new Set(drivers.map((driver) => driver.id));
     return Object.values(allEntries).filter((entry) => ids.has(entry.driverId));
   }, [allEntries, drivers]);
+  const targetEntry = loadTarget && allEntries[entryKey(loadTarget.driverId, loadTarget.date, loadTarget.slot)];
+  const targetMatches = !!targetEntry && !targetEntry.deleted && !targetEntry.dayStatus
+    && targetEntry.loadNumber.trim().toLowerCase() === loadTarget?.loadNumber.trim().toLowerCase();
+  const targetReady = loadTarget && board?.weekStart === loadTarget.week && week === loadTarget.week;
   const summary = totals(shownEntries);
   const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
   const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
@@ -114,7 +133,7 @@ export default function GrossBoardPage() {
   function switchWeek(next: string) {
     if (next === week || loading) return;
     activityRef.current += 1;
-    setBalanceDriver(null);
+    setBalanceDriver(null); setLoadTarget(null);
     setPendingWeek(next);
   }
 
@@ -127,7 +146,7 @@ export default function GrossBoardPage() {
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, error]);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, error, setWeek]);
 
   const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     activityRef.current += 1;
@@ -189,6 +208,7 @@ export default function GrossBoardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {payReturn && <Link data-navigation-back href={payReturn} className={buttonClass}>← Back to Driver Pay</Link>}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -237,6 +257,7 @@ export default function GrossBoardPage() {
         <span>{drivers.length} drivers · Daily totals · Hover grouped loads for details; click to edit</span>
       </div>
 
+      {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
       {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading gross board…</div> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers for this dispatcher.</div> : board && <div className="max-h-[70vh] overflow-auto rounded-xl border border-zinc-800" role="region" aria-label="Weekly gross board" tabIndex={0}>
         <table className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
@@ -266,7 +287,7 @@ export default function GrossBoardPage() {
                   <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200">{driver.fullName}{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Original", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {dayEntries.map((entries, i) => <DaySummaryCell key={dates[i]} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
+                  {dayEntries.map((entries, i) => <DaySummaryCell onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
                   <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>

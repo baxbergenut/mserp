@@ -1,5 +1,9 @@
 "use client";
 
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt } from "lucide-react";
@@ -32,11 +36,11 @@ function ScheduleTable({ rows }: { rows: ChargeOccurrence[] }) {
 export default function DriverChargesPage() {
   const [data, setData] = useState<ChargeData | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [tab, setTab] = useState<"recurring" | "installment" | "types">("recurring");
-  const [search, setSearch] = useState("");
-  const [driverFilter, setDriverFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [status, setStatus] = useState("all");
+  const [tab, setTab] = useViewState<"recurring" | "installment" | "types">("page:tab", "recurring");
+  const [search, setSearch] = useViewState("page:search", "");
+  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "");
+  const [typeFilter, setTypeFilter] = useViewState("page:typeFilter", "");
+  const [status, setStatus] = useViewState("page:status", "all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,7 +62,7 @@ export default function DriverChargesPage() {
       if (cancelled) return;
       const activeDrivers = drivers.filter(d => d.active);
       setData(charges); setDrivers(activeDrivers);
-      const q = new URLSearchParams(window.location.search); const driver = activeDrivers.find(d => d.id === q.get("driverId"))?.id ?? ""; setDriverFilter(driver);
+      const q = new URLSearchParams(window.location.search); const driver = activeDrivers.find(d => d.id === q.get("driverId"))?.id ?? ""; if (q.has("driverId")) setDriverFilter(driver);
       if (q.get("tab") === "installment") setTab("installment");
       const source = charges.schedules.find(s => s.id === q.get("scheduleId") && activeDrivers.some(d => d.id === s.driverId));
       if (source) { setTab(source.kind); void Promise.all([previewDriverCharge(source.id), fetchChargeHistory(source.id)]).then(([rows, events]) => { if (!cancelled) setDetail({ schedule: source, rows, events }); }).catch(err => { if (!cancelled) setError(err.message); }); }
@@ -66,7 +70,7 @@ export default function DriverChargesPage() {
       if (action === "recurring" || action === "installment") { setTab(action); if(action === "installment") setCreate(newCharge(action, driver, charges.currentWeek)); }
     }).catch(err => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, []);
+  }, [setDriverFilter, setTab]);
   async function run(action: () => Promise<void>) {
     setError(""); setBusy(true);
     try { await recurringSaves.waitForSaves(); await action(); } catch (err) { setError(err instanceof Error ? err.message : "Unable to save charges"); } finally { setBusy(false); }
@@ -110,6 +114,6 @@ export default function DriverChargesPage() {
     </Modal>}
 
     {bulk && <Modal title={`${bulk.action === "amount" ? "Change amount" : bulk.action === "end" ? "End" : bulk.action === "pause" ? "Pause" : "Resume"} assignments`} description="Changes apply from the effective week and replace later scheduled changes. Saved overrides and confirmations are protected." isSaving={busy} submitLabel={bulkPreview ? "Apply changes" : "Preview changes"} onClose={() => { setBulk(null); setError(""); }} onSubmit={e => { e.preventDefault(); if (!bulkPreview) { setBulkPreview(true); return; } void run(async () => { await bulkDriverCharges(bulk); await reload(); setBulk(null); setMessage("Assignments updated"); }); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}{bulkPreview ? <><p className="text-sm text-zinc-300">{bulk.action} from {bulk.weekStart}{bulk.action === "amount" && `: ${money(bulk.amount)} per week`}. {bulk.action === "end" && "The effective week will have no charge."}</p><ul className="max-h-64 overflow-auto text-sm text-zinc-400">{selectedSchedules.map(s => <li key={s.id} className="py-1">{s.driverName} · {s.name}</li>)}</ul><button type="button" className={payButtonClass} onClick={() => setBulkPreview(false)}>Back to edit</button></> : <><Field label="Effective week (Monday)"><input required type="date" min={week} className={controlClass} value={bulk.weekStart} onChange={e => setBulk({ ...bulk, weekStart: e.target.value })} /></Field>{bulk.action === "amount" && <Field label="New weekly amount"><input required inputMode="decimal" className={controlClass} value={bulk.amount} onChange={e => setBulk({ ...bulk, amount: e.target.value })} /></Field>}</>}</div></Modal>}
-    {detail && <Modal title={`${detail.schedule.driverName} · ${detail.schedule.name}`} description={detail.schedule.kind === "recurring" ? "Future charges depend on this charge type’s eligibility and Gross Board entries. Saved weekly decisions remain in place." : detail.schedule.eligibility === "loads" ? "Future dates are provisional and assume weekly loads." : "Schedule and recorded changes"} isSaving={false} submitLabel="Close" onSubmit={e => { e.preventDefault(); setDetail(null); }} onClose={() => setDetail(null)}><div className="space-y-4"><ScheduleTable rows={detail.rows} /><h3 className="text-sm font-medium text-zinc-200">History</h3>{detail.events.map(event => <details key={event.id} className="rounded border border-zinc-800 p-2 text-xs text-zinc-400"><summary>{event.action.replaceAll("_", " ")} · {event.actor} · {new Date(event.createdAt).toLocaleString()}</summary><p className="mt-2">{historyDescription(event)}</p></details>)}</div></Modal>}
+    {detail && <Modal title={`${detail.schedule.driverName} · ${detail.schedule.name}`} description={detail.schedule.kind === "recurring" ? "Future charges depend on this charge type’s eligibility and Gross Board entries. Saved weekly decisions remain in place." : detail.schedule.eligibility === "loads" ? "Future dates are provisional and assume weekly loads." : "Schedule and recorded changes"} isSaving={false} submitLabel="Close" onSubmit={e => { e.preventDefault(); setDetail(null); }} onClose={() => setDetail(null)}><div className="space-y-4"><ScheduleTable rows={detail.rows} /><h3 className="text-sm font-medium text-zinc-200">History</h3>{detail.events.map(event => <RememberedDetails memoryKey={`charge-event:${event.id}`} key={event.id} className="rounded border border-zinc-800 p-2 text-xs text-zinc-400"><summary>{event.action.replaceAll("_", " ")} · {event.actor} · {new Date(event.createdAt).toLocaleString()}</summary><p className="mt-2">{historyDescription(event)}</p></RememberedDetails>)}</div></Modal>}
   </div>;
 }

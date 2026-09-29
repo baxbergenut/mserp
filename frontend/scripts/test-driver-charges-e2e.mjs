@@ -172,7 +172,10 @@ try {
   const pastPayroll = await (await page.request.get(`${base}/api/driver-pay?weekStart=${previousWeek}`)).json();
   expect(pastPayroll.drivers.find(d => d.fullName === 'E2e Driver').edits.generatedCharges[0].amount).toBe('-35.00');
   await page.reload();
+  await expect(page.getByLabel('Matrix effective week', {exact:true})).toHaveValue(previousWeek);
   await expect(adminCheck).toBeChecked();
+  await expect(adminAmount).toHaveValue('35.00');
+  await page.getByLabel('Matrix effective week', {exact:true}).fill(currentMatrixWeek);
   await expect(adminAmount).toHaveValue('50.00');
 
   // A second type owns the complementary eligibility rule.
@@ -209,9 +212,9 @@ try {
   const driverId = initial.schedules.find(s => s.name === 'Admin fee').driverId;
   const week = initial.currentWeek;
   const plan = initial.schedules.find(s => s.kind === 'installment');
-  await page.goto(`${base}/accounting/driver-pay`);
+  await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
   await expect(page.getByRole('heading', { name: 'Driver pay', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toHaveValue('-50.00');
   await expect(page.getByLabel('E2e Driver, Admin fee, charge name', { exact: true })).toHaveAttribute('readonly', '');
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toBeEditable();
@@ -238,7 +241,7 @@ try {
   await page.getByRole('button', { name: 'Advance, skip this week', exact: true }).click();
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
   await page.reload();
-  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(installment).toHaveValue('0.00');
   let preview = await (await page.request.get(`${base}/api/driver-charges/schedules/${plan.id}/preview`)).json();
   expect(preview).toHaveLength(8);
@@ -250,6 +253,7 @@ try {
   await expect(page.getByRole('dialog')).toContainText('E2e Driver · Advance');
   await page.getByRole('button', { name: 'Close', exact: true }).last().click();
   await page.goto(`${base}/accounting/driver-charges?driverId=${driverId}`);
+  await page.getByRole('tab',{name:'Recurring assignments',exact:true}).click();
   const next = new Date(`${week}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
   await page.getByLabel('Matrix effective week', { exact: true }).fill(next.toISOString().slice(0,10));
   await adminAmount.selectOption('35.00');
@@ -280,20 +284,22 @@ try {
     return result.items.find(e => e.expenseType === 'Parking violation');
   };
   expect((await penaltyBalance()).remainingAmount).toBe('100.25');
-  await page.goto(`${base}/accounting/driver-pay`);
-  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
+  if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   const penalty = page.getByLabel('E2e Driver, expense Penalties · Parking violation, deduction', { exact: true });
   await expect(penalty).toHaveValue('100.25');
   expect((await penaltyBalance()).paidAmount).toBe('0');
   await penalty.fill('30.10');
   await expect.poll(async () => (await penaltyBalance()).remainingAmount, { timeout: 12000 }).toBe('70.15');
   await page.getByRole('button', { name: 'Next week', exact: true }).click();
-  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  await expect(page.getByRole('button', {name:'E2e Driver',exact:true})).toHaveAttribute('aria-expanded','false');
+  if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(penalty).toHaveValue('70.15');
   await page.getByRole('button', { name: 'Save expense deductions', exact: true }).click();
   await expect.poll(async () => (await penaltyBalance()).remainingAmount, { timeout: 12000 }).toBe('0.00');
   await page.getByRole('button', { name: 'Next week', exact: true }).click();
-  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  await expect(page.getByRole('button', {name:'E2e Driver',exact:true})).toHaveAttribute('aria-expanded','false');
+  if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(penalty).toHaveCount(0);
   await page.goto(`${base}/expenses`);
   await expect(page.getByRole('columnheader', { name: 'Paid', exact: true })).toBeVisible();
@@ -347,8 +353,8 @@ try {
   await page.getByRole('tab',{name:'Company & other expenses',exact:true}).click();
   await expect(page.getByRole('cell',{name:'Company repair',exact:true})).toBeVisible();
   await expect(page.getByRole('cell',{name:'Owner repair',exact:true})).toHaveCount(0);
-  await page.goto(`${base}/accounting/driver-pay`);
-  await page.getByRole('button', {name:'E2e Driver',exact:true}).click();
+  await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
+  if (await page.getByRole('button', {name:'E2e Driver',exact:true}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', {name:'E2e Driver',exact:true}).click();
   await page.getByLabel('E2e Driver, Admin fee, charge amount', {exact:true}).fill('-30.10');
   await expect(page.getByRole('button', {name:'Finalize driver',exact:true})).toBeEnabled({timeout:15000});
   await page.getByRole('button', {name:'Finalize driver',exact:true}).click();
@@ -385,6 +391,73 @@ try {
   await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'driver-charges-mobile.png'), fullPage: true });
+  // Payroll navigation uses placement identity, not a possibly duplicated load number.
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate)
+      VALUES('${driverId}','2026-05-10','NAV / TARGET & 42',100),('${idleDriver}','2026-05-10','NAV / TARGET & 42',100),
+            ('${driverId}','2026-05-04','NAV-SINGLE',100);
+    INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,driver_rate)
+      VALUES('${driverId}','2026-05-10',1,'NAV-OTHER',100),('${driverId}','2026-05-10',2,'NAV / TARGET & 42',100);
+  `);
+  await page.setViewportSize({width:1440,height:640});
+  await page.goto(`${base}/accounting/driver-pay?weekStart=2026-05-04&driverId=${driverId}`);
+  if (await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).click();
+  await page.getByLabel('E2e Driver, adjustment 1, name',{exact:true}).fill('Navigation saved');
+  await page.getByLabel('E2e Driver, adjustment 1, amount',{exact:true}).fill('10');
+  await page.getByPlaceholder('Driver, truck, or load…').fill('NAV');
+  await page.locator('main').evaluate(el => { el.scrollTop = 240; });
+  await page.getByRole('link',{name:'NAV / TARGET & 42',exact:true}).last().click();
+  await expect(page.getByRole('dialog',{name:'Daily loads',exact:true})).toBeVisible();
+  const targetUrl = page.url();
+  expect(new URL(targetUrl).searchParams.get('driverId')).toBe(driverId);
+  expect(new URL(targetUrl).searchParams.get('slot')).toBe('2');
+  const selected = page.locator('[data-highlighted="true"]');
+  await expect(selected).toHaveAttribute('aria-label','Selected load NAV / TARGET & 42, E2e Driver, 2026-05-10, slot 3');
+  await expect(selected.getByRole('combobox')).toHaveValue('NAV / TARGET & 42');
+  const savedNavigation = await (await page.request.get(`${base}/api/driver-pay?weekStart=2026-05-04`)).json();
+  expect(savedNavigation.drivers.find(d=>d.id===driverId).edits.adjustments[0].name).toBe('Navigation saved');
+  await page.screenshot({path:join(temp,'payroll-gross-board-target.png'),fullPage:true});
+  await selected.getByLabel('E2e Driver, 2026-05-10, driver rate',{exact:true}).fill('123.45');
+  await page.getByRole('button',{name:'← Back to Driver Pay',exact:true}).click();
+  await expect(page.getByPlaceholder('Driver, truck, or load…')).toHaveValue('NAV');
+  await expect(page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/})).toHaveAttribute('aria-expanded','true');
+  await expect.poll(() => page.locator('main').evaluate(el => el.scrollTop)).toBeGreaterThan(100);
+  const returnedPay = await (await page.request.get(`${base}/api/driver-pay?weekStart=2026-05-04`)).json();
+  expect(returnedPay.drivers.find(d=>d.id===driverId).loads.find(l=>l.date==='2026-05-10'&&l.slot===2).driverGross).toBe('123.45');
+  await page.goto(`${base}/accounting/driver-pay?weekStart=2026-05-04&driverId=${driverId}`);
+  if (await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).click();
+  await page.getByRole('link',{name:'NAV-SINGLE',exact:true}).click();
+  await expect(page.locator('[data-highlighted="true"]')).toHaveAttribute('aria-label','Selected load NAV-SINGLE, E2e Driver, 2026-05-04, slot 1');
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  sql(`SET search_path TO ${schema},public; UPDATE gross_board_extra_entries SET load_number='REPLACED' WHERE driver_id='${driverId}' AND service_date='2026-05-10' AND slot=2;`);
+  await page.goto(targetUrl);
+  await expect(page.getByText(/is no longer in this driver/)).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // The same Back behavior preserves ordinary list views across the app.
+  await page.goto(`${base}/expenses`);
+  await page.getByPlaceholder('Search expenses…').fill('Company repair');
+  await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
+  await page.getByRole('link',{name:'Drivers',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Drivers',exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
+  await page.reload();
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  sql(`SET search_path TO ${schema},public; INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
+       SELECT 'Navigation list '||n, 'navigation list '||n, 'cpm',0.75 FROM generate_series(1,30) n;`);
+  await page.getByRole('link',{name:'Drivers',exact:true}).click();
+  await page.getByPlaceholder('Search drivers…').fill('Navigation list');
+  await expect(page.getByText('Page 1 of 2',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Next page',exact:true}).click();
+  await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Expenses',exact:true}).click();
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
+  await expect(page.getByPlaceholder('Search drivers…')).toHaveValue('Navigation list');
+  await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
+  await page.goBack();
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
   expect(errors).toEqual([]);
   console.log(`Driver charges E2E passed. Screenshots: ${temp}`);
 } catch (error) {

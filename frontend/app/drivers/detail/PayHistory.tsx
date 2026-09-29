@@ -1,4 +1,6 @@
 "use client";
+
+import { useViewState } from "@/app/lib/viewMemory";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchDriverPayHistory, fetchSettlementHistory } from "@/app/lib/api";
@@ -16,10 +18,10 @@ function SettlementLog({ driverId, week }: { driverId: string; week: string }) {
 }
 
 export function PayHistory({ driverId }: { driverId: string }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useViewState("PayHistory:page", 1);
+  const [pageSize, setPageSize] = useViewState("PayHistory:pageSize", 25);
   const [data, setData] = useState<PaginatedResponse<DriverPayHistoryRow> | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useViewState<string | null>("PayHistory:open", null);
   const [error, setError] = useState("");
   useEffect(() => { let cancelled = false; fetchDriverPayHistory(driverId, page, pageSize).then(result => { if (!cancelled) { setData(result); setError(""); } }).catch(e => { if (!cancelled) setError(e.message); }); return () => { cancelled = true; }; }, [driverId, page, pageSize]);
   return <section className="space-y-4"><div><h2 className="text-sm font-semibold text-zinc-100">Weekly pay history</h2><p className="mt-1 text-xs text-zinc-500">Earnings, reimbursements and deductions from Driver Pay. Finalized settlements are fixed records; draft weeks follow current source details.</p></div>

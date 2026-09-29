@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Truck as TruckIcon } from "lucide-react";
@@ -49,9 +51,9 @@ export default function TrucksPage() {
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,7 +81,7 @@ export default function TrucksPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, page, pageSize]);
+  }, [setPage, debouncedSearch, page, pageSize]);
 
   const loadOptions = async () => {
     try {

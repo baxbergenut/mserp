@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, UserRound } from "lucide-react";
@@ -9,8 +11,8 @@ import { ErrorBanner, TablePagination } from "../components/management/Managemen
 
 export function DriverSetupTasks({ search = "", revision = 0, onCount }: { search?: string; revision?: number; onCount?: (count: number) => void }) {
   const [data, setData] = useState<PaginatedResponse<DriverIntake> | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useViewState("DriverSetupTasks:page", 1);
+  const [pageSize, setPageSize] = useViewState("DriverSetupTasks:pageSize", 25);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function DriverSetupTasks({ search = "", revision = 0, onCount }: { searc
     const interval = window.setInterval(() => void refresh(), 15000);
     document.addEventListener("visibilitychange", refresh);
     return () => { active = false; window.clearInterval(interval); document.removeEventListener("visibilitychange", refresh); };
-  }, [page, pageSize, search, revision, onCount]);
+  }, [page, pageSize, search, revision, onCount, setPage]);
 
   return (
     <section aria-label="Driver setup tasks" className="space-y-3">

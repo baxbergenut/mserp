@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { createCustomTask, deleteCustomTask, fetchCustomTasks, setCustomTaskCompleted, updateCustomTask } from "../lib/api";
@@ -10,11 +12,11 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
   search: string; revision: number; creating: boolean; onCloseCreate: () => void; onCount: (count: number) => void;
 }) {
   const [data, setData] = useState<PaginatedResponse<CustomTask> | null>(null);
-  const [status, setStatus] = useState<"open" | "completed" | "all">("open");
-  const [position, setPosition] = useState({ search, page: 1 });
+  const [status, setStatus] = useViewState<"open" | "completed" | "all">("CustomTasks:status", "open");
+  const [position, setPosition] = useViewState("CustomTasks:position", { search, page: 1 });
   const page = position.search === search ? position.page : 1;
   const setPage = (nextPage: number) => setPosition({ search, page: nextPage });
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useViewState("CustomTasks:pageSize", 25);
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

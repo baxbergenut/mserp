@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useId, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus } from "lucide-react";
 import type { GrossBoardEntry } from "@/app/lib/types";
@@ -10,16 +10,31 @@ import { additionalLoadEntries, decimalDisplay, emptyEntry, mismatch, dayStatuse
 
 type Props = {
   entries: GrossBoardEntry[];
+  focusSlot?: number;
+  onReturn?: () => void;
   driverId: string;
   driverName: string;
   date: string;
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, driverName, date, onChange }: Props) {
+export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, driverName, date, onChange, focusSlot, onReturn }: Props) {
   const [draft, setDraft] = useState<GrossBoardEntry[] | null>(null);
   const [hover, setHover] = useState<{ top: number; left: number } | null>(null);
   const tooltipId = useId();
+  const cellId = useId();
+  const openedTarget = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusSlot === undefined) return;
+    const key = `${driverId}:${date}:${focusSlot}`;
+    if (openedTarget.current === key) return;
+    const timer = setTimeout(() => {
+      openedTarget.current = key;
+      document.getElementById(cellId)?.scrollIntoView({ block: "center", inline: "center" });
+      setDraft(entries);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [focusSlot, driverId, date, entries, cellId]);
   const visible = entries.filter(entry => !entry.deleted);
   const displayed = visible.length ? visible : [emptyEntry(driverId, date)];
   const sum = totals(displayed);
@@ -48,8 +63,18 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   };
   const field = "flex h-8 w-full items-center justify-center border-b border-zinc-800/70 px-2 font-mono text-xs text-zinc-300 hover:bg-blue-500/10 focus-visible:outline-2 focus-visible:outline-blue-500";
 
+  function applyDraft() {
+      if (!draft || invalid) return false;
+      for (const entry of draft) {
+        const previous = entries.find(saved => saved.slot === entry.slot);
+        if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot, current => ({ ...entry, version: current.version }));
+      }
+      setDraft(null);
+      return true;
+  }
+
   return <>
-    {displayed.length === 1 ? <DayCell entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td className="border-b border-r border-zinc-800/70 p-0 align-top">
+    {displayed.length === 1 ? <DayCell id={cellId} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td id={cellId} className="border-b border-r border-zinc-800/70 p-0 align-top">
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span><div className="flex gap-1">
         <button type="button" aria-label={`${label}, edit loads`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor()}><Pencil className="h-3 w-3" /></button>
         {displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
@@ -67,23 +92,18 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
       {displayed.length > 4 && <p className="mt-2 text-[10px] text-zinc-500">Open to view all {displayed.length} loads.</p>}
     </div>, document.body)}
     {draft && <Modal title="Daily loads" description={`${driverName} · ${date}. Original rates and miles stay linked to system loads.`} isSaving={false} submitLabel="Apply changes" onClose={() => setDraft(null)} onSubmit={event => {
-      event.preventDefault();
-      if (invalid) return;
-      for (const entry of draft) {
-        const previous = entries.find(saved => saved.slot === entry.slot);
-        if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot, current => ({ ...entry, version: current.version }));
-      }
-      setDraft(null);
+      event.preventDefault(); applyDraft();
     }} wide>
+      {onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>← Back to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
       <div className="overflow-x-auto pb-32"><table className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Original", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
-        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} entry={entry} driverName={driverName} disabled={false} onChange={editDraft} />)}
+        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={false} onChange={editDraft} />)}
       </tr></tbody></table></div>
       <button type="button" disabled={draft.filter(entry => !entry.deleted).length >= 100} onClick={() => addDraft(driverId, date)} className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-3 py-2 text-xs text-blue-300"><Plus className="h-3 w-3" />Add load</button>
       {invalid && <p role="alert" className="mt-3 text-xs text-red-300">Correct invalid rates or mileage before applying.</p>}
     </Modal>}
   </>;
 }, (previous, next) => previous.driverId === next.driverId && previous.driverName === next.driverName
-  && previous.date === next.date && previous.onChange === next.onChange
+  && previous.onReturn === next.onReturn && previous.focusSlot === next.focusSlot && previous.date === next.date && previous.onChange === next.onChange
   && previous.entries.length === next.entries.length
   && previous.entries.every((entry, index) => entry === next.entries[index] || JSON.stringify(entry) === JSON.stringify(next.entries[index])));

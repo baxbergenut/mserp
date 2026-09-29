@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Landmark, Pencil } from "lucide-react";
@@ -12,10 +14,10 @@ import { emptyInvestorInput, InvestorForm } from "./InvestorForm";
 export default function InvestorsPage() {
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [search, setSearch] = useState("");
-  const [showCompany, setShowCompany] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [showCompany, setShowCompany] = useViewState("page:showCompany", false);
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,7 +33,7 @@ export default function InvestorsPage() {
       setInvestors(result.items); setPage(result.page); setTotal(result.total); setTotalPages(result.totalPages); setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Failed to load investors"); }
     finally { setIsLoading(false); }
-  }, [page, pageSize, debouncedSearch, showCompany]);
+  }, [setPage, page, pageSize, debouncedSearch, showCompany]);
   useEffect(() => { const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer); }, [loadData]);
 
   const open = async (investor: Investor | null) => {

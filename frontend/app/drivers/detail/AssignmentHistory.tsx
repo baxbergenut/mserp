@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
@@ -16,7 +18,7 @@ function dateTime(value: string) {
 export function AssignmentHistory({ driverId }: { driverId: string }) {
   const [entries, setEntries] = useState<AssignmentHistoryEntry[] | null>(null);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useViewState("AssignmentHistory:filter", "all");
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {

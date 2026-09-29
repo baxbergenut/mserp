@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AuthSession } from "@/app/lib/types";
 import { fetchAuthSession } from "@/app/lib/api";
+import { PageNavigation } from "./PageNavigation";
 import { Sidebar } from "./Sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -57,9 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full">
       <Sidebar username={session.user.username} />
-      <main className="min-w-0 flex-1 overflow-auto">
-        <div className="w-full px-4 py-6 sm:px-6 xl:px-8">{children}</div>
-      </main>
+      <PageNavigation key={`${pathname}?${query}`} userId={session.user.id} url={query ? `${pathname}?${query}` : pathname}>{children}</PageNavigation>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DriverSetupTasks } from "../drivers/DriverSetupTasks";
@@ -18,9 +20,9 @@ export default function TasksPage() {
   const [customTotal, setCustomTotal] = useState(0);
   const [creatingTask, setCreatingTask] = useState(false);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [search, setSearch] = useState("");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
+  const [search, setSearch] = useViewState("page:search", "");
   const debouncedSearch = useDebouncedValue(search, 250);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

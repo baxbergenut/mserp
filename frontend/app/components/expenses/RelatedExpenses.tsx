@@ -1,5 +1,9 @@
 "use client";
 
+import { RememberedDetails } from "@/app/components/RememberedDetails";
+
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { WalletCards } from "lucide-react";
@@ -35,8 +39,8 @@ export function RelatedExpenses({
   scope?: "personal" | "non_personal";
 }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useViewState(`RelatedExpenses:${scope ?? "linked"}:page`, 1);
+  const [pageSize, setPageSize] = useViewState(`RelatedExpenses:${scope ?? "linked"}:pageSize`, 10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [amount, setAmount] = useState("0");
@@ -58,7 +62,7 @@ export function RelatedExpenses({
     } finally {
       setLoading(false);
     }
-  }, [driverId, page, pageSize, truckId, scope]);
+  }, [setPage, driverId, page, pageSize, truckId, scope]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
@@ -103,7 +107,7 @@ export function RelatedExpenses({
                   <td className="px-4 py-3 font-mono tabular-nums">{formatDate(expense.expenseDate)}</td>
                   <td className="px-4 py-3">{expense.category}</td>
                   <td className="px-4 py-3 text-zinc-400">{expense.expenseType || "—"}</td>
-                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <details className="mt-1 whitespace-normal"><summary className="cursor-pointer text-xs text-blue-400">Payment history</summary>{expense.driverSettled ? <p className="py-2 text-xs">Opening balance marked fully paid.</p> : expense.payments.length ? expense.payments.map(p => <div className="flex gap-3 py-1 text-xs" key={p.weekStart}><Link className="text-blue-400" href={`/accounting/driver-pay?weekStart=${p.weekStart}&driverId=${driverId}`}>Week of {p.weekStart}</Link><span className="ml-auto font-mono">{formatMoney(p.amount)}</span></div>) : <p className="py-2 text-xs">No saved payments yet.</p>}</details>}</td>
+                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <RememberedDetails memoryKey={`expense-payments:${expense.id}`} className="mt-1 whitespace-normal"><summary className="cursor-pointer text-xs text-blue-400">Payment history</summary>{expense.driverSettled ? <p className="py-2 text-xs">Opening balance marked fully paid.</p> : expense.payments.length ? expense.payments.map(p => <div className="flex gap-3 py-1 text-xs" key={p.weekStart}><Link className="text-blue-400" href={`/accounting/driver-pay?weekStart=${p.weekStart}&driverId=${driverId}`}>Week of {p.weekStart}</Link><span className="ml-auto font-mono">{formatMoney(p.amount)}</span></div>) : <p className="py-2 text-xs">No saved payments yet.</p>}</RememberedDetails>}</td>
                   <td className="px-4 py-3">{expense.coveredBy || "Unspecified"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>{formatMoney(expense.amount)}</td>
                   {scope === "personal" && <><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.paidAmount)}</td><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.remainingAmount)}</td></>}

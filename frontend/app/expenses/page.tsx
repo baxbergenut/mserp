@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, WalletCards, X } from "lucide-react";
@@ -83,13 +85,13 @@ function Verification({ checked, label }: { checked: boolean; label: string }) {
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [company, setCompany] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [category, setCategory] = useViewState("page:category", "");
+  const [company, setCompany] = useViewState("page:company", "");
+  const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
+  const [dateTo, setDateTo] = useViewState("page:dateTo", "");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [summaryAmount, setSummaryAmount] = useState("0");
@@ -134,7 +136,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [category, company, dateFrom, dateTo, debouncedSearch, page, pageSize]);
+  }, [setPage, category, company, dateFrom, dateTo, debouncedSearch, page, pageSize]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);

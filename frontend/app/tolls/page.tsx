@@ -1,5 +1,7 @@
 "use client";
 
+import { useViewState } from "@/app/lib/viewMemory";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
@@ -52,16 +54,16 @@ function routeLabel(toll: Toll) {
 }
 
 export default function TollsPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "transactions">("overview");
+  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions">("page:activeTab", "overview");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [tolls, setTolls] = useState<Toll[]>([]);
-  const [search, setSearch] = useState("");
-  const [unit, setUnit] = useState("");
-  const [agency, setAgency] = useState("");
-  const [postFrom, setPostFrom] = useState("");
-  const [postTo, setPostTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useViewState("page:search", "");
+  const [unit, setUnit] = useViewState("page:unit", "");
+  const [agency, setAgency] = useViewState("page:agency", "");
+  const [postFrom, setPostFrom] = useViewState("page:postFrom", "");
+  const [postTo, setPostTo] = useViewState("page:postTo", "");
+  const [page, setPage] = useViewState("page:page", 1);
+  const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [units, setUnits] = useState<string[]>([]);
@@ -97,7 +99,7 @@ export default function TollsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [agency, debouncedSearch, page, pageSize, postFrom, postTo, unit]);
+  }, [setPage, agency, debouncedSearch, page, pageSize, postFrom, postTo, unit]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
