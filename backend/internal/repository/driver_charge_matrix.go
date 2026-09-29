@@ -1,6 +1,9 @@
 package repository
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type ChargeCell struct {
 	DriverID    string `json:"driverId"`
@@ -16,9 +19,6 @@ type ChargeCell struct {
 func (r *DriverChargeRepository) SaveCell(ctx context.Context, c ChargeCell, actor string) error {
 	if _, err := chargeWeek(c.WeekStart); err != nil {
 		return err
-	}
-	if c.WeekStart < ChargeCurrentWeek() {
-		return chargeInvalid("Changes must start in the current or a future week")
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -75,13 +75,23 @@ func (r *DriverChargeRepository) SaveCell(ctx context.Context, c ChargeCell, act
 		if !c.Included {
 			return tx.Commit(ctx)
 		}
-		// A future assignment must not be hidden by a new indefinite assignment.
+		// Fill the gap before an existing assignment without changing that
+		// assignment's source identity, amounts, or saved weekly decisions.
+		var endWeek *string
 		for _, future := range data.Schedules {
 			if future.TypeID != nil && *future.TypeID == t.ID && future.StartWeek > c.WeekStart {
-				return chargeInvalid("This driver has an assignment starting %s; choose that effective week", future.StartWeek)
+				start, _ := chargeWeek(future.StartWeek)
+				last := start.AddDate(0, 0, -7).Format(time.DateOnly)
+				if endWeek == nil || last < *endWeek {
+					endWeek = &last
+				}
 			}
 		}
-		err = tx.QueryRow(ctx, `INSERT INTO driver_charge_schedules(driver_id,type_id,kind,name,direction,start_week,eligibility) VALUES($1,$2,'recurring',$3,$4,$5::date,'calendar') RETURNING id::text`, c.DriverID, t.ID, t.Name, t.Direction, c.WeekStart).Scan(&c.ScheduleID)
+		eligibility := t.Eligibility
+		if len(t.Rules) > 0 {
+			eligibility = t.Rules[0].Eligibility
+		}
+		err = tx.QueryRow(ctx, `INSERT INTO driver_charge_schedules(driver_id,type_id,kind,name,direction,start_week,end_week,eligibility) VALUES($1,$2,'recurring',$3,$4,$5::date,$6::date,$7) RETURNING id::text`, c.DriverID, t.ID, t.Name, t.Direction, c.WeekStart, endWeek, eligibility).Scan(&c.ScheduleID)
 		if err != nil {
 			return err
 		}
@@ -89,8 +99,14 @@ func (r *DriverChargeRepository) SaveCell(ctx context.Context, c ChargeCell, act
 		if err = freezeChargesBefore(ctx, tx, s, c.WeekStart, loads[c.DriverID]); err != nil {
 			return err
 		}
+		through := "2101-01-03"
+		for _, p := range s.Phases {
+			if p.WeekStart > c.WeekStart && p.WeekStart < through {
+				through = p.WeekStart
+			}
+		}
 		for _, o := range s.Occurrences {
-			if o.WeekStart >= c.WeekStart && (o.Overridden || o.ConfirmedAt != nil) {
+			if o.WeekStart >= c.WeekStart && o.WeekStart < through && (o.Overridden || o.ConfirmedAt != nil) {
 				return chargeInvalid("Correct the saved charge in week %s before changing this schedule", o.WeekStart)
 			}
 		}
@@ -98,7 +114,7 @@ func (r *DriverChargeRepository) SaveCell(ctx context.Context, c ChargeCell, act
 			c.Amount = phaseAt(*s, c.WeekStart).Amount
 		}
 		// Keep later dated changes intact. This cell describes the selected week.
-		if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_occurrences WHERE schedule_id=$1 AND week_start >= $2::date AND NOT overridden AND confirmed_at IS NULL`, s.ID, c.WeekStart); err != nil {
+		if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_occurrences WHERE schedule_id=$1 AND week_start >= $2::date AND week_start < $3::date AND NOT overridden AND confirmed_at IS NULL`, s.ID, c.WeekStart, through); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1 WHERE id=$1`, s.ID); err != nil {

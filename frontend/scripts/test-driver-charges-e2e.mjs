@@ -103,6 +103,24 @@ try {
   await expect(adminCheck).toBeChecked();
   await expect(adminAmount).toHaveValue('50.00');
 
+  await expect(page.getByRole('columnheader', { name: 'Admin fee', exact: true })).toBeVisible();
+  const matrixRow = page.getByRole('rowheader', { name: 'E2e Driver', exact: true }).locator('..');
+  expect((await matrixRow.boundingBox()).height).toBe(32);
+  const currentMatrixWeek = await page.getByLabel('Matrix effective week', { exact: true }).inputValue();
+  const previousDate = new Date(`${currentMatrixWeek}T12:00:00Z`); previousDate.setUTCDate(previousDate.getUTCDate() - 7);
+  const previousWeek = previousDate.toISOString().slice(0,10);
+  await page.getByLabel('Matrix effective week', { exact: true }).fill(previousWeek);
+  await expect(adminCheck).not.toBeChecked();
+  await adminCheck.check();
+  await expect(adminAmount).toBeEnabled();
+  await adminAmount.selectOption('35.00');
+  await expect(adminAmount).toBeEnabled();
+  const pastPayroll = await (await page.request.get(`${base}/api/driver-pay?weekStart=${previousWeek}`)).json();
+  expect(pastPayroll.drivers.find(d => d.fullName === 'E2e Driver').edits.generatedCharges[0].amount).toBe('-35.00');
+  await page.reload();
+  await expect(adminCheck).toBeChecked();
+  await expect(adminAmount).toHaveValue('50.00');
+
   // A second type owns the complementary eligibility rule.
   await page.getByRole('button', { name: 'New charge type', exact: true }).click();
   await page.getByLabel('Charge name', { exact: true }).fill('Idle fee');

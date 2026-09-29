@@ -49,10 +49,15 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			backdated, err := os.ReadFile("../../sql/035_backdated_driver_charges.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
 				source = strings.Replace(source, strings.ReplaceAll(string(matrix), "\r\n", "\n"), "", 1)
+				source = strings.Replace(source, strings.ReplaceAll(string(backdated), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, body, "", 1)
 				if strings.Contains(source, "CREATE TABLE driver_charge_types") {
 					t.Fatal("migration isolation failed")
@@ -89,6 +94,11 @@ func TestDriverChargesDatabase(t *testing.T) {
 				}
 				if len(options) != 2 || options[0] != "200.00" || options[1] != "175.00" || eligibility != "loads" {
 					t.Fatal("migration lost configured amounts or eligibility", options, eligibility)
+				}
+			}
+			if mode == "migration" {
+				if _, err = admin.Exec(ctx, string(backdated)); err != nil {
+					t.Fatal(err)
 				}
 			}
 			// Do not grant charge tables here: migration ownership must provide access.
@@ -405,6 +415,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal("deletion did not return useful error")
 			}
 			testChargeMatrix(t, pool, actor)
+			testBackdatedChargeMatrix(t, pool, actor)
 		})
 	}
 }

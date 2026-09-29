@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `034_driver_charge_matrix.sql`:
+  `035_backdated_driver_charges.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -283,6 +283,11 @@ assignment lookup lists.
   rules; prior weeks retain their rules and weekly overrides stay explicit.
   Existing amount selections survive option edits. PUT /driver-charges/recurring
   version-checks a cell, pauses unchecked assignments, and preserves later phases.
+  The matrix has compact 32px rows and accepts any valid Monday, including past
+  weeks. Backdated assignments fill gaps up to the next assignment; dated type
+  rules apply, with the earliest type rule used before the type existed. Migration
+  035 permits no-load eligibility in these recurring historical periods. Changes
+  affect only the selected phase interval and reject conflicting weekly overrides.
   Installments retain their own calendar/load eligibility.
   Nonempty unmatched plans qualify; day statuses do not. Read-only projections
   account for all elapsed eligible weeks regardless of browsing order. Writes

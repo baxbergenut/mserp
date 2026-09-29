@@ -81,6 +81,11 @@ func TestInvestorsDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(matrix))
+				backdated, e := os.ReadFile("../../sql/035_backdated_driver_charges.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(backdated))
 			}
 			// Grant only old tables: new runtime tables must already belong to mserp_app.
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,trucks,truck_driver_assignments,files,dispatchers TO mserp_app`)

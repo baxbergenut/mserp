@@ -781,7 +781,7 @@ export interface ChargeSchedule {
   installmentCount: number;
   id: string; driverId: string; driverName: string; typeId: string | null; kind: "recurring" | "installment";
   name: string; direction: "charge" | "reimbursement"; startWeek: string; endWeek: string | null;
-  eligibility: "calendar" | "loads"; total: string | null; version: number; phases: ChargePhase[]; occurrences: ChargeOccurrence[];
+  eligibility: ChargeEligibility; total: string | null; version: number; phases: ChargePhase[]; occurrences: ChargeOccurrence[];
   confirmed: string; remaining: string; scheduled: string; completionWeek: string; status: string;
 }
 export interface ChargeData { types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string }
