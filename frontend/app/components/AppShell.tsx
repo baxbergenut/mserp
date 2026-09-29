@@ -9,26 +9,22 @@ import { Sidebar } from "./Sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  return pathname === "/login" ? <>{children}</> : <AuthenticatedShell>{children}</AuthenticatedShell>;
+}
+
+function AuthenticatedShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [authenticatedPath, setAuthenticatedPath] = useState<string | null>(null);
-  const isLogin = pathname === "/login";
   const query = searchParams.toString();
 
   useEffect(() => {
     let active = true;
-    if (isLogin) {
-      return () => {
-        active = false;
-      };
-    }
-
     fetchAuthSession()
       .then((value) => {
         if (active) {
           setSession(value);
-          setAuthenticatedPath(pathname);
         }
       })
       .catch(() => {
@@ -40,11 +36,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [isLogin, pathname, query, router]);
+  }, [pathname, query, router]);
 
-  if (isLogin) return <>{children}</>;
-
-  if (!session || authenticatedPath !== pathname) {
+  if (!session) {
     return (
       <div className="flex h-full items-center justify-center" role="status">
         <div className="flex items-center gap-3 text-sm text-zinc-500">

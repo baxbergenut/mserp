@@ -3,6 +3,7 @@
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
@@ -23,11 +24,12 @@ const truckColumnStyle = { left: `max(${columnWidths[0]}px, ${columnWidths[0] / 
 const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
 
 export default function GrossBoardPage() {
-  const [week, setWeek] = useViewState("page:week", () => monday());
-  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all");
+  const router = useRouter();
+  const [loadTarget, setLoadTarget] = useState(() => typeof window === "undefined" ? null : parseBoardLoadTarget(window.location.search));
+  const [week, setWeek] = useViewState("page:week", () => monday(), loadTarget?.week);
+  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", loadTarget ? "all" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
-  const [loadTarget, setLoadTarget] = useState<ReturnType<typeof parseBoardLoadTarget>>(null);
   useEffect(() => {
     const target = parseBoardLoadTarget(window.location.search);
     if (!target) return;
@@ -139,14 +141,18 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (dirty || saving || loading || error || (!pendingWeek && !pendingLink)) return;
-    if (pendingLink) { window.location.assign(pendingLink); return; }
+    if (pendingLink) {
+      if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
+      else window.location.assign(pendingLink);
+      return;
+    }
     if (pendingWeek) {
       const timer = setTimeout(() => {
         setBoard(null); setMessage(""); setLoading(true); setWeek(pendingWeek); setPendingWeek(null);
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, error, setWeek]);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, error, setWeek, router]);
 
   const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     activityRef.current += 1;

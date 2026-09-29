@@ -21,10 +21,10 @@ export function writeMemory(key: string, value: unknown) {
 }
 
 // View preferences only. Never use this for records, credentials, or form drafts.
-export function useViewState<T>(name: string, initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>] {
+export function useViewState<T>(name: string, initial: T | (() => T), initialOverride?: T): [T, Dispatch<SetStateAction<T>>] {
   const scope = useContext(ViewMemoryContext);
   const key = `${scope}:view:${name}`;
-  const [value, setValue] = useState<T>(() => readMemory(key, typeof initial === "function" ? (initial as () => T)() : initial));
+  const [value, setValue] = useState<T>(() => initialOverride !== undefined ? initialOverride : readMemory(key, typeof initial === "function" ? (initial as () => T)() : initial));
   const update = useCallback<Dispatch<SetStateAction<T>>>(next => {
     setValue(current => {
       const result = typeof next === "function" ? (next as (value: T) => T)(current) : next;

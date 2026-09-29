@@ -279,7 +279,12 @@ assignment lookup lists.
   State survives reloads within that browser tab; records are fetched afresh.
   Never persist fetched records, credentials, form drafts or pending financial
   edits through this hook. New page view controls should use useViewState.
-  Explicit load deep links override the remembered Gross Board week/filter/scroll.
+  Explicit load deep links override the remembered Gross Board week/filter/scroll
+  on the first render, avoiding an initial request for the remembered week.
+  Internal navigation after autosave uses the client router, preserving the app
+  shell. After initial authentication, route session rechecks run alongside page
+  requests; every API request still enforces authentication and handles expiry.
+  Entering login unmounts the authenticated shell and clears its session state.
 
 - Driver charges use migration 033: charge types, schedules, effective Monday
   phases, weekly occurrences and append-only audit events. They are independent

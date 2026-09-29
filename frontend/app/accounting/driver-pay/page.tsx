@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -15,8 +16,12 @@ import { SettlementDialog } from "./SettlementDialog";
 import { driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } from "./pay";
 
 export default function DriverPayPage() {
-  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek());
-  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "");
+  const router = useRouter();
+  const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const requested = params.get("weekStart");
+  const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? requested : undefined;
+  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
+  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has("driverId") ? params.get("driverId") ?? "" : undefined);
   const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean} | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -85,12 +90,16 @@ export default function DriverPayPage() {
   }, [dirty]);
   useEffect(() => {
     if (dirty || saving || loading || refreshing || error) return;
-    if (pendingLink) { window.location.assign(pendingLink); return; }
+    if (pendingLink) {
+      if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
+      else window.location.assign(pendingLink);
+      return;
+    }
     if (pendingWeek) {
       const timer = setTimeout(() => { setReport(null); setLoading(true); setWeek(pendingWeek); setPendingWeek(null); setOpened(new Set()); setMessage(""); }, 0);
       return () => clearTimeout(timer);
     }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, refreshing, error, setOpened, setWeek]);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, refreshing, error, setOpened, setWeek, router]);
   async function reload(refreshSources = false) {
     if (dirty && !window.confirm("Discard unsaved payroll edits and reload this week?")) return;
     setChanges({}); setError(""); setMessage(""); setPendingWeek(null); setPendingLink(null);

@@ -46,7 +46,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
     const positions = readMemory<ScrollPosition>(key, {});
     let restoring = !explicitLoad && Object.keys(positions).length > 0;
     let frame = 0;
-    const elements = () => [main, ...Array.from(main.querySelectorAll<HTMLElement>("*"))];
+    const elements = () => Object.keys(positions).every(id => id === "main") ? [main] : [main, ...Array.from(main.querySelectorAll<HTMLElement>("*"))];
     const restore = () => {
       if (!restoring) return;
       const remaining = new Set(Object.keys(positions));
@@ -55,6 +55,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
         if (!saved) continue;
         element.scrollTo({ top: saved.top, left: saved.left, behavior: "instant" });
         if (Math.abs(element.scrollTop - saved.top) < 2 && Math.abs(element.scrollLeft - saved.left) < 2) remaining.delete(id);
+        if (!remaining.size) break;
       }
       if (!remaining.size) restoring = false;
     };

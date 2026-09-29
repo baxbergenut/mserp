@@ -406,6 +406,14 @@ try {
   await page.getByLabel('E2e Driver, adjustment 1, amount',{exact:true}).fill('10');
   await page.getByPlaceholder('Driver, truck, or load…').fill('NAV');
   await page.locator('main').evaluate(el => { el.scrollTop = 240; });
+  const navigationDocuments = [];
+  const navigationWeeks = [];
+  const trackNavigation = request => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) navigationDocuments.push(request.url());
+    const url = new URL(request.url());
+    if (request.method() === 'GET' && ['/api/gross-board','/api/driver-pay'].includes(url.pathname)) navigationWeeks.push(url.searchParams.get('weekStart'));
+  };
+  page.on('request', trackNavigation);
   await page.getByRole('link',{name:'NAV / TARGET & 42',exact:true}).last().click();
   await expect(page.locator('[data-highlighted="true"]')).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -427,6 +435,9 @@ try {
   await expect.poll(() => page.locator('main').evaluate(el => el.scrollTop)).toBeGreaterThan(100);
   const returnedPay = await (await page.request.get(`${base}/api/driver-pay?weekStart=2026-05-04`)).json();
   expect(returnedPay.drivers.find(d=>d.id===driverId).loads.find(l=>l.date==='2026-05-10'&&l.slot===2).driverGross).toBe('123.45');
+  page.off('request', trackNavigation);
+  expect(navigationDocuments).toEqual([]);
+  expect(navigationWeeks).toEqual(['2026-05-04','2026-05-04']);
   await page.goto(`${base}/accounting/driver-pay?weekStart=2026-05-04&driverId=${driverId}`);
   if (await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).click();
   await page.getByRole('link',{name:'NAV-SINGLE',exact:true}).click();
