@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt } from "lucide-react";
 import { bulkDriverCharges, createDriverCharges, fetchChargeHistory, fetchDriverCharges, fetchDrivers, previewDriverCharge, previewNewCharges, saveChargeType } from "@/app/lib/api";
@@ -9,6 +9,8 @@ import { controlClass, ErrorBanner, Field, ManagementHeader, ManagementSearch, M
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import { payButtonClass } from "../driver-pay/DriverCard";
 import RecurringMatrix from "./RecurringMatrix";
+import ChargeNotice, { type ChargeNotification } from "./ChargeNotice";
+import { useRecurringChargeSaves } from "./useRecurringChargeSaves";
 import ChargeTypeFields from "./ChargeTypeFields";
 import { eligibilityLabel, currentChargeWeek } from "./charges";
 
@@ -45,7 +47,10 @@ export default function DriverChargesPage() {
   const [bulk, setBulk] = useState<ChargeBulk | null>(null);
   const [bulkPreview, setBulkPreview] = useState(false);
   const [detail, setDetail] = useState<{ schedule: ChargeSchedule; rows: ChargeOccurrence[]; events: ChargeEvent[] } | null>(null);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<ChargeNotification | null>(null);
+  const dismissNotice = useCallback(() => setNotice(null), []);
+  const setMessage = useCallback((message: string, error = false) => setNotice({ message, error }), []);
+  const recurringSaves = useRecurringChargeSaves(setData, setMessage);
   const week = data?.currentWeek ?? currentChargeWeek();
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +69,7 @@ export default function DriverChargesPage() {
   }, []);
   async function run(action: () => Promise<void>) {
     setError(""); setBusy(true);
-    try { await action(); } catch (err) { setError(err instanceof Error ? err.message : "Unable to save charges"); } finally { setBusy(false); }
+    try { await recurringSaves.waitForSaves(); await action(); } catch (err) { setError(err instanceof Error ? err.message : "Unable to save charges"); } finally { setBusy(false); }
   }
   async function reload() {
     const [charges, drivers] = await Promise.all([fetchDriverCharges(), fetchDrivers()]);
@@ -80,11 +85,11 @@ export default function DriverChargesPage() {
   return <div className="space-y-5 animate-fade-in">
     <ManagementHeader icon={Receipt} title="Driver charges" description="Assign weekly fees and reimbursements, and track installment recovery." count={tab === "types" ? types.length : tab === "recurring" ? drivers.length : visible.length} actionLabel={tab === "installment" ? "New installment plan" : "New charge type"} onAction={() => { setError(""); setCreatePreview(null); setCountMode(false); if (tab !== "installment") setTypeForm(newType()); else setCreate(newCharge(tab, driverFilter, week)); }} />
     {error && !typeForm && !create && !bulk && <ErrorBanner message={error} />}
-    {message && <p role="status" className="text-sm text-emerald-400">{message}</p>}
+    <ChargeNotice notice={notice} dismiss={dismissNotice} />
     <div className="flex flex-wrap gap-2" role="tablist" aria-label="Driver charges views">{([["recurring", "Recurring assignments"], ["installment", "Installment plans"], ["types", "Charge types"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} onClick={() => chooseTab(key)} className={`${payButtonClass} ${tab === key ? "bg-blue-500/10 text-blue-300" : ""}`}>{label}</button>)}</div>
     <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={setSearch} placeholder={tab === "types" ? "Search charge types…" : tab === "recurring" ? "Search drivers…" : "Search driver or plan…"} />{tab !== "types" && <><select aria-label="Filter driver" className={`${controlClass} !w-52`} value={driverFilter} onChange={e => { setDriverFilter(e.target.value); setSelected(new Set()); }}><option value="">All active drivers</option>{drivers.map(d => <option key={d.id} value={d.id}>{d.fullName}</option>)}</select>{tab === "recurring" && <select aria-label="Filter charge type" className={`${controlClass} !w-44`} value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setSelected(new Set()); }}><option value="">All charge types</option>{data?.types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}</>}{tab !== "recurring" && <select aria-label="Filter status" className={`${controlClass} !w-40`} value={status} onChange={e => { setStatus(e.target.value); setSelected(new Set()); }}><option value="all">All statuses</option>{(tab === "types" ? ["active", "archived"] : ["active", "scheduled", "paused", "ended", "completed"]).map(v => <option key={v} value={v}>{v}</option>)}</select>}<button className={payButtonClass} disabled={busy} onClick={() => void run(reload)}>Reload</button></div>
     {tab === "installment" && !!selectedSchedules.length && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/30 p-3 text-xs"><span>{selectedSchedules.length} selected</span>{(["amount", "pause", "resume"] as ChargeBulk["action"][]).map(action => <button key={action} className={payButtonClass} onClick={() => { setBulk({ targets: selectedSchedules.map(s => ({ id: s.id, version: s.version })), action, weekStart: week, amount: "" }); setBulkPreview(false); setError(""); }}>{action === "amount" ? "Change amount" : action === "end" ? "End assignments" : action === "pause" ? "Pause" : "Resume"}</button>)}</div>}
-    {!data ? <p role="status" className="p-8 text-sm text-zinc-500">{error ? "Unable to load charges. Use Reload to retry." : "Loading driver charges…"}</p> : tab === "recurring" ? <RecurringMatrix data={data} drivers={drivers} search={search} driverFilter={driverFilter} typeFilter={typeFilter} busy={busy} run={run} reload={reload} showHistory={s => { void run(async () => { const [rows, events] = await Promise.all([previewDriverCharge(s.id), fetchChargeHistory(s.id)]); setDetail({schedule:s, rows, events}); }); }} /> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[850px] text-zinc-300"><thead className="bg-zinc-900"><tr>{tab !== "types" && <th className={td}><input aria-label="Select visible assignments" type="checkbox" checked={visible.length > 0 && visible.every(s => selected.has(s.id))} onChange={e => setSelected(e.target.checked ? new Set(visible.map(s => s.id)) : new Set())} /></th>}{(tab === "types" ? ["Name", "Direction", "Available amounts", "Eligibility", "Status", ""] : ["Driver", "Plan", "Original", "Confirmed", "Remaining", "Scheduled / end", "Status", ""]).map((v, i) => <th className={td} key={i}>{v}</th>)}</tr></thead><tbody>
+    {!data ? <p role="status" className="p-8 text-sm text-zinc-500">{error ? "Unable to load charges. Use Reload to retry." : "Loading driver charges…"}</p> : tab === "recurring" ? <RecurringMatrix data={data} drivers={drivers} search={search} driverFilter={driverFilter} typeFilter={typeFilter} busy={busy} pending={recurringSaves.pending} onSave={recurringSaves.save} showHistory={s => { void run(async () => { const [rows, events] = await Promise.all([previewDriverCharge(s.id), fetchChargeHistory(s.id)]); setDetail({schedule:s, rows, events}); }); }} /> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[850px] text-zinc-300"><thead className="bg-zinc-900"><tr>{tab !== "types" && <th className={td}><input aria-label="Select visible assignments" type="checkbox" checked={visible.length > 0 && visible.every(s => selected.has(s.id))} onChange={e => setSelected(e.target.checked ? new Set(visible.map(s => s.id)) : new Set())} /></th>}{(tab === "types" ? ["Name", "Direction", "Available amounts", "Eligibility", "Status", ""] : ["Driver", "Plan", "Original", "Confirmed", "Remaining", "Scheduled / end", "Status", ""]).map((v, i) => <th className={td} key={i}>{v}</th>)}</tr></thead><tbody>
       {tab === "types" ? types.map(t => <tr key={t.id}><td className={td}>{t.name}</td><td className={td}>{t.direction}</td><td className={td}>{t.amounts.map(money).join(" / ")}</td><td className={td}>{eligibilityLabel(t.eligibility)}</td><td className={td}>{t.archived ? "Archived" : "Active"}</td><td className={td}><button className={payButtonClass} onClick={() => { setTypeForm({ ...t }); setError(""); }}>Edit type</button></td></tr>) : visible.map(s => { return <tr key={s.id}><td className={td}><input type="checkbox" aria-label={`Select ${s.driverName}, ${s.name}`} checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td><td className={td}><Link className="text-blue-400" href={`/drivers/detail?id=${s.driverId}`}>{s.driverName}</Link></td><td className={td}>{s.name}</td><><td className={td}>{money(s.total ?? "0")}</td><td className={td}>{money(s.confirmed)}</td><td className={`${td} font-medium`}>{money(s.remaining)}</td><td className={td}>{money(s.scheduled)}<br /><span className="text-zinc-500">{s.completionWeek || "No completion scheduled"}{s.eligibility === "loads" && " · provisional"}</span></td></><td className={td}>{s.status}</td><td className={td}><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => { const [rows, events] = await Promise.all([previewDriverCharge(s.id), fetchChargeHistory(s.id)]); setDetail({ schedule: s, rows, events }); })}>Schedule / history</button></td></tr>; })}
     </tbody></table>{(tab === "types" ? types : visible).length === 0 && <p className="p-10 text-center text-sm text-zinc-500">No {tab === "types" ? "charge types" : "assignments"} match this view.</p>}</div>}
     <p className="text-xs text-zinc-500">These adjustments affect Driver Pay. Expenses, dispatcher commission, and the financial dashboard are calculated separately.</p>

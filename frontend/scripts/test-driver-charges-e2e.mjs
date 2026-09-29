@@ -86,8 +86,62 @@ try {
   await expect(page.getByLabel('Filter driver').locator('option', { hasText: 'Inactive Driver' })).toHaveCount(0);
   const adminCheck = page.getByLabel('E2e Driver, Admin fee', { exact: true });
   const adminAmount = page.getByLabel('E2e Driver, Admin fee amount', { exact: true });
+  // Hold one driver's request so another save can finish first. The page
+  // must stay interactive, merge both results, and keep the table stationary.
+  let releaseSave;
+  const heldSave = new Promise(resolve => { releaseSave = resolve; });
+  let firstSave = true;
+  const holdFirstSave = async route => {
+    if (firstSave) { firstSave = false; await heldSave; }
+    await route.continue();
+  };
+  const chargeReads = [];
+  const recordRead = request => { if (request.method() === 'GET' && /\/api\/(driver-charges|drivers)(\?|$)/.test(request.url())) chargeReads.push(request.url()); };
+  page.on('request', recordRead);
+  await page.route('**/api/driver-charges/recurring', holdFirstSave);
+  const tableBeforeSave = await page.locator('table').boundingBox();
   await adminCheck.check();
+  await expect(adminCheck).toBeDisabled();
+  const otherCheck = page.getByLabel('Unassigned Driver, Admin fee', { exact: true });
+  await expect(otherCheck).toBeEnabled();
+  await expect(page.getByLabel('Matrix effective week', { exact: true })).toBeEnabled();
+  await page.getByPlaceholder('Search drivers…').fill('Driver');
+  await otherCheck.check();
+  await expect(otherCheck).toBeEnabled();
+  await expect(otherCheck).toBeChecked();
+  await expect(adminCheck).toBeDisabled();
+  expect((await page.locator('table').boundingBox()).y).toBe(tableBeforeSave.y);
+  await expect(page.getByRole('status').filter({ hasText: 'Unassigned Driver · Admin fee saved' })).toHaveCSS('position', 'fixed');
+  await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
+  await page.getByRole('tab', { name: 'Recurring assignments', exact: true }).click();
+  await expect(adminCheck).toBeDisabled();
+  releaseSave();
   await expect(adminAmount).toBeEnabled();
+  await expect(adminCheck).toBeChecked();
+  await expect(otherCheck).toBeChecked();
+  expect((await page.locator('table').boundingBox()).y).toBe(tableBeforeSave.y);
+  page.off('request', recordRead);
+  expect(chargeReads.length).toBe(2);
+  for (const url of chargeReads) { expect(new URL(url).pathname).toBe('/api/driver-charges'); expect(new URL(url).searchParams.has('driverId')).toBe(true); }
+  await page.unroute('**/api/driver-charges/recurring', holdFirstSave);
+  await page.reload();
+  await expect(adminCheck).toBeChecked();
+  await expect(otherCheck).toBeChecked();
+  await otherCheck.uncheck();
+  await expect(otherCheck).toBeEnabled();
+
+  // Failed writes roll back the optimistic value with a fixed error notice.
+  const rejectSave = route => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Simulated save conflict' }) });
+  await page.route('**/api/driver-charges/recurring', rejectSave);
+  const tableBeforeFailure = await page.locator('table').boundingBox();
+  await adminAmount.selectOption('35.00');
+  await expect(page.getByRole('alert').filter({ hasText: 'Simulated save conflict' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Simulated save conflict' })).toHaveCSS('position', 'fixed');
+  await expect(adminAmount).toBeEnabled();
+  await expect(adminAmount).toHaveValue('50.00');
+  expect((await page.locator('table').boundingBox()).y).toBe(tableBeforeFailure.y);
+  await page.unroute('**/api/driver-charges/recurring', rejectSave);
+
   await adminAmount.selectOption('35.00');
   await expect(adminAmount).toHaveValue('35.00');
   await expect(adminAmount).toBeEnabled();

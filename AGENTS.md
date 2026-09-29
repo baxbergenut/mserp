@@ -283,7 +283,10 @@ assignment lookup lists.
   rules; prior weeks retain their rules and weekly overrides stay explicit.
   Existing amount selections survive option edits. PUT /driver-charges/recurring
   version-checks a cell, pauses unchecked assignments, and preserves later phases.
-  The matrix has compact 32px rows and accepts any valid Monday, including past
+  Matrix saves lock only the affected driver row and refresh that driver’s
+  schedules; concurrent responses merge by driver identity. Page-wide actions
+  await pending row saves. Save/error notices use a viewport-fixed portal so
+  feedback never moves the table. The matrix has compact 32px rows and accepts any valid Monday, including past
   weeks. Backdated assignments fill gaps up to the next assignment; dated type
   rules apply, with the earliest type rule used before the type existed. Migration
   035 permits no-load eligibility in these recurring historical periods. Changes
