@@ -42,8 +42,14 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := strings.TrimSuffix(strings.TrimPrefix(strings.ReplaceAll(string(migration), "\r\n", "\n"), "BEGIN;\n"), "COMMIT;\n")
+			costMigration, err := os.ReadFile("../../sql/030_add_driver_pay_cost_overrides.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			costBody := strings.TrimSuffix(strings.TrimPrefix(strings.ReplaceAll(string(costMigration), "\r\n", "\n"), "BEGIN;\n"), "COMMIT;\n")
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, costBody, "", 1)
 				sql = strings.Replace(sql, body, "", 1)
 				if strings.Contains(sql, "CREATE TABLE driver_pay_weeks") {
 					t.Fatal("failed to isolate legacy schema")
@@ -68,10 +74,13 @@ func TestDriverPayDatabase(t *testing.T) {
 				if _, err := admin.Exec(ctx, string(migration)); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := admin.Exec(ctx, string(costMigration)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			// Only grant legacy tables here: new table ownership must come from SQL.
 			if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app;
- GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,loads,dispatchers,truck_driver_assignments,trucks,gross_board_entries TO mserp_app`); err != nil {
+ GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,loads,dispatchers,truck_driver_assignments,trucks,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}
 			config, err := pgxpool.ParseConfig(dsn)
@@ -87,6 +96,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			defer pool.Close()
 			board := NewGrossBoardRepository(pool)
 			pay := NewDriverPayRepository(pool)
+			seedDriverPayCosts(t, ctx, pool, driver)
 			monday, _ := time.Parse(time.DateOnly, "2026-09-28")
 			batch := []GrossBoardEntry{
 				{DriverID: driver, Date: "2026-09-28", Slot: 1, LoadNumber: "LOAD-B", OriginalRate: "1", DriverRate: "600", Miles: "1"},
@@ -108,6 +118,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatalf("all planned/inactive/non-delivered entries must appear: %+v", report)
 			}
 			loads := report.Drivers[0].Loads
+			if report.Drivers[0].FuelTotal != "90.30" || report.Drivers[0].TollTotal != "12.25" {
+				t.Fatalf("weekly costs (must not multiply by load slots): fuel=%s toll=%s", report.Drivers[0].FuelTotal, report.Drivers[0].TollTotal)
+			}
 			if loads[0].PickupDate != "2026-09-28" || loads[0].PickupLocation != "First, OH" || loads[0].DeliveryLocation != "Last, PA" || loads[0].Fee != "635.51" || loads[0].LoadedMiles != "725.78" {
 				t.Fatalf("source mapping: %+v", loads[0])
 			}
@@ -119,6 +132,8 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			edits := report.Drivers[0].Edits
 			edits.Notes = "Weekly note"
+			fuelOverride, tollOverride := "-80.15", "0.00"
+			edits.FuelOverride, edits.TollOverride = &fuelOverride, &tollOverride
 			edits.Comments[loads[0].CommentKey] = "Checked receipt"
 			edits.Adjustments = []DriverPayAdjustment{{ID: "00000000-0000-0000-0000-000000000001", Kind: "reimbursement", Name: "Parking", Amount: "35.25"}}
 			updated, err := pay.Save(ctx, edits)
@@ -146,6 +161,18 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			if report.Drivers[0].Loads[1].DriverGross != "600.00" || report.Drivers[0].Edits.Notes != "Second note" || len(report.Drivers[0].Edits.Adjustments) != 1 {
 				t.Fatal("transaction or edit persistence failed")
+			}
+			persisted := report.Drivers[0].Edits
+			if persisted.FuelOverride == nil || *persisted.FuelOverride != fuelOverride || persisted.TollOverride == nil || *persisted.TollOverride != tollOverride {
+				t.Fatal("cost overrides not persisted")
+			}
+			persisted.FuelOverride, persisted.TollOverride = nil, nil
+			if _, err := pay.Save(ctx, persisted); err != nil {
+				t.Fatal(err)
+			}
+			report, err = pay.Get(ctx, monday)
+			if err != nil || report.Drivers[0].Edits.FuelOverride != nil || report.Drivers[0].Edits.TollOverride != nil {
+				t.Fatal("reset overrides failed", err)
 			}
 			// Profile percentage uses board driver gross, not the original load gross.
 			if _, err := pool.Exec(ctx, `UPDATE drivers SET pay_type='gross_percentage',pay_rate=30 WHERE id=$1`, driver); err != nil {
@@ -222,6 +249,18 @@ func TestDriverPayDatabase(t *testing.T) {
 			next, err := pay.Get(ctx, monday.AddDate(0, 0, 7))
 			if err != nil || len(next.Drivers) != 0 {
 				t.Fatal("week boundary leaked")
+			}
+			if _, err := board.SaveEntries(ctx, []GrossBoardEntry{{DriverID: driver, Date: "2026-10-05", LoadNumber: "NEXT-WEEK"}}); err != nil {
+				t.Fatal(err)
+			}
+			next, err = pay.Get(ctx, monday.AddDate(0, 0, 7))
+			if err != nil || len(next.Drivers) != 1 {
+				t.Fatal("next week report", err)
+			}
+			// The fuel boundary fixture belongs to next week; no tolls or manual
+			// overrides may carry forward from the previous driver's week.
+			if next.Drivers[0].FuelTotal != "999.00" || next.Drivers[0].TollTotal != "0" || next.Drivers[0].Edits.FuelOverride != nil || next.Drivers[0].Edits.TollOverride != nil {
+				t.Fatal("next week costs or overrides leaked")
 			}
 		})
 	}

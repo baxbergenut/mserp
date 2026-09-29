@@ -55,3 +55,18 @@ func TestGrossBoardMultipleSlots(t *testing.T) {
 		t.Fatal("deletion not canonicalized")
 	}
 }
+
+func TestDriverPayCostOverrides(t *testing.T) {
+	for _, value := range []string{"0", "-0.00", "-123.45", "12.25", "9999999999.99"} {
+		e := repository.DriverPayEdits{DriverID: "00000000-0000-0000-0000-000000000001", WeekStart: "2026-09-28", FuelOverride: &value, TollOverride: &value}
+		if err := validateDriverPayEdits(&e); err != nil {
+			t.Fatalf("valid override %s: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "-", "1.234", "10000000000", "NaN", "1/2"} {
+		e := repository.DriverPayEdits{DriverID: "00000000-0000-0000-0000-000000000001", WeekStart: "2026-09-28", FuelOverride: &value}
+		if validateDriverPayEdits(&e) == nil {
+			t.Fatalf("accepted invalid override %s", value)
+		}
+	}
+}

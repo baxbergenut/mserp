@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, memo, useState } from "react";
-import { AlertTriangle, ChevronDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
-import { driverTotals } from "./pay";
+import { costAmount, costRows, driverTotals } from "./pay";
 import { CommentButton } from "./CommentButton";
 
 export const payButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -38,7 +38,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const allFeesMissing = totals.missingFees === driver.loads.length;
   const incomplete = totals.review > 0;
-  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction;
+  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs;
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
   const editAdjustment = (index: number, update: (item: DriverPayAdjustment) => DriverPayAdjustment) => {
     edit(current => {
@@ -48,10 +48,20 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
     });
   };
   const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => load.date === addDays(edits.weekStart, index)).length), 0);
+  const visibleCostRows = driver.payType === "cpm" ? [] : costRows;
   const adjustmentCells = <td colSpan={2} rowSpan={weekRowCount} className="border-b border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
     <div className="h-56 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
-        <tbody>{Array.from({ length: Math.min(100, Math.max(7, edits.adjustments.length + 1)) }, (_, index) => {
+        <tbody>{visibleCostRows.map(({ key, label }, index) => {
+          const value = costAmount(driver, edits, key);
+          const manual = edits[`${key}Override`] != null;
+          const source = amount(driver[`${key}Total`], true);
+          const description = `Weekly ${label.toLowerCase()} total: ${source}. ${key === "fuel" ? "Diesel, by merchant-local purchase date." : "Matched historical truck tolls, by crossing date; includes credits."} ${driver.isOwnerOperator && driver.payType === "gross_percentage" ? "Automatically deducted from pay." : "Company expense: no automatic deduction."}`;
+          return <tr key={key} className="sticky z-10 bg-zinc-950" style={{ top: index * 32 }}>
+            <td className={`${cell} text-zinc-300`}><div className="flex items-center justify-between gap-1"><span title={description}>{label}</span><span className="ml-auto text-[10px] text-zinc-500" title={description}>Source {source}</span>{manual && <button type="button" disabled={disabled} aria-label={`${driver.fullName}, ${label}, reset to automatic`} title="Reset to automatic amount" onClick={() => edit(current => ({ ...current, [`${key}Override`]: null }))} className="rounded p-1 text-blue-400 hover:bg-zinc-800 disabled:opacity-40"><RotateCcw className="h-3 w-3" /></button>}</div></td>
+            <td className={`${cell} !border-r-0 !px-0`}><input aria-label={`${driver.fullName}, ${label}, amount`} aria-invalid={!value.trim() || !validDecimal(value)} disabled={disabled} inputMode="decimal" value={value} title={`${manual ? "Manual override" : "Automatic amount"}. Positive: reimbursement. Negative: charge. Zero: no charge.`} onChange={event => { const value = event.target.value; edit(current => ({ ...current, [`${key}Override`]: value })); }} className={`h-[31px] w-full min-w-0 bg-transparent px-2 text-right font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 aria-invalid:bg-red-500/10 ${value.startsWith("-") ? "text-red-300" : hundredths(value) > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} /></td>
+          </tr>;
+        })}{Array.from({ length: Math.min(100, Math.max(7 - visibleCostRows.length, edits.adjustments.length + 1)) }, (_, index) => {
           const item = edits.adjustments[index];
           const name = item?.name ?? "";
           const value = item ? `${item.kind === "deduction" ? "-" : ""}${item.amount}` : "";

@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `029_add_driver_pay.sql`:
+  `030_add_driver_pay_cost_overrides.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -328,7 +328,16 @@ assignment lookup lists.
   percentage; CPM fees use system total miles times the profile tariff. Exact
   decimals round each fee to cents, and totals sum visible rounded fees. Missing
   source details stay blank; unmatched/incomplete rows and provisional totals
-  are marked for review. No fuel/toll deductions or finalization are included.
+  are marked for review. Percentage-pay drivers have permanent Fuel and Toll rows
+  with locked names and signed editable amounts; CPM drivers never show or apply
+  these rows. Percentage owner-operators default to negative weekly costs, while
+  company drivers default to zero. Fuel uses production Relay diesel line items
+  (excluding DEF/products), confirmed driver links and merchant-local dates. Tolls
+  include production/legacy credits by crossing date and unique historical truck
+  assignment using New York calendar dates, never today's assignment or guessed
+  nearby loads. Unmatched/ambiguous tolls remain outside payroll. Source totals
+  remain visible; null overrides follow current source totals, explicit zero or
+  signed overrides persist until reset. No finalization is included.
   Notes, load comments, and named additions/reimbursements/deductions belong to
   a driver/week in `driver_pay_weeks`, with version checks and five-second autosave.
   Comments are keyed by date, slot, and normalized load number so replacing a
@@ -337,7 +346,7 @@ assignment lookup lists.
   These source fields survive sync serialization. Historical payloads may need
   Refresh load details; that action never imports new loads or changes assignments.
   Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
-  verify fresh schema and migration 029 as `mserp_app`.
+  verify fresh schema and migrations 029–030 as `mserp_app`.
 
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).

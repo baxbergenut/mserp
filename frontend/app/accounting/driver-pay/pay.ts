@@ -15,7 +15,21 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
     missingFees: sum.missingFees + Number(load.fee === ""), review: sum.review + Number(load.issues.length > 0),
   }), { original: BigInt(0), gross: BigInt(0), totalMiles: BigInt(0), loadedMiles: BigInt(0), deadheadMiles: BigInt(0), fee: BigInt(0), missingFees: 0, review: 0 });
   const adjustments = adjustmentTotals(edits.adjustments);
-  return { ...values, ...adjustments, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction };
+  const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
+  return { ...values, ...adjustments, costs, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs };
+}
+
+export const costRows = [{ key: "fuel", label: "Fuel" }, { key: "toll", label: "Toll" }] as const;
+export type CostKey = typeof costRows[number]["key"];
+
+export function costAmount(driver: DriverPayDriver, edits: DriverPayEdits, key: CostKey): string {
+  if (driver.payType === "cpm") return "0.00";
+  const override = edits[`${key}Override`];
+  if (override != null) return override;
+  if (!driver.isOwnerOperator || driver.payType !== "gross_percentage") return "0.00";
+  const cents = -hundredths(driver[`${key}Total`] ?? "0");
+  const magnitude = cents < BigInt(0) ? -cents : cents;
+  return `${cents < BigInt(0) ? "-" : ""}${magnitude / BigInt(100)}.${String(magnitude % BigInt(100)).padStart(2, "0")}`;
 }
 
 // Preserve typing during saves while adopting the committed concurrency version.
@@ -27,7 +41,10 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
 }
 
 export function validAdjustments(edits: DriverPayEdits) {
-  return normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));
+  return costRows.every(({ key }) => {
+    const value = edits[`${key}Override`];
+    return value == null || (value.trim() !== "" && validDecimal(value));
+  }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));
 }
 
 export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {

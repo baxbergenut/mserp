@@ -24,6 +24,14 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 	if e.Version < 0 || e.Version > 2147483646 {
 		return errors.New("invalid version")
 	}
+	for _, value := range []*string{e.FuelOverride, e.TollOverride} {
+		if value != nil {
+			*value = strings.TrimSpace(*value)
+			if !grossBoardDecimal.MatchString(*value) {
+				return errors.New("Fuel and Toll amounts must be signed numbers with at most two decimal places, or null for automatic totals")
+			}
+		}
+	}
 	if len([]rune(e.Notes)) > 5000 {
 		return errors.New("weekly notes must be 5000 characters or fewer")
 	}

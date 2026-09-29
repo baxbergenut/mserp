@@ -683,6 +683,8 @@ export interface DriverPayEdits {
   notes: string;
   comments: Record<string, string>;
   adjustments: DriverPayAdjustment[];
+  fuelOverride: string | null;
+  tollOverride: string | null;
   version: number;
 }
 export interface DriverPayLoad {
@@ -711,6 +713,8 @@ export interface DriverPayDriver {
   dispatcherName: string;
   payType: PayType;
   payRate: string;
+  fuelTotal: string;
+  tollTotal: string;
   loads: DriverPayLoad[];
   edits: DriverPayEdits;
 }
