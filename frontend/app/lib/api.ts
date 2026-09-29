@@ -359,7 +359,7 @@ export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdit
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
 
 export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
-export const fetchInvestorsPage = (query: PageQuery) =>
+export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }) =>
   paginatedRequest<PaginatedResponse<Investor>>(withQuery("/investors", query));
 export const createInvestor = (input: InvestorInput) =>
   apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(input) });

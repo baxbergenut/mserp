@@ -107,7 +107,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and review-first AI transaction entry.
 - `frontend/app/investors/`: truck owners, independent investors and driver-linked
-  investors. Truck forms select explicit owners; ownership is separate from operation.
+  investors. The company is hidden by default with a Show company filter.
+  Truck forms select explicit owners; ownership is separate from operation.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults. Driver and
   truck detail pages include expenses linked to that record.
@@ -226,7 +227,9 @@ browser bundle.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
 - Investors: `GET/POST /investors`, `PUT /investors/{id}`. List supports search and
-  pagination; inactive investors retain ownership/history. Company identity is protected.
+  pagination; paginated reads exclude the company unless includeCompany=true.
+  Unpaginated owner lookups include the company. Inactive investors retain
+  ownership/history. Company identity is protected.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`

@@ -38,6 +38,17 @@ func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wantsPagination(r) {
+		// The directory excludes the company by default; unpaginated owner
+		// lookups still include it for truck forms.
+		if !strings.EqualFold(r.URL.Query().Get("includeCompany"), "true") {
+			filtered := make([]repository.Investor, 0, len(values))
+			for _, investor := range values {
+				if !investor.IsCompany {
+					filtered = append(filtered, investor)
+				}
+			}
+			values = filtered
+		}
 		p, err := parsePagination(r)
 		if err != nil {
 			writeAPIError(w, 400, err.Error())

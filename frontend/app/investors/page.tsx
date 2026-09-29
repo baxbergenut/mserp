@@ -13,6 +13,7 @@ export default function InvestorsPage() {
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
+  const [showCompany, setShowCompany] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
@@ -26,11 +27,11 @@ export default function InvestorsPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await fetchInvestorsPage({ page, pageSize, search: debouncedSearch });
+      const result = await fetchInvestorsPage({ page, pageSize, search: debouncedSearch, includeCompany: showCompany });
       setInvestors(result.items); setPage(result.page); setTotal(result.total); setTotalPages(result.totalPages); setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Failed to load investors"); }
     finally { setIsLoading(false); }
-  }, [page, pageSize, debouncedSearch]);
+  }, [page, pageSize, debouncedSearch, showCompany]);
   useEffect(() => { const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer); }, [loadData]);
 
   const open = async (investor: Investor | null) => {
@@ -53,7 +54,13 @@ export default function InvestorsPage() {
   return <div className="space-y-5 animate-fade-in">
     <ManagementHeader icon={Landmark} title="Investors" description="Manage truck owners, including drivers who invest in the fleet." count={total} actionLabel="Add investor" onAction={() => void open(null)} />
     {error && <ErrorBanner message={error} />}
-    <ManagementSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search investors or truck units…" />
+    <div className="flex flex-wrap items-center gap-4">
+      <ManagementSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search investors or truck units…" />
+      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-400">
+        <input type="checkbox" checked={showCompany} onChange={(event) => { setShowCompany(event.target.checked); setPage(1); }} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600" />
+        Show company
+      </label>
+    </div>
     <TableShell>
       {isLoading ? <LoadingTable columns={6} /> : investors.length === 0 ? <EmptyState message={search ? "No investors match your search." : "No investors yet."} /> :
         <table className="w-full min-w-[760px] text-left text-[13px]">
