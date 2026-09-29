@@ -112,6 +112,7 @@ try {
   await page.screenshot({ path: join(temp, 'investors-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(page.locator('aside')).toHaveCSS('width', '64px');
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'investors-mobile.png'), fullPage: true });
