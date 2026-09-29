@@ -7,6 +7,7 @@ import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { costAmount, costRows, driverTotals } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
+import { ExpenseRows } from "./ExpenseRows";
 import { CommentButton } from "./CommentButton";
 
 export const payButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -41,7 +42,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const allFeesMissing = driver.loads.length > 0 && totals.missingFees === driver.loads.length;
   const incomplete = totals.review > 0;
-  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated;
+  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses;
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
   const editAdjustment = (index: number, update: (item: DriverPayAdjustment) => DriverPayAdjustment) => {
     edit(current => {
@@ -64,7 +65,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
             <td className={`${cell} text-zinc-300`}><div className="flex items-center justify-between gap-1"><span title={description}>{label}</span><span className="ml-auto text-[10px] text-zinc-500" title={description}>Source {source}</span>{manual && <button type="button" disabled={disabled} aria-label={`${driver.fullName}, ${label}, reset to automatic`} title="Reset to automatic amount" onClick={() => edit(current => ({ ...current, [`${key}Override`]: null }))} className="rounded p-1 text-blue-400 hover:bg-zinc-800 disabled:opacity-40"><RotateCcw className="h-3 w-3" /></button>}</div></td>
             <td className={`${cell} !border-r-0 !px-0`}><input aria-label={`${driver.fullName}, ${label}, amount`} aria-invalid={!value.trim() || !validDecimal(value)} disabled={disabled} inputMode="decimal" value={value} title={`${manual ? "Manual override" : "Automatic amount"}. Positive: reimbursement. Negative: charge. Zero: no charge.`} onChange={event => { const value = event.target.value; edit(current => ({ ...current, [`${key}Override`]: value })); }} className={`h-[31px] w-full min-w-0 bg-transparent px-2 text-right font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 aria-invalid:bg-red-500/10 ${value.startsWith("-") ? "text-red-300" : hundredths(value) > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} /></td>
           </tr>;
-        })}<GeneratedChargeRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} />{Array.from({ length: Math.min(100, Math.max(7 - visibleCostRows.length, edits.adjustments.length + 1)) }, (_, index) => {
+        })}<ExpenseRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} /><GeneratedChargeRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} />{Array.from({ length: Math.min(100, Math.max(7 - visibleCostRows.length, edits.adjustments.length + 1)) }, (_, index) => {
           const item = edits.adjustments[index];
           const name = item?.name ?? "";
           const value = item ? `${item.kind === "deduction" ? "-" : ""}${item.amount}` : "";
@@ -99,7 +100,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
     </tr>
     {open && <tr><td colSpan={7} className="border-b border-zinc-700 p-0">
       <div id={`driver-${driver.id}`}><ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
- {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — review deductions before confirming. No balance is automatically carried forward.</p>}
+ {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — review deductions before confirming. Unpaid expense balances carry forward; other negative pay does not.</p>}
         <div className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 bg-zinc-950/30 text-left text-xs">
             <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>

@@ -519,6 +519,9 @@ export interface TollDashboard {
 }
 
 export interface Expense {
+  paidAmount: string | null;
+  remainingAmount: string | null;
+  driverSettled: boolean;
   id: string;
   truckId: string | null;
   driverId: string | null;
@@ -545,6 +548,7 @@ export interface Expense {
 }
 
 export type ExpenseCategory =
+  | "Penalties"
   | "Maintenance"
   | "Other"
   | "Safety"
@@ -681,7 +685,21 @@ export interface DriverPayAdjustment {
   note: string;
   amount: string;
 }
+export interface ExpenseDeduction {
+  expenseId: string;
+  name: string;
+  expenseDate: string;
+  total: string;
+  available: string;
+  openingBalance: string;
+  amount: string;
+  remaining: string;
+  version: number;
+  saved: boolean;
+  apply?: boolean;
+}
 export interface DriverPayEdits {
+  expenseDeductions?: ExpenseDeduction[];
   generatedCharges?: ChargeOccurrence[];
   driverId: string;
   weekStart: string;

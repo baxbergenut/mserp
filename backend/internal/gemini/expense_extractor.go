@@ -216,7 +216,8 @@ Item keys map as follows: conf=confidence, co=company, cat=category, date=expens
 Use the receipt/invoice/service date when visible. Otherwise use the submission date %s.
 Normalize expenseDate as YYYY-MM-DD and amount as an unsigned decimal string with exactly two digits after the decimal point.
 Company must be "MS Express" or "Flinn Corp" when identifiable; otherwise null (the application defaults it to MS Express).
-Category must be exactly one of Maintenance, Other, Safety, HR, Administrative.
+Category must be exactly one of Maintenance, Other, Safety, HR, Administrative, Penalties.
+Use Penalties for fines, violations, tickets, and penalties.
 Use Maintenance for repairs, parts, tires, towing, wash, service, and truck upkeep.
 Use Safety for inspections, permits, scales, drug tests, MVR/PSP, compliance, and safety equipment.
 Use HR for recruiting, onboarding, payroll-personnel, lodging or transport primarily for a driver/employee.

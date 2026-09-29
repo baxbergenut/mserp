@@ -280,7 +280,8 @@ export default function ExpensesPage() {
                 <th className="px-4 py-3 font-medium">Expense</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Responsibility</th>
-                <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="px-4 py-3 text-right font-medium">Total amount</th>
+                <th className="px-4 py-3 text-right font-medium">Paid</th><th className="px-4 py-3 text-right font-medium">Remaining</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -325,6 +326,8 @@ export default function ExpensesPage() {
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
                     {formatMoney(expense.amount)}
                   </td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={expense.driverSettled ? "Existing driver expense: assumed fully paid" : "Saved Driver Pay deductions"}>{expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)}</td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">{expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)}</td>
                   <td className="px-4 py-3"><RowActions onEdit={() => openEdit(expense)} onDelete={() => setPendingDelete(expense)} /></td>
                 </tr>
               ))}

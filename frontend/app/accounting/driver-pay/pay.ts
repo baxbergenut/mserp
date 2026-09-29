@@ -17,7 +17,8 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
   const generated = (edits.generatedCharges ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
-  return { ...values, ...adjustments, costs, generated, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated };
+  const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  return { ...values, ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
 }
 
 export const costRows = [{ key: "fuel", label: "Fuel" }, { key: "toll", label: "Toll" }] as const;
@@ -38,6 +39,12 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   const result = { ...current };
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
   else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version,
+    expenseDeductions: result[saved.driverId].expenseDeductions?.map(row => {
+      const committed = saved.expenseDeductions?.find(r => r.expenseId === row.expenseId);
+      const submitted = snapshot.expenseDeductions?.find(r => r.expenseId === row.expenseId);
+      if (!committed) return row;
+      return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...row, version: committed.version, available: committed.available, openingBalance: committed.openingBalance };
+    }),
     generatedCharges: result[saved.driverId].generatedCharges?.map(row => {
       const committed = saved.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
       const submitted = snapshot.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
@@ -46,11 +53,12 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
     }),
   };
   if (!current[saved.driverId]?.generatedCharges && result[saved.driverId]) delete result[saved.driverId].generatedCharges;
+  if (!current[saved.driverId]?.expenseDeductions && result[saved.driverId]) delete result[saved.driverId].expenseDeductions;
   return result;
 }
 
 export function validAdjustments(edits: DriverPayEdits) {
-  return (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
+  return (edits.expenseDeductions ?? []).every(row => row.amount.trim() && validDecimal(row.amount) && hundredths(row.amount) >= BigInt(0) && hundredths(row.amount) <= hundredths(row.available)) && (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
     const value = edits[`${key}Override`];
     return value == null || (value.trim() !== "" && validDecimal(value));
   }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));

@@ -72,3 +72,17 @@ assert.equal(rebased.generatedCharges[0].version, 1);
 assert.equal(rebased.generatedCharges[0].typeVersion, 3);
 assert.equal(rebased.version, 3);
 console.log("Generated charge checks passed: charge-only totals, skips, validation, and typing during save.");
+
+const expenseRow = { expenseId: "expense", name: "Penalty", total: "100.25", available: "100.25", amount: "30.10", version: 1, saved: false, apply: true };
+const expenseEdits = { ...auto, expenseDeductions: [expenseRow] };
+assert.equal(driverTotals({ loads: [] }, expenseEdits).payable, -3010n);
+assert.equal(validAdjustments(expenseEdits), true);
+for (const amount of ["", "-1", "100.26", "1.001"]) assert.equal(validAdjustments({ ...expenseEdits, expenseDeductions: [{ ...expenseRow, amount }] }), false);
+assert.equal(validAdjustments({ ...expenseEdits, expenseDeductions: [{ ...expenseRow, amount: "0" }] }), true);
+const committedExpense = { ...expenseEdits, version: 2, expenseDeductions: [{ ...expenseRow, version: 2, saved: true, apply: false }] };
+const typedExpense = { ...expenseEdits, expenseDeductions: [{ ...expenseRow, amount: "20.25" }] };
+const reconciledExpense = reconcilePaySave({ driver: typedExpense }, expenseEdits, committedExpense).driver;
+assert.equal(reconciledExpense.expenseDeductions[0].amount, "20.25");
+assert.equal(reconciledExpense.expenseDeductions[0].version, 2);
+assert.equal(reconciledExpense.expenseDeductions[0].apply, true);
+console.log("Expense deduction checks passed: exact totals, bounds, zero deferrals and edits during save.");

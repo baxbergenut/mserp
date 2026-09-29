@@ -10,6 +10,7 @@ import {
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Maintenance",
+  "Penalties",
   "Other",
   "Safety",
   "HR",
@@ -96,7 +97,7 @@ export function ExpenseForm({
           </datalist>
         </Field>
         <Field label="Category">
-          <select
+          <select aria-label="Category"
             required
             value={value.category}
             onChange={(event) => set("category", event.target.value as ExpenseCategory)}
@@ -106,7 +107,7 @@ export function ExpenseForm({
           </select>
         </Field>
         <Field label="Expense date">
-          <input
+          <input aria-label="Expense date"
             required
             type="date"
             value={value.expenseDate}
@@ -115,7 +116,7 @@ export function ExpenseForm({
           />
         </Field>
         <Field label="Amount" hint="Enter dollars and cents without a currency symbol.">
-          <input
+          <input aria-label="Amount"
             required
             type="number"
             step="0.01"
@@ -158,7 +159,7 @@ export function ExpenseForm({
           )}
         </Field>
         <Field label="Driver">
-          <select
+          <select aria-label="Driver"
             value={value.driverId ?? ""}
             onChange={(event) => {
               const driverId = event.target.value || null;
@@ -187,7 +188,7 @@ export function ExpenseForm({
           )}
         </Field>
         <Field label="Expense type">
-          <input
+          <input aria-label="Expense type"
             list="expense-types"
             value={value.expenseType}
             onChange={(event) => set("expenseType", event.target.value)}
@@ -230,8 +231,8 @@ export function ExpenseForm({
       </FormSection>
 
       <FormSection title="Responsibility and verification">
-        <Field label="Who will cover">
-          <input
+        <Field label="Who will cover" hint="Choose Driver to deduct this expense in Driver Pay. A linked driver is required; the unpaid balance carries forward.">
+          <input aria-label="Who will cover"
             list="expense-covered-by"
             value={value.coveredBy}
             onChange={(event) => set("coveredBy", event.target.value)}
@@ -239,7 +240,7 @@ export function ExpenseForm({
             placeholder="Company, Driver, Truck Owner…"
           />
           <datalist id="expense-covered-by">
-            {options.coveredBy.map((option) => <option key={option} value={option} />)}
+            {Array.from(new Set(["Company", "Driver", ...options.coveredBy])).map((option) => <option key={option} value={option} />)}
           </datalist>
         </Field>
         <Field label="Paid by">

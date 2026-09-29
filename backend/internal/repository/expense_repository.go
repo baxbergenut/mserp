@@ -18,6 +18,9 @@ func NewExpenseRepository(pool *pgxpool.Pool) *ExpenseRepository {
 }
 
 type Expense struct {
+	PaidAmount          *string   `json:"paidAmount"`
+	RemainingAmount     *string   `json:"remainingAmount"`
+	DriverSettled       bool      `json:"driverSettled"`
 	ID                  string    `json:"id"`
 	TruckID             *string   `json:"truckId"`
 	DriverID            *string   `json:"driverId"`
@@ -357,7 +360,12 @@ SELECT e.id, e.truck_id, e.driver_id, e.company, e.category,
 	COALESCE(d.full_name, e.driver_name), e.amount::text, e.payment_type,
 	e.expense_type, e.reference_number, e.description, e.covered_by, e.paid_by,
 	e.manager_verified, e.accounting_verified, e.source_spreadsheet_id,
-	e.source_sheet, e.source_row, e.created_at, e.updated_at
+	e.source_sheet, e.source_row, e.created_at, e.updated_at,
+ CASE WHEN lower(btrim(e.covered_by))='driver' THEN
+   CASE WHEN e.driver_settled THEN e.amount ELSE coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+ CASE WHEN lower(btrim(e.covered_by))='driver' THEN
+   CASE WHEN e.driver_settled THEN 0 ELSE e.amount-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+ e.driver_settled
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -371,7 +379,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.Description, &value.CoveredBy, &value.PaidBy,
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
-		&value.CreatedAt, &value.UpdatedAt,
+		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled,
 	)
 	return value, err
 }

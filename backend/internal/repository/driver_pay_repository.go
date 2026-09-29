@@ -31,15 +31,16 @@ type DriverPayAdjustment struct {
 	Amount string `json:"amount"`
 }
 type DriverPayEdits struct {
-	DriverID         string                `json:"driverId"`
-	WeekStart        string                `json:"weekStart"`
-	Notes            string                `json:"notes"`
-	Comments         map[string]string     `json:"comments"`
-	Adjustments      []DriverPayAdjustment `json:"adjustments"`
-	FuelOverride     *string               `json:"fuelOverride"`
-	TollOverride     *string               `json:"tollOverride"`
-	Version          int                   `json:"version"`
-	GeneratedCharges []ChargeOccurrence    `json:"generatedCharges,omitempty"`
+	ExpenseDeductions []ExpenseDeduction    `json:"expenseDeductions,omitempty"`
+	DriverID          string                `json:"driverId"`
+	WeekStart         string                `json:"weekStart"`
+	Notes             string                `json:"notes"`
+	Comments          map[string]string     `json:"comments"`
+	Adjustments       []DriverPayAdjustment `json:"adjustments"`
+	FuelOverride      *string               `json:"fuelOverride"`
+	TollOverride      *string               `json:"tollOverride"`
+	Version           int                   `json:"version"`
+	GeneratedCharges  []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
 	Date             string   `json:"date"`
@@ -105,6 +106,8 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
+ OR EXISTS (SELECT 1 FROM expenses x WHERE x.driver_id=d.id AND lower(btrim(x.covered_by))='driver'
+ AND NOT x.driver_settled AND x.expense_date<$1::date+7)
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week)
 	if err != nil {
 		return result, err
@@ -181,11 +184,15 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
 	}
 	kept := []DriverPayDriver{}
 	for _, d := range result.Drivers {
+		d.Edits.ExpenseDeductions, err = expenseDeductions(ctx, tx, d.ID, result.WeekStart)
+		if err != nil {
+			return result, err
+		}
 		d.Edits.GeneratedCharges = generated[d.ID]
 		if d.Edits.GeneratedCharges == nil {
 			d.Edits.GeneratedCharges = []ChargeOccurrence{}
 		}
-		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 {
+		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 {
 			kept = append(kept, d)
 		}
 	}
@@ -267,6 +274,12 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	if edits.GeneratedCharges != nil {
 		edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
+		if err != nil {
+			return edits, err
+		}
+	}
+	if edits.ExpenseDeductions != nil {
+		edits.ExpenseDeductions, err = saveExpenseDeductions(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
 		if err != nil {
 			return edits, err
 		}

@@ -21,6 +21,7 @@ var expenseAmountPattern = regexp.MustCompile(`^-?\d{1,12}(?:\.\d{1,2})?$`)
 
 var expenseCategories = map[string]struct{}{
 	"Maintenance":    {},
+	"Penalties":      {},
 	"Other":          {},
 	"Safety":         {},
 	"HR":             {},
@@ -102,7 +103,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		return repository.ExpenseInput{}, errors.New("company is required")
 	}
 	if _, ok := expenseCategories[request.Category]; !ok {
-		return repository.ExpenseInput{}, errors.New("category must be Maintenance, Other, Safety, HR, or Administrative")
+		return repository.ExpenseInput{}, errors.New("category must be Maintenance, Other, Safety, HR, Administrative, or Penalties")
 	}
 	expenseDate, err := parseOptionalDate(request.ExpenseDate, "expense date")
 	if err != nil {
@@ -119,6 +120,15 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	}
 	if err := validateOptionalUUID(request.DriverID, "driver id"); err != nil {
 		return repository.ExpenseInput{}, err
+	}
+	if strings.EqualFold(strings.TrimSpace(request.CoveredBy), "Driver") {
+		request.CoveredBy = "Driver"
+		if request.DriverID == nil || strings.TrimSpace(*request.DriverID) == "" {
+			return repository.ExpenseInput{}, errors.New("select a linked driver for a driver-covered expense")
+		}
+		if strings.HasPrefix(request.Amount, "-") {
+			return repository.ExpenseInput{}, errors.New("driver expenses must have a nonnegative amount")
+		}
 	}
 	return repository.ExpenseInput{
 		Company: request.Company, Category: request.Category, ExpenseDate: *expenseDate,
@@ -412,7 +422,13 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 	var postgresError *pgconn.PgError
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
-		case "23503", "23514", "22P02", "22003":
+		case "23503":
+			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
+			return
+		case "23514":
+			writeAPIError(w, http.StatusBadRequest, "check the expense category and amount; paid expenses must retain their driver, date, total and responsibility")
+			return
+		case "22P02", "22003":
 			writeAPIError(w, http.StatusBadRequest, "the expense contains invalid data")
 			return
 		}

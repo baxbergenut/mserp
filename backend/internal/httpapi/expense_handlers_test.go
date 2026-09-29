@@ -24,6 +24,27 @@ func TestExpenseRequestValidate(t *testing.T) {
 	}
 }
 
+func TestDriverExpenseValidation(t *testing.T) {
+	r := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100.25", CoveredBy: " driver "}
+	if _, err := r.validate(); err == nil {
+		t.Fatal("driver responsibility requires a linked driver")
+	}
+	driver := "00000000-0000-4000-8000-000000000001"
+	r.DriverID = &driver
+	input, err := r.validate()
+	if err != nil || *input.CoveredBy != "Driver" {
+		t.Fatalf("penalty: %+v %v", input, err)
+	}
+	r.Amount = "-1"
+	if _, err := r.validate(); err == nil {
+		t.Fatal("negative driver expense accepted")
+	}
+	r.CoveredBy = "Company"
+	if _, err := r.validate(); err != nil {
+		t.Fatal("company credits must remain supported", err)
+	}
+}
+
 func TestNormalizeExtractedExpenseValues(t *testing.T) {
 	t.Parallel()
 

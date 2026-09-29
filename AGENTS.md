@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `035_backdated_driver_charges.sql`:
+  `036_driver_expense_balances.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -491,6 +491,25 @@ assignment lookup lists.
   Tests use only `MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL`, whose database name
   must contain `_test`, and verify fresh schema and migration as `mserp_app`.
   CI runs these checks against a disposable PostgreSQL service.
+- Driver-covered expenses (coveredBy = Driver) require a linked driver and a
+  nonnegative total. Penalties is an expense category. Migration 036 marks all
+  pre-existing driver-covered expenses as settled with zero remaining balance.
+  New expenses suggest their full unpaid balance in Driver Pay from the expense
+  date's Monday, including weeks without loads. Saving an edited deduction or
+  choosing Save expense deductions records payment immediately; merely reading
+  payroll or saving unrelated notes does not. Zero explicitly defers a week.
+  Subsequent weeks show the unpaid remainder; saved historical rows retain their
+  amounts, and fully paid expenses do not generate new rows. Saved deductions in
+  other weeks reserve the principal, including future weeks, preventing duplicate
+  collection. expense_payments stores exact numeric weekly amounts, actor and
+  update time; expense balance versions reject stale cross-week edits. Payment
+  writes and payroll autosave commit atomically. Expenses show total, paid and
+  remaining; company expenses have no driver balance. Expense identity, date,
+  responsibility and total cannot change once payroll rows exist; deletion is
+  restricted. Legacy settled totals/responsibility cannot be repurposed.
+  Use a new expense for an additional charge. Tests run as mserp_app against the
+  disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
+
 - Expenses optionally link to existing drivers and trucks with `ON DELETE SET
   NULL` while retaining imported unit/name snapshots for historical display.
   The Google Sheets import is idempotent by spreadsheet, sheet, and source row;
