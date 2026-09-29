@@ -100,7 +100,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `backend/internal/repository/driver_pay_repository.go` and
   `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
 - `frontend/app/accounting/driver-charges/`: reusable charge types, effective-dated
-  an all-driver recurring fee matrix and installment plans, schedules and audit
+  an active-driver recurring fee matrix and installment plans, schedules and audit
   history. Driver profiles link to this centralized management view.
 - `frontend/app/accounting/dispatcher-pay/`: weekly dispatcher commission reports.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
@@ -274,7 +274,9 @@ assignment lookup lists.
   payable, including charge-only weeks. Type defaults never update assignments.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
-  Recurring assignments use an all-driver matrix with charge types as columns.
+  Recurring assignments use an active-driver matrix with charge types as columns.
+  Driver charges lists and driver pickers show active drivers only; stored
+  schedules and historical payroll for inactive drivers remain retained.
   Each type defines 1–50 exact amount options and calendar/loads/no_loads
   eligibility (migration 034); drivers select an amount with a dropdown. Type
   eligibility changes apply from the current New York Monday through dated

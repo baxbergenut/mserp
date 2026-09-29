@@ -81,7 +81,9 @@ try {
   await expect(page.getByRole('cell', { name: 'Admin fee', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Recurring assignments', exact: true }).click();
   await expect(page.getByRole('rowheader', { name: 'Unassigned Driver', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Inactive Driver, Admin fee', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Inactive Driver, Admin fee', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('rowheader', { name: /Inactive Driver/ })).toHaveCount(0);
+  await expect(page.getByLabel('Filter driver').locator('option', { hasText: 'Inactive Driver' })).toHaveCount(0);
   const adminCheck = page.getByLabel('E2e Driver, Admin fee', { exact: true });
   const adminAmount = page.getByLabel('E2e Driver, Admin fee amount', { exact: true });
   await adminCheck.check();
