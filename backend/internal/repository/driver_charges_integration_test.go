@@ -161,6 +161,12 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if err = admin.QueryRow(ctx, `SELECT count(*) FROM driver_charge_occurrences`).Scan(&count); err != nil || count != 0 {
 				t.Fatal("read persisted occurrences", err)
 			}
+			renamed := report.Drivers[0].Edits
+			renamed.GeneratedCharges = append([]ChargeOccurrence(nil), renamed.GeneratedCharges...)
+			renamed.GeneratedCharges[0].Name = "Changed recurring label"
+			if _, err = pay.Save(ctx, renamed, actor); err == nil {
+				t.Fatal("recurring label was editable")
+			}
 			edits := report.Drivers[0].Edits
 			edits.GeneratedCharges[0].Amount = "0"
 			saved, err := pay.Save(ctx, edits, actor)

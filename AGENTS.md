@@ -271,7 +271,10 @@ assignment lookup lists.
   phases, weekly occurrences and append-only audit events. They are independent
   of freeform driver_pay_weeks.adjustments JSON, Expenses, investors, dispatcher
   commission and estimated profit. Weekly generated rows affect Driver Pay net
-  payable, including charge-only weeks. Type defaults never update assignments.
+  payable, including charge-only weeks. Recurring labels are read-only in Driver
+  Pay (also enforced by the API); amounts, skips and resets remain editable.
+  Charge creation lives on Driver charges; Driver Pay retains installment
+  confirmation/reopening and source links only. Type defaults never update assignments.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.

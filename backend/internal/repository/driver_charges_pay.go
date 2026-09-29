@@ -61,6 +61,9 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 			return nil, ErrChargeConflict
 		}
 		input.Name = strings.TrimSpace(input.Name)
+		if s.Kind == "recurring" && input.Name != current.Name {
+			return nil, chargeInvalid("Recurring charge labels cannot be edited in Driver Pay")
+		}
 		n, err := chargeCents(input.Amount)
 		if err != nil || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 200 || (s.Kind == "installment" && n > 0) {
 			return nil, chargeInvalid("Provide a name and valid amount; installments must be negative or zero")

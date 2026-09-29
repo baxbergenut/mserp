@@ -213,6 +213,12 @@ try {
   await expect(page.getByRole('heading', { name: 'Driver pay', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toHaveValue('-50.00');
+  await expect(page.getByLabel('E2e Driver, Admin fee, charge name', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toBeEditable();
+  await expect(page.getByLabel('E2e Driver, Advance, charge name', { exact: true })).toBeEditable();
+  await expect(page.getByRole('link', { name: 'Assign recurring charge', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'New installment plan', exact: true })).toHaveCount(0);
+
   await expect(page.getByText('Needs review', { exact: true })).toHaveCount(0);
   const installment = page.getByLabel('E2e Driver, Advance, charge amount', { exact: true });
   await installment.fill('-60');
