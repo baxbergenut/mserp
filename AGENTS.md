@@ -446,7 +446,8 @@ assignment lookup lists.
   opening a repeatable-read snapshot. Driver profiles expose editable details,
   weekly pay history, personal balances, other expenses and assignment history.
   Payroll load numbers deep-link to Gross Board by driver ID, service date and
-  slot, opening Daily loads with that exact entry highlighted. The load number
+  slot, scrolling to and highlighting that entry directly in the Gross Board.
+  Daily loads opens only when the user chooses to edit a multi-load day. The load number
   guards against replaced/deleted slots, which display an explicit missing-entry
   notice. Pending payroll edits save before normal link navigation. The daily
   editor applies valid edits and awaits Gross Board autosave before Back to

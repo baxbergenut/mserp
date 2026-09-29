@@ -23,15 +23,17 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   const [hover, setHover] = useState<{ top: number; left: number } | null>(null);
   const tooltipId = useId();
   const cellId = useId();
-  const openedTarget = useRef<string | null>(null);
+  const scrolledTarget = useRef<string | null>(null);
   useEffect(() => {
     if (focusSlot === undefined) return;
     const key = `${driverId}:${date}:${focusSlot}`;
-    if (openedTarget.current === key) return;
+    if (scrolledTarget.current === key) return;
     const timer = setTimeout(() => {
-      openedTarget.current = key;
-      document.getElementById(cellId)?.scrollIntoView({ block: "center", inline: "center" });
-      setDraft(entries);
+      scrolledTarget.current = key;
+      const cell = document.getElementById(cellId);
+      cell?.scrollIntoView({ block: "center", inline: "center" });
+      cell?.querySelector("[data-selected-load]")?.scrollIntoView({ block: "nearest", inline: "center" });
+      cell?.focus({ preventScroll: true });
     }, 0);
     return () => clearTimeout(timer);
   }, [focusSlot, driverId, date, entries, cellId]);
@@ -41,6 +43,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   const confirmed = displayed.every(entry => entry.loadRecordId !== null);
   const needsReview = displayed.some(entry => entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.originalRate) || mismatch(entry.enteredMiles, entry.miles)));
   const label = `${driverName}, ${date}`;
+  const selected = displayed.find(entry => entry.slot === focusSlot);
   const openEditor = (add = false) => {
     setHover(null);
     const initial = entries.length ? entries : displayed;
@@ -74,7 +77,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   }
 
   return <>
-    {displayed.length === 1 ? <DayCell id={cellId} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td id={cellId} className="border-b border-r border-zinc-800/70 p-0 align-top">
+    {displayed.length === 1 ? <DayCell id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span><div className="flex gap-1">
         <button type="button" aria-label={`${label}, edit loads`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor()}><Pencil className="h-3 w-3" /></button>
         {displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
@@ -82,7 +85,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
       <button type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
         onMouseEnter={event => showBreakdown(event.currentTarget)} onMouseLeave={() => setHover(null)} onFocus={event => showBreakdown(event.currentTarget)} onBlur={() => setHover(null)}
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : "bg-amber-500/10 !text-amber-200"}`}>
-        <span className="truncate">{displayed.map(entry => entry.dayStatus || entry.loadNumber || "Empty").join(" / ")}</span>
+        <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className="rounded bg-blue-500/30 px-1 font-semibold text-blue-100">{entry.loadNumber}</mark> : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
       </button>
       {([["original rate", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <button key={name} type="button" aria-label={`${label}, total ${name}`} className={`${field} ${needsReview && name !== "driver rate" ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value)}</button>)}
     </td>}
