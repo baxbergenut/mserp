@@ -41,7 +41,7 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 	if e.Adjustments == nil {
 		e.Adjustments = []repository.DriverPayAdjustment{}
 	}
-	if len(e.Comments) > 700 || len(e.Adjustments) > 100 {
+	if len(e.Comments) > 700 || len(e.Adjustments) > 100 || len(e.GeneratedCharges) > 100 {
 		return errors.New("too many comments or adjustments")
 	}
 	for key, value := range e.Comments {
@@ -88,7 +88,12 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 
 func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverPayRepository, job *jobs.SyncLoadsJob) {
 	fail := func(w http.ResponseWriter, err error) {
-		if errors.Is(err, repository.ErrDriverPayConflict) {
+		var invalid *repository.ChargeValidationError
+		if errors.As(err, &invalid) {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		if errors.Is(err, repository.ErrDriverPayConflict) || errors.Is(err, repository.ErrChargeConflict) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -123,7 +128,8 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		saved, err := repo.Save(r.Context(), e)
+		session, _ := authSessionFromContext(r.Context())
+		saved, err := repo.Save(r.Context(), e, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

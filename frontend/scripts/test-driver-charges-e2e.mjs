@@ -1,0 +1,172 @@
+// Requires a disposable local _test database, psql, Go, and a /api frontend build.
+// Uses a temporary schema, a real API process, and real browser authentication.
+import { chromium, expect } from '@playwright/test';
+import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, extname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const frontend = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const backend = resolve(frontend, '../backend');
+const dsn = process.env.MSERP_DRIVER_CHARGES_TEST_DATABASE_URL;
+if (!dsn) throw new Error('Set MSERP_DRIVER_CHARGES_TEST_DATABASE_URL to a disposable local _test database');
+const database = new URL(dsn);
+if (!['127.0.0.1', 'localhost'].includes(database.hostname) || !database.pathname.includes('_test')) throw new Error('Only local _test databases are permitted');
+const schema = `charges_e2e_${randomBytes(8).toString('hex')}`;
+const password = randomBytes(24).toString('hex');
+const temp = await mkdtemp(join(tmpdir(), 'mserp-charges-e2e-'));
+const sql = (input) => execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+let api, browser, server;
+try {
+  const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
+  sql(`CREATE SCHEMA ${schema}; GRANT USAGE ON SCHEMA ${schema} TO mserp_app; SET search_path TO ${schema},public;\n${init}\n
+    GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO mserp_app;
+    INSERT INTO app_users(username,password_hash) VALUES('charges-e2e',crypt('${password}',gen_salt('bf')));
+    INSERT INTO drivers(full_name,normalized_name,is_owner_operator,pay_type,pay_rate) VALUES('E2e Driver','e2e driver',false,'cpm',0.75);
+  `);
+  const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
+  execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
+  database.searchParams.set('search_path', `${schema},public`);
+  database.searchParams.set('role', 'mserp_app');
+  const apiPort = 18559;
+  api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
+    ...process.env, DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
+    RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
+    AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: 'http://127.0.0.1:13559',
+    FLEETSCOPE_COMPANY_ID: '', FLEETSCOPE_WEBHOOK_SECRET: '',
+  }});
+  let apiLog = ''; api.stdout.on('data', (chunk) => { apiLog += chunk; }); api.stderr.on('data', (chunk) => { apiLog += chunk; });
+  await expect.poll(async () => { if (api.exitCode !== null) throw new Error(`Test API exited: ${apiLog}`); try { return (await fetch(`http://127.0.0.1:${apiPort}/readyz`)).status; } catch { return 0; } }, { timeout: 20000 }).toBe(200);
+  server = createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url, 'http://127.0.0.1:13559');
+      if (url.pathname.startsWith('/api/')) {
+        const chunks = []; for await (const chunk of req) chunks.push(chunk);
+        const headers = {};
+        for (const key of ['cookie', 'content-type', 'x-csrf-token', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
+        const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
+        res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return;
+      }
+      const path = url.pathname === '/' ? '/index.html' : extname(url.pathname) ? url.pathname : `${url.pathname}.html`;
+      const content = await readFile(join(frontend, 'out', path));
+      const type = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' }[extname(path)] ?? 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': type }); res.end(content);
+    } catch { res.writeHead(404); res.end(); }
+  });
+  await new Promise((done) => server.listen(13559, '127.0.0.1', done));
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  const base = 'http://127.0.0.1:13559';
+
+  expect((await page.request.get(`${base}/api/driver-charges`)).status()).toBe(401);
+  await page.goto(`${base}/login?next=/accounting/driver-charges`);
+  await page.getByLabel('Username').fill('charges-e2e');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
+  expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
+  await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
+  await page.getByRole('button', { name: 'New charge type', exact: true }).click();
+  await page.getByLabel('Charge name', { exact: true }).fill('Admin fee');
+  await page.getByLabel('Default weekly amount', { exact: true }).fill('50');
+  await page.getByRole('button', { name: 'Save type', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'Admin fee', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Recurring assignments', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign recurring charge', exact: true }).click();
+  await page.getByLabel('E2e Driver', { exact: true }).check();
+  await page.getByLabel('Charge type', { exact: true }).selectOption({ label: 'Admin fee' });
+  await page.getByRole('button', { name: 'Preview schedule', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Every calendar week');
+  await page.getByRole('button', { name: 'Create assignments', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'Admin fee', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
+  await page.getByRole('button', { name: 'New installment plan', exact: true }).click();
+  await page.getByLabel('Driver', { exact: true }).selectOption({ label: 'E2e Driver' });
+  await page.getByLabel('Description', { exact: true }).fill('Advance');
+  await page.getByLabel('Total charge', { exact: true }).fill('650');
+  await page.getByLabel('Weekly amount', { exact: true }).fill('100');
+  await page.getByRole('button', { name: 'Preview schedule', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('row')).toHaveCount(8);
+  await page.getByRole('button', { name: 'Create assignments', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: '$650.00', exact: true })).toHaveCount(2);
+  const initial = await (await page.request.get(`${base}/api/driver-charges`)).json();
+  const driverId = initial.schedules[0].driverId;
+  const week = initial.currentWeek;
+  const plan = initial.schedules.find(s => s.kind === 'installment');
+  await page.goto(`${base}/accounting/driver-pay`);
+  await expect(page.getByRole('heading', { name: 'Driver pay', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toHaveValue('-50.00');
+  await expect(page.getByText('Needs review', { exact: true })).toHaveCount(0);
+  const installment = page.getByLabel('E2e Driver, Advance, charge amount', { exact: true });
+  await installment.fill('-60');
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  await page.getByRole('button', { name: 'Confirm installment deductions', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm selected', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(installment).toBeDisabled();
+  let current = await (await page.request.get(`${base}/api/driver-charges`)).json();
+  expect(current.schedules.find(s => s.id === plan.id).confirmed).toBe('60.00');
+  expect(current.schedules.find(s => s.id === plan.id).remaining).toBe('590.00');
+  await page.getByRole('button', { name: 'Reopen deductions', exact: true }).click();
+  await page.getByLabel('Reason', { exact: true }).fill('Correct this week');
+  await page.getByRole('button', { name: 'Reopen selected', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(installment).toBeEnabled();
+  await page.getByRole('button', { name: 'Advance, skip this week', exact: true }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  await page.reload();
+  await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
+  await expect(installment).toHaveValue('0.00');
+  let preview = await (await page.request.get(`${base}/api/driver-charges/schedules/${plan.id}/preview`)).json();
+  expect(preview).toHaveLength(8);
+  await page.getByRole('button', { name: 'Advance, reset to scheduled amount', exact: true }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  await expect(installment).toHaveValue('-100.00');
+  await page.screenshot({ path: join(temp, 'payroll-charges-desktop.png'), fullPage: true });
+  await page.getByRole('link', { name: 'Advance source', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('E2e Driver · Advance');
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.goto(`${base}/accounting/driver-charges?driverId=${driverId}`);
+  await page.getByLabel('Select E2e Driver, Admin fee', { exact: true }).check();
+  await page.getByRole('button', { name: 'Change amount', exact: true }).click();
+  await page.getByLabel('New weekly amount', { exact: true }).fill('35');
+  const next = new Date(`${week}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
+  await page.getByLabel('Effective week (Monday)', { exact: true }).fill(next.toISOString().slice(0,10));
+  await page.getByRole('button', { name: 'Preview changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('Assignments updated', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Schedule / history', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('$35.00');
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.screenshot({ path: join(temp, 'driver-charges-desktop.png'), fullPage: true });
+  await page.goto(`${base}/drivers/detail?id=${driverId}`);
+  await expect(page.getByRole('link', { name: 'Manage charges', exact: true })).toBeVisible();
+  await expect(page.getByText(/installment balance remaining/)).toContainText('$650.00');
+  await page.goto(`${base}/accounting/driver-charges`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(page.locator('aside')).toHaveCSS('width', '64px');
+  await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: join(temp, 'driver-charges-mobile.png'), fullPage: true });
+  expect(errors).toEqual([]);
+  console.log(`Driver charges E2E passed. Screenshots: ${temp}`);
+} catch (error) {
+  const page = browser?.contexts()[0]?.pages()[0];
+  if (page) { await page.screenshot({ path: join(temp, 'failure.png'), fullPage: true }); console.error('Failure screenshot:', join(temp, 'failure.png')); console.error((await page.locator('body').innerText()).slice(-5000)); }
+  throw error;
+} finally {
+  await browser?.close();
+  if (server) await new Promise((done) => server.close(done));
+  if (api && api.exitCode === null) { const exited = new Promise((done) => api.once('exit', done)); api.kill(); await exited; }
+  sql(`DROP SCHEMA IF EXISTS ${schema} CASCADE;`);
+}

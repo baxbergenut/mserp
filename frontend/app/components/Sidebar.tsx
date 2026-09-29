@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/expenses", label: "Expenses", icon: WalletCards, exact: true },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
+    { href: "/accounting/driver-charges", label: "Driver charges", icon: Receipt },
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },

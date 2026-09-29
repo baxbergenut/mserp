@@ -58,6 +58,8 @@ jobs:
       - name: Test backend
         working-directory: backend
         env:
+          MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+          MSERP_DRIVER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: |
@@ -109,6 +111,12 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           node scripts/test-investors-e2e.mjs
+
+      - name: Verify driver charges in Chromium
+        working-directory: frontend
+        env:
+          MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+        run: node scripts/test-driver-charges-e2e.mjs
 
       - name: Package release
         shell: bash

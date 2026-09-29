@@ -303,6 +303,7 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  chargePauseWeek?: string;
   fullName: string;
   isOwnerOperator: boolean;
   payType: PayType;
@@ -681,6 +682,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface DriverPayEdits {
+  generatedCharges?: ChargeOccurrence[];
   driverId: string;
   weekStart: string;
   notes: string;
@@ -757,3 +759,29 @@ export interface InvestorInput {
   notes: string;
   active: boolean;
 }
+
+export interface ChargeType {
+  id: string; name: string; direction: "charge" | "reimbursement"; amount: string; archived: boolean; version: number;
+}
+export interface ChargePhase { weekStart: string; amount: string; paused: boolean }
+export interface ChargeOccurrence {
+  scheduleId: string; weekStart: string; kind: "recurring" | "installment"; name: string;
+  scheduledAmount: string; amount: string; overridden: boolean; confirmedAt: string | null; confirmedBy: string | null;
+  version: number; scheduleVersion: number; reset?: boolean;
+}
+export interface ChargeSchedule {
+  installmentCount: number;
+  id: string; driverId: string; driverName: string; typeId: string | null; kind: "recurring" | "installment";
+  name: string; direction: "charge" | "reimbursement"; startWeek: string; endWeek: string | null;
+  eligibility: "calendar" | "loads"; total: string | null; version: number; phases: ChargePhase[]; occurrences: ChargeOccurrence[];
+  confirmed: string; remaining: string; scheduled: string; completionWeek: string; status: string;
+}
+export interface ChargeData { types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string }
+export interface ChargeCreate {
+  driverIds: string[]; typeId: string; kind: "recurring" | "installment"; name: string; amount: string; total: string;
+  installments: number; startWeek: string; endWeek: string | null; eligibility: "calendar" | "loads";
+}
+export interface ChargeBulk {
+  targets: {id: string; version: number}[]; action: "amount" | "pause" | "resume" | "end"; weekStart: string; amount: string;
+}
+export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }

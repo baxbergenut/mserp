@@ -81,6 +81,15 @@ func TestFleetScopeDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if incremental {
+				charges, e := os.ReadFile("../../sql/033_add_driver_charges.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = pool.Exec(ctx, string(charges)); e != nil {
+					t.Fatal(e)
+				}
+			}
 			var runtimeRoleExists bool
 			if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app')`).Scan(&runtimeRoleExists); err != nil {
 				t.Fatal(err)

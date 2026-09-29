@@ -1,5 +1,6 @@
 "use client";
 
+import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { ExternalLink, FileBadge, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import type { Dispatcher, Driver, DriverInput, Truck } from "../lib/types";
 import { fileDownloadUrl } from "../lib/api";
@@ -345,10 +346,14 @@ export function DriverForm({
       <FormSection title="Status and notes">
         <Toggle
           checked={value.active}
-          onChange={(checked) => set("active", checked)}
+          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek() })}
           label="Active driver"
           description="Inactive drivers stay in historical records but are visually marked."
         />
+        {!value.active && <Field label="Pause charges from (Monday)">
+          <input type="date" min={currentChargeWeek()} required value={value.chargePauseWeek ?? currentChargeWeek()} onChange={event => set("chargePauseWeek", event.target.value)} className={controlClass} />
+          <p className="mt-1 text-xs text-zinc-500">Charges pause from this week. Outstanding balances remain; reactivation does not resume charges.</p>
+        </Field>}
         <Field label="Internal notes" wide>
           <textarea
             rows={3}

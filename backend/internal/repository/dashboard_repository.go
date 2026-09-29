@@ -111,7 +111,7 @@ func (r *DashboardRepository) GetFinancialDashboard(
 			DriverPay: "Percentage-based owner-operators receive their gross share, less fuel and toll deductions. CPM owner-operators receive CPM pay with no expense deductions.",
 			Fuel:      "Diesel is deducted only from percentage-based owner-operators. CPM owner-operator and company-driver fuel remains a company expense. DEF, other products, cash advances, and fees are excluded.",
 			Tolls:     "Tolls are deducted only from percentage-based owner-operators. Other driver tolls remain company expenses. Tolls are attributed using truck history, then a nearby load when needed.",
-			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Dispatcher pay is reported separately under Accounting; dispatcher pay and maintenance are not deducted here.",
+			Profit:    "Percentage-based owner-operator contribution is the retained gross percentage. CPM owner-operator and company-driver contribution also subtracts pay, diesel, and tolls. Manual payroll adjustments, recurring driver charges and installment recoveries are excluded from this estimate. Dispatcher pay is reported separately under Accounting; dispatcher pay and maintenance are not deducted here.",
 			Week:      "Weekly reports run Monday through Sunday. DataTruck load timestamps use their encoded UTC calendar date so midnight schedule values do not shift to the prior day.",
 		},
 	}

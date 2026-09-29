@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `032_add_investors.sql`:
+  `033_add_driver_charges.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -99,6 +99,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   adjustments block autosave/navigation until completed or cleared.
   `backend/internal/repository/driver_pay_repository.go` and
   `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
+- `frontend/app/accounting/driver-charges/`: reusable charge types, effective-dated
+  recurring assignments and installment plans, bulk previews, schedules and audit
+  history. Driver profiles link to this centralized management view.
 - `frontend/app/accounting/dispatcher-pay/`: weekly dispatcher commission reports.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
@@ -221,6 +224,11 @@ browser bundle.
   GET accepts Monday `weekStart`; PUT saves one driver's versioned weekly notes,
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
+- Driver charges: `GET /driver-charges` (optional driverId),
+  `POST /driver-charges/types`, `POST /driver-charges/schedules`,
+  `POST /driver-charges/schedules/preview`, `POST /driver-charges/bulk`,
+  `GET /driver-charges/schedules/{id}/preview` and `/history`,
+  `POST /driver-charges/confirm` and `/reopen`.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
 - Driver assignment history: `GET /drivers/{id}/assignments` returns truck and
   dispatcher periods, current links, source notes, and whether the start is known.
@@ -258,6 +266,31 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Driver charges use migration 033: charge types, schedules, effective Monday
+  phases, weekly occurrences and append-only audit events. They are independent
+  of freeform driver_pay_weeks.adjustments JSON, Expenses, investors, dispatcher
+  commission and estimated profit. Weekly generated rows affect Driver Pay net
+  payable, including charge-only weeks. Type defaults never update assignments.
+  Bulk changes are current/future only and replace subsequent planned phases;
+  saved overrides/confirmations must be explicitly corrected first.
+  Every calendar week or Gross Board load weeks is selected per schedule.
+  Nonempty unmatched plans qualify; day statuses do not. Read-only projections
+  account for all elapsed eligible weeks regardless of browsing order. Writes
+  snapshot prior projected occurrences; explicit weekly edits, zero skips and
+  confirmed rows survive source changes. Installment overrides reserve principal
+  before future allocation; underpayments extend schedules. Confirming selected
+  deductions is explicit and idempotent, records the session user, and locks
+  those rows. Reopening requires a reason and reverses only collection status.
+  Viewing/autosave never collects money. Driver rows serialize charge writes;
+  schedule and occurrence versions reject stale edits. Money is integer cents
+  in calculations and numeric/decimal strings at persistence/API boundaries.
+  Driver deactivation requires chargePauseWeek when charges exist and pauses
+  them atomically; reactivation does not resume them. Charge history prevents
+  permanent driver deletion. Existing releases cannot display these new charges
+  after rollback but cannot erase them through the legacy adjustment contract.
+  Tests use disposable MSERP_DRIVER_CHARGES_TEST_DATABASE_URL (_test database),
+  fresh and migrated schemas as mserp_app, and test-driver-charges-e2e.mjs.
 
 - Investors own trucks independently of operating-driver assignments. A driver may
   have one investor profile, sharing live name/contact details; independent owners
@@ -554,6 +587,8 @@ npm run build
 # E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
 npx playwright install chromium
 node scripts/test-investors-e2e.mjs
+# Same isolated database safety requirement, using MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
+node scripts/test-driver-charges-e2e.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build

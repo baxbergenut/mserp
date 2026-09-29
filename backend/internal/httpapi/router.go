@@ -123,6 +123,7 @@ func NewRouter(
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerDriverPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), job)
+	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
 	registerTollRoutes(protected, logger, tollJob, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)

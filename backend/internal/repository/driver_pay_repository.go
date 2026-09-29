@@ -31,14 +31,15 @@ type DriverPayAdjustment struct {
 	Amount string `json:"amount"`
 }
 type DriverPayEdits struct {
-	DriverID     string                `json:"driverId"`
-	WeekStart    string                `json:"weekStart"`
-	Notes        string                `json:"notes"`
-	Comments     map[string]string     `json:"comments"`
-	Adjustments  []DriverPayAdjustment `json:"adjustments"`
-	FuelOverride *string               `json:"fuelOverride"`
-	TollOverride *string               `json:"tollOverride"`
-	Version      int                   `json:"version"`
+	DriverID         string                `json:"driverId"`
+	WeekStart        string                `json:"weekStart"`
+	Notes            string                `json:"notes"`
+	Comments         map[string]string     `json:"comments"`
+	Adjustments      []DriverPayAdjustment `json:"adjustments"`
+	FuelOverride     *string               `json:"fuelOverride"`
+	TollOverride     *string               `json:"tollOverride"`
+	Version          int                   `json:"version"`
+	GeneratedCharges []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
 	Date             string   `json:"date"`
@@ -76,18 +77,25 @@ type DriverPayWeek struct {
 	Drivers   []DriverPayDriver `json:"drivers"`
 }
 
-// One statement provides a consistent snapshot across placement, source data,
-// profile tariffs, and accounting edits. No load status or active-driver filter.
+// One repeatable-read transaction provides a consistent snapshot of placement,
+// source data, tariffs, accounting edits, and charge schedules. No load status
+// or active-driver filter.
 func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPayWeek, error) {
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
-	rows, err := r.pool.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.unit_number,''),
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.unit_number,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
- e.service_date::text,e.slot,e.load_number,l.id,
+ coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
  coalesce(l.total_pay::text,''),coalesce(e.driver_rate::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text
- FROM `+grossBoardEntriesSQL+` e JOIN drivers d ON d.id=e.driver_id
+ FROM drivers d LEFT JOIN `+grossBoardEntriesSQL+` e ON d.id=e.driver_id
+ AND e.service_date >= $1::date AND e.service_date < $1::date+7 AND NOT e.deleted AND btrim(e.load_number)<>''
  LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id
@@ -95,8 +103,8 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
- WHERE e.service_date >= $1::date AND e.service_date < $1::date+7
- AND NOT e.deleted AND btrim(e.load_number)<>''
+ WHERE e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week)
 	if err != nil {
 		return result, err
@@ -155,9 +163,34 @@ func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPa
 			index[d.ID] = i
 			result.Drivers = append(result.Drivers, d)
 		}
-		result.Drivers[i].Loads = append(result.Drivers[i].Loads, l)
+		if l.LoadNumber != "" {
+			result.Drivers[i].Loads = append(result.Drivers[i].Loads, l)
+		}
 	}
-	return result, rows.Err()
+	if err = rows.Err(); err != nil {
+		return result, err
+	}
+	rows.Close()
+	data, loads, err := chargeData(ctx, tx, "")
+	if err != nil {
+		return result, err
+	}
+	generated, err := generatedForWeek(data, loads, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
+	kept := []DriverPayDriver{}
+	for _, d := range result.Drivers {
+		d.Edits.GeneratedCharges = generated[d.ID]
+		if d.Edits.GeneratedCharges == nil {
+			d.Edits.GeneratedCharges = []ChargeOccurrence{}
+		}
+		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 {
+			kept = append(kept, d)
+		}
+	}
+	result.Drivers = kept
+	return result, tx.Commit(ctx)
 }
 
 func payLoadLocations(stops []datatruck.LoadStop) (string, string) {
@@ -219,7 +252,25 @@ func driverPayFee(kind, rate, basis string) string {
 	return fee.FloatString(2)
 }
 
-func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits) (DriverPayEdits, error) {
+func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, actors ...string) (DriverPayEdits, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return edits, err
+	}
+	defer tx.Rollback(ctx)
+	if err = lockChargeDrivers(ctx, tx, []string{edits.DriverID}); err != nil {
+		return edits, err
+	}
+	actor := ""
+	if len(actors) > 0 {
+		actor = actors[0]
+	}
+	if edits.GeneratedCharges != nil {
+		edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
+		if err != nil {
+			return edits, err
+		}
+	}
 	comments, err := json.Marshal(edits.Comments)
 	if err != nil {
 		return edits, err
@@ -230,15 +281,18 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits) (D
 	}
 	var version int
 	if edits.Version == 0 {
-		err = r.pool.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override)
  VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride).Scan(&version)
 	} else {
-		err = r.pool.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,version=version+1,updated_at=now()
+		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,version=version+1,updated_at=now()
  WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict
 	}
 	edits.Version = version
-	return edits, err
+	if err != nil {
+		return edits, err
+	}
+	return edits, tx.Commit(ctx)
 }

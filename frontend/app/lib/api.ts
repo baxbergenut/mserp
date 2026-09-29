@@ -1,4 +1,5 @@
 import type {
+ ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
   InvestorInput,
   DriverPayWeek,
@@ -365,3 +366,13 @@ export const createInvestor = (input: InvestorInput) =>
   apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(input) });
 export const updateInvestor = (id: string, input: InvestorInput) =>
   apiRequest<Investor>(`/investors/${id}`, { method: "PUT", body: JSON.stringify(input) });
+
+export const fetchDriverCharges = (driverId?: string) => apiRequest<ChargeData>(withQuery("/driver-charges", { driverId }));
+export const saveChargeType = (input: ChargeType) => apiRequest<ChargeType>("/driver-charges/types", { method: "POST", body: JSON.stringify(input) });
+export const previewNewCharges = (input: ChargeCreate) => apiRequest<ChargeOccurrence[]>("/driver-charges/schedules/preview", { method: "POST", body: JSON.stringify(input) });
+export const createDriverCharges = (input: ChargeCreate) => apiRequest<string[]>("/driver-charges/schedules", { method: "POST", body: JSON.stringify(input) });
+export const bulkDriverCharges = (input: ChargeBulk) => apiRequest<void>("/driver-charges/bulk", { method: "POST", body: JSON.stringify(input) });
+export const previewDriverCharge = (id: string) => apiRequest<ChargeOccurrence[]>(`/driver-charges/schedules/${id}/preview`);
+export const fetchChargeHistory = (id: string) => apiRequest<ChargeEvent[]>(`/driver-charges/schedules/${id}/history`);
+export const confirmDriverCharges = (driverId: string, weekStart: string, rows: ChargeOccurrence[], reason?: string) =>
+  apiRequest<void>(`/driver-charges/${reason === undefined ? "confirm" : "reopen"}`, { method: "POST", body: JSON.stringify({ driverId, weekStart, rows, reason: reason ?? "" }) });

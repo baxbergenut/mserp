@@ -16,7 +16,8 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   }), { original: BigInt(0), gross: BigInt(0), totalMiles: BigInt(0), loadedMiles: BigInt(0), deadheadMiles: BigInt(0), fee: BigInt(0), missingFees: 0, review: 0 });
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
-  return { ...values, ...adjustments, costs, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs };
+  const generated = (edits.generatedCharges ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  return { ...values, ...adjustments, costs, generated, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated };
 }
 
 export const costRows = [{ key: "fuel", label: "Fuel" }, { key: "toll", label: "Toll" }] as const;
@@ -36,12 +37,20 @@ export function costAmount(driver: DriverPayDriver, edits: DriverPayEdits, key: 
 export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapshot: DriverPayEdits, saved: DriverPayEdits) {
   const result = { ...current };
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
-  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version };
+  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version,
+    generatedCharges: result[saved.driverId].generatedCharges?.map(row => {
+      const committed = saved.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
+      const submitted = snapshot.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
+      if (!committed) return row;
+      return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...row, version: committed.version, scheduleVersion: committed.scheduleVersion, scheduledAmount: committed.scheduledAmount };
+    }),
+  };
+  if (!current[saved.driverId]?.generatedCharges && result[saved.driverId]) delete result[saved.driverId].generatedCharges;
   return result;
 }
 
 export function validAdjustments(edits: DriverPayEdits) {
-  return costRows.every(({ key }) => {
+  return (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
     const value = edits[`${key}Override`];
     return value == null || (value.trim() !== "" && validDecimal(value));
   }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));

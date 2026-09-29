@@ -85,6 +85,7 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	ChargePauseWeek  string  `json:"chargePauseWeek"`
 	FullName         string  `json:"fullName"`
 	IsOwnerOperator  bool    `json:"isOwnerOperator"`
 	PayType          string  `json:"payType"`
@@ -139,7 +140,8 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, err
 	}
 	return repository.DriverInput{
-		FullName: request.FullName, IsOwnerOperator: request.IsOwnerOperator,
+		ChargePauseWeek: request.ChargePauseWeek,
+		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
 		PayType: request.PayType, PayRate: request.PayRate,
 		Phone: optionalString(request.Phone), Email: optionalString(request.Email),
 		LicenseNumber: optionalString(request.LicenseNumber), LicenseState: optionalString(request.LicenseState),
@@ -322,6 +324,8 @@ func (handler fleetHandler) updateDriver(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.ChargeActor = session.User.ID
 	value, err := handler.repo.UpdateDriver(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -506,6 +510,11 @@ func (handler fleetHandler) deleteDispatcher(w http.ResponseWriter, r *http.Requ
 }
 
 func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
+	var invalid *repository.ChargeValidationError
+	if errors.As(err, &invalid) {
+		writeAPIError(w, 409, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrInvestorConflict) || errors.Is(err, repository.ErrInactiveOwner) {
 		writeAPIError(w, http.StatusConflict, err.Error())
 		return

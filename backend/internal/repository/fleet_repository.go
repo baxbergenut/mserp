@@ -51,6 +51,8 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	ChargePauseWeek  string
+	ChargeActor      string
 	FullName         string
 	IsOwnerOperator  bool
 	PayType          string
@@ -264,6 +266,18 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	}
 	defer tx.Rollback(ctx)
 
+	if err = lockChargeDrivers(ctx, tx, []string{id}); err != nil {
+		return Driver{}, err
+	}
+	var wasActive bool
+	if err = tx.QueryRow(ctx, "SELECT active FROM drivers WHERE id=$1", id).Scan(&wasActive); err != nil {
+		return Driver{}, err
+	}
+	if wasActive && !input.Active {
+		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, input.ChargeActor); err != nil {
+			return Driver{}, err
+		}
+	}
 	displayName := formatPersonName(input.FullName)
 	command, err := tx.Exec(ctx, `
 		UPDATE drivers SET
@@ -302,6 +316,16 @@ func (r *FleetRepository) DeleteDriver(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback(ctx)
 
+	if err = lockChargeDrivers(ctx, tx, []string{id}); err != nil {
+		return err
+	}
+	var charges bool
+	if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM driver_charge_schedules WHERE driver_id=$1)", id).Scan(&charges); err != nil {
+		return err
+	}
+	if charges {
+		return chargeInvalid("This driver has charge history; deactivate the driver instead of deleting")
+	}
 	if err = releaseDriverTruck(ctx, tx, id); err != nil {
 		return err
 	}
