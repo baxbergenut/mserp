@@ -45,9 +45,14 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			matrix, err := os.ReadFile("../../sql/034_driver_charge_matrix.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
+				source = strings.Replace(source, strings.ReplaceAll(string(matrix), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, body, "", 1)
 				if strings.Contains(source, "CREATE TABLE driver_charge_types") {
 					t.Fatal("migration isolation failed")
@@ -59,6 +64,31 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if mode == "migration" {
 				if _, err = admin.Exec(ctx, string(migration)); err != nil {
 					t.Fatal(err)
+				}
+			}
+			if mode == "migration" {
+				if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app`); err != nil {
+					t.Fatal(err)
+				}
+				// Exercise an actual populated 033 schema, retaining custom amounts and
+				// historical load eligibility when moving it onto the charge type.
+				_, err = admin.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('00000000-0000-4000-8000-000000000034','Historical Driver','historical driver','cpm',0.75);
+    INSERT INTO driver_charge_types(id,name,direction,amount) VALUES('00000000-0000-4000-8000-000000000035','Historical type','charge',200);
+    INSERT INTO driver_charge_schedules(id,driver_id,type_id,kind,name,direction,start_week,end_week,eligibility) VALUES('00000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000034','00000000-0000-4000-8000-000000000035','recurring','Historical type','charge','2001-01-01','2001-01-08','loads');
+    INSERT INTO driver_charge_phases(schedule_id,week_start,amount) VALUES('00000000-0000-4000-8000-000000000036','2001-01-01',175);`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = admin.Exec(ctx, string(matrix)); err != nil {
+					t.Fatal(err)
+				}
+				var options []string
+				var eligibility string
+				if err = admin.QueryRow(ctx, `SELECT amounts::text[],eligibility FROM driver_charge_types WHERE name='Historical type'`).Scan(&options, &eligibility); err != nil {
+					t.Fatal(err)
+				}
+				if len(options) != 2 || options[0] != "200.00" || options[1] != "175.00" || eligibility != "loads" {
+					t.Fatal("migration lost configured amounts or eligibility", options, eligibility)
 				}
 			}
 			// Do not grant charge tables here: migration ownership must provide access.
@@ -150,7 +180,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if err != nil || saved.GeneratedCharges[0].Amount != "-50.00" {
 				t.Fatal("reset", err)
 			}
-			typ.Amount = "80"
+			typ.Amounts = []string{"80", "35", "25", "20"}
 			typ, err = repo.SaveType(ctx, typ, actor)
 			if err != nil {
 				t.Fatal(err)
@@ -315,6 +345,12 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if len(projection) != 1 {
 				t.Fatal("reactivation resumed charges")
 			}
+			// Load eligibility belongs to the type, regardless of assignment input.
+			typ.Eligibility = "loads"
+			typ, err = repo.SaveType(ctx, typ, actor)
+			if err != nil {
+				t.Fatal(err)
+			}
 			// Load eligibility: statuses do not qualify, unmatched plans do.
 			_, err = repo.Create(ctx, ChargeCreate{DriverIDs: []string{other}, Kind: "recurring", TypeID: typ.ID, Amount: "25", StartWeek: week, Eligibility: "loads"}, actor)
 			if err != nil {
@@ -368,6 +404,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 			if !errors.As(fleet.DeleteDriver(ctx, driver), &invalid) {
 				t.Fatal("deletion did not return useful error")
 			}
+			testChargeMatrix(t, pool, actor)
 		})
 	}
 }

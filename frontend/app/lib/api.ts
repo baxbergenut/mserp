@@ -1,5 +1,5 @@
 import type {
- ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
+ ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
   InvestorInput,
   DriverPayWeek,
@@ -376,3 +376,5 @@ export const previewDriverCharge = (id: string) => apiRequest<ChargeOccurrence[]
 export const fetchChargeHistory = (id: string) => apiRequest<ChargeEvent[]>(`/driver-charges/schedules/${id}/history`);
 export const confirmDriverCharges = (driverId: string, weekStart: string, rows: ChargeOccurrence[], reason?: string) =>
   apiRequest<void>(`/driver-charges/${reason === undefined ? "confirm" : "reopen"}`, { method: "POST", body: JSON.stringify({ driverId, weekStart, rows, reason: reason ?? "" }) });
+
+export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/driver-charges/recurring", { method: "PUT", body: JSON.stringify(input) });

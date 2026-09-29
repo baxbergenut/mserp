@@ -55,6 +55,21 @@ func registerDriverChargeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 		}
 		writeJSON(w, 200, data)
 	})
+	r.Put("/driver-charges/recurring", func(w http.ResponseWriter, r *http.Request) {
+		var c repository.ChargeCell
+		if !decode(w, r, &c) {
+			return
+		}
+		if !isUUID(c.DriverID) || !isUUID(c.TypeID) || (c.ScheduleID != "" && !isUUID(c.ScheduleID)) {
+			writeAPIError(w, 400, "Invalid driver or charge selection")
+			return
+		}
+		if err := repo.SaveCell(r.Context(), c, actor(r)); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(204)
+	})
 	r.Post("/driver-charges/types", func(w http.ResponseWriter, r *http.Request) {
 		var t repository.ChargeType
 		if !decode(w, r, &t) {

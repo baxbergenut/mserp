@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
@@ -24,17 +23,41 @@ type chargeQuery interface {
 func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, map[string]map[string]bool, error) {
 	data := ChargeData{Types: []ChargeType{}, Schedules: []ChargeSchedule{}, CurrentWeek: ChargeCurrentWeek()}
 	loads := map[string]map[string]bool{}
-	rows, err := q.Query(ctx, `SELECT id::text,name,direction,amount::text,archived,version FROM driver_charge_types ORDER BY name,id`)
+	rows, err := q.Query(ctx, `SELECT id::text,name,direction,amount::text,archived,version,amounts::text[],eligibility FROM driver_charge_types ORDER BY name,id`)
 	if err != nil {
 		return data, loads, err
 	}
 	for rows.Next() {
 		var t ChargeType
-		if err = rows.Scan(&t.ID, &t.Name, &t.Direction, &t.Amount, &t.Archived, &t.Version); err != nil {
+		if err = rows.Scan(&t.ID, &t.Name, &t.Direction, &t.Amount, &t.Archived, &t.Version, &t.Amounts, &t.Eligibility); err != nil {
 			rows.Close()
 			return data, loads, err
 		}
 		data.Types = append(data.Types, t)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return data, loads, err
+	}
+	typeIndex := map[string]int{}
+	for i := range data.Types {
+		typeIndex[data.Types[i].ID] = i
+		data.Types[i].Rules = []ChargeTypeRule{}
+	}
+	rows, err = q.Query(ctx, `SELECT type_id::text,week_start::text,eligibility FROM driver_charge_type_rules ORDER BY week_start`)
+	if err != nil {
+		return data, loads, err
+	}
+	for rows.Next() {
+		var id string
+		var rule ChargeTypeRule
+		if err = rows.Scan(&id, &rule.WeekStart, &rule.Eligibility); err != nil {
+			rows.Close()
+			return data, loads, err
+		}
+		i := typeIndex[id]
+		data.Types[i].Rules = append(data.Types[i].Rules, rule)
 	}
 	err = rows.Err()
 	rows.Close()
@@ -51,6 +74,11 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 		if err = rows.Scan(&s.ID, &s.DriverID, &s.DriverName, &s.TypeID, &s.Kind, &s.Name, &s.Direction, &s.StartWeek, &s.EndWeek, &s.Eligibility, &s.Total, &s.Version, &s.InstallmentCount); err != nil {
 			rows.Close()
 			return data, loads, err
+		}
+		if s.TypeID != nil {
+			t := data.Types[typeIndex[*s.TypeID]]
+			s.TypeVersion = t.Version
+			s.TypeRules = t.Rules
 		}
 		s.Phases = []ChargePhase{}
 		s.Occurrences = []ChargeOccurrence{}
@@ -97,6 +125,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 		i := index[o.ScheduleID]
 		o.Kind = data.Schedules[i].Kind
 		o.ScheduleVersion = data.Schedules[i].Version
+		o.TypeVersion = data.Schedules[i].TypeVersion
 		data.Schedules[i].Occurrences = append(data.Schedules[i].Occurrences, o)
 	}
 	err = rows.Err()
@@ -148,33 +177,6 @@ func chargeAudit(ctx context.Context, tx pgx.Tx, schedule, typeID, actor, action
 	_, err = tx.Exec(ctx, `INSERT INTO driver_charge_events(schedule_id,type_id,actor_id,action,details) VALUES(NULLIF($1,'')::uuid,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,$4,$5)`, schedule, typeID, actor, action, b)
 	return err
 }
-func (r *DriverChargeRepository) SaveType(ctx context.Context, t ChargeType, actor string) (ChargeType, error) {
-	t.Name = strings.TrimSpace(t.Name)
-	n, err := chargeCents(t.Amount)
-	if err != nil || n <= 0 || len([]rune(t.Name)) < 1 || len([]rune(t.Name)) > 200 || (t.Direction != "charge" && t.Direction != "reimbursement") {
-		return t, chargeInvalid("Provide a name, direction and positive amount")
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return t, err
-	}
-	defer tx.Rollback(ctx)
-	if t.ID == "" {
-		err = tx.QueryRow(ctx, `INSERT INTO driver_charge_types(name,direction,amount,archived) VALUES($1,$2,$3::numeric,$4) RETURNING id::text,version`, t.Name, t.Direction, t.Amount, t.Archived).Scan(&t.ID, &t.Version)
-	} else {
-		err = tx.QueryRow(ctx, `UPDATE driver_charge_types SET name=$2,direction=$3,amount=$4::numeric,archived=$5,version=version+1 WHERE id=$1 AND version=$6 RETURNING version`, t.ID, t.Name, t.Direction, t.Amount, t.Archived, t.Version).Scan(&t.Version)
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return t, ErrChargeConflict
-	}
-	if err != nil {
-		return t, err
-	}
-	if err = chargeAudit(ctx, tx, "", t.ID, actor, "type_saved", t); err != nil {
-		return t, err
-	}
-	return t, tx.Commit(ctx)
-}
 func lockChargeDrivers(ctx context.Context, tx pgx.Tx, ids []string) error {
 	rows, err := tx.Query(ctx, `SELECT id FROM drivers WHERE id::text=ANY($1::text[]) ORDER BY id FOR UPDATE`, ids)
 	if err != nil {
@@ -201,7 +203,7 @@ func validateChargeCreate(c *ChargeCreate) error {
 	if c.Kind != "recurring" && c.Kind != "installment" {
 		return chargeInvalid("Invalid charge kind")
 	}
-	if c.Eligibility != "calendar" && c.Eligibility != "loads" {
+	if c.Kind == "installment" && c.Eligibility != "calendar" && c.Eligibility != "loads" {
 		return chargeInvalid("Choose calendar or load weeks")
 	}
 	if _, err := chargeWeek(c.StartWeek); err != nil {
@@ -262,13 +264,18 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 	var typeID *string
 	if c.Kind == "recurring" {
 		var archived bool
-		err = tx.QueryRow(ctx, `SELECT name,direction,archived FROM driver_charge_types WHERE id=$1 FOR SHARE`, c.TypeID).Scan(&c.Name, &direction, &archived)
+		var amounts []string
+		err = tx.QueryRow(ctx, `SELECT name,direction,archived,amounts::text[] FROM driver_charge_types WHERE id=$1 FOR SHARE`, c.TypeID).Scan(&c.Name, &direction, &archived, &amounts)
 		if err != nil {
 			return nil, err
 		}
 		if archived {
 			return nil, chargeInvalid("This charge type is archived")
 		}
+		if !allowedChargeAmount(amounts, c.Amount) {
+			return nil, chargeInvalid("Choose one of this charge type's amounts")
+		}
+		c.Eligibility = "calendar" // Recurring eligibility is resolved from the type's dated rules.
 		typeID = &c.TypeID
 	}
 	ids := []string{}
@@ -382,6 +389,9 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 	if err = lockChargeDrivers(ctx, tx, drivers); err != nil {
 		return err
 	}
+	if err = lockChargeTypes(ctx, tx); err != nil {
+		return err
+	}
 	data, loads, err := chargeData(ctx, tx, "")
 	if err != nil {
 		return err
@@ -401,6 +411,13 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 		}
 		if s == nil || s.Version != target.Version {
 			return ErrChargeConflict
+		}
+		if s.Kind == "recurring" && b.Action == "amount" {
+			for _, t := range data.Types {
+				if s.TypeID != nil && t.ID == *s.TypeID && !allowedChargeAmount(t.Amounts, b.Amount) {
+					return chargeInvalid("Choose one of this charge type's amounts")
+				}
+			}
 		}
 		if b.WeekStart < s.StartWeek {
 			return chargeInvalid("Effective week cannot precede the assignment")
@@ -465,7 +482,7 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 	return tx.Commit(ctx)
 }
 func (r *DriverChargeRepository) History(ctx context.Context, id string) ([]ChargeEvent, error) {
-	rows, err := r.pool.Query(ctx, `SELECT e.id,e.action,coalesce(u.username,'System'),e.details,e.created_at FROM driver_charge_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.schedule_id=$1 ORDER BY e.id DESC`, id)
+	rows, err := r.pool.Query(ctx, `SELECT e.id,e.action,coalesce(u.username,'System'),e.details,e.created_at FROM driver_charge_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.schedule_id=$1 OR (e.schedule_id IS NULL AND e.type_id=(SELECT type_id FROM driver_charge_schedules WHERE id=$1)) ORDER BY e.id DESC`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -514,12 +531,16 @@ func (r *DriverChargeRepository) Draft(ctx context.Context, c ChargeCreate) ([]C
 	if c.Kind == "installment" {
 		s.Total = &c.Total
 	} else {
+		var amounts []string
 		var archived bool
-		if err := r.pool.QueryRow(ctx, `SELECT name,direction,archived FROM driver_charge_types WHERE id=$1`, c.TypeID).Scan(&s.Name, &s.Direction, &archived); err != nil {
+		if err := r.pool.QueryRow(ctx, `SELECT name,direction,archived,eligibility,amounts::text[] FROM driver_charge_types WHERE id=$1`, c.TypeID).Scan(&s.Name, &s.Direction, &archived, &s.Eligibility, &amounts); err != nil {
 			return nil, err
 		}
 		if archived {
 			return nil, chargeInvalid("This charge type is archived")
+		}
+		if !allowedChargeAmount(amounts, c.Amount) {
+			return nil, chargeInvalid("Choose one of this charge type's amounts")
 		}
 	}
 	through := "2100-12-27"

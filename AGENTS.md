@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `033_add_driver_charges.sql`:
+  `034_driver_charge_matrix.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -100,7 +100,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `backend/internal/repository/driver_pay_repository.go` and
   `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
 - `frontend/app/accounting/driver-charges/`: reusable charge types, effective-dated
-  recurring assignments and installment plans, bulk previews, schedules and audit
+  an all-driver recurring fee matrix and installment plans, schedules and audit
   history. Driver profiles link to this centralized management view.
 - `frontend/app/accounting/dispatcher-pay/`: weekly dispatcher commission reports.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
@@ -274,7 +274,14 @@ assignment lookup lists.
   payable, including charge-only weeks. Type defaults never update assignments.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
-  Every calendar week or Gross Board load weeks is selected per schedule.
+  Recurring assignments use an all-driver matrix with charge types as columns.
+  Each type defines 1–50 exact amount options and calendar/loads/no_loads
+  eligibility (migration 034); drivers select an amount with a dropdown. Type
+  eligibility changes apply from the current New York Monday through dated
+  rules; prior weeks retain their rules and weekly overrides stay explicit.
+  Existing amount selections survive option edits. PUT /driver-charges/recurring
+  version-checks a cell, pauses unchecked assignments, and preserves later phases.
+  Installments retain their own calendar/load eligibility.
   Nonempty unmatched plans qualify; day statuses do not. Read-only projections
   account for all elapsed eligible weeks regardless of browsing order. Writes
   snapshot prior projected occurrences; explicit weekly edits, zero skips and
@@ -283,7 +290,7 @@ assignment lookup lists.
   deductions is explicit and idempotent, records the session user, and locks
   those rows. Reopening requires a reason and reverses only collection status.
   Viewing/autosave never collects money. Driver rows serialize charge writes;
-  schedule and occurrence versions reject stale edits. Money is integer cents
+  schedule, type and occurrence versions reject stale edits. Money is integer cents
   in calculations and numeric/decimal strings at persistence/API boundaries.
   Driver deactivation requires chargePauseWeek when charges exist and pauses
   them atomically; reactivation does not resume them. Charge history prevents

@@ -42,7 +42,7 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
       const committed = saved.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
       const submitted = snapshot.generatedCharges?.find(r => r.scheduleId === row.scheduleId);
       if (!committed) return row;
-      return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...row, version: committed.version, scheduleVersion: committed.scheduleVersion, scheduledAmount: committed.scheduledAmount };
+      return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...row, version: committed.version, scheduleVersion: committed.scheduleVersion, typeVersion: committed.typeVersion, scheduledAmount: committed.scheduledAmount };
     }),
   };
   if (!current[saved.driverId]?.generatedCharges && result[saved.driverId]) delete result[saved.driverId].generatedCharges;

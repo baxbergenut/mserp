@@ -760,16 +760,24 @@ export interface InvestorInput {
   active: boolean;
 }
 
+export type ChargeEligibility = "calendar" | "loads" | "no_loads";
+export interface ChargeCell {
+ driverId: string; typeId: string; weekStart: string; included: boolean; amount: string;
+ scheduleId: string; version: number; typeVersion: number;
+}
 export interface ChargeType {
+ amounts: string[]; eligibility: ChargeEligibility; rules: {weekStart: string; eligibility: ChargeEligibility}[];
+
   id: string; name: string; direction: "charge" | "reimbursement"; amount: string; archived: boolean; version: number;
 }
 export interface ChargePhase { weekStart: string; amount: string; paused: boolean }
 export interface ChargeOccurrence {
   scheduleId: string; weekStart: string; kind: "recurring" | "installment"; name: string;
   scheduledAmount: string; amount: string; overridden: boolean; confirmedAt: string | null; confirmedBy: string | null;
-  version: number; scheduleVersion: number; reset?: boolean;
+  version: number; scheduleVersion: number; typeVersion: number; reset?: boolean;
 }
 export interface ChargeSchedule {
+  typeVersion: number;
   installmentCount: number;
   id: string; driverId: string; driverName: string; typeId: string | null; kind: "recurring" | "installment";
   name: string; direction: "charge" | "reimbursement"; startWeek: string; endWeek: string | null;

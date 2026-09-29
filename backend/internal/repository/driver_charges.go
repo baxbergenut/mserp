@@ -61,7 +61,15 @@ func chargeWeek(s string) (time.Time, error) {
 	return t, nil
 }
 
+type ChargeTypeRule struct {
+	WeekStart   string `json:"weekStart"`
+	Eligibility string `json:"eligibility"`
+}
 type ChargeType struct {
+	Amounts     []string         `json:"amounts"`
+	Eligibility string           `json:"eligibility"`
+	Rules       []ChargeTypeRule `json:"rules"`
+
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Direction string `json:"direction"`
@@ -75,6 +83,7 @@ type ChargePhase struct {
 	Paused    bool   `json:"paused"`
 }
 type ChargeOccurrence struct {
+	TypeVersion     int        `json:"typeVersion"`
 	ScheduleID      string     `json:"scheduleId"`
 	WeekStart       string     `json:"weekStart"`
 	Kind            string     `json:"kind"`
@@ -89,6 +98,8 @@ type ChargeOccurrence struct {
 	Reset           bool       `json:"reset,omitempty"`
 }
 type ChargeSchedule struct {
+	TypeVersion      int                `json:"typeVersion"`
+	TypeRules        []ChargeTypeRule   `json:"-"`
 	InstallmentCount int                `json:"installmentCount"`
 	ID               string             `json:"id"`
 	DriverID         string             `json:"driverId"`
@@ -179,6 +190,7 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 	for _, o := range s.Occurrences {
 		o.Kind = s.Kind
 		o.ScheduleVersion = s.Version
+		o.TypeVersion = s.TypeVersion
 		fixed[o.WeekStart] = o
 		if s.Kind == "installment" {
 			n, _ := chargeCents(o.Amount)
@@ -209,7 +221,13 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 			continue
 		}
 		p := phaseAt(s, week)
-		if p.Paused || (s.Eligibility == "loads" && !loads[week] && !(forecast && week >= ChargeCurrentWeek())) {
+		rule := ChargeTypeRule{Eligibility: s.Eligibility}
+		for _, r := range s.TypeRules {
+			if r.WeekStart <= week {
+				rule = r
+			}
+		}
+		if p.Paused || (rule.Eligibility == "loads" && !loads[week] && !(forecast && week >= ChargeCurrentWeek())) || (rule.Eligibility == "no_loads" && loads[week]) {
 			continue
 		}
 		n, _ := chargeCents(p.Amount)
@@ -230,7 +248,7 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 		if s.Direction == "charge" {
 			n = -n
 		}
-		out = append(out, ChargeOccurrence{ScheduleID: s.ID, WeekStart: week, Kind: s.Kind, Name: s.Name, Amount: chargeMoney(n), ScheduledAmount: chargeMoney(n), ScheduleVersion: s.Version})
+		out = append(out, ChargeOccurrence{ScheduleID: s.ID, WeekStart: week, Kind: s.Kind, Name: s.Name, Amount: chargeMoney(n), ScheduledAmount: chargeMoney(n), ScheduleVersion: s.Version, TypeVersion: s.TypeVersion})
 	}
 	return out, nil
 }

@@ -23,6 +23,9 @@ func generatedForWeek(data ChargeData, loads map[string]map[string]bool, week st
 	return out, nil
 }
 func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor string, submitted []ChargeOccurrence) ([]ChargeOccurrence, error) {
+	if err := lockChargeTypes(ctx, tx); err != nil {
+		return nil, err
+	}
 	data, loads, err := chargeData(ctx, tx, driver)
 	if err != nil {
 		return nil, err
@@ -40,7 +43,7 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 				break
 			}
 		}
-		if s == nil || s.Version != input.ScheduleVersion {
+		if s == nil || s.Version != input.ScheduleVersion || s.TypeVersion != input.TypeVersion {
 			return nil, ErrChargeConflict
 		}
 		rows, err := projectCharges(*s, week, loads[driver], false)
@@ -185,7 +188,7 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 		if !reopen && current.ConfirmedAt != nil && input.Amount == current.Amount && input.Name == current.Name {
 			continue
 		}
-		if s.Version != input.ScheduleVersion || current.Version != input.Version || current.Amount != input.Amount || current.Name != input.Name {
+		if s.Version != input.ScheduleVersion || s.TypeVersion != input.TypeVersion || current.Version != input.Version || current.Amount != input.Amount || current.Name != input.Name {
 			return ErrChargeConflict
 		}
 		if reopen && current.ConfirmedAt == nil {
@@ -223,6 +226,9 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 }
 
 func pauseDriverCharges(ctx context.Context, tx pgx.Tx, driver, week, actor string) error {
+	if err := lockChargeTypes(ctx, tx); err != nil {
+		return err
+	}
 	data, loads, err := chargeData(ctx, tx, driver)
 	if err != nil {
 		return err
