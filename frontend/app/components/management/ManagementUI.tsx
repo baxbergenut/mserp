@@ -65,7 +65,7 @@ export function ManagementHeader({
         </div>
         <p className="mt-1.5 text-[13px] text-zinc-500">{description}</p>
       </div>
-      {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{action}{secondaryAction}</div> : action}
+      {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{secondaryAction}{action}</div> : action}
     </div>
   );
 }
