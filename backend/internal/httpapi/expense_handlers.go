@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,15 +19,6 @@ import (
 )
 
 var expenseAmountPattern = regexp.MustCompile(`^-?\d{1,12}(?:\.\d{1,2})?$`)
-
-var expenseCategories = map[string]struct{}{
-	"Maintenance":    {},
-	"Penalties":      {},
-	"Other":          {},
-	"Safety":         {},
-	"HR":             {},
-	"Administrative": {},
-}
 
 type expenseHandler struct {
 	logger    *slog.Logger
@@ -41,6 +33,9 @@ func registerExpenseRoutes(
 	extractor gemini.ExpenseExtractor,
 ) {
 	handler := expenseHandler{logger: logger, repo: repo, extractor: extractor}
+	r.Get("/expense-settings", handler.listSettings)
+	r.Post("/expense-settings", handler.saveSetting)
+	r.Put("/expense-settings/{id}", handler.saveSetting)
 	r.Get("/expenses", handler.listExpenses)
 	r.Post("/expenses", handler.createExpense)
 	r.Post("/expenses/bulk", handler.createExpenses)
@@ -104,8 +99,8 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	if request.Company == "" {
 		return repository.ExpenseInput{}, errors.New("company is required")
 	}
-	if _, ok := expenseCategories[request.Category]; !ok {
-		return repository.ExpenseInput{}, errors.New("category must be Maintenance, Other, Safety, HR, Administrative, or Penalties")
+	if request.Category == "" || utf8.RuneCountInString(request.Category) > 100 {
+		return repository.ExpenseInput{}, errors.New("category is required and must be at most 100 characters")
 	}
 	if request.ExpenseType == "" {
 		return repository.ExpenseInput{}, errors.New("expense name is required")
@@ -310,6 +305,34 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	settings, err := handler.repo.ListExpenseSettings(r.Context())
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	input.Categories = map[string][]string{}
+	categoryIDs := map[string]string{}
+	categories := []string{}
+	for _, item := range settings {
+		if item.Active && item.Kind == "category" {
+			input.Categories[item.Name] = []string{}
+			categoryIDs[item.ID] = item.Name
+			categories = append(categories, item.Name)
+		}
+	}
+	for _, item := range settings {
+		if !item.Active {
+			continue
+		}
+		if item.Kind == "name" && item.CategoryID != nil {
+			if name, ok := categoryIDs[*item.CategoryID]; ok {
+				input.Categories[name] = append(input.Categories[name], item.Name)
+			}
+		}
+		if item.Kind == "payment_method" {
+			input.PaymentMethods = append(input.PaymentMethods, item.Name)
+		}
+	}
 	extraction, err := handler.extractor.ExtractExpense(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, gemini.ErrNotConfigured) {
@@ -339,7 +362,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			return
 		}
 		values = append(values, extractedExpense{
-			Company: validExtractedCompany(item.Company), Category: validExtractedCategory(item.Category),
+			Company: validExtractedCompany(item.Company), Category: validExtractedCategory(item.Category, categories),
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
@@ -380,12 +403,14 @@ func validExtractedCompany(value *string) string {
 	return "MS Express"
 }
 
-func validExtractedCategory(value *string) string {
+func validExtractedCategory(value *string, categories []string) string {
 	cleaned := cleanExtractedValue(value)
-	if _, ok := expenseCategories[cleaned]; ok {
-		return cleaned
+	for _, category := range categories {
+		if strings.EqualFold(cleaned, category) {
+			return category
+		}
 	}
-	return "Other"
+	return ""
 }
 
 func validExtractedDate(value *string) string {
@@ -455,6 +480,10 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
 			return
 		case "23514":
+			if postgresError.ConstraintName == "expense_active_category" {
+				writeAPIError(w, http.StatusBadRequest, "Select an active category from Expense settings")
+				return
+			}
 			writeAPIError(w, http.StatusBadRequest, "check the expense category and amount; paid expenses must retain their driver, date, total and responsibility")
 			return
 		case "22P02", "22003":

@@ -96,12 +96,16 @@ func TestExpenseSchemaStaysWithinGeminiComplexityLimit(t *testing.T) {
 func TestExpensePromptUsesDirectSubmissionContext(t *testing.T) {
 	prompt := expensePrompt(ExpenseInput{
 		Text: "Oil change $125", MessageDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
+		Categories: map[string][]string{"Travel": {"Hotel"}}, PaymentMethods: []string{"Card 1456"},
 	})
 	if strings.Contains(strings.ToLower(prompt), "telegram") {
 		t.Fatalf("expense prompt still references Telegram: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Transaction text:") || !strings.Contains(prompt, "2026-09-28") {
 		t.Fatalf("expense prompt is missing submission context: %s", prompt)
+	}
+	if !strings.Contains(prompt, `"Travel":["Hotel"]`) || !strings.Contains(prompt, `"Card 1456"`) || strings.Contains(prompt, "Category must be exactly one of") {
+		t.Fatalf("expense prompt does not use current settings: %s", prompt)
 	}
 }
 

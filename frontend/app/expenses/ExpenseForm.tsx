@@ -1,9 +1,9 @@
 "use client";
 
 import { expenseAssignment } from "./assignments";
+import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
 
-
-import type { Driver, Expense, ExpenseCategory, ExpenseInput, Investor, Truck } from "../lib/types";
+import type { Driver, Expense, ExpensePage, ExpenseInput, Investor, Truck } from "../lib/types";
 import {
   controlClass,
   Field,
@@ -11,18 +11,9 @@ import {
   Toggle,
 } from "../components/management/ManagementUI";
 
-export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
-  "Maintenance",
-  "Penalties",
-  "Other",
-  "Safety",
-  "HR",
-  "Administrative",
-];
-
 export const emptyExpenseInput: ExpenseInput = {
   company: "MS Express",
-  category: "Maintenance",
+  category: "",
   expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
   driverId: null,
@@ -64,19 +55,15 @@ export function expenseToInput(expense: Expense): ExpenseInput {
 export function ExpenseForm({
   value,
   options,
+  originalCategory,
   drivers,
   trucks,
   owners,
   onChange,
 }: {
   value: ExpenseInput;
-  options: {
-    companies: string[];
-    paymentTypes: string[];
-    expenseTypes: string[];
-    paidBy: string[];
-    coveredBy: string[];
-  };
+  options: ExpensePage["options"];
+  originalCategory?: string;
   drivers: Driver[];
   trucks: Truck[];
   owners: Investor[];
@@ -106,13 +93,15 @@ export function ExpenseForm({
           <select aria-label="Category"
             required
             value={value.category}
-            onChange={(event) => set("category", event.target.value as ExpenseCategory)}
+            onChange={(event) => onChange(changeExpenseCategory(value, event.target.value, options.settings))}
             className={controlClass}
           >
-            {EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
+            <option value="">Select category</option>
+            {originalCategory && !activeExpenseCategories(options.settings).some(item => item.name === originalCategory) && <option value={originalCategory}>{originalCategory} (saved category)</option>}
+            {activeExpenseCategories(options.settings).map(item => <option key={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Name">
+        <Field label="Name" hint="Choose a default for this category or enter a custom name.">
           <input aria-label="Name"
             required
             pattern=".*\S.*"
@@ -123,7 +112,7 @@ export function ExpenseForm({
             placeholder="e.g. Parking violation"
           />
           <datalist id="expense-names">
-            {options.expenseTypes.map((option) => <option key={option} value={option} />)}
+            {expenseNames(options.settings, value.category).map((option) => <option key={option} value={option} />)}
           </datalist>
         </Field>
         <Field label="Expense date">
@@ -217,8 +206,9 @@ export function ExpenseForm({
             <p className="text-xs text-amber-300">Confirm the owner responsible on the expense date. For historical expenses, select the owner explicitly.</p>
           </div>}
         </Field>
-        <Field label="Payment type">
+        <Field label="Payment method">
           <input
+            aria-label="Payment method"
             list="payment-types"
             value={value.paymentType}
             onChange={(event) => set("paymentType", event.target.value)}

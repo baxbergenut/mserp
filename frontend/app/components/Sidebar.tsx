@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/tolls", label: "Tolls", icon: Receipt },
-  { href: "/expenses", label: "Expenses", icon: WalletCards, exact: true },
+  { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/driver-charges", label: "Driver charges", icon: Receipt },

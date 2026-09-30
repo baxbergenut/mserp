@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -88,12 +89,13 @@ type ExpensePageQuery struct {
 }
 
 type ExpenseFilterOptions struct {
-	Categories   []string `json:"categories"`
-	Companies    []string `json:"companies"`
-	PaymentTypes []string `json:"paymentTypes"`
-	ExpenseTypes []string `json:"expenseTypes"`
-	PaidBy       []string `json:"paidBy"`
-	CoveredBy    []string `json:"coveredBy"`
+	Settings     []ExpenseSetting `json:"settings"`
+	Categories   []string         `json:"categories"`
+	Companies    []string         `json:"companies"`
+	PaymentTypes []string         `json:"paymentTypes"`
+	ExpenseTypes []string         `json:"expenseTypes"`
+	PaidBy       []string         `json:"paidBy"`
+	CoveredBy    []string         `json:"coveredBy"`
 }
 
 type ExpenseSummary struct {
@@ -168,21 +170,45 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 				FILTER (WHERE category <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT company ORDER BY company)
 				FILTER (WHERE company <> ''), '{}'),
-			COALESCE(array_agg(DISTINCT payment_type ORDER BY payment_type)
-				FILTER (WHERE payment_type IS NOT NULL AND payment_type <> ''), '{}'),
-			COALESCE(array_agg(DISTINCT expense_type ORDER BY expense_type)
-				FILTER (WHERE expense_type IS NOT NULL AND expense_type <> ''), '{}'),
-			COALESCE(array_agg(DISTINCT paid_by ORDER BY paid_by)
-				FILTER (WHERE paid_by IS NOT NULL AND paid_by <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT covered_by ORDER BY covered_by)
 				FILTER (WHERE covered_by IS NOT NULL AND covered_by <> ''), '{}')
 		FROM expenses e`).Scan(
-		&options.Categories, &options.Companies, &options.PaymentTypes,
-		&options.ExpenseTypes, &options.PaidBy, &options.CoveredBy,
+		&options.Categories, &options.Companies, &options.CoveredBy,
 	); err != nil {
 		return ExpensePage{}, err
 	}
 
+	settings, err := r.ListExpenseSettings(ctx)
+	if err != nil {
+		return ExpensePage{}, err
+	}
+	options.Settings = settings
+	options.PaymentTypes = []string{}
+	options.PaidBy = []string{}
+	// Keep the legacy field; defaults now come from category-linked settings.
+	options.ExpenseTypes = []string{}
+	categories := map[string]bool{}
+	for _, name := range options.Categories {
+		categories[name] = true
+	}
+	for _, item := range settings {
+		if !item.Active {
+			continue
+		}
+		switch item.Kind {
+		case "category":
+			categories[item.Name] = true
+		case "payment_method":
+			options.PaymentTypes = append(options.PaymentTypes, item.Name)
+		case "payer":
+			options.PaidBy = append(options.PaidBy, item.Name)
+		}
+	}
+	options.Categories = []string{}
+	for name := range categories {
+		options.Categories = append(options.Categories, name)
+	}
+	sort.Strings(options.Categories)
 	return ExpensePage{
 		Page:    NewPage(values, total, query.Pagination),
 		Options: options,

@@ -73,8 +73,12 @@ func TestNormalizeExtractedExpenseValues(t *testing.T) {
 		t.Fatalf("validExtractedDate() = %q, want empty", got)
 	}
 	unknownCategory := "Fuel"
-	if got := validExtractedCategory(&unknownCategory); got != "Other" {
-		t.Fatalf("validExtractedCategory() = %q, want Other", got)
+	if got := validExtractedCategory(&unknownCategory, []string{"Other"}); got != "" {
+		t.Fatalf("validExtractedCategory() = %q, want empty", got)
+	}
+	customCategory := " travel "
+	if got := validExtractedCategory(&customCategory, []string{"Travel"}); got != "Travel" {
+		t.Fatalf("custom category = %q, want Travel", got)
 	}
 }
 
@@ -86,7 +90,7 @@ func TestExpenseRequestValidateRejectsInvalidValues(t *testing.T) {
 		request expenseRequest
 	}{
 		{name: "missing company", request: expenseRequest{Category: "Safety", ExpenseDate: "2026-09-23", Amount: "10.00"}},
-		{name: "unknown category", request: expenseRequest{Company: "MS Express", Category: "Fuel", ExpenseDate: "2026-09-23", Amount: "10.00"}},
+		{name: "empty category", request: expenseRequest{Company: "MS Express", Category: "", ExpenseDate: "2026-09-23", Amount: "10.00"}},
 		{name: "invalid date", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "09/23/2026", Amount: "10.00"}},
 		{name: "missing amount", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "2026-09-23"}},
 		{name: "too many cents", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "2026-09-23", Amount: "10.001"}},

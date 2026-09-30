@@ -551,13 +551,16 @@ export interface Expense {
   updatedAt: string;
 }
 
-export type ExpenseCategory =
-  | "Penalties"
-  | "Maintenance"
-  | "Other"
-  | "Safety"
-  | "HR"
-  | "Administrative";
+export type ExpenseCategory = string;
+export type ExpenseSettingKind = "category" | "name" | "payment_method" | "payer";
+export interface ExpenseSetting {
+  id: string;
+  kind: ExpenseSettingKind;
+  categoryId: string | null;
+  name: string;
+  active: boolean;
+  version: number;
+}
 
 export interface ExpenseInput {
  ownerId?: string | null;
@@ -581,6 +584,7 @@ export interface ExpenseInput {
 
 export interface ExpensePage extends PaginatedResponse<Expense> {
   options: {
+    settings: ExpenseSetting[];
     categories: string[];
     companies: string[];
     paymentTypes: string[];

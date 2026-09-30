@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `039_load_cancelled_status.sql`:
+  `040_expense_settings.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -245,6 +245,8 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
 - Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
+- Expense settings: `GET/POST /expense-settings`, `PUT /expense-settings/{id}`
+  (category, name, payment_method, payer; updates require the current version).
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
@@ -567,6 +569,23 @@ assignment lookup lists.
   restricted. Legacy settled totals/responsibility cannot be repurposed.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
+
+- Expense settings at /expenses/settings (linked from Expenses) manage categories,
+  category-specific default names, payment methods and common payer suggestions.
+  Migration 040 adds expense_settings with optimistic versions and archive/restore;
+  there is no delete API. Active categories replace the former fixed enum in manual
+  entry, filters and AI review. Default names belong to a category; custom expense
+  names and one-off payment/payer text never automatically become defaults. Changing
+  category clears a matching old default name but preserves custom text. AI receives
+  the active catalog and leaves unrecognized categories blank for review.
+  Seeded names are curated; existing payment methods and payer names seed their lists.
+  Existing expense text remains a historical snapshot across catalog renames/archives.
+  A database guard requires an active category for new/changed classifications while
+  allowing unchanged historical categories on edits; archived parents hide all their
+  default names. Category/name uniqueness is case-insensitive within its scope.
+  Responsibility (Company/Driver/Truck Owner) stays separate from editable settings.
+  Database tests use MSERP_DRIVER_PAY_TEST_DATABASE_URL for fresh and migrated schemas
+  as mserp_app; test-driver-charges-e2e.mjs includes expense-settings-e2e.mjs.
 
 - Expense type is labeled Name in manual and AI review forms, required after Category.
   The API retains expenseType for compatibility and requires a nonblank name on writes.

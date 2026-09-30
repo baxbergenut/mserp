@@ -4,7 +4,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, WalletCards, X } from "lucide-react";
+import { Check, Settings, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   createExpenses,
@@ -15,7 +15,7 @@ import {
   fetchTrucks,
   updateExpense,
 } from "../lib/api";
-import type { Driver, Expense, ExpenseInput, Investor, Truck } from "../lib/types";
+import type { Driver, Expense, ExpenseInput, ExpensePage, Investor, Truck } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -31,7 +31,6 @@ import {
 } from "../components/management/ManagementUI";
 import {
   emptyExpenseInput,
-  EXPENSE_CATEGORIES,
   ExpenseForm,
   expenseToInput,
 } from "./ExpenseForm";
@@ -40,7 +39,9 @@ import { ExpenseAIImport, ExpenseBatchEditor } from "./ExpenseAIImport";
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
 
-const emptyOptions = {
+const emptyOptions: ExpensePage["options"] = {
+  settings: [],
+  categories: [],
   companies: [] as string[],
   paymentTypes: [] as string[],
   expenseTypes: [] as string[],
@@ -123,13 +124,7 @@ export default function ExpensesPage() {
       setTotalPages(response.totalPages);
       setSummaryAmount(response.summary.amount);
       setIncompleteCount(response.summary.incompleteCount);
-      setOptions({
-        companies: response.options.companies,
-        paymentTypes: response.options.paymentTypes,
-        expenseTypes: response.options.expenseTypes,
-        paidBy: response.options.paidBy,
-        coveredBy: response.options.coveredBy,
-      });
+      setOptions(response.options);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to load expenses");
@@ -164,7 +159,7 @@ export default function ExpensesPage() {
   const hasFilters = Boolean(search || category || company || dateFrom || dateTo);
 
   function openCreate() {
-    setForm({ ...emptyExpenseInput, expenseDate: new Date().toISOString().slice(0, 10) });
+    setForm({ ...emptyExpenseInput, category: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance")?.name ?? options.settings.find(item => item.kind === "category" && item.active)?.name ?? "", expenseDate: new Date().toISOString().slice(0, 10) });
     setBatchForms([]);
     setAIMessage("");
     setError("");
@@ -231,6 +226,7 @@ export default function ExpensesPage() {
         onAction={openCreate}
       />
 
+      <div className="flex justify-end"><Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expense settings</Link></div>
       {error && <ErrorBanner message={error} />}
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -252,7 +248,7 @@ export default function ExpensesPage() {
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
         <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">All categories</option>
-          {EXPENSE_CATEGORIES.map((value) => <option key={value}>{value}</option>)}
+          {options.categories.map((value) => <option key={value}>{value}</option>)}
         </select>
         <select value={company} onChange={(event) => { setCompany(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">All companies</option>
@@ -387,9 +383,9 @@ export default function ExpensesPage() {
             </div>
           )}
           {batchForms.length > 0 && !editing ? (
-            <ExpenseBatchEditor owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
+            <ExpenseBatchEditor settings={options.settings} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
           ) : (
-            <ExpenseForm owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+            <ExpenseForm originalCategory={editing?.category} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
           )}
         </Modal>
       )}

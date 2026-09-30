@@ -8,6 +8,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyExpenseSettings } from './expense-settings-e2e.mjs';
 
 const frontend = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const backend = resolve(frontend, '../backend');
@@ -64,12 +65,14 @@ try {
   const base = 'http://127.0.0.1:13559';
 
   expect((await page.request.get(`${base}/api/driver-charges`)).status()).toBe(401);
+  expect((await page.request.get(`${base}/api/expense-settings`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/accounting/driver-charges`);
   await page.getByLabel('Username').fill('charges-e2e');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
+  await verifyExpenseSettings(page, base, temp);
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
   await page.getByRole('button', { name: 'New charge type', exact: true }).click();
   await page.getByLabel('Charge name', { exact: true }).fill('Admin fee');

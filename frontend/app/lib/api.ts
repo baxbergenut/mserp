@@ -39,6 +39,7 @@ import type {
   AuthSession,
   Expense,
   ExpenseInput,
+  ExpenseSetting,
   ExpensePage,
   ExpenseExtraction,
 } from "./types";
@@ -387,3 +388,6 @@ export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/dri
 export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }));
 export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequest<SettlementEvent[]>(withQuery(`/drivers/${id}/settlement-history`, { weekStart }));
 export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason}) });
+
+export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
+export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
