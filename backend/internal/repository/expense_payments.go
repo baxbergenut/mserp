@@ -14,6 +14,7 @@ import (
 type ExpenseDeduction struct {
 	ExpenseID      string `json:"expenseId"`
 	Name           string `json:"name"`
+	Category       string `json:"category,omitempty"`
 	ExpenseDate    string `json:"expenseDate"`
 	Total          string `json:"total"`
 	Available      string `json:"available"`
@@ -26,7 +27,7 @@ type ExpenseDeduction struct {
 }
 
 func expenseDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]ExpenseDeduction, error) {
-	rows, err := tx.Query(ctx, `SELECT e.id, concat_ws(' · ',e.category,coalesce(nullif(e.expense_type,''),nullif(e.description,''),e.reference_number)),
+	rows, err := tx.Query(ctx, `SELECT e.id, coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
  e.expense_date::text,e.amount::text,
  (e.amount-coalesce(p.other,0))::text,
  coalesce(w.amount,e.amount-coalesce(p.other,0))::text,
@@ -48,7 +49,7 @@ func expenseDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]E
 	result := []ExpenseDeduction{}
 	for rows.Next() {
 		var d ExpenseDeduction
-		if err := rows.Scan(&d.ExpenseID, &d.Name, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved); err != nil {
+		if err := rows.Scan(&d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved); err != nil {
 			return nil, err
 		}
 		result = append(result, d)

@@ -94,7 +94,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			expenses := NewExpenseRepository(pool)
 			pay := NewDriverPayRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-09-28")
-			input := ExpenseInput{Company: "MS Express", Category: "Penalties", ExpenseDate: week, DriverID: &driver, Amount: "100.25", CoveredBy: payTestString("Driver")}
+			input := ExpenseInput{Company: "MS Express", Category: "Penalties", ExpenseDate: week, DriverID: &driver, Amount: "100.25", ExpenseType: payTestString("Parking violation"), Description: payTestString("Long explanation that must not appear in Driver Pay"), CoveredBy: payTestString("Driver")}
 			e, err := expenses.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)
@@ -127,6 +127,20 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if len(first.ExpenseDeductions) != 1 || first.ExpenseDeductions[0].Amount != "100.25" {
 				t.Fatalf("initial suggestions: %+v", first)
 			}
+			if first.ExpenseDeductions[0].Name != "Parking violation" || first.ExpenseDeductions[0].Category != "Penalties" {
+				t.Fatalf("payroll must use only the expense name: %+v", first.ExpenseDeductions[0])
+			}
+			// Legacy records without a name use their category, never the description.
+			if _, err = pool.Exec(ctx, `UPDATE expenses SET expense_type=NULL WHERE id=$1`, e.ID); err != nil {
+				t.Fatal(err)
+			}
+			if got := read(week).ExpenseDeductions[0].Name; got != "Penalties" {
+				t.Fatalf("legacy name fallback = %q", got)
+			}
+			if _, err = pool.Exec(ctx, `UPDATE expenses SET expense_type='Parking violation' WHERE id=$1`, e.ID); err != nil {
+				t.Fatal(err)
+			}
+			first = read(week)
 			balance("0", "100.25")
 			// Notes and simple reads do not collect the suggested full amount.
 			first.Notes = "Notes only"

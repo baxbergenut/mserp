@@ -90,7 +90,7 @@ func (request *grossBoardRequest) validate() error {
 		}
 		switch e.DayStatus {
 		case "":
-		case "SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD":
+		case "SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "LOAD CANCELLED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD":
 			if e.LoadNumber != "" || e.LoadRecordID != nil || e.OriginalRate != "" || e.DriverRate != "" || e.Miles != "" || e.EnteredOriginalRate != "" || e.EnteredMiles != "" || e.AcceptSystemValues {
 				return errors.New("a day status cannot contain a load, rates, or miles")
 			}

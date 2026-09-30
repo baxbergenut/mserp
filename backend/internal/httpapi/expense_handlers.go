@@ -100,11 +100,15 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	request.Company = strings.TrimSpace(request.Company)
 	request.Category = strings.TrimSpace(request.Category)
 	request.Amount = strings.TrimSpace(request.Amount)
+	request.ExpenseType = strings.TrimSpace(request.ExpenseType)
 	if request.Company == "" {
 		return repository.ExpenseInput{}, errors.New("company is required")
 	}
 	if _, ok := expenseCategories[request.Category]; !ok {
 		return repository.ExpenseInput{}, errors.New("category must be Maintenance, Other, Safety, HR, Administrative, or Penalties")
+	}
+	if request.ExpenseType == "" {
+		return repository.ExpenseInput{}, errors.New("expense name is required")
 	}
 	expenseDate, err := parseOptionalDate(request.ExpenseDate, "expense date")
 	if err != nil {

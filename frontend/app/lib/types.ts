@@ -614,7 +614,7 @@ export interface AuthSession {
   expiresAt: string;
 }
 
-export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
+export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "LOAD CANCELLED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
 
 export interface GrossBoardEntry {
   slot: number;
@@ -691,6 +691,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
+  category?: ExpenseCategory;
   expenseId: string;
   name: string;
   expenseDate: string;

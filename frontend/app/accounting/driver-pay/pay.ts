@@ -65,5 +65,10 @@ export function validAdjustments(edits: DriverPayEdits) {
 }
 
 export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
-  return { ...edits, adjustments: edits.adjustments.filter(item => item.name.trim() !== "" || item.amount.trim() !== "" || item.kind === "deduction") };
+  return { ...edits,
+    // Include displayed expense deductions in a normal payroll save. Reading a
+    // week remains read-only; saved rows only change when their amount is edited.
+    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => row.saved ? row : { ...row, apply: true }) }),
+    adjustments: edits.adjustments.filter(item => item.name.trim() !== "" || item.amount.trim() !== "" || item.kind === "deduction"),
+  };
 }

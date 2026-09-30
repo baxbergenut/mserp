@@ -112,6 +112,20 @@ export function ExpenseForm({
             {EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
           </select>
         </Field>
+        <Field label="Name">
+          <input aria-label="Name"
+            required
+            pattern=".*\S.*"
+            list="expense-names"
+            value={value.expenseType}
+            onChange={(event) => set("expenseType", event.target.value)}
+            className={controlClass}
+            placeholder="e.g. Parking violation"
+          />
+          <datalist id="expense-names">
+            {options.expenseTypes.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
         <Field label="Expense date">
           <input aria-label="Expense date"
             required
@@ -202,18 +216,6 @@ export function ExpenseForm({
             <p className="text-xs text-zinc-500">{owners.find(o => o.id === value.ownerId)?.driverId ? "Deduct from this owner's Driver Pay, regardless of who operates the truck." : "Investor responsibility. This will not be deducted from the operating driver's pay."}</p>
             <p className="text-xs text-amber-300">Confirm the owner responsible on the expense date. For historical expenses, select the owner explicitly.</p>
           </div>}
-        </Field>
-        <Field label="Expense type">
-          <input aria-label="Expense type"
-            list="expense-types"
-            value={value.expenseType}
-            onChange={(event) => set("expenseType", event.target.value)}
-            className={controlClass}
-            placeholder="e.g. Tire issue"
-          />
-          <datalist id="expense-types">
-            {options.expenseTypes.map((option) => <option key={option} value={option} />)}
-          </datalist>
         </Field>
         <Field label="Payment type">
           <input

@@ -236,12 +236,12 @@ export function ExpenseBatchEditor({
               <th className="px-2 py-2 font-medium">#</th>
               <th className="px-2 py-2 font-medium">Company</th>
               <th className="px-2 py-2 font-medium">Category</th>
+              <th className="px-2 py-2 font-medium">Name</th>
               <th className="px-2 py-2 font-medium">Date</th>
               <th className="px-2 py-2 font-medium">Truck / unit</th>
               <th className="px-2 py-2 font-medium">Driver</th>
               <th className="px-2 py-2 font-medium">Amount</th>
               <th className="px-2 py-2 font-medium">Payment</th>
-              <th className="px-2 py-2 font-medium">Expense type</th>
               <th className="px-2 py-2 font-medium">Reference</th>
               <th className="px-2 py-2 font-medium">Description</th>
               <th className="px-2 py-2 font-medium">Covered by</th>
@@ -260,6 +260,7 @@ export function ExpenseBatchEditor({
                     {EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
                   </select>
                 </td>
+                <td className="px-2 py-2"><input required pattern=".*\S.*" aria-label={`Transaction ${index + 1} name`} value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input required type="date" value={value.expenseDate} onChange={(event) => update(index, { expenseDate: event.target.value })} className={compactControl} /></td>
                 <td className="space-y-1 px-2 py-2">
                   <select
@@ -289,7 +290,6 @@ export function ExpenseBatchEditor({
                 </td>
                 <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} /></td>
-                <td className="px-2 py-2"><input value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
                 <td className="px-2 py-2"><select aria-label={`Transaction ${index + 1} responsibility`} value={value.coveredBy} onChange={event => update(index, {coveredBy:event.target.value,ownerId:null})} className={compactControl}>{Array.from(new Set(["Company","Driver","Truck Owner",value.coveredBy])).filter(Boolean).map(v => <option key={v}>{v}</option>)}</select>{value.coveredBy === "Truck Owner" && <select required aria-label={`Transaction ${index + 1} owner`} value={value.ownerId ?? ""} onChange={event => update(index,{ownerId:event.target.value || null})} className={compactControl}><option value="">Select responsible owner</option>{owners.filter(o => !o.isCompany).map(o => <option key={o.id} value={o.id}>{o.fullName}</option>)}</select>}</td>

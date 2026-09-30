@@ -6,6 +6,7 @@ export const dayStatuses: { value: Exclude<GrossBoardDayStatus, "">; aliases: st
   { value: "RESET", aliases: ["34 hour reset", "34 hr reset", "34 reset", "rest"], color: "bg-indigo-500/15 text-indigo-300" },
   { value: "IN TRANSIT", aliases: ["transit", "intransit", "on the road"], color: "bg-blue-500/15 text-blue-300" },
   { value: "REJECTED", aliases: ["reject", "refused"], color: "bg-rose-500/15 text-rose-300" },
+  { value: "LOAD CANCELLED", aliases: ["cancelled", "canceled", "load canceled", "cancelled load", "canceled load"], color: "bg-rose-500/15 text-rose-300" },
   { value: "NO LOAD", aliases: ["no loads", "noload", "empty", "no load available"], color: "bg-zinc-500/15 text-zinc-300" },
   { value: "STUCK", aliases: ["stranded"], color: "bg-orange-500/15 text-orange-300" },
   { value: "LATE DEL", aliases: ["late delivery", "late del", "delayed delivery"], color: "bg-yellow-500/15 text-yellow-300" },

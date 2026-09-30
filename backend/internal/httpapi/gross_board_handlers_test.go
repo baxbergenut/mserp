@@ -53,7 +53,7 @@ func TestGrossBoardValidation(t *testing.T) {
 }
 
 func TestGrossBoardStatuses(t *testing.T) {
-	for _, status := range []string{"SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD"} {
+	for _, status := range []string{"SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "LOAD CANCELLED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD"} {
 		r := grossBoardRequest{WeekStart: "2026-09-28", Entries: []repository.GrossBoardEntry{{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", DayStatus: status}}}
 		if err := r.validate(); err != nil {
 			t.Fatalf("valid status %s rejected: %v", status, err)

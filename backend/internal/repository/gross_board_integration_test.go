@@ -71,6 +71,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
+	cancelledMigration, err := os.ReadFile("../../sql/039_load_cancelled_status.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(cancelledMigration)); err != nil {
+		t.Fatal(err)
+	}
 	base := GrossBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "l100", OriginalRate: "999", Miles: "999", DriverRate: "1000.10"}
 	if err = repo.Save(ctx, []GrossBoardEntry{base}); err != nil {
 		t.Fatal(err)
@@ -315,6 +322,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Database constraints also reject invalid status payloads outside HTTP.
+	for _, slot := range []int{0, 1} {
+		cancelled := GrossBoardEntry{DriverID: carryDriver, Date: "2026-10-02", Slot: slot, DayStatus: "LOAD CANCELLED"}
+		saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{cancelled})
+		if err != nil || len(saved) != 1 || saved[0].DayStatus != "LOAD CANCELLED" || saved[0].LoadRecordID != nil {
+			t.Fatalf("cancelled status slot %d: %v %+v", slot, err, saved)
+		}
+	}
 	bad := GrossBoardEntry{DriverID: carryDriver, Date: "2026-10-01", DayStatus: "HOME", OriginalRate: "1"}
 	if err = repo.Save(ctx, []GrossBoardEntry{bad}); err == nil {
 		t.Fatal("database accepted money on a status day")

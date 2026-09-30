@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `038_payroll_settlements.sql`:
+  `039_load_cancelled_status.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -296,8 +296,9 @@ assignment lookup lists.
   commission and estimated profit. Weekly generated rows affect Driver Pay net
   payable, including charge-only weeks. Recurring labels are read-only in Driver
   Pay (also enforced by the API); amounts, skips and resets remain editable.
-  Charge creation lives on Driver charges; Driver Pay retains installment
-  confirmation/reopening and source links only. Type defaults never update assignments.
+  Charge creation lives on Driver charges; Driver Pay retains legacy installment
+  reopening and source links only. Weekly amount edits autosave normally; payroll
+  finalization confirms collection. Type defaults never update assignments.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.
@@ -387,8 +388,9 @@ assignment lookup lists.
   dispatcher and showing current truck assignments. Weeks start Monday.
   Day statuses are stored separately from load numbers (`day_status`, migration
   028). Status days have no linked load, rates, or miles and never contribute to
-  totals, balance history, or incomplete-rate counts. The picker supports all 12
-  dispatcher statuses, exact names/aliases when no amounts are present, and
+  totals, balance history, or incomplete-rate counts. The picker supports all 13
+  dispatcher statuses (including LOAD CANCELLED, migration 039), exact names/aliases
+  when no amounts are present, and
   explicit suggestions for partial text. Replacing populated days requires a
   clear-values confirmation. Statuses never auto-link to imported loads, even
   when a load number happens to equal the status label. Existing free text is
@@ -548,9 +550,9 @@ assignment lookup lists.
   nonnegative total. Penalties is an expense category. Migration 036 marks all
   pre-existing driver-covered expenses as settled with zero remaining balance.
   New expenses suggest their full unpaid balance in Driver Pay from the expense
-  date's Monday, including weeks without loads. Saving an edited deduction or
-  choosing Save expense deductions records payment immediately; merely reading
-  payroll or saving unrelated notes does not. Zero explicitly defers a week.
+  date's Monday, including weeks without loads. Normal payroll autosaves include
+  all displayed unsaved expense deductions; editing a deduction saves its new
+  amount. Reading payroll alone does not collect payments. Zero explicitly defers a week.
   Subsequent weeks show the unpaid remainder; saved historical rows retain their
   amounts, and fully paid expenses do not generate new rows. Saved deductions in
   other weeks reserve the principal, including future weeks, preventing duplicate
@@ -562,6 +564,12 @@ assignment lookup lists.
   restricted. Legacy settled totals/responsibility cannot be repurposed.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
+
+- Expense type is labeled Name in manual and AI review forms, required after Category.
+  The API retains expenseType for compatibility and requires a nonblank name on writes.
+  Driver Pay shows only this name and the deduction amount; unnamed legacy records
+  fall back to category. A small blue Penalty or Expense source label appears next
+  to the name. There are no separate save-expense or confirm-installment buttons.
 
 - Expenses optionally link to existing drivers and trucks with `ON DELETE SET
   NULL` while retaining imported unit/name snapshots for historical display.

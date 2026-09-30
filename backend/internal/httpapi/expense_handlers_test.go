@@ -7,7 +7,7 @@ func TestExpenseRequestValidate(t *testing.T) {
 
 	request := expenseRequest{
 		Company: " MS Express ", Category: "Maintenance", ExpenseDate: "2026-09-23",
-		Amount: "1234.50", UnitNumber: " 010 ", Description: " oil change ",
+		Amount: "1234.50", UnitNumber: " 010 ", ExpenseType: " Oil change ", Description: " oil change ",
 	}
 	input, err := request.validate()
 	if err != nil {
@@ -22,10 +22,22 @@ func TestExpenseRequestValidate(t *testing.T) {
 	if input.Description == nil || *input.Description != "oil change" {
 		t.Fatalf("validate() description = %#v", input.Description)
 	}
+	if input.ExpenseType == nil || *input.ExpenseType != "Oil change" {
+		t.Fatalf("validate() name = %#v", input.ExpenseType)
+	}
+}
+
+func TestExpenseNameRequired(t *testing.T) {
+	for _, name := range []string{"", " \t\n "} {
+		request := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100", ExpenseType: name}
+		if _, err := request.validate(); err == nil || err.Error() != "expense name is required" {
+			t.Fatalf("name %q: expected required name error, got %v", name, err)
+		}
+	}
 }
 
 func TestDriverExpenseValidation(t *testing.T) {
-	r := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100.25", CoveredBy: " driver "}
+	r := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100.25", ExpenseType: "Parking violation", CoveredBy: " driver "}
 	if _, err := r.validate(); err == nil {
 		t.Fatal("driver responsibility requires a linked driver")
 	}
@@ -82,6 +94,7 @@ func TestExpenseRequestValidateRejectsInvalidValues(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			test.request.ExpenseType = "Test expense"
 			if _, err := test.request.validate(); err == nil {
 				t.Fatal("validate() error = nil, want error")
 			}
