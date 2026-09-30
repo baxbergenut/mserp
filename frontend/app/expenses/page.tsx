@@ -224,9 +224,9 @@ export default function ExpensesPage() {
         count={total}
         actionLabel="Add expense"
         onAction={openCreate}
+        secondaryAction={<Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expense settings</Link>}
       />
 
-      <div className="flex justify-end"><Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expense settings</Link></div>
       {error && <ErrorBanner message={error} />}
 
       <div className="grid gap-3 sm:grid-cols-3">

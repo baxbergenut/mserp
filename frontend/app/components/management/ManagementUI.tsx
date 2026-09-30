@@ -34,6 +34,7 @@ export function ManagementHeader({
   actionLabel,
   onAction,
   actionIcon: ActionIcon = Plus,
+  secondaryAction,
 }: {
   icon: LucideIcon;
   title: string;
@@ -42,7 +43,16 @@ export function ManagementHeader({
   actionLabel: string;
   onAction: () => void;
   actionIcon?: LucideIcon;
+  secondaryAction?: ReactNode;
 }) {
+  const action = <button
+    type="button"
+    onClick={onAction}
+    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+  >
+    <ActionIcon className="h-4 w-4" />
+    {actionLabel}
+  </button>;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -55,14 +65,7 @@ export function ManagementHeader({
         </div>
         <p className="mt-1.5 text-[13px] text-zinc-500">{description}</p>
       </div>
-      <button
-        type="button"
-        onClick={onAction}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-      >
-        <ActionIcon className="h-4 w-4" />
-        {actionLabel}
-      </button>
+      {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{action}{secondaryAction}</div> : action}
     </div>
   );
 }
