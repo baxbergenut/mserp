@@ -426,11 +426,7 @@ try {
   await page.setViewportSize({width:1440,height:640});
   await page.goto(`${base}/accounting/driver-pay?weekStart=2026-05-04&driverId=${driverId}`);
   if (await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).click();
-  const unmatchedLoad = page.getByRole('link', { name: 'NAV-SINGLE', exact: true });
-  await expect(unmatchedLoad).toHaveClass(/text-red-300/);
-  await expect(unmatchedLoad).toHaveAttribute('title', /Not found in the system/);
-  await expect(unmatchedLoad.locator('xpath=ancestor::tr[1]')).toHaveClass(/bg-red-500\/10/);
-  await page.screenshot({ path: join(temp, 'unmatched-payroll-loads.png'), fullPage: true });
+  await expect(page.getByRole('link', { name: 'NAV-SINGLE', exact: true })).toHaveClass(/text-blue-400/);
   await page.getByLabel('E2e Driver, adjustment 1, name',{exact:true}).fill('Navigation saved');
   await page.getByLabel('E2e Driver, adjustment 1, amount',{exact:true}).fill('10');
   await page.getByPlaceholder('Driver, truck, or load…').fill('NAV');
@@ -459,11 +455,17 @@ try {
   const selected = page.locator('[data-highlighted="true"]');
   await expect(selected).toHaveAttribute('aria-label','Selected load NAV / TARGET & 42, E2e Driver, 2026-05-10, slot 3');
   await expect(selected.locator('[data-selected-load]')).toHaveText('NAV / TARGET & 42');
+  const groupedLoads = selected.getByRole('button', { name: 'E2e Driver, 2026-05-10, load numbers and details', exact: true });
+  await expect(groupedLoads).toHaveClass(/bg-red-500\/15/);
+  await expect(selected.locator('[data-selected-load]')).toHaveClass(/text-red-300/);
+  await groupedLoads.hover();
+  await expect(page.getByRole('tooltip').getByRole('cell', { name: 'NAV-OTHER', exact: true })).toHaveClass(/text-red-300/);
   const savedNavigation = await (await page.request.get(`${base}/api/driver-pay?weekStart=2026-05-04`)).json();
   expect(savedNavigation.drivers.find(d=>d.id===driverId).edits.adjustments[0].name).toBe('Navigation saved');
   await page.screenshot({path:join(temp,'payroll-gross-board-target.png'),fullPage:true});
   await selected.getByRole('button',{name:'E2e Driver, 2026-05-10, edit loads',exact:true}).click();
   const dailyLoads = page.getByRole('dialog',{name:'Daily loads',exact:true});
+  for (const input of await dailyLoads.getByRole('combobox').all()) await expect(input).toHaveClass(/bg-red-500\/15.*text-red-300/);
   await dailyLoads.locator('[data-highlighted="true"]').getByLabel('E2e Driver, 2026-05-10, driver rate',{exact:true}).fill('123.45');
   let releasePayRead;
   const payReadGate = new Promise(resolve => { releasePayRead = resolve; });
@@ -485,6 +487,11 @@ try {
   if (await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/}).click();
   await page.getByRole('link',{name:'NAV-SINGLE',exact:true}).click();
   await expect(page.locator('[data-highlighted="true"]')).toHaveAttribute('aria-label','Selected load NAV-SINGLE, E2e Driver, 2026-05-04, slot 1');
+  const singleLoad = page.getByRole('combobox', { name: 'E2e Driver, 2026-05-04, load number or status', exact: true });
+  await expect(singleLoad).toHaveClass(/bg-red-500\/15.*text-red-300/);
+  await expect(singleLoad).toHaveAttribute('title', /Unmatched manual load/);
+  await expect(page.getByRole('combobox', { name: 'E2e Driver, 2026-05-05, load number or status', exact: true })).toHaveClass(/bg-zinc-800\/30/);
+  await page.screenshot({ path: join(temp, 'unmatched-gross-board-loads.png'), fullPage: true, animations: 'disabled' });
   await expect(page.getByRole('dialog')).toHaveCount(0);
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_extra_entries SET load_number='REPLACED' WHERE driver_id='${driverId}' AND service_date='2026-05-10' AND slot=2;`);
   await page.goto(targetUrl);
@@ -521,6 +528,7 @@ try {
   await page.getByRole('option', { name: 'LOAD CANCELLED', exact: true }).click();
   const cancelledStatus = page.getByRole('combobox', { name: 'E2e Driver, 2026-05-06, load number or status', exact: true });
   await expect(cancelledStatus).toHaveValue('LOAD CANCELLED');
+  await expect(cancelledStatus).not.toHaveAttribute('title', /Unmatched manual load/);
   await expect.poll(async () => {
     const board = await (await page.request.get(`${base}/api/gross-board?weekStart=2026-05-04`)).json();
     return board.entries.find(entry => entry.driverId === driverId && entry.date === '2026-05-06')?.dayStatus;

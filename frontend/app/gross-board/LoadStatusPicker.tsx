@@ -27,6 +27,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const query = entry.loadNumber.trim();
   const status = dayStatuses.find((item) => item.value === entry.dayStatus);
   const confirmed = entry.loadRecordId !== null;
+  const unmatched = !status && !confirmed && query !== "";
   const statusOptions = suggestedDayStatuses(browse || status ? "" : query);
   const loads = results.query === query && !status ? results.loads : [];
   const options: Option[] = [
@@ -91,7 +92,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       <input ref={input} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
-        title={status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Original rate and miles come from Loads." : "Enter a load number or day status"}
+        title={status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Original rate and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number or day status"}
         maxLength={200} value={status?.value ?? entry.loadNumber} disabled={disabled}
         onFocus={(event) => { setFocused(true); setBrowse(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => { setFocused(false); setBrowse(false); }}
@@ -117,7 +118,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           }
           if (event.key === "Enter" && open && options.length) { event.preventDefault(); choose(options[activeIndex]); }
         }}
-        className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
+        className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
         placeholder="Load # / status" />
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
         <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}

@@ -414,6 +414,9 @@ assignment lookup lists.
   matches the values reviewed. Driver-rate differences are intentional.
   Exact unique load numbers resolve on every board read, including late imports;
   unmatched or mistyped numbers remain unchanged. There is no fuzzy auto-linking.
+  Unmatched manual load numbers show red on Gross Board, including grouped-day
+  summaries, hover details and daily editors; blank cells and statuses keep their
+  own styling. Confirmed system loads remain green.
   The visible idle board refreshes every 30 seconds and on focus, discarding
   responses if editing or saving occurred during the request. Cards
   and row totals include planned and confirmed entries in the selected view,
@@ -434,8 +437,7 @@ assignment lookup lists.
   percentage; CPM fees use system total miles times the profile tariff. Exact
   decimals round each fee to cents, and totals sum visible rounded fees. Missing
   source details stay blank; unmatched/incomplete rows and provisional totals
-  are marked for review. Unmatched manually entered loads have red load numbers
-  and a red row tint in Driver Pay. Percentage-pay drivers have permanent Fuel and Toll rows
+  are marked for review. Percentage-pay drivers have permanent Fuel and Toll rows
   with locked names and signed editable amounts; CPM drivers never show or apply
   these rows. Percentage owner-operators default to negative weekly costs, while
   company drivers default to zero. Fuel uses production Relay diesel line items
