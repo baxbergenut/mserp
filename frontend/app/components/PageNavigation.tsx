@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { BackHrefContext, MarkBackContext, readMemory, ViewMemoryContext, writeMemory } from "@/app/lib/viewMemory";

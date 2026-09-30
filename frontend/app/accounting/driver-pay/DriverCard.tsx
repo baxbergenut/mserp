@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, memo, useState } from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";

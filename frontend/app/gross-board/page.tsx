@@ -2,18 +2,19 @@
 
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
-import Link from "next/link";
+import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
+import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { MetricCard } from "@/app/components/MetricCard";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { parseBoardLoadTarget } from "./loadLink";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
-import { addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 112, 112];
@@ -116,6 +117,7 @@ export default function GrossBoardPage() {
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
+  const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
   const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => dispatcher === "all" || driver.dispatcherId === dispatcher), [board, dispatcher]);
   const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName])).entries()), [board]);
   const shownEntries = useMemo(() => {
@@ -130,7 +132,7 @@ export default function GrossBoardPage() {
   const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
   const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
   const endingBalances = drivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
-    Object.values(allEntries).filter(entry => entry.driverId === driver.id)));
+    (entryIndex.byDriver.get(driver.id) ?? [])));
   const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
   const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
@@ -224,20 +226,20 @@ export default function GrossBoardPage() {
           <div className="flex items-center gap-3">
             <CalendarRange className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Gross Board</h1>
-            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{drivers.length}</span>
+            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span>
           </div>
           <p className="mt-1.5 text-[13px] text-zinc-500">Weekly load planning, driver rates, and gross totals by dispatcher.</p>
         </div>
         <div className="flex items-center gap-2">
-          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : message || "Saved automatically"}</span>
+          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
           <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
-        <MetricCard compact label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
-        <MetricCard compact label="Original RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
+        <MetricCard loading={loading} compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
+        <MetricCard loading={loading} compact label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
+        <MetricCard loading={loading} compact label="Original RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -264,12 +266,12 @@ export default function GrossBoardPage() {
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red rates/miles = entered values differ from the system</span>
         <span>Rate balance carries forward through the selected week · Click a balance for history</span>
         <span>Type a load or status · Use the dropdown to see all day statuses</span>
-        <span>{drivers.length} drivers · Daily totals · Hover grouped loads for details; click to edit</span>
+        <span>{loading ? <SkeletonBar className="h-3 w-16 align-middle" /> : `${drivers.length} drivers`} · Daily totals · Hover grouped loads for details; click to edit</span>
       </div>
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
-      {loading ? <div role="status" className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">Loading gross board…</div> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers for this dispatcher.</div> : board && <div className="max-h-[70vh] overflow-auto rounded-xl border border-zinc-800" role="region" aria-label="Weekly gross board" tabIndex={0}>
+      {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers for this dispatcher.</div> : board && <div className="weekly-content-enter max-h-[70vh] overflow-auto rounded-xl border border-zinc-800" role="region" aria-label="Weekly gross board" tabIndex={0}>
         <table className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
           <thead className="sticky top-0 z-30 bg-zinc-900 text-zinc-300">
@@ -283,8 +285,7 @@ export default function GrossBoardPage() {
           </thead>
           <tbody>
             {drivers.map((driver, index) => {
-              const dayEntries = dates.map(date => Object.values(allEntries).filter(entry => entry.driverId === driver.id && entry.date === date ).sort((a, b) => a.slot - b.slot));
-              dayEntries.forEach((entries, i) => { if (!entries.length) entries.push(emptyEntry(driver.id, dates[i])); });
+              const dayEntries = dates.map(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]);
               const entries = dayEntries.flat();
               const sum = totals(entries);
               const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", entries);
@@ -320,7 +321,7 @@ export default function GrossBoardPage() {
       </div>}
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
         opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
-        entries={Object.values(allEntries).filter(entry => entry.driverId === selectedDriver.id)} onClose={() => setBalanceDriver(null)} />}
+        entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}
     </div>
   );
 }

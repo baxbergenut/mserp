@@ -29,6 +29,10 @@ requests, authentication cookies, and CSRF protection remain same-origin behind
 Nginx. Do not build production against the direct IP endpoint. Nginx requires
 revalidation for frontend assets because deterministic release archives use an
 epoch modification time and must not trigger heuristic browser caching.
+The Nginx site configuration enables gzip for JavaScript, CSS, route text and
+JSON responses (minimum 1 KB), with `Vary: Accept-Encoding`. Site configuration
+changes are installed separately from release archives; back up the active
+configuration, run `nginx -t`, and reload only after validation.
 
 Database migrations should remain backward-compatible with the previous
 application release because an application rollback does not automatically

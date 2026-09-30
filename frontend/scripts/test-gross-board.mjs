@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 assert.equal(monday(new Date(2026, 8, 28)), "2026-09-28");
 assert.equal(monday(new Date(2026, 9, 4)), "2026-09-28");
@@ -100,3 +100,17 @@ const reused = additionalLoadEntries([draft, { ...removed, version: 4 }], blank.
 assert.equal(reused[0].slot, 1);
 assert.equal(reused[0].version, 4);
 assert.equal(reused[0].deleted, false);
+
+const indexedEntries = [
+  { ...blank, slot: 2, deleted: true },
+  { ...blank, driverId: "other", slot: 0 },
+  { ...blank, slot: 0 },
+  { ...blank, date: "2026-09-29", slot: 1 },
+];
+const indexed = indexBoardEntries(indexedEntries);
+assert.deepEqual(indexed.byDay.get("driver:2026-09-28").map(e => e.slot), [0, 2]);
+assert.equal(indexed.byDay.get("driver:2026-09-28")[1].deleted, true);
+assert.equal(indexed.byDriver.get("driver").length, 3);
+assert.equal(indexed.byDriver.get("other").length, 1);
+assert.equal(indexedEntries[0].slot, 2); // Source ordering is unchanged.
+console.log("Board indexing checks passed: driver/day isolation, slots and tombstones.");

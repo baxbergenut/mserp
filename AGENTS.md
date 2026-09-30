@@ -285,6 +285,10 @@ assignment lookup lists.
   shell. After initial authentication, route session rechecks run alongside page
   requests; every API request still enforces authentication and handles expiry.
   Entering login unmounts the authenticated shell and clears its session state.
+  IntentLink prefetches route code on hover/focus without caching financial records.
+  Weekly payroll/board tables and metrics show reduced-motion-aware skeletons
+  during reads. Gross Board indexes entries once by driver/day per revision.
+  Production Nginx compresses JavaScript, CSS, route payloads and JSON responses.
 
 - Driver charges use migration 033: charge types, schedules, effective Monday
   phases, weekly occurrences and append-only audit events. They are independent

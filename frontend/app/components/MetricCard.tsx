@@ -1,3 +1,4 @@
+import { SkeletonBar } from "./WeeklyTableSkeleton";
 import type { LucideIcon } from "lucide-react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
@@ -8,6 +9,7 @@ interface MetricCardProps {
   delta?: number | null;
   delay?: number;
   compact?: boolean;
+  loading?: boolean;
 }
 
 export function MetricCard({
@@ -17,6 +19,7 @@ export function MetricCard({
   delta,
   delay = 0,
   compact = false,
+  loading = false,
 }: MetricCardProps) {
   return (
     <div
@@ -47,7 +50,7 @@ export function MetricCard({
 
       <div className={compact ? "order-1" : "mt-4"}>
         <p className={`font-mono font-semibold tracking-tight text-zinc-100 ${compact ? "text-lg" : "text-2xl"}`}>
-          {value}
+          {loading ? <SkeletonBar className="h-5 w-24 align-middle" /> : value}
         </p>
         <p className={`text-zinc-500 ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[13px]"}`}>{label}</p>
       </div>

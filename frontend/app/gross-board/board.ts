@@ -133,3 +133,19 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
   }
   return remaining;
 }
+
+// Build lookup buckets once per board revision instead of scanning every entry
+// for every driver/day. Keep tombstones and slot order for editing/versioning.
+export function indexBoardEntries(entries: GrossBoardEntry[]) {
+  const byDriver = new Map<string, GrossBoardEntry[]>();
+  const byDay = new Map<string, GrossBoardEntry[]>();
+  for (const entry of entries) {
+    const driverEntries = byDriver.get(entry.driverId) ?? [];
+    driverEntries.push(entry); byDriver.set(entry.driverId, driverEntries);
+    const key = `${entry.driverId}:${entry.date}`;
+    const dayEntries = byDay.get(key) ?? [];
+    dayEntries.push(entry); byDay.set(key, dayEntries);
+  }
+  for (const day of byDay.values()) day.sort((a, b) => a.slot - b.slot);
+  return { byDriver, byDay };
+}
