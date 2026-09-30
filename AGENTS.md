@@ -434,7 +434,8 @@ assignment lookup lists.
   percentage; CPM fees use system total miles times the profile tariff. Exact
   decimals round each fee to cents, and totals sum visible rounded fees. Missing
   source details stay blank; unmatched/incomplete rows and provisional totals
-  are marked for review. Percentage-pay drivers have permanent Fuel and Toll rows
+  are marked for review. Unmatched manually entered loads have red load numbers
+  and a red row tint in Driver Pay. Percentage-pay drivers have permanent Fuel and Toll rows
   with locked names and signed editable amounts; CPM drivers never show or apply
   these rows. Percentage owner-operators default to negative weekly costs, while
   company drivers default to zero. Fuel uses production Relay diesel line items
@@ -567,9 +568,11 @@ assignment lookup lists.
 
 - Expense type is labeled Name in manual and AI review forms, required after Category.
   The API retains expenseType for compatibility and requires a nonblank name on writes.
-  Driver Pay shows only this name and the deduction amount; unnamed legacy records
-  fall back to category. A small blue Penalty or Expense source label appears next
-  to the name. There are no separate save-expense or confirm-installment buttons.
+  Driver Pay shows this name and a negative deduction amount; unnamed legacy records
+  fall back to category. A small muted Left balance beside the name previews the
+  opening weekly balance minus the edited deduction, before later-week payments.
+  Expense payment amounts remain nonnegative in the API and are subtracted once
+  from net pay. There are no separate save-expense or confirm-installment buttons.
 
 - Expenses optionally link to existing drivers and trucks with `ON DELETE SET
   NULL` while retaining imported unit/name snapshots for historical display.
