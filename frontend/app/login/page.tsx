@@ -6,7 +6,7 @@ import { LockKeyhole } from "lucide-react";
 import { login } from "@/app/lib/api";
 
 function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/gross-board";
 }
 
 export default function LoginPage() {

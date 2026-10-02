@@ -6,6 +6,7 @@ import type { AuthSession } from "@/app/lib/types";
 import { fetchAuthSession } from "@/app/lib/api";
 import { PageNavigation } from "./PageNavigation";
 import { Sidebar } from "./Sidebar";
+import { TopBar } from "./TopBar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -52,7 +53,10 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full">
       <Sidebar username={session.user.username} />
-      <PageNavigation key={`${pathname}?${query}`} userId={session.user.id} url={query ? `${pathname}?${query}` : pathname}>{children}</PageNavigation>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <TopBar key={pathname + query} username={session.user.username} />
+        <PageNavigation key={`${pathname}?${query}`} userId={session.user.id} url={query ? `${pathname}?${query}` : pathname}>{children}</PageNavigation>
+      </div>
     </div>
   );
 }

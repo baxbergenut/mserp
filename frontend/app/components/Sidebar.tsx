@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   Banknote,
   ChevronDown,
-  LayoutDashboard,
   Users,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,7 +23,6 @@ import {
 import { logout } from "@/app/lib/api";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/fuel", label: "Fuel", icon: Fuel },

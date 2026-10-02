@@ -1,6 +1,7 @@
 "use client";
 
 import { useViewState } from "@/app/lib/viewMemory";
+import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -124,6 +125,8 @@ function DriversContent() {
     setEditing(null);
     setError("");
   };
+
+  useQuickCreate(openCreate);
 
   const openEdit = (driver: Driver) => {
     setIntake(null);

@@ -1,4 +1,5 @@
 "use client";
+import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
@@ -107,6 +108,8 @@ export default function TrucksPage() {
     setEditing(null);
     setError("");
   };
+
+  useQuickCreate(openCreate);
 
   const openEdit = async (truck: Truck) => {
     if (!await loadOptions()) return;

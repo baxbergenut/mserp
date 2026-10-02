@@ -1,6 +1,7 @@
 "use client";
 
 import { useViewState } from "@/app/lib/viewMemory";
+import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -31,6 +32,7 @@ export default function TasksPage() {
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((n) => n + 1), []);
+  useQuickCreate(() => setCreatingTask(true));
 
   useEffect(() => {
     let cancelled = false;

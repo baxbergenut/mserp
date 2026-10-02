@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useState, type Dispatch, type S
 export const ViewMemoryContext = createContext("");
 export const BackHrefContext = createContext<string | undefined>(undefined);
 export const MarkBackContext = createContext<(url: string) => void>(() => {});
+export const NavigationSearchContext = createContext<string | undefined>(undefined);
 export const useMarkBack = () => useContext(MarkBackContext);
 export const useBackHref = () => useContext(BackHrefContext);
 const fallback = new Map<string, string>();
@@ -23,8 +24,13 @@ export function writeMemory(key: string, value: unknown) {
 // View preferences only. Never use this for records, credentials, or form drafts.
 export function useViewState<T>(name: string, initial: T | (() => T), initialOverride?: T): [T, Dispatch<SetStateAction<T>>] {
   const scope = useContext(ViewMemoryContext);
+  const explicitSearch = useContext(NavigationSearchContext);
+  const override = explicitSearch !== undefined && name === "page:search" ? explicitSearch as T
+    : explicitSearch !== undefined && name === "page:page" ? 1 as T
+    : explicitSearch !== undefined && ["page:filters", "page:category", "page:company", "page:dateFrom", "page:dateTo"].includes(name)
+      ? (typeof initial === "function" ? (initial as () => T)() : initial) : initialOverride;
   const key = `${scope}:view:${name}`;
-  const [value, setValue] = useState<T>(() => initialOverride !== undefined ? initialOverride : readMemory(key, typeof initial === "function" ? (initial as () => T)() : initial));
+  const [value, setValue] = useState<T>(() => override !== undefined ? override : readMemory(key, typeof initial === "function" ? (initial as () => T)() : initial));
   const update = useCallback<Dispatch<SetStateAction<T>>>(next => {
     setValue(current => {
       const result = typeof next === "function" ? (next as (value: T) => T)(current) : next;

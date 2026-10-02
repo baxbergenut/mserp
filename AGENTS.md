@@ -88,8 +88,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
   shell and sidebar; `frontend/app/login/` owns the login page.
-- `frontend/app/page.tsx`: redirects `/` to `/dashboard`.
-- `frontend/app/dashboard/`: load-derived metrics and charting.
+- `frontend/app/page.tsx`: redirects `/` to `/gross-board`.
+- `frontend/app/dashboard/`: redirects legacy Dashboard links to Gross Board.
+  The old load-derived dashboard is removed pending a Gross Board-based replacement.
 - `frontend/app/accounting/driver-pay/`: collapsed weekly driver accordions sourced
   from Gross Board, system load details, profile tariffs, comments and adjustments.
   Driver summaries form a connected compact table; comments use hover previews and
@@ -119,6 +120,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   modal, form, table, empty/error, and confirmation primitives. Reuse these
   before creating parallel UI patterns.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
+- `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
+  links and account menu. Explicit search query parameters override remembered
+  list search/page values; new query tokens open existing forms once.
 - `frontend/app/lib/api.ts`: API base selection and every frontend request.
 - `frontend/app/lib/types.ts`: frontend view/input contracts.
 - `frontend/app/lib/pdf.ts`: browser-side PDF-to-JPEG rendering used before GROQ

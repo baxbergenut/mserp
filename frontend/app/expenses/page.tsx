@@ -1,6 +1,7 @@
 "use client";
 
 import { useViewState } from "@/app/lib/viewMemory";
+import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -165,6 +166,8 @@ export default function ExpensesPage() {
     setError("");
     setEditing(null);
   }
+
+  useQuickCreate(openCreate, !isLoading);
 
   function openEdit(expense: Expense) {
     setForm(expenseToInput(expense));
