@@ -86,6 +86,8 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	DriverHome       *string `json:"driverHome"`
+	HomeVersion      int     `json:"homeVersion"`
 	ChargePauseWeek  string  `json:"chargePauseWeek"`
 	FullName         string  `json:"fullName"`
 	IsOwnerOperator  bool    `json:"isOwnerOperator"`
@@ -110,6 +112,13 @@ type driverRequest struct {
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
+	if request.DriverHome != nil {
+		home := strings.TrimSpace(*request.DriverHome)
+		if len([]rune(home)) > 300 || strings.ContainsRune(home, 0) || request.HomeVersion < 0 || request.HomeVersion > 2147483646 {
+			return repository.DriverInput{}, errors.New("invalid driver home or home version")
+		}
+		request.DriverHome = &home
+	}
 	request.FullName = strings.TrimSpace(request.FullName)
 	if request.FullName == "" {
 		return repository.DriverInput{}, errors.New("full name is required")
@@ -145,6 +154,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, err
 	}
 	return repository.DriverInput{
+		DriverHome: request.DriverHome, HomeVersion: request.HomeVersion,
 		ChargePauseWeek: request.ChargePauseWeek,
 		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
 		PayType: request.PayType, PayRate: request.PayRate,
@@ -522,6 +532,10 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 	var invalid *repository.ChargeValidationError
 	if errors.As(err, &invalid) {
 		writeAPIError(w, 409, err.Error())
+		return
+	}
+	if errors.Is(err, repository.ErrDriverBoardConflict) {
+		writeAPIError(w, http.StatusConflict, err.Error())
 		return
 	}
 	if errors.Is(err, repository.ErrInvestorConflict) || errors.Is(err, repository.ErrInactiveOwner) {

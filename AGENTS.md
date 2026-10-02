@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `044_access_control.sql`:
+  `045_driver_board.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -107,6 +107,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+- `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
+  filters, current New York week Gross Board totals and versioned autosaves.
+  Keep fields on one line with compact rows. Prioritize columns through ETA;
+  later fields may extend into horizontal scrolling. Show type codes without a legend.
+  `driver_board_repository.go` and `driver_board_handlers.go` own its backend.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and review-first AI transaction entry.
@@ -246,6 +251,9 @@ browser bundle.
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
+- Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
+  with changed entries only. Dedicated `driver_board.read`/`driver_board.write`
+  permissions include board contact/home reads and home updates respectively.
 - Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
   `POST /driver-pay/finalize` and `/reopen` (optional driverId, report revision;
   reopening requires a reason). `GET /drivers/{id}/pay-history` is paginated;
@@ -297,6 +305,25 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Driver Board uses migration 045. It lists active managed drivers with live
+  truck, phone and dispatcher assignments. Operational text, trailer and status
+  are persistent per driver, not weekly snapshots; Gross Board alone supplies
+  the current New York Monday–Sunday gross and miles (same entered/source and
+  status/deletion rules). Filters scope cards and dispatcher totals to shown
+  drivers. Type badges use actual truck ownership plus driver pay method: O for
+  percentage owner operators, M for CPM company/own-truck drivers, %-O/M-O for
+  percentage/CPM hired drivers on other investors' trucks, % for company
+  percentage drivers. No ownership or pay settings change from this view.
+  `drivers.driver_home` is a separate optional home-base field (not the mailing
+  address), shared by profiles and the board. Database-triggered home versions
+  prevent stale profile/board overwrites; older clients omitting home preserve it.
+  Five-second autosave writes changed rows atomically with optimistic versions;
+  clearing retains versions, navigation flushes, conflicts retain local drafts,
+  and visible idle boards refresh every 30 seconds/on focus. Drafts are never
+  persisted in view memory. Tests use disposable local
+  MSERP_DRIVER_BOARD_TEST_DATABASE_URL as mserp_app for fresh/migrated schemas;
+  the investor E2E runner includes driver-board-e2e.mjs.
 
 - Access control uses migration 044. One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in
@@ -828,6 +855,7 @@ go vet ./...
 # frontend/
 npm run lint
 node scripts/test-gross-board.mjs
+node scripts/test-driver-board.mjs
 node scripts/test-driver-pay.mjs
 node scripts/test-phone.mjs
 npm run build

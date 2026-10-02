@@ -274,6 +274,8 @@ export type TruckStatus =
   | "out_of_service";
 
 export interface Driver {
+  driverHome: string;
+  homeVersion: number;
   id: string;
   fullName: string;
   isOwnerOperator: boolean;
@@ -306,6 +308,8 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  driverHome?: string;
+  homeVersion?: number;
   chargePauseWeek?: string;
   fullName: string;
   isOwnerOperator: boolean;
@@ -328,6 +332,37 @@ export interface DriverInput {
   active: boolean;
   notes: string;
   cdlFileId: string | null;
+}
+
+export interface DriverBoardEntry {
+  driverId: string;
+  currentLoad: string;
+  trailerNumber: string;
+  status: string;
+  destination: string;
+  eta: string;
+  notes: string;
+  homeTime: string;
+  driverHome: string;
+  homeVersion: number;
+  version: number;
+}
+
+export interface DriverBoardDriver {
+  id: string;
+  fullName: string;
+  driverType: "O" | "M" | "%-O" | "M-O" | "%";
+  truckUnit: string;
+  phone: string;
+  dispatcherId: string;
+  dispatcherName: string;
+}
+
+export interface DriverBoard {
+  weekStart: string;
+  drivers: DriverBoardDriver[];
+  entries: DriverBoardEntry[];
+  grossEntries: GrossBoardEntry[];
 }
 
 export type DriverDirectoryEntry = Driver & { intakeId?: string };

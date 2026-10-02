@@ -46,6 +46,8 @@ func routePermission(method, path string) string {
 		if read {
 			return "loads.read"
 		}
+	case "driver-board":
+		return pair("driver_board")
 	case "gross-board":
 		return pair("board")
 	case "fuel-transactions", "fuel-dashboard":

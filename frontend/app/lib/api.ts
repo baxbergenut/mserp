@@ -1,6 +1,7 @@
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
+  DriverBoard, DriverBoardEntry,
   AccessData, AccessRole, ManagedUser,
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
@@ -109,6 +110,10 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
+export const fetchDriverBoard = (weekStart: string) =>
+  apiRequest<DriverBoard>(withQuery("/driver-board", { weekStart }));
+export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
+  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>
   apiRequest<GrossBoardBalanceLine[]>(withQuery("/gross-board/balance", { driverId, weekStart }));
 export const searchGrossBoardLoads = (search: string) =>

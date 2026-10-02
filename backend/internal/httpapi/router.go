@@ -125,6 +125,7 @@ func NewRouter(
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
+	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool))
 	registerDriverPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), job)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
 	registerInvestorPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), repository.NewDriverChargeRepository(pool))

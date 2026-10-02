@@ -15,6 +15,8 @@ import {
 
 export const emptyDriverInput: DriverInput = {
   fullName: "",
+  driverHome: "",
+  homeVersion: 0,
   isOwnerOperator: false,
   payType: "cpm",
   payRate: 0,
@@ -39,6 +41,8 @@ export const emptyDriverInput: DriverInput = {
 export function driverToInput(driver: Driver): DriverInput {
   return {
     fullName: driver.fullName,
+    driverHome: driver.driverHome ?? "",
+    homeVersion: driver.homeVersion ?? 0,
     isOwnerOperator: driver.isOwnerOperator,
     payType: driver.payType,
     payRate: driver.payRate,
@@ -309,6 +313,9 @@ export function DriverForm({
           />
         </Field>
         <div className="hidden sm:block" />
+        <Field label="Driver home" wide>
+          <input value={value.driverHome ?? ""} onChange={(event) => set("driverHome", event.target.value)} maxLength={300} placeholder="City, state" className={controlClass} />
+        </Field>
         <Field label="Street address" wide>
           <input
             value={value.address}

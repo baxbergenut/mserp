@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const source = fs.readFileSync(new URL('../app/driver-board/board.ts', import.meta.url), 'utf8');
+const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
+const { reconcileDriverBoard } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const draft = { driverId: 'a', notes: 'first', driverHome: 'Memphis, TN', version: 0, homeVersion: 0 };
+const committed = { ...draft, version: 1, homeVersion: 1 };
+assert.deepEqual(reconcileDriverBoard({ a: draft }, { a: draft }, [committed]), {});
+const later = { ...draft, notes: 'second', driverHome: 'Louisville, KY' };
+assert.deepEqual(reconcileDriverBoard({ a: later }, { a: draft }, [committed]), { a: { ...later, version: 1, homeVersion: 1 } });
+const reverted = { ...draft, notes: '' };
+assert.deepEqual(reconcileDriverBoard({ a: reverted }, { a: draft }, [committed]), { a: { ...reverted, version: 1, homeVersion: 1 } });
+assert.deepEqual(reconcileDriverBoard({ b: { ...draft, driverId: 'b' } }, { a: draft }, [committed]), { b: { ...draft, driverId: 'b' } });
+console.log('Driver Board checks passed: in-flight typing, revert and version reconciliation.');

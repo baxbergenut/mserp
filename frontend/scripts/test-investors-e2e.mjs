@@ -4,6 +4,7 @@ import { chromium, expect } from '@playwright/test';
 import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
+import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -131,6 +132,7 @@ try {
   await runPhoneE2E({ page, base });
   await runAccessE2E({ page, base, sql, schema, temp });
   await runInvestorPayE2E({ page, base, sql, schema, temp });
+  await runDriverBoardE2E({ page, base, sql, schema, temp });
   await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();

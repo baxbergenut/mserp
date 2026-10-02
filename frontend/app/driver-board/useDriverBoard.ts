@@ -1,0 +1,122 @@
+"use client";
+
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { fetchDriverBoard, saveDriverBoard } from "@/app/lib/api";
+import type { DriverBoard, DriverBoardEntry } from "@/app/lib/types";
+import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
+import { reconcileDriverBoard } from "./board";
+
+export function useDriverBoard() {
+  const router = useRouter();
+  const [board, setBoard] = useState<DriverBoard | null>(null);
+  const [changes, setChanges] = useState<Record<string, DriverBoardEntry>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const activity = useRef(0);
+  const savingRef = useRef(false);
+  const idle = useRef(false);
+  const savedRef = useRef<Record<string, DriverBoardEntry>>({});
+  const dirty = Object.keys(changes).length > 0;
+  const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
+  useLayoutEffect(() => { savedRef.current = saved; idle.current = !dirty && !saving && !loading; }, [saved, dirty, saving, loading]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDriverBoard(currentChargeWeek()).then(value => { if (!cancelled) setBoard(value); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load Driver Board"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false, inFlight = false;
+    const refresh = async () => {
+      if (!idle.current || document.visibilityState !== "visible" || inFlight) return;
+      const revision = activity.current;
+      inFlight = true;
+      try {
+        const value = await fetchDriverBoard(currentChargeWeek());
+        if (!cancelled && idle.current && revision === activity.current) { setBoard(value); setRefreshError(""); }
+      } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Use Reload to update totals and assignments."); }
+      finally { inFlight = false; }
+    };
+    const timer = setInterval(() => void refresh(), 30000);
+    const focus = () => void refresh();
+    window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); };
+  }, []);
+
+  const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {
+    activity.current += 1;
+    idle.current = false;
+    setChanges(current => {
+      const baseline = savedRef.current[id];
+      const next = { ...(current[id] ?? baseline), [field]: value };
+      const result = { ...current, [id]: next };
+      // While saving, a revert must still be sent after the first write finishes.
+      if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
+      return result;
+    });
+  }, []);
+
+  const save = useCallback(async () => {
+    if (savingRef.current || !dirty || loading) return;
+    savingRef.current = true; activity.current += 1;
+    const snapshot = { ...changes };
+    setSaving(true); setError("");
+    try {
+      const committed = await saveDriverBoard(Object.values(snapshot));
+      setBoard(current => {
+        if (!current) return current;
+        const entries = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
+        committed.forEach(e => { entries[e.driverId] = e; });
+        return { ...current, entries: Object.values(entries) };
+      });
+      setChanges(current => reconcileDriverBoard(current, snapshot, committed));
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
+    finally { activity.current += 1; savingRef.current = false; setSaving(false); }
+  }, [changes, dirty, loading]);
+
+  useEffect(() => {
+    if (!dirty || saving || error || loading) return;
+    const timer = setTimeout(() => void save(), pendingLink ? 0 : 5000);
+    return () => clearTimeout(timer);
+  }, [dirty, saving, error, loading, save, pendingLink]);
+
+  useEffect(() => {
+    if (!dirty && !saving) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const leave = (event: MouseEvent) => {
+      const link = (event.target as Element).closest?.("a[href]");
+      if (link && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && link.getAttribute("target") !== "_blank") {
+        const href = link.getAttribute("href");
+        if (!href?.startsWith("/") && !href?.startsWith("http")) return;
+        event.preventDefault(); event.stopPropagation(); setPendingLink(href);
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leave, true);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
+  }, [dirty, saving]);
+
+  useEffect(() => {
+    if (!pendingLink || dirty || saving || error || loading) return;
+    if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
+    else window.location.assign(pendingLink);
+  }, [pendingLink, dirty, saving, error, loading, router]);
+
+  async function reload() {
+    if (savingRef.current) return;
+    if (dirty && !window.confirm("Discard unsaved changes and reload the saved Driver Board?")) return;
+    activity.current += 1; idle.current = false;
+    setLoading(true); setError(""); setPendingLink(null); setChanges({});
+    try { setBoard(await fetchDriverBoard(currentChargeWeek())); setRefreshError(""); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load Driver Board"); }
+    finally { setLoading(false); }
+  }
+
+  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, leaving: !!pendingLink };
+}

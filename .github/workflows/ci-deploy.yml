@@ -58,6 +58,7 @@ jobs:
       - name: Test backend
         working-directory: backend
         env:
+          MSERP_DRIVER_BOARD_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_ACCESS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
@@ -96,6 +97,10 @@ jobs:
       - name: Check gross board calculations and autosave
         working-directory: frontend
         run: node scripts/test-gross-board.mjs
+
+      - name: Check driver board autosave
+        working-directory: frontend
+        run: node scripts/test-driver-board.mjs
 
       - name: Check driver pay calculations and autosave
         working-directory: frontend
