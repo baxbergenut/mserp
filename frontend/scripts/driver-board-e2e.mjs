@@ -19,7 +19,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   const headers = { 'X-CSRF-Token': session.csrfToken };
   const getBoard = async () => (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
   await page.goto(`${base}/driver-board`);
-  await expect(page.getByRole('heading', { name: 'Driver Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
   await page.getByLabel('Dispatcher filter').selectOption('e4500000-0000-0000-0000-000000000001');
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await expect(page.getByText('$2,800.15', { exact: true })).toHaveCount(2);
@@ -142,7 +142,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     await viewer.getByLabel('Email or existing username', { exact: true }).fill('board-viewer@example.com');
     await viewer.getByLabel('Password', { exact: true }).fill(password);
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(viewer.getByRole('heading', { name: 'Driver Board', exact: true })).toBeVisible();
+    await expect(viewer.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
     await expect(viewer.getByLabel('Board Cpm · Notes', { exact: true })).toBeDisabled();
     const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
     remote = (await getBoard()).entries.find(e => e.driverId === id);
@@ -164,5 +164,5 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.screenshot({ path: join(temp, 'driver-board-mobile-table.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  console.log('Driver Board E2E passed: totals, autosave, navigation flush, home/profile synchronization, history/undo, personal and named views, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
+  console.log('Status Board E2E passed: totals, autosave, navigation flush, home/profile synchronization, history/undo, personal and named views, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
 }

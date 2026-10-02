@@ -308,6 +308,7 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  assignmentWeek?: string;
   driverHome?: string;
   homeVersion?: number;
   chargePauseWeek?: string;
@@ -425,6 +426,7 @@ export interface Truck {
 }
 
 export interface TruckInput {
+  assignmentWeek?: string;
   ownerId: string | null;
   unitNumber: string;
   vin: string;
@@ -502,6 +504,7 @@ export interface Dispatcher {
 }
 
 export interface DispatcherInput {
+  assignmentWeek?: string;
   fullName: string;
   email: string;
   /** Optional phone: ten ASCII digits, or an empty string. */

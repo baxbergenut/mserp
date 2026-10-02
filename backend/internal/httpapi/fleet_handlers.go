@@ -86,6 +86,7 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	AssignmentWeek   string  `json:"assignmentWeek"`
 	DriverHome       *string `json:"driverHome"`
 	HomeVersion      int     `json:"homeVersion"`
 	ChargePauseWeek  string  `json:"chargePauseWeek"`
@@ -154,7 +155,8 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, err
 	}
 	return repository.DriverInput{
-		DriverHome: request.DriverHome, HomeVersion: request.HomeVersion,
+		AssignmentWeek: request.AssignmentWeek,
+		DriverHome:     request.DriverHome, HomeVersion: request.HomeVersion,
 		ChargePauseWeek: request.ChargePauseWeek,
 		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
 		PayType: request.PayType, PayRate: request.PayRate,
@@ -169,6 +171,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	AssignmentWeek      string  `json:"assignmentWeek"`
 	OwnerID             *string `json:"ownerId"`
 	UnitNumber          string  `json:"unitNumber"`
 	VIN                 string  `json:"vin"`
@@ -232,7 +235,8 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
-		OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
+		AssignmentWeek: request.AssignmentWeek,
+		OwnerID:        request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
 		Make: optionalString(request.Make), Model: optionalString(request.Model),
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,
@@ -244,13 +248,14 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 }
 
 type dispatcherRequest struct {
-	FullName      string   `json:"fullName"`
-	Email         string   `json:"email"`
-	Phone         string   `json:"phone"`
-	PayPercentage *float64 `json:"payPercentage"`
-	DriverIDs     []string `json:"driverIds"`
-	Active        bool     `json:"active"`
-	Notes         string   `json:"notes"`
+	AssignmentWeek string   `json:"assignmentWeek"`
+	FullName       string   `json:"fullName"`
+	Email          string   `json:"email"`
+	Phone          string   `json:"phone"`
+	PayPercentage  *float64 `json:"payPercentage"`
+	DriverIDs      []string `json:"driverIds"`
+	Active         bool     `json:"active"`
+	Notes          string   `json:"notes"`
 }
 
 func (request dispatcherRequest) validate() (repository.DispatcherInput, error) {
@@ -277,7 +282,8 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 		driverIDs = append(driverIDs, id)
 	}
 	return repository.DispatcherInput{
-		FullName: request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
+		AssignmentWeek: request.AssignmentWeek,
+		FullName:       request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
 		PayPercentage: request.PayPercentage, DriverIDs: driverIDs,
 		Active: request.Active, Notes: optionalString(request.Notes),
 	}, nil
@@ -549,7 +555,14 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 	var postgresError *pgconn.PgError
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
-		case "23503", "23514", "22P02":
+		case "23514":
+			if strings.HasPrefix(postgresError.Message, "The selected week precedes") {
+				writeAPIError(w, http.StatusConflict, postgresError.Message)
+				return
+			}
+			writeAPIError(w, http.StatusBadRequest, "the request references invalid data")
+			return
+		case "23503", "22P02":
 			writeAPIError(w, http.StatusBadRequest, "the request references invalid data")
 			return
 		case "23505":

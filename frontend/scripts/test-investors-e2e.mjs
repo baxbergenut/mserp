@@ -4,6 +4,7 @@ import { chromium, expect } from '@playwright/test';
 import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
+import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -113,6 +114,7 @@ try {
   await expect(truckRow).toContainText('E2e Investor');
   await truckRow.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel(/^Assigned driver/).selectOption({ label: 'E2e Driver' });
+  await page.getByRole('button', { name: 'This week', exact: true }).click();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(truckRow).toContainText('E2e Driver');
   await expect(truckRow).toContainText('E2e Investor');
@@ -133,6 +135,7 @@ try {
   await runAccessE2E({ page, base, sql, schema, temp });
   await runInvestorPayE2E({ page, base, sql, schema, temp });
   await runDriverBoardE2E({ page, base, sql, schema, temp });
+  await runAssignmentWeekE2E({ page, base, sql, schema });
   await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();

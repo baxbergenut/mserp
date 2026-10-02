@@ -548,8 +548,9 @@ assignment lookup lists.
 
 - Gross board plans persist up to 100 load slots per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers and inactive
-  drivers with saved entries through the selected week appear, grouped by current
-  dispatcher and showing current truck assignments. Weeks start Monday.
+  drivers with saved entries through the selected week appear. Gross Board and
+  unfinalized Driver Pay resolve dispatcher/truck headings from assignment history
+  for the selected New York week, never today's links. Weeks start Monday.
   Day statuses are stored separately from load numbers (`day_status`, migration
   028). Status days have no linked load, rates, or miles and never contribute to
   totals, balance history, or incomplete-rate counts. The picker supports all 13
@@ -690,6 +691,18 @@ assignment lookup lists.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
+- Assignment changes in driver, truck, and dispatcher forms require a start Monday
+  in the current or a past New York week. The optional assignmentWeek API field
+  defaults to the current week for older clients. Migration 047 makes dispatcher
+  history honor this boundary; truck writes use the same boundary. Same-week
+  corrections retain zero-length periods without overlaps. Changes cannot cross
+  a later recorded assignment week; unchanged links never reopen periods.
+  Tests cover fresh/migrated schemas and assignment-week-e2e.mjs. Migration 046
+  is reserved for the separate Driver Board history work.
+
+- Status Board is the visible name of /driver-board; route/permission identifiers
+  stay compatible. Sidebar order begins Status Board, Gross Board, Loads.
+
 - Driver/truck assignment history lives in `truck_driver_assignments`. Partial
   unique indexes enforce at most one current truck per driver and one current
   driver per truck. Assignment changes must remain transactional.

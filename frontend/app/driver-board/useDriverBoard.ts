@@ -27,7 +27,7 @@ export function useDriverBoard() {
   useEffect(() => {
     let cancelled = false;
     fetchDriverBoard(currentChargeWeek()).then(value => { if (!cancelled) setBoard(value); })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load Driver Board"); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load Status Board"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
@@ -110,11 +110,11 @@ export function useDriverBoard() {
 
   async function reload() {
     if (savingRef.current) return;
-    if (dirty && !window.confirm("Discard unsaved changes and reload the saved Driver Board?")) return;
+    if (dirty && !window.confirm("Discard unsaved changes and reload the saved Status Board?")) return;
     activity.current += 1; idle.current = false;
     setLoading(true); setError(""); setPendingLink(null); setChanges({});
     try { setBoard(await fetchDriverBoard(currentChargeWeek())); setRefreshError(""); }
-    catch (err) { setError(err instanceof Error ? err.message : "Unable to load Driver Board"); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load Status Board"); }
     finally { setLoading(false); }
   }
 

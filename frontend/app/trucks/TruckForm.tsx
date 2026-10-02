@@ -1,5 +1,7 @@
 "use client";
 
+import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
+
 import { ExternalLink, FileText, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import type { Driver, Investor, Truck, TruckInput } from "../lib/types";
 import { fileDownloadUrl } from "../lib/api";
@@ -76,7 +78,7 @@ export function TruckForm({
   onRemoveIRP: () => void;
 }) {
   const set = <K extends keyof TruckInput>(key: K, next: TruckInput[K]) =>
-    onChange({ ...value, [key]: next });
+    onChange({ ...value, [key]: next, ...(["driverId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
   const numberOrNull = (raw: string) => (raw === "" ? null : Number(raw));
 
   return (
@@ -246,6 +248,7 @@ export function TruckForm({
       </FormSection>
 
       <FormSection title="Operations and assignment">
+        <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
         <Field label="Assigned driver" hint="Selecting a driver releases any truck currently assigned to them.">
           <select
             value={value.driverId ?? ""}

@@ -1,5 +1,7 @@
 "use client";
 
+import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
+
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { ExternalLink, FileBadge, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import { PhoneInput } from "../components/management/PhoneInput";
@@ -85,7 +87,7 @@ export function DriverForm({
   onRemoveCDL: () => void;
 }) {
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
-    onChange({ ...value, [key]: next });
+    onChange({ ...value, [key]: next, ...(["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
 
   return (
     <div className="space-y-6">
@@ -249,6 +251,7 @@ export function DriverForm({
       </FormSection>
 
       <FormSection title="Assignments">
+        <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
         <Field label="Dispatcher">
           <select
             value={value.dispatcherId ?? ""}

@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrDriverBoardConflict = errors.New("driver board or driver home changed; reload to review the latest values before editing again")
+var ErrDriverBoardConflict = errors.New("status board or driver home changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
 	DriverID      string `json:"driverId"`

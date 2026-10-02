@@ -138,10 +138,8 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	defer tx.Rollback(ctx)
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.unit_number,''),
- coalesce(dp.id::text,''), coalesce(dp.full_name,'Unassigned'), d.active
- FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
- LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
- LEFT JOIN trucks t ON t.id=a.truck_id
+ coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
+ FROM drivers d `+weeklyAssignmentJoins+`
  WHERE d.active OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
  AND e.service_date < $1::date+7)
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)

@@ -62,8 +62,8 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
-		logger.Error("driver board request failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "the driver board could not be loaded or saved")
+		logger.Error("status board request failed", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "the status board could not be loaded or saved")
 	}
 	r.Get("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))

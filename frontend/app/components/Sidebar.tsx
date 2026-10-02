@@ -25,9 +25,9 @@ import { logout } from "@/app/lib/api";
 import { usePermissions, pagePermission } from "@/app/lib/access";
 
 const NAV_ITEMS = [
-  { href: "/loads", label: "Loads", icon: Package },
+  { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
-  { href: "/driver-board", label: "Driver Board", icon: Truck },
+  { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/tolls", label: "Tolls", icon: Receipt },

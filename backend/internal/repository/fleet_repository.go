@@ -55,6 +55,7 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	AssignmentWeek   string
 	DriverHome       *string
 	HomeVersion      int
 	ChargePauseWeek  string
@@ -112,6 +113,7 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	AssignmentWeek      string
 	OwnerID             *string
 	UnitNumber          string
 	VIN                 *string
@@ -147,13 +149,14 @@ type Dispatcher struct {
 }
 
 type DispatcherInput struct {
-	FullName      string
-	Email         *string
-	Phone         *string
-	PayPercentage *float64
-	DriverIDs     []string
-	Active        bool
-	Notes         *string
+	AssignmentWeek string
+	FullName       string
+	Email          *string
+	Phone          *string
+	PayPercentage  *float64
+	DriverIDs      []string
+	Active         bool
+	Notes          *string
 }
 
 func (r *FleetRepository) ListDrivers(ctx context.Context) ([]Driver, error) {
@@ -228,6 +231,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+		return Driver{}, err
+	}
 
 	id, err := createDriverTx(ctx, tx, input)
 	if err != nil {
@@ -241,6 +247,11 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 
 // Shared by manual entry and atomic completion of a FleetScope intake.
 func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
+	if input.AssignmentWeek != "" {
+		if err := setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+			return "", err
+		}
+	}
 	var id string
 	displayName := formatPersonName(input.FullName)
 	err := tx.QueryRow(ctx, `
@@ -273,6 +284,9 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	}
 	defer tx.Rollback(ctx)
 	if err = setBoardActor(ctx, tx, input.ChargeActor, "profile"); err != nil {
+		return Driver{}, err
+	}
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Driver{}, err
 	}
 
@@ -461,6 +475,9 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+		return Truck{}, err
+	}
 
 	if input.OwnerID != nil {
 		var active bool
@@ -505,6 +522,9 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+		return Truck{}, err
+	}
 
 	unitNumber := normalizeTruckUnit(input.UnitNumber)
 	command, err := tx.Exec(ctx, `
@@ -645,6 +665,9 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 		return Dispatcher{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+		return Dispatcher{}, err
+	}
 
 	var id string
 	displayName := formatPersonName(input.FullName)
@@ -673,6 +696,9 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 		return Dispatcher{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
+		return Dispatcher{}, err
+	}
 
 	displayName := formatPersonName(input.FullName)
 	command, err := tx.Exec(ctx, `
@@ -738,23 +764,31 @@ func setDispatcherDrivers(ctx context.Context, tx pgx.Tx, dispatcherID string, d
 }
 
 func setDriverTruck(ctx context.Context, tx pgx.Tx, driverID string, truckID *string) error {
-	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {
+	if truckID != nil {
+		return assignTruck(ctx, tx, *truckID, driverID)
+	}
+	var assigned bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments WHERE driver_id=$1 AND unassigned_at IS NULL)`, driverID).Scan(&assigned); err != nil {
 		return err
 	}
-	if truckID == nil {
+	if !assigned {
 		return nil
 	}
-	return assignTruck(ctx, tx, *truckID, driverID)
+	return releaseDriverTruck(ctx, tx, driverID)
 }
 
 func setTruckDriver(ctx context.Context, tx pgx.Tx, truckID string, driverID *string) error {
-	if err := releaseTruckDriver(ctx, tx, truckID); err != nil {
+	if driverID != nil {
+		return assignTruck(ctx, tx, truckID, *driverID)
+	}
+	var assigned bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments WHERE truck_id=$1 AND unassigned_at IS NULL)`, truckID).Scan(&assigned); err != nil {
 		return err
 	}
-	if driverID == nil {
+	if !assigned {
 		return nil
 	}
-	return assignTruck(ctx, tx, truckID, *driverID)
+	return releaseTruckDriver(ctx, tx, truckID)
 }
 
 func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error {
@@ -773,7 +807,7 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO truck_driver_assignments (truck_id, driver_id) VALUES ($1, $2)`,
+		INSERT INTO truck_driver_assignments (truck_id, driver_id,assigned_at) VALUES ($1, $2,coalesce(nullif(current_setting('mserp.assignment_week',true),'')::date::timestamp AT TIME ZONE 'America/New_York',now()))`,
 		truckID, driverID); err != nil {
 		return err
 	}
@@ -786,8 +820,12 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 }
 
 func releaseDriverTruck(ctx context.Context, tx pgx.Tx, driverID string) error {
+	if err := prepareTruckAssignmentBoundary(ctx, tx, "driver_id", driverID); err != nil {
+		return err
+	}
+
 	rows, err := tx.Query(ctx, `
-		UPDATE truck_driver_assignments SET unassigned_at = now()
+		UPDATE truck_driver_assignments SET unassigned_at = coalesce(nullif(current_setting('mserp.assignment_week',true),'')::date::timestamp AT TIME ZONE 'America/New_York',now())
 		WHERE driver_id = $1 AND unassigned_at IS NULL RETURNING truck_id`, driverID)
 	if err != nil {
 		return err
@@ -817,8 +855,12 @@ func releaseDriverTruck(ctx context.Context, tx pgx.Tx, driverID string) error {
 }
 
 func releaseTruckDriver(ctx context.Context, tx pgx.Tx, truckID string) error {
+	if err := prepareTruckAssignmentBoundary(ctx, tx, "truck_id", truckID); err != nil {
+		return err
+	}
+
 	_, err := tx.Exec(ctx, `
-		UPDATE truck_driver_assignments SET unassigned_at = now()
+		UPDATE truck_driver_assignments SET unassigned_at = coalesce(nullif(current_setting('mserp.assignment_week',true),'')::date::timestamp AT TIME ZONE 'America/New_York',now())
 		WHERE truck_id = $1 AND unassigned_at IS NULL`, truckID)
 	if err != nil {
 		return err

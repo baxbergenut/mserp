@@ -74,7 +74,7 @@ export default function DriverBoardPage() {
 
   return <div className="space-y-5 animate-fade-in">
     <div className="flex flex-wrap items-center justify-end gap-3">
-      <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Driver Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span></div><p className="mt-1.5 text-[13px] text-zinc-500">Live dispatch overview with this week’s Gross Board totals.</p></div></PageHeader>
+      <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Status Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span></div><p className="mt-1.5 text-[13px] text-zinc-500">Live dispatch overview with this week’s Gross Board totals.</p></div></PageHeader>
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : canEdit ? "All changes saved" : "Read only"}</span>
       <button className={buttonClass} onClick={reload} disabled={loading || saving}><RefreshCw className="h-4 w-4" />Reload</button>
       <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "History · shown drivers", ids: drivers.map(d => d.id) })}><History className="h-4 w-4" />History</button>
@@ -93,7 +93,7 @@ export default function DriverBoardPage() {
       setSavedViews(current => [...current.filter(v => v.id !== next.id), next]); selectView(next.id);
     }} onDelete={id => { setSavedViews(current => current.filter(v => v.id !== id)); selectView("all"); }} />
     <div className="flex flex-wrap items-center gap-3">
-      <input aria-label="Search Driver Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
+      <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
       <select aria-label="Dispatcher filter" value={dispatcher} onChange={event => setDispatcher(event.target.value)} className={`${controlClass} max-w-48`}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
       <select aria-label="Status filter" value={status} onChange={event => setStatus(event.target.value)} className={`${controlClass} max-w-44`}><option value="all">All statuses</option><option value="">No status</option>{statuses.map(s => <option key={s}>{s}</option>)}</select>
       {board && <span className="ml-auto text-xs text-zinc-500">Week {shortDate(board.weekStart)}–{shortDate(addDays(board.weekStart, 6))} · New York · totals for shown drivers</span>}
@@ -131,7 +131,7 @@ export default function DriverBoardPage() {
               </tr>
             </Fragment>;
           })}
-          {!loading && drivers.length === 0 && <tr><td colSpan={15} className="p-10 text-center text-zinc-500">{error && !board ? "Driver Board could not be loaded. Use Reload to retry." : "No active drivers match this view."}</td></tr>}
+          {!loading && drivers.length === 0 && <tr><td colSpan={15} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Reload to retry." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
     </div>

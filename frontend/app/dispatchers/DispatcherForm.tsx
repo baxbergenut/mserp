@@ -1,5 +1,7 @@
 "use client";
 
+import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
+
 import { PhoneInput } from "../components/management/PhoneInput";
 
 import type { Dispatcher, DispatcherInput, Driver } from "../lib/types";
@@ -51,7 +53,7 @@ export function DispatcherForm({
   const set = <K extends keyof DispatcherInput>(
     key: K,
     next: DispatcherInput[K],
-  ) => onChange({ ...value, [key]: next });
+  ) => onChange({ ...value, [key]: next, ...(["driverIds"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
 
   const toggleDriver = (id: string) => {
     const selected = value.driverIds.includes(id);
@@ -110,6 +112,7 @@ export function DispatcherForm({
       </FormSection>
 
       <FormSection title="Assigned drivers">
+        <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
         <div className="sm:col-span-2">
           {drivers.length === 0 ? (
             <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-[12px] text-zinc-600">
