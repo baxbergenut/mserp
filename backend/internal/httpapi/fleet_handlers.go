@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"mserp/internal/phone"
 	"mserp/internal/repository"
 )
 
@@ -113,6 +114,10 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	if request.FullName == "" {
 		return repository.DriverInput{}, errors.New("full name is required")
 	}
+	normalizedPhone, err := phone.Normalize(request.Phone)
+	if err != nil {
+		return repository.DriverInput{}, err
+	}
 	if request.PayType != "cpm" && request.PayType != "gross_percentage" {
 		return repository.DriverInput{}, errors.New("pay type must be cpm or gross_percentage")
 	}
@@ -143,7 +148,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		ChargePauseWeek: request.ChargePauseWeek,
 		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
 		PayType: request.PayType, PayRate: request.PayRate,
-		Phone: optionalString(request.Phone), Email: optionalString(request.Email),
+		Phone: optionalString(normalizedPhone), Email: optionalString(request.Email),
 		LicenseNumber: optionalString(request.LicenseNumber), LicenseState: optionalString(request.LicenseState),
 		LicenseExpires: licenseExpires, HireDate: hireDate, Address: optionalString(request.Address),
 		City: optionalString(request.City), State: optionalString(request.State), PostalCode: optionalString(request.PostalCode),
@@ -243,6 +248,10 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 	if request.FullName == "" {
 		return repository.DispatcherInput{}, errors.New("full name is required")
 	}
+	normalizedPhone, err := phone.Normalize(request.Phone)
+	if err != nil {
+		return repository.DispatcherInput{}, err
+	}
 	if request.PayPercentage != nil && (*request.PayPercentage < 0 || *request.PayPercentage > 100) {
 		return repository.DispatcherInput{}, errors.New("pay percentage must be between 0 and 100")
 	}
@@ -258,7 +267,7 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 		driverIDs = append(driverIDs, id)
 	}
 	return repository.DispatcherInput{
-		FullName: request.FullName, Email: optionalString(request.Email), Phone: optionalString(request.Phone),
+		FullName: request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
 		PayPercentage: request.PayPercentage, DriverIDs: driverIDs,
 		Active: request.Active, Notes: optionalString(request.Notes),
 	}, nil

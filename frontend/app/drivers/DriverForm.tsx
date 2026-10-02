@@ -2,6 +2,8 @@
 
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { ExternalLink, FileBadge, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
+import { PhoneInput } from "../components/management/PhoneInput";
+
 import type { Dispatcher, Driver, DriverInput, Truck } from "../lib/types";
 import { fileDownloadUrl } from "../lib/api";
 import {
@@ -188,13 +190,7 @@ export function DriverForm({
           />
         </Field>
         <Field label="Phone">
-          <input
-            type="tel"
-            value={value.phone}
-            onChange={(event) => set("phone", event.target.value)}
-            className={controlClass}
-            placeholder="(555) 555-0123"
-          />
+          <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />
         </Field>
         <Field label="Email">
           <input

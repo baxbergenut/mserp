@@ -82,6 +82,13 @@ func TestFleetScopeDatabase(t *testing.T) {
 				}
 			}
 			if incremental {
+				owners, e := os.ReadFile("../../sql/032_add_investors.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = pool.Exec(ctx, string(owners)); e != nil {
+					t.Fatal(e)
+				}
 				charges, e := os.ReadFile("../../sql/033_add_driver_charges.sql")
 				if e != nil {
 					t.Fatal(e)
@@ -101,6 +108,15 @@ func TestFleetScopeDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				if _, e = pool.Exec(ctx, string(backdated)); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if incremental {
+				phones, e := os.ReadFile("../../sql/042_standardize_phones.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = pool.Exec(ctx, string(phones)); e != nil {
 					t.Fatal(e)
 				}
 			}

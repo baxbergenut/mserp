@@ -1,4 +1,5 @@
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
+import { withPhone } from "./phone";
 import type {
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
@@ -233,7 +234,7 @@ export const fetchDriverIntake = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<DriverIntake>>(withQuery("/driver-intake", query));
 export const completeDriverIntake = (id: string, input:
   { driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) =>
-  apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify(input) });
+  apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify("driver" in input ? { ...input, driver: withPhone(input.driver) } : input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriverAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/drivers/${id}/assignments`);
 export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }) =>
@@ -241,12 +242,12 @@ export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean 
 export const createDriver = (input: DriverInput) =>
   apiRequest<Driver>("/drivers", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(withPhone(input)),
   });
 export const updateDriver = (id: string, input: DriverInput) =>
   apiRequest<Driver>(`/drivers/${id}`, {
     method: "PUT",
-    body: JSON.stringify(input),
+    body: JSON.stringify(withPhone(input)),
   });
 export const deleteDriver = (id: string) =>
   apiRequest<void>(`/drivers/${id}`, { method: "DELETE" });
@@ -302,12 +303,12 @@ export const fetchDispatchersPage = (query: PageQuery) =>
 export const createDispatcher = (input: DispatcherInput) =>
   apiRequest<Dispatcher>("/dispatchers", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(withPhone(input)),
   });
 export const updateDispatcher = (id: string, input: DispatcherInput) =>
   apiRequest<Dispatcher>(`/dispatchers/${id}`, {
     method: "PUT",
-    body: JSON.stringify(input),
+    body: JSON.stringify(withPhone(input)),
   });
 export const deleteDispatcher = (id: string) =>
   apiRequest<void>(`/dispatchers/${id}`, { method: "DELETE" });
@@ -369,9 +370,9 @@ export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
 export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }) =>
   paginatedRequest<PaginatedResponse<Investor>>(withQuery("/investors", query));
 export const createInvestor = (input: InvestorInput) =>
-  apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(input) });
+  apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(withPhone(input)) });
 export const updateInvestor = (id: string, input: InvestorInput) =>
-  apiRequest<Investor>(`/investors/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  apiRequest<Investor>(`/investors/${id}`, { method: "PUT", body: JSON.stringify(withPhone(input)) });
 
 export const fetchDriverCharges = (driverId?: string) => apiRequest<ChargeData>(withQuery("/driver-charges", { driverId }));
 export const saveChargeType = (input: ChargeType) => apiRequest<ChargeType>("/driver-charges/types", { method: "POST", body: JSON.stringify(input) });

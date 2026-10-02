@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"mserp/internal/phone"
 )
 
 const MaxBodyBytes = 64 << 10
@@ -83,6 +85,9 @@ func (e *Event) Validate() error {
 		if err != nil || address.Address != e.Driver.Email {
 			return errors.New("invalid driver email")
 		}
+	}
+	if _, err := phone.Normalize(e.Driver.Phone); err != nil {
+		return err
 	}
 	if _, err := time.Parse(time.DateOnly, e.Driver.HireDate); err != nil {
 		return errors.New("hireDate must use YYYY-MM-DD")

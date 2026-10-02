@@ -1,5 +1,7 @@
 "use client";
 
+import { PhoneInput } from "../components/management/PhoneInput";
+
 import type { Driver, InvestorInput } from "../lib/types";
 import { controlClass, Field, FormSection, Toggle } from "../components/management/ManagementUI";
 
@@ -21,7 +23,7 @@ export function InvestorForm({ value, onChange, drivers, editing }: {
         </select>
       </Field>
       <Field label="Full name" wide><input autoFocus required maxLength={200} disabled={!!value.driverId} value={value.fullName} onChange={(e) => set("fullName", e.target.value)} className={controlClass} /></Field>
-      <Field label="Phone"><input type="tel" maxLength={100} disabled={!!value.driverId} value={value.phone} onChange={(e) => set("phone", e.target.value)} className={controlClass} /></Field>
+      <Field label="Phone"><PhoneInput disabled={!!value.driverId} value={value.phone} onChange={(phone) => set("phone", phone)} /></Field>
       <Field label="Email"><input type="email" maxLength={254} disabled={!!value.driverId} value={value.email} onChange={(e) => set("email", e.target.value)} className={controlClass} /></Field>
     </FormSection>
     <FormSection title="Status and notes">

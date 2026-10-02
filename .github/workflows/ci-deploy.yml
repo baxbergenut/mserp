@@ -61,6 +61,8 @@ jobs:
           MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+          MSERP_PHONE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+          MSERP_FLEETSCOPE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: |
           go test ./...
@@ -97,6 +99,10 @@ jobs:
       - name: Check driver pay calculations and autosave
         working-directory: frontend
         run: node scripts/test-driver-pay.mjs
+
+      - name: Check phone normalization and display
+        working-directory: frontend
+        run: node scripts/test-phone.mjs
 
       - name: Build static frontend
         working-directory: frontend

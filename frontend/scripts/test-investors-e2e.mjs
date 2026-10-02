@@ -2,6 +2,7 @@
 // Uses a temporary schema, a real API process, and real browser authentication.
 import { chromium, expect } from '@playwright/test';
 import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
+import { runPhoneE2E } from './phone-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -126,6 +127,7 @@ try {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'E2e Investor' })).toContainText('Inactive');
   await page.screenshot({ path: join(temp, 'investors-desktop.png'), fullPage: true });
+  await runPhoneE2E({ page, base });
   await runInvestorPayE2E({ page, base, sql, schema, temp });
   await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });

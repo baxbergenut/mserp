@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"mserp/internal/fleetscope"
+	"mserp/internal/phone"
 )
 
 var (
@@ -46,35 +47,38 @@ type DriverDirectoryEntry struct {
 func (r *FleetRepository) GetDriverIntake(ctx context.Context, id string) (DriverIntake, error) {
 	var item DriverIntake
 	var data []byte
-	err := r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt)
+	var canonicalPhone *string
+	err := r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone)
 	if err != nil {
 		return item, mapNotFound(err)
 	}
 	if err = json.Unmarshal(data, &item.Driver); err != nil {
 		return item, err
 	}
+	item.Driver.Phone = stringValue(canonicalPhone)
 	item.Candidates, err = intakeCandidates(ctx, r.pool, item.Driver)
 	return item, err
 }
 
 func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pagination, search string, includeInactive bool) (Page[DriverDirectoryEntry], error) {
+	search = phone.Search(search)
 	const directory = `WITH directory AS (
-	 SELECT d.id, d.full_name, false AS pending, NULL::jsonb AS data, d.created_at AS received_at
+	 SELECT d.id, d.full_name, false AS pending, NULL::jsonb AS data, d.created_at AS received_at, d.phone
 	 FROM drivers d
 	 LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
 	 LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
 	 LEFT JOIN trucks t ON t.id=a.truck_id
 	 WHERE ($1='' OR concat_ws(' ',d.full_name,d.email,d.phone,t.unit_number,dp.full_name,d.license_number) ILIKE '%' || $1 || '%') AND ($2 OR d.active)
 	 UNION ALL
-	 SELECT id, driver_data->>'fullName', true, driver_data, received_at FROM fleetscope_driver_intake
-	 WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',driver_data->>'phone',driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
+	 SELECT id, driver_data->>'fullName', true, driver_data, received_at, phone FROM fleetscope_driver_intake
+	 WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
 	) `
 	var total int
 	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive).Scan(&total); err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at FROM directory ORDER BY pending DESC,full_name,id LIMIT $3 OFFSET $4`, search, includeInactive, pagination.PageSize, pagination.Offset())
+	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at,phone FROM directory ORDER BY pending DESC,full_name,id LIMIT $3 OFFSET $4`, search, includeInactive, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}
@@ -84,7 +88,8 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 		var item DriverDirectoryEntry
 		var pending bool
 		var data []byte
-		if err = rows.Scan(&item.ID, &pending, &data, &item.CreatedAt); err != nil {
+		var canonicalPhone *string
+		if err = rows.Scan(&item.ID, &pending, &data, &item.CreatedAt, &canonicalPhone); err != nil {
 			break
 		}
 		if pending {
@@ -95,7 +100,7 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 			item.IntakeID = item.ID
 			item.FullName = formatPersonName(source.FullName)
 			item.IsOwnerOperator = source.DriverType == "owner_operator"
-			item.Phone = &source.Phone
+			item.Phone = canonicalPhone
 			item.Email = &source.Email
 		} else {
 			ids = append(ids, item.ID)
@@ -170,9 +175,9 @@ func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleets
 	if err != nil {
 		return IntakeResult{}, err
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO fleetscope_driver_intake(company_id, fleetscope_driver_id, driver_data, normalized_name, occurred_at)
-		VALUES($1,$2,$3,$4,$5) ON CONFLICT(company_id, fleetscope_driver_id) DO NOTHING RETURNING id`,
-		event.CompanyID, event.Driver.ID, data, normalizeName(event.Driver.FullName), event.OccurredAt).Scan(&result.IntakeID)
+	err = tx.QueryRow(ctx, `INSERT INTO fleetscope_driver_intake(company_id, fleetscope_driver_id, driver_data, normalized_name, occurred_at, phone)
+		VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(company_id, fleetscope_driver_id) DO NOTHING RETURNING id`,
+		event.CompanyID, event.Driver.ID, data, normalizeName(event.Driver.FullName), event.OccurredAt, phone.Imported(event.Driver.Phone)).Scan(&result.IntakeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `SELECT id FROM fleetscope_driver_intake WHERE company_id=$1 AND fleetscope_driver_id=$2`, event.CompanyID, event.Driver.ID).Scan(&result.IntakeID)
 	} else if err == nil {
@@ -191,15 +196,15 @@ func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleets
 func (r *FleetRepository) ListDriverIntake(ctx context.Context, pagination Pagination, searches ...string) (Page[DriverIntake], error) {
 	search := ""
 	if len(searches) > 0 {
-		search = searches[0]
+		search = phone.Search(searches[0])
 	}
-	const filter = ` WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',driver_data->>'phone') ILIKE '%' || $1 || '%')`
+	const filter = ` WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone) ILIKE '%' || $1 || '%')`
 	var total int
 	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM fleetscope_driver_intake`+filter, search).Scan(&total); err != nil {
 		return Page[DriverIntake]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := r.pool.Query(ctx, `SELECT id, driver_data, received_at FROM fleetscope_driver_intake`+filter+` ORDER BY received_at, id LIMIT $2 OFFSET $3`, search, pagination.PageSize, pagination.Offset())
+	rows, err := r.pool.Query(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake`+filter+` ORDER BY received_at, id LIMIT $2 OFFSET $3`, search, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[DriverIntake]{}, err
 	}
@@ -207,7 +212,8 @@ func (r *FleetRepository) ListDriverIntake(ctx context.Context, pagination Pagin
 	for rows.Next() {
 		var item DriverIntake
 		var data []byte
-		if err = rows.Scan(&item.ID, &data, &item.ReceivedAt); err != nil {
+		var canonicalPhone *string
+		if err = rows.Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone); err != nil {
 			rows.Close()
 			return Page[DriverIntake]{}, err
 		}
@@ -215,6 +221,7 @@ func (r *FleetRepository) ListDriverIntake(ctx context.Context, pagination Pagin
 			rows.Close()
 			return Page[DriverIntake]{}, err
 		}
+		item.Driver.Phone = stringValue(canonicalPhone)
 		items = append(items, item)
 	}
 	err = rows.Err()
@@ -237,6 +244,7 @@ type intakeQuerier interface {
 
 // Candidates are suggestions for human review, never automatic identity merges.
 func intakeCandidates(ctx context.Context, db intakeQuerier, d fleetscope.Driver) ([]IntakeCandidate, error) {
+	d.Phone = stringValue(phone.Imported(d.Phone))
 	rows, err := db.Query(ctx, `SELECT id, full_name, phone, email FROM drivers
 		WHERE normalized_name=$1
 		OR ($2<>'' AND lower(trim(email))=lower(trim($2)))

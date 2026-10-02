@@ -282,6 +282,20 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
+- Contact phones are optional ten ASCII digits without a country code; blank
+  values store as NULL. Drivers, dispatchers, investors, FleetScope intake and
+  Relay review use this contract. Forms, APIs and database triggers normalize
+  common punctuation and an optional leading US 1, and reject invalid manual
+  input. UI contact displays use +1 (XXX) XXX-XXXX; formatted phone searches
+  resolve against canonical digits. Shared rules live in backend/internal/phone
+  and frontend/app/lib/phone.ts, with PhoneInput for all contact forms. Migration
+  042 archives changed originals in phone_normalization_audit, keeps the first
+  number in valid slash-separated legacy lists, and clears irrecoverable values.
+  FleetScope retains its first source JSON snapshot and exposes a separate
+  canonical phone column; Relay retains raw upstream payloads but never uses
+  malformed contacts as matching evidence. Database checks use only disposable
+  MSERP_PHONE_TEST_DATABASE_URL (_test database), as mserp_app.
+
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
   and DriverCard.tsx with Driver Pay. Reports group trucks by investor, retain
   full load details, and deduct hired driver earnings in the charges column.
@@ -760,6 +774,7 @@ go vet ./...
 npm run lint
 node scripts/test-gross-board.mjs
 node scripts/test-driver-pay.mjs
+node scripts/test-phone.mjs
 npm run build
 # E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
 npx playwright install chromium

@@ -1,5 +1,7 @@
 "use client";
 
+import { PhoneInput } from "../components/management/PhoneInput";
+
 import type { Dispatcher, DispatcherInput, Driver } from "../lib/types";
 import {
   controlClass,
@@ -75,13 +77,7 @@ export function DispatcherForm({
           />
         </Field>
         <Field label="Phone">
-          <input
-            type="tel"
-            value={value.phone}
-            onChange={(event) => set("phone", event.target.value)}
-            className={controlClass}
-            placeholder="(555) 555-0123"
-          />
+          <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />
         </Field>
         <Field label="Email">
           <input

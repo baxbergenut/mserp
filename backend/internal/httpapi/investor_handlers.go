@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"mserp/internal/phone"
 	"mserp/internal/repository"
 )
 
@@ -26,10 +27,14 @@ func (v investorRequest) validate() (repository.InvestorInput, error) {
 	if err := validateOptionalUUID(v.DriverID, "driver id"); err != nil {
 		return repository.InvestorInput{}, err
 	}
-	if utf8.RuneCountInString(v.Notes) > 5000 || len(v.Email) > 254 || len(v.Phone) > 100 {
+	normalizedPhone, err := phone.Normalize(v.Phone)
+	if err != nil {
+		return repository.InvestorInput{}, err
+	}
+	if utf8.RuneCountInString(v.Notes) > 5000 || len(v.Email) > 254 {
 		return repository.InvestorInput{}, errors.New("contact details or notes are too long")
 	}
-	return repository.InvestorInput{FullName: v.FullName, DriverID: v.DriverID, Email: optionalString(v.Email), Phone: optionalString(v.Phone), Notes: optionalString(v.Notes), Active: v.Active}, nil
+	return repository.InvestorInput{FullName: v.FullName, DriverID: v.DriverID, Email: optionalString(v.Email), Phone: optionalString(normalizedPhone), Notes: optionalString(v.Notes), Active: v.Active}, nil
 }
 func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 	values, err := h.repo.ListInvestors(r.Context(), strings.TrimSpace(r.URL.Query().Get("search")))

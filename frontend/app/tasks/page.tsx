@@ -1,5 +1,7 @@
 "use client";
 
+import { formatPhone, normalizePhone } from "../lib/phone";
+
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
@@ -112,14 +114,15 @@ function RelayTaskCard({ task, drivers, disabled, onDecision }: {
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");
-  const filtered = drivers.filter((d) => [d.fullName, d.email, d.phone, d.truckUnit].join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+  const search = normalizePhone(query) || query.trim().toLowerCase();
+  const filtered = drivers.filter((d) => [d.fullName, d.email, d.phone, d.truckUnit].join(" ").toLowerCase().includes(search));
   const driver = drivers.find((d) => d.id === selected);
   return (
     <section className="rounded-xl border border-zinc-800 bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-zinc-100">{task.name || "Unnamed Relay account"}</h2>
-          <p className="mt-1 break-all text-sm text-zinc-400">{task.email || "No email"} · {task.phone || "No phone"}</p>
+          <p className="mt-1 break-all text-sm text-zinc-400">{task.email || "No email"} · {formatPhone(task.phone) || "No phone"}</p>
           <p className="mt-1 break-all text-xs text-zinc-500">{task.environment} · Relay ID: {task.relayDriverId}</p>
           {task.integrationId && <p className="mt-1 break-all text-xs text-zinc-500">Source card / integration ID: {task.integrationId}</p>}
         </div>
@@ -135,7 +138,7 @@ function RelayTaskCard({ task, drivers, disabled, onDecision }: {
           <div key={candidate.driverId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800/60 p-3">
             <div className="min-w-0">
               <p className="text-sm font-medium text-zinc-200">{candidate.name}{!candidate.active && <span className="ml-2 text-xs text-zinc-500">Inactive</span>}</p>
-              <p className="break-all text-xs text-zinc-500">{candidate.email || "No email"} · {candidate.phone || "No phone"}</p>
+              <p className="break-all text-xs text-zinc-500">{candidate.email || "No email"} · {formatPhone(candidate.phone) || "No phone"}</p>
               <p className="mt-1 text-xs text-amber-300">{candidate.reasons.join(" · ")}</p>
             </div>
             <div className="flex gap-2">

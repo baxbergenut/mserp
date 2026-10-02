@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"mserp/internal/phone"
 	"mserp/internal/relay"
 )
 
@@ -319,7 +319,7 @@ func ensureRelayDriver(
 	// The upsert locks the identity until the fuel-day transaction commits.
 	// Review uses the same row lock, so a concurrent sync cannot undo a link.
 	var driverID *string
-	phone := nullIfBlank(driver.Phone)
+	normalizedPhone := phone.Imported(driver.Phone)
 	var email any
 	if driver.Email != nil {
 		email = nullIfBlank(*driver.Email)
@@ -342,7 +342,7 @@ func ensureRelayDriver(
 		integrationID,
 		nullIfBlank(driver.FirstName),
 		nullIfBlank(driver.LastName),
-		phone,
+		normalizedPhone,
 		email,
 	).Scan(&driverID)
 	return driverID, err
@@ -458,27 +458,8 @@ func normalizeEmail(value string) string {
 
 func phoneKeys(value string) map[string]struct{} {
 	result := make(map[string]struct{})
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		switch r {
-		case '/', ',', ';':
-			return true
-		default:
-			return false
-		}
-	})
-	for _, part := range parts {
-		digits := strings.Map(func(r rune) rune {
-			if unicode.IsNumber(r) {
-				return r
-			}
-			return -1
-		}, part)
-		if len(digits) == 11 && strings.HasPrefix(digits, "1") {
-			digits = digits[1:]
-		}
-		if len(digits) == 10 {
-			result[digits] = struct{}{}
-		}
+	if normalized := phone.Imported(value); normalized != nil {
+		result[*normalized] = struct{}{}
 	}
 	return result
 }

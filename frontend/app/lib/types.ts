@@ -76,6 +76,7 @@ export interface RelayIdentityTask {
   integrationId: string | null;
   name: string;
   email: string | null;
+  /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
   transactionCount: number;
   latestTransaction: string | null;
@@ -84,6 +85,7 @@ export interface RelayIdentityTask {
     driverId: string;
     name: string;
     email: string | null;
+    /** Ten ASCII digits without the +1 country code, or null when not recorded. */
     phone: string | null;
     active: boolean;
     reasons: string[];
@@ -277,6 +279,7 @@ export interface Driver {
   isOwnerOperator: boolean;
   payType: PayType;
   payRate: number;
+  /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
   email: string | null;
   licenseNumber: string | null;
@@ -308,6 +311,7 @@ export interface DriverInput {
   isOwnerOperator: boolean;
   payType: PayType;
   payRate: number;
+  /** Optional phone: ten ASCII digits, or an empty string. */
   phone: string;
   email: string;
   licenseNumber: string;
@@ -446,6 +450,7 @@ export interface Dispatcher {
   id: string;
   fullName: string;
   email: string | null;
+  /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
   payPercentage: number | null;
   active: boolean;
@@ -458,6 +463,7 @@ export interface Dispatcher {
 export interface DispatcherInput {
   fullName: string;
   email: string;
+  /** Optional phone: ten ASCII digits, or an empty string. */
   phone: string;
   payPercentage: number | null;
   driverIds: string[];
@@ -781,6 +787,7 @@ export interface Investor {
   driverId: string | null;
   isCompany: boolean;
   email: string | null;
+  /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
   notes: string | null;
   active: boolean;
@@ -792,6 +799,7 @@ export interface InvestorInput {
   fullName: string;
   driverId: string | null;
   email: string;
+  /** Optional phone: ten ASCII digits, or an empty string. */
   phone: string;
   notes: string;
   active: boolean;
@@ -837,4 +845,4 @@ export interface SettlementEvent { action: string; version: number; actor: strin
 
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
-export interface TruckChargeData { terms: TruckTerm[]; phases: TruckChargePhase[] }
+export interface TruckChargeData { eligibleTruckIds: string[]; terms: TruckTerm[]; phases: TruckChargePhase[] }

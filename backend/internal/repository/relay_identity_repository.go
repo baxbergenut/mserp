@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"mserp/internal/phone"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -88,6 +90,7 @@ func relaySuggestions(task RelayIdentityTask, drivers []RelaySuggestion) []Relay
 }
 
 func (r *FuelRepository) RelayIdentityTasks(ctx context.Context, pagination Pagination, search string) (Page[RelayIdentityTask], error) {
+	search = phone.Search(search)
 	// A consistent read also releases all rows before the next query, supporting a single-connection pool.
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {

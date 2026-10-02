@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"mserp/internal/phone"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -174,6 +176,7 @@ func (r *FleetRepository) ListDriversPage(
 	search string,
 	includeInactive bool,
 ) (Page[Driver], error) {
+	search = phone.Search(search)
 	const where = `
 WHERE ($1 = '' OR concat_ws(' ', d.full_name, d.email, d.phone, t.unit_number,
 	dp.full_name, d.license_number) ILIKE '%' || $1 || '%')
@@ -585,6 +588,7 @@ func (r *FleetRepository) ListDispatchersPage(
 	pagination Pagination,
 	search string,
 ) (Page[Dispatcher], error) {
+	search = phone.Search(search)
 	const where = `
 WHERE ($1 = '' OR concat_ws(' ', dp.full_name, dp.email, dp.phone) ILIKE '%' || $1 || '%')`
 	var total int

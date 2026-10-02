@@ -1,5 +1,7 @@
 "use client";
 
+import { formatPhone } from "../lib/phone";
+
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
@@ -70,7 +72,7 @@ export default function InvestorsPage() {
           <tbody>{investors.map((investor) => <tr key={investor.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
             <td className="px-4 py-3 font-medium text-zinc-200">{investor.driverId ? <Link className="hover:text-blue-400" href={`/drivers/detail?id=${investor.driverId}`}>{investor.fullName}</Link> : investor.fullName}</td>
             <td className="px-4 py-3"><span className="rounded-full bg-blue-500/10 px-2 py-1 text-[11px] text-blue-400">{investor.isCompany ? "Company" : investor.driverId ? "Driver" : "Investor"}</span></td>
-            <td className="px-4 py-3"><div className="text-zinc-400">{investor.phone ?? "—"}</div><div className="mt-0.5 text-[11px] text-zinc-500">{investor.email ?? "No email"}</div></td>
+            <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(investor.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-500">{investor.email ?? "No email"}</div></td>
             <td className="max-w-xs px-4 py-3"><div className="flex flex-wrap gap-1.5">{investor.trucks.length ? investor.trucks.map((truck) => <Link key={truck.id} href={`/trucks/detail?id=${truck.id}`} className="rounded bg-zinc-800/60 px-2 py-1 font-mono text-[11px] hover:text-blue-400">{truck.unitNumber}</Link>) : <span className="text-zinc-500">No trucks</span>}</div></td>
             <td className="px-4 py-3"><StatusBadge active={investor.active} /></td>
             <td className="px-4 py-3 text-right">{!investor.isCompany && <button aria-label={`Edit ${investor.fullName}`} onClick={() => void open(investor)} className="rounded-md p-2 text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200"><Pencil className="h-3.5 w-3.5" /></button>}</td>

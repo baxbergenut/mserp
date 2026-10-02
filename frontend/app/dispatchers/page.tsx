@@ -1,5 +1,7 @@
 "use client";
 
+import { formatPhone } from "../lib/phone";
+
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
@@ -156,7 +158,7 @@ export default function DispatchersPage() {
             <tbody>{dispatchers.map((dispatcher) => (
               <tr key={dispatcher.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                 <td className="px-4 py-3 font-medium text-zinc-200">{dispatcher.fullName}</td>
-                <td className="px-4 py-3"><div className="text-zinc-400">{dispatcher.phone ?? "—"}</div><div className="mt-0.5 text-[11px] text-zinc-600">{dispatcher.email ?? "No email"}</div></td>
+                <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(dispatcher.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-600">{dispatcher.email ?? "No email"}</div></td>
                 <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">{dispatcher.payPercentage === null ? "—" : `${dispatcher.payPercentage.toFixed(2)}%`}</td>
                 <td className="px-4 py-3"><span className="rounded-full bg-zinc-800/60 px-2 py-1 text-[11px] text-zinc-400">{dispatcher.driverCount} {dispatcher.driverCount === 1 ? "driver" : "drivers"}</span></td>
                 <td className="px-4 py-3"><StatusBadge active={dispatcher.active} /></td>

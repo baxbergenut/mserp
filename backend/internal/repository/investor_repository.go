@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"mserp/internal/phone"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -52,6 +54,7 @@ func scanInvestor(row rowScanner) (Investor, error) {
 	return v, err
 }
 func (r *FleetRepository) ListInvestors(ctx context.Context, search string) ([]Investor, error) {
+	search = phone.Search(search)
 	rows, err := r.pool.Query(ctx, selectInvestorsSQL+` WHERE $1='' OR concat_ws(' ',coalesce(d.full_name,i.full_name),coalesce(d.email,i.email),coalesce(d.phone,i.phone)) ILIKE '%'||$1||'%'
  OR EXISTS(SELECT 1 FROM trucks t WHERE t.owner_id=i.id AND t.unit_number ILIKE '%'||$1||'%')
  ORDER BY i.is_company DESC,coalesce(d.full_name,i.full_name),i.id`, search)

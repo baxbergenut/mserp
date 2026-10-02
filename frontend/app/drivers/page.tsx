@@ -1,5 +1,7 @@
 "use client";
 
+import { formatPhone } from "../lib/phone";
+
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
@@ -298,7 +300,7 @@ function DriversContent() {
                 <tr key={driver.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="font-medium text-zinc-200 hover:text-blue-400">{driver.fullName}</button> : <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>}{driver.intakeId && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">New</span>}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">{driver.phone || driver.email || "No contact info"}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-600">{formatPhone(driver.phone) || driver.email || "No contact info"}</div>
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{driver.isOwnerOperator ? "Owner-operator" : "Company"}</td>
                   <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">
@@ -353,10 +355,10 @@ function DriversContent() {
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
           {intake && <div className="mb-5"><Field label="Already in MSERP?"><select className={controlClass} value={linkDriverID} onChange={(event) => setLinkDriverID(event.target.value)}>
             <option value="">Set up as a new driver</option>
-            {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {driver.phone || driver.email || "No contact details"}{driver.active ? "" : " (inactive)"}</option>)}
+            {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {formatPhone(driver.phone) || driver.email || "No contact details"}{driver.active ? "" : " (inactive)"}</option>)}
           </select></Field>{linkDriverID && <p className="mt-3 text-sm text-zinc-400">Confirm this is the same person as {intake.driver.fullName}. Linking keeps the existing profile, pay rates and assignments.</p>}</div>}
           {intake && !linkDriverID && intake.candidates.length > 0 && <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
-            <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${candidate.phone || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>
+            <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${formatPhone(candidate.phone) || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>
             <label className="mt-3 flex items-center gap-2"><input type="checkbox" required checked={separateConfirmed} onChange={(event) => setSeparateConfirmed(event.target.checked)} />I reviewed the matches. This is a different person.</label>
           </div>}
           {!linkDriverID && <DriverForm
