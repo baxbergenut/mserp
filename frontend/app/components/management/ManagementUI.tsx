@@ -55,9 +55,9 @@ export function ManagementHeader({
     {actionLabel}
   </button>;
   return (
-    <PageHeader>
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
+    
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
+      <PageHeader><div>
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">{title}</h1>
@@ -66,10 +66,10 @@ export function ManagementHeader({
           </span>
         </div>
         <p className="mt-1.5 text-[13px] text-zinc-500">{description}</p>
-      </div>
+      </div></PageHeader>
       {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{secondaryAction}{action}</div> : action}
     </div>
-    </PageHeader>
+    
   );
 }
 

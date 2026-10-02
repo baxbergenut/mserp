@@ -122,7 +122,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
 - `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
   links and account menu. PageHeader portals render each page title, icon, count,
-  description and actions in the top bar while preserving page context/handlers.
+  and description on the left of the top bar, preserving page context/handlers.
+  Page action buttons/status controls remain in the main content; global controls
+  stay on the right.
   Explicit search query parameters override remembered
   list search/page values; new query tokens open existing forms once.
 - `frontend/app/lib/api.ts`: API base selection and every frontend request.

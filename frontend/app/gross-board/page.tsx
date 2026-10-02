@@ -223,20 +223,20 @@ export default function GrossBoardPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       {payReturn && <Link data-navigation-back href={payReturn} className={buttonClass}>← Back to Driver Pay</Link>}
-      <PageHeader><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
+        <PageHeader><div>
           <div className="flex items-center gap-3">
             <CalendarRange className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Gross Board</h1>
             <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span>
           </div>
           <p className="mt-1.5 text-[13px] text-zinc-500">Weekly load planning, driver rates, and gross totals by dispatcher.</p>
-        </div>
+        </div></PageHeader>
         <div className="flex items-center gap-2">
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
           <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
         </div>
-      </div></PageHeader>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard loading={loading} compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />

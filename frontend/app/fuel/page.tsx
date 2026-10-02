@@ -185,8 +185,8 @@ export default function FuelPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <PageHeader><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <PageHeader><div>
           <div className="flex items-center gap-3">
             <Fuel className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Fuel</h1>
@@ -202,7 +202,7 @@ export default function FuelPage() {
             Fuel performance, pricing, and Relay purchase data.
             {" "}<Link href="/tasks" className="text-blue-400 hover:underline">Review unassigned Relay accounts</Link>
           </p>
-        </div>
+        </div></PageHeader>
         <button
           type="button"
           onClick={() => void handleSync()}
@@ -212,7 +212,7 @@ export default function FuelPage() {
           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
           {isSyncing ? "Syncing missing days…" : "Sync fuel"}
         </button>
-      </div></PageHeader>
+      </div>
 
       {message && (
         <div

@@ -414,8 +414,8 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
   const isDriver = kind === "driver";
   return (
     <div className="space-y-5 animate-fade-in">
-      <PageHeader><header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-end">
+        <PageHeader><div>
           <div className="flex items-center gap-2.5">
             {isDriver ? <UserRound className="h-5 w-5 text-blue-400" /> : <Headset className="h-5 w-5 text-violet-400" />}
             <h1 className="text-lg font-semibold text-zinc-100">{isDriver ? "Driver pay" : "Dispatcher pay"}</h1>
@@ -423,7 +423,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
           <p className="mt-1.5 text-[12px] text-zinc-600">
             {isDriver ? "Weekly driver settlements and company contribution." : "Weekly dispatcher commission from managed load gross."}
           </p>
-        </div>
+        </div></PageHeader>
 
         {dashboard && dashboard.availableWeeks.length > 0 && (
           <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
@@ -433,7 +433,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
             </select>
           </label>
         )}
-      </header></PageHeader>
+      </header>
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[12px] text-red-300" role="alert">
