@@ -246,6 +246,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pool.Exec(ctx, `UPDATE expense_payments SET investor_truck_id=NULL WHERE expense_id=$1`, expense); e == nil {
 				t.Fatal("payment destination changed")
 			}
+			checkInvestorChargeHandoff(t, ctx, pool, actor)
 			// Owner-only work in another week uses Driver Pay once, with the 88% tariff.
 			if _, e = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) SELECT $1,service_date+7,load_number,load_record_id,driver_rate FROM gross_board_entries WHERE driver_id=$2`, owner, driver); e != nil {
 				t.Fatal(e)

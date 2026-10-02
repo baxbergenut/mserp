@@ -82,43 +82,7 @@ func TestFleetScopeDatabase(t *testing.T) {
 				}
 			}
 			if incremental {
-				owners, e := os.ReadFile("../../sql/032_add_investors.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				if _, e = pool.Exec(ctx, string(owners)); e != nil {
-					t.Fatal(e)
-				}
-				charges, e := os.ReadFile("../../sql/033_add_driver_charges.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				if _, e = pool.Exec(ctx, string(charges)); e != nil {
-					t.Fatal(e)
-				}
-				matrix, e := os.ReadFile("../../sql/034_driver_charge_matrix.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				if _, e = pool.Exec(ctx, string(matrix)); e != nil {
-					t.Fatal(e)
-				}
-				backdated, e := os.ReadFile("../../sql/035_backdated_driver_charges.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				if _, e = pool.Exec(ctx, string(backdated)); e != nil {
-					t.Fatal(e)
-				}
-			}
-			if incremental {
-				phones, e := os.ReadFile("../../sql/042_standardize_phones.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				if _, e = pool.Exec(ctx, string(phones)); e != nil {
-					t.Fatal(e)
-				}
+				applyLaterTestMigrations(t, ctx, pool, "028")
 			}
 			var runtimeRoleExists bool
 			if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app')`).Scan(&runtimeRoleExists); err != nil {

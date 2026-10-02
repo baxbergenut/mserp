@@ -76,6 +76,7 @@ func TestAssignmentHistoryDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "031")
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments TO mserp_app`)
 			appcfg := cfg.Copy()

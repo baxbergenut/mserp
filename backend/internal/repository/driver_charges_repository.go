@@ -316,6 +316,9 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 			return nil, err
 		}
 		ids = append(ids, id)
+		if err = handoffInvestorDriverCharges(ctx, tx, driver, actor); err != nil {
+			return nil, err
+		}
 	}
 	return ids, tx.Commit(ctx)
 }
@@ -479,6 +482,9 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 			return err
 		}
 		if err = chargeAudit(ctx, tx, s.ID, "", actor, b.Action, b); err != nil {
+			return err
+		}
+		if err = handoffInvestorDriverCharges(ctx, tx, s.DriverID, actor); err != nil {
 			return err
 		}
 	}

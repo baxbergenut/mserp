@@ -748,7 +748,7 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 		return err
 	}
 	if unchanged {
-		return nil
+		return handoffInvestorDriverCharges(ctx, tx, driverID, "")
 	}
 	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {
 		return err
@@ -759,6 +759,9 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO truck_driver_assignments (truck_id, driver_id) VALUES ($1, $2)`,
 		truckID, driverID); err != nil {
+		return err
+	}
+	if err := handoffInvestorDriverCharges(ctx, tx, driverID, ""); err != nil {
 		return err
 	}
 	_, err := tx.Exec(ctx, `

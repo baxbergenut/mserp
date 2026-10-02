@@ -127,5 +127,8 @@ func (r *DriverChargeRepository) SaveCell(ctx context.Context, c ChargeCell, act
 	if err = chargeAudit(ctx, tx, c.ScheduleID, t.ID, actor, "recurring_selection", c); err != nil {
 		return err
 	}
+	if err = handoffInvestorDriverCharges(ctx, tx, c.DriverID, actor); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }

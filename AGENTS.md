@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `041_truck_settlements.sql`:
+  `043_investor_driver_charge_handoff.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -312,6 +312,15 @@ assignment lookup lists.
   and type eligibility. Explicitly moving a driver fee atomically pauses its
   driver assignment; personal fees never move automatically. Saved overrides
   and finalized weeks block conflicting moves. Later truck phases remain intact.
+  Migration 043 automatically hands recurring deductions to investor trucks on
+  assignment and recurring-charge writes, and backfills current assignments.
+  The effective Monday follows the stored assignment and any later known owner
+  start. Driver fees stay paused after departure until explicitly resumed.
+  Existing truck fee selections win; gaps inherit driver phases without stacking.
+  Unconfirmed driver occurrences from the handoff week are removed with full
+  audit details; earlier weeks, reimbursements and personal installments remain.
+  Finalized/confirmed collections block handoff until reopened. Rates are never
+  inferred, and transferred fees still need explicit truck settlement terms.
   Truck charge management and writes exclude single-truck driver owners and
   trucks currently operated by their owner; their fees use Driver charges.
   GET /truck-charges supplies backend-filtered eligibleTruckIds. Historical
