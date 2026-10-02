@@ -369,10 +369,11 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.goto(`${base}/drivers/detail?id=${driverId}`);
   await page.getByRole('button', {name:'Edit driver',exact:true}).click();
-  await page.getByLabel('Phone', {exact:true}).fill('555-0101');
+  await page.getByLabel('Phone', {exact:true}).fill('+1 (555) 555-0101');
   await page.getByRole('button', {name:'Save driver',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  expect((await (await page.request.get(`${base}/api/drivers/${driverId}`)).json()).phone).toBe('555-0101');
+  expect((await (await page.request.get(`${base}/api/drivers/${driverId}`)).json()).phone).toBe('5555550101');
+  await expect(page.getByText('+1 (555) 555-0101', {exact:true})).toHaveCount(2);
   await page.screenshot({path:join(temp,'driver-profile-desktop.png'),fullPage:true,animations:'disabled'});
   await page.getByRole('tab',{name:'Personal charges',exact:true}).click();
   await expect(page.getByRole('cell',{name:'Owner repair',exact:true})).toBeVisible();
