@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,6 +33,8 @@ type GrossBoardEntry struct {
 	Version             int    `json:"version"`
 	EnteredOriginalRate string `json:"enteredOriginalRate"`
 	EnteredMiles        string `json:"enteredMiles"`
+	SystemOriginalRate  string `json:"systemOriginalRate"`
+	SystemMiles         string `json:"systemMiles"`
 	Duplicate           bool   `json:"duplicate"`
 	AcceptSystemValues  bool   `json:"acceptSystemValues,omitempty"`
 }
@@ -96,14 +97,15 @@ const grossBoardResolvedLoad = `
  ) matched ON true
  LEFT JOIN loads l ON l.id=matched.id `
 
-// Every read uses current source values. Carry is calculated from the same
+// Entered values take precedence over current source values. Carry uses the same
 // effective entries as the grid, with exact numeric arithmetic. A repeated
 // system load for one driver contributes only on its earliest board date.
 const grossBoardEffective = `WITH resolved AS (
  SELECT e.*, l.id AS matched_id,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
- CASE WHEN l.id IS NOT NULL THEN l.total_pay ELSE e.original_rate END AS effective_original,
- CASE WHEN l.id IS NOT NULL THEN l.total_miles ELSE e.miles END AS effective_miles,
+ coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN l.total_pay ELSE e.original_rate END) AS effective_original,
+ coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN l.total_miles ELSE e.miles END) AS effective_miles,
+ l.total_pay AS system_original, l.total_miles AS system_miles,
  l.id IS NOT NULL AND row_number() OVER (
    PARTITION BY e.driver_id, l.id ORDER BY e.service_date,e.slot) > 1 AS duplicate
  FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
@@ -118,12 +120,14 @@ const grossBoardEffective = `WITH resolved AS (
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
- coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted`
+ coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
+ coalesce(system_original::text,''), coalesce(system_miles::text,'')`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	return row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
-		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted)
+		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
+		&e.SystemOriginalRate, &e.SystemMiles)
 }
 
 func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBoard, error) {
@@ -264,11 +268,6 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return a.DriverID+a.Date < b.DriverID+b.Date
 	})
 	for index, e := range entries {
-		entryTable, slotPredicate := "gross_board_entries", ""
-		if e.Slot > 0 {
-			entryTable = "gross_board_extra_entries"
-			slotPredicate = " AND slot=" + strconv.Itoa(e.Slot)
-		}
 		var loadID *int
 		if e.LoadRecordID != nil {
 			var id int
@@ -294,32 +293,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if enteredMiles == "" {
 			enteredMiles = e.Miles
 		}
-		if e.Version > 0 && loadID != nil {
-			var previousNumber, previousOriginal, previousMiles string
-			var previousID *int
-			err = tx.QueryRow(ctx, `SELECT load_number,load_record_id,
-              coalesce(entered_original_rate::text,original_rate::text,''),
-              coalesce(entered_miles::text,miles::text,'')
-              FROM `+entryTable+` WHERE driver_id=$1 AND service_date=$2::date AND version=$3`+slotPredicate+` FOR UPDATE`,
-				e.DriverID, e.Date, e.Version).Scan(&previousNumber, &previousID, &previousOriginal, &previousMiles)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrGrossBoardConflict
-			}
-			if err != nil {
-				return nil, err
-			}
-			// A linked entry keeps its reference until explicitly reviewed.
-			// A plan keeps its entered amounts even if its text is replaced by a system number.
-			if previousID == nil || *previousID == *loadID {
-				if e.EnteredOriginalRate == "" && previousOriginal != "" {
-					enteredOriginal = previousOriginal
-				}
-				if e.EnteredMiles == "" && previousMiles != "" {
-					enteredMiles = previousMiles
-				}
-			}
-		}
-		// Never trust rates or mileage supplied by a browser for a confirmed load.
+		// Keep a source snapshot separately; the displayed values prefer entered amounts.
 		original, miles := e.OriginalRate, e.Miles
 		if loadID != nil {
 			err = tx.QueryRow(ctx, `SELECT total_pay::text,coalesce(total_miles::text,'') FROM loads WHERE id=$1 FOR SHARE`, loadID).Scan(&original, &miles)
