@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `045_driver_board.sql`:
+  `046_driver_board_history.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -112,6 +112,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Keep fields on one line with compact rows. Prioritize columns through ETA;
   later fields may extend into horizontal scrolling. Show type codes without a legend.
   `driver_board_repository.go` and `driver_board_handlers.go` own its backend.
+  Status fills follow the TODAY sheet where a matching rule exists. Future
+  feature scope, exclusions and rollout order live in `docs/DRIVER_BOARD_PLAN.md`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/expenses/`: paginated expense management, filters, linked fleet
   assignments, CRUD forms, and review-first AI transaction entry.
@@ -252,6 +254,8 @@ browser bundle.
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
 - Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
+  plus `GET /driver-board/history?driverIds=...&before=...` (50-event cursor pages)
+  and `POST /driver-board/history/{id}/undo` (driverId, version, homeVersion).
   with changed entries only. Dedicated `driver_board.read`/`driver_board.write`
   permissions include board contact/home reads and home updates respectively.
 - Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
@@ -306,7 +310,7 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
-- Driver Board uses migration 045. It lists active managed drivers with live
+- Driver Board uses migrations 045–046. It lists active managed drivers with live
   truck, phone and dispatcher assignments. Operational text, trailer and status
   are persistent per driver, not weekly snapshots; Gross Board alone supplies
   the current New York Monday–Sunday gross and miles (same entered/source and
@@ -324,6 +328,18 @@ assignment lookup lists.
   persisted in view memory. Tests use disposable local
   MSERP_DRIVER_BOARD_TEST_DATABASE_URL as mserp_app for fresh/migrated schemas;
   the investor E2E runner includes driver-board-e2e.mjs.
+  Migration 046 records board and profile-home differences transactionally,
+  grouped by driver/transaction, with authenticated actor and name snapshots.
+  No-op saves add no history; existing data has no invented past events. Events
+  survive driver/account deletion and cannot be rewritten after their transaction.
+  History reads use driver_board.read; undo uses driver_board.write and creates
+  an audited correction. It locks the driver, checks board/home versions and
+  rejects any later change to affected fields, including changes back to the same
+  value. Unrelated later fields remain intact. The history side panel opens per
+  driver or for the shown view. All drivers, My view and named dispatcher-group
+  views use per-user, per-tab viewMemory; these filters are not access restrictions.
+  Gross cards and group totals follow all visible filters. Next loads, progress,
+  handoff and ELD integration remain future phases in docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in

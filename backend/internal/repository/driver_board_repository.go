@@ -131,12 +131,28 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	return result, tx.Commit(ctx)
 }
 
-func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry) ([]DriverBoardEntry, error) {
+func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	user := ""
+	if len(actor) > 0 {
+		user = actor[0]
+	}
+	if err = setBoardActor(ctx, tx, user, "board"); err != nil {
+		return nil, err
+	}
+	entries, err = saveDriverBoardEntries(ctx, tx, entries)
+	if err != nil {
+		return nil, err
+	}
+	return entries, tx.Commit(ctx)
+}
+
+func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry) ([]DriverBoardEntry, error) {
+	var err error
 	entries = append([]DriverBoardEntry(nil), entries...)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID < entries[j].DriverID })
 	for index := range entries {
@@ -176,9 +192,6 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 			}
 		}
 		e.Version = version
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
 	}
 	return entries, nil
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -53,6 +54,10 @@ func (request *driverBoardRequest) validate() error {
 
 func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeAPIError(w, 404, "history event not found")
+			return
+		}
 		if errors.Is(err, repository.ErrDriverBoardConflict) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
@@ -83,11 +88,67 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		entries, err := repo.Save(r.Context(), request.Entries)
+		session, _ := authSessionFromContext(r.Context())
+		entries, err := repo.Save(r.Context(), request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return
 		}
 		writeJSON(w, 200, entries)
+	})
+	r.Get("/driver-board/history", func(w http.ResponseWriter, r *http.Request) {
+		ids := strings.Split(r.URL.Query().Get("driverIds"), ",")
+		if len(ids) > 1000 {
+			writeAPIError(w, 400, "too many drivers")
+			return
+		}
+		for _, id := range ids {
+			if !isUUID(id) {
+				writeAPIError(w, 400, "valid driver ids are required")
+				return
+			}
+		}
+		var cursor int64
+		if raw := r.URL.Query().Get("before"); raw != "" {
+			var err error
+			cursor, err = strconv.ParseInt(raw, 10, 64)
+			if err != nil || cursor < 0 {
+				writeAPIError(w, 400, "invalid history cursor")
+				return
+			}
+		}
+		result, err := repo.History(r.Context(), ids, cursor)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Post("/driver-board/history/{id}/undo", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeAPIError(w, 400, "invalid history id")
+			return
+		}
+		var input struct {
+			DriverID    string `json:"driverId"`
+			Version     int    `json:"version"`
+			HomeVersion int    `json:"homeVersion"`
+		}
+		if err = decodeJSON(r, &input); err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		if !isUUID(input.DriverID) || input.Version < 0 || input.HomeVersion < 0 {
+			writeAPIError(w, 400, "invalid driver or version")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		saved, err := repo.Undo(r.Context(), id, input.DriverID, input.Version, input.HomeVersion, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, saved)
 	})
 }

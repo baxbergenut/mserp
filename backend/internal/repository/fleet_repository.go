@@ -272,6 +272,9 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.ChargeActor, "profile"); err != nil {
+		return Driver{}, err
+	}
 
 	if err = lockChargeDrivers(ctx, tx, []string{id}); err != nil {
 		return Driver{}, err

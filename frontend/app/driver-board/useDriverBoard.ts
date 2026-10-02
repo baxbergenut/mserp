@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard } from "@/app/lib/api";
+import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { reconcileDriverBoard } from "./board";
@@ -118,5 +118,16 @@ export function useDriverBoard() {
     finally { setLoading(false); }
   }
 
-  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, leaving: !!pendingLink };
+  async function undo(eventId: number, driverId: string) {
+    if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
+    const entry = savedRef.current[driverId];
+    if (!entry) throw new Error("This driver is no longer on the active board.");
+    savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true);
+    try {
+      const committed = await undoDriverBoardEvent(eventId, entry);
+      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e) } : current);
+    } finally { activity.current += 1; savingRef.current = false; setSaving(false); }
+  }
+
+  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, undo, leaving: !!pendingLink };
 }

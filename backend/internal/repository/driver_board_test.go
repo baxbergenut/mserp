@@ -54,6 +54,13 @@ func TestDriverBoardDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	historyMigration, err := os.ReadFile("../../sql/046_driver_board_history.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), string(historyMigration)) {
+		t.Fatal("history migration must match fresh schema")
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("driver_board_test_%d", time.Now().UnixNano())
@@ -74,6 +81,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(before)
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
+				exec(string(historyMigration))
 			} else {
 				exec(string(source))
 			}
@@ -82,6 +90,9 @@ func TestDriverBoardDatabase(t *testing.T) {
 			var owner string
 			if err := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='driver_board'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
 				t.Fatalf("table ownership: %s %v", owner, err)
+			}
+			if err := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='driver_board_history'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
+				t.Fatalf("history ownership: %s %v", owner, err)
 			}
 			appcfg := cfg.Copy()
 			appcfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
@@ -93,6 +104,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			defer pool.Close()
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
+			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			home := "Louisville, KY"
 			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, DriverHome: &home}
 			driver, err := fleet.CreateDriver(ctx, input)
@@ -164,6 +176,9 @@ func TestDriverBoardDatabase(t *testing.T) {
 			var count int
 			if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board WHERE driver_id=$1`, other.ID).Scan(&count); err != nil || count != 0 {
 				t.Fatal("partial batch committed", err)
+			}
+			if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board_history WHERE driver_id=$1`, other.ID).Scan(&count); err != nil || count != 0 {
+				t.Fatal("rolled back batch leaked history", err)
 			}
 			next, err := repo.Get(ctx, week.AddDate(0, 0, 7))
 			if err != nil {

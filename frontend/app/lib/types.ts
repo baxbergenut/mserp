@@ -365,6 +365,12 @@ export interface DriverBoard {
   grossEntries: GrossBoardEntry[];
 }
 
+export interface DriverBoardEvent {
+  id: number; driverId: string; driverName: string; actorId: string; actorName: string;
+  source: string; undoOf: number | null; before: Record<string, string>; after: Record<string, string>; createdAt: string;
+}
+export interface DriverBoardHistory { items: DriverBoardEvent[]; nextCursor: number }
+
 export type DriverDirectoryEntry = Driver & { intakeId?: string };
 
 export interface DriverIntake {
