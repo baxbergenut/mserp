@@ -117,6 +117,25 @@ func TestInvestorPayDatabase(t *testing.T) {
 			cr := NewDriverChargeRepository(pool)
 			pr := NewDriverPayRepository(pool)
 			term := TruckTerm{TruckID: truck, OwnerID: investor, WeekStart: "2026-01-05", SharePercent: "88"}
+			if e = cr.SaveTruckTerm(ctx, term, actor); e == nil {
+				t.Fatal("single-truck driver owner must use Driver charges")
+			}
+			ownTruck := mustID(`INSERT INTO trucks(unit_number,owner_id) VALUES('OWNER-TRUCK',$1) RETURNING id`, investor)
+			if _, e = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01')`, ownTruck, owner); e != nil {
+				t.Fatal(e)
+			}
+			ownTerm := term
+			ownTerm.TruckID = ownTruck
+			if e = cr.SaveTruckTerm(ctx, ownTerm, actor); e == nil {
+				t.Fatal("self-operated truck must use Driver charges")
+			}
+			management, e := cr.TruckCharges(ctx)
+			if e != nil || len(management.EligibleTruckIDs) != 1 || management.EligibleTruckIDs[0] != truck {
+				t.Fatalf("investor management eligibility: %+v %v", management, e)
+			}
+			if _, e = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-01-02' WHERE truck_id=$1`, ownTruck); e != nil {
+				t.Fatal(e)
+			}
 			if e = cr.SaveTruckTerm(ctx, term, actor); e != nil {
 				t.Fatal(e)
 			}

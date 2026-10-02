@@ -312,6 +312,10 @@ assignment lookup lists.
   and type eligibility. Explicitly moving a driver fee atomically pauses its
   driver assignment; personal fees never move automatically. Saved overrides
   and finalized weeks block conflicting moves. Later truck phases remain intact.
+  Truck charge management and writes exclude single-truck driver owners and
+  trucks currently operated by their owner; their fees use Driver charges.
+  GET /truck-charges supplies backend-filtered eligibleTruckIds. Historical
+  accounting reads retain saved terms independently of management eligibility.
   Owner-only weeks stay in Driver Pay using the owner's tariff without a second
   driver-wage deduction. Mixed owner/hired-driver weeks use one investor truck
   statement and charge hired labor only. Once an investor truck-week is saved,

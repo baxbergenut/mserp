@@ -30,8 +30,9 @@ type TruckChargePhase struct {
 	MoveScheduleVersion int    `json:"moveScheduleVersion,omitempty"`
 }
 type TruckChargeData struct {
-	Terms  []TruckTerm        `json:"terms"`
-	Phases []TruckChargePhase `json:"phases"`
+	EligibleTruckIDs []string           `json:"eligibleTruckIds"`
+	Terms            []TruckTerm        `json:"terms"`
+	Phases           []TruckChargePhase `json:"phases"`
 }
 
 func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
@@ -68,7 +69,56 @@ func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error
 	return d, rows.Err()
 }
 func (r *DriverChargeRepository) TruckCharges(ctx context.Context) (TruckChargeData, error) {
-	return truckChargeData(ctx, r.pool)
+	d, err := truckChargeData(ctx, r.pool)
+	if err != nil {
+		return d, err
+	}
+	d.EligibleTruckIDs = []string{}
+	rows, err := r.pool.Query(ctx, `SELECT t.id::text FROM trucks t JOIN investors i ON i.id=t.owner_id WHERE `+investorTruckEligibility)
+	if err != nil {
+		return d, err
+	}
+	defer rows.Close()
+	eligible := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return d, err
+		}
+		d.EligibleTruckIDs = append(d.EligibleTruckIDs, id)
+		eligible[id] = true
+	}
+	terms := []TruckTerm{}
+	for _, term := range d.Terms {
+		if eligible[term.TruckID] {
+			terms = append(terms, term)
+		}
+	}
+	phases := []TruckChargePhase{}
+	for _, phase := range d.Phases {
+		if eligible[phase.TruckID] {
+			phases = append(phases, phase)
+		}
+	}
+	d.Terms, d.Phases = terms, phases
+	return d, rows.Err()
+}
+
+// Ownership records also represent owner-operators. Only additional trucks
+// operated separately from their driver-owner qualify for investor management.
+const investorTruckEligibility = `NOT i.is_company AND (i.driver_id IS NULL OR
+ ((SELECT count(*) FROM trucks owned WHERE owned.owner_id=i.id)>=2 AND NOT EXISTS
+ (SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=i.driver_id AND a.unassigned_at IS NULL)))`
+
+func requireInvestorTruck(ctx context.Context, tx pgx.Tx, truck string) error {
+	var eligible bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t JOIN investors i ON i.id=t.owner_id WHERE t.id=$1 AND `+investorTruckEligibility+`)`, truck).Scan(&eligible); err != nil {
+		return err
+	}
+	if !eligible {
+		return chargeInvalid("Owner-operator charges belong in Driver charges; choose an additional investor truck")
+	}
+	return nil
 }
 
 func truckAudit(ctx context.Context, tx pgx.Tx, truck, week, action, actor string, detail any) error {
@@ -120,6 +170,9 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "terms", ""); err != nil {
 		return err
 	}
+	if err = requireInvestorTruck(ctx, tx, v.TruckID); err != nil {
+		return err
+	}
 	var previousOwner bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=$1 AND w.owner_id<>$3 AND w.week_start >= $2::date AND w.week_start < coalesce((SELECT min(week_start) FROM truck_settlement_terms WHERE truck_id=$1 AND week_start>$2::date),'2101-01-01'::date))`, v.TruckID, v.WeekStart, v.OwnerID).Scan(&previousOwner); err != nil {
 		return err
@@ -168,6 +221,9 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 		return err
 	}
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "charge", v.TypeID); err != nil {
+		return err
+	}
+	if err = requireInvestorTruck(ctx, tx, v.TruckID); err != nil {
 		return err
 	}
 	var hasTerms bool

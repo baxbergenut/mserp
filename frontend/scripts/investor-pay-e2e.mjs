@@ -31,10 +31,15 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   expect(directory.items.some(i => i.id === investor)).toBe(true);
   const session = await (await page.request.get(`${base}/api/auth/session`)).json();
   const headers = { 'x-csrf-token': session.csrfToken };
-  for (const truckId of [ownTruck, extraTruck]) {
+  for (const truckId of [extraTruck]) {
     const response = await page.request.put(`${base}/api/truck-charges/terms`, { headers, data: { truckId, ownerId: investor, weekStart: '2026-01-05', sharePercent: '88', version: 0 } });
     expect(response.status(), await response.text()).toBe(204);
   }
+  const truckConfig = await (await page.request.get(`${base}/api/truck-charges`)).json();
+  expect(truckConfig.eligibleTruckIds).toContain(extraTruck);
+  expect(truckConfig.eligibleTruckIds).not.toContain(ownTruck);
+  const rejected = await page.request.put(`${base}/api/truck-charges/terms`, { headers, data: { truckId: ownTruck, ownerId: investor, weekStart: '2026-01-05', sharePercent: '88', version: 0 } });
+  expect(rejected.status()).toBe(400);
   const created = await page.request.post(`${base}/api/driver-charges/types`, { headers, data: { id: '', name: 'Truck admin', direction: 'charge', amount: '100.00', amounts: ['100.00'], eligibility: 'calendar', archived: false, version: 0 } });
   expect(created.ok(), await created.text()).toBe(true);
   const type = await created.json();
