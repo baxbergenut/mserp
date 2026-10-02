@@ -1,7 +1,7 @@
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
-  DriverBoard, DriverBoardEntry, DriverBoardHistory,
+  DriverBoard, DriverBoardEntry, DriverBoardHistory, BoardLoads, BoardLoadAction,
   AccessData, AccessRole, ManagedUser,
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
@@ -116,6 +116,9 @@ export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before }));
+export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));
+export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
+  apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, homeVersion: entry.homeVersion, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry) =>
   apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, homeVersion: entry.homeVersion }) });
 export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>

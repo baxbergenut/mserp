@@ -60,8 +60,14 @@ func TestDriverPayDatabase(t *testing.T) {
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
+			loadPlanMigration, readErr := os.ReadFile("../../sql/048_status_board_loads.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(truckMigration), "\r\n", "\n"), "", 1)
+				// Plan identities depend on the extra-slot table created by migration 029.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(loadPlanMigration), "\r\n", "\n"), "", 1)
 			}
 			if mode == "migration" {
 				// Restore the pre-039 status checks before removing migration 029's
@@ -113,6 +119,9 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				if _, truckErr := admin.Exec(ctx, string(truckMigration)); truckErr != nil {
 					t.Fatal(truckErr)
+				}
+				if _, err := admin.Exec(ctx, string(loadPlanMigration)); err != nil {
+					t.Fatal(err)
 				}
 			}
 			config, err := pgxpool.ParseConfig(dsn)

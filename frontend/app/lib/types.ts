@@ -364,6 +364,22 @@ export interface DriverBoard {
   drivers: DriverBoardDriver[];
   entries: DriverBoardEntry[];
   grossEntries: GrossBoardEntry[];
+  loads: Record<string, BoardLoads>;
+}
+
+export interface BoardStop { key: string; type: string; location: string; appointment: string }
+export interface BoardLoad {
+  planId: string; date: string; slot: number; number: string; loadId: number | null;
+  sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
+}
+export interface BoardLoads {
+  current: BoardLoad | null; next: BoardLoad[]; hidden: BoardLoad[]; unavailable: BoardLoad[];
+  destinationSource: boolean; sourceDestination: string; stopKey: string;
+  fromDate: string; revision: string; customOrder: boolean;
+}
+export interface BoardLoadAction {
+  action: "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual";
+  planId?: string; order?: string[]; stopKey?: string;
 }
 
 export interface DriverBoardEvent {

@@ -37,10 +37,11 @@ type DriverBoardDriver struct {
 }
 
 type DriverBoard struct {
-	WeekStart    string              `json:"weekStart"`
-	Drivers      []DriverBoardDriver `json:"drivers"`
-	Entries      []DriverBoardEntry  `json:"entries"`
-	GrossEntries []GrossBoardEntry   `json:"grossEntries"`
+	WeekStart    string                `json:"weekStart"`
+	Drivers      []DriverBoardDriver   `json:"drivers"`
+	Entries      []DriverBoardEntry    `json:"entries"`
+	GrossEntries []GrossBoardEntry     `json:"grossEntries"`
+	Loads        map[string]BoardLoads `json:"loads"`
 }
 
 type DriverBoardRepository struct{ pool *pgxpool.Pool }
@@ -128,6 +129,14 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
+	ids := []string{}
+	for _, d := range result.Drivers {
+		ids = append(ids, d.ID)
+	}
+	result.Loads, err = readBoardLoads(ctx, tx, ids, week.AddDate(0, 0, -7).Format(time.DateOnly))
+	if err != nil {
+		return result, err
+	}
 	return result, tx.Commit(ctx)
 }
 
@@ -170,6 +179,25 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if !active || homeVersion != e.HomeVersion {
 			return nil, ErrDriverBoardConflict
 		}
+		old, readErr := boardEntry(ctx, tx, e.DriverID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		loadStateValue, _, readErr := loadState(ctx, tx, e.DriverID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		stateChanged := false
+		if old.CurrentLoad != e.CurrentLoad && loadStateValue.Current != nil {
+			loadStateValue.Current = nil
+			loadStateValue.StopKey = ""
+			loadStateValue.DestinationSource = false
+			stateChanged = true
+		}
+		if old.Destination != e.Destination && loadStateValue.DestinationSource {
+			loadStateValue.DestinationSource = false
+			stateChanged = true
+		}
 		var version int
 		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time)
    SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE $9::int=0
@@ -192,6 +220,11 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			}
 		}
 		e.Version = version
+		if stateChanged {
+			if err = saveLoadState(ctx, tx, e.DriverID, loadStateValue); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return entries, nil
 }

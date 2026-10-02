@@ -4,14 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { History, RefreshCw, Undo2, X } from "lucide-react";
 import { fetchDriverBoardHistory } from "@/app/lib/api";
-import type { DriverBoardEvent } from "@/app/lib/types";
+import type { DriverBoardEvent, BoardLoad } from "@/app/lib/types";
+import { formatETA } from "./board";
 
-const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Origin / destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Driver home" };
+const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Origin / destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Driver home", loadPlan: "Load selection and queue" };
+function historyValue(field: string, value: string) {
+  if (field === "eta") return formatETA(value, true);
+  if (field !== "loadPlan") return value || "Empty";
+  try {
+    const state = JSON.parse(value) as { current?: BoardLoad; orderLabels?: string[]; hidden?: string[]; destinationSource?: boolean; stopKey?: string };
+    const stop = state.current?.stops.find(s => s.key === state.stopKey);
+    return [`Current: ${state.current?.number || "Not selected"}`, `Order: ${state.orderLabels?.length ? state.orderLabels.join(" → ") : "Gross Board dates"}`, `Removed from queue: ${state.hidden?.length ?? 0}`, `Destination: ${state.destinationSource ? stop?.location || "Selected load stop" : "Manual"}`].join("\n");
+  } catch { return "Load plan updated"; }
+}
 const buttonClass = "rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40";
 
-export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClose }: {
+export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClose, onLoads }: {
   driverIds: string[]; title: string; canUndo: boolean; waiting: boolean;
   onUndo: (id: number, driverId: string) => Promise<void>; onClose: () => void;
+  onLoads?: () => void;
 }) {
   const scope = driverIds.join(",");
   const [events, setEvents] = useState<DriverBoardEvent[]>([]);
@@ -76,6 +87,7 @@ export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClo
     <section ref={panel} role="dialog" aria-modal="true" aria-label={title} className="flex h-dvh w-full max-w-xl flex-col border-l border-zinc-700 bg-zinc-950 shadow-2xl">
       <header className="flex items-center gap-3 border-b border-zinc-800 p-4">
         <History className="h-5 w-5 text-zinc-400" /><div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-zinc-100">{title}</h2><p className="text-xs text-zinc-500">Saved changes · times shown in New York</p></div>
+        {onLoads && <button className={buttonClass} disabled={busy} onClick={onLoads}>Loads</button>}
         <button aria-label="Refresh history" disabled={busy || loading} className={buttonClass} onClick={refresh}><RefreshCw className="h-4 w-4" /></button>
         <button aria-label="Close history" disabled={busy} className={buttonClass} onClick={onClose}><X className="h-4 w-4" /></button>
       </header>
@@ -88,7 +100,7 @@ export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClo
           <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-zinc-200">{event.driverName}</h3><p className="mt-1 text-xs text-zinc-400">{event.actorName} · {event.source === "profile" ? "Driver profile" : event.source === "undo" ? "Undo" : event.source === "board" ? "Status Board" : "System update"}</p><time className="text-[11px] text-zinc-500" dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" })}</time></div>
             {canUndo && <button className={buttonClass} disabled={busy || waiting || loading} onClick={() => setConfirm(event)} aria-label={`Undo change ${event.id}`}><Undo2 className="h-3.5 w-3.5" /></button>}
           </div>
-          <dl className="mt-3 space-y-3">{Object.entries(event.after).map(([field, value]) => <div key={field}><dt className="text-xs font-medium text-zinc-400">{labels[field] ?? field}</dt><dd className="mt-1 grid grid-cols-[1fr_auto_1fr] gap-2 text-xs"><span className="whitespace-pre-wrap break-words text-zinc-500">{event.before[field] || "Empty"}</span><span aria-label="changed to" className="text-zinc-600">→</span><span className="whitespace-pre-wrap break-words text-zinc-200">{value || "Empty"}</span></dd></div>)}</dl>
+          <dl className="mt-3 space-y-3">{Object.entries(event.after).map(([field, value]) => <div key={field}><dt className="text-xs font-medium text-zinc-400">{labels[field] ?? field}</dt><dd className="mt-1 grid grid-cols-[1fr_auto_1fr] gap-2 text-xs"><span className="whitespace-pre-wrap break-words text-zinc-500">{historyValue(field, event.before[field])}</span><span aria-label="changed to" className="text-zinc-600">→</span><span className="whitespace-pre-wrap break-words text-zinc-200">{historyValue(field, value)}</span></dd></div>)}</dl>
           {event.undoOf && <p className="mt-2 text-[11px] text-zinc-500">Reverses change #{event.undoOf}</p>}
         </article>)}
         {loading && <p role="status" className="text-sm text-zinc-400">Loading history…</p>}

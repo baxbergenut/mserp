@@ -82,6 +82,16 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
 				exec(string(historyMigration))
+				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql"} {
+					migration, err := os.ReadFile("../../sql/" + name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(strings.ReplaceAll(string(source), "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n")) {
+						t.Fatal("migration must match schema", name)
+					}
+					exec(string(migration))
+				}
 			} else {
 				exec(string(source))
 			}
@@ -105,6 +115,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
+			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			home := "Louisville, KY"
 			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, DriverHome: &home}
 			driver, err := fleet.CreateDriver(ctx, input)

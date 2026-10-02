@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `046_driver_board_history.sql`:
+  `048_status_board_loads.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -256,6 +256,9 @@ browser bundle.
 - Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
   plus `GET /driver-board/history?driverIds=...&before=...` (50-event cursor pages)
   and `POST /driver-board/history/{id}/undo` (driverId, version, homeVersion).
+  `GET/POST /driver-board/loads/{driverId}` reads/changes operational load selection,
+  order and destination source; GET accepts an optional `from` date, POST requires
+  board/home versions and the displayed plan revision.
   with changed entries only. Dedicated `driver_board.read`/`driver_board.write`
   permissions include board contact/home reads and home updates respectively.
 - Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
@@ -338,8 +341,31 @@ assignment lookup lists.
   value. Unrelated later fields remain intact. The history side panel opens per
   driver or for the shown view. All drivers, My view and named dispatcher-group
   views use per-user, per-tab viewMemory; these filters are not access restrictions.
-  Gross cards and group totals follow all visible filters. Next loads, progress,
-  handoff and ELD integration remain future phases in docs/DRIVER_BOARD_PLAN.md.
+  Gross cards and group totals follow all visible filters. Migration 048 adds
+  stable Gross Board plan UUIDs and separate driver_board_load_state JSON storage
+  for current selection, stop/source choice, order and removed-from-queue plans.
+  Reusing a slot renews its UUID; financial edits preserve it. Reads are pure and
+  never activate/advance loads. Current selection is explicit and retained with
+  a warning after source removal/reassignment. Unique linked loads deduplicate;
+  identical business numbers with distinct records remain separate. Unmatched
+  plans stay visible. Default plans start the previous New York Monday and include
+  future weeks; the Loads panel can read older dates. Older current selections and
+  explicit ordering remain included. Gross Board controls planned assignment;
+  DataTruck driver mismatches warn instead of dropping or moving plans. Finished
+  next loads remain inspectable; finished current loads are not auto-cleared.
+  Stops come from imported raw_payload. Only first pickup/final delivery inherit
+  load-level appointments; ETA remains manually set with a date picker and optional
+  time, shown compactly on one line. New ETAs persist as YYYY-MM-DD or
+  YYYY-MM-DDTHH:mm in New York wall time in the existing string field; legacy text
+  is displayed unchanged until explicitly replaced or cleared. Idle board refresh
+  pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
+  than a repeated table column. Source destinations have an explicit
+  manual override. Text edits detach current identity or destination source safely.
+  Queue mutations lock the driver, check board/home versions plus source revision,
+  share transactional history and support undo. No financial dates/rates or upstream
+  records change. History loadPlan values contain operational snapshots, formatted
+  for people in the UI. Next loads follows ETA to preserve priority column widths.
+  Progress, handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in

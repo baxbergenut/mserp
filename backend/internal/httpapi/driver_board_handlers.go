@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"mserp/internal/repository"
@@ -58,13 +59,59 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 404, "history event not found")
 			return
 		}
-		if errors.Is(err, repository.ErrDriverBoardConflict) {
+		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
 		logger.Error("status board request failed", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "the status board could not be loaded or saved")
 	}
+	parseFrom := func(raw string) (string, error) {
+		if raw == "" {
+			week, err := grossBoardWeek(repository.ChargeCurrentWeek())
+			return week.AddDate(0, 0, -7).Format(time.DateOnly), err
+		}
+		date, err := time.Parse(time.DateOnly, raw)
+		if err != nil || date.Year() < 2000 || date.Year() > 2100 {
+			return "", errors.New("invalid plan start date")
+		}
+		return raw, nil
+	}
+	r.Get("/driver-board/loads/{driverId}", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "driverId")
+		from, err := parseFrom(r.URL.Query().Get("from"))
+		if !isUUID(id) || err != nil {
+			writeAPIError(w, 400, "valid driver and start date are required")
+			return
+		}
+		result, err := repo.Loads(r.Context(), id, from)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Post("/driver-board/loads/{driverId}", func(w http.ResponseWriter, r *http.Request) {
+		var a repository.BoardLoadAction
+		if err := decodeJSON(r, &a); err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		a.DriverID = chi.URLParam(r, "driverId")
+		from, err := parseFrom(a.FromDate)
+		if !isUUID(a.DriverID) || err != nil || a.Version < 0 || a.HomeVersion < 0 || len(a.Revision) != 64 || len(a.Order) > 1000 {
+			writeAPIError(w, 400, "invalid load action")
+			return
+		}
+		a.FromDate = from
+		session, _ := authSessionFromContext(r.Context())
+		result, err := repo.ChangeLoads(r.Context(), a, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
 	r.Get("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {

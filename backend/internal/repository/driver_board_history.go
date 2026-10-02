@@ -105,6 +105,11 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	raw, _ := json.Marshal(entry)
 	var current map[string]any
 	_ = json.Unmarshal(raw, &current)
+	_, stateRaw, err := loadState(ctx, tx, driver)
+	if err != nil {
+		return entry, err
+	}
+	current["loadPlan"] = stateRaw
 	for k, v := range after {
 		if current[k] != v {
 			return entry, ErrDriverBoardConflict
@@ -124,6 +129,15 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{entry})
 	if err != nil {
 		return entry, err
+	}
+	if previous, ok := before["loadPlan"]; ok {
+		var restored boardLoadState
+		if err = json.Unmarshal([]byte(previous), &restored); err != nil {
+			return entry, err
+		}
+		if err = saveLoadState(ctx, tx, driver, restored); err != nil {
+			return entry, err
+		}
 	}
 	return saved[0], tx.Commit(ctx)
 }

@@ -1,9 +1,9 @@
 # Driver Board implementation plan
 
-Decisions recorded October 2, 2026. The current implementation includes phase 0
-and phase 1 (history and personal views), locally validated and awaiting release.
-The remaining phases are planned work. The user explicitly chose history and
-personal views first; next loads, progress and handoff are outside this pass.
+Decisions recorded October 2, 2026. Phases 0–1 (colors, history and personal views)
+shipped in f0ce1a9. The page is now named Status Board (route /driver-board).
+Phase 2 (current selection, ordered next loads and source destinations) is the
+current implementation pass. Progress actions, handoff and ELD remain later phases.
 
 ## Agreed direction
 
@@ -121,6 +121,46 @@ board dates. A removed current plan requires review rather than silent deletion.
 Acceptance: multi-stop, duplicate-number, unmatched-plan, cross-week and driver
 reassignment scenarios work; opening a board never advances a load; notes and
 financial figures stay intact.
+
+Implemented in migration 048: both Gross Board slot tables have plan UUIDs,
+retained through financial edits but renewed when slots change load identity,
+become statuses or are removed. Queue order, exclusions, selected load snapshot
+and stop/source choice live in separate operational storage. Existing text is
+never automatically matched or promoted. Manual current-load edits detach the
+selection; manual destination edits switch off the source. Older-client text
+disagreements retain a review warning and suppress the automatic destination.
+
+Next loads is a single-line column after ETA. The Loads panel opens from Current
+load or Next loads, with a History switch, explicit current/stop confirmation,
+up/down ordering, reset, removal/restoration, source/manual destination selection,
+all known stops and first-pickup/final-delivery appointments. ETA stays manually set.
+The default plan window starts the previous New York Monday and includes future
+weeks; the panel can include older dates. Older current selections and explicitly
+ordered plans stay included. Unmatched plans remain visible in the chosen window.
+Gross Board owns planned driver assignment; a disagreeing DataTruck driver is
+shown for review, not used to silently move or discard the plan. Delivered or
+cancelled next loads remain inspectable outside the active queue. A current load
+is retained for review even if its source plan disappears or source status finishes.
+
+Actions use the existing driver-row version plus a revision of the displayed
+plans, audit atomically, and support history undo. They do not write DataTruck,
+alter Gross Board placement/payroll, mark stops complete or infer a new status.
+Live details use the existing imported DataTruck snapshot and display its sync
+time; this release adds no upstream polling or ELD connection.
+
+Validated locally against fresh and migrated PostgreSQL schemas as mserp_app,
+the full database-enabled Go suite and vet, frontend lint/calculation checks and
+production build, and Chromium flows for selection, multi-stop destinations,
+manual/source switching, cross-week order/undo, removed current plans, stale-source
+conflicts, read-only access and compact desktop/mobile layout.
+
+October 2 layout refinement: remove the repeated Dispatcher column (group labels
+and filters remain). ETA uses a date picker with optional time in New York time.
+Cells stay single-line, for example `10/3 · 2:30p` or `10/3` when time is unknown.
+New values use `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the existing text field;
+legacy free text stays intact until replaced or cleared. Existing autosave,
+history and permissions apply. The editor pauses idle refresh to avoid replacing
+its underlying row during a draft.
 
 ## Phase 3 — explicit progress actions
 

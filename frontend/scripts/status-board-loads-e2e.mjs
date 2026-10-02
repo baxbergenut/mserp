@@ -1,0 +1,72 @@
+import { expect } from '@playwright/test';
+import { join } from 'node:path';
+
+export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers }) {
+  const date = new Date(`${week}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 7);
+  const nextWeek = date.toISOString().slice(0, 10);
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(88011,'SOURCE-A','Dispatched',1000,1000,500,
+    '{"pickup_appointment_time":"${nextWeek}T12:00:00Z","delivery_appointment_time":"${nextWeek}T19:00:00Z","stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Richmond","state":"VA"}},{"ordering":3,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}}]}');
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles) VALUES('${id}','${nextWeek}','SOURCE-A',88011,1000,900,500);
+    INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,original_rate,driver_rate,miles) VALUES
+    ('${id}','${nextWeek}',1,'NEXT-B',2000,1800,600),('${id}','${nextWeek}',2,'NEXT-C',3000,2800,700);
+  `);
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
+  await expect(field('Current load')).toHaveValue('LOAD 8841');
+  await expect(field('ETA')).toBeInViewport({ ratio: 1 });
+  await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
+  await expect(panel.getByText('No linked current load.', { exact: false })).toBeVisible();
+  const source = panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /SOURCE-A/ }) });
+  await source.getByRole('button', { name: 'Set current', exact: true }).click();
+  await panel.getByLabel('Choose current stop').selectOption({ label: 'delivery · Richmond, VA' });
+  await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
+  await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
+  await expect(panel.getByText('Appointment:', { exact: false })).toHaveCount(2);
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await expect(field('Current load')).toHaveValue('SOURCE-A');
+  await expect(field('Status')).toHaveValue('ENROUTE');
+  await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
+  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Richmond, VA');
+  await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
+  await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  await panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /PLAN-101/ }) }).getByRole('button', { name: 'Remove from queue', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Move NEXT-B up', exact: true })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Move NEXT-C up', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: '1. NEXT-C', exact: true })).toBeVisible();
+  await page.screenshot({ path: join(temp, 'status-board-loads.png'), fullPage: true });
+  const history = await (await page.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).json();
+  await panel.getByRole('button', { name: 'History', exact: true }).click();
+  const historyPanel = page.getByRole('dialog', { name: 'Board Cpm · History', exact: true });
+  await historyPanel.getByRole('button', { name: `Undo change ${history.items[0].id}`, exact: true }).click();
+  await historyPanel.getByRole('button', { name: 'Undo change', exact: true }).click();
+  await expect(historyPanel.getByText(`Reverses change #${history.items[0].id}`, { exact: true })).toBeVisible();
+  await historyPanel.getByRole('button', { name: 'Loads', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: '1. NEXT-B', exact: true })).toBeVisible();
+  await panel.getByLabel('Current load destination source').selectOption('');
+  await expect(panel.getByLabel('Current load destination source')).toHaveValue('');
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await expect(field('Origin / destination')).toHaveValue('Richmond, VA');
+  await field('Origin / destination').fill('Manual destination');
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Boston, MA' });
+  await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Boston, MA');
+  // Removing the source plan never drops the current load or advances to NEXT-B.
+  sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await expect(field('Current load')).toHaveValue('SOURCE-A');
+  await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  await expect(panel.getByText('Current plan was removed, replaced or reassigned in Gross Board; review it', { exact: true })).toBeVisible();
+  const stale = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
+  const board = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
+  const entry = board.entries.find(e => e.driverId === id);
+  sql(`SET search_path TO ${schema},public; UPDATE gross_board_extra_entries SET load_number='NEXT-B-EDIT' WHERE driver_id='${id}' AND service_date='${nextWeek}' AND slot=1;`);
+  expect((await page.request.post(`${base}/api/driver-board/loads/${id}`, { headers, data: { action: 'clear', version: entry.version, homeVersion: entry.homeVersion, fromDate: stale.fromDate, revision: stale.revision } })).status()).toBe(409);
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  console.log('Status Board loads E2E passed: explicit selection, multi-stop source, appointments separate from ETA, cross-week queue, reorder/undo, manual override, persistence, source removal and stale-source conflict.');
+}

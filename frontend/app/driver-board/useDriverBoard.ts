@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent } from "@/app/lib/api";
-import type { DriverBoard, DriverBoardEntry } from "@/app/lib/types";
+import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads } from "@/app/lib/api";
+import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { reconcileDriverBoard } from "./board";
 
-export function useDriverBoard() {
+export function useDriverBoard(pauseRefresh = false) {
   const router = useRouter();
   const [board, setBoard] = useState<DriverBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverBoardEntry>>({});
@@ -22,7 +22,7 @@ export function useDriverBoard() {
   const savedRef = useRef<Record<string, DriverBoardEntry>>({});
   const dirty = Object.keys(changes).length > 0;
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
-  useLayoutEffect(() => { savedRef.current = saved; idle.current = !dirty && !saving && !loading; }, [saved, dirty, saving, loading]);
+  useLayoutEffect(() => { savedRef.current = saved; idle.current = !dirty && !saving && !loading && !pauseRefresh; }, [saved, dirty, saving, loading, pauseRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +63,13 @@ export function useDriverBoard() {
     });
   }, []);
 
+  const refreshLoads = useCallback(async (ids: string[]) => {
+    try {
+      const rows = await Promise.all(ids.map(async id => [id, await fetchBoardLoads(id)] as const));
+      setBoard(current => current ? { ...current, loads: { ...current.loads, ...Object.fromEntries(rows) } } : current);
+    } catch { setRefreshError("Load details could not be refreshed. Use Reload to review the saved plans."); }
+  }, []);
+
   const save = useCallback(async () => {
     if (savingRef.current || !dirty || loading) return;
     savingRef.current = true; activity.current += 1;
@@ -77,9 +84,10 @@ export function useDriverBoard() {
         return { ...current, entries: Object.values(entries) };
       });
       setChanges(current => reconcileDriverBoard(current, snapshot, committed));
+      await refreshLoads(committed.map(e => e.driverId));
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activity.current += 1; savingRef.current = false; setSaving(false); }
-  }, [changes, dirty, loading]);
+  }, [changes, dirty, loading, refreshLoads]);
 
   useEffect(() => {
     if (!dirty || saving || error || loading) return;
@@ -126,8 +134,21 @@ export function useDriverBoard() {
     try {
       const committed = await undoDriverBoardEvent(eventId, entry);
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e) } : current);
+      await refreshLoads([driverId]);
     } finally { activity.current += 1; savingRef.current = false; setSaving(false); }
   }
 
-  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, undo, leaving: !!pendingLink };
+  async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction) {
+    if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
+    const entry = savedRef.current[driverId];
+    if (!entry) throw new Error("This driver is no longer on the active board.");
+    savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true);
+    try {
+      const result = await changeBoardLoads(entry, view, action);
+      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), loads: { ...current.loads, [driverId]: result.loads } } : current);
+      return result.loads;
+    } finally { activity.current += 1; savingRef.current = false; setSaving(false); }
+  }
+
+  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, undo, changeLoads, leaving: !!pendingLink };
 }

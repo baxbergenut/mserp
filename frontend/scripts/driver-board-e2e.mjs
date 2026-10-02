@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
+import { runStatusBoardLoadsE2E } from './status-board-loads-e2e.mjs';
 
 export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -13,6 +14,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,driver_rate,miles) VALUES
     ('e4500000-0000-0000-0000-000000000002','${week}','PLAN-101',1000.10,900.05,500.25),
     ('e4500000-0000-0000-0000-000000000003','${week}','PLAN-102',2000.20,1900.10,800.50);
+    INSERT INTO driver_board(driver_id,eta) VALUES('e4500000-0000-0000-0000-000000000002','Friday 17:00');
   `);
   const id = 'e4500000-0000-0000-0000-000000000002';
   const session = await (await page.request.get(`${base}/api/auth/session`)).json();
@@ -27,12 +29,27 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
+  await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
+  await expect(field('ETA')).toHaveText('Friday 17:00');
+  await field('ETA').click();
+  await expect(page.getByRole('dialog')).toContainText('Existing ETA: Friday 17:00');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(field('ETA')).toHaveText('Friday 17:00');
+  await field('ETA').click();
+  await page.getByLabel('Arrival date', { exact: true }).fill(week);
+  await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.reload();
+  await expect(field('ETA')).toHaveAttribute('title', `${week} · Time not set`);
   await expect(field('Driver home')).toHaveValue('Louisville, KY');
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');
   await field('Origin / destination').fill('Memphis, TN → Louisville, KY');
-  await field('ETA').fill('Friday 17:00');
+  await field('ETA').click();
+  await page.getByLabel('Arrival time (optional)', { exact: true }).fill('17:00');
+  await page.screenshot({ path: join(temp, 'status-board-eta-picker.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await field('Notes').fill('Call before arrival');
   await field('Home time').fill('Home next Friday');
   await field('Driver home').fill('Memphis, TN');
@@ -40,6 +57,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.reload();
   await expect(field('Notes')).toHaveValue('Call before arrival');
   await expect(field('Driver home')).toHaveValue('Memphis, TN');
+  await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
   let profile = await (await page.request.get(`${base}/api/drivers/${id}`)).json();
   expect(profile.driverHome).toBe('Memphis, TN');
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
@@ -127,6 +145,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(field('Notes')).toHaveValue('');
   await expect(field('Driver home')).toHaveValue('');
   // Board-only viewers can read but cannot mutate board or fleet records.
+  await runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers });
   const role = await page.request.post(`${base}/api/settings/roles`, { headers, data: { name: 'Board viewer', permissions: ['driver_board.read'] } });
   expect(role.status()).toBe(204);
   const access = await (await page.request.get(`${base}/api/settings/access`)).json();
@@ -144,6 +163,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(viewer.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
     await expect(viewer.getByLabel('Board Cpm · Notes', { exact: true })).toBeDisabled();
+    await expect(viewer.getByLabel('Board Cpm · ETA', { exact: true })).toBeDisabled();
     const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
     remote = (await getBoard()).entries.find(e => e.driverId === id);
     expect((await viewer.request.put(`${base}/api/driver-board`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { entries: [remote] } })).status()).toBe(403);
@@ -154,6 +174,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     expect((await viewer.request.post(`${base}/api/driver-board/history/${history.items[0].id}/undo`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { driverId: id, version: remote.version, homeVersion: remote.homeVersion } })).status()).toBe(403);
     await viewer.getByRole('button', { name: 'Board Cpm · History', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: /^Undo change/ })).toHaveCount(0);
+    await viewer.getByRole('dialog').getByRole('button', { name: 'Loads', exact: true }).click();
+    await expect(viewer.getByRole('dialog').getByRole('button', { name: 'Set current', exact: true })).toHaveCount(0);
+    const loads = await (await viewer.request.get(`${base}/api/driver-board/loads/${id}`)).json();
+    expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, homeVersion: remote.homeVersion, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
