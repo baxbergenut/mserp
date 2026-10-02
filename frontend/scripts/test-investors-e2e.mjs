@@ -3,6 +3,7 @@
 import { chromium, expect } from '@playwright/test';
 import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
+import { runAccessE2E } from './access-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -26,7 +27,7 @@ try {
   const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
   sql(`CREATE SCHEMA ${schema}; GRANT USAGE ON SCHEMA ${schema} TO mserp_app; SET search_path TO ${schema},public;\n${init}\n
     GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO mserp_app;
-    INSERT INTO app_users(username,password_hash) VALUES('investor-e2e',crypt('${password}',gen_salt('bf')));
+    INSERT INTO app_users(username,password_hash,email,role_id) VALUES('investor-e2e',crypt('${password}',gen_salt('bf')),'investor-e2e@example.com',(SELECT id FROM app_roles WHERE system_role));
     INSERT INTO drivers(full_name,normalized_name,is_owner_operator,pay_type,pay_rate) VALUES('E2e Driver','e2e driver',true,'gross_percentage',80);
   `);
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
@@ -65,7 +66,7 @@ try {
   const base = 'http://127.0.0.1:13549';
   expect((await page.request.get(`${base}/api/investors`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/investors`);
-  await page.getByLabel('Username').fill('investor-e2e');
+  await page.getByLabel('Email or existing username', { exact: true }).fill('investor-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
@@ -128,6 +129,7 @@ try {
   await expect(page.getByRole('row').filter({ hasText: 'E2e Investor' })).toContainText('Inactive');
   await page.screenshot({ path: join(temp, 'investors-desktop.png'), fullPage: true });
   await runPhoneE2E({ page, base });
+  await runAccessE2E({ page, base, sql, schema, temp });
   await runInvestorPayE2E({ page, base, sql, schema, temp });
   await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });

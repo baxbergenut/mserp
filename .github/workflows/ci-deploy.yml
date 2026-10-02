@@ -53,11 +53,12 @@ jobs:
       - name: Prepare isolated assignment history database
         env:
           PGPASSWORD: postgres
-        run: psql -h 127.0.0.1 -U postgres -d mserp_assignment_history_test -v ON_ERROR_STOP=1 -c 'CREATE ROLE mserp_app'
+        run: psql -h 127.0.0.1 -U postgres -d mserp_assignment_history_test -v ON_ERROR_STOP=1 -c 'CREATE ROLE mserp_app; CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public'
 
       - name: Test backend
         working-directory: backend
         env:
+          MSERP_ACCESS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable

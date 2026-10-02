@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `043_investor_driver_charge_handoff.sql`:
+  `044_access_control.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -190,15 +190,27 @@ For a new database, apply `backend/sql/init.sql`. For an existing database, appl
 the numbered SQL files in order as needed. There is no automatic migration tool,
 so schema changes must update `init.sql` and add a new incremental SQL file.
 
-To provision a user, generate a bcrypt hash without exposing the password in
+Accounts are created by administrators in Settings; there is no self-sign-up
+or email delivery dependency. New users require a name, unique email, role and
+password (12-72 bytes). Administrators can reset passwords in Edit user; users
+can change their own password from the account menu. Migration 044 preserves
+existing users' unrestricted access as the Administrator role, revokes old
+sessions, and temporarily allows legacy username login until a real email is
+attached in Settings. Email addresses are not verified.
+
+For a completely new database, provision the initial account below and assign
+its real email and the built-in Administrator role directly in the database.
+
+To provision the initial user, generate a bcrypt hash without exposing the password in
 shell history, then insert it directly:
 
 ```powershell
 cd backend
 go run ./cmd/hash-password
 # Use the printed hash as <bcrypt-hash>:
-# INSERT INTO app_users (username, password_hash)
-# VALUES ('admin', '<bcrypt-hash>');
+# INSERT INTO app_users (username, email, password_hash, role_id)
+# SELECT 'admin', 'actual-admin@example.com', '<bcrypt-hash>', id
+# FROM app_roles WHERE system_role;
 ```
 
 ### Run locally
@@ -225,7 +237,11 @@ browser bundle.
 ## Current API surface
 
 - Health: `GET /healthz`, `GET /readyz`
-- Auth: `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`
+- Auth: `POST /auth/login` (email/password, optional trustDevice),
+  `GET /auth/session`, `POST /auth/logout`, `POST /auth/password`.
+- Access administration: `GET /settings/access`, `POST /settings/users`,
+  `PUT /settings/users/{id}`, `POST /settings/users/{id}/revoke`,
+  `POST /settings/roles`, `PUT /settings/roles/{id}`. All require `access.manage`.
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
   `GET /gross-board/loads?search=...`, and
@@ -281,6 +297,30 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Access control uses migration 044. One role per user, with a code-owned
+  permission catalog in repository/access_permissions.go. The built-in
+  Administrator role is immutable and has the complete catalog. The API checks
+  current role permissions on every request and denies unmapped resources;
+  hiding navigation is supplementary. Settings creates/edits roles, provisions
+  and disables users, resets passwords, and revokes all sessions. There is no
+  email verification, SMTP requirement, invitation token or public registration.
+  New/edited accounts require a valid unique email. Existing accounts retain
+  their full access as Administrators and may use their old username until an
+  email is attached; subsequently login requires that email. Passwords are bcrypt
+  hashes. Trust this device for 30 days extends only that session to a fixed
+  30-day lifetime; normal sessions use AUTH_SESSION_TTL. Password/account changes
+  and explicit revocation invalidate every session, including remembered ones.
+  Session issuance locks/rechecks the user version to prevent stale login races.
+  Current role permissions are loaded for every request. Account and role writes
+  are versioned and audited without password material; serialized updates retain
+  at least one active Administrator. Fleet read includes full profiles/documents;
+  grant it to roles using fleet selectors. Payroll history/finalization require
+  separate permissions. Login throttling trusts Nginx X-Real-IP only on loopback.
+  Tests use disposable local MSERP_ACCESS_TEST_DATABASE_URL (_test database),
+  fresh/migrated schemas as mserp_app; access-e2e.mjs runs with investor E2E.
+  Pre-044 binaries do not enforce permissions: rollback to them is unsafe once
+  access restrictions are in use.
 
 - Contact phones are optional ten ASCII digits without a country code; blank
   values store as NULL. Drivers, dispatchers, investors, FleetScope intake and

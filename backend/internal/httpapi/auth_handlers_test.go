@@ -22,16 +22,16 @@ type fakeAuthStore struct {
 	sessions map[string]repository.AuthSession
 }
 
-func (s *fakeAuthStore) FindUserByUsername(_ context.Context, username string) (repository.AuthUser, error) {
+func (s *fakeAuthStore) FindUserByEmail(_ context.Context, username string) (repository.AuthUser, error) {
 	if !strings.EqualFold(username, s.user.Username) {
 		return repository.AuthUser{}, repository.ErrAuthRecordNotFound
 	}
 	return s.user, nil
 }
 
-func (s *fakeAuthStore) CreateSession(
+func (s *fakeAuthStore) CreatePasswordSession(
 	_ context.Context,
-	_ string,
+	_ repository.AuthUser,
 	tokenHash string,
 	csrfToken string,
 	expiresAt time.Time,
@@ -87,7 +87,7 @@ func TestAuthLoginSessionAndCSRF(t *testing.T) {
 	loginRequest := httptest.NewRequest(
 		http.MethodPost,
 		"/auth/login",
-		strings.NewReader(`{"username":"ADMIN","password":"correct horse battery staple"}`),
+		strings.NewReader(`{"email":"ADMIN","password":"correct horse battery staple"}`),
 	)
 	loginRequest.Header.Set("Content-Type", "application/json")
 	loginResponse := httptest.NewRecorder()
@@ -144,14 +144,16 @@ func TestAuthLoginRejectsInvalidCredentials(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/auth/login",
-		strings.NewReader(`{"username":"missing","password":"wrong"}`),
+		strings.NewReader(`{"email":"missing","password":"wrong"}`),
 	)
 	response := httptest.NewRecorder()
 	handler.login(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
 	}
-	if !strings.Contains(response.Body.String(), "invalid username or password") {
+	if !strings.Contains(response.Body.String(), "invalid email or password") {
 		t.Fatalf("unexpected body: %s", response.Body.String())
 	}
 }
+
+func (s *fakeAuthStore) ChangePassword(context.Context, string, string, string) error { return nil }

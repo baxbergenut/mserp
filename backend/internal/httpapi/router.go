@@ -62,8 +62,11 @@ func NewRouter(
 	protected := chi.NewRouter()
 	protected.Use(auth.requireSession)
 	protected.Use(auth.requireCSRF)
+	protected.Use(requirePermission)
+	registerAccessRoutes(protected, auth, authRepo)
 	protected.Get("/auth/session", auth.session)
 	protected.Post("/auth/logout", auth.logout)
+	protected.Post("/auth/password", auth.changePassword)
 
 	protected.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) {
 		result, err := job.Run(r.Context())

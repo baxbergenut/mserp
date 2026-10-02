@@ -25,7 +25,7 @@ try {
   const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
   sql(`CREATE SCHEMA ${schema}; GRANT USAGE ON SCHEMA ${schema} TO mserp_app; SET search_path TO ${schema},public;\n${init}\n
     GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO mserp_app;
-    INSERT INTO app_users(username,password_hash) VALUES('charges-e2e',crypt('${password}',gen_salt('bf')));
+    INSERT INTO app_users(username,password_hash,email,role_id) VALUES('charges-e2e',crypt('${password}',gen_salt('bf')),'charges-e2e@example.com',(SELECT id FROM app_roles WHERE system_role));
     INSERT INTO drivers(full_name,normalized_name,is_owner_operator,pay_type,pay_rate) VALUES('E2e Driver','e2e driver',false,'cpm',0.75),('Unassigned Driver','unassigned driver',false,'cpm',0.75);
     INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Inactive Driver','inactive driver','cpm',0.75,false);
   `);
@@ -67,7 +67,7 @@ try {
   expect((await page.request.get(`${base}/api/driver-charges`)).status()).toBe(401);
   expect((await page.request.get(`${base}/api/expense-settings`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/accounting/driver-charges`);
-  await page.getByLabel('Username').fill('charges-e2e');
+  await page.getByLabel('Email or existing username', { exact: true }).fill('charges-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Charges', exact: true })).toBeVisible();

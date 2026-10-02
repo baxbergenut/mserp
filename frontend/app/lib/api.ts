@@ -1,6 +1,7 @@
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
+  AccessData, AccessRole, ManagedUser,
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
   InvestorInput,
@@ -186,8 +187,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 		const body = await response.json().catch(() => null);
 		if (
 			response.status === 401 &&
-			path !== "/auth/login" &&
-			path !== "/auth/session" &&
+			!path.startsWith("/auth/") &&
 			typeof window !== "undefined"
 		) {
 			const next = `${window.location.pathname}${window.location.search}`;
@@ -209,14 +209,20 @@ export async function fetchAuthSession(): Promise<AuthSession> {
 	return session;
 }
 
-export async function login(username: string, password: string): Promise<AuthSession> {
+export async function login(email: string, password: string, trustDevice = false): Promise<AuthSession> {
 	const session = await apiRequest<AuthSession>("/auth/login", {
 		method: "POST",
-		body: JSON.stringify({ username, password }),
+		body: JSON.stringify({ email, password, trustDevice }),
 	});
 	csrfToken = session.csrfToken;
 	return session;
 }
+
+export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
+export const saveUser = (user: ManagedUser) => apiRequest<{id: string}>(`/settings/users${user.id ? `/${user.id}` : ""}`, { method: user.id ? "PUT" : "POST", body: JSON.stringify(user) });
+export const saveRole = (role: AccessRole) => apiRequest<void>(`/settings/roles${role.id ? `/${role.id}` : ""}`, { method: role.id ? "PUT" : "POST", body: JSON.stringify(role) });
+export const revokeUserAccess = (id: string) => apiRequest<void>(`/settings/users/${id}/revoke`, { method: "POST" });
 
 export async function logout(): Promise<void> {
 	try {

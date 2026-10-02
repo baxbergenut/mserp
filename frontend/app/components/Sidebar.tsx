@@ -19,8 +19,10 @@ import {
   WalletCards,
   CalendarRange,
   ListChecks,
+  Settings,
 } from "lucide-react";
 import { logout } from "@/app/lib/api";
+import { usePermissions, pagePermission } from "@/app/lib/access";
 
 const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
@@ -39,9 +41,11 @@ const NAV_ITEMS = [
   { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers", icon: Headset },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function Sidebar({ username }: { username: string }) {
+  const permissions = usePermissions();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(
@@ -81,6 +85,8 @@ export function Sidebar({ username }: { username: string }) {
       {/* ── Navigation ── */}
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
+          const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href))) : [];
+          if ("children" in item ? children.length === 0 : !permissions.includes(pagePermission(item.href))) return null;
           const active =
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));
@@ -91,7 +97,7 @@ export function Sidebar({ username }: { username: string }) {
               return (
                 <Link
                   key={item.href}
-                  href={item.children[0].href}
+                  href={children[0].href}
                   className={`group flex items-center justify-center rounded-lg py-2 text-[13px] font-medium transition-all duration-150 ${
                     active
                       ? "bg-accent/10 text-accent"
@@ -124,7 +130,7 @@ export function Sidebar({ username }: { username: string }) {
                 </button>
                 {accountingExpanded && (
                   <div className="mt-1 space-y-1 pl-5">
-                    {item.children.map((child) => {
+                    {children.map((child) => {
                       const childActive = pathname === child.href;
                       const ChildIcon = child.icon;
                       return (

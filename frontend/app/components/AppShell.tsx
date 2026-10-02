@@ -8,6 +8,8 @@ import { PageNavigation } from "./PageNavigation";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { PageHeaderProvider } from "./PageHeader";
+import Link from "next/link";
+import { PermissionsContext, pagePermission, firstAllowedPage } from "@/app/lib/access";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -52,14 +54,16 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <PermissionsContext.Provider value={session.user.permissions}>
     <div className="flex h-full">
       <Sidebar username={session.user.username} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PageHeaderProvider key={`${pathname}?${query}`}>
         <TopBar key={pathname + query} username={session.user.username} />
-        <PageNavigation key={`${pathname}?${query}`} userId={session.user.id} url={query ? `${pathname}?${query}` : pathname}>{children}</PageNavigation>
+        <PageNavigation key={`${pathname}?${query}`} userId={session.user.id} url={query ? `${pathname}?${query}` : pathname}>{!pagePermission(pathname) || session.user.permissions.includes(pagePermission(pathname)) ? children : <div className="p-8"><h1 className="text-lg font-semibold">Access restricted</h1><p className="mt-2 text-sm text-zinc-400">Your role does not have access to this page.</p><Link className="mt-4 inline-block text-blue-400" href={firstAllowedPage(session.user.permissions)}>Open an available page</Link></div>}</PageNavigation>
         </PageHeaderProvider>
       </div>
     </div>
+    </PermissionsContext.Provider>
   );
 }

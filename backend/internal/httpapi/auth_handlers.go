@@ -23,8 +23,9 @@ import (
 const sessionCookieName = "mserp_session"
 
 type authStore interface {
-	FindUserByUsername(context.Context, string) (repository.AuthUser, error)
-	CreateSession(context.Context, string, string, string, time.Time) error
+	FindUserByEmail(context.Context, string) (repository.AuthUser, error)
+	CreatePasswordSession(context.Context, repository.AuthUser, string, string, time.Time) error
+	ChangePassword(context.Context, string, string, string) error
 	FindSessionByTokenHash(context.Context, string) (repository.AuthSession, error)
 	DeleteSessionByTokenHash(context.Context, string) error
 }
@@ -39,6 +40,7 @@ type authHandler struct {
 	store             authStore
 	options           AuthOptions
 	limiter           *loginLimiter
+	networkLimiter    *loginLimiter
 	now               func() time.Time
 	dummyPasswordHash string
 }
@@ -46,13 +48,17 @@ type authHandler struct {
 type authContextKey struct{}
 
 type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	TrustDevice bool   `json:"trustDevice"`
 }
 
 type authUserResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	RoleID      string   `json:"roleId"`
+	Permissions []string `json:"permissions"`
 }
 
 type sessionResponse struct {
@@ -71,6 +77,7 @@ func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *
 		store:             store,
 		options:           options,
 		limiter:           newLoginLimiter(5, 15*time.Minute),
+		networkLimiter:    newLoginLimiter(30, 15*time.Minute),
 		now:               time.Now,
 		dummyPasswordHash: string(dummyPasswordHash),
 	}
@@ -83,20 +90,22 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	request.Username = strings.TrimSpace(request.Username)
-	if request.Username == "" || request.Password == "" || len(request.Username) > 200 || len(request.Password) > 72 {
-		writeAPIError(w, http.StatusUnauthorized, "invalid username or password")
+	request.Email = strings.TrimSpace(request.Email)
+	if request.Email == "" || request.Password == "" || len(request.Email) > 254 || len(request.Password) > 72 {
+		writeAPIError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
-	limiterKey := clientAddress(r) + "\x00" + strings.ToLower(request.Username)
-	if !h.limiter.allow(limiterKey, h.now()) {
+	limiterKey := strings.ToLower(request.Email)
+	if !h.limiter.allow(limiterKey, h.now()) || !h.networkLimiter.allow(clientAddress(r), h.now()) {
 		w.Header().Set("Retry-After", "900")
 		writeAPIError(w, http.StatusTooManyRequests, "too many login attempts; try again later")
 		return
 	}
+	h.networkLimiter.fail(clientAddress(r), h.now())
+	h.limiter.fail(limiterKey, h.now())
 
-	user, err := h.store.FindUserByUsername(r.Context(), request.Username)
+	user, err := h.store.FindUserByEmail(r.Context(), request.Email)
 	if err != nil && !errors.Is(err, repository.ErrAuthRecordNotFound) {
 		h.logger.Error("find login user", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "login could not be completed")
@@ -109,34 +118,83 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 		passwordHash = h.dummyPasswordHash
 	}
 	if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(request.Password)) != nil || user.ID == "" {
-		h.limiter.fail(limiterKey, h.now())
-		writeAPIError(w, http.StatusUnauthorized, "invalid username or password")
+		writeAPIError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	token, err := randomToken()
 	if err != nil {
-		h.logger.Error("generate session token", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "login could not be completed")
+		h.authFailure(w)
 		return
 	}
-	csrfToken, err := randomToken()
+	csrf, err := randomToken()
 	if err != nil {
-		h.logger.Error("generate CSRF token", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "login could not be completed")
+		h.authFailure(w)
 		return
 	}
-
-	expiresAt := h.now().Add(h.options.SessionTTL)
-	if err := h.store.CreateSession(r.Context(), user.ID, hashToken(token), csrfToken, expiresAt); err != nil {
-		h.logger.Error("create login session", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "login could not be completed")
+	ttl := h.options.SessionTTL
+	if request.TrustDevice {
+		ttl = 30 * 24 * time.Hour
+	}
+	expiry := h.now().Add(ttl)
+	if err = h.store.CreatePasswordSession(r.Context(), user, hashToken(token), csrf, expiry); err != nil {
+		h.authFailure(w)
 		return
 	}
-
+	session, err := h.store.FindSessionByTokenHash(r.Context(), hashToken(token))
+	if err != nil {
+		h.authFailure(w)
+		return
+	}
 	h.limiter.succeed(limiterKey)
-	h.setSessionCookie(w, token, expiresAt)
-	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), user, csrfToken, expiresAt))
+	h.setSessionCookie(w, token, expiry)
+	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), session.User, csrf, expiry))
+}
+
+func (h *authHandler) authFailure(w http.ResponseWriter) {
+	writeAPIError(w, http.StatusInternalServerError, "login could not be completed")
+}
+
+func (h *authHandler) changePassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(in.NewPassword) < 12 || len(in.NewPassword) > 72 {
+		writeAPIError(w, http.StatusBadRequest, "new password must contain 12–72 bytes")
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	key := "password:" + session.User.ID
+	if !h.limiter.allow(key, h.now()) {
+		writeAPIError(w, http.StatusTooManyRequests, "too many attempts; try again later")
+		return
+	}
+	h.limiter.fail(key, h.now())
+	login := session.User.Email
+	if login == "" {
+		login = session.User.Username
+	}
+	u, err := h.store.FindUserByEmail(r.Context(), login)
+	if err != nil || u.ID != session.User.ID || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.CurrentPassword)) != nil {
+		writeAPIError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(in.NewPassword), 12)
+	if err != nil {
+		h.authFailure(w)
+		return
+	}
+	if err = h.store.ChangePassword(r.Context(), u.ID, u.PasswordHash, string(hash)); err != nil {
+		writeAPIError(w, http.StatusConflict, "password changed elsewhere; sign in again")
+		return
+	}
+	h.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *authHandler) session(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +280,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		User:      authUserResponse{ID: user.ID, Username: user.Username},
+		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
 	}
@@ -245,6 +303,13 @@ func hashToken(token string) string {
 func clientAddress(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {
+		// Production Nginx is local and overwrites X-Real-IP. Never accept a
+		// forwarded address from an untrusted remote peer.
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			if real := net.ParseIP(r.Header.Get("X-Real-IP")); real != nil {
+				return real.String()
+			}
+		}
 		return host
 	}
 	return r.RemoteAddr
@@ -286,6 +351,13 @@ func (l *loginLimiter) allow(key string, now time.Time) bool {
 func (l *loginLimiter) fail(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.attempts) > 10000 {
+		for k, v := range l.attempts {
+			if now.Sub(v.updated) >= l.window {
+				delete(l.attempts, k)
+			}
+		}
+	}
 	attempt := l.attempts[key]
 	if now.Sub(attempt.updated) >= l.window {
 		attempt.failures = 0

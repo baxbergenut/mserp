@@ -244,7 +244,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 }
 
 func (r *DriverPayRepository) SettlementHistory(ctx context.Context, driver, week string) ([]SettlementEvent, error) {
-	rows, err := r.pool.Query(ctx, `SELECT action,version,coalesce(u.username,''),reason,e.created_at,report FROM payroll_settlement_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE driver_id=$1 AND week_start=$2::date ORDER BY version DESC`, driver, week)
+	rows, err := r.pool.Query(ctx, `SELECT e.action,e.version,coalesce(u.username,''),e.reason,e.created_at,e.report FROM payroll_settlement_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.driver_id=$1 AND e.week_start=$2::date ORDER BY e.version DESC`, driver, week)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,53 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Settings, ShieldCheck, Users, KeyRound, Pencil, RefreshCw } from "lucide-react";
+import { fetchAccess, saveUser, saveRole, revokeUserAccess } from "@/app/lib/api";
+import type { AccessData, ManagedUser, AccessRole } from "@/app/lib/types";
+import { useViewState } from "@/app/lib/viewMemory";
+import { ManagementHeader, ManagementSearch, Modal, Field, controlClass } from "@/app/components/management/ManagementUI";
+
+const button = "inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
+const newUser = (): ManagedUser => ({ id: "", username: "", email: "", roleId: "", active: true, password: "", version: 0 });
+const newRole = (): AccessRole => ({ id: "", name: "", permissions: [], system: false, version: 0 });
+
+export default function SettingsPage() {
+  const [data, setData] = useState<AccessData | null>(null);
+  const [tab, setTab] = useViewState<"users" | "roles">("access:tab", "users");
+  const [search, setSearch] = useViewState("access:search", "");
+  const [user, setUser] = useState<ManagedUser | null>(null);
+  const [role, setRole] = useState<AccessRole | null>(null);
+  const [revoke, setRevoke] = useState<ManagedUser | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const refresh = useCallback(async () => { setLoading(true); try { setData(await fetchAccess()); } catch (e) { setError(e instanceof Error ? e.message : "Could not load access settings"); } finally { setLoading(false); } }, []);
+  useEffect(() => { let active = true; fetchAccess().then(value => { if (active) setData(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load access settings"); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []);
+  async function perform(action: () => Promise<void>) {
+    setBusy(true); setError(""); setNotice("");
+    try { await action(); } catch (e) { setError(e instanceof Error ? e.message : "Could not save access settings"); }
+    finally { setBusy(false); }
+  }
+  const users = data?.users.filter(u => `${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
+
+  return <div className="space-y-5 animate-fade-in">
+    <ManagementHeader icon={Settings} title="Settings" description="Manage team accounts, roles and permissions." count={tab === "users" ? data?.users.length ?? 0 : data?.roles.length ?? 0} actionLabel={tab === "users" ? "Add user" : "Create role"} onAction={() => { if (busy || !data) return; setError(""); if (tab === "users") setUser(newUser()); else setRole(newRole()); }} secondaryAction={<button className={button} disabled={busy || loading} onClick={() => void refresh()}><RefreshCw className="h-3.5 w-3.5" />Refresh</button>} />
+    <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">{([['users', Users, 'Users'], ['roles', ShieldCheck, 'Roles & permissions']] as const).map(([value, Icon, label]) => <button key={value} onClick={() => setTab(value)} className={`${button} ${tab === value ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : ''}`}><Icon className="h-4 w-4" />{label}</button>)}</div>
+    {error && <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+    {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</p>}
+    {loading && !data ? <p role="status" className="text-sm text-zinc-500">Loading access settings…</p> : data && <>
+      {tab === "users" ? <>
+        <div className="flex flex-wrap items-center justify-between gap-3"><ManagementSearch value={search} onChange={setSearch} placeholder="Search names or emails…" /><p className="text-xs text-zinc-500">Administrator-created accounts · No public sign-up</p></div>
+        <div className="overflow-x-auto rounded-xl border border-zinc-800"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{['User', 'Role', 'Status', 'Actions'].map(h => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead><tbody>{users.map(u => <tr key={u.id} className="border-t border-zinc-800/70"><td className="px-4 py-3"><p className="text-zinc-200">{u.username}</p><p className="text-xs text-zinc-500">{u.email || 'Email required'}</p></td><td className="px-4 py-3 text-zinc-400">{data.roles.find(r => r.id === u.roleId)?.name ?? 'Unassigned'}</td><td className="px-4 py-3"><span className={u.active ? 'text-emerald-400' : 'text-zinc-500'}>{u.active ? 'Active' : 'Disabled'}</span></td><td className="px-4 py-3"><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => { setError(""); setUser({ ...u }); }}><Pencil className="h-3.5 w-3.5" />Edit</button><button className={button} disabled={busy} onClick={() => setRevoke(u)}><KeyRound className="h-3.5 w-3.5" />Revoke access</button></div></td></tr>)}</tbody></table>{users.length === 0 && <p className="p-8 text-center text-sm text-zinc-500">No users match this search.</p>}</div>
+      </> : <div className="grid gap-4 xl:grid-cols-2">{data.roles.map(r => <section key={r.id} className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-medium text-zinc-100">{r.name}</h2><p className="mt-1 text-xs text-zinc-500">{data.users.filter(u => u.roleId === r.id).length} users · {r.permissions.length} permissions</p></div>{!r.system && <button className={button} disabled={busy} onClick={() => { setError(""); setRole({ ...r, permissions: [...r.permissions] }); }}><Pencil className="h-3.5 w-3.5" />Edit role</button>}</div><p className="mt-4 text-xs leading-6 text-zinc-400">{r.system ? 'Full access. This built-in role cannot be edited. At least one active, administrator must remain.' : r.permissions.map(p => data.permissions.find(v => v.key === p)?.label ?? p).join(' · ') || 'No permissions assigned.'}</p></section>)}</div>}
+    </>}
+    {user && <Modal title={user.id ? "Edit user" : "Add user"} description="Email and role are required. Set a password for new accounts or enter a replacement to reset it. Saving signs the user out on every device." isSaving={busy} submitLabel={user.id ? "Save changes" : "Create user"} onClose={() => setUser(null)} onSubmit={e => { e.preventDefault(); void perform(async () => { const created = !user.id; await saveUser(user); setUser(null); await refresh(); setNotice(created ? "User created. Share the credentials with them securely." : "User updated. Existing sessions revoked."); }); }}>
+      <div className="grid gap-4"><Field label="Name"><input className={controlClass} required maxLength={200} value={user.username} onChange={e => setUser({ ...user, username: e.target.value })} /></Field><Field label="Email"><input className={controlClass} required type="email" maxLength={254} value={user.email} onChange={e => setUser({ ...user, email: e.target.value })} /></Field><Field label={user.id ? "New password (optional)" : "Password"}><input className={controlClass} type="password" autoComplete="new-password" required={!user.id} minLength={12} maxLength={72} value={user.password ?? ""} onChange={e => setUser({ ...user, password: e.target.value })} /></Field><Field label="Role"><select aria-label="Role" className={controlClass} required value={user.roleId} onChange={e => setUser({ ...user, roleId: e.target.value })}><option value="">Select role</option>{data?.roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field><label className="flex gap-2 text-sm text-zinc-300"><input type="checkbox" checked={user.active} onChange={e => setUser({ ...user, active: e.target.checked })} />Active account</label>{error && <p role="alert" className="text-sm text-red-300">{error}</p>}</div>
+    </Modal>}
+    {role && <Modal title={role.id ? "Edit role" : "Create role"} description="Permissions apply to every user assigned this role. Changes take effect on their next API request. Grant fleet read access for pages with fleet selectors." isSaving={busy} submitLabel="Save role" onClose={() => setRole(null)} onSubmit={e => { e.preventDefault(); void perform(async () => { await saveRole(role); setRole(null); await refresh(); setNotice("Role saved. Permissions take effect immediately."); }); }}>
+      <Field label="Role name"><input className={controlClass} required maxLength={80} value={role.name} onChange={e => setRole({ ...role, name: e.target.value })} /></Field><div className="mt-5 grid gap-2 sm:grid-cols-2">{data?.permissions.map(p => <label key={p.key} className="flex items-start gap-3 rounded-lg border border-zinc-800 p-3 text-xs text-zinc-300"><input type="checkbox" checked={role.permissions.includes(p.key)} onChange={e => setRole({ ...role, permissions: e.target.checked ? [...role.permissions, p.key] : role.permissions.filter(k => k !== p.key) })} className="mt-0.5 accent-blue-500" /><span>{p.label}<span className="mt-1 block text-[11px] text-zinc-600">{p.key}</span></span></label>)}</div>{error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
+    </Modal>}
+    {revoke && <Modal title={`Revoke access for ${revoke.username}?`} description="This signs the user out on every device, including 30-day sessions. They can sign in again with their password. Disable their account to block login." isSaving={busy} submitLabel="Revoke all sessions" onClose={() => setRevoke(null)} onSubmit={e => { e.preventDefault(); void perform(async () => { await revokeUserAccess(revoke.id); setRevoke(null); await refresh(); setNotice("All sessions revoked."); }); }}>{error && <p role="alert" className="text-sm text-red-300">{error}</p>}</Modal>}
+  </div>;
+}
