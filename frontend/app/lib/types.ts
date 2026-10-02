@@ -721,6 +721,8 @@ export interface DriverPayEdits {
   version: number;
 }
 export interface DriverPayLoad {
+  sourceDriverId?: string;
+  driverFee?: string;
   date: string;
   slot: number;
   loadNumber: string;
@@ -738,6 +740,10 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  investorId?: string;
+  truckId?: string;
+  autoCharges?: { name: string; amount: string; source: string }[];
+  issues?: string[];
  settlement?: PayrollSettlement;
   id: string;
   isOwnerOperator: boolean;
@@ -753,6 +759,7 @@ export interface DriverPayDriver {
   edits: DriverPayEdits;
 }
 export interface DriverPayWeek {
+ issues?: string[];
  revision: string;
   weekStart: string;
   drivers: DriverPayDriver[];
@@ -827,3 +834,7 @@ export interface ChargeEvent { id: number; action: string; actor: string; detail
 export interface PayrollSettlement { finalized: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 export interface SettlementEvent { action: string; version: number; actor: string; reason: string; createdAt: string; report: DriverPayDriver }
+
+export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
+export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
+export interface TruckChargeData { terms: TruckTerm[]; phases: TruckChargePhase[] }

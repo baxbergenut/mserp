@@ -1,6 +1,7 @@
 // Requires a disposable local _test database, psql, Go, and a /api frontend build.
 // Uses a temporary schema, a real API process, and real browser authentication.
 import { chromium, expect } from '@playwright/test';
+import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -94,7 +95,7 @@ try {
   await page.getByLabel('Linked driver').selectOption({ label: 'E2e Driver' });
   await expect(page.getByLabel('Full name', { exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Create investor', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'E2e Driver', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'E2e Driver', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Add investor', exact: true }).click();
   await expect(page.getByLabel('Linked driver').locator('option')).toHaveCount(1);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -125,6 +126,8 @@ try {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'E2e Investor' })).toContainText('Inactive');
   await page.screenshot({ path: join(temp, 'investors-desktop.png'), fullPage: true });
+  await runInvestorPayE2E({ page, base, sql, schema, temp });
+  await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(page.locator('aside')).toHaveCSS('width', '64px');

@@ -70,7 +70,7 @@ try {
   await page.getByLabel('Username').fill('charges-e2e');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
   await verifyExpenseSettings(page, base, temp);
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
@@ -82,7 +82,7 @@ try {
   await page.getByRole('button', { name: 'Save type', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Admin fee', exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Recurring assignments', exact: true }).click();
+  await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
   await expect(page.getByRole('rowheader', { name: 'Unassigned Driver', exact: true })).toBeVisible();
   await expect(page.getByLabel('Inactive Driver, Admin fee', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('rowheader', { name: /Inactive Driver/ })).toHaveCount(0);
@@ -116,7 +116,7 @@ try {
   expect((await page.locator('table').boundingBox()).y).toBe(tableBeforeSave.y);
   await expect(page.getByRole('status').filter({ hasText: 'Unassigned Driver · Admin fee saved' })).toHaveCSS('position', 'fixed');
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
-  await page.getByRole('tab', { name: 'Recurring assignments', exact: true }).click();
+  await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
   await expect(adminCheck).toBeDisabled();
   releaseSave();
   await expect(adminAmount).toBeEnabled();
@@ -249,7 +249,7 @@ try {
   await expect(page.getByRole('dialog')).toContainText('E2e Driver · Advance');
   await page.getByRole('button', { name: 'Close', exact: true }).last().click();
   await page.goto(`${base}/accounting/driver-charges?driverId=${driverId}`);
-  await page.getByRole('tab',{name:'Recurring assignments',exact:true}).click();
+  await page.getByRole('tab',{name:'Driver charges',exact:true}).click();
   const next = new Date(`${week}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
   await page.getByLabel('Matrix effective week', { exact: true }).fill(next.toISOString().slice(0,10));
   await adminAmount.selectOption('35.00');
@@ -415,7 +415,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(page.locator('aside')).toHaveCSS('width', '64px');
-  await expect(page.getByRole('heading', { name: 'Driver charges', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Charges', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'driver-charges-mobile.png'), fullPage: true });
   // Payroll navigation uses placement identity, not a possibly duplicated load number.

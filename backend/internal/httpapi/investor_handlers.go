@@ -38,17 +38,9 @@ func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wantsPagination(r) {
-		// The directory excludes the company by default; unpaginated owner
-		// lookups still include it for truck forms.
-		if !strings.EqualFold(r.URL.Query().Get("includeCompany"), "true") {
-			filtered := make([]repository.Investor, 0, len(values))
-			for _, investor := range values {
-				if !investor.IsCompany {
-					filtered = append(filtered, investor)
-				}
-			}
-			values = filtered
-		}
+		// Keep owner identities in unpaginated lookups. The investor directory
+		// shows driver-linked owners only when they own an additional truck.
+		values = investorDirectory(values, strings.EqualFold(r.URL.Query().Get("includeCompany"), "true"))
 		p, err := parsePagination(r)
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
@@ -61,6 +53,16 @@ func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, values)
+}
+func investorDirectory(values []repository.Investor, includeCompany bool) []repository.Investor {
+	filtered := make([]repository.Investor, 0, len(values))
+	for _, investor := range values {
+		if investor.IsCompany && !includeCompany || investor.DriverID != nil && len(investor.Trucks) < 2 {
+			continue
+		}
+		filtered = append(filtered, investor)
+	}
+	return filtered
 }
 func (h fleetHandler) saveInvestor(w http.ResponseWriter, r *http.Request) {
 	id := ""

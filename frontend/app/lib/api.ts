@@ -391,3 +391,10 @@ export const settleDriverPay = (weekStart: string, revision: string, driverId: s
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
 export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
+
+export const fetchInvestorPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart }));
+export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });
+export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason }) });
+export const fetchTruckCharges = () => apiRequest<import("./types").TruckChargeData>("/truck-charges");
+export const saveTruckTerm = (input: import("./types").TruckTerm) => apiRequest<void>("/truck-charges/terms", { method: "PUT", body: JSON.stringify(input) });
+export const saveTruckCharge = (input: import("./types").TruckChargePhase) => apiRequest<void>("/truck-charges/recurring", { method: "PUT", body: JSON.stringify(input) });

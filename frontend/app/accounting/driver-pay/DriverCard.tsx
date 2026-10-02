@@ -43,6 +43,8 @@ type Props = {
 export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay }: Props) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const totals = driverTotals(driver, edits);
+  const investor = !!driver.investorId;
+  const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const allFeesMissing = driver.loads.length > 0 && totals.missingFees === driver.loads.length;
   const incomplete = totals.review > 0;
@@ -69,7 +71,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
             <td className={`${cell} text-zinc-300`}><div className="flex items-center justify-between gap-1"><span title={description}>{label}</span><span className="ml-auto text-[10px] text-zinc-500" title={description}>Source {source}</span>{manual && <button type="button" disabled={disabled} aria-label={`${driver.fullName}, ${label}, reset to automatic`} title="Reset to automatic amount" onClick={() => edit(current => ({ ...current, [`${key}Override`]: null }))} className="rounded p-1 text-blue-400 hover:bg-zinc-800 disabled:opacity-40"><RotateCcw className="h-3 w-3" /></button>}</div></td>
             <td className={`${cell} !border-r-0 !px-0`}><input aria-label={`${driver.fullName}, ${label}, amount`} aria-invalid={!value.trim() || !validDecimal(value)} disabled={disabled} inputMode="decimal" value={value} title={`${manual ? "Manual override" : "Automatic amount"}. Positive: reimbursement. Negative: charge. Zero: no charge.`} onChange={event => { const value = event.target.value; edit(current => ({ ...current, [`${key}Override`]: value })); }} className={`h-[31px] w-full min-w-0 bg-transparent px-2 text-right font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 aria-invalid:bg-red-500/10 ${value.startsWith("-") ? "text-red-300" : hundredths(value) > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} /></td>
           </tr>;
-        })}<ExpenseRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} /><GeneratedChargeRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} />{Array.from({ length: Math.min(100, Math.max(7 - visibleCostRows.length, edits.adjustments.length + 1)) }, (_, index) => {
+        })}{(driver.autoCharges ?? []).map(row => <tr key={row.source}><td className={`${cell} text-zinc-300`}><span title={row.source.startsWith("driver:") ? driver.loads.filter(l => l.sourceDriverId === row.source.slice(7)).map(l => `${l.loadNumber}: ${amount(l.driverFee ?? "", true)}`).join("\n") : "Recurring truck charge"}>{row.name}</span></td><td className={`${numeric} !border-r-0 text-red-300`}>{amount(row.amount, true)}</td></tr>)}<ExpenseRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} /><GeneratedChargeRows driver={driver} edits={edits} disabled={disabled} onEdit={edit} />{Array.from({ length: Math.min(100, Math.max(7 - visibleCostRows.length, edits.adjustments.length + 1)) }, (_, index) => {
           const item = edits.adjustments[index];
           const name = item?.name ?? "";
           const value = item ? `${item.kind === "deduction" ? "-" : ""}${item.amount}` : "";
@@ -96,21 +98,22 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
         </button>
       </th>
       <td className="border-b border-zinc-800 px-3">{driver.truckUnit || "—"}</td>
-      <td className="border-b border-zinc-800 px-3">{driver.isOwnerOperator ? "Owner operator" : "Company driver"}</td>
-      <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>
+      <td className="border-b border-zinc-800 px-3">{investor ? "Investor" : driver.isOwnerOperator ? "Owner operator" : "Company driver"}</td>
+      <td className="border-b border-zinc-800 px-3">{investor ? tariffLabel(driver).replace("driver gross", "truck gross") : tariffLabel(driver)}</td>
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName}</td>
       <td className="border-b border-zinc-800 px-3 text-right font-mono">{driver.loads.length}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
     </tr>
     {open && <tr><td colSpan={7} className="border-b border-zinc-700 p-0">
       <div id={`driver-${driver.id}`}>
-        {onSettlement && <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2"><span className="text-xs text-zinc-500">{driver.settlement?.finalized ? `Finalized by ${driver.settlement.finalizedBy}` : driver.settlement ? "Reopened for corrections" : "Draft settlement"}</span><button type="button" disabled={settlementDisabled} className={payButtonClass} onClick={() => onSettlement(!!driver.settlement?.finalized)}>{driver.settlement?.finalized ? "Reopen driver" : "Finalize driver"}</button></div>}
+        {onSettlement && <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2"><span className="text-xs text-zinc-500">{driver.settlement?.finalized ? `Finalized by ${driver.settlement.finalizedBy}` : driver.settlement ? "Reopened for corrections" : "Draft settlement"}</span><button type="button" disabled={settlementDisabled} className={payButtonClass} onClick={() => onSettlement(!!driver.settlement?.finalized)}>{driver.settlement?.finalized ? `Reopen ${investor ? "truck" : "driver"}` : `Finalize ${investor ? "truck" : "driver"}`}</button></div>}
+        {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — review deductions before confirming. Unpaid expense balances carry forward; other negative pay does not.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 bg-zinc-950/30 text-left text-xs">
-            <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>
-            <thead className="bg-zinc-900 text-[10px] text-zinc-400"><tr>{columns.map(([label], index) => <th key={label}
+            <colgroup>{displayColumns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>
+            <thead className="bg-zinc-900 text-[10px] text-zinc-400"><tr>{displayColumns.map(([label], index) => <th key={label}
               title={label === "Driver gross" ? "Gross Board driver gross used for percentage pay" : undefined}
               className={`${cell} font-medium ${index === 0 ? "sticky left-0 z-10 bg-zinc-900" : ""} ${index >= 5 && index !== 11 ? "text-right" : ""}`}>
               {label === "Comments" ? <span className="sr-only">Comments</span> : label}
@@ -121,7 +124,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
               const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
               return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
                 {index === 0 && <th rowSpan={loads.length} scope="rowgroup" className={`${cell} sticky left-0 z-10 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
-                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: driver.id, date: load.date, slot: String(load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}</div></td>
+                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: load.sourceDriverId ?? driver.id, date: load.date, slot: String(load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}</div></td>
                 <td className={`${cell} text-zinc-400`}>{load.pickupDate || "—"}</td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>

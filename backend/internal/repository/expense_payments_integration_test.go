@@ -58,6 +58,13 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			truckMigration, readErr := os.ReadFile("../../sql/041_truck_settlements.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(truckMigration), "\r\n", "\n"), "", 1)
+			}
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(settlementMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(ownerMigration), "\r\n", "\n"), "", 1)
@@ -80,6 +87,11 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				exec(string(settlementMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT ON app_users TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`)
+			if mode == "migration" {
+				if _, truckErr := admin.Exec(ctx, string(truckMigration)); truckErr != nil {
+					t.Fatal(truckErr)
+				}
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)

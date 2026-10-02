@@ -54,7 +54,7 @@ export default function InvestorsPage() {
     finally { setIsSaving(false); }
   };
   return <div className="space-y-5 animate-fade-in">
-    <ManagementHeader icon={Landmark} title="Investors" description="Manage truck owners, including drivers who invest in the fleet." count={total} actionLabel="Add investor" onAction={() => void open(null)} />
+    <ManagementHeader icon={Landmark} title="Investors" description="Independent investors and drivers who own additional fleet trucks." count={total} actionLabel="Add investor" onAction={() => void open(null)} />
     {error && <ErrorBanner message={error} />}
     <div className="flex flex-wrap items-center gap-4">
       <ManagementSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search investors or truck units…" />
@@ -78,7 +78,7 @@ export default function InvestorsPage() {
         </table>}
     </TableShell>
     {!isLoading && <TablePagination page={page} pageSize={pageSize} totalItems={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={(v) => { setPageSize(v); setPage(1); }} />}
-    <p className="text-[12px] text-zinc-500">Assign truck owners from <Link href="/trucks" className="text-blue-400 hover:text-blue-300">Trucks</Link>. Weekly statements and owner charges are planned for a future update.</p>
+    <p className="text-[12px] text-zinc-500">Assign truck owners from <Link href="/trucks" className="text-blue-400 hover:text-blue-300">Trucks</Link>. Manage recurring fees in <Link href="/accounting/driver-charges?tab=trucks" className="text-blue-400 hover:text-blue-300">Charges</Link> and review <Link href="/accounting/investor-pay" className="text-blue-400 hover:text-blue-300">Investor Pay</Link>. Drivers with fewer than two owned trucks are kept out of this directory.</p>
     {editing !== undefined && <Modal title={editing ? `Edit ${editing.fullName}` : "Add investor"} description="A driver can also be an investor. Ownership stays with the investor when the operating driver changes." isSaving={isSaving} submitLabel={editing ? "Save changes" : "Create investor"} onClose={() => setEditing(undefined)} onSubmit={(event) => { event.preventDefault(); void save(); }}>
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <InvestorForm value={form} onChange={setForm} drivers={drivers} editing={!!editing} />

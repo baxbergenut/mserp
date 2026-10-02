@@ -400,9 +400,9 @@ SELECT e.id, e.truck_id, e.driver_id, e.company, e.category,
 	e.expense_type, e.reference_number, e.description, e.covered_by, e.paid_by,
 	e.manager_verified, e.accounting_verified, e.source_spreadsheet_id,
 	e.source_sheet, e.source_row, e.created_at, e.updated_at,
- CASE WHEN (lower(btrim(e.covered_by))='driver' OR e.charge_driver_id IS NOT NULL) THEN
+ CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
    CASE WHEN e.driver_settled THEN e.amount ELSE coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
- CASE WHEN (lower(btrim(e.covered_by))='driver' OR e.charge_driver_id IS NOT NULL) THEN
+ CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
    CASE WHEN e.driver_settled THEN 0 ELSE e.amount-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)

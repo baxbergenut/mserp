@@ -43,6 +43,8 @@ type DriverPayEdits struct {
 	GeneratedCharges  []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
+	SourceDriverID   string   `json:"sourceDriverId,omitempty"`
+	DriverFee        string   `json:"driverFee,omitempty"`
 	Date             string   `json:"date"`
 	Slot             int      `json:"slot"`
 	LoadNumber       string   `json:"loadNumber"`
@@ -60,6 +62,10 @@ type DriverPayLoad struct {
 	Issues           []string `json:"issues"`
 }
 type DriverPayDriver struct {
+	InvestorID      string             `json:"investorId,omitempty"`
+	TruckID         string             `json:"truckId,omitempty"`
+	AutoCharges     []PayAutoCharge    `json:"autoCharges,omitempty"`
+	Issues          []string           `json:"issues,omitempty"`
 	Settlement      *PayrollSettlement `json:"settlement,omitempty"`
 	ID              string             `json:"id"`
 	FullName        string             `json:"fullName"`
@@ -75,6 +81,7 @@ type DriverPayDriver struct {
 	Edits           DriverPayEdits     `json:"edits"`
 }
 type DriverPayWeek struct {
+	Issues    []string          `json:"issues,omitempty"`
 	Revision  string            `json:"revision"`
 	WeekStart string            `json:"weekStart"`
 	Drivers   []DriverPayDriver `json:"drivers"`
@@ -100,6 +107,26 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 	return result, tx.Commit(ctx)
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	result, err := readDriverPaySourceWeek(ctx, tx, week, "")
+	if err != nil {
+		return result, err
+	}
+	result, _, err = routeTruckPay(ctx, tx, result)
+	if err != nil {
+		return result, err
+	}
+	if driverID != "" {
+		selected := []DriverPayDriver{}
+		for _, d := range result.Drivers {
+			if d.ID == driverID {
+				selected = append(selected, d)
+			}
+		}
+		result.Drivers = selected
+	}
+	return overlayPayrollSettlements(ctx, tx, result, driverID)
+}
+func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.unit_number,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
@@ -210,7 +237,7 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 		}
 	}
 	result.Drivers = kept
-	return overlayPayrollSettlements(ctx, tx, result, driverID)
+	return result, nil
 }
 
 func payLoadLocations(stops []datatruck.LoadStop) (string, string) {
@@ -295,10 +322,36 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		}
 	}
 	if edits.ExpenseDeductions != nil {
+		week, e := chargeWeek(edits.WeekStart)
+		if e != nil {
+			return edits, e
+		}
+		routed, e := readDriverPayWeek(ctx, tx, week, edits.DriverID)
+		if e != nil {
+			return edits, e
+		}
+		allowed := map[string]bool{}
+		for _, d := range routed.Drivers {
+			for _, x := range d.Edits.ExpenseDeductions {
+				allowed[x.ExpenseID] = true
+			}
+		}
+		for _, x := range edits.ExpenseDeductions {
+			if x.Apply && !allowed[x.ExpenseID] {
+				return edits, chargeInvalid("This expense belongs to another settlement; reload payroll")
+			}
+		}
 		edits.ExpenseDeductions, err = saveExpenseDeductions(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
 		if err != nil {
 			return edits, err
 		}
+		filtered := []ExpenseDeduction{}
+		for _, item := range edits.ExpenseDeductions {
+			if allowed[item.ExpenseID] {
+				filtered = append(filtered, item)
+			}
+		}
+		edits.ExpenseDeductions = filtered
 	}
 	comments, err := json.Marshal(edits.Comments)
 	if err != nil {

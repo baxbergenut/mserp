@@ -56,6 +56,13 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			truckMigration, readErr := os.ReadFile("../../sql/041_truck_settlements.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(truckMigration), "\r\n", "\n"), "", 1)
+			}
 			if mode == "migration" {
 				// Restore the pre-039 status checks before removing migration 029's
 				// exact schema block to construct the legacy database.
@@ -102,6 +109,11 @@ func TestDriverPayDatabase(t *testing.T) {
 			if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app;
  GRANT SELECT ON app_users TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,loads,dispatchers,truck_driver_assignments,trucks,gross_board_entries,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
+			}
+			if mode == "migration" {
+				if _, truckErr := admin.Exec(ctx, string(truckMigration)); truckErr != nil {
+					t.Fatal(truckErr)
+				}
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

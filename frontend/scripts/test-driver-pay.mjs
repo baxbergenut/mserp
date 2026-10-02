@@ -92,3 +92,10 @@ assert.equal(reconciledExpense.expenseDeductions[0].amount, "20.25");
 assert.equal(reconciledExpense.expenseDeductions[0].version, 2);
 assert.equal(reconciledExpense.expenseDeductions[0].apply, true);
 console.log("Expense deduction checks passed: exact totals, bounds, zero deferrals and edits during save.");
+
+const investorTruck = { ...owner, investorId: "investor", fuelTotal: "1500.00", tollTotal: "200.00", loads: [{ ...load, fee: "8800.00", driverFee: "2500.00" }], autoCharges: [{ name: "Driver earnings", amount: "-2500.00", source: "driver:hired" }, { name: "Admin", amount: "-100.00", source: "truck_charge:truck:admin" }] };
+const investorEdits = { ...auto, expenseDeductions: [{ ...expenseRow, amount: "300.00", available: "300.00" }] };
+assert.equal(driverTotals(investorTruck, investorEdits).payable, 420000n);
+assert.equal(driverTotals({ ...investorTruck, issues: ["Ownership requires review"] }, investorEdits).review, 1);
+assert.equal(driverTotals({ ...owner, autoCharges: [{ name: "Admin", amount: "-100.00", source: "truck_charge:truck:admin" }] }, auto).payable, 42316n);
+console.log("Investor pay checks passed: earnings charged once, truck costs and expenses, owner-only fees, review indicators.");

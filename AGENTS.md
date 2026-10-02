@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `040_expense_settings.sql`:
+  `041_truck_settlements.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -112,6 +112,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   assignments, CRUD forms, and review-first AI transaction entry.
 - `frontend/app/investors/`: truck owners, independent investors and driver-linked
   investors. The company is hidden by default with a Show company filter.
+  The directory hides driver-linked owners with fewer than two owned trucks;
+  unpaginated owner lookups retain them for forms and history.
   Truck forms select explicit owners; ownership is separate from operation.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults. Driver and
@@ -280,6 +282,48 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
+- Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
+  and DriverCard.tsx with Driver Pay. Reports group trucks by investor, retain
+  full load details, and deduct hired driver earnings in the charges column.
+  Earnings use percentage/CPM tariffs before personal deductions; finalized
+  driver load fees take precedence over later tariff changes. Truck shares use
+  explicit dated percentages of Gross Board driver gross. No default percentage,
+  separate dispatch-fee deduction, or blanket start cutoff is inferred.
+  Migration 041 adds truck terms, recurring phases, weekly investor snapshots,
+  audit records, and expense payment destinations. Configure each truck's owner,
+  share, and effective Monday in Charges > Truck charges. Historical owner terms
+  are explicit accounting agreements, not inferred ownership history. Known
+  conflicting ownership periods require review. Driver charges/installments and
+  shared charge types remain on the same Charges page. Truck fees follow trucks
+  and type eligibility. Explicitly moving a driver fee atomically pauses its
+  driver assignment; personal fees never move automatically. Saved overrides
+  and finalized weeks block conflicting moves. Later truck phases remain intact.
+  Owner-only weeks stay in Driver Pay using the owner's tariff without a second
+  driver-wage deduction. Mixed owner/hired-driver weeks use one investor truck
+  statement and charge hired labor only. Once an investor truck-week is saved,
+  its destination stays Investor Pay during corrections to preserve payments.
+  Unassigned trucks retain calendar fees. No-load owner routing requires a
+  unique full-week historical assignment. Load source units or unique dated
+  assignments for unmatched plans determine truck attribution. Missing matches,
+  duplicate system loads, ownership conflicts and unlinked fuel need review.
+  Fuel uses confirmed Relay identities, unique source Truck # prompts, diesel
+  items and merchant-local dates; tolls use stored truck IDs/crossing dates and
+  include credits. Routed costs leave driver sources transaction by transaction;
+  legacy manual cost overrides require review/reset. Owner-covered truck expenses
+  route to the owner settlement, sharing expense principal/version protection.
+  Existing payments retain their destination. Reads never collect expenses;
+  autosave/finalize saves displayed deductions. Reopening preserves payments.
+  Finalization freezes reports, checks revisions and shares the payroll lock;
+  reopening requires a reason. Negative net has no automatic debt carry beyond
+  existing expense balances. Financial dashboard calculations remain separate.
+  API: GET /truck-charges; PUT /truck-charges/terms and /recurring;
+  GET/PUT /investor-pay; POST /investor-pay/finalize and /reopen. Shared payroll
+  edits use driverId as the truck ID on Investor Pay endpoints. Tests use only
+  disposable MSERP_INVESTOR_TEST_DATABASE_URL (_test DB), fresh/migrated schemas
+  as mserp_app, and test-investors-e2e.mjs (including investor-pay-e2e.mjs).
+  Earlier clients cannot display truck settlements after rollback; new expense
+  payment destinations remain protected.
+
 - Navigation preserves view state throughout the app. PageNavigation supplies a
   shared Back link and restores main/nested scroll positions after data loads;
   viewMemory.useViewState retains filters, sorting, weeks, pagination, tabs and
@@ -360,7 +404,7 @@ assignment lookup lists.
   truck_ownership_history records changes and retains truck-unit snapshots after
   deletion; migration starts are marked unknown, not invented effective dates.
   Future charges/statements must use ownership periods and handle unknown starts
-  explicitly. No new charges, payroll changes or statement generation are included.
+  explicitly. Truck settlements and charges are described above.
   investor_repository.go and investor_handlers.go own the API. Tests use only
   disposable MSERP_INVESTOR_TEST_DATABASE_URL (_test database), checking fresh and
   migrated schemas as mserp_app. CI runs these and real-API Chromium E2E flows.
@@ -551,8 +595,9 @@ assignment lookup lists.
   CI runs these checks against a disposable PostgreSQL service.
 - Expense responsibility is distinct from the operating driver. Migration 037
   stores owner_id and charge_driver_id: Driver bills the linked driver; Truck
-  Owner bills the explicitly selected investor, entering driver payroll only when
-  that investor is driver-linked. Independent investors never bill the operating
+  Owner bills the explicitly selected investor. Configured truck terms route
+  expenses to Investor Pay or owner-only Driver Pay; unconfigured driver-linked
+  owners retain their existing Driver Pay behavior. Independent investors never bill the operating
   driver. Current driver/truck selections fill their counterpart and default to
   Company for company drivers or the actual truck owner for owner-operators.
   Historical dates require explicit owner selection rather than guessing from

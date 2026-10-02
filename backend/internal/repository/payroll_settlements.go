@@ -158,6 +158,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				}
 			}
 		} else {
+			if len(d.Issues) > 0 {
+				return empty, chargeInvalid("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
+			}
 			for _, load := range d.Loads {
 				if load.Fee == "" || len(load.Issues) > 0 {
 					return empty, chargeInvalid("Resolve the loads needing review for %s before finalizing", d.FullName)
