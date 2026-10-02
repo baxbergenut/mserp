@@ -654,6 +654,8 @@ export interface GrossBoardEntry {
   version: number;
   enteredOriginalRate: string;
   enteredMiles: string;
+  systemOriginalRate?: string;
+  systemMiles?: string;
   duplicate: boolean;
   acceptSystemValues?: boolean;
 }

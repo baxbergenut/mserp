@@ -274,7 +274,7 @@ export default function GrossBoardPage() {
       {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">Saving edits before leaving this week…{invalid || error ? " Resolve the highlighted issue to continue." : ""}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
       <div className="flex flex-wrap gap-4 text-[11px] text-zinc-500">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Green = confirmed load; original rate and miles are locked</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Green = confirmed load; entered gross and miles take precedence</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red load = unmatched manual entry</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red rates/miles = entered values differ from the system</span>
         <span>Rate balance carries forward through the selected week · Click a balance for history</span>

@@ -42,7 +42,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   const sum = totals(displayed);
   const confirmed = displayed.every(entry => entry.loadRecordId !== null);
   const unmatched = displayed.some(entry => !entry.dayStatus && entry.loadRecordId === null && entry.loadNumber.trim() !== "");
-  const needsReview = displayed.some(entry => entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.originalRate) || mismatch(entry.enteredMiles, entry.miles)));
+  const needsReview = displayed.some(entry => entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "") || mismatch(entry.enteredMiles, entry.systemMiles ?? "")));
   const label = `${driverName}, ${date}`;
   const selected = displayed.find(entry => entry.slot === focusSlot);
   const openEditor = (add = false) => {

@@ -93,7 +93,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if entry.EnteredOriginalRate != "999.00" || entry.EnteredMiles != "999.00" {
 		t.Fatalf("comparison values were discarded: %+v", entry)
 	}
-	if entry.LoadRecordID == nil || *entry.LoadRecordID != 1 || entry.OriginalRate != "1234.56" || entry.Miles != "500.25" || entry.DriverRate != "1000.10" || entry.Version != 1 {
+	if entry.LoadRecordID == nil || *entry.LoadRecordID != 1 || entry.OriginalRate != "999.00" || entry.Miles != "999.00" || entry.SystemOriginalRate != "1234.56" || entry.SystemMiles != "500.25" || entry.DriverRate != "1000.10" || entry.Version != 1 {
 		t.Fatalf("source fields not enforced: %+v", entry)
 	}
 	if err = repo.Save(ctx, []GrossBoardEntry{base}); !errors.Is(err, ErrGrossBoardConflict) {
@@ -115,10 +115,26 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	board, err = repo.Get(ctx, week)
-	if err != nil || board.Entries[0].OriginalRate != "1500.01" {
+	if err != nil || board.Entries[0].OriginalRate != "999.00" || board.Entries[0].SystemOriginalRate != "1500.01" {
 		t.Fatal("source refresh failed", err)
 	}
 	// Replacing a confirmed load with free text unlocks manual values.
+	// Explicit zero overrides both source fields; clearing removes the override.
+	zero := board.Entries[0]
+	zero.EnteredOriginalRate, zero.OriginalRate = "0", "0"
+	zero.EnteredMiles, zero.Miles = "0", "0"
+	zeroRows, err := repo.SaveEntries(ctx, []GrossBoardEntry{zero})
+	if err != nil || zeroRows[0].OriginalRate != "0.00" || zeroRows[0].Miles != "0.00" {
+		t.Fatal("zero override lost", err, zeroRows)
+	}
+	reset := zeroRows[0]
+	reset.EnteredOriginalRate, reset.OriginalRate = "", ""
+	reset.EnteredMiles, reset.Miles = "", ""
+	resetRows, err := repo.SaveEntries(ctx, []GrossBoardEntry{reset})
+	if err != nil || resetRows[0].OriginalRate != "1500.01" || resetRows[0].Miles != "500.25" {
+		t.Fatal("cleared override did not use source", err, resetRows)
+	}
+	entry.Version = resetRows[0].Version
 	entry.LoadNumber = "HOME"
 	entry.LoadRecordID = nil
 	entry.OriginalRate = "0.10"
@@ -169,7 +185,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range board.Entries {
-		if e.Date == base.Date && (e.LoadRecordID == nil || e.OriginalRate != "50.25" || e.Miles != "") {
+		if e.Date == base.Date && (e.LoadRecordID == nil || e.OriginalRate != "0.10" || e.Miles != "0.20" || e.SystemOriginalRate != "50.25") {
 			t.Fatalf("late confirmation failed: %+v", e)
 		}
 	}
@@ -235,7 +251,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 			linked = e
 		}
 	}
-	if linked.LoadRecordID == nil || linked.OriginalRate != "900.25" || linked.EnteredOriginalRate != "1000.00" || linked.EnteredMiles != "400.00" || linked.Miles != "430.00" {
+	if linked.LoadRecordID == nil || linked.OriginalRate != "1000.00" || linked.SystemOriginalRate != "900.25" || linked.EnteredOriginalRate != "1000.00" || linked.EnteredMiles != "400.00" || linked.Miles != "400.00" || linked.SystemMiles != "430.00" {
 		t.Fatalf("late match lost reference or source values: %+v", linked)
 	}
 	// Ordinary autosaves must not dismiss a discrepancy.
@@ -252,6 +268,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal("stale source review accepted", err)
 	}
 	linked.OriginalRate = "900.50"
+	linked.Miles = "430.00"
 	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{linked})
 	if err != nil || saved[0].EnteredOriginalRate != "900.50" || saved[0].EnteredMiles != "430.00" || saved[0].AcceptSystemValues {
 		t.Fatal("review did not record exact source values", err, saved)

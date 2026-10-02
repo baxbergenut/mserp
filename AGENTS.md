@@ -518,10 +518,12 @@ assignment lookup lists.
   not reclassified by migration. Clearing a status retains the entry version.
   Free text remains a plan; a unique exact load number (case-insensitive,
   trimmed) or explicit suggestion selection confirms it. Duplicate business
-  load numbers require explicit selection. Confirmed original rate and miles
-  always come from the linked load's current `total_pay` and `total_miles`,
-  including on writes; driver rate stays dispatcher-editable. No pay formula
-  is applied to driver rate. Rate balance carries original minus driver rate
+  load numbers require explicit selection. Entered original gross and miles
+  take precedence in the grid, totals and balance; absent entered values fall
+  back to the linked load's current `total_pay` and `total_miles`. Source values
+  remain available as `systemOriginalRate` and `systemMiles` for comparison.
+  Original-pay entry also fills driver gross while it is blank or still equals
+  the previous original pay; a distinct driver gross is preserved. Rate balance carries original minus driver rate
   forward from the first saved board entry through the selected week's end,
   including plans. Missing load numbers or rates are excluded and counted as
   incomplete, never treated as zero. Repeated system loads for the same driver
@@ -530,7 +532,7 @@ assignment lookup lists.
   dispatcher changes; source corrections and historical edits recalculate carry.
   The grid and opening balances are read in one repeatable-read snapshot.
   Migration 027 preserves entered original rates and miles separately from
-  authoritative source values. Differences show red and retain both values for
+  current source values. Differences show red and retain both values for
   review; accepting system values resets the comparison only if the source still
   matches the values reviewed. Driver-rate differences are intentional.
   Exact unique load numbers resolve on every board read, including late imports;
@@ -595,7 +597,7 @@ assignment lookup lists.
   These source fields survive sync serialization. Historical payloads may need
   Refresh load details; that action never imports new loads or changes assignments.
   Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
-  verify fresh schema and migrations 029–030 as `mserp_app`.
+  verify fresh schema and migrations 029-030 as `mserp_app`.
 
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).

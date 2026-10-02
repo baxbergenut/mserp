@@ -28,8 +28,8 @@ assert.deepEqual(reconcileAutosave({ [key]: later }, { [key]: draft }, [committe
 // Reverting to the old blank value while saving is still an edit to persist.
 assert.deepEqual(reconcileAutosave({ [key]: blank }, { [key]: draft }, [committed])[key], { ...blank, version: 1 });
 // Server confirmation locks source fields but preserves the newest driver rate.
-const confirmed = { ...committed, loadRecordId: 42, originalRate: "999.99", miles: "123.45" };
-assert.deepEqual(reconcileAutosave({ [key]: later }, { [key]: draft }, [confirmed])[key], { ...later, version: 1, loadRecordId: 42, originalRate: "999.99", miles: "123.45", acceptSystemValues: false });
+const confirmed = { ...committed, loadRecordId: 42, originalRate: "999.99", miles: "123.45", systemOriginalRate: "1000", systemMiles: "124" };
+assert.deepEqual(reconcileAutosave({ [key]: later }, { [key]: draft }, [confirmed])[key], { ...later, version: 1, loadRecordId: 42, originalRate: "999.99", miles: "123.45", systemOriginalRate: "1000", systemMiles: "124", acceptSystemValues: false });
 const differentLoad = { ...later, loadNumber: "HOME" };
 assert.deepEqual(reconcileAutosave({ [key]: differentLoad }, { [key]: draft }, [confirmed])[key], { ...differentLoad, version: 1 });
 console.log("Gross board checks passed: exact totals, week boundaries, and queued autosave reconciliation.");
@@ -46,7 +46,9 @@ const match = matchLoad({ ...plan, miles: "500" }, { id: 4, loadNumber: "PLAN", 
 assert.equal(match.enteredOriginalRate, "1000.10");
 assert.equal(match.enteredMiles, "500");
 assert.equal(match.driverRate, "1200.20");
-assert.equal(mismatch(match.enteredOriginalRate, match.originalRate), true);
+assert.equal(match.originalRate, "1000.10");
+assert.equal(match.miles, "500");
+assert.equal(mismatch(match.enteredOriginalRate, match.systemOriginalRate), true);
 assert.equal(mismatch("100", "100.00"), false);
 assert.equal(mismatch("", "100"), false);
 assert.equal(mismatch("100", ""), true);
@@ -54,7 +56,8 @@ assert.equal(mismatch("100", ""), true);
 const editedMiles = { ...plan, miles: "700", enteredMiles: "700" };
 const rebased = reconcileAutosave({ [key]: editedMiles }, { [key]: plan }, [{ ...match, version: 2 }])[key];
 assert.equal(rebased.enteredMiles, "700");
-assert.equal(rebased.miles, "480.50");
+assert.equal(rebased.miles, "700");
+assert.equal(rebased.systemMiles, "480.50");
 assert.equal(rebased.version, 2);
 console.log("Rate balance checks passed: carry, missing/zero rates, duplicates, comparison values, and confirmation races.");
 
@@ -123,3 +126,16 @@ assert.equal(indexed.byDriver.get("driver").length, 3);
 assert.equal(indexed.byDriver.get("other").length, 1);
 assert.equal(indexedEntries[0].slot, 2); // Source ordering is unchanged.
 console.log("Board indexing checks passed: driver/day isolation, slots and tombstones.");
+
+const { editAmount } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const autoGross = editAmount(blank, "originalRate", "1200");
+assert.equal(autoGross.driverRate, "1200");
+assert.equal(editAmount(autoGross, "originalRate", "1500").driverRate, "1500");
+assert.equal(editAmount({ ...autoGross, driverRate: "1100" }, "originalRate", "1500").driverRate, "1100");
+assert.equal(editAmount({ ...autoGross, driverRate: "0" }, "originalRate", "1500").driverRate, "0");
+assert.equal(editAmount(match, "miles", "0").enteredMiles, "0");
+assert.equal(matchLoad(blank, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).driverRate, "900");
+assert.equal(matchLoad({ ...blank, originalRate: "0", miles: "0" }, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).originalRate, "0");
+const newerGross = editAmount(match, "originalRate", "1400");
+assert.equal(reconcileAutosave({[key]:newerGross}, {[key]:match}, [{...match,version:3}])[key].originalRate, "1400");
+console.log("Entered values and original-to-driver gross defaults passed.");

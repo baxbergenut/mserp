@@ -79,10 +79,22 @@ export function totals(entries: GrossBoardEntry[]) {
 }
 
 export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBoardEntry {
+  const original = entry.enteredOriginalRate || entry.originalRate || load.originalRate;
+  const miles = entry.enteredMiles || entry.miles || load.miles;
   return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
-    originalRate: load.originalRate, miles: load.miles, acceptSystemValues: false };
+    originalRate: original, miles, systemOriginalRate: load.originalRate, systemMiles: load.miles,
+    driverRate: entry.driverRate === "" ? original : entry.driverRate, acceptSystemValues: false };
+}
+
+// Follow original pay until the dispatcher has entered a different driver gross.
+export function editAmount(entry: GrossBoardEntry, field: "originalRate" | "driverRate" | "miles", value: string): GrossBoardEntry {
+  return { ...entry, [field]: value, acceptSystemValues: false,
+    ...(field === "originalRate" ? { enteredOriginalRate: value,
+      driverRate: entry.driverRate === "" || (validDecimal(entry.driverRate) && validDecimal(entry.originalRate) && hundredths(entry.driverRate) === hundredths(entry.originalRate)) ? value : entry.driverRate,
+    } : field === "miles" ? { enteredMiles: value } : {}),
+  };
 }
 
 export function mismatch(entered: string, actual: string) {
@@ -124,7 +136,10 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
     const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId;
     remaining[key] = { ...draft, version: entry.version,
       ...(sameLoad && entry.loadRecordId !== null ? {
-        loadRecordId: entry.loadRecordId, originalRate: entry.originalRate, miles: entry.miles,
+        loadRecordId: entry.loadRecordId,
+        originalRate: draft.originalRate === snapshot[key].originalRate ? entry.originalRate : draft.originalRate,
+        miles: draft.miles === snapshot[key].miles ? entry.miles : draft.miles,
+        systemOriginalRate: entry.systemOriginalRate, systemMiles: entry.systemMiles,
         enteredOriginalRate: draft.enteredOriginalRate === snapshot[key].enteredOriginalRate ? entry.enteredOriginalRate : draft.enteredOriginalRate,
         enteredMiles: draft.enteredMiles === snapshot[key].enteredMiles ? entry.enteredMiles : draft.enteredMiles,
         duplicate: entry.duplicate,

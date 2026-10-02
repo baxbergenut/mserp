@@ -139,7 +139,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if saved[0].OriginalRate != "700.00" || saved[0].Miles != "100.01" {
+			if saved[0].OriginalRate != "1.00" || saved[0].Miles != "1.00" || saved[0].SystemOriginalRate != "700.00" || saved[0].SystemMiles != "100.01" {
 				t.Fatalf("source fields not authoritative: %+v", saved[0])
 			}
 			report, err := pay.Get(ctx, monday)
@@ -253,10 +253,11 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			restored = restoredRows[0]
-			if restored.EnteredOriginalRate != "650.00" || restored.OriginalRate != "700.00" {
+			if restored.EnteredOriginalRate != "650.00" || restored.OriginalRate != "650.00" || restored.SystemOriginalRate != "700.00" {
 				t.Fatalf("extra-slot review: %+v", restored)
 			}
 			restored.AcceptSystemValues = true
+			restored.OriginalRate, restored.Miles = restored.SystemOriginalRate, restored.SystemMiles
 			accepted, err := board.SaveEntries(ctx, []GrossBoardEntry{restored})
 			if err != nil || accepted[0].EnteredOriginalRate != "700.00" {
 				t.Fatalf("extra-slot acceptance: %+v %v", accepted, err)
