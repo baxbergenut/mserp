@@ -137,6 +137,17 @@ export default function GrossBoardPage() {
     (entryIndex.byDriver.get(driver.id) ?? [])));
   const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
   const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
+  const dispatcherTotals = new Map<string, { original: bigint; driver: bigint; miles: bigint; balance: bigint; incomplete: number }>();
+  for (const driver of drivers) {
+    const entries = dates.flatMap(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? []);
+    const subtotal = totals(entries);
+    const opening = openings.get(driver.id);
+    const group = dispatcherTotals.get(driver.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0), balance: BigInt(0), incomplete: 0 };
+    group.original += subtotal.original; group.driver += subtotal.driver; group.miles += subtotal.miles;
+    group.balance += rateBalance(opening?.openingBalance ?? "0", entries);
+    group.incomplete += (opening?.openingIncomplete ?? 0) + incompleteRates(entries);
+    dispatcherTotals.set(driver.dispatcherId, group);
+  }
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
 
   function switchWeek(next: string) {
@@ -295,8 +306,15 @@ export default function GrossBoardPage() {
               const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(entries);
 
               const groupStart = index === 0 || drivers[index - 1].dispatcherId !== driver.dispatcherId;
+              const group = dispatcherTotals.get(driver.dispatcherId)!;
               return <Fragment key={driver.id}>
-                {groupStart && <tr><th colSpan={14} scope="rowgroup" className="border-b border-zinc-700 bg-blue-500/10 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th></tr>}
+                {groupStart && <tr className="bg-blue-500/10" aria-label={`${driver.dispatcherName} totals`}>
+                  <th colSpan={10} scope="rowgroup" className="border-b border-zinc-700 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th>
+                  <td className="border-b border-r border-zinc-700 px-2 py-2 font-mono text-blue-200">{decimalDisplay(group.original, true)}</td>
+                  <td className="border-b border-r border-zinc-700 px-2 py-2 font-mono text-zinc-200">{decimalDisplay(group.driver, true)}</td>
+                  <td className={`border-b border-r border-zinc-700 px-2 py-2 font-mono ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}{group.incomplete > 0 && <span className="mt-1 block font-sans text-[10px] text-amber-300">{group.incomplete} incomplete</span>}</td>
+                  <td className="border-b border-zinc-700 px-2 py-2 font-mono text-zinc-200">{decimalDisplay(group.miles)}</td>
+                </tr>}
                 <tr>
                   <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200">{driver.fullName}{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckUnit || "—"}</td>
