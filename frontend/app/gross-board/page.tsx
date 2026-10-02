@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
 import { IntentLink as Link } from "@/app/components/IntentLink";
@@ -221,7 +223,7 @@ export default function GrossBoardPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       {payReturn && <Link data-navigation-back href={payReturn} className={buttonClass}>← Back to Driver Pay</Link>}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <PageHeader><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <CalendarRange className="h-5 w-5 text-zinc-500" />
@@ -234,7 +236,7 @@ export default function GrossBoardPage() {
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
           <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
         </div>
-      </div>
+      </div></PageHeader>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard loading={loading} compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />

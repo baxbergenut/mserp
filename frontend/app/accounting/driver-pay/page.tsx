@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState } from "@/app/lib/viewMemory";
 
@@ -131,10 +133,10 @@ export default function DriverPayPage() {
   const busy = loading || refreshing;
   const switchWeek = (next: string) => { if (next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
   return <div className="space-y-5 animate-fade-in">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <PageHeader><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Driver pay</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span></div><p className="mt-1.5 text-[13px] text-zinc-500">Weekly loads from Gross Board, profile tariffs, and driver adjustments.</p></div>
       <div className="flex flex-wrap items-center gap-2"><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{error && dirty ? "Not saved" : saving ? "Saving…" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span><button className={payButtonClass} disabled={saving || busy} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button className={payButtonClass} disabled={saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div>
-    </div>
+    </div></PageHeader>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MetricCard loading={loading} compact label="Drivers / loads" value={loading ? "—" : `${drivers.length} / ${summary.loads}`} icon={UsersRound} /><MetricCard loading={loading} compact label="Earned pay" value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label="Loads needing review" value={loading ? "—" : String(summary.review)} icon={AlertTriangle} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /></div>
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)}–{shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>

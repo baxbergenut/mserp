@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Search, Plus, UserRound, X, LogOut, ChevronDown } from "lucide-react";
 import { IntentLink } from "./IntentLink";
+import { PageHeaderSlot } from "./PageHeader";
 import { fetchDriversPage, fetchTrucksPage, fetchLoadsPage, fetchExpensesPage, fetchInvestorsPage, logout } from "@/app/lib/api";
 
 type Result = { label: string; detail: string; href: string };
@@ -12,7 +13,6 @@ const quickActions = [{ label: "Expense", path: "/expenses" }, { label: "Driver"
 const itemClass = "block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400";
 
 export function TopBar({ username }: { username: string }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [menu, setMenu] = useState<"search" | "new" | "account" | null>(null);
   const [createToken, setCreateToken] = useState(0);
@@ -58,16 +58,15 @@ export function TopBar({ username }: { username: string }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [term, menu]);
 
-  const title = pathname.split("/").filter(Boolean).map(part => part.split("-").map(word => word[0]?.toUpperCase() + word.slice(1)).join(" ")).join(" / ") || "Dashboard";
   const groups = data?.query === term ? data.groups : null;
 
   return <div ref={root} className="relative z-40 shrink-0 border-b border-zinc-800/60 bg-zinc-950">
     <header className="flex h-14 items-center gap-2 px-2 sm:gap-3 sm:px-6 xl:px-8" aria-label="Global navigation">
-      <span className="hidden min-w-0 flex-1 truncate text-sm text-zinc-400 lg:block">{title}</span>
       <button ref={trigger} onClick={() => setMenu(menu === "search" ? null : "search")} aria-expanded={menu === "search"} aria-controls="global-search" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-600 lg:max-w-md"><Search className="h-4 w-4 shrink-0" /><span className="truncate">Search MSERP…</span><kbd className="ml-auto hidden whitespace-nowrap text-[11px] sm:block">Ctrl / ⌘ K</kbd></button>
       <button onClick={() => { setCreateToken(Date.now()); setMenu(menu === "new" ? null : "new"); }} aria-expanded={menu === "new"} aria-controls="quick-create" className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500"><Plus className="h-4 w-4" /><span className="hidden sm:inline">New</span></button>
       <button onClick={() => setMenu(menu === "account" ? null : "account")} aria-label={`Account: ${username}`} aria-expanded={menu === "account"} aria-controls="account-menu" className="flex items-center gap-2 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800"><UserRound className="h-4 w-4" /><span className="hidden max-w-32 truncate text-sm xl:block">{username}</span><ChevronDown className="hidden h-3 w-3 sm:block" /></button>
     </header>
+    <PageHeaderSlot />
     {menu === "new" && <nav id="quick-create" aria-label="Create a record" className="absolute right-14 top-12 w-48 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">{quickActions.map(action => <IntentLink key={action.path} href={`${action.path}?new=${createToken}`} onClick={close} className={itemClass}>New {action.label.toLowerCase()}</IntentLink>)}</nav>}
     {menu === "account" && <div id="account-menu" className="absolute right-4 top-12 w-56 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl"><p className="truncate px-3 py-2 text-sm text-zinc-400">Signed in as <span className="text-zinc-100">{username}</span></p><button disabled={signingOut} className={`${itemClass} flex w-full items-center gap-2`} onClick={async () => { setSigningOut(true); setError(""); try { await logout(); router.replace("/login"); } catch { setError("Could not sign out. Please try again."); } finally { setSigningOut(false); } }}><LogOut className="h-4 w-4" />{signingOut ? "Signing out…" : "Sign out"}</button>{error && <p role="alert" className="px-3 py-2 text-xs text-red-400">{error}</p>}</div>}
     {menu === "search" && <section id="global-search" aria-label="Global search" className="absolute left-2 right-2 top-12 mx-auto max-w-2xl overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl">

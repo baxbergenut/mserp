@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Truck as TruckIcon } from "lucide-react";
@@ -35,13 +37,13 @@ export default function TruckDetailPage() {
       {truck && (
         <>
           <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-5">
-            <div className="flex items-center gap-3">
+            <PageHeader><div className="flex items-center gap-3">
               <TruckIcon className="h-5 w-5 text-blue-400" />
               <div>
                 <h1 className="text-lg font-semibold text-zinc-100">Truck {truck.unitNumber}</h1>
                 <p className="mt-1 text-[13px] text-zinc-500">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "No vehicle details"}</p>
               </div>
-            </div>
+            </div></PageHeader>
             <dl className="mt-5 grid gap-4 text-[12px] sm:grid-cols-4">
               <div><dt className="text-zinc-600">Driver</dt><dd className="mt-1 text-zinc-300">{truck.driverName || "Unassigned"}</dd></div>
               <div><dt className="text-zinc-600">Status</dt><dd className="mt-1 capitalize text-zinc-300">{truck.status.replaceAll("_", " ")}</dd></div>

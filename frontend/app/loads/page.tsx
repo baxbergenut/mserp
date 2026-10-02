@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
@@ -103,7 +105,7 @@ export default function LoadsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <PageHeader><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Package className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">Loads</h1>
@@ -122,7 +124,7 @@ export default function LoadsPage() {
           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
           {isSyncing ? "Syncing loads…" : "Sync DataTruck"}
         </button>
-      </div>
+      </div></PageHeader>
 
       {message && (
         <div

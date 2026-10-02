@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { RememberedDetails } from "@/app/components/RememberedDetails";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -412,7 +414,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
   const isDriver = kind === "driver";
   return (
     <div className="space-y-5 animate-fade-in">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <PageHeader><header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
             {isDriver ? <UserRound className="h-5 w-5 text-blue-400" /> : <Headset className="h-5 w-5 text-violet-400" />}
@@ -431,7 +433,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
             </select>
           </label>
         )}
-      </header>
+      </header></PageHeader>
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[12px] text-red-300" role="alert">

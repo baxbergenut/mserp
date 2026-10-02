@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/app/components/PageHeader";
+
 import { useViewState } from "@/app/lib/viewMemory";
 
 import Link from "next/link";
@@ -183,7 +185,7 @@ export default function FuelPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <PageHeader><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <Fuel className="h-5 w-5 text-zinc-500" />
@@ -210,7 +212,7 @@ export default function FuelPage() {
           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
           {isSyncing ? "Syncing missing days…" : "Sync fuel"}
         </button>
-      </div>
+      </div></PageHeader>
 
       {message && (
         <div

@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { PAGE_SIZE_OPTIONS } from "../../lib/pagination";
+import { PageHeader } from "../PageHeader";
 
 export const controlClass =
   "w-full rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2 text-[13px] text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
@@ -54,6 +55,7 @@ export function ManagementHeader({
     {actionLabel}
   </button>;
   return (
+    <PageHeader>
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-3">
@@ -67,6 +69,7 @@ export function ManagementHeader({
       </div>
       {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{secondaryAction}{action}</div> : action}
     </div>
+    </PageHeader>
   );
 }
 

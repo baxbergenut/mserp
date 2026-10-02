@@ -121,7 +121,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   before creating parallel UI patterns.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
 - `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
-  links and account menu. Explicit search query parameters override remembered
+  links and account menu. PageHeader portals render each page title, icon, count,
+  description and actions in the top bar while preserving page context/handlers.
+  Explicit search query parameters override remembered
   list search/page values; new query tokens open existing forms once.
 - `frontend/app/lib/api.ts`: API base selection and every frontend request.
 - `frontend/app/lib/types.ts`: frontend view/input contracts.
