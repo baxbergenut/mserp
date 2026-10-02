@@ -193,7 +193,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),coalesce(l.driver_id::text,''),coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb)
  FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
- AND (e.service_date >= LEAST($2::date,coalesce((SELECT (payload->'current'->>'date')::date FROM driver_board_load_state WHERE driver_id=e.driver_id),$2::date)) OR e.plan_id=ANY($3::uuid[])
+ AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[])
  OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, from, selected)
 	if err != nil {
@@ -239,9 +239,6 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			if manualMismatch[id] {
 				view.Current.Warning = "Current load text differs from the selected plan; clear or reselect the load"
 				view.DestinationSource = false
-			}
-			if current.Date < view.FromDate {
-				view.FromDate = current.Date
 			}
 			for _, stop := range current.Stops {
 				if stop.Key == s.StopKey {

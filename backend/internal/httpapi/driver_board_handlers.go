@@ -69,7 +69,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 	parseFrom := func(raw string) (string, error) {
 		if raw == "" {
 			week, err := grossBoardWeek(repository.ChargeCurrentWeek())
-			return week.AddDate(0, 0, -7).Format(time.DateOnly), err
+			return week.Format(time.DateOnly), err
 		}
 		date, err := time.Parse(time.DateOnly, raw)
 		if err != nil || date.Year() < 2000 || date.Year() > 2100 {

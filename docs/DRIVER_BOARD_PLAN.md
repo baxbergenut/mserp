@@ -134,9 +134,10 @@ Next loads is a single-line column after ETA. The Loads panel opens from Current
 load or Next loads, with a History switch, explicit current/stop confirmation,
 up/down ordering, reset, removal/restoration, source/manual destination selection,
 all known stops and first-pickup/final-delivery appointments. ETA stays manually set.
-The default plan window starts the previous New York Monday and includes future
+The default plan window starts the current New York Monday and includes future
 weeks; the panel can include older dates. Older current selections and explicitly
-ordered plans stay included. Unmatched plans remain visible in the chosen window.
+ordered plans stay included without pulling other older plans into the window.
+Unmatched plans remain visible in the chosen window.
 Gross Board owns planned driver assignment; a disagreeing DataTruck driver is
 shown for review, not used to silently move or discard the plan. Delivered or
 cancelled next loads remain inspectable outside the active queue. A current load
@@ -155,7 +156,9 @@ manual/source switching, cross-week order/undo, removed current plans, stale-sou
 conflicts, read-only access and compact desktop/mobile layout.
 
 October 2 layout refinement: remove the repeated Dispatcher column (group labels
-and filters remain). ETA uses a date picker with optional time in New York time.
+and filters remain). ETA uses a compact cell-anchored popup with a date picker
+and optional time in New York time. Personal view controls follow All statuses
+in the filter row; the current week label sits beside the page actions.
 Cells stay single-line, for example `10/3 · 2:30p` or `10/3` when time is unknown.
 New values use `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the existing text field;
 legacy free text stays intact until replaced or cleared. Existing autosave,

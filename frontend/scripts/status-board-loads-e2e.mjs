@@ -4,7 +4,10 @@ import { join } from 'node:path';
 export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers }) {
   const date = new Date(`${week}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 7);
   const nextWeek = date.toISOString().slice(0, 10);
+  date.setUTCDate(date.getUTCDate() - 14);
+  const previousWeek = date.toISOString().slice(0, 10);
   sql(`SET search_path TO ${schema},public;
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES('${id}','${previousWeek}','OLD-WEEK-PLAN');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(88011,'SOURCE-A','Dispatched',1000,1000,500,
     '{"pickup_appointment_time":"${nextWeek}T12:00:00Z","delivery_appointment_time":"${nextWeek}T19:00:00Z","stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Richmond","state":"VA"}},{"ordering":3,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}}]}');
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles) VALUES('${id}','${nextWeek}','SOURCE-A',88011,1000,900,500);
@@ -12,11 +15,21 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
     ('${id}','${nextWeek}',1,'NEXT-B',2000,1800,600),('${id}','${nextWeek}',2,'NEXT-C',3000,2800,700);
   `);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  const defaultLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
+  expect(defaultLoads.fromDate).toBe(week);
+  expect(defaultLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
+  const defaultBoard = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
+  expect(defaultBoard.loads[id].fromDate).toBe(week);
+  expect(defaultBoard.loads[id].next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
+  const olderLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}?from=${previousWeek}`)).json();
+  expect(olderLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(true);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await expect(field('Current load')).toHaveValue('LOAD 8841');
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
+  await expect(panel.getByLabel('Plans from')).toHaveValue(week);
+  await expect(panel.getByText('OLD-WEEK-PLAN', { exact: false })).toHaveCount(0);
   await expect(panel.getByText('No linked current load.', { exact: false })).toBeVisible();
   const source = panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /SOURCE-A/ }) });
   await source.getByRole('button', { name: 'Set current', exact: true }).click();

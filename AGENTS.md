@@ -348,18 +348,20 @@ assignment lookup lists.
   never activate/advance loads. Current selection is explicit and retained with
   a warning after source removal/reassignment. Unique linked loads deduplicate;
   identical business numbers with distinct records remain separate. Unmatched
-  plans stay visible. Default plans start the previous New York Monday and include
+  plans stay visible. Default plans start the current New York Monday and include
   future weeks; the Loads panel can read older dates. Older current selections and
-  explicit ordering remain included. Gross Board controls planned assignment;
+  explicit ordering remain included without widening the default plan window.
+  Gross Board controls planned assignment;
   DataTruck driver mismatches warn instead of dropping or moving plans. Finished
   next loads remain inspectable; finished current loads are not auto-cleared.
   Stops come from imported raw_payload. Only first pickup/final delivery inherit
-  load-level appointments; ETA remains manually set with a date picker and optional
-  time, shown compactly on one line. New ETAs persist as YYYY-MM-DD or
+  load-level appointments; ETA remains manually set in a compact cell-anchored
+  popup with a date picker and optional time, shown on one line. New ETAs persist as YYYY-MM-DD or
   YYYY-MM-DDTHH:mm in New York wall time in the existing string field; legacy text
   is displayed unchanged until explicitly replaced or cleared. Idle board refresh
   pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
-  than a repeated table column. Source destinations have an explicit
+  than a repeated table column. Personal view controls follow the status filter
+  on the same row. Source destinations have an explicit
   manual override. Text edits detach current identity or destination source safely.
   Queue mutations lock the driver, check board/home versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream

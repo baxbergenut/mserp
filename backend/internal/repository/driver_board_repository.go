@@ -133,7 +133,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
 	}
-	result.Loads, err = readBoardLoads(ctx, tx, ids, week.AddDate(0, 0, -7).Format(time.DateOnly))
+	result.Loads, err = readBoardLoads(ctx, tx, ids, week.Format(time.DateOnly))
 	if err != nil {
 		return result, err
 	}

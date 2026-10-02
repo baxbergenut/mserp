@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -157,5 +158,25 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	var sum string
 	if err = pool.QueryRow(ctx, `SELECT sum(original_rate)::text FROM gross_board_entries WHERE driver_id=$1`, d.ID).Scan(&sum); err != nil || sum != "9000.00" {
 		t.Fatal("operational actions changed accounting", sum, err)
+	}
+	// Current-week defaults must not pull in the previous week, even when an
+	// older current load is retained for review across the week boundary.
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES
+ ($1,'2026-09-21','OLD-WEEK'),($1,'2026-09-29','OLD-OTHER')`, d.ID)
+	for _, week := range []string{"2026-09-28", "2026-10-05"} {
+		monday, _ := time.Parse(time.DateOnly, week)
+		board, err := repo.Get(ctx, monday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loads := board.Loads[d.ID]
+		if loads.FromDate != week || loads.Current == nil || loads.Current.PlanID != currentID {
+			t.Fatalf("week window or retained current changed: %+v", loads)
+		}
+		for _, p := range loads.Next {
+			if p.Date < week {
+				t.Fatalf("previous-week plan appeared in next loads: %+v", p)
+			}
+		}
 	}
 }
