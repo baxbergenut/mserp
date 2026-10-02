@@ -116,13 +116,18 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ env.PRODUCTION_API_URL }}
         run: npm run build
 
+      # The hosted Ubuntu 24.04 image already supplies Chromium's shared libraries.
+      # Avoid --with-deps: its redundant apt upgrades can stall on package mirrors.
+      - name: Install Chromium
+        working-directory: frontend
+        timeout-minutes: 5
+        run: npx playwright install chromium
+
       - name: Verify investor flows in Chromium
         working-directory: frontend
         env:
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-        run: |
-          npx playwright install --with-deps chromium
-          node scripts/test-investors-e2e.mjs
+        run: node scripts/test-investors-e2e.mjs
 
       - name: Verify driver charges in Chromium
         working-directory: frontend

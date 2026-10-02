@@ -959,6 +959,10 @@ Prefer these targeted searches over recursively reading the repository.
   restricted `mserp-deploy` user. Repository secrets are
   `MSERP_DEPLOY_SSH_KEY` and `MSERP_DEPLOY_KNOWN_HOSTS`; never print or replace
   them during routine work.
+- CI installs Playwright Chromium separately with a five-minute timeout, using
+  the hosted Ubuntu 24.04 runner's existing system libraries. Do not add
+  `--with-deps` to routine browser setup: redundant apt upgrades have stalled
+  on the runner's package mirror and exhausted the entire build timeout.
 - The deploy user owns only `/var/lib/mserp-deploy/incoming`, uses a restricted
   SSH key, and may sudo only `/usr/local/sbin/mserp-deploy`. Do not broaden its
   filesystem ownership or sudo permissions.
