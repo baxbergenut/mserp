@@ -17,6 +17,7 @@ export function PhoneInput({ value, onChange, disabled = false }: {
       type="tel"
       inputMode="tel"
       autoComplete="tel-national"
+      aria-label="Phone"
       disabled={disabled}
       value={value}
       pattern="[0-9]{10}"
