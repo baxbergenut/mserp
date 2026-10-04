@@ -24,9 +24,11 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   const [select, setSelect] = useState<BoardLoad | null>(null);
   const [clear, setClear] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(initial.current?.planId ?? null);
+  const [expandedCurrent, setExpandedCurrent] = useState(initial.current?.planId ?? null);
   const panel = useRef<HTMLElement>(null);
   const locked = busy || waiting || !canEdit;
-  useEffect(() => { setExpanded(view.current?.planId ?? null); }, [view.current?.planId]);
+  const currentPlan = view.current?.planId ?? null;
+  if (currentPlan !== expandedCurrent) { setExpandedCurrent(currentPlan); setExpanded(currentPlan); }
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
