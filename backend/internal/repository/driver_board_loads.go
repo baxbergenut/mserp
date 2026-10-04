@@ -42,7 +42,40 @@ type boardLoadState struct {
 	Hidden            []string   `json:"hidden"`
 	DestinationSource bool       `json:"destinationSource"`
 	StopKey           string     `json:"stopKey"`
+	Completed         []string   `json:"completed,omitempty"`
 }
+
+func boardCompletionKey(p BoardLoad) string {
+	if p.LoadID != nil {
+		return fmt.Sprintf("load:%d", *p.LoadID)
+	}
+	return "plan:" + p.PlanID
+}
+
+func boardProgressStatus(status string, next []BoardLoad) string {
+	if status == "ENROUTE" || status == "RESERVED" {
+		if len(next) > 0 {
+			return "RESERVED"
+		}
+		return "ENROUTE"
+	}
+	return status
+}
+
+func useBoardStop(s *boardLoadState, kind string) {
+	s.StopKey = ""
+	s.DestinationSource = false
+	if s.Current == nil {
+		return
+	}
+	for _, stop := range s.Current.Stops {
+		if strings.EqualFold(stop.Type, kind) && strings.TrimSpace(stop.Location) != "" {
+			s.StopKey, s.DestinationSource = stop.Key, true
+			return
+		}
+	}
+}
+
 type BoardLoads struct {
 	Current           *BoardLoad  `json:"current"`
 	Week              []BoardLoad `json:"week"`
@@ -192,12 +225,7 @@ func matchBoardCurrentLoad(plans []BoardLoad, number string) *BoardLoad {
 }
 
 func defaultBoardStop(stops []BoardStop) *BoardStop {
-	// Prefer the final delivery; fall back to the first pickup with a location.
-	for i := len(stops) - 1; i >= 0; i-- {
-		if strings.EqualFold(stops[i].Type, "delivery") && strings.TrimSpace(stops[i].Location) != "" {
-			return &stops[i]
-		}
-	}
+	// New current loads always start at pickup.
 	for i := range stops {
 		if strings.EqualFold(stops[i].Type, "pickup") && strings.TrimSpace(stops[i].Location) != "" {
 			return &stops[i]
@@ -316,6 +344,10 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		for _, k := range s.Hidden {
 			hidden[k] = true
 		}
+		completed := map[string]bool{}
+		for _, key := range s.Completed {
+			completed[key] = true
+		}
 		for _, p := range plans[id] {
 			if view.Current != nil && p.PlanID == view.Current.PlanID {
 				continue
@@ -326,7 +358,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 				seen[*p.LoadID] = true
 			}
-			if terminalLoad(p.SourceStatus) {
+			if completed[boardCompletionKey(p)] || terminalLoad(p.SourceStatus) {
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)
@@ -411,6 +443,53 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	switch a.Action {
+	case "advance":
+		if strings.TrimSpace(e.CurrentLoad) == "" {
+			return result, ErrBoardLoadSelection
+		}
+		if view.Current == nil {
+			plans := append(append(append([]BoardLoad{}, view.Week...), view.Next...), view.Earlier...)
+			// Deduplicate plan IDs before matching an older unlinked text value.
+			seen := map[string]bool{}
+			unique := []BoardLoad{}
+			for _, p := range plans {
+				if !seen[p.PlanID] {
+					unique = append(unique, p)
+					seen[p.PlanID] = true
+				}
+			}
+			view.Current = matchBoardCurrentLoad(unique, e.CurrentLoad)
+			if view.Current != nil {
+				next := []BoardLoad{}
+				for _, p := range view.Next {
+					if boardCompletionKey(p) != boardCompletionKey(*view.Current) {
+						next = append(next, p)
+					}
+				}
+				view.Next = next
+			}
+		}
+		switch e.Status {
+		case "DISPATCHED":
+			e.Status = boardProgressStatus("ENROUTE", view.Next)
+			s.Current = view.Current
+			useBoardStop(&s, "delivery")
+			e.Destination = ""
+		case "ENROUTE", "RESERVED":
+			if view.Current != nil {
+				s.Completed = append(s.Completed, boardCompletionKey(*view.Current))
+			}
+			s.Current = nil
+			e.CurrentLoad, e.Destination, e.Status, e.ETA = "", "", "", ""
+			if len(view.Next) > 0 {
+				next := view.Next[0]
+				s.Current = &next
+				e.CurrentLoad, e.Status = next.Number, "DISPATCHED"
+			}
+			useBoardStop(&s, "pickup")
+		default:
+			return result, ErrBoardLoadSelection
+		}
 	case "select":
 		var chosen *BoardLoad
 		for _, p := range append(append([]BoardLoad{}, view.Next...), view.Earlier...) {
@@ -424,25 +503,16 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 			return result, ErrBoardLoadSelection
 		}
 		s.Current = chosen
-		s.StopKey = a.StopKey
-		s.DestinationSource = false
-		if a.StopKey != "" {
-			for _, stop := range chosen.Stops {
-				if stop.Key == a.StopKey && stop.Location != "" {
-					s.DestinationSource = true
-				}
-			}
-			if !s.DestinationSource {
-				return result, ErrBoardLoadSelection
-			}
-		}
 		e.CurrentLoad = chosen.Number
+		e.Status, e.Destination = "DISPATCHED", ""
+		useBoardStop(&s, "pickup")
 	case "clear":
 		s.Current = nil
 		s.StopKey = ""
 		s.DestinationSource = false
 		e.CurrentLoad = ""
 		e.Destination = ""
+		e.Status = ""
 	case "order":
 		valid := map[string]bool{}
 		for _, p := range view.Next {
@@ -521,6 +591,26 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err = setBoardActor(ctx, tx, actor, "board"); err != nil {
 		return result, err
 	}
+	// Queue changes affect the loaded-state label, never manual exceptions.
+	if a.Action == "hide" || a.Action == "restore" {
+		next := append([]BoardLoad{}, view.Next...)
+		if a.Action == "hide" {
+			for i, p := range next {
+				if p.PlanID == a.PlanID {
+					next = append(next[:i], next[i+1:]...)
+					break
+				}
+			}
+		}
+		if a.Action == "restore" {
+			for _, p := range view.Hidden {
+				if p.PlanID == a.PlanID && p.Date >= view.FromDate {
+					next = append(next, p)
+				}
+			}
+		}
+		e.Status = boardProgressStatus(e.Status, next)
+	}
 	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{e})
 	if err != nil {
 		return result, err
@@ -533,5 +623,9 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}
+	result.Entry.Status = boardProgressStatus(result.Entry.Status, result.Loads.Next)
+	if err = attachBoardUndoID(ctx, tx, &result.Entry); err != nil {
+		return result, err
+	}
 	return result, tx.Commit(ctx)
 }

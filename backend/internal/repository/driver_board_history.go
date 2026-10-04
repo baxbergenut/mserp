@@ -33,6 +33,16 @@ func setBoardActor(ctx context.Context, tx pgx.Tx, actor, source string) error {
 	return err
 }
 
+// Only return events produced by this write, never another user's latest event.
+func attachBoardUndoID(ctx context.Context, tx pgx.Tx, entry *DriverBoardEntry) error {
+	err := tx.QueryRow(ctx, `SELECT id FROM driver_board_history WHERE driver_id=$1 AND transaction_id=txid_current() AND source='board' AND undo_of IS NULL`, entry.DriverID).Scan(&entry.UndoID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		entry.UndoID = 0
+		return nil
+	}
+	return err
+}
+
 func (r *DriverBoardRepository) History(ctx context.Context, ids []string, before int64) (DriverBoardHistory, error) {
 	result := DriverBoardHistory{Items: []DriverBoardEvent{}}
 	rows, err := r.pool.Query(ctx, `SELECT id,driver_id,driver_name,actor_id,actor_name,source,undo_of,before_values,after_values,created_at
@@ -57,7 +67,7 @@ func (r *DriverBoardRepository) History(ctx context.Context, ids []string, befor
 
 // Undo is a new audited correction. A later edit of any affected field prevents
 // reversing the older event, even if that field has since returned to its value.
-func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version, homeVersion int, actor string) (DriverBoardEntry, error) {
+func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version, homeVersion int, actor string, personal ...bool) (DriverBoardEntry, error) {
 	var entry DriverBoardEntry
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -76,7 +86,10 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 		return entry, ErrDriverBoardConflict
 	}
 	var before, after map[string]string
-	err = tx.QueryRow(ctx, `SELECT before_values,after_values FROM driver_board_history WHERE id=$1 AND driver_id=$2`, id, driver).Scan(&before, &after)
+	mine := len(personal) > 0 && personal[0]
+	err = tx.QueryRow(ctx, `SELECT before_values,after_values FROM driver_board_history h WHERE id=$1 AND driver_id=$2
+ AND (NOT $3::boolean OR (actor_id=$4 AND actor_id<>'' AND source='board' AND undo_of IS NULL
+ AND NOT EXISTS(SELECT 1 FROM driver_board_history u WHERE u.undo_of=h.id)))`, id, driver, mine, actor).Scan(&before, &after)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry, ErrNotFound
 	}
@@ -88,7 +101,11 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 		keys = append(keys, k)
 	}
 	var changed bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_board_history WHERE driver_id=$1 AND id>$2 AND after_values ?| $3::text[])`, driver, id, keys).Scan(&changed); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_board_history h WHERE driver_id=$1 AND id>$2 AND after_values ?| $3::text[]
+ AND (NOT $4::boolean OR NOT (
+ (h.actor_id=$5 AND h.undo_of IS NOT NULL AND EXISTS(SELECT 1 FROM driver_board_history original WHERE original.id=h.undo_of AND original.actor_id=$5))
+ OR (h.actor_id=$5 AND EXISTS(SELECT 1 FROM driver_board_history u WHERE u.undo_of=h.id AND u.actor_id=$5))
+ )))`, driver, id, keys, mine, actor).Scan(&changed); err != nil {
 		return entry, err
 	}
 	if changed {

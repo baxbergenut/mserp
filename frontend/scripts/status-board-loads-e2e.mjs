@@ -47,13 +47,13 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
 
   const source = panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /SOURCE-A/ }) });
   await source.getByRole('button', { name: 'Set current', exact: true }).click();
-  await panel.getByLabel('Choose current stop').selectOption({ label: 'delivery · Richmond, VA' });
   await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
+  await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Richmond, VA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await expect(panel.getByText('Appointment:', { exact: false })).toHaveCount(2);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(field('Current load')).toHaveValue('SOURCE-A');
-  await expect(field('Status')).toHaveValue('ENROUTE');
+  await expect(field('Status')).toHaveValue('DISPATCHED');
   await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
   const destination = page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true });
   await expect(destination).toHaveText('Richmond, VADEL');
@@ -64,7 +64,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(destination).toHaveText('Atlanta, GAPU');
   await destination.click();
   await expect(destination).toHaveText('Richmond, VADEL');
-  await expect(field('Status')).toHaveValue('ENROUTE');
+  await expect(field('Status')).toHaveValue('DISPATCHED');
   await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();

@@ -11,6 +11,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { usePermissions } from "@/app/lib/access";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
+import { StatusCell } from "./StatusCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
 import { addDays, decimalDisplay, indexBoardEntries, shortDate, totals } from "@/app/gross-board/board";
 import { statuses, statusColor, formatETA, previewCurrentLoad } from "./board";
@@ -154,7 +155,14 @@ export default function DriverBoardPage() {
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
-                <td className={`${cellClass} ${statusColor(entry.status)}`}><select aria-label={`${d.fullName} · Status`} title={entry.status} value={entry.status} disabled={disabled} onChange={event => edit(d.id, "status", event.target.value)} className="h-8 w-full bg-transparent px-0.5 text-[10px] font-medium outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500"><option value="" className="bg-zinc-900 text-zinc-300">—</option>{statuses.map(s => <option key={s} className={statusColor(s)}>{s}</option>)}</select></td>
+                <td className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
+                  canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
+                  onChange={value => edit(d.id, "status", value)} onAdvance={async () => {
+                    if (!loads || destinationBusy) return;
+                    setDestinationError("");
+                    try { await state.changeLoads(d.id, loads, { action: "advance" }); }
+                    catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
+                  }} /></td>
                 <td className={cellClass}>{loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Origin / destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
                   title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
                   className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"

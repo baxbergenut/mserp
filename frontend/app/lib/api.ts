@@ -122,8 +122,8 @@ export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
 export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, homeVersion: entry.homeVersion, revision: view.revision, fromDate: view.fromDate }) });
-export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry) =>
-  apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, homeVersion: entry.homeVersion }) });
+export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>
+  apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, homeVersion: entry.homeVersion, personal }) });
 export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>
   apiRequest<GrossBoardBalanceLine[]>(withQuery("/gross-board/balance", { driverId, weekStart }));
 export const searchGrossBoardLoads = (search: string) =>

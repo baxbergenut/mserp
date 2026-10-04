@@ -117,6 +117,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
+			testBoardProgress(t, ctx, pool, repo, fleet)
 			home := "Louisville, KY"
 			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, DriverHome: &home}
 			driver, err := fleet.CreateDriver(ctx, input)

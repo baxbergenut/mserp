@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
 import { runStatusBoardLoadsE2E } from './status-board-loads-e2e.mjs';
+import { runStatusBoardProgressE2E } from './status-board-progress-e2e.mjs';
 
 export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -76,11 +77,11 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(field('Current load')).toHaveValue('PLAN-101');
   await expect(page.getByRole('listbox')).toHaveCount(0);
   const loadDestination = page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true });
-  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Current load')).toHaveValue('PLAN-101');
-  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await field('Current load').fill('');
   await expect(field('Origin / destination')).toHaveValue('');
   await expect(loadDestination).toHaveCount(0);
@@ -89,17 +90,17 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(field('Current load')).toHaveValue('');
   await expect(field('Origin / destination')).toHaveValue('');
   await field('Current load').fill(' plan-101 ');
-  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await field('Notes').click();
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
-  await expect(loadDestination).toHaveText('Dallas, TXDEL');
-  await loadDestination.click();
   await expect(loadDestination).toHaveText('Atlanta, GAPU');
+  await loadDestination.click();
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
   await field('Current load').fill('plan-');
   await page.getByRole('option').filter({ hasText: 'PLAN-101' }).click();
   await expect(field('Current load')).toHaveValue('PLAN-101');
-  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   const statusBox = await page.getByLabel('Status filter').boundingBox();
   const viewBox = await page.getByRole('button', { name: 'My view', exact: true }).boundingBox();
@@ -277,5 +278,6 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await runStatusBoardProgressE2E({ page, base, sql, schema, week });
   console.log('Status Board E2E passed: totals, autosave, navigation flush, home/profile synchronization, history/undo, personal and named views, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
 }

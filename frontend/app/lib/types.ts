@@ -336,6 +336,8 @@ export interface DriverInput {
 }
 
 export interface DriverBoardEntry {
+  undoId?: number;
+  statusEdited?: boolean;
   resolveCurrentLoad?: boolean;
   driverId: string;
   currentLoad: string;
@@ -385,7 +387,7 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual";
+  action: "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual";
   planId?: string; order?: string[]; stopKey?: string;
 }
 

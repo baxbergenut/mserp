@@ -78,9 +78,10 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	currentID := v.Next[0].PlanID
 	r := action(BoardLoadAction{Action: "select", PlanID: currentID, StopKey: v.Next[0].Stops[1].Key})
-	if r.Loads.SourceDestination != "Richmond, VA" || len(r.Loads.Next) != 3 || e.Status != "RESERVED" || e.ETA != "Friday" || e.Notes != "Keep my notes" || e.CurrentLoad != "QUEUE-A" {
+	if r.Loads.SourceDestination != "Atlanta, GA" || len(r.Loads.Next) != 3 || e.Status != "DISPATCHED" || e.ETA != "Friday" || e.Notes != "Keep my notes" || e.CurrentLoad != "QUEUE-A" {
 		t.Fatalf("explicit selection damaged fields: %+v", r)
 	}
+	r = action(BoardLoadAction{Action: "source", StopKey: r.Loads.Current.Stops[1].Key})
 	stale := BoardLoadAction{DriverID: d.ID, Version: e.Version - 1, HomeVersion: e.HomeVersion, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
 	if _, err = repo.ChangeLoads(ctx, stale, ""); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("repeated click accepted", err)
@@ -279,7 +280,7 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	e.CurrentLoad = "  auto-a  "
 	save()
 	v := view()
-	if v.Current == nil || !v.DestinationSource || v.SourceDestination != "Dallas, Texas, 75236" || len(v.Next) != 0 {
+	if v.Current == nil || !v.DestinationSource || v.SourceDestination != "Atlanta, Georgia, 30303" || len(v.Next) != 0 {
 		t.Fatalf("earlier delivered weekly match/repeated slots: %+v", v)
 	}
 	if e.Status != "DISPATCHED" || e.ETA != "2026-10-01T15:00" || e.Notes != "Keep notes" {
@@ -296,7 +297,7 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		t.Fatal(err)
 	}
 	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, e.HomeVersion, "")
-	if err != nil || !view().DestinationSource || view().SourceDestination != "Dallas, Texas, 75236" {
+	if err != nil || !view().DestinationSource || view().SourceDestination != "Atlanta, Georgia, 30303" {
 		t.Fatal("clear undo did not restore source", err)
 	}
 	for _, number := range []string{"PREVIOUS", "FUTURE", "AUTO", "UNKNOWN"} {

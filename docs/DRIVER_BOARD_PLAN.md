@@ -2,8 +2,7 @@
 
 Decisions recorded October 2, 2026. Phases 0–1 (colors, history and personal views)
 shipped in f0ce1a9. The page is now named Status Board (route /driver-board).
-Phase 2 (current selection, ordered next loads and source destinations) is the
-current implementation pass. Progress actions, handoff and ELD remain later phases.
+Phases 2–3 now cover current/next loads, destinations, status-click progress and personal Ctrl+Z. Handoff and ELD remain later phases.
 
 ## Agreed direction
 
@@ -179,39 +178,46 @@ Windows tel default (Chrome on the operator's PC).
 
 Current-load typing suggests the driver’s Gross Board load numbers for the current
 week. Choosing a suggestion or typing an exact unambiguous number previews and
-autosaves the current load's final delivery, falling back to its first located
-pickup. All days in the week remain eligible, including earlier delivered loads;
+autosaves the current load at its pickup with DISPATCHED status. All days in the week remain eligible, including earlier delivered loads;
 the Next queue still starts today. Clearing the number clears its location and
-source, and changing it removes the previous location. Status and ETA stay
-unchanged. The location cell still switches PU/DEL; the Loads panel supports
+source and status, and changing it removes the previous location. ETA stays
+unchanged on manual entry. The location cell still switches PU/DEL; the Loads panel supports
 choosing specific stops and manual destinations.
 
-## Phase 3 — explicit progress actions
+## Phase 3 — status-click progress and personal undo
 
-Clicking the status cell continues to open the dropdown. Add clearly named
-actions for the selected current load in its compact controls/Loads panel:
+October 4 clarification: DISPATCHED means heading to current pickup. ENROUTE
+means the current load is picked up with nothing next; RESERVED means picked
+up with a next load available. Each load follows one pickup and one delivery.
 
-- Picked up: for a DISPATCHED load, record pickup and change the familiar board
-  status to ENROUTE, then show the next delivery stop. Do not introduce an
-  IN-TRANSIT label in the board.
-- Delivered: record completion of the selected delivery stop. Intermediate
-  delivery stops do not finish the whole load.
-- Delivered & start [next load]: when the final stop is complete and the next
-  load is unambiguous, provide an explicitly named combined action. Promote
-  that load and show its pickup. Promotion does not mark the next load picked up.
-- With no next load or ambiguous sequencing, finish the current load without
-  inventing a replacement or availability state. Keep HOME/SHOP/VACATION and
-  other manual exceptions under updater control.
+Implemented without extra board buttons, tooltips, or instructional text:
 
-RESERVED can mean a next load is booked while the current one is still moving.
-Store physical progress separately from the familiar board status and future
-reservation. Review how the visible RESERVED label should behave on Picked up
-before enabling that action for RESERVED rows. Likewise agree the status shown
-after final delivery with no next load; do not guess HOME or NO LOAD.
+- A new current load starts DISPATCHED and shows its pickup.
+- Clicking DISPATCHED records pickup and shows delivery; next-load presence
+  determines ENROUTE or RESERVED. These two labels also follow queue changes
+  during refresh; HOME/SHOP/VACATION and other manual exceptions stay manual.
+- Clicking ENROUTE/RESERVED completes the current load and starts the first
+  available next load as DISPATCHED at pickup. Without a next load, current
+  load, location, ETA and status become blank; never infer NO LOAD.
+- Only the chevron opens the manual dropdown. Options have neutral colors;
+  the cell retains the familiar status fill. Destination clicks remain display
+  switches and never record pickup/delivery.
+- Completed identities are stored with operational load state, preventing the
+  finished load from returning to Next while DataTruck still says Dispatched.
+  Gross Board, source load status and financial values are never rewritten.
+- Version and plan-revision checks reject stale/repeated advances. Status
+  double-clicks advance once. Clearing stale ETA on promotion avoids carrying
+  the prior delivery ETA onto a different load.
 
-Actions save atomically with queue changes and history, use idempotency and
-version checks, and expose correction/undo. Repeated clicks or stale responses
-must not advance twice. No writes to DataTruck are included in this phase.
+Ctrl+Z (Cmd+Z on Mac) reverses this page's own saved actions, using event IDs
+returned by its successful writes. The in-memory stack lasts for this page
+session, is never populated from global history, and does not include another
+browser's actions. The server verifies ownership for personal undo. Consecutive
+undos may traverse this user's already-reversed event pairs; another person's
+later overlapping edit still blocks undo. Every correction remains audited.
+Pending cell edits can be undone before saving; native text undo remains active
+while typing. A shortcut during a save waits for that save. Loads-panel actions
+use the same stack. No extra undo button or instructional tooltip is added.
 
 ## Phase 4 — lightweight shift handoff
 

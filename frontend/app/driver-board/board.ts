@@ -1,5 +1,9 @@
 import type { BoardLoads, DriverBoardEntry } from "@/app/lib/types";
 
+export function progressStatus(status: string, loads?: BoardLoads) {
+  return loads && (status === "ENROUTE" || status === "RESERVED") ? (loads.next.length ? "RESERVED" : "ENROUTE") : status;
+}
+
 // Preview a draft immediately; autosave resolves the same match transactionally.
 export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverBoardEntry, saved?: DriverBoardEntry): BoardLoads | undefined {
   if (!loads) return loads;
@@ -10,8 +14,7 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   const chosen = matches[0];
   const unique = chosen && (matches.length === 1 || (chosen.loadId !== null && matches.every(p => p.loadId === chosen.loadId)));
   const current = unique ? chosen : null;
-  const stop = current?.stops.findLast(s => s.type.toLowerCase() === "delivery" && s.location.trim())
-    ?? current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
+  const stop = current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
   return { ...loads, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
 }
 

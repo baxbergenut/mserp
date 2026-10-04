@@ -14,6 +14,8 @@ import (
 var ErrDriverBoardConflict = errors.New("status board or driver home changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
+	UndoID       int64 `json:"undoId,omitempty"`
+	StatusEdited bool  `json:"statusEdited,omitempty"`
 	// Write-only intent: selecting the same number should still resolve its stops.
 	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
 	DriverID           string `json:"driverId"`
@@ -154,6 +156,10 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
+	for i := range result.Entries {
+		e := &result.Entries[i]
+		e.Status = boardProgressStatus(e.Status, result.Loads[e.DriverID].Next)
+	}
 	return result, tx.Commit(ctx)
 }
 
@@ -174,6 +180,11 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 	if err != nil {
 		return nil, err
 	}
+	for i := range entries {
+		if err = attachBoardUndoID(ctx, tx, &entries[i]); err != nil {
+			return nil, err
+		}
+	}
 	return entries, tx.Commit(ctx)
 }
 
@@ -183,6 +194,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID < entries[j].DriverID })
 	for index := range entries {
 		e := &entries[index]
+		e.UndoID = 0
 		var home string
 		var homeVersion int
 		var active bool
@@ -219,6 +231,12 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		// of the date/status filters used by the Next loads queue. Explicit drawer
 		// actions and undo restore their own selection without this inference.
 		if len(matchDate) > 0 && (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) {
+			if !e.StatusEdited {
+				e.Status = ""
+				if strings.TrimSpace(e.CurrentLoad) != "" {
+					e.Status = "DISPATCHED"
+				}
+			}
 			if strings.TrimSpace(e.CurrentLoad) == "" || e.Destination == old.Destination {
 				e.Destination = ""
 			}
@@ -236,11 +254,27 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 						loadStateValue.StopKey = stop.Key
 						loadStateValue.DestinationSource = true
 					}
+					if (e.Status == "ENROUTE" || e.Status == "RESERVED") && e.Destination == "" {
+						useBoardStop(&loadStateValue, "delivery")
+					}
 					stateChanged = true
 				}
 			}
 		}
+		if len(matchDate) > 0 && !e.ResolveCurrentLoad && old.CurrentLoad == e.CurrentLoad && e.StatusEdited && loadStateValue.Current != nil {
+			if e.Status == "DISPATCHED" {
+				useBoardStop(&loadStateValue, "pickup")
+				e.Destination = ""
+				stateChanged = true
+			}
+			if e.Status == "ENROUTE" || e.Status == "RESERVED" {
+				useBoardStop(&loadStateValue, "delivery")
+				e.Destination = ""
+				stateChanged = true
+			}
+		}
 		e.ResolveCurrentLoad = false
+		e.StatusEdited = false
 		var version int
 		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time)
    SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE $9::int=0

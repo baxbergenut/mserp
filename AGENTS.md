@@ -393,14 +393,26 @@ assignment lookup lists.
   Blank numbers have no action.
   Current-load typing suggests this driver’s current-week Gross Board load numbers,
   excluding statuses/deleted entries and deduplicating numbers. Selection fills
-  the current load and final delivery (or first located pickup) immediately and
+  the current load and pickup immediately, sets DISPATCHED, and
   links it through atomic autosave. Exact typed numbers resolve the same way,
   using every day of the current New York week, including delivered/hidden plans.
   Distinct duplicate load matches remain unlinked. Changing the text clears the
   old displayed destination; clearing Current load clears manual and sourced
   destinations. Loads.week supplies matching candidates independently of Next;
   write-only resolveCurrentLoad intent supports reselecting an unchanged number.
-  Progress, handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
+  Status-cell labels advance pickup/delivery; only the chevron opens the neutral
+  dropdown. Pickup shows delivery and sets RESERVED when Next is nonempty,
+  otherwise ENROUTE; these labels also follow queue changes during reads.
+  Delivery records completed identities in operational load state, promotes the
+  next load to DISPATCHED/pickup, and clears the stale ETA. Without Next, current
+  load/location/status/ETA become blank, never NO LOAD. Other statuses remain
+  manual. Version/revision checks and double-click handling prevent double advance.
+  Writes return their own undoId. Ctrl+Z/Cmd+Z keeps a page-session stack of
+  these IDs and pending edits, with server-enforced actor ownership for personal
+  undo. It can traverse this user's reversed event pairs but never overwrite
+  another actor's later overlapping edits. Native draft text undo stays native.
+  No extra board buttons, tooltips or workflow explanations are added.
+  Handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in

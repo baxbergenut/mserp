@@ -178,6 +178,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		var input struct {
+			Personal    bool   `json:"personal"`
 			DriverID    string `json:"driverId"`
 			Version     int    `json:"version"`
 			HomeVersion int    `json:"homeVersion"`
@@ -191,7 +192,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		saved, err := repo.Undo(r.Context(), id, input.DriverID, input.Version, input.HomeVersion, session.User.ID)
+		saved, err := repo.Undo(r.Context(), id, input.DriverID, input.Version, input.HomeVersion, session.User.ID, input.Personal)
 		if err != nil {
 			fail(w, err)
 			return

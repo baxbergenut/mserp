@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
-import { reconcileDriverBoard } from "./board";
+import { progressStatus, reconcileDriverBoard } from "./board";
+import { usePermissions } from "@/app/lib/access";
 
 export function useDriverBoard(pauseRefresh = false) {
+  const canEdit = usePermissions().includes("driver_board.write");
   const router = useRouter();
   const [board, setBoard] = useState<DriverBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverBoardEntry>>({});
@@ -20,9 +22,14 @@ export function useDriverBoard(pauseRefresh = false) {
   const savingRef = useRef(false);
   const idle = useRef(false);
   const savedRef = useRef<Record<string, DriverBoardEntry>>({});
+  const changesRef = useRef(changes);
+  const undoStack = useRef<{ id: number; driverId: string }[]>([]);
+  const draftUndo = useRef<{ id: string; field: keyof DriverBoardEntry; before?: DriverBoardEntry }[]>([]);
+  const pendingUndo = useRef(false);
+  const undoLatestRef = useRef<() => Promise<void>>(async () => {});
   const dirty = Object.keys(changes).length > 0;
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
-  useLayoutEffect(() => { savedRef.current = saved; idle.current = !dirty && !saving && !loading && !pauseRefresh; }, [saved, dirty, saving, loading, pauseRefresh]);
+  useLayoutEffect(() => { changesRef.current = changes; savedRef.current = saved; idle.current = !dirty && !saving && !loading && !pauseRefresh; }, [saved, changes, dirty, saving, loading, pauseRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,15 +60,18 @@ export function useDriverBoard(pauseRefresh = false) {
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {
     activity.current += 1;
     idle.current = false;
-    setChanges(current => {
-      const baseline = savedRef.current[id];
-      const next = { ...(current[id] ?? baseline), [field]: value };
-      if (field === "currentLoad") { next.destination = ""; next.resolveCurrentLoad = true; }
-      const result = { ...current, [id]: next };
-      // While saving, a revert must still be sent after the first write finishes.
-      if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
-      return result;
-    });
+    const last = draftUndo.current.at(-1);
+    if (!last || last.id !== id || last.field !== field) draftUndo.current.push({ id, field, before: changesRef.current[id] });
+    const current = changesRef.current;
+    const baseline = savedRef.current[id];
+    const next = { ...(current[id] ?? baseline), [field]: value };
+    if (field === "currentLoad") { next.destination = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : ""; }
+    if (field === "status") next.statusEdited = true;
+    const result = { ...current, [id]: next };
+    // While saving, a revert must still be sent after the first write finishes.
+    if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
+    changesRef.current = result;
+    setChanges(result);
   }, []);
 
   const refreshLoads = useCallback(async (ids: string[]) => {
@@ -75,9 +85,13 @@ export function useDriverBoard(pauseRefresh = false) {
     if (savingRef.current || !dirty || loading) return;
     savingRef.current = true; activity.current += 1;
     const snapshot = { ...changes };
+    const draftActions = draftUndo.current;
+    draftUndo.current = [];
     setSaving(true); setError("");
     try {
       const committed = await saveDriverBoard(Object.values(snapshot));
+      const editOrder = draftActions.map(a => a.id);
+      for (const e of [...committed].sort((a,b) => editOrder.lastIndexOf(a.driverId) - editOrder.lastIndexOf(b.driverId))) if (e.undoId) undoStack.current.push({ id: e.undoId, driverId: e.driverId });
       setBoard(current => {
         if (!current) return current;
         const entries = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
@@ -86,7 +100,7 @@ export function useDriverBoard(pauseRefresh = false) {
       });
       setChanges(current => reconcileDriverBoard(current, snapshot, committed));
       await refreshLoads(committed.map(e => e.driverId));
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
+    } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activity.current += 1; savingRef.current = false; setSaving(false); }
   }, [changes, dirty, loading, refreshLoads]);
 
@@ -121,19 +135,20 @@ export function useDriverBoard(pauseRefresh = false) {
     if (savingRef.current) return;
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved Status Board?")) return;
     activity.current += 1; idle.current = false;
-    setLoading(true); setError(""); setPendingLink(null); setChanges({});
+    setLoading(true); setError(""); setPendingLink(null); setChanges({}); draftUndo.current = [];
     try { setBoard(await fetchDriverBoard(currentChargeWeek())); setRefreshError(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to load Status Board"); }
     finally { setLoading(false); }
   }
 
-  async function undo(eventId: number, driverId: string) {
+  async function undo(eventId: number, driverId: string, personal = false) {
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
     savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true);
     try {
-      const committed = await undoDriverBoardEvent(eventId, entry);
+      const committed = await undoDriverBoardEvent(eventId, entry, personal);
+      undoStack.current = undoStack.current.filter(e => e.id !== eventId);
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e) } : current);
       await refreshLoads([driverId]);
     } finally { activity.current += 1; savingRef.current = false; setSaving(false); }
@@ -146,10 +161,54 @@ export function useDriverBoard(pauseRefresh = false) {
     savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true);
     try {
       const result = await changeBoardLoads(entry, view, action);
+      if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId });
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), loads: { ...current.loads, [driverId]: result.loads } } : current);
       return result.loads;
     } finally { activity.current += 1; savingRef.current = false; setSaving(false); }
   }
 
-  return { board, entries: { ...saved, ...changes }, loading, saving, dirty, error, refreshError, edit, save, reload, undo, changeLoads, leaving: !!pendingLink };
+  useLayoutEffect(() => {
+    undoLatestRef.current = async () => {
+      if (!canEdit || loading || pendingLink) return;
+      if (savingRef.current) { pendingUndo.current = true; return; }
+      setError("");
+      if (dirty) {
+        const action = draftUndo.current.pop();
+        if (!action) return;
+        const result = { ...changesRef.current };
+        const base = savedRef.current[action.id];
+        if (action.before) result[action.id] = { ...action.before, version: base.version, homeVersion: base.homeVersion, undoId: base.undoId };
+        else delete result[action.id];
+        if (JSON.stringify(result[action.id]) === JSON.stringify(base)) delete result[action.id];
+        changesRef.current = result; setChanges(result); activity.current += 1;
+        return;
+      }
+      const action = undoStack.current.at(-1);
+      if (action) await undo(action.id, action.driverId, true);
+    };
+  });
+
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if (!canEdit || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "z" || event.repeat) return;
+      const target = event.target as HTMLElement;
+      // Keep native text undo while typing, and leave other dialogs' drafts alone.
+      const dialog = target.closest('[role="dialog"]');
+      if ((dialog && !dialog.hasAttribute('data-board-undo')) || (dirty && target.closest('input,textarea,[contenteditable="true"]'))) return;
+      if (!dirty && !savingRef.current && !undoStack.current.length) return;
+      event.preventDefault();
+      void undoLatestRef.current().catch(err => setError(err instanceof Error ? err.message : "Unable to undo this change."));
+    };
+    document.addEventListener("keydown", keyboard);
+    return () => document.removeEventListener("keydown", keyboard);
+  }, [canEdit, dirty]);
+
+  useEffect(() => {
+    if (saving || !pendingUndo.current) return;
+    pendingUndo.current = false;
+    void undoLatestRef.current().catch(err => setError(err instanceof Error ? err.message : "Unable to undo this change."));
+  }, [saving]);
+
+  const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: progressStatus(entry.status, board?.loads[id]) }]));
+  return { board, entries, loading, saving, dirty, error, refreshError, edit, save, reload, undo, changeLoads, leaving: !!pendingLink };
 }
