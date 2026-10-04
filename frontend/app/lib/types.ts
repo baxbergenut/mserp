@@ -350,6 +350,11 @@ export interface DriverBoardEntry {
 }
 
 export interface DriverBoardDriver {
+  dispatcherExtension?: number | null;
+  mainUpdaterName?: string;
+  mainUpdaterExtension?: number | null;
+  afterHoursUpdaterName?: string;
+  afterHoursUpdaterExtension?: number | null;
   id: string;
   fullName: string;
   driverType: "O" | "M" | "%-O" | "M-O" | "%";
@@ -505,7 +510,20 @@ export interface CDLFileUploadResult {
   fields: CDLFields;
 }
 
+export interface Updater {
+  id: string;
+  fullName: string;
+  shift: "main" | "after_hours";
+  extension: number | null;
+  version: number;
+  dispatcherNames: string[];
+}
+export type UpdaterInput = Pick<Updater, "fullName" | "shift" | "extension"> & { version?: number };
+
 export interface Dispatcher {
+  extension: number | null;
+  mainUpdaterId: string | null;
+  afterHoursUpdaterId: string | null;
   id: string;
   fullName: string;
   email: string | null;
@@ -520,6 +538,8 @@ export interface Dispatcher {
 }
 
 export interface DispatcherInput {
+  extension?: number | null;
+  updaters?: { mainUpdaterId: string | null; afterHoursUpdaterId: string | null };
   assignmentWeek?: string;
   fullName: string;
   email: string;

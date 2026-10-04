@@ -41,7 +41,7 @@ const NAV_ITEMS = [
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/trucks", label: "Trucks", icon: Truck },
-  { href: "/dispatchers", label: "Dispatchers", icon: Headset },
+  { href: "/dispatchers", label: "Dispatchers and updaters", icon: Headset },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

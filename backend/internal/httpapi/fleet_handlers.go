@@ -40,6 +40,10 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Post("/trucks", handler.createTruck)
 	r.Put("/trucks/{id}", handler.updateTruck)
 	r.Delete("/trucks/{id}", handler.deleteTruck)
+	r.Get("/updaters", handler.listUpdaters)
+	r.Post("/updaters", handler.saveUpdater)
+	r.Put("/updaters/{id}", handler.saveUpdater)
+	r.Delete("/updaters/{id}", handler.deleteUpdater)
 	r.Get("/dispatchers", handler.listDispatchers)
 	r.Post("/dispatchers", handler.createDispatcher)
 	r.Put("/dispatchers/{id}", handler.updateDispatcher)
@@ -248,17 +252,35 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 }
 
 type dispatcherRequest struct {
-	AssignmentWeek string   `json:"assignmentWeek"`
-	FullName       string   `json:"fullName"`
-	Email          string   `json:"email"`
-	Phone          string   `json:"phone"`
-	PayPercentage  *float64 `json:"payPercentage"`
-	DriverIDs      []string `json:"driverIds"`
-	Active         bool     `json:"active"`
-	Notes          string   `json:"notes"`
+	Extension      json.RawMessage                `json:"extension"`
+	Updaters       *repository.UpdaterAssignments `json:"updaters"`
+	AssignmentWeek string                         `json:"assignmentWeek"`
+	FullName       string                         `json:"fullName"`
+	Email          string                         `json:"email"`
+	Phone          string                         `json:"phone"`
+	PayPercentage  *float64                       `json:"payPercentage"`
+	DriverIDs      []string                       `json:"driverIds"`
+	Active         bool                           `json:"active"`
+	Notes          string                         `json:"notes"`
 }
 
 func (request dispatcherRequest) validate() (repository.DispatcherInput, error) {
+	var extension *int
+	if len(request.Extension) > 0 {
+		if err := json.Unmarshal(request.Extension, &extension); err != nil {
+			return repository.DispatcherInput{}, errors.New("extension must be a whole number")
+		}
+	}
+	if err := validateExtension(extension); err != nil {
+		return repository.DispatcherInput{}, err
+	}
+	if request.Updaters != nil {
+		for _, id := range []*string{request.Updaters.MainUpdaterID, request.Updaters.AfterHoursUpdaterID} {
+			if err := validateOptionalUUID(id, "updater id"); err != nil {
+				return repository.DispatcherInput{}, err
+			}
+		}
+	}
 	request.FullName = strings.TrimSpace(request.FullName)
 	if request.FullName == "" {
 		return repository.DispatcherInput{}, errors.New("full name is required")
@@ -282,6 +304,7 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 		driverIDs = append(driverIDs, id)
 	}
 	return repository.DispatcherInput{
+		Extension: extension, ExtensionSet: len(request.Extension) > 0, Updaters: request.Updaters,
 		AssignmentWeek: request.AssignmentWeek,
 		FullName:       request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
 		PayPercentage: request.PayPercentage, DriverIDs: driverIDs,
@@ -540,7 +563,7 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 		writeAPIError(w, 409, err.Error())
 		return
 	}
-	if errors.Is(err, repository.ErrDriverBoardConflict) {
+	if errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) {
 		writeAPIError(w, http.StatusConflict, err.Error())
 		return
 	}

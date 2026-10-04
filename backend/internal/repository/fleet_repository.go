@@ -136,19 +136,25 @@ type TruckInput struct {
 }
 
 type Dispatcher struct {
-	ID            string    `json:"id"`
-	FullName      string    `json:"fullName"`
-	Email         *string   `json:"email"`
-	Phone         *string   `json:"phone"`
-	PayPercentage *float64  `json:"payPercentage"`
-	Active        bool      `json:"active"`
-	Notes         *string   `json:"notes"`
-	DriverCount   int       `json:"driverCount"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	Extension           *int      `json:"extension"`
+	MainUpdaterID       *string   `json:"mainUpdaterId"`
+	AfterHoursUpdaterID *string   `json:"afterHoursUpdaterId"`
+	ID                  string    `json:"id"`
+	FullName            string    `json:"fullName"`
+	Email               *string   `json:"email"`
+	Phone               *string   `json:"phone"`
+	PayPercentage       *float64  `json:"payPercentage"`
+	Active              bool      `json:"active"`
+	Notes               *string   `json:"notes"`
+	DriverCount         int       `json:"driverCount"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type DispatcherInput struct {
+	Extension      *int
+	ExtensionSet   bool
+	Updaters       *UpdaterAssignments
 	AssignmentWeek string
 	FullName       string
 	Email          *string
@@ -673,12 +679,15 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 	displayName := formatPersonName(input.FullName)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO dispatchers (
-			full_name, normalized_name, email, phone, pay_percentage, active, notes
-		) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+			full_name, normalized_name, email, phone, pay_percentage, active, notes, extension
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
 		displayName, normalizeName(displayName), input.Email, input.Phone,
-		input.PayPercentage, input.Active, input.Notes,
+		input.PayPercentage, input.Active, input.Notes, input.Extension,
 	).Scan(&id)
 	if err != nil {
+		return Dispatcher{}, err
+	}
+	if err = setDispatcherUpdaters(ctx, tx, id, input.Updaters); err != nil {
 		return Dispatcher{}, err
 	}
 	if err = setDispatcherDrivers(ctx, tx, id, input.DriverIDs); err != nil {
@@ -704,14 +713,18 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 	command, err := tx.Exec(ctx, `
 		UPDATE dispatchers SET full_name = $2, normalized_name = $3, email = $4,
 			phone = $5, pay_percentage = $6, active = $7, notes = $8,
+ extension = CASE WHEN $9 THEN $10::int ELSE extension END,
 			updated_at = now()
 		WHERE id = $1`, id, displayName, normalizeName(displayName),
-		input.Email, input.Phone, input.PayPercentage, input.Active, input.Notes)
+		input.Email, input.Phone, input.PayPercentage, input.Active, input.Notes, input.ExtensionSet, input.Extension)
 	if err != nil {
 		return Dispatcher{}, err
 	}
 	if command.RowsAffected() == 0 {
 		return Dispatcher{}, ErrNotFound
+	}
+	if err = setDispatcherUpdaters(ctx, tx, id, input.Updaters); err != nil {
+		return Dispatcher{}, err
 	}
 	if err = setDispatcherDrivers(ctx, tx, id, input.DriverIDs); err != nil {
 		return Dispatcher{}, err
@@ -735,7 +748,9 @@ func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string) error
 
 const selectDispatchersSQL = `
 SELECT dp.id, dp.full_name, dp.email, dp.phone, dp.pay_percentage,
-	dp.active, dp.notes, COUNT(d.id)::int, dp.created_at, dp.updated_at
+	dp.active, dp.notes, COUNT(d.id)::int, dp.created_at, dp.updated_at, dp.extension,
+ (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='main'),
+ (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='after_hours')
 FROM dispatchers dp
 LEFT JOIN drivers d ON d.dispatcher_id = dp.id`
 
@@ -743,7 +758,7 @@ func scanDispatcher(row rowScanner) (Dispatcher, error) {
 	var value Dispatcher
 	err := row.Scan(&value.ID, &value.FullName, &value.Email, &value.Phone,
 		&value.PayPercentage, &value.Active, &value.Notes, &value.DriverCount,
-		&value.CreatedAt, &value.UpdatedAt)
+		&value.CreatedAt, &value.UpdatedAt, &value.Extension, &value.MainUpdaterID, &value.AfterHoursUpdaterID)
 	value.FullName = formatPersonName(value.FullName)
 	return value, err
 }
