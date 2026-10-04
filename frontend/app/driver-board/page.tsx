@@ -13,7 +13,7 @@ import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
 import { addDays, decimalDisplay, indexBoardEntries, shortDate, totals } from "@/app/gross-board/board";
-import { statuses, statusColor, formatETA } from "./board";
+import { statuses, statusColor, formatETA, previewCurrentLoad } from "./board";
 import { useDriverBoard } from "./useDriverBoard";
 import { BoardHistory } from "./BoardHistory";
 import { BoardViews, type BoardView } from "./BoardViews";
@@ -118,7 +118,7 @@ export default function DriverBoardPage() {
             const entry = entries[d.id];
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const group = groups.get(d.dispatcherId)!;
-            const loads = board?.loads[d.id];
+            const loads = previewCurrentLoad(board?.loads[d.id], entry, board?.entries.find(e => e.driverId === d.id));
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
             const stopLabel = stopType === "pickup" ? "PU" : stopType === "delivery" ? "DEL" : "";

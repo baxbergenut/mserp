@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,17 +14,19 @@ import (
 var ErrDriverBoardConflict = errors.New("status board or driver home changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
-	DriverID      string `json:"driverId"`
-	CurrentLoad   string `json:"currentLoad"`
-	TrailerNumber string `json:"trailerNumber"`
-	Status        string `json:"status"`
-	Destination   string `json:"destination"`
-	ETA           string `json:"eta"`
-	Notes         string `json:"notes"`
-	HomeTime      string `json:"homeTime"`
-	DriverHome    string `json:"driverHome"`
-	HomeVersion   int    `json:"homeVersion"`
-	Version       int    `json:"version"`
+	// Write-only intent: selecting the same number should still resolve its stops.
+	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
+	DriverID           string `json:"driverId"`
+	CurrentLoad        string `json:"currentLoad"`
+	TrailerNumber      string `json:"trailerNumber"`
+	Status             string `json:"status"`
+	Destination        string `json:"destination"`
+	ETA                string `json:"eta"`
+	Notes              string `json:"notes"`
+	HomeTime           string `json:"homeTime"`
+	DriverHome         string `json:"driverHome"`
+	HomeVersion        int    `json:"homeVersion"`
+	Version            int    `json:"version"`
 }
 
 type DriverBoardDriver struct {
@@ -167,14 +170,14 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 	if err = setBoardActor(ctx, tx, user, "board"); err != nil {
 		return nil, err
 	}
-	entries, err = saveDriverBoardEntries(ctx, tx, entries)
+	entries, err = saveDriverBoardEntries(ctx, tx, entries, boardLoadToday(r.now()))
 	if err != nil {
 		return nil, err
 	}
 	return entries, tx.Commit(ctx)
 }
 
-func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry) ([]DriverBoardEntry, error) {
+func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry, matchDate ...string) ([]DriverBoardEntry, error) {
 	var err error
 	entries = append([]DriverBoardEntry(nil), entries...)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID < entries[j].DriverID })
@@ -202,7 +205,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, readErr
 		}
 		stateChanged := false
-		if old.CurrentLoad != e.CurrentLoad && loadStateValue.Current != nil {
+		if (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) && loadStateValue.Current != nil {
 			loadStateValue.Current = nil
 			loadStateValue.StopKey = ""
 			loadStateValue.DestinationSource = false
@@ -212,6 +215,32 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			loadStateValue.DestinationSource = false
 			stateChanged = true
 		}
+		// Normal text autosave resolves against the whole current week, independent
+		// of the date/status filters used by the Next loads queue. Explicit drawer
+		// actions and undo restore their own selection without this inference.
+		if len(matchDate) > 0 && (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) {
+			if strings.TrimSpace(e.CurrentLoad) == "" || e.Destination == old.Destination {
+				e.Destination = ""
+			}
+			if strings.TrimSpace(e.CurrentLoad) != "" {
+				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, matchDate[0])
+				if err != nil {
+					return nil, err
+				}
+				chosen := matchBoardCurrentLoad(views[e.DriverID].Week, e.CurrentLoad)
+				if chosen != nil {
+					loadStateValue.Current = chosen
+					loadStateValue.StopKey = ""
+					loadStateValue.DestinationSource = false
+					if stop := defaultBoardStop(chosen.Stops); stop != nil && e.Destination == "" {
+						loadStateValue.StopKey = stop.Key
+						loadStateValue.DestinationSource = true
+					}
+					stateChanged = true
+				}
+			}
+		}
+		e.ResolveCurrentLoad = false
 		var version int
 		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time)
    SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE $9::int=0

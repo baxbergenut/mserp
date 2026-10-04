@@ -56,6 +56,7 @@ export function useDriverBoard(pauseRefresh = false) {
     setChanges(current => {
       const baseline = savedRef.current[id];
       const next = { ...(current[id] ?? baseline), [field]: value };
+      if (field === "currentLoad") { next.destination = ""; next.resolveCurrentLoad = true; }
       const result = { ...current, [id]: next };
       // While saving, a revert must still be sent after the first write finishes.
       if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];

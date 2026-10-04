@@ -13,6 +13,7 @@ import (
 )
 
 type driverBoardRequest struct {
+	// Entries may carry resolveCurrentLoad to explicitly reselect an unchanged number.
 	Entries []repository.DriverBoardEntry `json:"entries"`
 }
 

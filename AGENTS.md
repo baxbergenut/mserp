@@ -386,10 +386,18 @@ assignment lookup lists.
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
   A phone click copies its +1 number after a 500ms double-click window with
-  brief feedback; a double-click cancels copying and opens the native tel: handler. Blank numbers have no action.
+  brief feedback; double-click or the phone icon opens RingCentral's dialer via
+  rcapp://r/dialer with a prefilled number, without copying or auto-dialing.
+  Blank numbers have no action.
   Current-load typing suggests this driver’s current-week Gross Board load numbers,
   excluding statuses/deleted entries and deduplicating numbers. Selection fills
-  operational text via normal autosave; linking stops remains an explicit Loads action.
+  the current load and final delivery (or first located pickup) immediately and
+  links it through atomic autosave. Exact typed numbers resolve the same way,
+  using every day of the current New York week, including delivered/hidden plans.
+  Distinct duplicate load matches remain unlinked. Changing the text clears the
+  old displayed destination; clearing Current load clears manual and sourced
+  destinations. Loads.week supplies matching candidates independently of Next;
+  write-only resolveCurrentLoad intent supports reselecting an unchanged number.
   Progress, handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned

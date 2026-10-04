@@ -172,12 +172,19 @@ history and permissions apply. The editor pauses idle refresh to avoid replacing
 its underlying row during a draft.
 
 Phone cells wait 500ms before copying the +1 number on a single click. A double-click
-cancels copying and opens the device’s calling app; keyboard activation copies
-immediately. Copy feedback is brief and adds no column width.
+cancels copying and opens RingCentral's dialer with the number prefilled; the small
+phone icon does the same in one click. No call is placed automatically. Keyboard
+activation of the number copies immediately. The rcapp link avoids a misconfigured
+Windows tel default (Chrome on the operator's PC).
 
 Current-load typing suggests the driver’s Gross Board load numbers for the current
-week. Choosing a suggestion fills the text through normal autosave and preserves
-status, ETA and destination; source/stop linking still uses the Loads panel.
+week. Choosing a suggestion or typing an exact unambiguous number previews and
+autosaves the current load's final delivery, falling back to its first located
+pickup. All days in the week remain eligible, including earlier delivered loads;
+the Next queue still starts today. Clearing the number clears its location and
+source, and changing it removes the previous location. Status and ETA stay
+unchanged. The location cell still switches PU/DEL; the Loads panel supports
+choosing specific stops and manual destinations.
 
 ## Phase 3 — explicit progress actions
 

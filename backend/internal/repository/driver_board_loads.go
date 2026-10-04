@@ -45,6 +45,7 @@ type boardLoadState struct {
 }
 type BoardLoads struct {
 	Current           *BoardLoad  `json:"current"`
+	Week              []BoardLoad `json:"week"`
 	Next              []BoardLoad `json:"next"`
 	Earlier           []BoardLoad `json:"earlier"`
 	Hidden            []BoardLoad `json:"hidden"`
@@ -170,15 +171,53 @@ func annotateLoad(p *BoardLoad, driver string) {
 	}
 }
 
+// Repeated slots for the same imported load are equivalent; distinct matching
+// loads (or unresolved duplicate plans) must never be guessed from their number.
+func matchBoardCurrentLoad(plans []BoardLoad, number string) *BoardLoad {
+	var chosen *BoardLoad
+	for _, p := range plans {
+		if !strings.EqualFold(strings.TrimSpace(p.Number), strings.TrimSpace(number)) {
+			continue
+		}
+		if chosen != nil {
+			if chosen.LoadID == nil || p.LoadID == nil || *chosen.LoadID != *p.LoadID {
+				return nil
+			}
+			continue
+		}
+		v := p
+		chosen = &v
+	}
+	return chosen
+}
+
+func defaultBoardStop(stops []BoardStop) *BoardStop {
+	// Prefer the final delivery; fall back to the first pickup with a location.
+	for i := len(stops) - 1; i >= 0; i-- {
+		if strings.EqualFold(stops[i].Type, "delivery") && strings.TrimSpace(stops[i].Location) != "" {
+			return &stops[i]
+		}
+	}
+	for i := range stops {
+		if strings.EqualFold(stops[i].Type, "pickup") && strings.TrimSpace(stops[i].Location) != "" {
+			return &stops[i]
+		}
+	}
+	return nil
+}
+
 // Read-only reconciliation: no calendar or upstream status can promote a load.
 func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (map[string]BoardLoads, error) {
+	day, _ := time.Parse(time.DateOnly, from)
+	week := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
+	weekEnd := day.AddDate(0, 0, 7-(int(day.Weekday())+6)%7).Format(time.DateOnly)
 	result := map[string]BoardLoads{}
 	states := map[string]boardLoadState{}
 	manualMismatch := map[string]bool{}
 	selected := []string{}
 	for _, id := range ids {
 		states[id] = boardLoadState{}
-		result[id] = BoardLoads{Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
+		result[id] = BoardLoads{Week: []BoardLoad{}, Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
 	rows, err := tx.Query(ctx, `SELECT s.driver_id,s.payload,coalesce(b.current_load,'') FROM driver_board_load_state s LEFT JOIN driver_board b ON b.driver_id=s.driver_id WHERE s.driver_id=ANY($1::uuid[])`, ids)
 	if err != nil {
@@ -195,7 +234,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		states[id] = s
 		if s.Current != nil {
 			selected = append(selected, s.Current.PlanID)
-			manualMismatch[id] = currentText != s.Current.Number
+			manualMismatch[id] = !strings.EqualFold(strings.TrimSpace(currentText), strings.TrimSpace(s.Current.Number))
 		}
 	}
 	err = rows.Err()
@@ -210,7 +249,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[])
  OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','cancelled','canceled')
  OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
- ORDER BY e.driver_id,e.service_date,e.slot`, ids, from, selected)
+ ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +273,11 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	for _, id := range ids {
 		s := states[id]
 		view := result[id]
+		for _, p := range plans[id] {
+			if p.Date >= week && p.Date < weekEnd {
+				view.Week = append(view.Week, p)
+			}
+		}
 		view.DestinationSource = s.DestinationSource
 		view.StopKey = s.StopKey
 		view.CustomOrder = len(s.Order) > 0
@@ -398,6 +442,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		s.StopKey = ""
 		s.DestinationSource = false
 		e.CurrentLoad = ""
+		e.Destination = ""
 	case "order":
 		valid := map[string]bool{}
 		for _, p := range view.Next {

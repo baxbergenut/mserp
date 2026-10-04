@@ -1,4 +1,19 @@
-import type { DriverBoardEntry } from "@/app/lib/types";
+import type { BoardLoads, DriverBoardEntry } from "@/app/lib/types";
+
+// Preview a draft immediately; autosave resolves the same match transactionally.
+export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverBoardEntry, saved?: DriverBoardEntry): BoardLoads | undefined {
+  if (!loads) return loads;
+  const number = entry.currentLoad.trim().toLowerCase();
+  const aligned = !loads.current || loads.current.number.trim().toLowerCase() === number;
+  if (aligned && !entry.resolveCurrentLoad && entry.currentLoad === saved?.currentLoad) return loads;
+  const matches = loads.week.filter(p => p.number.trim().toLowerCase() === number);
+  const chosen = matches[0];
+  const unique = chosen && (matches.length === 1 || (chosen.loadId !== null && matches.every(p => p.loadId === chosen.loadId)));
+  const current = unique ? chosen : null;
+  const stop = current?.stops.findLast(s => s.type.toLowerCase() === "delivery" && s.location.trim())
+    ?? current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
+  return { ...loads, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
+}
 
 // ETA is a New York wall-clock date with optional minute precision. Keep legacy
 // text untouched; never guess a date from values such as "Friday afternoon".

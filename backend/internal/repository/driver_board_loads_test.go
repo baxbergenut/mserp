@@ -234,3 +234,108 @@ func TestBoardLoadToday(t *testing.T) {
 		}
 	}
 }
+
+func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Pool, original *DriverBoardRepository, fleet *FleetRepository) {
+	t.Helper()
+	repo := *original
+	repo.now = func() time.Time { return time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) }
+	d, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Autofill Driver", PayType: "cpm", PayRate: 0.6, Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() {
+		exec(`DELETE FROM drivers WHERE id=$1`, d.ID)
+		exec(`DELETE FROM loads WHERE id IN (88021,88022)`)
+	}()
+	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
+ (88021,'AUTO-A','Delivered',1000,1000,500,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"Georgia","zip_code":"30303"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"Texas","zip_code":"75236"}}]}'),
+ (88022,'AUTO-B','Dispatched',1000,1000,500,'{}')`)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES
+ ($1,'2026-09-28','AUTO-A',88021),($1,'2026-09-29','AUTO-A',88021),
+ ($1,'2026-09-21','PREVIOUS',88021),($1,'2026-10-05','FUTURE',88021)`, d.ID)
+	e := DriverBoardEntry{DriverID: d.ID, Status: "DISPATCHED", ETA: "2026-10-01T15:00", Notes: "Keep notes"}
+	view := func() BoardLoads {
+		t.Helper()
+		v, err := repo.Loads(ctx, d.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	save := func() {
+		t.Helper()
+		rows, err := repo.Save(ctx, []DriverBoardEntry{e})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e = rows[0]
+	}
+	e.CurrentLoad = "  auto-a  "
+	save()
+	v := view()
+	if v.Current == nil || !v.DestinationSource || v.SourceDestination != "Dallas, Texas, 75236" || len(v.Next) != 0 {
+		t.Fatalf("earlier delivered weekly match/repeated slots: %+v", v)
+	}
+	if e.Status != "DISPATCHED" || e.ETA != "2026-10-01T15:00" || e.Notes != "Keep notes" {
+		t.Fatal("autofill changed unrelated fields")
+	}
+	e.CurrentLoad = ""
+	e.Destination = "stale manual destination"
+	save()
+	if e.Destination != "" || view().Current != nil || view().DestinationSource {
+		t.Fatal("clear retained location or source")
+	}
+	h, err := repo.History(ctx, []string{d.ID}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, e.HomeVersion, "")
+	if err != nil || !view().DestinationSource || view().SourceDestination != "Dallas, Texas, 75236" {
+		t.Fatal("clear undo did not restore source", err)
+	}
+	for _, number := range []string{"PREVIOUS", "FUTURE", "AUTO", "UNKNOWN"} {
+		e.CurrentLoad = number
+		save()
+		if view().Current != nil || view().DestinationSource {
+			t.Fatal("out-of-week/partial/free text matched", number)
+		}
+	}
+	e.CurrentLoad = "AUTO-A"
+	save()
+	v = view()
+	cleared, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, Revision: v.Revision, FromDate: v.FromDate, Action: "clear"}, "")
+	if err != nil || cleared.Entry.Destination != "" || cleared.Loads.Current != nil {
+		t.Fatal("drawer clear retained location", err)
+	}
+	e = cleared.Entry
+	// Distinct imported loads sharing a plan number must not be guessed.
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-30','AUTO-A',88022)`, d.ID)
+	e.CurrentLoad = "AUTO-A"
+	save()
+	if view().Current != nil {
+		t.Fatal("ambiguous number auto-linked")
+	}
+	exec(`UPDATE gross_board_entries SET load_number='' WHERE driver_id=$1 AND service_date='2026-09-30'`, d.ID)
+	// Retyping an existing unlinked number also links it on autosave.
+	e.ResolveCurrentLoad = true
+	save()
+	if !view().DestinationSource {
+		t.Fatal("existing unlinked exact number not resolved")
+	}
+	stale := e
+	e.Notes = "newer"
+	save()
+	stale.CurrentLoad = ""
+	if _, err = repo.Save(ctx, []DriverBoardEntry{stale}); !errors.Is(err, ErrDriverBoardConflict) {
+		t.Fatal("stale clear accepted", err)
+	}
+	if !view().DestinationSource {
+		t.Fatal("failed save changed source")
+	}
+}

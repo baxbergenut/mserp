@@ -15,6 +15,8 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     ('e4500000-0000-0000-0000-000000000002','${week}','PLAN-101',1000.10,900.05,500.25),
     ('e4500000-0000-0000-0000-000000000003','${week}','PLAN-102',2000.20,1900.10,800.50);
     INSERT INTO driver_board(driver_id,eta) VALUES('e4500000-0000-0000-0000-000000000002','Friday 17:00');
+    INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(88012,'PLAN-101','Dispatched',1000.10,1000.10,500.25,
+    '{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"Georgia","zip_code":"30303"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"Texas","zip_code":"75236"}}]}');
     INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES
     ('e4500000-0000-0000-0000-000000000002','${week}'::date-7,95,'PLAN-OLD'),
     ('e4500000-0000-0000-0000-000000000002','${week}'::date+7,95,'PLAN-FUTURE');
@@ -29,14 +31,15 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await expect(page.getByText('$2,800.15', { exact: true })).toHaveCount(2);
   await expect(page.getByText('1,300.75', { exact: true })).toBeVisible();
-  const phone = page.getByRole('link', { name: 'Board Cpm · Phone', exact: true });
-  await expect(phone).toHaveAttribute('href', 'tel:+14703344443');
+  const phone = page.getByRole('button', { name: 'Board Cpm · Phone', exact: true });
+  const dialer = page.getByRole('link', { name: 'Board Cpm · Open in RingCentral', exact: true });
+  await expect(dialer).toHaveAttribute('href', 'rcapp://r/dialer?number=%2B14703344443');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   // Observe native dialer activation without actually opening a calling app.
   await page.evaluate(() => {
     window.phoneClicks = [];
     document.addEventListener('click', event => {
-      const link = event.target.closest('a[href^="tel:"]');
+      const link = event.target.closest('a[href^="rcapp:"]');
       if (!link) return;
       window.phoneClicks.push({ detail: event.detail, prevented: event.defaultPrevented, href: link.getAttribute('href') });
       event.preventDefault();
@@ -45,20 +48,24 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await phone.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   await expect(phone.getByRole('status')).toHaveText('Copied');
-  await expect.poll(() => page.evaluate(() => window.phoneClicks.at(-1).prevented)).toBe(true);
+  expect(await page.evaluate(() => window.phoneClicks.length)).toBe(0);
   await expect(phone.getByRole('status')).toHaveText('');
   await page.evaluate(() => navigator.clipboard.writeText('Keep clipboard on double-click'));
   await phone.dblclick();
-  expect(await page.evaluate(() => window.phoneClicks.some(click => click.detail === 2 && !click.prevented && click.href === 'tel:+14703344443'))).toBe(true);
+  expect(await page.evaluate(() => window.phoneClicks.some(click => !click.prevented && click.href === 'rcapp://r/dialer?number=%2B14703344443'))).toBe(true);
   // Check after the single-click timer would have fired, not just immediately.
   await page.waitForTimeout(650);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Keep clipboard on double-click');
   await expect(phone.getByRole('status')).toHaveText('');
+  await dialer.click();
+  expect(await page.evaluate(() => window.phoneClicks.length)).toBe(2);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Keep clipboard on double-click');
   await phone.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   await expect(page).toHaveURL(/driver-board/);
-  await expect(page.getByRole('link', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Board Percent · Open in RingCentral', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
@@ -69,12 +76,31 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.keyboard.press('Enter');
   await expect(field('Current load')).toHaveValue('PLAN-101');
   await expect(page.getByRole('listbox')).toHaveCount(0);
+  const loadDestination = page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true });
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Current load')).toHaveValue('PLAN-101');
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await field('Current load').fill('');
+  await expect(field('Origin / destination')).toHaveValue('');
+  await expect(loadDestination).toHaveCount(0);
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.reload();
+  await expect(field('Current load')).toHaveValue('');
+  await expect(field('Origin / destination')).toHaveValue('');
+  await field('Current load').fill(' plan-101 ');
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await field('Notes').click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.reload();
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
+  await loadDestination.click();
+  await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await field('Current load').fill('plan-');
   await page.getByRole('option').filter({ hasText: 'PLAN-101' }).click();
   await expect(field('Current load')).toHaveValue('PLAN-101');
+  await expect(loadDestination).toHaveText('Dallas, TXDEL');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   const statusBox = await page.getByLabel('Status filter').boundingBox();
   const viewBox = await page.getByRole('button', { name: 'My view', exact: true }).boundingBox();
