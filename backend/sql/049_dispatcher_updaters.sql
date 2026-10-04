@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Each updater has one shift; each dispatcher has at most one updater per shift.
 CREATE TABLE updaters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,3 +28,5 @@ DO $$ BEGIN
         ALTER TABLE dispatcher_updaters OWNER TO mserp_app;
     END IF;
 END $$;
+
+COMMIT;
