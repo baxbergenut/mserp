@@ -39,21 +39,16 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
   await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
   const card = number => panel.getByRole('article').filter({ has: panel.getByRole('button', { name: number, exact: true }) });
-  const previous = card('PLAN-OLD');
-  await previous.getByRole('button', { name: 'PLAN-OLD', exact: true }).click();
-  await expect(previous.getByRole('button', { name: 'PLAN-OLD', exact: true })).toHaveAttribute('aria-expanded', 'true');
-  const older = card('OLD-WEEK-PLAN');
-  await older.getByRole('button', { name: 'OLD-WEEK-PLAN', exact: true }).click();
-  await expect(previous.getByRole('button', { name: 'PLAN-OLD', exact: true })).toHaveAttribute('aria-expanded', 'false');
-  await older.getByRole('button', { name: 'Set current', exact: true }).click();
-  await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
-  await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
-  await expect(panel.getByRole('button', { name: 'OLD-WEEK-PLAN · Current load', exact: true })).toHaveAttribute('aria-expanded', 'true');
-
   const source = card('SOURCE-A');
+  await source.getByRole('button', { name: 'SOURCE-A', exact: true }).click();
+  await expect(source.getByRole('button', { name: 'SOURCE-A', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  const nextB = card('NEXT-B');
+  await nextB.getByRole('button', { name: 'NEXT-B', exact: true }).click();
+  await expect(source.getByRole('button', { name: 'SOURCE-A', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await source.getByRole('button', { name: 'SOURCE-A', exact: true }).click();
   await source.getByRole('button', { name: 'Set current', exact: true }).click();
   await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'SOURCE-A · Current load', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Richmond, VA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await expect(panel.getByText('Appointment:', { exact: false })).toHaveCount(2);
