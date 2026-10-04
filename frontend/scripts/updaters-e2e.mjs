@@ -33,8 +33,8 @@ export async function runUpdatersE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/driver-board`);
   const heading = page.getByRole('row', { name: 'E2e Updater Dispatcher One totals', exact: true });
   await expect(heading).toContainText('E2e Updater Dispatcher One (111)');
-  await expect(heading).toContainText('Main: E2e Main Updater (107)');
-  await expect(heading).toContainText('After hours: E2e Night Updater');
+  await expect(heading).toContainText('E2e Main Updater (107)');
+  await expect(heading).toContainText('E2e Night Updater');
   await page.screenshot({ path: `${temp}/updaters-status-board.png`, fullPage: true });
   await page.goto(`${base}/dispatchers`);
   await expect(page.getByRole("cell", { name: "E2e Main Updater", exact: true })).toBeVisible();

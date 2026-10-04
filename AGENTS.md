@@ -321,7 +321,9 @@ assignment lookup lists.
   shift until unassigned. Updater edits are versioned. Dispatcher profile saves
   atomically include updater assignments; omitted new fields preserve them for
   older clients. Status Board headings show both updaters and known extensions,
-  without requiring fleet.read. No updater changes affect commissions or rosters.
+  without requiring fleet.read. Main updaters align right before Original gross;
+  after-hours updaters start after Status. Shift labels are omitted and gross
+  column borders continue through group headings. No updater changes affect commissions or rosters.
   backend/scripts/seed-dispatcher-updaters.sql imports the October 4 TODAY headings
   explicitly; it is an operator data import, not a schema migration.
 
