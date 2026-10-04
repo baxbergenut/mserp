@@ -10,7 +10,7 @@ import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
 import { usePermissions } from "@/app/lib/access";
 import { compactLoadLocation } from "@/app/lib/usStates";
-import { formatPhone } from "@/app/lib/phone";
+import { PhoneCell } from "./PhoneCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
 import { addDays, decimalDisplay, indexBoardEntries, shortDate, totals } from "@/app/gross-board/board";
 import { statuses, statusColor, formatETA } from "./board";
@@ -56,6 +56,7 @@ export default function DriverBoardPage() {
   const [savedViews, setSavedViews] = useViewState<BoardView[]>("page:savedViews", []);
   const [history, setHistory] = useState<{ driverId?: string; name: string; ids: string[] } | null>(null);
   const [loadDriver, setLoadDriver] = useState<{ id: string; name: string } | null>(null);
+  const [destinationError, setDestinationError] = useState("");
   const viewIds = view === "all" ? null : view === "my" ? myIds : savedViews.find(v => v.id === view)?.dispatcherIds ?? [];
   function selectView(id: string) { setView(id); setDispatcher("all"); }
   const drivers = (board?.drivers ?? []).filter(d =>
@@ -107,6 +108,7 @@ export default function DriverBoardPage() {
 
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
+    {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     <div data-scroll-key="driver-board" className="max-h-[72vh] overflow-auto rounded-xl border border-zinc-800" aria-busy={loading}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
         <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
@@ -117,6 +119,12 @@ export default function DriverBoardPage() {
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const group = groups.get(d.dispatcherId)!;
             const loads = board?.loads[d.id];
+            const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
+            const stopType = stop?.type.toLowerCase();
+            const stopLabel = stopType === "pickup" ? "PU" : stopType === "delivery" ? "DEL" : "";
+            const oppositeType = stopType === "pickup" ? "delivery" : stopType === "delivery" ? "pickup" : "";
+            const otherStop = oppositeType ? loads?.current?.stops.find(s => s.type.toLowerCase() === oppositeType && s.location.trim()) : undefined;
+            const destinationBusy = dirty || saving || loading || leaving;
             const next = loads?.next ?? [];
             const nextLabel = next.slice(0, 2).map(p => p.number).join(" → ") + (next.length > 2 ? ` (+${next.length - 2})` : "");
             return <Fragment key={d.id}>
@@ -129,9 +137,17 @@ export default function DriverBoardPage() {
                 <td className={cellClass}>{textCell(entry, d.fullName, "trailerNumber", "Trailer", 100)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>
-                <td className={`${cellClass} px-1 leading-4 text-zinc-400`}>{formatPhone(d.phone) || "—"}</td>
+                <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
                 <td className={`${cellClass} ${statusColor(entry.status)}`}><select aria-label={`${d.fullName} · Status`} title={entry.status} value={entry.status} disabled={disabled} onChange={event => edit(d.id, "status", event.target.value)} className="h-8 w-full bg-transparent px-0.5 text-[10px] font-medium outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500"><option value="" className="bg-zinc-900 text-zinc-300">—</option>{statuses.map(s => <option key={s} className={statusColor(s)}>{s}</option>)}</select></td>
-                <td className={cellClass}>{loads?.destinationSource ? <button aria-label={`${d.fullName} · Origin / destination from load`} title={`${compactLoadLocation(loads.sourceDestination) || "Select a stop"} · From current load; click to change source or use manual text`} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-blue-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</button> : textCell(entry, d.fullName, "destination", "Origin / destination", 500)}</td>
+                <td className={cellClass}>{loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Origin / destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
+                  title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
+                  className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"
+                  onClick={async () => {
+                    if (!otherStop || !canEdit || destinationBusy) return;
+                    setDestinationError("");
+                    try { await state.changeLoads(d.id, loads, { action: "source", stopKey: otherStop.key }); }
+                    catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not switch destination. Reload the board and try again."); }
+                  }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Origin / destination", 500)}</td>
                 <td className={cellClass}><button type="button" aria-label={`${d.fullName} · ETA`} title={formatETA(entry.eta, true)} disabled={disabled} className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" aria-haspopup="dialog" aria-expanded={etaEditor?.id === d.id} onClick={event => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor: event.currentTarget })}>{formatETA(entry.eta)}</button></td>
                 <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-300 hover:text-blue-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{nextLabel || "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>

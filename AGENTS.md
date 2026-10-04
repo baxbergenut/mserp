@@ -364,11 +364,16 @@ assignment lookup lists.
   than a repeated table column. Personal view controls follow the status filter
   on the same row. Source destinations have an explicit
   manual override. Imported locations display City, ST without ZIP codes; formatting
-  does not alter source values, stop keys or manual destination text. Text edits detach current identity or destination source safely.
+  does not alter source values, stop keys or manual destination text. Clicking a
+  source destination switches to the first located stop of the opposite type,
+  with a muted PU/DEL indicator. This uses versioned load-source actions/history
+  without changing status or ETA; specific multi-stop choices remain in Loads. Text edits detach current identity or destination source safely.
   Queue mutations lock the driver, check board/home versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
+  A phone click copies its +1 number with brief feedback; a double-click opens
+  the native tel: handler. Blank numbers have no action.
   Current-load typing suggests this driver’s current-week Gross Board load numbers,
   excluding statuses/deleted entries and deduplicating numbers. Selection fills
   operational text via normal autosave; linking stops remains an explicit Loads action.

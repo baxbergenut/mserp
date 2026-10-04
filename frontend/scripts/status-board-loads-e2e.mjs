@@ -55,7 +55,30 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(field('Status')).toHaveValue('ENROUTE');
   await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
-  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Richmond, VA');
+  const destination = page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true });
+  await expect(destination).toHaveText('Richmond, VADEL');
+  await destination.click();
+  await expect(destination).toHaveText('Atlanta, GAPU');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();
+  await expect(destination).toHaveText('Atlanta, GAPU');
+  await destination.click();
+  await expect(destination).toHaveText('Richmond, VADEL');
+  await expect(field('Status')).toHaveValue('ENROUTE');
+  await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
+  await expect(field('Current load')).toHaveValue('SOURCE-A');
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  await page.screenshot({ path: join(temp, 'status-board-destination-toggle.png'), fullPage: true, animations: 'disabled' });
+  const toggleHistory = await (await page.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).json();
+  expect(toggleHistory.items[0].after.loadPlan).not.toBe(toggleHistory.items[0].before.loadPlan);
+  await page.route(`**/api/driver-board/loads/${id}`, route => route.request().method() === 'POST'
+    ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Destination changed; reload the board.' }) })
+    : route.continue(), { times: 1 });
+  await destination.click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Destination changed');
+  await expect(destination).toHaveText('Richmond, VADEL');
+  await page.getByRole('button', { name: 'Reload board', exact: true }).click();
+  await expect(destination).toHaveText('Richmond, VADEL');
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   if (week < today) await panel.locator('summary').filter({ hasText: 'Earlier unfinished plans' }).click();
@@ -84,7 +107,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Boston, MA');
+  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Boston, MADEL');
   // Removing the source plan never drops the current load or advances to NEXT-B.
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();

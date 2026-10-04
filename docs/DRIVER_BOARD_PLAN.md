@@ -137,7 +137,10 @@ all known stops and first-pickup/final-delivery appointments. ETA stays manually
 Next loads start today in New York and include future plans. Earlier unfinished
 plans are available in a separate collapsed section and can be explicitly selected
 as current. Imported stop locations display City, ST without ZIP codes while
-source values, stop keys and manual text remain intact. Current selections remain visible across midnight. Manual ordering
+source values, stop keys and manual text remain intact. A click on the source
+destination switches pickup/delivery using the first located stop of the opposite
+type; a muted PU/DEL label identifies the displayed stop. Specific multi-stop
+selection remains in Loads. Switches are saved/audited without status or ETA changes. Current selections remain visible across midnight. Manual ordering
 does not make past plans upcoming; stale cutoff dates are clamped to today, and
 pre-midnight actions must refresh after the queue changes. Weekly totals still
 cover Monday–Sunday.
@@ -167,6 +170,9 @@ New values use `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the existing text field;
 legacy free text stays intact until replaced or cleared. Existing autosave,
 history and permissions apply. The editor pauses idle refresh to avoid replacing
 its underlying row during a draft.
+
+Phone cells copy the +1 number on a single click and open the device’s calling
+app on a double-click, with brief copy feedback and no extra column width.
 
 Current-load typing suggests the driver’s Gross Board load numbers for the current
 week. Choosing a suggestion fills the text through normal autosave and preserves

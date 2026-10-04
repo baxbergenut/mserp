@@ -29,6 +29,27 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await expect(page.getByText('$2,800.15', { exact: true })).toHaveCount(2);
   await expect(page.getByText('1,300.75', { exact: true })).toBeVisible();
+  const phone = page.getByRole('link', { name: 'Board Cpm · Phone', exact: true });
+  await expect(phone).toHaveAttribute('href', 'tel:+14703344443');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  // Observe native dialer activation without actually opening a calling app.
+  await page.evaluate(() => {
+    window.phoneClicks = [];
+    document.addEventListener('click', event => {
+      const link = event.target.closest('a[href^="tel:"]');
+      if (!link) return;
+      window.phoneClicks.push({ detail: event.detail, prevented: event.defaultPrevented, href: link.getAttribute('href') });
+      event.preventDefault();
+    });
+  });
+  await phone.click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
+  await expect(phone.getByRole('status')).toHaveText('Copied');
+  await expect.poll(() => page.evaluate(() => window.phoneClicks.at(-1).prevented)).toBe(true);
+  await phone.dblclick();
+  expect(await page.evaluate(() => window.phoneClicks.some(click => click.detail === 2 && !click.prevented && click.href === 'tel:+14703344443'))).toBe(true);
+  await expect(page).toHaveURL(/driver-board/);
+  await expect(page.getByRole('link', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
@@ -193,6 +214,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     await expect(viewer.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
     await expect(viewer.getByLabel('Board Cpm · Notes', { exact: true })).toBeDisabled();
     await expect(viewer.getByLabel('Board Cpm · ETA', { exact: true })).toBeDisabled();
+    await expect(viewer.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toBeDisabled();
     const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
     remote = (await getBoard()).entries.find(e => e.driverId === id);
     expect((await viewer.request.put(`${base}/api/driver-board`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { entries: [remote] } })).status()).toBe(403);
