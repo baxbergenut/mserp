@@ -116,6 +116,7 @@ export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before }));
+// The server clamps the optional upcoming cutoff to today in New York; older unfinished plans are returned separately.
 export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, homeVersion: entry.homeVersion, revision: view.revision, fromDate: view.fromDate }) });

@@ -134,10 +134,13 @@ Next loads is a single-line column after ETA. The Loads panel opens from Current
 load or Next loads, with a History switch, explicit current/stop confirmation,
 up/down ordering, reset, removal/restoration, source/manual destination selection,
 all known stops and first-pickup/final-delivery appointments. ETA stays manually set.
-The default plan window starts the current New York Monday and includes future
-weeks; the panel can include older dates. Older current selections and explicitly
-ordered plans stay included without pulling other older plans into the window.
-Unmatched plans remain visible in the chosen window.
+Next loads start today in New York and include future plans. Earlier unfinished
+plans are available in a separate collapsed section and can be explicitly selected
+as current. Imported stop locations display City, ST without ZIP codes while
+source values, stop keys and manual text remain intact. Current selections remain visible across midnight. Manual ordering
+does not make past plans upcoming; stale cutoff dates are clamped to today, and
+pre-midnight actions must refresh after the queue changes. Weekly totals still
+cover Monday–Sunday.
 Gross Board owns planned driver assignment; a disagreeing DataTruck driver is
 shown for review, not used to silently move or discard the plan. Delivered or
 cancelled next loads remain inspectable outside the active queue. A current load
@@ -164,6 +167,10 @@ New values use `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the existing text field;
 legacy free text stays intact until replaced or cleared. Existing autosave,
 history and permissions apply. The editor pauses idle refresh to avoid replacing
 its underlying row during a draft.
+
+Current-load typing suggests the driver’s Gross Board load numbers for the current
+week. Choosing a suggestion fills the text through normal autosave and preserves
+status, ETA and destination; source/stop linking still uses the Loads panel.
 
 ## Phase 3 — explicit progress actions
 

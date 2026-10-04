@@ -13,3 +13,17 @@ export const STATE_CODES: Record<string, string> = {
 };
 
 export const STATE_NAMES = Object.fromEntries(Object.entries(STATE_CODES).map(([name, code]) => [code, name]));
+
+// Display imported stop locations compactly; callers keep the source value and
+// stop identity intact. Do not apply this to manually entered dispatch text.
+export function compactLoadLocation(value: string) {
+  const parts = value.split(",").map(part => part.trim()).filter(Boolean);
+  if (/^\d{5}(?:-\d{4})?$/.test(parts.at(-1) ?? "")) parts.pop();
+  if (parts.length) {
+    const last = parts.length - 1;
+    const state = parts[last].replace(/\s+\d{5}(?:-\d{4})?$/, "").trim();
+    const match = Object.entries(STATE_CODES).find(([name, code]) => name.toLowerCase() === state.toLowerCase() || code === state.toUpperCase());
+    parts[last] = match?.[1] ?? state;
+  }
+  return parts.join(", ");
+}

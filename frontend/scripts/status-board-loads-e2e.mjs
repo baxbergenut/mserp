@@ -2,35 +2,49 @@ import { expect } from '@playwright/test';
 import { join } from 'node:path';
 
 export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers }) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const yesterdayDate = new Date(today + 'T12:00:00Z'); yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
   const date = new Date(`${week}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 7);
   const nextWeek = date.toISOString().slice(0, 10);
   date.setUTCDate(date.getUTCDate() - 14);
   const previousWeek = date.toISOString().slice(0, 10);
   sql(`SET search_path TO ${schema},public;
     INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES('${id}','${previousWeek}','OLD-WEEK-PLAN');
+    INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES('${id}','${today}',90,'TODAY-PLAN'),('${id}','${yesterday}',91,'YESTERDAY-PLAN');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(88011,'SOURCE-A','Dispatched',1000,1000,500,
-    '{"pickup_appointment_time":"${nextWeek}T12:00:00Z","delivery_appointment_time":"${nextWeek}T19:00:00Z","stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Richmond","state":"VA"}},{"ordering":3,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}}]}');
+    '{"pickup_appointment_time":"${nextWeek}T12:00:00Z","delivery_appointment_time":"${nextWeek}T19:00:00Z","stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"Georgia","zip_code":"30303"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Richmond","state":"Virginia","zip_code":"23219"}},{"ordering":3,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}}]}');
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles) VALUES('${id}','${nextWeek}','SOURCE-A',88011,1000,900,500);
     INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,original_rate,driver_rate,miles) VALUES
     ('${id}','${nextWeek}',1,'NEXT-B',2000,1800,600),('${id}','${nextWeek}',2,'NEXT-C',3000,2800,700);
   `);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   const defaultLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
-  expect(defaultLoads.fromDate).toBe(week);
+  expect(defaultLoads.fromDate).toBe(today);
   expect(defaultLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
   const defaultBoard = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
-  expect(defaultBoard.loads[id].fromDate).toBe(week);
+  expect(defaultBoard.loads[id].fromDate).toBe(today);
   expect(defaultBoard.loads[id].next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
   const olderLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}?from=${previousWeek}`)).json();
-  expect(olderLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(true);
+  expect(olderLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
+  expect(defaultLoads.earlier.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(true);
+  expect(defaultLoads.earlier.some(load => load.number === 'YESTERDAY-PLAN')).toBe(true);
+  expect(defaultLoads.next.some(load => load.number === 'TODAY-PLAN')).toBe(true);
+  expect(defaultLoads.next.every(load => load.date >= today)).toBe(true);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await expect(field('Current load')).toHaveValue('LOAD 8841');
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
-  await expect(panel.getByLabel('Plans from')).toHaveValue(week);
-  await expect(panel.getByText('OLD-WEEK-PLAN', { exact: false })).toHaveCount(0);
-  await expect(panel.getByText('No linked current load.', { exact: false })).toBeVisible();
+  await expect(panel.getByText(`Upcoming from ${today} · New York`, { exact: true })).toBeVisible();
+  await expect(panel.getByText('OLD-WEEK-PLAN', { exact: true })).not.toBeVisible();
+  await panel.locator('summary').filter({ hasText: 'Earlier unfinished plans' }).click();
+  const older = panel.getByRole('article').filter({ has: page.getByRole('heading', { name: 'OLD-WEEK-PLAN', exact: true }) });
+  await older.getByRole('button', { name: 'Set current', exact: true }).click();
+  await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
+  await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
+  await expect(panel.getByText('OLD-WEEK-PLAN', { exact: true })).toBeVisible();
+
   const source = panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /SOURCE-A/ }) });
   await source.getByRole('button', { name: 'Set current', exact: true }).click();
   await panel.getByLabel('Choose current stop').selectOption({ label: 'delivery · Richmond, VA' });
@@ -44,7 +58,9 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Richmond, VA');
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  if (week < today) await panel.locator('summary').filter({ hasText: 'Earlier unfinished plans' }).click();
   await panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /PLAN-101/ }) }).getByRole('button', { name: 'Remove from queue', exact: true }).click();
+  await panel.getByRole('article').filter({ has: page.getByRole('heading', { name: /TODAY-PLAN/ }) }).getByRole('button', { name: 'Remove from queue', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Move NEXT-B up', exact: true })).toBeDisabled();
   await panel.getByRole('button', { name: 'Move NEXT-C up', exact: true }).click();
   await expect(panel.getByRole('heading', { name: '1. NEXT-C', exact: true })).toBeVisible();
@@ -60,7 +76,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await panel.getByLabel('Current load destination source').selectOption('');
   await expect(panel.getByLabel('Current load destination source')).toHaveValue('');
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
-  await expect(field('Origin / destination')).toHaveValue('Richmond, VA');
+  await expect(field('Origin / destination')).toHaveValue('Richmond, Virginia, 23219');
   await field('Origin / destination').fill('Manual destination');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();

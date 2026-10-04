@@ -61,6 +61,10 @@ try {
       res.writeHead(200, { 'Content-Type': type }); res.end(content);
     } catch { res.writeHead(404); res.end(); }
   });
+  // Keep test proxy connections alive beyond the board's five-second autosave
+  // interval so a save/read does not race Node's default idle socket shutdown.
+  server.keepAliveTimeout = 60000;
+  server.headersTimeout = 65000;
   await new Promise((done) => server.listen(13549, '127.0.0.1', done));
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

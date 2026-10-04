@@ -373,7 +373,7 @@ export interface BoardLoad {
   sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
-  current: BoardLoad | null; next: BoardLoad[]; hidden: BoardLoad[]; unavailable: BoardLoad[];
+  current: BoardLoad | null; next: BoardLoad[]; earlier: BoardLoad[]; hidden: BoardLoad[]; unavailable: BoardLoad[];
   destinationSource: boolean; sourceDestination: string; stopKey: string;
   fromDate: string; revision: string; customOrder: boolean;
 }

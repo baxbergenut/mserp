@@ -15,6 +15,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     ('e4500000-0000-0000-0000-000000000002','${week}','PLAN-101',1000.10,900.05,500.25),
     ('e4500000-0000-0000-0000-000000000003','${week}','PLAN-102',2000.20,1900.10,800.50);
     INSERT INTO driver_board(driver_id,eta) VALUES('e4500000-0000-0000-0000-000000000002','Friday 17:00');
+    INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES
+    ('e4500000-0000-0000-0000-000000000002','${week}'::date-7,95,'PLAN-OLD'),
+    ('e4500000-0000-0000-0000-000000000002','${week}'::date+7,95,'PLAN-FUTURE');
   `);
   const id = 'e4500000-0000-0000-0000-000000000002';
   const session = await (await page.request.get(`${base}/api/auth/session`)).json();
@@ -29,6 +32,19 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
+  await field('Current load').fill('plan-');
+  await expect(page.getByRole('option').filter({ hasText: 'PLAN-101' })).toBeVisible();
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(1);
+  await page.screenshot({ path: join(temp, 'status-board-current-load-suggestions.png'), fullPage: true, animations: 'disabled' });
+  await page.keyboard.press('Enter');
+  await expect(field('Current load')).toHaveValue('PLAN-101');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.reload();
+  await expect(field('Current load')).toHaveValue('PLAN-101');
+  await field('Current load').fill('plan-');
+  await page.getByRole('option').filter({ hasText: 'PLAN-101' }).click();
+  await expect(field('Current load')).toHaveValue('PLAN-101');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   const statusBox = await page.getByLabel('Status filter').boundingBox();
   const viewBox = await page.getByRole('button', { name: 'My view', exact: true }).boundingBox();

@@ -12,6 +12,9 @@ import (
 
 func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {
 	t.Helper()
+	clocked := *repo
+	repo = &clocked
+	repo.now = func() time.Time { return time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC) }
 	d, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Queue Driver", PayType: "cpm", PayRate: 0.6, Active: true})
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +168,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
  ($1,'2026-09-21','OLD-WEEK'),($1,'2026-09-29','OLD-OTHER')`, d.ID)
 	for _, week := range []string{"2026-09-28", "2026-10-05"} {
 		monday, _ := time.Parse(time.DateOnly, week)
+		repo.now = func() time.Time { return monday.Add(12 * time.Hour) }
 		board, err := repo.Get(ctx, monday)
 		if err != nil {
 			t.Fatal(err)
@@ -177,6 +181,56 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 			if p.Date < week {
 				t.Fatalf("previous-week plan appeared in next loads: %+v", p)
 			}
+		}
+	}
+	// Midnight changes queue eligibility, even for an explicitly ordered plan.
+	v = view()
+	order := []string{}
+	for _, p := range v.Next {
+		order = append(order, p.PlanID)
+	}
+	r = action(BoardLoadAction{Action: "order", Order: order})
+	beforeMidnight := BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
+	repo.now = func() time.Time { return time.Date(2026, 10, 7, 4, 0, 0, 0, time.UTC) }
+	if _, err := repo.ChangeLoads(ctx, beforeMidnight, ""); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("pre-midnight action accepted", err)
+	}
+	v = view()
+	if v.FromDate != "2026-10-07" || v.Current == nil || v.Current.PlanID != currentID {
+		t.Fatal("rollover lost current", v)
+	}
+	for _, p := range v.Next {
+		if p.Date < v.FromDate {
+			t.Fatal("old ordered plan still upcoming", p)
+		}
+	}
+	var earlier *BoardLoad
+	for _, p := range v.Earlier {
+		if p.Number == "PLAN-C" {
+			copy := p
+			earlier = &copy
+		}
+	}
+	if earlier == nil {
+		t.Fatal("older unfinished plan unavailable")
+	}
+	r = action(BoardLoadAction{Action: "select", PlanID: earlier.PlanID})
+	if r.Loads.Current == nil || r.Loads.Current.PlanID != earlier.PlanID {
+		t.Fatal("cannot select earlier current")
+	}
+}
+
+func TestBoardLoadToday(t *testing.T) {
+	for _, tc := range []struct{ instant, date string }{
+		{"2026-10-04T03:59:59Z", "2026-10-03"},
+		{"2026-10-04T04:00:00Z", "2026-10-04"},
+		{"2026-10-05T04:00:00Z", "2026-10-05"},
+		{"2026-11-02T04:59:59Z", "2026-11-01"},
+		{"2026-11-02T05:00:00Z", "2026-11-02"},
+	} {
+		instant, _ := time.Parse(time.RFC3339, tc.instant)
+		if got := boardLoadToday(instant); got != tc.date {
+			t.Errorf("%s: got %s, want %s", tc.instant, got, tc.date)
 		}
 	}
 }

@@ -46,6 +46,7 @@ type boardLoadState struct {
 type BoardLoads struct {
 	Current           *BoardLoad  `json:"current"`
 	Next              []BoardLoad `json:"next"`
+	Earlier           []BoardLoad `json:"earlier"`
 	Hidden            []BoardLoad `json:"hidden"`
 	Unavailable       []BoardLoad `json:"unavailable"`
 	DestinationSource bool        `json:"destinationSource"`
@@ -73,6 +74,19 @@ type BoardLoadResult struct {
 
 const boardPlansSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_entries
  UNION ALL SELECT driver_id,service_date,slot,deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_extra_entries)`
+
+func boardLoadToday(now time.Time) string {
+	loc, _ := time.LoadLocation("America/New_York")
+	return now.In(loc).Format(time.DateOnly)
+}
+
+func (r *DriverBoardRepository) loadStartDate(from string) string {
+	today := boardLoadToday(r.now())
+	if from < today {
+		return today
+	}
+	return from
+}
 
 func loadState(ctx context.Context, tx pgx.Tx, id string) (boardLoadState, string, error) {
 	var s boardLoadState
@@ -164,7 +178,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	selected := []string{}
 	for _, id := range ids {
 		states[id] = boardLoadState{}
-		result[id] = BoardLoads{Next: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
+		result[id] = BoardLoads{Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
 	rows, err := tx.Query(ctx, `SELECT s.driver_id,s.payload,coalesce(b.current_load,'') FROM driver_board_load_state s LEFT JOIN driver_board b ON b.driver_id=s.driver_id WHERE s.driver_id=ANY($1::uuid[])`, ids)
 	if err != nil {
@@ -194,6 +208,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
  FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[])
+ OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','cancelled','canceled')
  OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, from, selected)
 	if err != nil {
@@ -271,6 +286,8 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)
+			} else if p.Date < from {
+				view.Earlier = append(view.Earlier, p)
 			} else {
 				view.Next = append(view.Next, p)
 			}
@@ -298,6 +315,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 }
 
 func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (BoardLoads, error) {
+	from = r.loadStartDate(from)
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return BoardLoads{}, err
@@ -335,6 +353,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if !active || e.Version != a.Version || e.HomeVersion != a.HomeVersion {
 		return result, ErrDriverBoardConflict
 	}
+	a.FromDate = r.loadStartDate(a.FromDate)
 	views, err := readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate)
 	if err != nil {
 		return result, err
@@ -350,7 +369,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	switch a.Action {
 	case "select":
 		var chosen *BoardLoad
-		for _, p := range view.Next {
+		for _, p := range append(append([]BoardLoad{}, view.Next...), view.Earlier...) {
 			if p.PlanID == a.PlanID {
 				v := p
 				chosen = &v
@@ -406,7 +425,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		s.Order = nil
 		s.OrderLabels = nil
 	case "hide", "restore":
-		list := view.Next
+		list := append(append([]BoardLoad{}, view.Next...), view.Earlier...)
 		if a.Action == "restore" {
 			list = view.Hidden
 		}

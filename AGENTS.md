@@ -348,9 +348,10 @@ assignment lookup lists.
   never activate/advance loads. Current selection is explicit and retained with
   a warning after source removal/reassignment. Unique linked loads deduplicate;
   identical business numbers with distinct records remain separate. Unmatched
-  plans stay visible. Default plans start the current New York Monday and include
-  future weeks; the Loads panel can read older dates. Older current selections and
-  explicit ordering remain included without widening the default plan window.
+  plans stay visible. Next loads start today in New York and include future plans. Older unfinished
+  plans are shown separately and may still be explicitly selected as current.
+  Older current selections stay visible; custom ordering cannot make past plans
+  upcoming. The server clamps stale cutoff dates and rejects stale midnight actions.
   Gross Board controls planned assignment;
   DataTruck driver mismatches warn instead of dropping or moving plans. Finished
   next loads remain inspectable; finished current loads are not auto-cleared.
@@ -362,11 +363,15 @@ assignment lookup lists.
   pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
   than a repeated table column. Personal view controls follow the status filter
   on the same row. Source destinations have an explicit
-  manual override. Text edits detach current identity or destination source safely.
+  manual override. Imported locations display City, ST without ZIP codes; formatting
+  does not alter source values, stop keys or manual destination text. Text edits detach current identity or destination source safely.
   Queue mutations lock the driver, check board/home versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
+  Current-load typing suggests this driver’s current-week Gross Board load numbers,
+  excluding statuses/deleted entries and deduplicating numbers. Selection fills
+  operational text via normal autosave; linking stops remains an explicit Loads action.
   Progress, handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned

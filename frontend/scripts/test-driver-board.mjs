@@ -25,3 +25,14 @@ assert.equal(formatETA('2026-10-03T12:00'), '10/3 · 12:00p');
 assert.equal(formatETA('2026-10-03'), '10/3');
 assert.equal(formatETA('2026-10-03T14:30', true), '2026-10-03 · 2:30pm · New York time');
 console.log('ETA checks passed: compact date/time, date-only, midnight/noon, invalid dates and preserved legacy text.');
+
+const stateSource = fs.readFileSync(new URL('../app/lib/usStates.ts', import.meta.url), 'utf8');
+const statesJS = ts.transpileModule(stateSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const { compactLoadLocation } = await import('data:text/javascript;base64,' + Buffer.from(statesJS).toString('base64'));
+assert.equal(compactLoadLocation('Dallas, Texas, 75236'), 'Dallas, TX');
+assert.equal(compactLoadLocation('Dallas, tx, 75236-1234'), 'Dallas, TX');
+assert.equal(compactLoadLocation('New York, New York 10001'), 'New York, NY');
+assert.equal(compactLoadLocation('Boston, MA'), 'Boston, MA');
+assert.equal(compactLoadLocation('Toronto, Ontario'), 'Toronto, Ontario');
+assert.equal(compactLoadLocation(''), '');
+console.log('Imported stop display checks passed: state abbreviations and ZIP removal.');

@@ -44,10 +44,13 @@ type DriverBoard struct {
 	Loads        map[string]BoardLoads `json:"loads"`
 }
 
-type DriverBoardRepository struct{ pool *pgxpool.Pool }
+type DriverBoardRepository struct {
+	pool *pgxpool.Pool
+	now  func() time.Time
+}
 
 func NewDriverBoardRepository(pool *pgxpool.Pool) *DriverBoardRepository {
-	return &DriverBoardRepository{pool: pool}
+	return &DriverBoardRepository{pool: pool, now: time.Now}
 }
 
 // Ownership and pay method are independent. An owner driving their own truck
@@ -133,7 +136,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
 	}
-	result.Loads, err = readBoardLoads(ctx, tx, ids, week.Format(time.DateOnly))
+	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""))
 	if err != nil {
 		return result, err
 	}
