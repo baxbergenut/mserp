@@ -171,8 +171,9 @@ legacy free text stays intact until replaced or cleared. Existing autosave,
 history and permissions apply. The editor pauses idle refresh to avoid replacing
 its underlying row during a draft.
 
-Phone cells copy the +1 number on a single click and open the device’s calling
-app on a double-click, with brief copy feedback and no extra column width.
+Phone cells wait 500ms before copying the +1 number on a single click. A double-click
+cancels copying and opens the device’s calling app; keyboard activation copies
+immediately. Copy feedback is brief and adds no column width.
 
 Current-load typing suggests the driver’s Gross Board load numbers for the current
 week. Choosing a suggestion fills the text through normal autosave and preserves

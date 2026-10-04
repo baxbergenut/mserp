@@ -46,8 +46,17 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   await expect(phone.getByRole('status')).toHaveText('Copied');
   await expect.poll(() => page.evaluate(() => window.phoneClicks.at(-1).prevented)).toBe(true);
+  await expect(phone.getByRole('status')).toHaveText('');
+  await page.evaluate(() => navigator.clipboard.writeText('Keep clipboard on double-click'));
   await phone.dblclick();
   expect(await page.evaluate(() => window.phoneClicks.some(click => click.detail === 2 && !click.prevented && click.href === 'tel:+14703344443'))).toBe(true);
+  // Check after the single-click timer would have fired, not just immediately.
+  await page.waitForTimeout(650);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Keep clipboard on double-click');
+  await expect(phone.getByRole('status')).toHaveText('');
+  await phone.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   await expect(page).toHaveURL(/driver-board/);
   await expect(page.getByRole('link', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });

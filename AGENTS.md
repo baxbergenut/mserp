@@ -372,8 +372,8 @@ assignment lookup lists.
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
-  A phone click copies its +1 number with brief feedback; a double-click opens
-  the native tel: handler. Blank numbers have no action.
+  A phone click copies its +1 number after a 500ms double-click window with
+  brief feedback; a double-click cancels copying and opens the native tel: handler. Blank numbers have no action.
   Current-load typing suggests this driver’s current-week Gross Board load numbers,
   excluding statuses/deleted entries and deduplicating numbers. Selection fills
   operational text via normal autosave; linking stops remains an explicit Loads action.
