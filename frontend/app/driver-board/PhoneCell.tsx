@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Phone } from "lucide-react";
 import { formatPhone, normalizePhone } from "@/app/lib/phone";
 
 export function PhoneCell({ name, phone }: { name: string; phone: string }) {
@@ -26,7 +25,7 @@ export function PhoneCell({ name, phone }: { name: string; phone: string }) {
     if (!navigator.clipboard) { setFeedback("Copy failed"); return; }
     navigator.clipboard.writeText(number).then(() => setFeedback("Copied"), () => setFeedback("Copy failed"));
   }
-  return <div className="flex h-8 min-w-0 items-center"><button type="button" aria-label={`${name} · Phone`} title={`${formatPhone(phone)} · Click to copy · Double-click to open RingCentral`}
+  return <div className="flex h-8 min-w-0 items-center"><button type="button" aria-label={`${name} · Phone`} title={`${formatPhone(phone)} · Click to copy · Double-click to call in RingCentral`}
     className="flex h-8 min-w-0 flex-1 select-none items-center overflow-hidden whitespace-nowrap px-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus:ring-1 focus:ring-inset focus:ring-blue-500"
     onMouseDown={event => { if (event.detail >= 2) cancelCopy(); }}
     onClick={event => {
@@ -35,6 +34,6 @@ export function PhoneCell({ name, phone }: { name: string; phone: string }) {
       if (event.detail === 0) copy(); // Keyboard activation has no double-click.
       else copyTimer.current = setTimeout(copy, 500);
     }}><span className={feedback === "Copied" ? "text-zinc-500" : ""}>{feedback || formatPhone(phone)}</span><span className="sr-only" role="status">{feedback}</span></button>
-    <a ref={callLink} href={`rcapp://r/dialer?number=${encodeURIComponent(number)}`} aria-label={`${name} · Open in RingCentral`} title="Open number in RingCentral" onClick={() => { cancelCopy(); setFeedback(""); }} className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-blue-300 focus:ring-1 focus:ring-blue-500"><Phone className="h-3 w-3" /></a>
+    <a ref={callLink} href={`rcapp://r/call?number=${encodeURIComponent(number)}`} hidden aria-hidden="true" tabIndex={-1} />
   </div>;
 }

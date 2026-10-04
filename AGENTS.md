@@ -388,8 +388,8 @@ assignment lookup lists.
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
   A phone click copies its +1 number after a 500ms double-click window with
-  brief feedback; double-click or the phone icon opens RingCentral's dialer via
-  rcapp://r/dialer with a prefilled number, without copying or auto-dialing.
+  brief feedback; double-click starts a RingCentral call via
+  rcapp://r/call, without copying the number.
   Blank numbers have no action.
   Current-load typing suggests this driver’s current-week Gross Board load numbers,
   excluding statuses/deleted entries and deduplicating numbers. Selection fills

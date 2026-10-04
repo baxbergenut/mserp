@@ -172,8 +172,8 @@ history and permissions apply. The editor pauses idle refresh to avoid replacing
 its underlying row during a draft.
 
 Phone cells wait 500ms before copying the +1 number on a single click. A double-click
-cancels copying and opens RingCentral's dialer with the number prefilled; the small
-phone icon does the same in one click. No call is placed automatically. Keyboard
+cancels copying and starts a RingCentral call directly using rcapp://r/call.
+There is no separate call button. Keyboard
 activation of the number copies immediately. The rcapp link avoids a misconfigured
 Windows tel default (Chrome on the operator's PC).
 

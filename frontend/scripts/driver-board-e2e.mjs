@@ -32,10 +32,11 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('$2,800.15', { exact: true })).toHaveCount(2);
   await expect(page.getByText('1,300.75', { exact: true })).toBeVisible();
   const phone = page.getByRole('button', { name: 'Board Cpm · Phone', exact: true });
-  const dialer = page.getByRole('link', { name: 'Board Cpm · Open in RingCentral', exact: true });
-  await expect(dialer).toHaveAttribute('href', 'rcapp://r/dialer?number=%2B14703344443');
+  const dialer = page.locator('a[href="rcapp://r/call?number=%2B14703344443"]');
+  await expect(dialer).toHaveAttribute('href', 'rcapp://r/call?number=%2B14703344443');
+  await expect(dialer).toBeHidden();
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  // Observe native dialer activation without actually opening a calling app.
+  // Intercept RingCentral call links without placing a real call.
   await page.evaluate(() => {
     window.phoneClicks = [];
     document.addEventListener('click', event => {
@@ -52,20 +53,18 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(phone.getByRole('status')).toHaveText('');
   await page.evaluate(() => navigator.clipboard.writeText('Keep clipboard on double-click'));
   await phone.dblclick();
-  expect(await page.evaluate(() => window.phoneClicks.some(click => !click.prevented && click.href === 'rcapp://r/dialer?number=%2B14703344443'))).toBe(true);
+  expect(await page.evaluate(() => window.phoneClicks.some(click => !click.prevented && click.href === 'rcapp://r/call?number=%2B14703344443'))).toBe(true);
   // Check after the single-click timer would have fired, not just immediately.
   await page.waitForTimeout(650);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Keep clipboard on double-click');
   await expect(phone.getByRole('status')).toHaveText('');
-  await dialer.click();
-  expect(await page.evaluate(() => window.phoneClicks.length)).toBe(2);
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Keep clipboard on double-click');
+  expect(await page.evaluate(() => window.phoneClicks.length)).toBe(1);
   await phone.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   await expect(page).toHaveURL(/driver-board/);
   await expect(page.getByRole('button', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Board Percent · Open in RingCentral', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Board Percent · Call in RingCentral', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
