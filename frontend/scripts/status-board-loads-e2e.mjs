@@ -38,12 +38,12 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
   const card = number => panel.getByRole('article').filter({ has: panel.getByRole('button', { name: number, exact: true }) });
-  const todayCard = card('TODAY-PLAN');
-  await todayCard.getByRole('button', { name: 'TODAY-PLAN', exact: true }).click();
-  await expect(todayCard.getByRole('button', { name: 'TODAY-PLAN', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  const previous = card('PLAN-OLD');
+  await previous.getByRole('button', { name: 'PLAN-OLD', exact: true }).click();
+  await expect(previous.getByRole('button', { name: 'PLAN-OLD', exact: true })).toHaveAttribute('aria-expanded', 'true');
   const older = card('OLD-WEEK-PLAN');
   await older.getByRole('button', { name: 'OLD-WEEK-PLAN', exact: true }).click();
-  await expect(todayCard.getByRole('button', { name: 'TODAY-PLAN', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(previous.getByRole('button', { name: 'PLAN-OLD', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await older.getByRole('button', { name: 'Set current', exact: true }).click();
   await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
   await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
