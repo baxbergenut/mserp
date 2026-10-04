@@ -33,6 +33,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   expect(defaultLoads.next.every(load => load.date >= today)).toBe(true);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await expect(field('Current load')).toHaveValue('LOAD 8841');
+  await expect(field('Next loads').getByText('NEXT-B', { exact: true })).toHaveClass(/text-red-300/);
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });

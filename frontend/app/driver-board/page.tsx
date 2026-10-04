@@ -127,7 +127,6 @@ export default function DriverBoardPage() {
             const otherStop = oppositeType ? loads?.current?.stops.find(s => s.type.toLowerCase() === oppositeType && s.location.trim()) : undefined;
             const destinationBusy = dirty || saving || loading || leaving;
             const next = loads?.next ?? [];
-            const nextLabel = next.slice(0, 2).map(p => p.number).join(" → ") + (next.length > 2 ? ` (+${next.length - 2})` : "");
             return <Fragment key={d.id}>
               {(i === 0 || drivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
                 <th scope="rowgroup" colSpan={5} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
@@ -173,7 +172,7 @@ export default function DriverBoardPage() {
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not switch destination. Reload the board and try again."); }
                   }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Origin / destination", 500)}</td>
                 <td className={cellClass}><button type="button" aria-label={`${d.fullName} · ETA`} title={formatETA(entry.eta, true)} disabled={disabled} className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" aria-haspopup="dialog" aria-expanded={etaEditor?.id === d.id} onClick={event => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor: event.currentTarget })}>{formatETA(entry.eta)}</button></td>
-                <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-300 hover:text-blue-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{nextLabel || "—"}</button></td>
+                <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "homeTime", "Home time", 500)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "driverHome", "Driver home", 300)}</td>
