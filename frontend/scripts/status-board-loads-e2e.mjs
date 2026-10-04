@@ -38,7 +38,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
   await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
-  const card = number => panel.getByRole('article').filter({ has: panel.getByRole('button', { name: number, exact: true }) });
+  const card = number => panel.getByRole('article').filter({ hasText: number });
   const source = card('SOURCE-A');
   await source.getByRole('button', { name: 'SOURCE-A', exact: true }).click();
   await expect(source.getByRole('button', { name: 'SOURCE-A', exact: true })).toHaveAttribute('aria-expanded', 'true');
