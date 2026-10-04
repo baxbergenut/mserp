@@ -37,6 +37,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
+  await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
   const card = number => panel.getByRole('article').filter({ has: panel.getByRole('button', { name: number, exact: true }) });
   const previous = card('PLAN-OLD');
   await previous.getByRole('button', { name: 'PLAN-OLD', exact: true }).click();
