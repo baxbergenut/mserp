@@ -92,7 +92,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
         <section className="space-y-2" aria-label="Load sequence">
           {view.next.map((load, index) => loadCard(load, "next", index))}
           {view.current ? loadCard(view.current, "current", -1) : <article className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400">No current load</article>}
-          {view.earlier.map((load, index) => loadCard(load, "earlier", index))}
+          {[...view.earlier].reverse().map((load, index) => loadCard(load, "earlier", index))}
         </section>
         {view.hidden.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-400">Removed from queue ({view.hidden.length})</summary><p className="mt-2 text-xs text-zinc-500">Gross Board plans remain unchanged.</p>{view.hidden.map(load => <div key={load.planId} className="mt-2 flex items-center justify-between gap-2 text-sm text-zinc-400"><span>{load.number} · {load.date}</span>{canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "restore", planId: load.planId })}>Restore</button>}</div>)}</details>}
         {view.unavailable.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-400">Delivered or cancelled ({view.unavailable.length})</summary>{view.unavailable.map(load => <article key={load.planId} className="mt-3 border-t border-zinc-800 pt-3 text-sm text-zinc-400">{load.number}{detail(load)}</article>)}</details>}
