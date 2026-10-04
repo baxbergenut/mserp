@@ -82,7 +82,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
 				exec(string(historyMigration))
-				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql"} {
+				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql"} {
 					migration, err := os.ReadFile("../../sql/" + name)
 					if err != nil {
 						t.Fatal(err)

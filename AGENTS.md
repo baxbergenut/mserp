@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `048_status_board_loads.sql`:
+  `049_dispatcher_updaters.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -283,7 +283,8 @@ browser bundle.
   Unpaginated owner lookups include the company. Inactive investors retain
   ownership/history. Company identity is protected.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
-- Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`
+- Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`.
+- Updaters: `GET/POST /updaters`, `PUT/DELETE /updaters/{id}` (fleet permissions).
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
 - Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
 - Expense settings: `GET/POST /expense-settings`, `PUT /expense-settings/{id}`
@@ -312,6 +313,18 @@ parameters retain the legacy raw-array response for dashboard calculations and
 assignment lookup lists.
 
 ## Domain invariants and data flows
+
+- Dispatchers and updaters share /dispatchers. Migration 049 adds optional integer
+  phone extensions (0–999999), updater profiles with main/after_hours shifts, and
+  one assignment per dispatcher/shift. An updater may serve multiple dispatchers.
+  Composite foreign keys enforce shift matching; assigned updaters cannot change
+  shift until unassigned. Updater edits are versioned. Dispatcher profile saves
+  atomically include updater assignments; omitted new fields preserve them for
+  older clients. Status Board headings show both updaters and known extensions,
+  without requiring fleet.read. No updater changes affect commissions or rosters.
+  backend/scripts/seed-dispatcher-updaters.sql imports the October 4 TODAY headings
+  explicitly; it is an operator data import, not a schema migration.
+
 
 - Driver Board uses migrations 045–046. It lists active managed drivers with live
   truck, phone and dispatcher assignments. Operational text, trailer and status

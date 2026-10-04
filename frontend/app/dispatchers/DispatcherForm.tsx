@@ -4,7 +4,7 @@ import { AssignmentWeekField } from "../components/management/AssignmentWeekFiel
 
 import { PhoneInput } from "../components/management/PhoneInput";
 
-import type { Dispatcher, DispatcherInput, Driver } from "../lib/types";
+import type { Dispatcher, DispatcherInput, Driver, Updater } from "../lib/types";
 import {
   controlClass,
   Field,
@@ -13,6 +13,8 @@ import {
 } from "../components/management/ManagementUI";
 
 export const emptyDispatcherInput: DispatcherInput = {
+  extension: null,
+  updaters: { mainUpdaterId: null, afterHoursUpdaterId: null },
   fullName: "",
   email: "",
   phone: "",
@@ -27,6 +29,8 @@ export function dispatcherToInput(
   drivers: Driver[],
 ): DispatcherInput {
   return {
+    extension: dispatcher.extension,
+    updaters: { mainUpdaterId: dispatcher.mainUpdaterId, afterHoursUpdaterId: dispatcher.afterHoursUpdaterId },
     fullName: dispatcher.fullName,
     email: dispatcher.email ?? "",
     phone: dispatcher.phone ?? "",
@@ -43,10 +47,12 @@ export function DispatcherForm({
   value,
   drivers,
   dispatcherId,
+  updaters,
   onChange,
 }: {
   value: DispatcherInput;
   drivers: Driver[];
+  updaters: Updater[];
   dispatcherId: string | null;
   onChange: (value: DispatcherInput) => void;
 }) {
@@ -81,6 +87,7 @@ export function DispatcherForm({
         <Field label="Phone">
           <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />
         </Field>
+        <Field label="Phone extension"><input type="number" min="0" max="999999" step="1" value={value.extension ?? ""} onChange={event => set("extension", event.target.value === "" ? null : Number(event.target.value))} className={controlClass} /></Field>
         <Field label="Email">
           <input
             type="email"
@@ -111,6 +118,14 @@ export function DispatcherForm({
         </Field>
       </FormSection>
 
+      <FormSection title="Assigned updaters">
+        {([['main', 'Main updater', 'mainUpdaterId'], ['after_hours', 'After hours updater', 'afterHoursUpdaterId']] as const).map(([shift, label, key]) => <Field key={key} label={label}>
+          <select aria-label={label} className={controlClass} value={value.updaters?.[key] ?? ""} onChange={event => set("updaters", { mainUpdaterId: value.updaters?.mainUpdaterId ?? null, afterHoursUpdaterId: value.updaters?.afterHoursUpdaterId ?? null, [key]: event.target.value || null })}>
+            <option value="">Unassigned</option>
+            {updaters.filter(u => u.shift === shift).map(u => <option key={u.id} value={u.id}>{u.fullName}{u.extension == null ? "" : ` (${u.extension})`}</option>)}
+          </select>
+        </Field>)}
+      </FormSection>
       <FormSection title="Assigned drivers">
         <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
         <div className="sm:col-span-2">

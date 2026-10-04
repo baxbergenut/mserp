@@ -40,7 +40,7 @@ func routePermission(method, path string) string {
 		return "payroll.read"
 	}
 	switch resource {
-	case "drivers", "trucks", "dispatchers", "investors", "driver-directory", "driver-intake", "files", "irp-files", "cdl-files":
+	case "drivers", "trucks", "dispatchers", "updaters", "investors", "driver-directory", "driver-intake", "files", "irp-files", "cdl-files":
 		return pair("fleet")
 	case "loads":
 		if read {

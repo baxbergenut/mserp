@@ -27,13 +27,18 @@ type DriverBoardEntry struct {
 }
 
 type DriverBoardDriver struct {
-	ID             string `json:"id"`
-	FullName       string `json:"fullName"`
-	DriverType     string `json:"driverType"`
-	TruckUnit      string `json:"truckUnit"`
-	Phone          string `json:"phone"`
-	DispatcherID   string `json:"dispatcherId"`
-	DispatcherName string `json:"dispatcherName"`
+	DispatcherExtension        *int   `json:"dispatcherExtension"`
+	MainUpdaterName            string `json:"mainUpdaterName"`
+	MainUpdaterExtension       *int   `json:"mainUpdaterExtension"`
+	AfterHoursUpdaterName      string `json:"afterHoursUpdaterName"`
+	AfterHoursUpdaterExtension *int   `json:"afterHoursUpdaterExtension"`
+	ID                         string `json:"id"`
+	FullName                   string `json:"fullName"`
+	DriverType                 string `json:"driverType"`
+	TruckUnit                  string `json:"truckUnit"`
+	Phone                      string `json:"phone"`
+	DispatcherID               string `json:"dispatcherId"`
+	DispatcherName             string `json:"dispatcherName"`
 }
 
 type DriverBoard struct {
@@ -81,9 +86,14 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,d.is_owner_operator,
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
+ dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
  coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0)
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
+ LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
+ LEFT JOIN updaters mu ON mu.id=ma.updater_id
+ LEFT JOIN dispatcher_updaters aa ON aa.dispatcher_id=dp.id AND aa.shift='after_hours'
+ LEFT JOIN updaters au ON au.id=aa.updater_id
  LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN investors i ON i.id=t.owner_id
  LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.active
@@ -97,6 +107,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var pay string
 		var owner, investor, own bool
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.Phone, &d.DispatcherID, &d.DispatcherName,
+			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version)
 		if err != nil {
 			rows.Close()

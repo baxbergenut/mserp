@@ -1,3 +1,4 @@
+import type { Updater, UpdaterInput } from "./types";
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
@@ -418,3 +419,8 @@ export const settleInvestorPay = (weekStart: string, revision: string, driverId:
 export const fetchTruckCharges = () => apiRequest<import("./types").TruckChargeData>("/truck-charges");
 export const saveTruckTerm = (input: import("./types").TruckTerm) => apiRequest<void>("/truck-charges/terms", { method: "PUT", body: JSON.stringify(input) });
 export const saveTruckCharge = (input: import("./types").TruckChargePhase) => apiRequest<void>("/truck-charges/recurring", { method: "PUT", body: JSON.stringify(input) });
+
+export const fetchUpdaters = () => apiRequest<Updater[]>("/updaters");
+export const createUpdater = (value: UpdaterInput) => apiRequest<Updater>("/updaters", { method: "POST", body: JSON.stringify(value) });
+export const updateUpdater = (id: string, value: UpdaterInput) => apiRequest<Updater>(`/updaters/${id}`, { method: "PUT", body: JSON.stringify(value) });
+export const deleteUpdater = (id: string) => apiRequest<void>(`/updaters/${id}`, { method: "DELETE" });
