@@ -573,8 +573,11 @@ assignment lookup lists.
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.
   Driver and truck matrices use the payroll-style previous/next week range and
-  This week controls. Valid effective weeks remain remembered. Driver charge
-  type filters use the visible catalog; remembered missing or hidden archived
+  This week controls. Valid effective weeks remain remembered. Driver matrices
+  open at the left edge so the first fee column remains visible;
+  driver and truck matrices have distinct named scroll identities.
+  Other tables retain their normal horizontal scroll restoration.
+  Driver charge type filters use the visible catalog; remembered missing or hidden archived
   types fall back to all visible types so initial entry cannot hide every fee.
   Driver charges lists and driver pickers show active drivers only; stored
   schedules and historical payroll for inactive drivers remain retained.

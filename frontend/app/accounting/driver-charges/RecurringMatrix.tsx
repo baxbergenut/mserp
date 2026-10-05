@@ -44,7 +44,7 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
     </div>
     <p className="text-xs text-zinc-500">Check a fee to include a driver. Changes save immediately from the selected week; unchecking pauses it. Later scheduled changes remain in place. Each charge type controls which weeks qualify.</p>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a Monday between 2000 and 2100.</p>}
-    <div className="overflow-x-auto rounded-lg border border-zinc-800">
+    <div data-scroll-key="driver-recurring-charges" data-scroll-initial-x="start" className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-left text-xs text-zinc-300">
         <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(t => <th scope="col" key={t.id} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{t.name}{t.archived && " (archived)"}</span></th>)}</tr></thead>
         <tbody>{visible.map(driver => <tr key={driver.id} className="group h-8">

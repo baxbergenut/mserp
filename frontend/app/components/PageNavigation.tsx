@@ -53,8 +53,9 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
       for (const element of elements()) {
         const id = scrollKey(element, main), saved = positions[id];
         if (!saved) continue;
-        element.scrollTo({ top: saved.top, left: saved.left, behavior: "instant" });
-        if (Math.abs(element.scrollTop - saved.top) < 2 && Math.abs(element.scrollLeft - saved.left) < 2) remaining.delete(id);
+        const left = element.dataset.scrollInitialX === "start" ? 0 : saved.left;
+        element.scrollTo({ top: saved.top, left, behavior: "instant" });
+        if (Math.abs(element.scrollTop - saved.top) < 2 && Math.abs(element.scrollLeft - left) < 2) remaining.delete(id);
         if (!remaining.size) break;
       }
       if (!remaining.size) restoring = false;

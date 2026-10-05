@@ -9,7 +9,8 @@ const driver = { id: 'driver', fullName: 'Test Driver', active: true, driverType
 const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00'], archived: false, version: 1, eligibility: 'calendar', rules: [] };
 const schedule = { id: 'schedule', driverId: driver.id, driverName: driver.fullName, typeId: type.id, kind: 'recurring', name: type.name, startWeek: week, endWeek: null, version: 1, phases: [{ weekStart: week, amount: '50.00', paused: false }], occurrences: [] };
 const archivedType = { ...type, id: 'archived', name: 'Archived fee', archived: true };
-const data = { currentWeek: week, types: [type, archivedType], schedules: [schedule] };
+const extraTypes = Array.from({ length: 6 }, (_, index) => ({ ...type, id: `fee-${index}`, name: `Other fee ${index}` }));
+const data = { currentWeek: week, types: [type, ...extraTypes, archivedType], schedules: [schedule] };
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -28,12 +29,13 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const path = new URL(route.request().url()).pathname.slice(4);
+    const url = new URL(route.request().url());
+    const path = url.pathname.slice(4);
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
       '/driver-charges': data, '/drivers': [driver], '/truck-charges': { terms: [], phases: [], eligibleTruckIds: [] }, '/trucks': [], '/investors': [],
     };
-    await route.fulfill({ json: fixtures[path] ?? [] });
+    await route.fulfill({ json: path === '/trucks' && url.searchParams.has('page') ? { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } : fixtures[path] ?? [] });
   });
   await page.goto(`${base}/accounting/driver-charges`);
   const checked = page.getByRole('checkbox', { name: 'Test Driver, Admin fee', exact: true });
@@ -44,6 +46,40 @@ try {
   await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
   await expect(checked).toBeChecked();
   const memoryKey = name => `mserp-navigation-v1:user:/accounting/driver-charges:view:${name}`;
+  const scrollMemoryKey = 'mserp-navigation-v1:user:/accounting/driver-charges:scroll';
+  await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
+  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  await page.reload();
+  await expect(checked).toBeChecked();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(0);
+  await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
+  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  await page.goto(`${base}/trucks`);
+  await expect(page.getByRole('heading', { name: 'Trucks', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Accounting', exact: true }).click();
+  await page.getByRole('link', { name: 'Charges', exact: true }).click();
+  await expect(checked).toBeChecked();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(0);
+  // Both matrices overflow. A truck scroll must not hide the driver's checked
+  // first fee behind the sticky Driver column after returning and reloading.
+  await page.getByRole('tab', { name: 'Truck charges', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'Current driver', exact: true })).toBeVisible();
+  await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
+  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('columnheader', { name: 'Current driver', exact: true })).toBeVisible();
+  await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(200);
+  await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
+  await expect(checked).toBeChecked();
+  await page.reload();
+  await expect(checked).toBeChecked();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(0);
+  const driverColumn = await page.getByRole('columnheader', { name: 'Driver', exact: true }).boundingBox();
+  const firstFee = await checked.boundingBox();
+  expect(firstFee.x).toBeGreaterThanOrEqual(driverColumn.x + driverColumn.width);
   for (const savedFilter of ['missing-type', archivedType.id]) {
     await page.evaluate(({ key, value }) => sessionStorage.setItem(key, JSON.stringify(value)), { key: memoryKey('page:typeFilter'), value: savedFilter });
     await page.reload();
@@ -79,7 +115,7 @@ try {
   await page.reload();
   await expect(checked).toBeChecked();
   expect(errors).toEqual([]);
-  console.log('Charge views checks passed: initial selections, stale/archived filters, week navigation, remembered weeks and tab return.');
+  console.log('Charge views checks passed: initial selections, independent matrix scrolls, stale/archived filters, week navigation, remembered weeks and tab return.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
