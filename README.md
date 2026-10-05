@@ -70,8 +70,8 @@ added. Existing databases must apply
 ## Scheduled data syncs
 
 The API process runs the load, fuel, and toll sync jobs every day. When Five ELD
-credentials are configured, it also caches current truck positions and provider
-addresses on a bounded interval. The browser never receives those credentials.
+credentials are configured, it also caches current truck positions on a bounded
+interval. The browser never receives those credentials.
 Add the Five ELD values to the backend environment:
 
 ```dotenv
@@ -80,13 +80,12 @@ FIVE_ELD_PROVIDER_TOKEN=your-integration-provider-token
 FIVE_ELD_USDOT=your-usdot-number
 FIVE_ELD_SYNC_INTERVAL=5m
 FIVE_ELD_STALE_AFTER=15m
-FIVE_ELD_ADDRESS_REFRESH_INTERVAL=15m
-FIVE_ELD_MAX_ADDRESS_LOOKUPS=25
 ```
 
 All three identity/credential values must be present to enable the integration.
-The fleet position endpoint is called once per interval. Human-readable addresses
-come from bounded Five ELD tracking lookups and are cached in PostgreSQL.
+The fleet position endpoint is called once per interval and the result is cached
+in PostgreSQL. Opening the Status Board only reads that shared cache; it does not
+call Five ELD. Coordinates older than the stale threshold are not returned.
 
 By default,
 loads sync at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM in

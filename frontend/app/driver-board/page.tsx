@@ -11,6 +11,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { usePermissions } from "@/app/lib/access";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
+import { LocationCell, formatCoordinates } from "./LocationCell";
 import { StatusCell } from "./StatusCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
 import { addDays, decimalDisplay, indexBoardEntries, shortDate, totals } from "@/app/gross-board/board";
@@ -64,7 +65,7 @@ export default function DriverBoardPage() {
   const drivers = (board?.drivers ?? []).filter(d =>
     (viewIds === null || viewIds.includes(d.dispatcherId)) &&
     (dispatcher === "all" || d.dispatcherId === dispatcher) && (status === "all" || entries[d.id]?.status === status) &&
-    [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location?.address, entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
+    [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
   const dispatchers = Array.from(new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName])).entries());
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
   const ids = new Set(drivers.map(d => d.id));
@@ -166,8 +167,7 @@ export default function DriverBoardPage() {
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>
-                <td title={d.location ? `${d.location.address || "Five ELD map location"} · Updated ${locationTime(d.location.reportedAt)} NY${d.location.stale ? " · Stale" : ""}` : undefined}
-                  className={`${cellClass} px-1.5 ${d.location?.stale ? "text-amber-300/80" : "text-zinc-300"}`}>{d.location?.address || ""}</td>
+                <td className={cellClass}><LocationCell name={d.fullName} location={d.location} /></td>
                 <td className={cellClass}>{loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
                   title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
                   className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"

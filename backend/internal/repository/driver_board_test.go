@@ -135,8 +135,8 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: "ELD-17", VIN: &vin, DriverID: &driver.ID, Status: "available", Active: true, IsCompanyOwned: true}); err != nil {
 				t.Fatal(err)
 			}
-			exec(`INSERT INTO five_eld_locations(vin,provider_truck_number,address,latitude,longitude,reported_at,fetched_at,address_updated_at,address_reported_at)
-			 VALUES($1,'17','Chicago, IL',41.881,-87.623,now(),now(),now(),now())`, vin)
+			exec(`INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at)
+			 VALUES($1,'17',41.881,-87.623,now(),now())`, vin)
 			exec(`INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_success_at) VALUES(true,now(),now())`)
 			repo = NewDriverBoardRepository(pool, true)
 			week, _ := time.Parse("2006-01-02", "2026-09-28")
@@ -149,8 +149,13 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if len(board.Drivers) != 2 || len(board.GrossEntries) != 1 || board.GrossEntries[0].OriginalRate != "1250.15" || board.GrossEntries[0].Miles != "450.25" {
 				t.Fatalf("board read: %+v", board)
 			}
-			if !board.ELD.Configured || board.Drivers[0].Location == nil || board.Drivers[0].Location.Address != "Chicago, IL" {
+			if !board.ELD.Configured || board.Drivers[0].Location == nil || board.Drivers[0].Location.Latitude != 41.881 || board.Drivers[0].Location.Longitude != -87.623 {
 				t.Fatalf("Five ELD board location: %+v", board.Drivers)
+			}
+			exec(`UPDATE five_eld_locations SET reported_at=now()-interval '16 minutes' WHERE vin=$1`, vin)
+			staleBoard, err := repo.Get(ctx, week)
+			if err != nil || staleBoard.Drivers[0].Location != nil {
+				t.Fatalf("stale Five ELD location was exposed: %+v err=%v", staleBoard.Drivers, err)
 			}
 			var draft DriverBoardEntry
 			for _, e := range board.Entries {

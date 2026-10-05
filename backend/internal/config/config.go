@@ -47,8 +47,6 @@ type Config struct {
 	FiveELDUSDOT           string
 	FiveELDSyncInterval    time.Duration
 	FiveELDStaleAfter      time.Duration
-	FiveELDAddressRefresh  time.Duration
-	FiveELDMaxAddressCalls int
 }
 
 type DailySyncTime struct {
@@ -187,15 +185,6 @@ func Load() (Config, error) {
 	if fiveELDStaleAfter < fiveELDSyncInterval {
 		return Config{}, errors.New("FIVE_ELD_STALE_AFTER must not be shorter than FIVE_ELD_SYNC_INTERVAL")
 	}
-	fiveELDAddressRefresh, err := parseDurationRange("FIVE_ELD_ADDRESS_REFRESH_INTERVAL", "15m", time.Minute, 24*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-	fiveELDMaxAddressCalls, err := strconv.Atoi(envOrDefault("FIVE_ELD_MAX_ADDRESS_LOOKUPS", "25"))
-	if err != nil || fiveELDMaxAddressCalls < 1 || fiveELDMaxAddressCalls > 100 {
-		return Config{}, errors.New("FIVE_ELD_MAX_ADDRESS_LOOKUPS must be between 1 and 100")
-	}
-
 	cfg := Config{
 		FleetScope:             fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
 		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
@@ -231,8 +220,6 @@ func Load() (Config, error) {
 		FiveELDUSDOT:           fiveELDUSDOT,
 		FiveELDSyncInterval:    fiveELDSyncInterval,
 		FiveELDStaleAfter:      fiveELDStaleAfter,
-		FiveELDAddressRefresh:  fiveELDAddressRefresh,
-		FiveELDMaxAddressCalls: fiveELDMaxAddressCalls,
 	}
 
 	if err := cfg.FleetScope.Validate(); err != nil {

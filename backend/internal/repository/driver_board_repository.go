@@ -48,12 +48,10 @@ type DriverBoardDriver struct {
 }
 
 type DriverBoardLocation struct {
-	Address             string    `json:"address"`
 	Latitude            float64   `json:"latitude"`
 	Longitude           float64   `json:"longitude"`
 	ReportedAt          time.Time `json:"reportedAt"`
 	ProviderTruckNumber string    `json:"providerTruckNumber"`
-	Stale               bool      `json:"stale"`
 }
 
 type FiveELDBoardSummary struct {
@@ -117,9 +115,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0),
-	 CASE WHEN abs(extract(epoch from el.reported_at-el.address_reported_at))<=600 THEN el.address ELSE '' END,
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,
-	 CASE WHEN el.reported_at IS NULL THEN false ELSE now()-el.reported_at > make_interval(secs=>coalesce(es.stale_after_seconds,900)) END
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -131,6 +127,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  LEFT JOIN five_eld_sync_state es ON es.singleton
  LEFT JOIN five_eld_locations el ON el.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
    AND NOT (el.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+	 AND abs(extract(epoch from now()-el.reported_at))<=coalesce(es.stale_after_seconds,900)
  WHERE d.active
  ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
 	if err != nil {
@@ -141,22 +138,21 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var e DriverBoardEntry
 		var pay string
 		var owner, investor, own bool
-		var address, providerTruckNumber *string
+		var providerTruckNumber *string
 		var latitude, longitude *float64
 		var reportedAt *time.Time
-		var stale bool
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version,
-			&address, &latitude, &longitude, &reportedAt, &providerTruckNumber, &stale)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber)
 		if err != nil {
 			rows.Close()
 			return result, err
 		}
 		d.DriverType = driverBoardType(pay, owner, investor, own)
-		if address != nil && latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
-			d.Location = &DriverBoardLocation{Address: *address, Latitude: *latitude, Longitude: *longitude,
-				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Stale: stale}
+		if latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
+			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude,
+				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber}
 		}
 		e.DriverID = d.ID
 		result.Drivers = append(result.Drivers, d)

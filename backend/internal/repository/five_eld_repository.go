@@ -11,23 +11,19 @@ import (
 type FiveELDLocation struct {
 	VIN                 string
 	ProviderTruckNumber string
-	Address             string
 	Latitude            float64
 	Longitude           float64
 	ReportedAt          time.Time
 	FetchedAt           time.Time
-	AddressUpdatedAt    *time.Time
-	AddressReportedAt   *time.Time
 }
 
 type FiveELDSyncResult struct {
-	Fetched        int       `json:"fetched"`
-	Saved          int       `json:"saved"`
-	Unmatched      int       `json:"unmatched"`
-	Ambiguous      int       `json:"ambiguous"`
-	Invalid        int       `json:"invalid"`
-	AddressLookups int       `json:"addressLookups"`
-	SyncedAt       time.Time `json:"syncedAt"`
+	Fetched   int       `json:"fetched"`
+	Saved     int       `json:"saved"`
+	Unmatched int       `json:"unmatched"`
+	Ambiguous int       `json:"ambiguous"`
+	Invalid   int       `json:"invalid"`
+	SyncedAt  time.Time `json:"syncedAt"`
 }
 
 type FiveELDRepository struct{ pool *pgxpool.Pool }
@@ -57,28 +53,6 @@ func (r *FiveELDRepository) ActiveTruckVINs(ctx context.Context) (map[string]str
 	return result, rows.Err()
 }
 
-func (r *FiveELDRepository) Locations(ctx context.Context, vins []string) (map[string]FiveELDLocation, error) {
-	result := map[string]FiveELDLocation{}
-	if len(vins) == 0 {
-		return result, nil
-	}
-	rows, err := r.pool.Query(ctx, `SELECT vin,provider_truck_number,address,latitude,longitude,reported_at,fetched_at,address_updated_at,address_reported_at
- FROM five_eld_locations WHERE vin=ANY($1)`, vins)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var value FiveELDLocation
-		if err = rows.Scan(&value.VIN, &value.ProviderTruckNumber, &value.Address, &value.Latitude, &value.Longitude,
-			&value.ReportedAt, &value.FetchedAt, &value.AddressUpdatedAt, &value.AddressReportedAt); err != nil {
-			return nil, err
-		}
-		result[value.VIN] = value
-	}
-	return result, rows.Err()
-}
-
 func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []FiveELDLocation, unmatched, ambiguous []string, invalid int, staleAfter time.Duration, result FiveELDSyncResult) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -87,19 +61,15 @@ func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []Five
 	defer tx.Rollback(ctx)
 	for _, value := range locations {
 		_, err = tx.Exec(ctx, `INSERT INTO five_eld_locations
- (vin,provider_truck_number,address,latitude,longitude,reported_at,fetched_at,address_updated_at,address_reported_at)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+ (vin,provider_truck_number,latitude,longitude,reported_at,fetched_at)
+ VALUES($1,$2,$3,$4,$5,$6)
  ON CONFLICT(vin) DO UPDATE SET
  provider_truck_number=CASE WHEN EXCLUDED.reported_at>=five_eld_locations.reported_at THEN EXCLUDED.provider_truck_number ELSE five_eld_locations.provider_truck_number END,
  latitude=CASE WHEN EXCLUDED.reported_at>=five_eld_locations.reported_at THEN EXCLUDED.latitude ELSE five_eld_locations.latitude END,
  longitude=CASE WHEN EXCLUDED.reported_at>=five_eld_locations.reported_at THEN EXCLUDED.longitude ELSE five_eld_locations.longitude END,
  reported_at=greatest(EXCLUDED.reported_at,five_eld_locations.reported_at),
- fetched_at=greatest(EXCLUDED.fetched_at,five_eld_locations.fetched_at),
- address=CASE WHEN EXCLUDED.address<>'' THEN EXCLUDED.address ELSE five_eld_locations.address END,
-	address_updated_at=coalesce(EXCLUDED.address_updated_at,five_eld_locations.address_updated_at),
-	address_reported_at=coalesce(EXCLUDED.address_reported_at,five_eld_locations.address_reported_at)`,
-			value.VIN, value.ProviderTruckNumber, value.Address, value.Latitude, value.Longitude,
-			value.ReportedAt, value.FetchedAt, value.AddressUpdatedAt, value.AddressReportedAt)
+ fetched_at=greatest(EXCLUDED.fetched_at,five_eld_locations.fetched_at)`,
+			value.VIN, value.ProviderTruckNumber, value.Latitude, value.Longitude, value.ReportedAt, value.FetchedAt)
 		if err != nil {
 			return err
 		}

@@ -370,12 +370,10 @@ export interface DriverBoardDriver {
 }
 
 export interface DriverBoardLocation {
-  address: string;
   latitude: number;
   longitude: number;
   reportedAt: string;
   providerTruckNumber: string;
-  stale: boolean;
 }
 
 export interface FiveELDBoardSummary {
@@ -403,7 +401,6 @@ export interface SyncFiveELDResult {
   unmatched: number;
   ambiguous: number;
   invalid: number;
-  addressLookups: number;
   syncedAt: string;
 }
 

@@ -3,31 +3,15 @@ package fiveeld
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const maxResponseBytes = 4 << 20
-
-// flexibleInt accepts both JSON numbers and quoted decimal values. Five ELD's
-// pagination metadata has returned both representations in live responses.
-type flexibleInt int
-
-func (value *flexibleInt) UnmarshalJSON(data []byte) error {
-	raw := strings.Trim(strings.TrimSpace(string(data)), `"`)
-	parsed, err := strconv.Atoi(raw)
-	if err != nil {
-		return fmt.Errorf("invalid integer %q", raw)
-	}
-	*value = flexibleInt(parsed)
-	return nil
-}
 
 type Position struct {
 	TruckNumber string
@@ -35,19 +19,6 @@ type Position struct {
 	Latitude    float64
 	Longitude   float64
 	ReportedAt  time.Time
-}
-
-type Unit struct {
-	ID          string
-	TruckNumber string
-	VIN         string
-}
-
-type Tracking struct {
-	Address    string
-	Latitude   float64
-	Longitude  float64
-	ReportedAt time.Time
 }
 
 type Client struct {
@@ -100,69 +71,6 @@ func (c *Client) CurrentPositions(ctx context.Context, usdot string) ([]Position
 		})
 	}
 	return positions, nil
-}
-
-func (c *Client) ActiveUnits(ctx context.Context, usdot string) ([]Unit, error) {
-	const pageSize = 100
-	units := []Unit{}
-	for page := 1; page <= 1000; page++ {
-		var response struct {
-			Data []struct {
-				ID          string `json:"id"`
-				TruckNumber string `json:"truck_number"`
-				VIN         string `json:"vin"`
-			} `json:"data"`
-			Meta struct {
-				Page       flexibleInt `json:"page"`
-				TotalPages flexibleInt `json:"totalPages"`
-			} `json:"meta"`
-		}
-		query := url.Values{"page": {strconv.Itoa(page)}, "perPage": {strconv.Itoa(pageSize)}, "is_active": {"true"}}
-		if err := c.get(ctx, "/api/externalservice/current-units/"+url.PathEscape(usdot), query, &response); err != nil {
-			return nil, err
-		}
-		for _, unit := range response.Data {
-			units = append(units, Unit{ID: strings.TrimSpace(unit.ID), TruckNumber: strings.TrimSpace(unit.TruckNumber), VIN: strings.TrimSpace(unit.VIN)})
-		}
-		if int(response.Meta.TotalPages) <= page {
-			return units, nil
-		}
-	}
-	return nil, errors.New("Five ELD returned too many unit pages")
-}
-
-func (c *Client) LatestTracking(ctx context.Context, usdot, vehicleID string, from, to time.Time) (Tracking, bool, error) {
-	var response []struct {
-		Address     string `json:"address"`
-		Coordinates struct {
-			Latitude  float64 `json:"lat"`
-			Longitude float64 `json:"lng"`
-		} `json:"coordinates"`
-		Date string `json:"date"`
-	}
-	query := url.Values{"from": {from.UTC().Format(time.RFC3339Nano)}, "to": {to.UTC().Format(time.RFC3339Nano)}}
-	path := "/api/externalservice/trackings/" + url.PathEscape(usdot) + "/" + url.PathEscape(vehicleID) + "/"
-	if err := c.get(ctx, path, query, &response); err != nil {
-		return Tracking{}, false, err
-	}
-	var latest Tracking
-	found := false
-	for _, point := range response {
-		reportedAt, err := time.Parse(time.RFC3339Nano, point.Date)
-		if err != nil {
-			continue
-		}
-		if !found || reportedAt.After(latest.ReportedAt) {
-			latest = Tracking{
-				Address:    strings.TrimSpace(point.Address),
-				Latitude:   point.Coordinates.Latitude,
-				Longitude:  point.Coordinates.Longitude,
-				ReportedAt: reportedAt.UTC(),
-			}
-			found = true
-		}
-	}
-	return latest, found, nil
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, target any) error {

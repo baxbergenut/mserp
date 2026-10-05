@@ -281,25 +281,25 @@ Implemented in migration 050 and the server-side Five ELD client. Authentication
 uses both the company API key and integration-provider token; credentials and
 USDOT stay in the backend environment. The five-minute default poll makes one
 fleet position request, matches active assigned trucks only by normalized VIN,
-and performs bounded/cached tracking lookups for Five ELD's own human-readable
-address. Address lookup concurrency, per-cycle count and refresh interval are
-bounded and configurable. Unmatched, ambiguous and invalid units are counted for
-review and never rewrite fleet assignments.
+and caches the latest provider coordinates in PostgreSQL. Unmatched, ambiguous
+and invalid units are counted for review and never rewrite fleet assignments.
 
 The table places Location immediately before Destination. Location shows only
-the provider address and is blank when no address is available; its exact update
-time and stale state appear on hover rather than taking cell space. Destination
-continues to mean the current load stop/manual destination. The Loads panel shows
-the full truck location, freshness and a coordinate-backed map. Last known data
-survives provider failures and becomes stale from the provider timestamp.
+provider coordinates newer than the configured freshness threshold and is blank
+for stale or missing data. A click copies the displayed coordinate pair; the
+exact provider update time appears only on hover. Destination continues to mean
+the current load stop/manual destination. The Loads panel shows the same live
+coordinate and map. Last known data survives provider failures in the server
+cache but is hidden after it becomes stale.
 
-Ordinary Driver Board refreshes only reread MSERP. `POST /jobs/sync-eld` provides
+Ordinary Driver Board refreshes only reread the shared MSERP cache, so concurrent
+viewers do not multiply provider requests. `POST /jobs/sync-eld` provides
 an authorized targeted refresh, while the backend interval worker polls at the
 configured cadence. No telemetry update changes financial data, assignments,
 load status or progress, and the UI makes no ETA or HOS claim. Targeted active
 DataTruck load refresh remains separate future work.
 
-Acceptance covers correct VIN mapping, provider-owned address display,
+Acceptance covers correct VIN mapping, live coordinate display and copying,
 stale/offline units, changed assignments, provider outages/rate limits and access
 controls. No telemetry poll modifies financial records or causes a load transition.
 

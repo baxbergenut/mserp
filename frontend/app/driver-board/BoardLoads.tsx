@@ -7,6 +7,7 @@ import { compactLoadLocation } from "@/app/lib/usStates";
 import { fetchBoardLoads } from "@/app/lib/api";
 import type { BoardLoad, BoardLoads as Loads, BoardLoadAction, DriverBoardLocation } from "@/app/lib/types";
 import { controlClass } from "@/app/components/management/ManagementUI";
+import { LocationCell } from "./LocationCell";
 
 const buttonClass = "rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40";
 const time = (value: string) => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown";
@@ -90,7 +91,7 @@ export function BoardLoads({ driverId, name, initial, location, canEdit, waiting
         {waiting && <p className="text-xs text-amber-300">Wait for board edits to finish saving before changing loads.</p>}
         {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
         {location && <section aria-label="Truck location" className="overflow-hidden rounded-lg border border-zinc-800">
-          <div className="px-3 py-2"><h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Truck location</h3><p className="mt-1 text-sm text-zinc-200">{location.address || "Address unavailable"}</p><p className={`mt-1 text-[11px] ${location.stale ? "text-amber-300" : "text-zinc-500"}`}>Five ELD updated {time(location.reportedAt)} NY{location.stale ? " · stale" : ""}</p></div>
+          <div className="px-3 py-2"><h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">Truck location</h3><div className="mt-1"><LocationCell name={name} location={location} /></div></div>
           <iframe title={`${name} truck location map`} src={mapURL} loading="lazy" referrerPolicy="no-referrer" className="h-56 w-full border-0 grayscale-[20%]" />
         </section>}
         <div className="flex items-center justify-end gap-2">{view.customOrder && canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "reset_order" })}>Reset order</button>}<button className={buttonClass} disabled={busy} onClick={() => void refresh()}><RefreshCw className="inline h-3.5 w-3.5" /> Refresh loads</button></div>
