@@ -15,7 +15,7 @@ func TestClientReadsCurrentPositions(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/api/v2/units-by-usdot/123456":
-			fmt.Fprint(w, `{"units":[{"truck_number":"17","vin":"1M8GDM9AXKP042788","coordinates":{"lat":41.881,"lng":-87.623},"timestamp":"2026-10-05T14:30:00Z"}]}`)
+			fmt.Fprint(w, `{"units":[{"truck_number":"17","vin":"1M8GDM9AXKP042788","coordinates":{"lat":41.881,"lng":-87.623},"rotation":90,"timestamp":"2026-10-05T14:30:00Z"}]}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -26,6 +26,9 @@ func TestClientReadsCurrentPositions(t *testing.T) {
 	positions, err := client.CurrentPositions(ctx, "123456")
 	if err != nil || len(positions) != 1 || positions[0].VIN != "1M8GDM9AXKP042788" {
 		t.Fatalf("positions: %+v %v", positions, err)
+	}
+	if positions[0].Heading == nil || *positions[0].Heading != 90 {
+		t.Fatalf("missing heading: %+v", positions[0])
 	}
 }
 

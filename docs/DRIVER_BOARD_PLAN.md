@@ -288,11 +288,15 @@ The table places Latest location immediately before Destination. It shows the
 latest known provider coordinates regardless of age and is blank only when no
 safe matched location is available. A click copies the displayed coordinate pair; the
 exact provider update time appears only on hover. Destination continues to mean
-the current load stop/manual destination. The Loads panel shows the same latest
-coordinate and map. Last known data survives provider failures in the server
+the current load stop/manual destination. The Loads panel contains no telemetry;
+truck numbers link to the redesigned Truck details. Both Truck and Driver Overview
+pages show a compact side map with a direction arrow from Five ELD rotation
+(migration 051), or a neutral dot when heading is missing. Driver map reads resolve
+the current truck assignment, refreshing from the cache every 30 seconds/on focus.
+Last known data survives provider failures in the server
 cache and remains visible even when its timestamp is old. There is no age cutoff.
 Coordinates recorded three hours ago or more appear muted gray; newer ones use the
-normal text color. The color ages while the board or Loads panel remains open.
+normal text color. The color ages while the board or detail page remains open.
 
 Ordinary Driver Board refreshes only reread the shared MSERP cache, so concurrent
 viewers do not multiply provider requests. `POST /jobs/sync-eld` provides

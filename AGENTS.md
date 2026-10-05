@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `049_dispatcher_updaters.sql`:
+  `051_five_eld_heading.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -290,6 +290,9 @@ browser bundle.
   Unpaginated owner lookups include the company. Inactive investors retain
   ownership/history. Company identity is protected.
 - Trucks: `GET/POST /trucks`, `GET/PUT/DELETE /trucks/{id}`
+  plus `GET /trucks/{id}/location` and `GET /drivers/{id}/location` (fleet.read).
+  Location reads return the shared cached coordinates/heading and resolve the
+  driver's current truck assignment, without requesting upstream telemetry.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`.
 - Updaters: `GET/POST /updaters`, `PUT/DELETE /updaters/{id}` (fleet permissions).
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
@@ -425,8 +428,15 @@ assignment lookup lists.
   board never calls Five ELD. The Latest location column is immediately before
   Destination and shows the latest known coordinates regardless of age,
   copies them on click and exposes the exact provider timestamp only on hover;
-  missing values stay blank. Loads shows the same latest coordinate and map.
-  Locations recorded three hours ago or more appear muted gray, including in Loads.
+  missing values stay blank. Loads contains no truck telemetry. Fleet-readable
+  truck numbers link to Truck details. Truck details mirrors the Driver profile:
+  summary, editor, Overview and Expenses tabs, vehicle/documents/maintenance/notes.
+  Truck and Driver Overview pages have a compact side map using Leaflet/OSM;
+  driver locations resolve the current assigned truck on each cache read.
+  Visible profiles refresh locations every 30 seconds and on focus, never calling
+  Five ELD directly. Migration 051 caches optional heading with each coordinate;
+  the map arrow rotates to the reported heading, or uses a neutral dot if absent.
+  Locations recorded three hours ago or more appear muted gray in all views.
   Last known points remain visible during outages. Polling defaults to five minutes;
   the retired FIVE_ELD_STALE_AFTER setting is ignored. The legacy database
   stale_after_seconds column is retained only for rollback compatibility.

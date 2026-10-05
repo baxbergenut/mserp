@@ -354,6 +354,7 @@ export interface DriverBoardEntry {
 }
 
 export interface DriverBoardDriver {
+  truckId: string;
   dispatcherExtension?: number | null;
   mainUpdaterName?: string;
   mainUpdaterExtension?: number | null;
@@ -370,10 +371,17 @@ export interface DriverBoardDriver {
 }
 
 export interface DriverBoardLocation {
+  heading: number | null;
   latitude: number;
   longitude: number;
   reportedAt: string;
   providerTruckNumber: string;
+}
+
+export interface FleetLocation {
+  truckId: string;
+  truckUnit: string;
+  location: DriverBoardLocation | null;
 }
 
 export interface FiveELDBoardSummary {

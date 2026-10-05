@@ -1538,6 +1538,13 @@ DO $$ BEGIN
 END $$;
 
 COMMIT;
+
+BEGIN;
+
+ALTER TABLE five_eld_locations ADD COLUMN heading DOUBLE PRECISION
+    CHECK (heading >= 0 AND heading < 360);
+
+COMMIT;
 BEGIN;
 
 -- A plan identity survives rate/date edits, but never follows a reused load slot.

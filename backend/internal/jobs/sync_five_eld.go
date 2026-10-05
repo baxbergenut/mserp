@@ -92,8 +92,12 @@ func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 			continue
 		}
 		position := byVIN[vin][0]
+		heading := position.Heading
+		if heading != nil && (math.IsNaN(*heading) || math.IsInf(*heading, 0) || *heading < 0 || *heading >= 360) {
+			heading = nil
+		}
 		locations = append(locations, repository.FiveELDLocation{VIN: vin, ProviderTruckNumber: position.TruckNumber,
-			Latitude: position.Latitude, Longitude: position.Longitude, ReportedAt: position.ReportedAt, FetchedAt: now})
+			Latitude: position.Latitude, Longitude: position.Longitude, Heading: heading, ReportedAt: position.ReportedAt, FetchedAt: now})
 	}
 
 	unmatched := []string{}

@@ -82,7 +82,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
 				exec(string(historyMigration))
-				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql", "050_five_eld_locations.sql"} {
+				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql", "050_five_eld_locations.sql", "051_five_eld_heading.sql"} {
 					migration, err := os.ReadFile("../../sql/" + name)
 					if err != nil {
 						t.Fatal(err)
@@ -135,8 +135,8 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: "ELD-17", VIN: &vin, DriverID: &driver.ID, Status: "available", Active: true, IsCompanyOwned: true}); err != nil {
 				t.Fatal(err)
 			}
-			exec(`INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at)
-			 VALUES($1,'17',41.881,-87.623,now(),now())`, vin)
+			exec(`INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at,heading)
+			 VALUES($1,'17',41.881,-87.623,now(),now(),90)`, vin)
 			exec(`INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_success_at) VALUES(true,now(),now())`)
 			repo = NewDriverBoardRepository(pool, true)
 			week, _ := time.Parse("2006-01-02", "2026-09-28")
@@ -168,13 +168,32 @@ func TestDriverBoardDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				location := latestBoard.Drivers[0].Location
-				if location == nil || location.Latitude != 41.881 || location.Longitude != -87.623 || !location.ReportedAt.Equal(reported) {
+				if location == nil || location.Latitude != 41.881 || location.Longitude != -87.623 || location.Heading == nil || *location.Heading != 90 || !location.ReportedAt.Equal(reported) {
 					t.Fatalf("latest Five ELD location lost at age %s: %+v", age, location)
 				}
 				if latestBoard.Drivers[1].Location != nil {
 					t.Fatal("missing Five ELD location must remain blank")
 				}
+				for _, read := range []func() (FleetLocation, error){
+					func() (FleetLocation, error) { return fleet.TruckLocation(ctx, latestBoard.Drivers[0].TruckID) },
+					func() (FleetLocation, error) { return fleet.DriverTruckLocation(ctx, driver.ID) },
+				} {
+					value, readErr := read()
+					if readErr != nil || value.TruckID != latestBoard.Drivers[0].TruckID || value.Location == nil || value.Location.Heading == nil || *value.Location.Heading != 90 || !value.Location.ReportedAt.Equal(reported) {
+						t.Fatalf("fleet location: %+v error=%v", value, readErr)
+					}
+				}
 			}
+			unassigned, err := fleet.DriverTruckLocation(ctx, other.ID)
+			if err != nil || unassigned.TruckID != "" || unassigned.Location != nil {
+				t.Fatalf("unassigned location: %+v error=%v", unassigned, err)
+			}
+			exec(`UPDATE five_eld_sync_state SET ambiguous_vins=ARRAY[$1]`, vin)
+			ambiguous, err := fleet.DriverTruckLocation(ctx, driver.ID)
+			if err != nil || ambiguous.Location != nil {
+				t.Fatalf("ambiguous location: %+v error=%v", ambiguous, err)
+			}
+			exec(`UPDATE five_eld_sync_state SET ambiguous_vins='{}'`)
 			var draft DriverBoardEntry
 			for _, e := range board.Entries {
 				if e.DriverID == driver.ID {

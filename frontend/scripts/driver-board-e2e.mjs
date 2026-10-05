@@ -2,6 +2,7 @@ import { expect } from '@playwright/test';
 import { join } from 'node:path';
 import { runStatusBoardLoadsE2E } from './status-board-loads-e2e.mjs';
 import { runStatusBoardProgressE2E } from './status-board-progress-e2e.mjs';
+import { runFleetLocationE2E } from './fleet-location-e2e.mjs';
 
 export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -22,6 +23,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at) VALUES
     ('1M8GDM9AXKP042788','17',41.881,-87.623,now(),now()),
     ('1M8GDM9AXKP042789','18',39.9526,-75.1652,now()-interval '3 days',now());
+    UPDATE five_eld_locations SET heading=90 WHERE vin='1M8GDM9AXKP042788';
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,driver_rate,miles) VALUES
     ('e4500000-0000-0000-0000-000000000002','${week}','PLAN-101',1000.10,900.05,500.25),
     ('e4500000-0000-0000-0000-000000000003','${week}','PLAN-102',2000.20,1900.10,800.50);
@@ -90,6 +92,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page).toHaveURL(/driver-board/);
   await expect(page.getByRole('button', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Board Percent · Call in RingCentral', exact: true })).toHaveCount(0);
+  await runFleetLocationE2E({ page, base, sql, schema, temp });
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
@@ -278,6 +281,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     remote = (await getBoard()).entries.find(e => e.driverId === id);
     expect((await viewer.request.put(`${base}/api/driver-board`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { entries: [remote] } })).status()).toBe(403);
     expect((await viewer.request.get(`${base}/api/drivers`)).status()).toBe(403);
+    expect((await viewer.request.get(`${base}/api/drivers/${id}/location`)).status()).toBe(403);
+    expect((await viewer.request.get(`${base}/api/trucks/e4500000-0000-0000-0000-000000000004/location`)).status()).toBe(403);
+    await expect(viewer.getByRole('link', { name: 'ELD-17', exact: true })).toHaveCount(0);
     await expect(viewer.getByRole('button', { name: 'All drivers', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(viewer.getByLabel('Saved board view')).toHaveCount(0);
     expect((await viewer.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).status()).toBe(200);

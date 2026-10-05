@@ -18,6 +18,7 @@ type Position struct {
 	VIN         string
 	Latitude    float64
 	Longitude   float64
+	Heading     *float64
 	ReportedAt  time.Time
 }
 
@@ -44,8 +45,9 @@ func NewClientWithHTTPClient(baseURL, apiKey, providerToken string, httpClient *
 func (c *Client) CurrentPositions(ctx context.Context, usdot string) ([]Position, error) {
 	var response struct {
 		Units []struct {
-			TruckNumber string `json:"truck_number"`
-			VIN         string `json:"vin"`
+			TruckNumber string   `json:"truck_number"`
+			VIN         string   `json:"vin"`
+			Rotation    *float64 `json:"rotation"`
 			Coordinates struct {
 				Latitude  float64 `json:"lat"`
 				Longitude float64 `json:"lng"`
@@ -67,6 +69,7 @@ func (c *Client) CurrentPositions(ctx context.Context, usdot string) ([]Position
 			VIN:         strings.TrimSpace(unit.VIN),
 			Latitude:    unit.Coordinates.Latitude,
 			Longitude:   unit.Coordinates.Longitude,
+			Heading:     unit.Rotation,
 			ReportedAt:  reportedAt.UTC(),
 		})
 	}

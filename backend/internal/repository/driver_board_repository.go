@@ -41,6 +41,7 @@ type DriverBoardDriver struct {
 	FullName                   string               `json:"fullName"`
 	DriverType                 string               `json:"driverType"`
 	TruckUnit                  string               `json:"truckUnit"`
+	TruckID                    string               `json:"truckId"`
 	Phone                      string               `json:"phone"`
 	DispatcherID               string               `json:"dispatcherId"`
 	DispatcherName             string               `json:"dispatcherName"`
@@ -48,6 +49,7 @@ type DriverBoardDriver struct {
 }
 
 type DriverBoardLocation struct {
+	Heading             *float64  `json:"heading"`
 	Latitude            float64   `json:"latitude"`
 	Longitude           float64   `json:"longitude"`
 	ReportedAt          time.Time `json:"reportedAt"`
@@ -110,12 +112,12 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	}
 	defer tx.Rollback(ctx)
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,d.is_owner_operator,
- coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(d.phone,''),
+ coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0),
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -124,9 +126,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN investors i ON i.id=t.owner_id
  LEFT JOIN driver_board b ON b.driver_id=d.id
- LEFT JOIN five_eld_sync_state es ON es.singleton
- LEFT JOIN five_eld_locations el ON el.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
-   AND NOT (el.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+ `+fiveELDLocationJoinSQL+`
  WHERE d.active
  ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
 	if err != nil {
@@ -138,19 +138,19 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var pay string
 		var owner, investor, own bool
 		var providerTruckNumber *string
-		var latitude, longitude *float64
+		var latitude, longitude, heading *float64
 		var reportedAt *time.Time
-		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.Phone, &d.DispatcherID, &d.DispatcherName,
+		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading)
 		if err != nil {
 			rows.Close()
 			return result, err
 		}
 		d.DriverType = driverBoardType(pay, owner, investor, own)
 		if latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
-			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude,
+			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading,
 				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber}
 		}
 		e.DriverID = d.ID

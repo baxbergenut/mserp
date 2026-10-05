@@ -75,3 +75,21 @@ func TestNormalizeELDVIN(t *testing.T) {
 		t.Fatal("short VIN accepted")
 	}
 }
+
+func TestSyncFiveELDHeading(t *testing.T) {
+	for _, value := range []float64{-1, 0, 90, 359, 360} {
+		repo := &fakeFiveELDRepo{active: map[string]struct{}{}}
+		job := NewSyncFiveELDJob(&fakeFiveELDClient{positions: []fiveeld.Position{{VIN: "1M8GDM9AXKP042788", Heading: &value, ReportedAt: time.Now()}}}, repo, "1", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if _, err := job.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		got := repo.stored[0].Heading
+		if value >= 0 && value < 360 {
+			if got == nil || *got != value {
+				t.Fatalf("heading %v lost", value)
+			}
+		} else if got != nil {
+			t.Fatalf("invalid heading %v accepted", value)
+		}
+	}
+}

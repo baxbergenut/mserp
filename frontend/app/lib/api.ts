@@ -40,6 +40,7 @@ import type {
   TollPage,
   TollDashboard,
   Truck,
+  FleetLocation,
   TruckInput,
   AuthSession,
   Expense,
@@ -291,6 +292,8 @@ export const uploadCDLFile = (file: File, renderedPages: Blob[] = []) => {
 
 export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
 export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);
+export const fetchTruckLocation = (id: string) => apiRequest<FleetLocation>(`/trucks/${id}/location`);
+export const fetchDriverTruckLocation = (id: string) => apiRequest<FleetLocation>(`/drivers/${id}/location`);
 export const fetchTrucksPage = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<Truck>>(withQuery("/trucks", query));
 export const createTruck = (input: TruckInput) =>
