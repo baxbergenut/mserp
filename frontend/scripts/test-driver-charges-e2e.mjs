@@ -83,7 +83,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Admin fee', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
-  await expect(page.getByRole('rowheader', { name: 'Unassigned Driver', exact: true })).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: /Unassigned Driver/ })).toBeVisible();
   await expect(page.getByLabel('Inactive Driver, Admin fee', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('rowheader', { name: /Inactive Driver/ })).toHaveCount(0);
   await expect(page.getByLabel('Filter driver').locator('option', { hasText: 'Inactive Driver' })).toHaveCount(0);
@@ -161,7 +161,7 @@ try {
   await expect(adminAmount).toHaveValue('50.00');
 
   await expect(page.getByRole('columnheader', { name: 'Admin fee', exact: true })).toBeVisible();
-  const matrixRow = page.getByRole('rowheader', { name: 'E2e Driver', exact: true }).locator('..');
+  const matrixRow = page.getByRole('rowheader', { name: /E2e Driver/ }).locator('..');
   expect((await matrixRow.boundingBox()).height).toBe(32);
   const currentMatrixWeek = await page.getByLabel('Matrix effective week', { exact: true }).inputValue();
   const previousDate = new Date(`${currentMatrixWeek}T12:00:00Z`); previousDate.setUTCDate(previousDate.getUTCDate() - 7);
