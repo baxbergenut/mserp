@@ -9,7 +9,7 @@ assert.equal(isOldLocation('2026-10-05T13:00:00.001Z', locationNow), false);
 assert.equal(isOldLocation('2026-10-05T13:00:00Z', locationNow), true);
 assert.equal(isOldLocation('2026-10-02T13:00:00Z', locationNow), true);
 assert.equal(isOldLocation('2026-10-05T17:00:00Z', locationNow), false);
-console.log('Latest location checks passed: red at three hours, not before.');
+console.log('Latest location checks passed: muted gray at three hours, not before.');
 const draft = { driverId: 'a', notes: 'first', driverHome: 'Memphis, TN', version: 0, homeVersion: 0 };
 const committed = { ...draft, version: 1, homeVersion: 1 };
 assert.deepEqual(reconcileDriverBoard({ a: draft }, { a: draft }, [committed]), {});

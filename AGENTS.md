@@ -426,7 +426,7 @@ assignment lookup lists.
   Destination and shows the latest known coordinates regardless of age,
   copies them on click and exposes the exact provider timestamp only on hover;
   missing values stay blank. Loads shows the same latest coordinate and map.
-  Locations recorded three hours ago or more appear red, including in Loads.
+  Locations recorded three hours ago or more appear muted gray, including in Loads.
   Last known points remain visible during outages. Polling defaults to five minutes;
   the retired FIVE_ELD_STALE_AFTER setting is ignored. The legacy database
   stale_after_seconds column is retained only for rollback compatibility.

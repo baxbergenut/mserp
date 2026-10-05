@@ -76,14 +76,14 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByRole('columnheader', { name: 'Latest location', exact: true })).toBeVisible();
   const location = page.getByRole('button', { name: 'Board Cpm · Latest location', exact: true });
   await expect(location).toHaveText('41.88100, -87.62300');
-  await expect(location).not.toHaveClass(/text-red-400/);
+  await expect(location).toHaveClass(/(?:^| )text-zinc-300(?: |$)/);
   await expect(location).toHaveAttribute('title', /Five ELD updated .* NY · Click to copy/);
   await location.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
   await expect(location.getByRole('status')).toHaveText('Copied');
   const olderLocation = page.getByRole('button', { name: 'Board Percent · Latest location', exact: true });
   await expect(olderLocation).toHaveText('39.95260, -75.16520');
-  await expect(olderLocation).toHaveClass(/text-red-400/);
+  await expect(olderLocation).toHaveClass(/(?:^| )text-zinc-400(?: |$)/);
   await expect(olderLocation).toHaveAttribute('title', /Five ELD updated .* NY · Click to copy/);
   await olderLocation.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('39.95260, -75.16520');

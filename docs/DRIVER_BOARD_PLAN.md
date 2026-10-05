@@ -291,7 +291,7 @@ exact provider update time appears only on hover. Destination continues to mean
 the current load stop/manual destination. The Loads panel shows the same latest
 coordinate and map. Last known data survives provider failures in the server
 cache and remains visible even when its timestamp is old. There is no age cutoff.
-Coordinates recorded three hours ago or more appear red; newer ones use the
+Coordinates recorded three hours ago or more appear muted gray; newer ones use the
 normal text color. The color ages while the board or Loads panel remains open.
 
 Ordinary Driver Board refreshes only reread the shared MSERP cache, so concurrent

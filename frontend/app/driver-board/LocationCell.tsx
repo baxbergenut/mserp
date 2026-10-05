@@ -33,6 +33,6 @@ export function LocationCell({ name, location }: { name: string; location: Drive
   }
   return <button type="button" aria-label={`${name} · Latest location`}
     title={`${coordinates} · Five ELD updated ${locationTime(location.reportedAt)} NY · Click to copy`}
-    className={`flex h-8 w-full min-w-0 items-center overflow-hidden whitespace-nowrap px-1.5 text-left hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 ${old ? "text-red-400 hover:text-red-300" : "text-zinc-300 hover:text-zinc-100"}`}
+    className={`flex h-8 w-full min-w-0 items-center overflow-hidden whitespace-nowrap px-1.5 text-left hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 ${old ? "text-zinc-400 hover:text-zinc-300" : "text-zinc-300 hover:text-zinc-100"}`}
     onClick={copy}><span className="truncate">{feedback || coordinates}</span><span className="sr-only" role="status">{feedback}</span></button>;
 }
