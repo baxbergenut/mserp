@@ -15,6 +15,20 @@ import (
 
 const maxResponseBytes = 4 << 20
 
+// flexibleInt accepts both JSON numbers and quoted decimal values. Five ELD's
+// pagination metadata has returned both representations in live responses.
+type flexibleInt int
+
+func (value *flexibleInt) UnmarshalJSON(data []byte) error {
+	raw := strings.Trim(strings.TrimSpace(string(data)), `"`)
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fmt.Errorf("invalid integer %q", raw)
+	}
+	*value = flexibleInt(parsed)
+	return nil
+}
+
 type Position struct {
 	TruckNumber string
 	VIN         string
@@ -99,8 +113,8 @@ func (c *Client) ActiveUnits(ctx context.Context, usdot string) ([]Unit, error) 
 				VIN         string `json:"vin"`
 			} `json:"data"`
 			Meta struct {
-				Page       int `json:"page"`
-				TotalPages int `json:"totalPages"`
+				Page       flexibleInt `json:"page"`
+				TotalPages flexibleInt `json:"totalPages"`
 			} `json:"meta"`
 		}
 		query := url.Values{"page": {strconv.Itoa(page)}, "perPage": {strconv.Itoa(pageSize)}, "is_active": {"true"}}
@@ -110,7 +124,7 @@ func (c *Client) ActiveUnits(ctx context.Context, usdot string) ([]Unit, error) 
 		for _, unit := range response.Data {
 			units = append(units, Unit{ID: strings.TrimSpace(unit.ID), TruckNumber: strings.TrimSpace(unit.TruckNumber), VIN: strings.TrimSpace(unit.VIN)})
 		}
-		if response.Meta.TotalPages <= page {
+		if int(response.Meta.TotalPages) <= page {
 			return units, nil
 		}
 	}

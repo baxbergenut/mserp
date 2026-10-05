@@ -21,7 +21,7 @@ func TestClientReadsPositionsDirectoryAndAddress(t *testing.T) {
 			if r.URL.Query().Get("is_active") != "true" {
 				t.Fatal("active filter missing")
 			}
-			fmt.Fprint(w, `{"data":[{"id":"vehicle-17","truck_number":"17","vin":"1M8GDM9AXKP042788"}],"meta":{"page":1,"totalPages":1}}`)
+			fmt.Fprint(w, `{"data":[{"id":"vehicle-17","truck_number":"17","vin":"1M8GDM9AXKP042788"}],"meta":{"page":"1","totalPages":"1"}}`)
 		case "/api/externalservice/trackings/123456/vehicle-17/":
 			fmt.Fprint(w, `[{"address":"Chicago, IL","coordinates":{"lat":41.881,"lng":-87.623},"date":"2026-10-05T14:30:00Z"}]`)
 		default:
