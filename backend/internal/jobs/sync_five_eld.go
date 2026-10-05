@@ -179,7 +179,11 @@ func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 			}
 			defer func() { <-semaphore }()
 			position := locations[index]
-			point, found, lookupErr := j.client.LatestTracking(ctx, j.usdot, unit.ID, position.ReportedAt.Add(-6*time.Hour), position.ReportedAt.Add(5*time.Minute))
+			trackingTo := position.ReportedAt.Add(5 * time.Minute)
+			if trackingTo.After(now) {
+				trackingTo = now
+			}
+			point, found, lookupErr := j.client.LatestTracking(ctx, j.usdot, unit.ID, position.ReportedAt.Add(-6*time.Hour), trackingTo)
 			resultMu.Lock()
 			addressLookups++
 			if lookupErr != nil {

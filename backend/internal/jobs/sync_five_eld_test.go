@@ -13,10 +13,11 @@ import (
 )
 
 type fakeFiveELDClient struct {
-	positions []fiveeld.Position
-	units     []fiveeld.Unit
-	tracking  fiveeld.Tracking
-	err       error
+	positions  []fiveeld.Position
+	units      []fiveeld.Unit
+	tracking   fiveeld.Tracking
+	trackingTo time.Time
+	err        error
 }
 
 func (f *fakeFiveELDClient) CurrentPositions(context.Context, string) ([]fiveeld.Position, error) {
@@ -25,7 +26,8 @@ func (f *fakeFiveELDClient) CurrentPositions(context.Context, string) ([]fiveeld
 func (f *fakeFiveELDClient) ActiveUnits(context.Context, string) ([]fiveeld.Unit, error) {
 	return f.units, nil
 }
-func (f *fakeFiveELDClient) LatestTracking(context.Context, string, string, time.Time, time.Time) (fiveeld.Tracking, bool, error) {
+func (f *fakeFiveELDClient) LatestTracking(_ context.Context, _, _ string, _, to time.Time) (fiveeld.Tracking, bool, error) {
+	f.trackingTo = to
 	return f.tracking, true, nil
 }
 
@@ -59,13 +61,17 @@ func TestSyncFiveELDMatchesVINAndAddsProviderAddress(t *testing.T) {
 	}
 	repo := &fakeFiveELDRepo{active: map[string]struct{}{"1M8GDM9AXKP042788": {}}}
 	job := NewSyncFiveELDJob(client, repo, "2812942", 15*time.Minute, 15*time.Minute, 25, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	job.now = func() time.Time { return reported.Add(time.Minute) }
+	now := reported.Add(time.Minute)
+	job.now = func() time.Time { return now }
 	result, err := job.Run(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Saved != 1 || result.AddressLookups != 1 || len(repo.stored) != 1 || repo.stored[0].Address != "Chicago, IL" {
 		t.Fatalf("result=%+v stored=%+v", result, repo.stored)
+	}
+	if !client.trackingTo.Equal(now) {
+		t.Fatalf("tracking end=%s, want current time %s", client.trackingTo, now)
 	}
 }
 
