@@ -127,7 +127,6 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  LEFT JOIN five_eld_sync_state es ON es.singleton
  LEFT JOIN five_eld_locations el ON el.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
    AND NOT (el.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
-	 AND abs(extract(epoch from now()-el.reported_at))<=coalesce(es.stale_after_seconds,900)
  WHERE d.active
  ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
 	if err != nil {

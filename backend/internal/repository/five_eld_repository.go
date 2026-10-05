@@ -53,7 +53,7 @@ func (r *FiveELDRepository) ActiveTruckVINs(ctx context.Context) (map[string]str
 	return result, rows.Err()
 }
 
-func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []FiveELDLocation, unmatched, ambiguous []string, invalid int, staleAfter time.Duration, result FiveELDSyncResult) error {
+func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []FiveELDLocation, unmatched, ambiguous []string, invalid int, result FiveELDSyncResult) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -75,23 +75,23 @@ func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []Five
 		}
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO five_eld_sync_state
- (singleton,last_attempt_at,last_success_at,last_error,stale_after_seconds,unmatched_vins,ambiguous_vins,invalid_unit_count)
- VALUES(true,$1,$1,'',$2,$3,$4,$5)
+ (singleton,last_attempt_at,last_success_at,last_error,unmatched_vins,ambiguous_vins,invalid_unit_count)
+ VALUES(true,$1,$1,'',$2,$3,$4)
  ON CONFLICT(singleton) DO UPDATE SET last_attempt_at=EXCLUDED.last_attempt_at,last_success_at=EXCLUDED.last_success_at,
- last_error='',stale_after_seconds=EXCLUDED.stale_after_seconds,unmatched_vins=EXCLUDED.unmatched_vins,
+ last_error='',unmatched_vins=EXCLUDED.unmatched_vins,
  ambiguous_vins=EXCLUDED.ambiguous_vins,invalid_unit_count=EXCLUDED.invalid_unit_count`,
-		result.SyncedAt, int(staleAfter.Seconds()), unmatched, ambiguous, invalid)
+		result.SyncedAt, unmatched, ambiguous, invalid)
 	if err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func (r *FiveELDRepository) RecordFailure(ctx context.Context, attemptedAt time.Time, staleAfter time.Duration, syncErr error) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_error,stale_after_seconds)
- VALUES(true,$1,$2,$3) ON CONFLICT(singleton) DO UPDATE SET
- last_attempt_at=EXCLUDED.last_attempt_at,last_error=EXCLUDED.last_error,stale_after_seconds=EXCLUDED.stale_after_seconds`,
-		attemptedAt, syncErr.Error(), int(staleAfter.Seconds()))
+func (r *FiveELDRepository) RecordFailure(ctx context.Context, attemptedAt time.Time, syncErr error) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_error)
+ VALUES(true,$1,$2) ON CONFLICT(singleton) DO UPDATE SET
+ last_attempt_at=EXCLUDED.last_attempt_at,last_error=EXCLUDED.last_error`,
+		attemptedAt, syncErr.Error())
 	return err
 }
 

@@ -172,7 +172,6 @@ FIVE_ELD_PROVIDER_TOKEN=...
 FIVE_ELD_USDOT=...
 FIVE_ELD_API_URL=https://read.fiveeld.com
 FIVE_ELD_SYNC_INTERVAL=5m
-FIVE_ELD_STALE_AFTER=15m
 RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
@@ -423,11 +422,13 @@ assignment lookup lists.
   Five ELD uses migration 050 and server-only API key/provider-token/USDOT
   configuration. A bounded interval poll matches current positions to assigned
   trucks by normalized VIN and caches the coordinates in PostgreSQL. Opening the
-  board never calls Five ELD. The Location column is immediately before
-  Destination, shows only coordinates newer than the configured stale threshold,
+  board never calls Five ELD. The Latest location column is immediately before
+  Destination and shows the latest known coordinates regardless of age,
   copies them on click and exposes the exact provider timestamp only on hover;
-  stale/missing values stay blank. Loads shows the live coordinate and map. Last
-  known points survive outages in the cache but are not exposed after they stale.
+  missing values stay blank. Loads shows the same latest coordinate and map. Last
+  known points remain visible during outages. Polling defaults to five minutes;
+  the retired FIVE_ELD_STALE_AFTER setting is ignored. The legacy database
+  stale_after_seconds column is retained only for rollback compatibility.
   Unmatched/ambiguous units require review and never change assignments, loads,
   progress or financial records. Handoff remains a future phase in
   docs/DRIVER_BOARD_PLAN.md.

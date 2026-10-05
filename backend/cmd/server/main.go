@@ -109,7 +109,7 @@ func main() {
 	if cfg.FiveELDEnabled {
 		fiveELDJob = jobs.NewSyncFiveELDJob(
 			fiveeld.NewClient(cfg.FiveELDAPIURL, cfg.FiveELDAPIKey, cfg.FiveELDProviderToken),
-			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, cfg.FiveELDStaleAfter, logger,
+			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, logger,
 		)
 	}
 	expenseExtractor := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiExpenseModel)

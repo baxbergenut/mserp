@@ -152,10 +152,28 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if !board.ELD.Configured || board.Drivers[0].Location == nil || board.Drivers[0].Location.Latitude != 41.881 || board.Drivers[0].Location.Longitude != -87.623 {
 				t.Fatalf("Five ELD board location: %+v", board.Drivers)
 			}
-			exec(`UPDATE five_eld_locations SET reported_at=now()-interval '16 minutes' WHERE vin=$1`, vin)
-			staleBoard, err := repo.Get(ctx, week)
-			if err != nil || staleBoard.Drivers[0].Location != nil {
-				t.Fatalf("stale Five ELD location was exposed: %+v err=%v", staleBoard.Drivers, err)
+			eldRepo := NewFiveELDRepository(pool)
+			for _, age := range []time.Duration{16 * time.Minute, 72 * time.Hour} {
+				reported := time.Now().UTC().Add(-age).Truncate(time.Microsecond)
+				exec(`UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, reported)
+				// An older provider response and a failed refresh must retain the latest known point.
+				if err = eldRepo.StoreLocations(ctx, []FiveELDLocation{{VIN: vin, ProviderTruckNumber: "17", Latitude: 1, Longitude: 2, ReportedAt: reported.Add(-time.Hour), FetchedAt: time.Now()}}, []string{}, []string{}, 0, FiveELDSyncResult{SyncedAt: time.Now()}); err != nil {
+					t.Fatal(err)
+				}
+				if err = eldRepo.RecordFailure(ctx, time.Now(), errors.New("provider unavailable")); err != nil {
+					t.Fatal(err)
+				}
+				latestBoard, readErr := repo.Get(ctx, week)
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				location := latestBoard.Drivers[0].Location
+				if location == nil || location.Latitude != 41.881 || location.Longitude != -87.623 || !location.ReportedAt.Equal(reported) {
+					t.Fatalf("latest Five ELD location lost at age %s: %+v", age, location)
+				}
+				if latestBoard.Drivers[1].Location != nil {
+					t.Fatal("missing Five ELD location must remain blank")
+				}
 			}
 			var draft DriverBoardEntry
 			for _, e := range board.Entries {

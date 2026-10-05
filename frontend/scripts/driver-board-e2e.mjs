@@ -21,7 +21,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_success_at,stale_after_seconds) VALUES(true,now(),now(),900);
     INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at) VALUES
     ('1M8GDM9AXKP042788','17',41.881,-87.623,now(),now()),
-    ('1M8GDM9AXKP042789','18',39.9526,-75.1652,now()-interval '16 minutes',now());
+    ('1M8GDM9AXKP042789','18',39.9526,-75.1652,now()-interval '3 days',now());
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,driver_rate,miles) VALUES
     ('e4500000-0000-0000-0000-000000000002','${week}','PLAN-101',1000.10,900.05,500.25),
     ('e4500000-0000-0000-0000-000000000003','${week}','PLAN-102',2000.20,1900.10,800.50);
@@ -73,13 +73,18 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await phone.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
-  const location = page.getByRole('button', { name: 'Board Cpm · Location', exact: true });
+  await expect(page.getByRole('columnheader', { name: 'Latest location', exact: true })).toBeVisible();
+  const location = page.getByRole('button', { name: 'Board Cpm · Latest location', exact: true });
   await expect(location).toHaveText('41.88100, -87.62300');
   await expect(location).toHaveAttribute('title', /Five ELD updated .* NY · Click to copy/);
   await location.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
   await expect(location.getByRole('status')).toHaveText('Copied');
-  await expect(page.getByRole('button', { name: 'Board Percent · Location', exact: true })).toHaveCount(0);
+  const olderLocation = page.getByRole('button', { name: 'Board Percent · Latest location', exact: true });
+  await expect(olderLocation).toHaveText('39.95260, -75.16520');
+  await expect(olderLocation).toHaveAttribute('title', /Five ELD updated .* NY · Click to copy/);
+  await olderLocation.click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('39.95260, -75.16520');
   await expect(page).toHaveURL(/driver-board/);
   await expect(page.getByRole('button', { name: 'Board Percent · Phone', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Board Percent · Call in RingCentral', exact: true })).toHaveCount(0);

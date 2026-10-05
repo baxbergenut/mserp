@@ -46,7 +46,6 @@ type Config struct {
 	FiveELDProviderToken   string
 	FiveELDUSDOT           string
 	FiveELDSyncInterval    time.Duration
-	FiveELDStaleAfter      time.Duration
 }
 
 type DailySyncTime struct {
@@ -178,13 +177,6 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	fiveELDStaleAfter, err := parseDurationRange("FIVE_ELD_STALE_AFTER", "15m", time.Minute, 24*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-	if fiveELDStaleAfter < fiveELDSyncInterval {
-		return Config{}, errors.New("FIVE_ELD_STALE_AFTER must not be shorter than FIVE_ELD_SYNC_INTERVAL")
-	}
 	cfg := Config{
 		FleetScope:             fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
 		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
@@ -219,7 +211,6 @@ func Load() (Config, error) {
 		FiveELDProviderToken:   fiveELDProviderToken,
 		FiveELDUSDOT:           fiveELDUSDOT,
 		FiveELDSyncInterval:    fiveELDSyncInterval,
-		FiveELDStaleAfter:      fiveELDStaleAfter,
 	}
 
 	if err := cfg.FleetScope.Validate(); err != nil {

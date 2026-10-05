@@ -24,7 +24,7 @@ export function LocationCell({ name, location }: { name: string; location: Drive
     if (!navigator.clipboard) { setFeedback("Copy failed"); return; }
     navigator.clipboard.writeText(coordinates).then(() => setFeedback("Copied"), () => setFeedback("Copy failed"));
   }
-  return <button type="button" aria-label={`${name} · Location`}
+  return <button type="button" aria-label={`${name} · Latest location`}
     title={`${coordinates} · Five ELD updated ${locationTime(location.reportedAt)} NY · Click to copy`}
     className="flex h-8 w-full min-w-0 items-center overflow-hidden whitespace-nowrap px-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 focus:ring-1 focus:ring-inset focus:ring-blue-500"
     onClick={copy}><span className="truncate">{feedback || coordinates}</span><span className="sr-only" role="status">{feedback}</span></button>;

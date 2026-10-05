@@ -26,7 +26,7 @@ import { ETAEditor } from "./ETAEditor";
 const columns = [
   ["Current load", 95], ["Driver", 125], ["Driver type", 55], ["Truck", 50], ["Trailer", 70],
   ["Original gross", 90], ["Driver gross", 90], ["Phone", 115], ["Status", 95],
-  ["Location", 110], ["Destination", 130], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
+  ["Latest location", 110], ["Destination", 130], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;

@@ -23,22 +23,21 @@ type fiveELDClient interface {
 
 type fiveELDRepository interface {
 	ActiveTruckVINs(context.Context) (map[string]struct{}, error)
-	StoreLocations(context.Context, []repository.FiveELDLocation, []string, []string, int, time.Duration, repository.FiveELDSyncResult) error
-	RecordFailure(context.Context, time.Time, time.Duration, error) error
+	StoreLocations(context.Context, []repository.FiveELDLocation, []string, []string, int, repository.FiveELDSyncResult) error
+	RecordFailure(context.Context, time.Time, error) error
 }
 
 type SyncFiveELDJob struct {
-	client     fiveELDClient
-	repo       fiveELDRepository
-	usdot      string
-	staleAfter time.Duration
-	logger     *slog.Logger
-	running    atomic.Bool
-	now        func() time.Time
+	client  fiveELDClient
+	repo    fiveELDRepository
+	usdot   string
+	logger  *slog.Logger
+	running atomic.Bool
+	now     func() time.Time
 }
 
-func NewSyncFiveELDJob(client fiveELDClient, repo fiveELDRepository, usdot string, staleAfter time.Duration, logger *slog.Logger) *SyncFiveELDJob {
-	return &SyncFiveELDJob{client: client, repo: repo, usdot: usdot, staleAfter: staleAfter, logger: logger, now: time.Now}
+func NewSyncFiveELDJob(client fiveELDClient, repo fiveELDRepository, usdot string, logger *slog.Logger) *SyncFiveELDJob {
+	return &SyncFiveELDJob{client: client, repo: repo, usdot: usdot, logger: logger, now: time.Now}
 }
 
 func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult, error) {
@@ -48,7 +47,7 @@ func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 	defer j.running.Store(false)
 	now := j.now().UTC()
 	fail := func(err error) (repository.FiveELDSyncResult, error) {
-		if recordErr := j.repo.RecordFailure(ctx, now, j.staleAfter, err); recordErr != nil {
+		if recordErr := j.repo.RecordFailure(ctx, now, err); recordErr != nil {
 			j.logger.Error("record Five ELD sync failure", "error", recordErr)
 		}
 		return repository.FiveELDSyncResult{}, err
@@ -111,7 +110,7 @@ func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 	sort.Strings(ambiguous)
 	result := repository.FiveELDSyncResult{Fetched: len(positions), Saved: len(locations), Unmatched: len(unmatched),
 		Ambiguous: len(ambiguous), Invalid: invalid, SyncedAt: now}
-	if err = j.repo.StoreLocations(ctx, locations, unmatched, ambiguous, invalid, j.staleAfter, result); err != nil {
+	if err = j.repo.StoreLocations(ctx, locations, unmatched, ambiguous, invalid, result); err != nil {
 		return fail(err)
 	}
 	j.logger.Info("Five ELD sync complete", "fetched", result.Fetched, "saved", result.Saved, "unmatched", result.Unmatched,
