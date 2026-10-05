@@ -74,3 +74,7 @@ export function reconcileDriverBoard(current: Record<string, DriverBoardEntry>, 
   }
   return remaining;
 }
+
+export function isOldLocation(reportedAt: string, now: number): boolean {
+  return now - Date.parse(reportedAt) >= 3 * 60 * 60 * 1000;
+}
