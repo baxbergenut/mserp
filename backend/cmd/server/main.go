@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"mserp/internal/config"
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
+	"mserp/internal/fiveeld"
 	"mserp/internal/gemini"
 	"mserp/internal/groq"
 	"mserp/internal/httpapi"
@@ -103,6 +105,14 @@ func main() {
 		cfg.PrePassTollSyncStart,
 		logger,
 	)
+	var fiveELDJob *jobs.SyncFiveELDJob
+	if cfg.FiveELDEnabled {
+		fiveELDJob = jobs.NewSyncFiveELDJob(
+			fiveeld.NewClient(cfg.FiveELDAPIURL, cfg.FiveELDAPIKey, cfg.FiveELDProviderToken),
+			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, cfg.FiveELDStaleAfter,
+			cfg.FiveELDAddressRefresh, cfg.FiveELDMaxAddressCalls, logger,
+		)
+	}
 	expenseExtractor := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiExpenseModel)
 	router := httpapi.NewRouter(
 		logger,
@@ -122,6 +132,7 @@ func main() {
 		customTaskRepo,
 		cabCardExtractor,
 		expenseExtractor,
+		fiveELDJob,
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,
 			SessionTTL:   cfg.AuthSessionTTL,
@@ -151,38 +162,51 @@ func main() {
 	if cfg.ScheduledSyncsEnabled {
 		go func() {
 			defer close(schedulerDone)
-			jobs.RunDailyScheduler(
-				ctx,
-				logger,
-				cfg.ScheduledSyncsLocation,
-				jobs.DailyJob{
-					Name:   "loads",
-					Hour:   cfg.ScheduledLoadsSyncTime.Hour,
-					Minute: cfg.ScheduledLoadsSyncTime.Minute,
-					Run: func(ctx context.Context) error {
-						_, err := loadJob.Run(ctx)
-						return err
+			var workers sync.WaitGroup
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				jobs.RunDailyScheduler(ctx, logger, cfg.ScheduledSyncsLocation,
+					jobs.DailyJob{
+						Name:   "loads",
+						Hour:   cfg.ScheduledLoadsSyncTime.Hour,
+						Minute: cfg.ScheduledLoadsSyncTime.Minute,
+						Run: func(ctx context.Context) error {
+							_, err := loadJob.Run(ctx)
+							return err
+						},
 					},
-				},
-				jobs.DailyJob{
-					Name:   "fuel",
-					Hour:   cfg.ScheduledFuelSyncTime.Hour,
-					Minute: cfg.ScheduledFuelSyncTime.Minute,
-					Run: func(ctx context.Context) error {
-						_, err := fuelJob.Run(ctx)
-						return err
+					jobs.DailyJob{
+						Name:   "fuel",
+						Hour:   cfg.ScheduledFuelSyncTime.Hour,
+						Minute: cfg.ScheduledFuelSyncTime.Minute,
+						Run: func(ctx context.Context) error {
+							_, err := fuelJob.Run(ctx)
+							return err
+						},
 					},
-				},
-				jobs.DailyJob{
-					Name:   "tolls",
-					Hour:   cfg.ScheduledTollsSyncTime.Hour,
-					Minute: cfg.ScheduledTollsSyncTime.Minute,
-					Run: func(ctx context.Context) error {
-						_, err := tollJob.Run(ctx)
-						return err
+					jobs.DailyJob{
+						Name:   "tolls",
+						Hour:   cfg.ScheduledTollsSyncTime.Hour,
+						Minute: cfg.ScheduledTollsSyncTime.Minute,
+						Run: func(ctx context.Context) error {
+							_, err := tollJob.Run(ctx)
+							return err
+						},
 					},
-				},
-			)
+				)
+			}()
+			if fiveELDJob != nil {
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "five-eld", Interval: cfg.FiveELDSyncInterval, Run: func(runCtx context.Context) error {
+						_, runErr := fiveELDJob.Run(runCtx)
+						return runErr
+					}})
+				}()
+			}
+			workers.Wait()
 		}()
 	} else {
 		close(schedulerDone)

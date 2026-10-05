@@ -278,6 +278,7 @@ export interface Driver {
   homeVersion: number;
   id: string;
   fullName: string;
+  driverType: "O" | "M" | "%-O" | "M-O" | "%";
   isOwnerOperator: boolean;
   payType: PayType;
   payRate: number;
@@ -365,6 +366,26 @@ export interface DriverBoardDriver {
   phone: string;
   dispatcherId: string;
   dispatcherName: string;
+  location: DriverBoardLocation | null;
+}
+
+export interface DriverBoardLocation {
+  address: string;
+  latitude: number;
+  longitude: number;
+  reportedAt: string;
+  providerTruckNumber: string;
+  stale: boolean;
+}
+
+export interface FiveELDBoardSummary {
+  configured: boolean;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string;
+  unmatched: number;
+  ambiguous: number;
+  invalid: number;
 }
 
 export interface DriverBoard {
@@ -373,6 +394,17 @@ export interface DriverBoard {
   entries: DriverBoardEntry[];
   grossEntries: GrossBoardEntry[];
   loads: Record<string, BoardLoads>;
+  eld: FiveELDBoardSummary;
+}
+
+export interface SyncFiveELDResult {
+  fetched: number;
+  saved: number;
+  unmatched: number;
+  ambiguous: number;
+  invalid: number;
+  addressLookups: number;
+  syncedAt: string;
 }
 
 export interface BoardStop { key: string; type: string; location: string; appointment: string }

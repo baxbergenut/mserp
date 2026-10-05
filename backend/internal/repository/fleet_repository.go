@@ -26,6 +26,7 @@ type Driver struct {
 	HomeVersion        int        `json:"homeVersion"`
 	ID                 string     `json:"id"`
 	FullName           string     `json:"fullName"`
+	DriverType         string     `json:"driverType"`
 	IsOwnerOperator    bool       `json:"isOwnerOperator"`
 	PayType            string     `json:"payType"`
 	PayRate            float64    `json:"payRate"`
@@ -380,6 +381,7 @@ func (r *FleetRepository) DeleteDriver(ctx context.Context, id string) error {
 
 const selectDriversSQL = `
 SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate,
+	coalesce(NOT i.is_company,false), coalesce(i.driver_id=d.id,false),
 	d.phone, d.email, d.license_number, d.license_state, d.license_expires,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
 	d.dispatcher_id, dp.full_name, a.truck_id, t.unit_number,
@@ -389,6 +391,7 @@ FROM drivers d
 LEFT JOIN dispatchers dp ON dp.id = d.dispatcher_id
 LEFT JOIN truck_driver_assignments a ON a.driver_id = d.id AND a.unassigned_at IS NULL
 LEFT JOIN trucks t ON t.id = a.truck_id
+LEFT JOIN investors i ON i.id = t.owner_id
 LEFT JOIN files f ON f.id = d.cdl_file_id`
 
 type rowScanner interface {
@@ -397,8 +400,10 @@ type rowScanner interface {
 
 func scanDriver(row rowScanner) (Driver, error) {
 	var value Driver
+	var investorTruck, ownTruck bool
 	err := row.Scan(
 		&value.ID, &value.FullName, &value.IsOwnerOperator, &value.PayType, &value.PayRate,
+		&investorTruck, &ownTruck,
 		&value.Phone, &value.Email, &value.LicenseNumber, &value.LicenseState, &value.LicenseExpires,
 		&value.HireDate, &value.Address, &value.City, &value.State, &value.PostalCode,
 		&value.EmergencyContact, &value.DispatcherID, &value.DispatcherName,
@@ -407,6 +412,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.CDLFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion,
 	)
+	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	value.FullName = formatPersonName(value.FullName)
 	value.DispatcherName = formatPersonNamePtr(value.DispatcherName)
 	value.TruckUnit = normalizeTruckUnitPtr(value.TruckUnit)

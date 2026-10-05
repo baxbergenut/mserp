@@ -33,6 +33,8 @@ func routePermission(method, path string) string {
 			return "fuel.sync"
 		case "/jobs/sync-tolls":
 			return "tolls.sync"
+		case "/jobs/sync-eld":
+			return "driver_board.write"
 		}
 		return ""
 	}

@@ -32,18 +32,38 @@ type DriverBoardEntry struct {
 }
 
 type DriverBoardDriver struct {
-	DispatcherExtension        *int   `json:"dispatcherExtension"`
-	MainUpdaterName            string `json:"mainUpdaterName"`
-	MainUpdaterExtension       *int   `json:"mainUpdaterExtension"`
-	AfterHoursUpdaterName      string `json:"afterHoursUpdaterName"`
-	AfterHoursUpdaterExtension *int   `json:"afterHoursUpdaterExtension"`
-	ID                         string `json:"id"`
-	FullName                   string `json:"fullName"`
-	DriverType                 string `json:"driverType"`
-	TruckUnit                  string `json:"truckUnit"`
-	Phone                      string `json:"phone"`
-	DispatcherID               string `json:"dispatcherId"`
-	DispatcherName             string `json:"dispatcherName"`
+	DispatcherExtension        *int                 `json:"dispatcherExtension"`
+	MainUpdaterName            string               `json:"mainUpdaterName"`
+	MainUpdaterExtension       *int                 `json:"mainUpdaterExtension"`
+	AfterHoursUpdaterName      string               `json:"afterHoursUpdaterName"`
+	AfterHoursUpdaterExtension *int                 `json:"afterHoursUpdaterExtension"`
+	ID                         string               `json:"id"`
+	FullName                   string               `json:"fullName"`
+	DriverType                 string               `json:"driverType"`
+	TruckUnit                  string               `json:"truckUnit"`
+	Phone                      string               `json:"phone"`
+	DispatcherID               string               `json:"dispatcherId"`
+	DispatcherName             string               `json:"dispatcherName"`
+	Location                   *DriverBoardLocation `json:"location"`
+}
+
+type DriverBoardLocation struct {
+	Address             string    `json:"address"`
+	Latitude            float64   `json:"latitude"`
+	Longitude           float64   `json:"longitude"`
+	ReportedAt          time.Time `json:"reportedAt"`
+	ProviderTruckNumber string    `json:"providerTruckNumber"`
+	Stale               bool      `json:"stale"`
+}
+
+type FiveELDBoardSummary struct {
+	Configured    bool       `json:"configured"`
+	LastAttemptAt *time.Time `json:"lastAttemptAt"`
+	LastSuccessAt *time.Time `json:"lastSuccessAt"`
+	LastError     string     `json:"lastError"`
+	Unmatched     int        `json:"unmatched"`
+	Ambiguous     int        `json:"ambiguous"`
+	Invalid       int        `json:"invalid"`
 }
 
 type DriverBoard struct {
@@ -52,15 +72,18 @@ type DriverBoard struct {
 	Entries      []DriverBoardEntry    `json:"entries"`
 	GrossEntries []GrossBoardEntry     `json:"grossEntries"`
 	Loads        map[string]BoardLoads `json:"loads"`
+	ELD          FiveELDBoardSummary   `json:"eld"`
 }
 
 type DriverBoardRepository struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool              *pgxpool.Pool
+	now               func() time.Time
+	fiveELDConfigured bool
 }
 
-func NewDriverBoardRepository(pool *pgxpool.Pool) *DriverBoardRepository {
-	return &DriverBoardRepository{pool: pool, now: time.Now}
+func NewDriverBoardRepository(pool *pgxpool.Pool, fiveELDConfigured ...bool) *DriverBoardRepository {
+	configured := len(fiveELDConfigured) > 0 && fiveELDConfigured[0]
+	return &DriverBoardRepository{pool: pool, now: time.Now, fiveELDConfigured: configured}
 }
 
 // Ownership and pay method are independent. An owner driving their own truck
@@ -93,7 +116,10 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
- coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0)
+	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0),
+	 CASE WHEN abs(extract(epoch from el.reported_at-el.address_reported_at))<=600 THEN el.address ELSE '' END,
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,
+	 CASE WHEN el.reported_at IS NULL THEN false ELSE now()-el.reported_at > make_interval(secs=>coalesce(es.stale_after_seconds,900)) END
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -101,7 +127,11 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  LEFT JOIN updaters au ON au.id=aa.updater_id
  LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN investors i ON i.id=t.owner_id
- LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.active
+ LEFT JOIN driver_board b ON b.driver_id=d.id
+ LEFT JOIN five_eld_sync_state es ON es.singleton
+ LEFT JOIN five_eld_locations el ON el.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
+   AND NOT (el.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+ WHERE d.active
  ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
 	if err != nil {
 		return result, err
@@ -111,14 +141,23 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var e DriverBoardEntry
 		var pay string
 		var owner, investor, own bool
+		var address, providerTruckNumber *string
+		var latitude, longitude *float64
+		var reportedAt *time.Time
+		var stale bool
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
-			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version)
+			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version,
+			&address, &latitude, &longitude, &reportedAt, &providerTruckNumber, &stale)
 		if err != nil {
 			rows.Close()
 			return result, err
 		}
 		d.DriverType = driverBoardType(pay, owner, investor, own)
+		if address != nil && latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
+			d.Location = &DriverBoardLocation{Address: *address, Latitude: *latitude, Longitude: *longitude,
+				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Stale: stale}
+		}
 		e.DriverID = d.ID
 		result.Drivers = append(result.Drivers, d)
 		result.Entries = append(result.Entries, e)
@@ -148,6 +187,11 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
+	result.ELD, err = fiveELDSyncSummary(ctx, tx)
+	if err != nil {
+		return result, err
+	}
+	result.ELD.Configured = r.fiveELDConfigured
 	ids := []string{}
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)

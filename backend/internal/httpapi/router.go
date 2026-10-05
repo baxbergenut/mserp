@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -33,6 +34,7 @@ func NewRouter(
 	customTaskRepo *repository.CustomTaskRepository,
 	documentExtractor groq.DocumentExtractor,
 	expenseExtractor gemini.ExpenseExtractor,
+	fiveELDJob *jobs.SyncFiveELDJob,
 	authOptions AuthOptions,
 	fleetScopeOptions ...fleetscope.Options,
 ) http.Handler {
@@ -76,6 +78,23 @@ func NewRouter(
 			return
 		}
 
+		writeJSON(w, http.StatusOK, result)
+	})
+	protected.Post("/jobs/sync-eld", func(w http.ResponseWriter, r *http.Request) {
+		if fiveELDJob == nil {
+			writeAPIError(w, http.StatusServiceUnavailable, "Five ELD integration is not configured")
+			return
+		}
+		result, err := fiveELDJob.Run(r.Context())
+		if errors.Is(err, jobs.ErrFiveELDSyncInProgress) {
+			writeAPIError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			logger.Error("sync Five ELD failed", "error", err)
+			writeAPIError(w, http.StatusBadGateway, "Five ELD location refresh failed")
+			return
+		}
 		writeJSON(w, http.StatusOK, result)
 	})
 	protected.Get("/loads", func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +144,7 @@ func NewRouter(
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
-	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool))
+	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool, fiveELDJob != nil))
 	registerDriverPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), job)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
 	registerInvestorPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), repository.NewDriverChargeRepository(pool))

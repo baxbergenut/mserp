@@ -15,6 +15,42 @@ type DailyJob struct {
 	Run    func(context.Context) error
 }
 
+type IntervalJob struct {
+	Name     string
+	Interval time.Duration
+	Run      func(context.Context) error
+}
+
+func RunIntervalJob(ctx context.Context, logger *slog.Logger, job IntervalJob) {
+	run := func() bool {
+		startedAt := time.Now()
+		if err := job.Run(ctx); err != nil {
+			if ctx.Err() != nil && errors.Is(err, context.Canceled) {
+				return false
+			}
+			logger.Error("interval sync failed", "job", job.Name, "error", err, "duration", time.Since(startedAt))
+		} else {
+			logger.Info("interval sync finished", "job", job.Name, "duration", time.Since(startedAt))
+		}
+		return true
+	}
+	if !run() {
+		return
+	}
+	ticker := time.NewTicker(job.Interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !run() {
+				return
+			}
+		}
+	}
+}
+
 func RunDailyScheduler(ctx context.Context, logger *slog.Logger, location *time.Location, dailyJobs ...DailyJob) {
 	var workers sync.WaitGroup
 	workers.Add(len(dailyJobs))

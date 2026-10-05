@@ -33,6 +33,7 @@ import type {
   PaginatedResponse,
   IRPFileUploadResult,
   SyncLoadsResult,
+  SyncFiveELDResult,
   SyncFuelResult,
   SyncTollsResult,
   Toll,
@@ -161,6 +162,9 @@ export const fetchLoadsPage = (query: PageQuery & {
 
 export const syncLoads = () =>
   apiRequest<SyncLoadsResult>("/jobs/sync-loads", { method: "POST" });
+
+export const syncFiveELD = () =>
+  apiRequest<SyncFiveELDResult>("/jobs/sync-eld", { method: "POST" });
 
 export const fetchFuelTransactions = () =>
   apiRequest<FuelTransaction[]>("/fuel-transactions");

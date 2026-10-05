@@ -46,7 +46,7 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
       <table className="w-full text-left text-xs text-zinc-300">
         <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(t => <th scope="col" key={t.id} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{t.name}{t.archived && " (archived)"}</span></th>)}</tr></thead>
         <tbody>{visible.map(driver => <tr key={driver.id} className="group h-8">
-          <th scope="row" className="sticky left-0 z-10 border-b border-r border-zinc-800 bg-zinc-950 h-8 whitespace-nowrap px-3 py-0 font-medium"><Link className="text-blue-400" href={`/drivers/detail?id=${driver.id}`}>{driver.fullName}</Link>{!driver.active && <span className="ml-2 text-[10px] text-zinc-500">Inactive</span>}</th>
+          <th scope="row" className="sticky left-0 z-10 border-b border-r border-zinc-800 bg-zinc-950 h-8 whitespace-nowrap px-3 py-0 font-medium"><Link className="text-blue-400" href={`/drivers/detail?id=${driver.id}`}>{driver.fullName}</Link><span className="ml-2 font-mono text-[10px] font-normal text-zinc-500">{driver.driverType}</span>{!driver.active && <span className="ml-2 text-[10px] text-zinc-500">Inactive</span>}</th>
           {types.map(type => {
             const cell = recurringCell(schedulesByDriver.get(driver.id) ?? [], driver.id, type.id, week);
             const { schedule, phase } = cell;

@@ -223,7 +223,7 @@ func TestAccessDatabase(t *testing.T) {
 
 func TestPermissionCoverage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(logger, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, AuthOptions{}).(chi.Routes)
+	router := NewRouter(logger, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, AuthOptions{}).(chi.Routes)
 	public := map[string]bool{"/healthz": true, "/readyz": true, "/auth/login": true, "/integrations/fleetscope/driver-hired": true}
 	err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		route = strings.ReplaceAll(route, "/*/", "/")
@@ -236,7 +236,7 @@ func TestPermissionCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ method, path, want string }{{"GET", "/drivers/abc/pay-history", "payroll.read"}, {"POST", "/driver-pay/finalize", "payroll.finalize"}, {"GET", "/new-resource", ""}, {"POST", "/jobs/sync-fuel", "fuel.sync"}, {"PUT", "/gross-board", "board.write"}} {
+	for _, tc := range []struct{ method, path, want string }{{"GET", "/drivers/abc/pay-history", "payroll.read"}, {"POST", "/driver-pay/finalize", "payroll.finalize"}, {"GET", "/new-resource", ""}, {"POST", "/jobs/sync-fuel", "fuel.sync"}, {"POST", "/jobs/sync-eld", "driver_board.write"}, {"PUT", "/gross-board", "board.write"}} {
 		if got := routePermission(tc.method, tc.path); got != tc.want {
 			t.Errorf("%s: %s", tc.path, got)
 		}

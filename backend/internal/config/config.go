@@ -40,6 +40,15 @@ type Config struct {
 	ScheduledLoadsSyncTime DailySyncTime
 	ScheduledFuelSyncTime  DailySyncTime
 	ScheduledTollsSyncTime DailySyncTime
+	FiveELDEnabled         bool
+	FiveELDAPIURL          string
+	FiveELDAPIKey          string
+	FiveELDProviderToken   string
+	FiveELDUSDOT           string
+	FiveELDSyncInterval    time.Duration
+	FiveELDStaleAfter      time.Duration
+	FiveELDAddressRefresh  time.Duration
+	FiveELDMaxAddressCalls int
 }
 
 type DailySyncTime struct {
@@ -153,6 +162,39 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	fiveELDAPIKey := strings.TrimSpace(os.Getenv("FIVE_ELD_API_KEY"))
+	fiveELDProviderToken := strings.TrimSpace(os.Getenv("FIVE_ELD_PROVIDER_TOKEN"))
+	fiveELDUSDOT := strings.TrimSpace(os.Getenv("FIVE_ELD_USDOT"))
+	fiveELDEnabled := fiveELDAPIKey != "" || fiveELDProviderToken != "" || fiveELDUSDOT != ""
+	if fiveELDEnabled && (fiveELDAPIKey == "" || fiveELDProviderToken == "" || fiveELDUSDOT == "") {
+		return Config{}, errors.New("FIVE_ELD_API_KEY, FIVE_ELD_PROVIDER_TOKEN and FIVE_ELD_USDOT must all be set")
+	}
+	fiveELDAPIURL := strings.TrimRight(envOrDefault("FIVE_ELD_API_URL", "https://read.fiveeld.com"), "/")
+	if fiveELDEnabled {
+		parsed, parseErr := url.Parse(fiveELDAPIURL)
+		if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.User != nil {
+			return Config{}, errors.New("FIVE_ELD_API_URL must be an HTTPS origin")
+		}
+	}
+	fiveELDSyncInterval, err := parseDurationRange("FIVE_ELD_SYNC_INTERVAL", "5m", time.Minute, time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	fiveELDStaleAfter, err := parseDurationRange("FIVE_ELD_STALE_AFTER", "15m", time.Minute, 24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	if fiveELDStaleAfter < fiveELDSyncInterval {
+		return Config{}, errors.New("FIVE_ELD_STALE_AFTER must not be shorter than FIVE_ELD_SYNC_INTERVAL")
+	}
+	fiveELDAddressRefresh, err := parseDurationRange("FIVE_ELD_ADDRESS_REFRESH_INTERVAL", "15m", time.Minute, 24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	fiveELDMaxAddressCalls, err := strconv.Atoi(envOrDefault("FIVE_ELD_MAX_ADDRESS_LOOKUPS", "25"))
+	if err != nil || fiveELDMaxAddressCalls < 1 || fiveELDMaxAddressCalls > 100 {
+		return Config{}, errors.New("FIVE_ELD_MAX_ADDRESS_LOOKUPS must be between 1 and 100")
+	}
 
 	cfg := Config{
 		FleetScope:             fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
@@ -182,6 +224,15 @@ func Load() (Config, error) {
 		ScheduledLoadsSyncTime: scheduledLoadsSyncTime,
 		ScheduledFuelSyncTime:  scheduledFuelSyncTime,
 		ScheduledTollsSyncTime: scheduledTollsSyncTime,
+		FiveELDEnabled:         fiveELDEnabled,
+		FiveELDAPIURL:          fiveELDAPIURL,
+		FiveELDAPIKey:          fiveELDAPIKey,
+		FiveELDProviderToken:   fiveELDProviderToken,
+		FiveELDUSDOT:           fiveELDUSDOT,
+		FiveELDSyncInterval:    fiveELDSyncInterval,
+		FiveELDStaleAfter:      fiveELDStaleAfter,
+		FiveELDAddressRefresh:  fiveELDAddressRefresh,
+		FiveELDMaxAddressCalls: fiveELDMaxAddressCalls,
 	}
 
 	if err := cfg.FleetScope.Validate(); err != nil {
@@ -210,6 +261,14 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseDurationRange(key, fallback string, minimum, maximum time.Duration) (time.Duration, error) {
+	value, err := time.ParseDuration(envOrDefault(key, fallback))
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%s must be a duration between %s and %s", key, minimum, maximum)
+	}
+	return value, nil
 }
 
 func utcDate(value time.Time) time.Time {

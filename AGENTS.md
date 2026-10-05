@@ -167,6 +167,14 @@ GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.6-27b
 GEMINI_API_KEY=...
 GEMINI_EXPENSE_MODEL=gemini-3.5-flash-lite
+FIVE_ELD_API_KEY=...
+FIVE_ELD_PROVIDER_TOKEN=...
+FIVE_ELD_USDOT=...
+FIVE_ELD_API_URL=https://read.fiveeld.com
+FIVE_ELD_SYNC_INTERVAL=5m
+FIVE_ELD_STALE_AFTER=15m
+FIVE_ELD_ADDRESS_REFRESH_INTERVAL=15m
+FIVE_ELD_MAX_ADDRESS_LOOKUPS=25
 RELAY_ENVIRONMENT=production
 RELAY_STAGING_API_KEY=...
 RELAY_PRODUCTION_API_KEY=...
@@ -261,6 +269,8 @@ browser bundle.
   board/home versions and the displayed plan revision.
   with changed entries only. Dedicated `driver_board.read`/`driver_board.write`
   permissions include board contact/home reads and home updates respectively.
+  `POST /jobs/sync-eld` performs an authorized targeted Five ELD refresh and
+  requires `driver_board.write`.
 - Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
   `POST /driver-pay/finalize` and `/reopen` (optional driverId, report revision;
   reopening requires a reason). `GET /drivers/{id}/pay-history` is paginated;
@@ -412,7 +422,15 @@ assignment lookup lists.
   undo. It can traverse this user's reversed event pairs but never overwrite
   another actor's later overlapping edits. Native draft text undo stays native.
   No extra board buttons, tooltips or workflow explanations are added.
-  Handoff and ELD remain future phases in docs/DRIVER_BOARD_PLAN.md.
+  Five ELD uses migration 050 and server-only API key/provider-token/USDOT
+  configuration. A bounded interval poll matches current positions to assigned
+  trucks by normalized VIN, then caches Five ELD tracking addresses. The board's
+  Location column is immediately before Destination, stays blank without a
+  provider address and exposes freshness on hover; Loads shows the full location
+  and map. Last known points survive outages and become stale by provider time.
+  Unmatched/ambiguous units require review and never change assignments, loads,
+  progress or financial records. Handoff remains a future phase in
+  docs/DRIVER_BOARD_PLAN.md.
 
 - Access control uses migration 044. One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in

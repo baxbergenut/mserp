@@ -82,7 +82,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
 				exec(string(historyMigration))
-				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql"} {
+				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql", "050_five_eld_locations.sql"} {
 					migration, err := os.ReadFile("../../sql/" + name)
 					if err != nil {
 						t.Fatal(err)
@@ -103,6 +103,9 @@ func TestDriverBoardDatabase(t *testing.T) {
 			}
 			if err := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='driver_board_history'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
 				t.Fatalf("history ownership: %s %v", owner, err)
+			}
+			if err := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='five_eld_locations'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
+				t.Fatalf("Five ELD location ownership: %s %v", owner, err)
 			}
 			appcfg := cfg.Copy()
 			appcfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
@@ -128,6 +131,14 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			vin := "1M8GDM9AXKP042788"
+			if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: "ELD-17", VIN: &vin, DriverID: &driver.ID, Status: "available", Active: true, IsCompanyOwned: true}); err != nil {
+				t.Fatal(err)
+			}
+			exec(`INSERT INTO five_eld_locations(vin,provider_truck_number,address,latitude,longitude,reported_at,fetched_at,address_updated_at,address_reported_at)
+			 VALUES($1,'17','Chicago, IL',41.881,-87.623,now(),now(),now(),now())`, vin)
+			exec(`INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_success_at) VALUES(true,now(),now())`)
+			repo = NewDriverBoardRepository(pool, true)
 			week, _ := time.Parse("2006-01-02", "2026-09-28")
 			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(999,'BOARD-LOAD','Delivered',1234.56,1234.56,450.25,'{}')`)
 			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate,entered_original_rate) VALUES($1,'2026-09-28','BOARD-LOAD',999,1100.10,1250.15)`, driver.ID)
@@ -137,6 +148,9 @@ func TestDriverBoardDatabase(t *testing.T) {
 			}
 			if len(board.Drivers) != 2 || len(board.GrossEntries) != 1 || board.GrossEntries[0].OriginalRate != "1250.15" || board.GrossEntries[0].Miles != "450.25" {
 				t.Fatalf("board read: %+v", board)
+			}
+			if !board.ELD.Configured || board.Drivers[0].Location == nil || board.Drivers[0].Location.Address != "Chicago, IL" {
+				t.Fatalf("Five ELD board location: %+v", board.Drivers)
 			}
 			var draft DriverBoardEntry
 			for _, e := range board.Entries {

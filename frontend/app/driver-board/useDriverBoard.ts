@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads } from "@/app/lib/api";
+import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { progressStatus, reconcileDriverBoard } from "./board";
@@ -17,6 +17,7 @@ export function useDriverBoard(pauseRefresh = false) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
+  const [eldRefreshing, setELDRefreshing] = useState(false);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const activity = useRef(0);
   const savingRef = useRef(false);
@@ -29,7 +30,7 @@ export function useDriverBoard(pauseRefresh = false) {
   const undoLatestRef = useRef<() => Promise<void>>(async () => {});
   const dirty = Object.keys(changes).length > 0;
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
-  useLayoutEffect(() => { changesRef.current = changes; savedRef.current = saved; idle.current = !dirty && !saving && !loading && !pauseRefresh; }, [saved, changes, dirty, saving, loading, pauseRefresh]);
+  useLayoutEffect(() => { changesRef.current = changes; savedRef.current = saved; idle.current = !dirty && !saving && !loading && !eldRefreshing && !pauseRefresh; }, [saved, changes, dirty, saving, loading, eldRefreshing, pauseRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,6 +142,19 @@ export function useDriverBoard(pauseRefresh = false) {
     finally { setLoading(false); }
   }
 
+  async function refreshELD() {
+    if (dirty || savingRef.current || loading || eldRefreshing) return;
+    activity.current += 1; idle.current = false; setELDRefreshing(true); setRefreshError("");
+    try {
+      await syncFiveELD();
+      setBoard(await fetchDriverBoard(currentChargeWeek()));
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : "Five ELD locations could not be refreshed.");
+    } finally {
+      activity.current += 1; setELDRefreshing(false);
+    }
+  }
+
   async function undo(eventId: number, driverId: string, personal = false) {
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
@@ -210,5 +224,5 @@ export function useDriverBoard(pauseRefresh = false) {
   }, [saving]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving, dirty, error, refreshError, edit, save, reload, undo, changeLoads, leaving: !!pendingLink };
+  return { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, leaving: !!pendingLink };
 }
