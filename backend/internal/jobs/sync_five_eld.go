@@ -179,14 +179,19 @@ func (j *SyncFiveELDJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 			}
 			defer func() { <-semaphore }()
 			position := locations[index]
+			// The provider's position clock can run a few seconds ahead of its
+			// history service. Keep the history window behind the wall clock so
+			// very fresh positions do not produce a transient 400 response.
 			trackingTo := position.ReportedAt.Add(5 * time.Minute)
-			if trackingTo.After(now) {
-				trackingTo = now
+			providerSafeNow := now.Add(-time.Minute)
+			if trackingTo.After(providerSafeNow) {
+				trackingTo = providerSafeNow
 			}
 			point, found, lookupErr := j.client.LatestTracking(ctx, j.usdot, unit.ID, position.ReportedAt.Add(-6*time.Hour), trackingTo)
 			resultMu.Lock()
 			addressLookups++
 			if lookupErr != nil {
+				locations[index].AddressUpdatedAt = &now
 				j.logger.Warn("Five ELD address lookup failed", "vin", unit.VIN, "error", lookupErr)
 			} else {
 				locations[index].AddressUpdatedAt = &now
