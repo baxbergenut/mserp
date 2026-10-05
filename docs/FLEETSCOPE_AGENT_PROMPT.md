@@ -1,5 +1,9 @@
 # FleetScope implementation prompt
 
+For the extension to an existing sender, use
+[the terminated-driver implementation prompt](FLEETSCOPE_TERMINATION_AGENT_PROMPT.md).
+The remaining instructions describe the original hire sender contract.
+
 Implement the FleetScope sender for the MSERP new-hire webhook. MSERP's receiver
 and accounting review UI are already implemented in
 `C:\BBG\SoftEng\mserp`. Work in `C:\BBG\SoftEng\fleetscope\api`.
@@ -12,7 +16,8 @@ production settings/data as part of implementation.
 
 This is a one-way handoff of **new recruitment hires for MS Express only**.
 There is no historical fleet import, polling of the full fleet, profile/status
-synchronization, termination handling, or writeback to FleetScope. Ordinary
+synchronization or writeback to FleetScope. Termination handling is a separate
+extension described in the linked prompt. Ordinary
 driver creation and CSV import must not emit events. Other FleetScope tenants
 must neither enqueue nor deliver to MSERP.
 

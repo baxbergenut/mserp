@@ -1,4 +1,4 @@
-// Package fleetscope defines the one-way, versioned new-hire handoff.
+// Package fleetscope defines the one-way, versioned driver lifecycle handoff.
 package fleetscope
 
 import (
@@ -51,16 +51,17 @@ type Driver struct {
 }
 
 type Event struct {
-	Version    int       `json:"version"`
-	EventID    string    `json:"eventId"`
-	Type       string    `json:"type"`
-	CompanyID  string    `json:"companyId"`
-	OccurredAt time.Time `json:"occurredAt"`
-	Driver     Driver    `json:"driver"`
+	Version         int       `json:"version"`
+	EventID         string    `json:"eventId"`
+	Type            string    `json:"type"`
+	CompanyID       string    `json:"companyId"`
+	OccurredAt      time.Time `json:"occurredAt"`
+	Driver          Driver    `json:"driver"`
+	TerminationDate string    `json:"terminationDate,omitempty"`
 }
 
 func (e *Event) Validate() error {
-	if e.Version != 1 || e.Type != "driver.hired" || !uuidPattern.MatchString(e.EventID) ||
+	if e.Version != 1 || (e.Type != "driver.hired" && e.Type != "driver.terminated") || !uuidPattern.MatchString(e.EventID) ||
 		!uuidPattern.MatchString(e.CompanyID) || !uuidPattern.MatchString(e.Driver.ID) || e.OccurredAt.IsZero() {
 		return errors.New("invalid event envelope")
 	}
@@ -76,6 +77,29 @@ func (e *Event) Validate() error {
 		if len(*field) > max || strings.ContainsAny(*field, "\x00\r\n") {
 			return errors.New("invalid driver field")
 		}
+	}
+	if e.Type == "driver.terminated" {
+		if e.Driver.FullName == "" {
+			return errors.New("fullName is required")
+		}
+		if _, err := time.Parse(time.DateOnly, e.TerminationDate); err != nil {
+			return errors.New("terminationDate must use YYYY-MM-DD")
+		}
+		loc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			return err
+		}
+		if e.TerminationDate > time.Now().In(loc).Format(time.DateOnly) {
+			return errors.New("terminationDate cannot be in the future; send when termination takes effect")
+		}
+		// Termination is a minimal identity notification, not a profile update.
+		if e.Driver != (Driver{ID: e.Driver.ID, FullName: e.Driver.FullName}) {
+			return errors.New("terminated driver must contain only id and fullName")
+		}
+		return nil
+	}
+	if e.TerminationDate != "" {
+		return errors.New("terminationDate is only valid for driver.terminated")
 	}
 	if e.Driver.FullName == "" || (e.Driver.DriverType != "company" && e.Driver.DriverType != "owner_operator") {
 		return errors.New("fullName and a valid driverType are required")

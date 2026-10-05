@@ -6,6 +6,7 @@ import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
 import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
+import { runOffboardingE2E } from './offboarding-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -23,6 +24,8 @@ const database = new URL(dsn);
 if (!['127.0.0.1', 'localhost'].includes(database.hostname) || !database.pathname.includes('_test')) throw new Error('Only local _test databases are permitted');
 const schema = `investor_e2e_${randomBytes(8).toString('hex')}`;
 const password = randomBytes(24).toString('hex');
+const webhookCompany = 'e5200000-0000-0000-0000-000000000001';
+const webhookSecret = randomBytes(32).toString('hex');
 const temp = await mkdtemp(join(tmpdir(), 'mserp-investor-e2e-'));
 const sql = (input) => execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let api, browser, server;
@@ -42,7 +45,7 @@ try {
     ...process.env, DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
     AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: 'http://127.0.0.1:13549',
-    FLEETSCOPE_COMPANY_ID: '', FLEETSCOPE_WEBHOOK_SECRET: '',
+    FLEETSCOPE_COMPANY_ID: webhookCompany, FLEETSCOPE_WEBHOOK_SECRET: webhookSecret,
   }});
   let apiLog = ''; api.stdout.on('data', (chunk) => { apiLog += chunk; }); api.stderr.on('data', (chunk) => { apiLog += chunk; });
   await expect.poll(async () => { if (api.exitCode !== null) throw new Error(`Test API exited: ${apiLog}`); try { return (await fetch(`http://127.0.0.1:${apiPort}/readyz`)).status; } catch { return 0; } }, { timeout: 20000 }).toBe(200);
@@ -77,6 +80,7 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
+  if (!process.argv.includes('--offboarding-only')) {
   await expect(page.getByText('No investors yet.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Show company')).not.toBeChecked();
   const companyCell = page.getByRole('cell', { name: 'MS Express Inc.', exact: true });
@@ -151,6 +155,10 @@ try {
   await page.screenshot({ path: join(temp, 'investors-mobile.png'), fullPage: true });
   expect(errors).toEqual([]);
   console.log(`Investor E2E passed: login, auth/CSRF, create, driver linking, duplicate exclusion, persistence, ownership independent of operation, search, edit, inactive status, responsive layout. Screenshots: ${temp}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await runOffboardingE2E({ page, base, sql, schema, apiBase: `http://127.0.0.1:${apiPort}`, webhookCompany, webhookSecret });
+  expect(errors).toEqual([]);
 } finally {
   await browser?.close();
   if (server) await new Promise((done) => server.close(done));

@@ -58,6 +58,11 @@ func (r *LoadRepository) UpsertLoads(ctx context.Context, records []LoadRecord) 
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// Coordinate operational assignment changes with fleet forms/offboarding,
+	// before taking any driver/truck row locks. Import timestamps remain unchanged.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(734912086)`); err != nil {
+		return err
+	}
 
 	// DataTruck normally returns newest loads first. Sort defensively so an
 	// older load can never overwrite a newer driver/truck assignment.
@@ -559,8 +564,8 @@ func enrichMatchedDriver(
 	}
 	_, err := tx.Exec(ctx, `
 		UPDATE drivers
-		SET dispatcher_id = COALESCE(dispatcher_id, $2), active = true, updated_at = now()
-		WHERE id = $1`, id, *dispatcherID)
+		SET dispatcher_id = COALESCE(dispatcher_id, $2), updated_at = now()
+		WHERE id = $1 AND active`, id, *dispatcherID)
 	return err
 }
 
@@ -625,6 +630,17 @@ func resolveTruck(ctx context.Context, tx pgx.Tx, unitNumber string) (string, bo
 }
 
 func syncTruckAssignment(ctx context.Context, tx pgx.Tx, truckID, driverID string) error {
+	// Historical loads retain their identity links but cannot reconnect inactive fleet records.
+	var driverActive, truckActive bool
+	if err := tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, driverID).Scan(&driverActive); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(ctx, `SELECT active FROM trucks WHERE id=$1 FOR UPDATE`, truckID).Scan(&truckActive); err != nil {
+		return err
+	}
+	if !driverActive || !truckActive {
+		return nil
+	}
 	var unchanged bool
 	if err := tx.QueryRow(ctx, `
 		SELECT EXISTS (

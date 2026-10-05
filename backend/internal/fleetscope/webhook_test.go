@@ -64,3 +64,25 @@ func TestEventValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminationValidation(t *testing.T) {
+	valid := Event{Version: 1, Type: "driver.terminated", EventID: "00000000-0000-0000-0000-000000000001", CompanyID: "00000000-0000-0000-0000-000000000002", OccurredAt: time.Now(), TerminationDate: "2026-01-01", Driver: Driver{ID: "00000000-0000-0000-0000-000000000003", FullName: "Test Driver"}}
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*Event){
+		func(e *Event) { e.TerminationDate = "" },
+		func(e *Event) { e.TerminationDate = "2026-02-30" },
+		func(e *Event) { e.TerminationDate = "2999-01-01" },
+		func(e *Event) { e.Driver.FullName = " " },
+		func(e *Event) { e.Driver.ID = "invalid" },
+		func(e *Event) { e.Driver.Email = "extra@example.test" },
+		func(e *Event) { e.Driver.HireDate = "2026-01-01" },
+	} {
+		event := valid
+		mutate(&event)
+		if event.Validate() == nil {
+			t.Fatal("invalid termination accepted")
+		}
+	}
+}

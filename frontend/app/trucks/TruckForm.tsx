@@ -1,6 +1,7 @@
 "use client";
 
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
+import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 
 import { ExternalLink, FileText, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import type { Driver, Investor, Truck, TruckInput } from "../lib/types";
@@ -252,11 +253,12 @@ export function TruckForm({
         <Field label="Assigned driver" hint="Selecting a driver releases any truck currently assigned to them.">
           <select
             value={value.driverId ?? ""}
+            disabled={!value.active}
             onChange={(event) => set("driverId", event.target.value || null)}
             className={controlClass}
           >
             <option value="">Unassigned</option>
-            {drivers.map((driver) => (
+            {drivers.filter((driver) => driver.active || driver.id === value.driverId).map((driver) => (
               <option key={driver.id} value={driver.id}>
                 {driver.fullName}{driver.truckUnit ? ` — currently ${driver.truckUnit}` : ""}
               </option>
@@ -306,9 +308,9 @@ export function TruckForm({
       <FormSection title="Status and notes">
         <Toggle
           checked={value.active}
-          onChange={(checked) => set("active", checked)}
+          onChange={(checked) => onChange({ ...value, active: checked, ...(!checked ? { driverId: null, status: value.status === "assigned" ? "available" : value.status, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
           label="Active truck"
-          description="Inactive trucks remain available in historical records."
+          description="Marking inactive disconnects the current driver. Historical records are retained."
         />
         <Field label="Internal notes" wide>
           <textarea

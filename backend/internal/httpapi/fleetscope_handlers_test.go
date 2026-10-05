@@ -22,6 +22,11 @@ type fakeFleetScopeStore struct {
 	err    error
 }
 
+func (s *fakeFleetScopeStore) AcceptFleetScopeTermination(_ context.Context, _ fleetscope.Event, _ string) (repository.IntakeResult, error) {
+	s.called = true
+	return repository.IntakeResult{Status: "accepted", TerminationID: "00000000-0000-0000-0000-000000000004"}, s.err
+}
+
 func (s *fakeFleetScopeStore) AcceptFleetScopeHire(_ context.Context, _ fleetscope.Event, _ string) (repository.IntakeResult, error) {
 	s.called = true
 	return repository.IntakeResult{Status: "accepted", IntakeID: "00000000-0000-0000-0000-000000000004"}, s.err
@@ -117,6 +122,61 @@ func TestIntakeRoutesRequireSessionAndCSRF(t *testing.T) {
 			router.ServeHTTP(w, req)
 			if w.Code != tc.status {
 				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestTerminationWebhookBoundary(t *testing.T) {
+	options := fleetscope.Options{CompanyID: "00000000-0000-0000-0000-000000000001", Secret: strings.Repeat("s", 32)}
+	valid := `{"version":1,"eventId":"00000000-0000-0000-0000-000000000002","companyId":"00000000-0000-0000-0000-000000000001","type":"driver.terminated","occurredAt":"2026-01-01T12:00:00Z","terminationDate":"2026-01-01","driver":{"id":"00000000-0000-0000-0000-000000000003","fullName":"Test Driver"}}`
+	for _, tc := range []struct {
+		name, body, allowedType   string
+		unsigned, stale, disabled bool
+		failure                   error
+		status                    int
+	}{
+		{name: "accepted", body: valid, status: 200},
+		{name: "unsigned", body: valid, unsigned: true, status: 401},
+		{name: "stale", body: valid, stale: true, status: 401},
+		{name: "disabled", body: valid, disabled: true, status: 404},
+		{name: "wrong company", body: strings.Replace(valid, options.CompanyID, "00000000-0000-0000-0000-000000000099", 1), status: 403},
+		{name: "wrong endpoint", body: valid, allowedType: "driver.hired", status: 400},
+		{name: "unknown field", body: strings.Replace(valid, `"fullName"`, `"reason"`, 1), status: 400},
+		{name: "missing date", body: strings.Replace(valid, `"terminationDate":"2026-01-01",`, "", 1), status: 400},
+		{name: "collision", body: valid, failure: repository.ErrFleetScopeEventConflict, status: 409},
+		{name: "unavailable", body: valid, failure: errors.New("private details"), status: 503},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeFleetScopeStore{err: tc.failure}
+			req := httptest.NewRequest(http.MethodPost, "/integrations/fleetscope/driver-terminated", strings.NewReader(tc.body))
+			now := time.Now()
+			if tc.stale {
+				now = now.Add(-10 * time.Minute)
+			}
+			stamp := strconv.FormatInt(now.Unix(), 10)
+			if !tc.unsigned {
+				req.Header.Set("X-FleetScope-Timestamp", stamp)
+				req.Header.Set("X-FleetScope-Signature", fleetscope.Sign(options.Secret, stamp, []byte(tc.body)))
+			}
+			settings := options
+			if tc.disabled {
+				settings = fleetscope.Options{}
+			}
+			allowed := tc.allowedType
+			if allowed == "" {
+				allowed = "driver.terminated"
+			}
+			w := httptest.NewRecorder()
+			fleetScopeWebhook(slog.New(slog.NewTextHandler(io.Discard, nil)), store, settings, allowed)(w, req)
+			if w.Code != tc.status {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+			if tc.status == 200 && !strings.Contains(w.Body.String(), `"terminationId"`) {
+				t.Fatal("wrong receipt shape")
+			}
+			if tc.status < 500 && tc.status != 200 && tc.status != 409 && store.called {
+				t.Fatal("invalid request reached repository")
 			}
 		})
 	}

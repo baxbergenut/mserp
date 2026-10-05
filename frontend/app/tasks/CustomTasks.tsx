@@ -27,6 +27,17 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
   const mutation = useRef(false);
 
   useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible" && !mutation.current && !creating && !editing && !deleting) {
+        setRefresh((value) => value + 1);
+      }
+    };
+    const timer = window.setInterval(refreshVisible, 15000);
+    window.addEventListener("focus", refreshVisible);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refreshVisible); };
+  }, [creating, editing, deleting]);
+
+  useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);

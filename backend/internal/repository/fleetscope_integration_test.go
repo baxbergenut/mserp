@@ -23,6 +23,10 @@ func TestFleetScopeDatabase(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set MSERP_FLEETSCOPE_TEST_DATABASE_URL to an isolated PostgreSQL database")
 	}
+	parsed, parseErr := pgxpool.ParseConfig(dsn)
+	if parseErr != nil || !strings.Contains(parsed.ConnConfig.Database, "_test") || (parsed.ConnConfig.Host != "localhost" && parsed.ConnConfig.Host != "127.0.0.1" && parsed.ConnConfig.Host != "::1") {
+		t.Fatal("a disposable local _test database is required")
+	}
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -100,7 +104,7 @@ func TestFleetScopeDatabase(t *testing.T) {
 				if _, err = tx.Exec(ctx, `SET LOCAL ROLE mserp_app`); err != nil {
 					t.Fatal(err)
 				}
-				for _, table := range []string{"fleetscope_driver_intake", "fleetscope_webhook_receipts", "relay_identity_reviews"} {
+				for _, table := range []string{"fleetscope_driver_intake", "fleetscope_webhook_receipts", "fleetscope_driver_terminations", "relay_identity_reviews"} {
 					var allowed bool
 					if err = tx.QueryRow(ctx, `SELECT has_table_privilege(current_user, $1, 'SELECT,INSERT,UPDATE,DELETE')`, table).Scan(&allowed); err != nil || !allowed {
 						t.Fatalf("runtime access to %s: %v", table, err)
@@ -114,6 +118,21 @@ func TestFleetScopeDatabase(t *testing.T) {
 				}
 			}
 			testFleetScopeLifecycle(t, pool)
+			// Exercise lifecycle mutations under the same runtime role as production.
+			if !runtimeRoleExists {
+				t.Fatal("mserp_app role required for offboarding tests")
+			}
+			if _, err = pool.Exec(ctx, "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA "+quoted+" TO mserp_app"); err != nil {
+				t.Fatal(err)
+			}
+			appcfg := cfg.Copy()
+			appcfg.ConnConfig.RuntimeParams["role"] = "mserp_app"
+			appPool, err := pgxpool.NewWithConfig(ctx, appcfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer appPool.Close()
+			testFleetScopeOffboarding(t, appPool, pool)
 		})
 	}
 }

@@ -81,7 +81,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `051_five_eld_heading.sql`:
+  `052_fleetscope_termination.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -285,6 +285,8 @@ browser bundle.
   dispatcher periods, current links, source notes, and whether the start is known.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
+- Terminations: `POST /integrations/fleetscope/driver-terminated` (same HMAC/company
+  boundary), version 1 `driver.terminated`, minimal driver ID/name plus terminationDate.
 - Investors: `GET/POST /investors`, `PUT /investors/{id}`. List supports search and
   pagination; paginated reads exclude the company unless includeCompany=true.
   Unpaginated owner lookups include the company. Inactive investors retain
@@ -641,7 +643,7 @@ assignment lookup lists.
   disposable administrator connection with an `mserp_app` role, and verify both
   fresh schema and migration 026 as that application role.
 
-- FleetScope is a one-way new-hire handoff for the configured MS Express company
+- FleetScope is a one-way hire/termination handoff for the configured MS Express company
   UUID. Both `FLEETSCOPE_COMPANY_ID` and `FLEETSCOPE_WEBHOOK_SECRET` must be set
   together; both absent disables receipt. Verify HMAC-SHA256 of timestamp + dot
   + exact body bytes and a five-minute delivery timestamp window. Pin the company
@@ -658,6 +660,22 @@ assignment lookup lists.
   profile, rates, assignments, and active status. Keep completed intake identity
   after driver deletion so retries cannot recreate it. Tests use the isolated
   `MSERP_FLEETSCOPE_TEST_DATABASE_URL`; never load production credentials for them.
+  Migration 052 adds durable termination identities/receipts and cancels pending
+  intakes. Only explicit completed-intake links authorize automatic deactivation;
+  unlinked/deleted identities create review tasks without name matching. Receipt,
+  deactivation, current truck/dispatcher release, and an Offboard task in custom_tasks
+  commit atomically. Effective assignments/charge pauses use the current New York
+  week; source termination dates remain for accounting review. Charge validation
+  conflicts roll back the pause only and flag the task; database errors roll back
+  the whole event. History, ownership, financial records and external identity links
+  remain. First termination wins; retries never repeat work or recreate deleted
+  tasks, and late hires cannot reopen setup. Rehire remains unsupported. See
+  docs/FLEETSCOPE_TERMINATION_AGENT_PROMPT.md for the sender implementation prompt.
+  Tasks refresh every 15 seconds while visible and idle. Manual inactive drivers
+  clear truck/dispatcher links; inactive trucks release their driver. Imports
+  preserve inactive status and cannot reconnect inactive fleet records.
+  The investor E2E runner includes offboarding-e2e.mjs; pass --offboarding-only
+  for its focused signed-webhook/form/task flow using the same isolated setup.
 
 - Gross board plans persist up to 100 load slots per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers and inactive

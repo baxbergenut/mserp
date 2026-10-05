@@ -255,6 +255,7 @@ export function DriverForm({
         <Field label="Dispatcher">
           <select
             value={value.dispatcherId ?? ""}
+            disabled={!value.active}
             onChange={(event) =>
               set(
                 "dispatcherId",
@@ -274,13 +275,14 @@ export function DriverForm({
         <Field label="Truck">
           <select
             value={value.truckId ?? ""}
+            disabled={!value.active}
             onChange={(event) =>
               set("truckId", event.target.value || null)
             }
             className={controlClass}
           >
             <option value="">Unassigned</option>
-            {trucks.map((truck) => (
+            {trucks.filter((truck) => truck.active || truck.id === value.truckId).map((truck) => (
               <option key={truck.id} value={truck.id}>
                 {truck.unitNumber}
                 {truck.driverName ? ` — currently ${truck.driverName}` : ""}
@@ -352,9 +354,9 @@ export function DriverForm({
       <FormSection title="Status and notes">
         <Toggle
           checked={value.active}
-          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek() })}
+          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek(), ...(!checked ? { truckId: null, dispatcherId: null, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
           label="Active driver"
-          description="Inactive drivers stay in historical records but are visually marked."
+          description="Marking inactive disconnects the current truck and dispatcher. Historical records are retained."
         />
         {!value.active && <Field label="Pause charges from (Monday)">
           <input type="date" min={currentChargeWeek()} required value={value.chargePauseWeek ?? currentChargeWeek()} onChange={event => set("chargePauseWeek", event.target.value)} className={controlClass} />

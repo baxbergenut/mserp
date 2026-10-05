@@ -16,11 +16,13 @@ var (
 	ErrFleetScopeEventConflict = errors.New("event ID was already used with another payload")
 	ErrIntakeCompleted         = errors.New("this hire has already been completed; refresh the list")
 	ErrIntakeMatch             = errors.New("possible existing drivers found; review matches before creating a separate driver")
+	ErrIntakeTerminated        = errors.New("this driver was terminated in FleetScope; setup is no longer available")
 )
 
 type IntakeResult struct {
-	Status   string `json:"status"`
-	IntakeID string `json:"intakeId"`
+	Status        string `json:"status"`
+	IntakeID      string `json:"intakeId,omitempty"`
+	TerminationID string `json:"terminationId,omitempty"`
 }
 
 type DriverIntake struct {
@@ -48,7 +50,7 @@ func (r *FleetRepository) GetDriverIntake(ctx context.Context, id string) (Drive
 	var item DriverIntake
 	var data []byte
 	var canonicalPhone *string
-	err := r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone)
+	err := r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL AND terminated_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone)
 	if err != nil {
 		return item, mapNotFound(err)
 	}
@@ -71,7 +73,7 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 	 WHERE ($1='' OR concat_ws(' ',d.full_name,d.email,d.phone,t.unit_number,dp.full_name,d.license_number) ILIKE '%' || $1 || '%') AND ($2 OR d.active)
 	 UNION ALL
 	 SELECT id, driver_data->>'fullName', true, driver_data, received_at, phone FROM fleetscope_driver_intake
-	 WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
+	 WHERE completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
 	) `
 	var total int
 	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive).Scan(&total); err != nil {
@@ -161,9 +163,9 @@ func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleets
 	}
 	result := IntakeResult{Status: "duplicate"}
 	var existingHash string
-	err = tx.QueryRow(ctx, `SELECT intake_id, body_sha256 FROM fleetscope_webhook_receipts WHERE event_id=$1`, event.EventID).Scan(&result.IntakeID, &existingHash)
+	err = tx.QueryRow(ctx, `SELECT coalesce(intake_id::text,''), body_sha256 FROM fleetscope_webhook_receipts WHERE event_id=$1`, event.EventID).Scan(&result.IntakeID, &existingHash)
 	if err == nil {
-		if hash != existingHash {
+		if hash != existingHash || result.IntakeID == "" {
 			return IntakeResult{}, ErrFleetScopeEventConflict
 		}
 		return result, tx.Commit(ctx)
@@ -186,6 +188,13 @@ func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleets
 	if err != nil {
 		return IntakeResult{}, err
 	}
+	// A termination can arrive before the hire. Keep the hire snapshot, but never
+	// expose a new setup action for a source identity already terminated.
+	if _, err = tx.Exec(ctx, `UPDATE fleetscope_driver_intake i SET terminated_at=t.occurred_at
+ FROM fleetscope_driver_terminations t WHERE i.id=$1 AND t.company_id=i.company_id
+ AND t.fleetscope_driver_id=i.fleetscope_driver_id AND i.terminated_at IS NULL`, result.IntakeID); err != nil {
+		return IntakeResult{}, err
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO fleetscope_webhook_receipts(event_id, body_sha256, intake_id) VALUES($1,$2,$3)`, event.EventID, hash, result.IntakeID)
 	if err != nil {
 		return IntakeResult{}, err
@@ -198,7 +207,7 @@ func (r *FleetRepository) ListDriverIntake(ctx context.Context, pagination Pagin
 	if len(searches) > 0 {
 		search = phone.Search(searches[0])
 	}
-	const filter = ` WHERE completed_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone) ILIKE '%' || $1 || '%')`
+	const filter = ` WHERE completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone) ILIKE '%' || $1 || '%')`
 	var total int
 	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM fleetscope_driver_intake`+filter, search).Scan(&total); err != nil {
 		return Page[DriverIntake]{}, err
@@ -272,17 +281,31 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('fleetscope:intake', 0))`); err != nil {
+		return Driver{}, err
+	}
+	// Keep assignment lock ordering identical to ordinary fleet writes.
+	week := ""
+	if input != nil {
+		week = input.AssignmentWeek
+	}
+	if err = setAssignmentWeek(ctx, tx, week); err != nil {
+		return Driver{}, err
+	}
 	// Coordinate identity review with another simultaneous intake completion.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('fleetscope:complete', 0))`); err != nil {
 		return Driver{}, err
 	}
 	var data []byte
-	var completedAt *time.Time
-	if err = tx.QueryRow(ctx, `SELECT driver_data, completed_at FROM fleetscope_driver_intake WHERE id=$1 FOR UPDATE`, id).Scan(&data, &completedAt); err != nil {
+	var completedAt, terminatedAt *time.Time
+	if err = tx.QueryRow(ctx, `SELECT driver_data, completed_at, terminated_at FROM fleetscope_driver_intake WHERE id=$1 FOR UPDATE`, id).Scan(&data, &completedAt, &terminatedAt); err != nil {
 		return Driver{}, mapNotFound(err)
 	}
 	if completedAt != nil {
 		return Driver{}, ErrIntakeCompleted
+	}
+	if terminatedAt != nil {
+		return Driver{}, ErrIntakeTerminated
 	}
 	if linkDriverID != "" {
 		// Lock the existing record against deletion. Linking is deliberately a

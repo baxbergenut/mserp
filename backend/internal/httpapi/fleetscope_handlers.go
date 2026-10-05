@@ -20,9 +20,10 @@ import (
 
 type fleetScopeStore interface {
 	AcceptFleetScopeHire(context.Context, fleetscope.Event, string) (repository.IntakeResult, error)
+	AcceptFleetScopeTermination(context.Context, fleetscope.Event, string) (repository.IntakeResult, error)
 }
 
-func fleetScopeWebhook(logger *slog.Logger, store fleetScopeStore, options fleetscope.Options) http.HandlerFunc {
+func fleetScopeWebhook(logger *slog.Logger, store fleetScopeStore, options fleetscope.Options, allowedTypes ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if options.CompanyID == "" || options.Secret == "" || options.Validate() != nil {
@@ -54,20 +55,33 @@ func fleetScopeWebhook(logger *slog.Logger, store fleetScopeStore, options fleet
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		allowedType := "driver.hired"
+		if len(allowedTypes) > 0 {
+			allowedType = allowedTypes[0]
+		}
+		if event.Type != allowedType {
+			writeAPIError(w, http.StatusBadRequest, "event type does not match webhook endpoint")
+			return
+		}
 		if !strings.EqualFold(event.CompanyID, options.CompanyID) {
 			writeAPIError(w, http.StatusForbidden, "company is not authorized for this integration")
 			return
 		}
 		hash := sha256.Sum256(body)
-		result, err := store.AcceptFleetScopeHire(r.Context(), event, hex.EncodeToString(hash[:]))
+		var result repository.IntakeResult
+		if event.Type == "driver.terminated" {
+			result, err = store.AcceptFleetScopeTermination(r.Context(), event, hex.EncodeToString(hash[:]))
+		} else {
+			result, err = store.AcceptFleetScopeHire(r.Context(), event, hex.EncodeToString(hash[:]))
+		}
 		if errors.Is(err, repository.ErrFleetScopeEventConflict) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
 		if err != nil {
 			// Do not log database details: they may include the incoming driver PII.
-			logger.Error("FleetScope new-hire receipt failed")
-			writeAPIError(w, http.StatusServiceUnavailable, "hire could not be recorded; retry delivery")
+			logger.Error("FleetScope receipt failed", "eventType", event.Type)
+			writeAPIError(w, http.StatusServiceUnavailable, "event could not be recorded; retry delivery")
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
@@ -157,7 +171,7 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			return
 		}
 		value, err := repo.CompleteDriverIntake(r.Context(), id, session.User.ID, request.LinkDriverID, input, request.SeparateConfirmed)
-		if errors.Is(err, repository.ErrIntakeCompleted) || errors.Is(err, repository.ErrIntakeMatch) {
+		if errors.Is(err, repository.ErrIntakeCompleted) || errors.Is(err, repository.ErrIntakeMatch) || errors.Is(err, repository.ErrIntakeTerminated) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}

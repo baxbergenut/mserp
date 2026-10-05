@@ -1,4 +1,4 @@
-# FleetScope new-hire handoff
+# FleetScope driver lifecycle handoff
 
 This version accepts one signed notification when MS Express hires a driver in
 FleetScope. It stages an immutable hire on MSERP's Drivers page with a **New**
@@ -9,9 +9,9 @@ Pending hires are outside the managed fleet and settlement calculations.
 
 The Drivers table and Tasks page check for arrivals every 15 seconds while the browser tab
 is visible. Server receipt is immediate; this refresh is only for the open UI.
-There is no fleet synchronization, historical backfill, update/termination
-propagation, or rehire workflow. Keeping the source IDs prevents duplicates; it
-does not establish ongoing sync. Identical normalized driver names remain subject
+There is no fleet synchronization, historical backfill, profile-update
+propagation, or rehire workflow. Termination notifications use the saved source
+identity as described below. Identical normalized driver names remain subject
 to MSERP's existing uniqueness constraint.
 
 ## Receiver configuration
@@ -68,6 +68,43 @@ deduplicate different event IDs. Neither case overwrites the first snapshot.
 Only committed database work receives 200. Failed persistence returns 503 so
 FleetScope retries. Completed intakes remain deduplicated even if their local
 driver is subsequently deleted.
+
+## Terminations
+
+`POST /integrations/fleetscope/driver-terminated` uses the same configuration,
+HMAC verification, company pinning, body limit and retry rules. The exact payload
+and FleetScope sender instructions are in
+[FLEETSCOPE_TERMINATION_AGENT_PROMPT.md](FLEETSCOPE_TERMINATION_AGENT_PROMPT.md).
+Deploy migration `052_fleetscope_termination.sql` before enabling the sender.
+The hire endpoint continues accepting only `driver.hired`; the termination
+endpoint accepts only `driver.terminated`.
+
+A termination atomically marks the explicitly linked driver inactive, clears the
+dispatcher, ends the current truck assignment, and creates an **Offboard [name]**
+task in the existing shared Tasks list. Assignments end in the current New York
+accounting week. Source termination dates are retained for review, without
+automatically rewriting earlier financial periods. Ownership, load links,
+expenses, payroll, external identity mappings and assignment history remain.
+Load imports cannot reactivate inactive drivers or assign inactive trucks/drivers.
+Marking a driver/truck inactive through fleet forms also clears current assignments.
+
+Charges are paused from the current New York week using the existing charge
+rules. If saved/confirmed charge rows block that pause, the pause rolls back,
+operational offboarding still completes, and the task flags the required
+accounting correction. Database errors roll back the entire receipt for retry.
+Manual deactivation retains its existing charge-pause validation.
+
+Only a completed intake's explicit identity link authorizes automatic driver
+changes. Unlinked/legacy/deleted identities create a review task. Names are never
+used to automatically deactivate anyone. A pending hire is cancelled; setup
+completion rejects it. A termination arriving before hire blocks the late setup
+task as well. Neither delivery order can create a managed driver automatically.
+
+Terminations deduplicate by event ID and company/driver identity. Event ID reuse
+with different bytes returns 409 across both event types. The first termination
+snapshot is retained. Retries do not reapply deactivation or recreate tasks after
+completion/deletion. HTTP 200 includes `status` (`accepted` or `duplicate`) and
+`terminationId`. Shared tasks refresh every 15 seconds while visible and idle.
 
 ## Accounting workflow
 
@@ -130,9 +167,16 @@ go vet ./...
 npm run lint
 node scripts/test-gross-board.mjs
 npm run build
+# Build with NEXT_PUBLIC_API_URL=/api, then use a disposable local
+# MSERP_INVESTOR_TEST_DATABASE_URL and psql on PATH for the browser flow:
+node scripts/test-investors-e2e.mjs --offboarding-only
 ```
 
 The PostgreSQL test creates/removes uniquely named test schemas and verifies
 baseline/incremental DDL, concurrent duplicate receipts, immutable snapshots,
 assignment rollback, explicit matching/linking, and deletion/retry behavior.
-Unit tests cover envelope/signature validation and the HTTP company/auth boundary.
+Unit tests cover both event envelopes/signatures and the HTTP company/auth boundary.
+The database suite also verifies termination deduplication, both delivery orders,
+cancelled setup, inactive assignment/import guards, task-failure rollback and
+charge-pause exceptions as mserp_app. The browser test exercises both inactive
+forms and a signed hire → explicit link → termination → task completion flow.

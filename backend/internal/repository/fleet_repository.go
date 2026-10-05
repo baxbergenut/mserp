@@ -254,6 +254,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 
 // Shared by manual entry and atomic completion of a FleetScope intake.
 func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
+	if !input.Active {
+		input.TruckID, input.DispatcherID = nil, nil
+	}
 	if input.AssignmentWeek != "" {
 		if err := setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 			return "", err
@@ -285,6 +288,9 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 }
 
 func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input DriverInput) (Driver, error) {
+	if !input.Active {
+		input.TruckID, input.DispatcherID = nil, nil
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Driver{}, err
@@ -482,6 +488,12 @@ func (r *FleetRepository) GetTruck(ctx context.Context, id string) (Truck, error
 }
 
 func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Truck, error) {
+	if !input.Active {
+		input.DriverID = nil
+		if input.Status == "assigned" {
+			input.Status = "available"
+		}
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Truck{}, err
@@ -529,6 +541,12 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 }
 
 func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input TruckInput) (Truck, error) {
+	if !input.Active {
+		input.DriverID = nil
+		if input.Status == "assigned" {
+			input.Status = "available"
+		}
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Truck{}, err
@@ -780,7 +798,7 @@ func setDispatcherDrivers(ctx context.Context, tx pgx.Tx, dispatcherID string, d
 	}
 	_, err := tx.Exec(ctx, `
 		UPDATE drivers SET dispatcher_id = $1, updated_at = now()
-		WHERE id = ANY($2::uuid[])`, dispatcherID, driverIDs)
+		WHERE id = ANY($2::uuid[]) AND active`, dispatcherID, driverIDs)
 	return err
 }
 
@@ -813,6 +831,16 @@ func setTruckDriver(ctx context.Context, tx pgx.Tx, truckID string, driverID *st
 }
 
 func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error {
+	var driverActive, truckActive bool
+	if err := tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, driverID).Scan(&driverActive); err != nil {
+		return mapNotFound(err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT active FROM trucks WHERE id=$1 FOR UPDATE`, truckID).Scan(&truckActive); err != nil {
+		return mapNotFound(err)
+	}
+	if !driverActive || !truckActive {
+		return chargeInvalid("Only active drivers and trucks can be assigned")
+	}
 	var unchanged bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments
  WHERE truck_id=$1 AND driver_id=$2 AND unassigned_at IS NULL)`, truckID, driverID).Scan(&unchanged); err != nil {
