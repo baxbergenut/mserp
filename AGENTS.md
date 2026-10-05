@@ -436,6 +436,9 @@ assignment lookup lists.
   Visible profiles refresh locations every 30 seconds and on focus, never calling
   Five ELD directly. Migration 051 caches optional heading with each coordinate;
   the map arrow rotates to the reported heading, or uses a neutral dot if absent.
+  OSM tile images explicitly use strict-origin referrers, overriding the global
+  no-referrer policy only for tiles. This identifies the site as OSM requires
+  without disclosing profile paths/IDs. Browser tests mirror production headers.
   Locations recorded three hours ago or more appear muted gray in all views.
   Last known points remain visible during outages. Polling defaults to five minutes;
   the retired FIVE_ELD_STALE_AFTER setting is ignored. The legacy database

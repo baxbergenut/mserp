@@ -59,7 +59,7 @@ try {
       const path = url.pathname === '/' ? '/index.html' : extname(url.pathname) ? url.pathname : `${url.pathname}.html`;
       const content = await readFile(join(frontend, 'out', path));
       const type = { '.txt': 'text/plain', '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' }[extname(path)] ?? 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': type }); res.end(content);
+      res.writeHead(200, { 'Content-Type': type, 'Referrer-Policy': 'no-referrer' }); res.end(content);
     } catch { res.writeHead(404); res.end(); }
   });
   // Keep test proxy connections alive beyond the board's five-second autosave

@@ -26,6 +26,9 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
       if (cancelled) return;
       map = L.map(element, { scrollWheelZoom: false, zoomAnimation: false, fadeAnimation: false }).setView([latitude, longitude], 10);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        // OSM requires a Referer; override the site's no-referrer policy only
+        // for tiles, sending the origin without private profile paths/IDs.
+        referrerPolicy: "strict-origin",
         maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
       const tiles = map.getPane("tilePane");

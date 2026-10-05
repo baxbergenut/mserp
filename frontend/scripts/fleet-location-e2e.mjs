@@ -6,7 +6,11 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   const truck = 'e4500000-0000-0000-0000-000000000004';
   const otherTruck = 'e4500000-0000-0000-0000-000000000005';
   // Keep map tests independent of external tile availability.
-  await page.route('https://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG1sAAAAASUVORK5CYII=', 'base64') }));
+  const tileReferrers = [];
+  await page.route('https://tile.openstreetmap.org/**', async route => {
+    tileReferrers.push((await route.request().allHeaders()).referer);
+    await route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG1sAAAAASUVORK5CYII=', 'base64') });
+  });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   await expect(page.getByRole('dialog').getByLabel('Truck location map')).toHaveCount(0);
   await expect(page.getByRole('dialog').getByRole('region', { name: 'Truck location', exact: true })).toHaveCount(0);
@@ -17,6 +21,9 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByRole('heading', { name: 'Vehicle details', exact: true })).toBeVisible();
   const panel = page.getByRole('region', { name: 'Latest truck location' });
   await expect(panel.getByRole('img', { name: 'Reported heading 90 degrees' })).toBeVisible();
+  await expect.poll(() => tileReferrers.length).toBeGreaterThan(0);
+  expect(tileReferrers.every(value => value === `${new URL(base).origin}/`)).toBe(true);
+  await expect(panel.locator('img.leaflet-tile').first()).toHaveAttribute('referrerpolicy', 'strict-origin');
   await expect(panel.locator('[data-heading="90"]')).toHaveCSS('transform', 'matrix(0, 1, -1, 0, 0, 0)');
   await panel.getByRole('button', { name: 'Truck ELD-17 · Latest location', exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
