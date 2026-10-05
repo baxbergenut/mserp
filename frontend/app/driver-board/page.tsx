@@ -23,13 +23,13 @@ import { CurrentLoadInput } from "./CurrentLoadInput";
 import { ETAEditor } from "./ETAEditor";
 
 const columns = [
-  ["Current load", 100], ["Driver", 140], ["Driver type", 75], ["Truck", 50], ["Trailer", 80],
-  ["Original gross", 100], ["Driver gross", 100], ["Phone", 132], ["Status", 110],
-  ["Location", 150], ["Destination", 150], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
+  ["Current load", 95], ["Driver", 125], ["Driver type", 55], ["Truck", 50], ["Trailer", 70],
+  ["Original gross", 90], ["Driver gross", 90], ["Phone", 115], ["Status", 100],
+  ["Location", 120], ["Destination", 135], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
-const driverColumnOffset = `max(100px, ${100 / columnWeight * 100}%)`;
+const driverColumnOffset = `max(${columns[0][1]}px, ${columns[0][1] / columnWeight * 100}%)`;
 const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
