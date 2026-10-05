@@ -1628,6 +1628,10 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+COMMIT;
+
+BEGIN;
+
 -- FleetScope termination receipts survive task/driver deletion and late hire delivery.
 ALTER TABLE fleetscope_driver_intake ADD COLUMN terminated_at TIMESTAMPTZ;
 CREATE TABLE fleetscope_driver_terminations (

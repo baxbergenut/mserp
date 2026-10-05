@@ -38,6 +38,9 @@ func TestPhoneDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Git checkouts may use different line endings for baseline and migration files.
+	source = []byte(strings.ReplaceAll(string(source), "\r\n", "\n"))
+	migration = []byte(strings.ReplaceAll(string(migration), "\r\n", "\n"))
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("phone_test_%d", time.Now().UnixNano())
@@ -86,6 +89,10 @@ func TestPhoneDatabase(t *testing.T) {
 				}
 			} else {
 				exec(string(source))
+			}
+			if mode == "migration" {
+				// Current repository reads require the complete upgraded schema.
+				applyLaterTestMigrations(t, ctx, admin, "042")
 			}
 			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,relay_driver_links TO mserp_app`)
 			appcfg := cfg.Copy()
