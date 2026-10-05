@@ -7,7 +7,7 @@ import { fetchDriverBoardHistory } from "@/app/lib/api";
 import type { DriverBoardEvent, BoardLoad } from "@/app/lib/types";
 import { formatETA } from "./board";
 
-const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Origin / destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Driver home", loadPlan: "Load selection and queue" };
+const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Driver home", loadPlan: "Load selection and queue" };
 function historyValue(field: string, value: string) {
   if (field === "eta") return formatETA(value, true);
   if (field !== "loadPlan") return value || "Empty";

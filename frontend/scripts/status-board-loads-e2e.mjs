@@ -56,7 +56,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(field('Status')).toHaveValue('DISPATCHED');
   await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
-  const destination = page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true });
+  const destination = page.getByRole('button', { name: 'Board Cpm · Destination from load', exact: true });
   await expect(destination).toHaveText('Richmond, VADEL');
   await destination.click();
   await expect(destination).toHaveText('Atlanta, GAPU');
@@ -105,15 +105,15 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await panel.getByLabel('Current load destination source').selectOption('');
   await expect(panel.getByLabel('Current load destination source')).toHaveValue('');
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
-  await expect(field('Origin / destination')).toHaveValue('Richmond, Virginia, 23219');
-  await field('Origin / destination').fill('Manual destination');
+  await expect(field('Destination')).toHaveValue('Richmond, Virginia, 23219');
+  await field('Destination').fill('Manual destination');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
   await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Boston, MA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Board Cpm · Origin / destination from load', exact: true })).toHaveText('Boston, MADEL');
+  await expect(page.getByRole('button', { name: 'Board Cpm · Destination from load', exact: true })).toHaveText('Boston, MADEL');
   // Removing the source plan never drops the current load or advances to NEXT-B.
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
