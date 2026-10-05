@@ -251,14 +251,16 @@ try {
   await page.goto(`${base}/accounting/driver-charges?driverId=${driverId}`);
   await page.getByRole('tab',{name:'Driver charges',exact:true}).click();
   const next = new Date(`${week}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
-  await page.getByLabel('Matrix effective week', { exact: true }).fill(next.toISOString().slice(0,10));
+  await page.getByRole('button', { name: 'Next week', exact: true }).click();
+  await expect(page.locator('[data-week-start]')).toHaveAttribute('data-week-start', next.toISOString().slice(0,10));
   await adminAmount.selectOption('35.00');
   await expect(adminAmount).toHaveValue('35.00');
   await expect(adminAmount).toBeEnabled();
   await page.getByLabel('E2e Driver, Admin fee history', { exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('$35.00');
   await page.getByRole('button', { name: 'Close', exact: true }).last().click();
-  await page.getByLabel('Matrix effective week', { exact: true }).fill(week);
+  await page.getByRole('button', { name: 'Previous week', exact: true }).click();
+  await expect(page.locator('[data-week-start]')).toHaveAttribute('data-week-start', week);
   await expect(adminAmount).toHaveValue('50.00');
   await page.screenshot({ path: join(temp, 'driver-charges-desktop.png'), fullPage: true });
   await page.goto(`${base}/drivers/detail?id=${driverId}`);
