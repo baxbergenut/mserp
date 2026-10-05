@@ -6,14 +6,16 @@ import type { ChargeData, Investor, Truck, TruckChargeData, TruckChargePhase, Tr
 import { useViewState } from "@/app/lib/viewMemory";
 import { Modal, Field, controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";
 import { payButtonClass } from "../driver-pay/DriverCard";
-import { currentChargeWeek, recurringCell } from "./charges";
+import { recurringCell, validChargeWeek } from "./charges";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
+import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
 export function TruckCharges({ charges, onChanged }: { charges: ChargeData; onChanged: () => Promise<void> }) {
   const [data, setData] = useState<TruckChargeData | null>(null);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [investors, setInvestors] = useState<Investor[]>([]);
-  const [week, setWeek] = useViewState("truckCharges:week", currentChargeWeek);
+  const [rememberedWeek, setWeek] = useViewState("truckCharges:week", charges.currentWeek);
+  const week = validChargeWeek(rememberedWeek) ? rememberedWeek : charges.currentWeek;
   const [search, setSearch] = useViewState("truckCharges:search", "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export function TruckCharges({ charges, onChanged }: { charges: ChargeData; onCh
     return () => { cancelled = true; };
   }, []);
   async function run(action: () => Promise<void>) { setBusy(true); setError(""); try { await action(); await reload(); await onChanged(); setTerm(null); setPhase(null); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save truck charges"); } finally { setBusy(false); } }
-  const validWeek = /^\d{4}-\d{2}-\d{2}$/.test(week) && week >= "2000-01-03" && week <= "2100-12-27" && new Date(`${week}T12:00:00Z`).getUTCDay() === 1;
+  const validWeek = validChargeWeek(week);
   const visible = trucks.filter(t => {
     if (!data?.eligibleTruckIds.includes(t.id)) return false;
     return (!t.isCompanyOwned || data?.terms.some(x => x.truckId === t.id)) && `${t.unitNumber} ${t.ownerName} ${t.driverName ?? ""}`.toLowerCase().includes(search.toLowerCase());
@@ -40,7 +42,7 @@ export function TruckCharges({ charges, onChanged }: { charges: ChargeData; onCh
   const movable = phase ? charges.schedules.filter(s => s.kind === "recurring" && s.typeId === phase.typeId && s.driverId === truck?.driverId && recurringCell(charges.schedules, s.driverId, phase.typeId, week).schedule?.id === s.id) : [];
   return <div className="space-y-3">
     {!term && !phase && error && <ErrorBanner message={error} />}
-    <div className="flex flex-wrap items-end gap-3"><label className="text-xs text-zinc-400">Effective week (Monday)<input type="date" min="2000-01-03" max="2100-12-27" value={week} disabled={busy} onChange={e => setWeek(e.target.value)} className={`${controlClass} mt-1 block !w-44`} /></label><input aria-label="Search investor trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Investor, truck or driver…" className={`${controlClass} !w-64`} /><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button></div>
+    <div className="flex flex-wrap items-center gap-3"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search investor trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Investor, truck or driver…" className={`${controlClass} !w-64`} /><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button></div>
     <p className="text-xs text-zinc-500">Fees belong to investor trucks and stay with them when drivers change. Owner-operators and trucks driven by their owner are managed in Driver charges. Set an investor share before calculating Investor Pay. Later dated changes stay in place.</p>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a valid Monday.</p>}
     {!data ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead className="bg-zinc-900"><tr>{["Investor / truck", "Current driver", "Investor share", ...types.map(t => t.name)].map((label,i) => <th key={i} className="min-w-44 border-b border-zinc-800 px-3 py-2">{label}</th>)}</tr></thead><tbody>{visible.map(t => {

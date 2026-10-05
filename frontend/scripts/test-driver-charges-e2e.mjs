@@ -107,7 +107,7 @@ try {
   await expect(adminCheck).toBeDisabled();
   const otherCheck = page.getByLabel('Unassigned Driver, Admin fee', { exact: true });
   await expect(otherCheck).toBeEnabled();
-  await expect(page.getByLabel('Matrix effective week', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Previous week', exact: true })).toBeEnabled();
   await page.getByPlaceholder('Search drivers…').fill('Driver');
   await otherCheck.check();
   await expect(otherCheck).toBeEnabled();
@@ -163,10 +163,10 @@ try {
   await expect(page.getByRole('columnheader', { name: 'Admin fee', exact: true })).toBeVisible();
   const matrixRow = page.getByRole('rowheader', { name: /E2e Driver/ }).locator('..');
   expect((await matrixRow.boundingBox()).height).toBe(32);
-  const currentMatrixWeek = await page.getByLabel('Matrix effective week', { exact: true }).inputValue();
+  const currentMatrixWeek = await page.locator('[data-week-start]').getAttribute('data-week-start');
   const previousDate = new Date(`${currentMatrixWeek}T12:00:00Z`); previousDate.setUTCDate(previousDate.getUTCDate() - 7);
   const previousWeek = previousDate.toISOString().slice(0,10);
-  await page.getByLabel('Matrix effective week', { exact: true }).fill(previousWeek);
+  await page.getByRole('button', { name: 'Previous week', exact: true }).click();
   await expect(adminCheck).not.toBeChecked();
   await adminCheck.check();
   await expect(adminAmount).toBeEnabled();
@@ -175,10 +175,10 @@ try {
   const pastPayroll = await (await page.request.get(`${base}/api/driver-pay?weekStart=${previousWeek}`)).json();
   expect(pastPayroll.drivers.find(d => d.fullName === 'E2e Driver').edits.generatedCharges[0].amount).toBe('-35.00');
   await page.reload();
-  await expect(page.getByLabel('Matrix effective week', {exact:true})).toHaveValue(previousWeek);
+  await expect(page.locator('[data-week-start]')).toHaveAttribute('data-week-start', previousWeek);
   await expect(adminCheck).toBeChecked();
   await expect(adminAmount).toHaveValue('35.00');
-  await page.getByLabel('Matrix effective week', {exact:true}).fill(currentMatrixWeek);
+  await page.getByRole('button', { name: 'Next week', exact: true }).click();
   await expect(adminAmount).toHaveValue('50.00');
 
   // A second type owns the complementary eligibility rule.

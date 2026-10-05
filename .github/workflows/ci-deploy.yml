@@ -135,6 +135,10 @@ jobs:
           MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: node scripts/test-driver-charges-e2e.mjs
 
+      - name: Verify charge filters and week navigation in Chromium
+        working-directory: frontend
+        run: node scripts/test-charge-views.mjs
+
       - name: Package release
         shell: bash
         run: |

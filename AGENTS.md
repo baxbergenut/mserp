@@ -572,6 +572,10 @@ assignment lookup lists.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.
+  Driver and truck matrices use the payroll-style previous/next week range and
+  This week controls. Valid effective weeks remain remembered. Driver charge
+  type filters use the visible catalog; remembered missing or hidden archived
+  types fall back to all visible types so initial entry cannot hide every fee.
   Driver charges lists and driver pickers show active drivers only; stored
   schedules and historical payroll for inactive drivers remain retained.
   Each type defines 1–50 exact amount options and calendar/loads/no_loads
@@ -999,6 +1003,8 @@ npx playwright install chromium
 node scripts/test-investors-e2e.mjs
 # Same isolated database safety requirement, using MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
 node scripts/test-driver-charges-e2e.mjs
+# Browser view regressions use isolated API fixtures, with no database needed.
+node scripts/test-charge-views.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build

@@ -8,17 +8,19 @@ import { History, LoaderCircle } from "lucide-react";
 import type { ChargeCell, ChargeData, ChargeSchedule, ChargeType, Driver } from "@/app/lib/types";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
-import { recurringCell } from "./charges";
+import { recurringCell, validChargeWeek } from "./charges";
+import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
 const money = (s: string) => decimalDisplay(hundredths(s), true);
 
-export default function RecurringMatrix({ data, drivers, search, driverFilter, typeFilter, busy, pending, onSave, showHistory }: {
+export default function RecurringMatrix({ data, drivers, search, driverFilter, typeFilter, archived, onArchivedChange, busy, pending, onSave, showHistory }: {
   data: ChargeData; drivers: Driver[]; search: string; driverFilter: string; typeFilter: string; busy: boolean;
+  archived: boolean; onArchivedChange: (archived: boolean) => void;
   pending: Record<string, ChargeCell>; onSave: (input: ChargeCell, driverName: string, typeName: string) => void;
   showHistory: (schedule: ChargeSchedule) => void;
 }) {
-  const [week, setWeek] = useViewState("RecurringMatrix:week", data.currentWeek);
-  const [archived, setArchived] = useViewState("RecurringMatrix:archived", false);
+  const [rememberedWeek, setWeek] = useViewState("RecurringMatrix:week", data.currentWeek);
+  const week = validChargeWeek(rememberedWeek) ? rememberedWeek : data.currentWeek;
   const schedulesByDriver = useMemo(() => {
     const grouped = new Map<string, ChargeSchedule[]>();
     for (const schedule of data.schedules) {
@@ -29,15 +31,15 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
   }, [data.schedules]);
   const visible = drivers.filter(d => (!driverFilter || driverFilter === d.id) && d.fullName.toLowerCase().includes(search.toLowerCase()));
   const types = data.types.filter(t => (!typeFilter || t.id === typeFilter) && (!t.archived || archived));
-  const validWeek = week >= "2000-01-03" && week <= "2100-12-27" && new Date(`${week}T12:00:00Z`).getUTCDay() === 1;
+  const validWeek = validChargeWeek(week);
   function save(driver: Driver, type: ChargeType, included: boolean, amount: string) {
     const { schedule } = recurringCell(schedulesByDriver.get(driver.id) ?? [], driver.id, type.id, week);
     onSave({ driverId: driver.id, typeId: type.id, weekStart: week, included, amount, scheduleId: schedule?.id ?? "", version: schedule?.version ?? 0, typeVersion: type.version }, driver.fullName, type.name);
   }
   return <div className="space-y-3">
     <div className="flex flex-wrap items-end gap-4">
-      <label className="space-y-1 text-xs text-zinc-400">Effective week (Monday)<input aria-label="Matrix effective week" type="date" min="2000-01-03" max="2100-12-27" value={week} disabled={busy} onChange={e => setWeek(e.target.value)} className={`${controlClass} !w-44 block`} /></label>
-      <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Show archived charge types</label>
+      <EffectiveWeekPicker week={week} currentWeek={data.currentWeek} disabled={busy} onChange={setWeek} />
+      <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input type="checkbox" checked={archived} onChange={e => onArchivedChange(e.target.checked)} />Show archived charge types</label>
       <span className="py-2 text-xs text-zinc-500">{visible.length} drivers</span>
     </div>
     <p className="text-xs text-zinc-500">Check a fee to include a driver. Changes save immediately from the selected week; unchecking pauses it. Later scheduled changes remain in place. Each charge type controls which weeks qualify.</p>
