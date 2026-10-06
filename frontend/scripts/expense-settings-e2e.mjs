@@ -80,7 +80,7 @@ export async function verifyExpenseSettings(page, base, temp) {
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
   await page.getByPlaceholder('Paste one or more transactions, receipt text, invoice details…').fill('Two test receipts');
   await page.getByRole('button', { name: /Analyze/ }).click();
-  await expect(page.getByLabel('Transaction 1 category', { exact: true })).toHaveValue('E2E Trips');
+  await expect(page.getByLabel('Transaction 1 category', { exact: true }).locator('option:checked')).toHaveText('E2E Trips');
   expect(await page.locator('#transaction-0-names option').evaluateAll(options => options.map(option => option.value))).toEqual(['E2E Hotel']);
   await page.getByLabel('Transaction 1 category', { exact: true }).selectOption({ label: 'Penalties' });
   await expect(page.getByLabel('Transaction 1 name', { exact: true })).toHaveValue('');
