@@ -64,6 +64,7 @@ type DriverPayLoad struct {
 }
 type DriverPayDriver struct {
 	InvestorID      string             `json:"investorId,omitempty"`
+	ProfileDriverID string             `json:"profileDriverId,omitempty"`
 	TruckID         string             `json:"truckId,omitempty"`
 	AutoCharges     []PayAutoCharge    `json:"autoCharges,omitempty"`
 	Issues          []string           `json:"issues,omitempty"`
@@ -132,7 +133,7 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
-	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.unit_number,''),
+	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.id::text,''),coalesce(t.unit_number,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
@@ -161,7 +162,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var d DriverPayDriver
 		var l DriverPayLoad
 		var raw, comments, adjustments []byte
-		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.IsOwnerOperator,
+		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.IsOwnerOperator,
 			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &raw,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal); err != nil {

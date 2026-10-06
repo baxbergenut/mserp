@@ -797,6 +797,7 @@ export interface GrossBoardEntry {
 export interface GrossBoardDriver {
   id: string;
   fullName: string;
+  truckId: string;
   truckUnit: string;
   dispatcherId: string;
   dispatcherName: string;
@@ -906,6 +907,7 @@ export interface DriverPayLoad {
 }
 export interface DriverPayDriver {
   investorId?: string;
+  profileDriverId?: string;
   truckId?: string;
   autoCharges?: { name: string; amount: string; source: string }[];
   issues?: string[];

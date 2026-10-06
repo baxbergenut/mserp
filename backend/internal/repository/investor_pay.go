@@ -152,6 +152,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		g.card.ID = id
 		g.card.TruckID = id
 		g.card.InvestorID = term.OwnerID
+		g.card.ProfileDriverID = g.ownerDriver
 		g.card.IsOwnerOperator = true
 		g.card.PayType = "gross_percentage"
 		g.card.PayRate = term.SharePercent
@@ -359,6 +360,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 				return source, investor, err
 			}
 			d.TruckUnit = g.card.TruckUnit
+			d.TruckID = g.card.TruckID
 			d.Loads = []DriverPayLoad{}
 			d.Edits = DriverPayEdits{DriverID: d.ID, WeekStart: source.WeekStart, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
 			d.AutoCharges = g.card.AutoCharges

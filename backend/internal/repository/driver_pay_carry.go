@@ -155,8 +155,8 @@ func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) 
 		}
 		var d DriverPayDriver
 		if err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,d.is_owner_operator,
- coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
- FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2`, report.WeekStart, r.Driver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName); err != nil {
+ coalesce(t.id::text,''),coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
+ FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2`, report.WeekStart, r.Driver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName); err != nil {
 			return err
 		}
 		d.FuelTotal = "0.00"

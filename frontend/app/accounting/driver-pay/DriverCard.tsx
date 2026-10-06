@@ -44,6 +44,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const totals = driverTotals(driver, edits);
   const investor = !!driver.investorId;
+  const profileDriverId = investor ? driver.profileDriverId : driver.id;
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const allFeesMissing = driver.loads.length > 0 && totals.missingFees === driver.loads.length;
@@ -94,13 +95,15 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   return <>
     <tr className={`h-9 cursor-pointer text-xs text-zinc-300 hover:bg-zinc-800/30 ${open ? "bg-zinc-800/30" : "bg-card"}`} onClick={() => onToggle(driver.id)}>
       <th scope="row" className="border-b border-zinc-800 px-3 py-0 text-left font-medium">
-        <button type="button" aria-expanded={open} aria-controls={`driver-${driver.id}`} className="flex h-9 w-full items-center gap-2 text-left text-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-500">
+        <div className="flex h-9 w-full items-center gap-2 text-left text-zinc-100">
+          <button type="button" aria-label={driver.fullName} aria-expanded={open} aria-controls={`driver-${driver.id}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500">
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
-          <span className="truncate">{driver.fullName}</span>{driver.settlement?.finalized && <span className="text-[10px] text-emerald-400">Finalized</span>}
+          </button>
+          {profileDriverId ? <Link href={`/drivers/detail?id=${profileDriverId}`} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link> : <span className="truncate">{driver.fullName}</span>}{driver.settlement?.finalized && <span className="text-[10px] text-emerald-400">Finalized</span>}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
-        </button>
+        </div>
       </th>
-      <td className="border-b border-zinc-800 px-3">{driver.truckUnit || "—"}</td>
+      <td className="border-b border-zinc-800 px-3">{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} onClick={event => event.stopPropagation()} className="font-mono underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
       <td className="border-b border-zinc-800 px-3">{investor ? "Investor" : driver.isOwnerOperator ? "Owner operator" : "Company driver"}</td>
       <td className="border-b border-zinc-800 px-3">{investor ? tariffLabel(driver).replace("driver gross", "truck gross") : tariffLabel(driver)}</td>
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName}</td>

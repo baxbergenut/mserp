@@ -42,6 +42,7 @@ type GrossBoardEntry struct {
 type GrossBoardDriver struct {
 	ID             string `json:"id"`
 	FullName       string `json:"fullName"`
+	TruckID        string `json:"truckId"`
 	TruckUnit      string `json:"truckUnit"`
 	DispatcherID   string `json:"dispatcherId"`
 	DispatcherName string `json:"dispatcherName"`
@@ -137,7 +138,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return board, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.unit_number,''),
+	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
  WHERE d.active OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
@@ -148,7 +149,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	for rows.Next() {
 		var d GrossBoardDriver
-		if err = rows.Scan(&d.ID, &d.FullName, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.Active); err != nil {
+		if err = rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.Active); err != nil {
 			rows.Close()
 			return board, err
 		}
