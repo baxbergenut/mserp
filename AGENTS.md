@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `055_charge_type_deletion.sql`:
+  `056_expense_category_access.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -548,8 +548,9 @@ assignment lookup lists.
   assignments for unmatched plans determine truck attribution. Missing matches,
   duplicate system loads, ownership conflicts and unlinked fuel need review.
   Fuel uses confirmed Relay identities, unique source Truck # prompts, diesel
-  items and merchant-local dates; tolls use stored truck IDs/crossing dates and
-  include credits. Routed costs leave driver sources transaction by transaction;
+  and DEF items and merchant-local dates; tolls use stored truck IDs and posting
+  dates, with crossing-date assignments, and include credits. Routed costs leave
+  driver sources transaction by transaction;
   legacy manual cost overrides require review/reset. Owner-covered truck expenses
   route to the owner settlement, sharing expense principal/version protection.
   Existing payments retain their destination. Reads never collect expenses;
@@ -792,11 +793,11 @@ assignment lookup lists.
   are marked for review. Percentage-pay drivers have permanent Fuel and Toll rows
   with locked names and signed editable amounts; CPM drivers never show or apply
   these rows. Percentage owner-operators default to negative weekly costs, while
-  company drivers default to zero. Fuel uses production Relay diesel line items
-  (excluding DEF/products), confirmed driver links and merchant-local dates. Tolls
-  include production/legacy credits by crossing date and unique historical truck
-  assignment using New York calendar dates, never today's assignment or guessed
-  nearby loads. Unmatched/ambiguous tolls remain outside payroll. Source totals
+  company drivers default to zero. Fuel uses production Relay diesel and DEF line
+  items, confirmed driver links and merchant-local dates. Tolls include
+  production/legacy credits by posting date and unique historical truck
+  assignment on the crossing date using New York calendar dates, never today's
+  assignment or guessed nearby loads. Unmatched/ambiguous tolls remain outside payroll. Source totals
   remain visible; null overrides follow current source totals, explicit zero or
   signed overrides persist until reset. Individual drivers or an entire week can
   be finalized and reopened (migration 038). Finalization requires the current

@@ -543,7 +543,7 @@ try {
   await expect(page.getByText('Page 1 of 2',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Next page',exact:true}).click();
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
-  await page.getByRole('link',{name:'Expenses',exact:true}).click();
+  await page.getByRole('link',{name:'Expenses & Charges',exact:true}).click();
   await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
   await expect(page.getByPlaceholder('Search drivers…')).toHaveValue('Navigation list');

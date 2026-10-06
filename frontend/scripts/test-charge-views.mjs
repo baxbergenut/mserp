@@ -74,13 +74,13 @@ try {
   const memoryKey = name => `mserp-navigation-v1:user:/accounting/driver-charges:view:${name}`;
   const scrollMemoryKey = 'mserp-navigation-v1:user:/accounting/driver-charges:scroll';
   await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
-  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  await expect.poll(() => page.evaluate(key => JSON.parse(sessionStorage.getItem(key) ?? '{}')['DIV:driver-recurring-charges']?.left, scrollMemoryKey)).toBe(200);
   await page.reload();
   await expect(checked).toBeChecked();
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(0);
   await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
-  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  await expect.poll(() => page.evaluate(key => JSON.parse(sessionStorage.getItem(key) ?? '{}')['DIV:driver-recurring-charges']?.left, scrollMemoryKey)).toBe(200);
   await page.goto(`${base}/trucks`);
   await expect(page.getByRole('heading', { name: 'Trucks', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Accounting', exact: true }).click();
@@ -93,7 +93,9 @@ try {
   await page.getByRole('tab', { name: 'Truck charges', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'Current driver', exact: true })).toBeVisible();
   await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 200; });
-  await expect.poll(() => page.evaluate(key => Object.values(JSON.parse(sessionStorage.getItem(key) ?? '{}')).some(position => position.left === 200), scrollMemoryKey)).toBe(true);
+  // Wait for this matrix's scroll event; a saved driver position must not
+  // satisfy the wait and let reload discard the pending truck position.
+  await expect.poll(() => page.evaluate(key => JSON.parse(sessionStorage.getItem(key) ?? '{}')['DIV:truck-recurring-charges']?.left, scrollMemoryKey)).toBe(200);
   await page.reload();
   await expect(page.getByRole('columnheader', { name: 'Current driver', exact: true })).toBeVisible();
   await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(200);
