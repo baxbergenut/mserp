@@ -15,6 +15,7 @@ const inactiveDriver = { ...driver, id: 'inactive', fullName: 'Inactive Driver',
 const pausedSchedule = { ...schedule, id: 'paused', driverId: secondDriver.id, driverName: secondDriver.fullName, version: 3, phases: [{ weekStart: week, amount: '25.00', paused: true }] };
 const writes = [];
 let failThirdDriver = true;
+let handoffFourthDriver = false;
 const archivedType = { ...type, id: 'archived', name: 'Archived fee', archived: true };
 const extraTypes = Array.from({ length: 6 }, (_, index) => ({ ...type, id: `fee-${index}`, name: `Other fee ${index}` }));
 const data = { currentWeek: week, types: [type, ...extraTypes, archivedType], schedules: [schedule, pausedSchedule] };
@@ -46,7 +47,7 @@ try {
         await route.fulfill({ status: 409, json: { error: 'Charge changed; reload and try again.' } }); return;
       }
       const existing = data.schedules.find(s => s.id === input.scheduleId);
-      const updated = { ...(existing ?? schedule), id: existing?.id ?? `new-${input.driverId}`, driverId: input.driverId, version: (existing?.version ?? 0) + 1, phases: [{ weekStart: input.weekStart, amount: input.amount, paused: !input.included }] };
+      const updated = { ...(existing ?? schedule), id: existing?.id ?? `new-${input.driverId}`, driverId: input.driverId, version: (existing?.version ?? 0) + 1, phases: [{ weekStart: input.weekStart, amount: input.amount, paused: !input.included || (handoffFourthDriver && input.driverId === fourthDriver.id) }] };
       data.schedules = [...data.schedules.filter(s => s.id !== updated.id), updated];
       await route.fulfill({ status: 204 }); return;
     }
@@ -153,20 +154,32 @@ try {
   expect(writes).toEqual([{ driverId: secondDriver.id, typeId: type.id, weekStart: week, included: true, amount: '25.00', scheduleId: pausedSchedule.id, version: 3, typeVersion: 1 }]);
   await page.getByLabel('Filter driver').selectOption('');
   const selectAll = page.getByRole('checkbox', { name: 'Admin fee: select all drivers', exact: true });
+  // A mixed column clears the included rows, rather than repeatedly trying
+  // to enable excluded investor-truck drivers.
+  await selectAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(checked).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Second Driver, Admin fee', exact: true })).not.toBeChecked();
+  expect(writes.slice(1).map(write => [write.driverId, write.included])).toEqual([[driver.id, false], [secondDriver.id, false]]);
   await selectAll.click();
   const failureNotice = page.getByRole('alert').filter({ hasText: 'Admin fee:' });
   await expect(failureNotice).toContainText('Third Driver');
-  await expect(failureNotice).toContainText('1 of 2 drivers updated');
+  await expect(failureNotice).toContainText('3 of 4 drivers updated');
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).toBeChecked();
   failThirdDriver = false;
+  // A partial failure also leaves a mixed column: clear it, then select all.
+  await selectAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  expect(writes.slice(7)).toHaveLength(3);
+  expect(writes.slice(7).every(write => write.included === false)).toBe(true);
   await selectAll.click();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).toBeChecked();
   await expect(selectAll).toBeChecked();
-  expect(writes.map(w => w.driverId)).toEqual([secondDriver.id, thirdDriver.id, fourthDriver.id, thirdDriver.id]);
-  expect(writes[3]).toEqual({ driverId: thirdDriver.id, typeId: type.id, weekStart: week, included: true, amount: '50.00', scheduleId: '', version: 0, typeVersion: 1 });
+  expect(writes[12]).toEqual({ driverId: thirdDriver.id, typeId: type.id, weekStart: week, included: true, amount: '50.00', scheduleId: '', version: 0, typeVersion: 1 });
+  expect(writes.filter(write => write.driverId === secondDriver.id).every(write => write.amount === '25.00')).toBe(true);
   await selectAll.click();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(selectAll).not.toBeChecked();
@@ -174,8 +187,19 @@ try {
   await expect(page.getByRole('checkbox', { name: 'Second Driver, Admin fee', exact: true })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).not.toBeChecked();
-  expect(writes.slice(4)).toHaveLength(4);
-  expect(writes.slice(4).every(write => write.included === false)).toBe(true);
+  expect(writes.slice(14)).toHaveLength(4);
+  expect(writes.slice(14).every(write => write.included === false)).toBe(true);
+  handoffFourthDriver = true;
+  await selectAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(checked).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).not.toBeChecked();
+  await selectAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  for (const current of [driver, secondDriver, thirdDriver, fourthDriver]) {
+    await expect(page.getByRole('checkbox', { name: `${current.fullName}, Admin fee`, exact: true })).not.toBeChecked();
+  }
+  expect(writes.slice(22).map(write => [write.driverId, write.included])).toEqual([[driver.id, false], [secondDriver.id, false], [thirdDriver.id, false]]);
   await page.getByLabel('Show archived charge types').check();
   await expect(page.getByRole('checkbox', { name: 'Archived fee: select all drivers', exact: true })).toHaveCount(0);
   await page.getByLabel('Show archived charge types').uncheck();

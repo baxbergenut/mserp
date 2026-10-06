@@ -223,7 +223,9 @@ try {
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toBeEditable();
   await expect(page.getByLabel('E2e Driver, Advance, charge name', { exact: true })).toBeEditable();
   const recurringAmount = page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true });
+  const quickSave = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/driver-pay', { timeout: 3000 });
   await recurringAmount.fill('-30');
+  await quickSave;
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
   const remainderWeek = new Date(week + 'T12:00:00Z'); remainderWeek.setUTCDate(remainderWeek.getUTCDate() + 7);
   const nextFee = async () => (await (await page.request.get(base + '/api/driver-pay?weekStart=' + remainderWeek.toISOString().slice(0,10))).json()).drivers.find(d => d.id === driverId).edits.generatedCharges.find(r => r.name === 'Admin fee');

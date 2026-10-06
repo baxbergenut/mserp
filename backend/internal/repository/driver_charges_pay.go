@@ -77,9 +77,28 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 			continue
 		}
 		if s.Kind == "recurring" && s.Direction == "charge" {
+			currentAmount, _ := chargeCents(current.Amount)
+			// Deferring an earlier deduction only increases unpaid principal.
+			// Later saved payments keep their exact amounts; projection carries
+			// the remaining balance onward without reallocating those payments.
+			deferring := !input.Reset && !input.WaiveRemainder && !current.WaiveRemainder && n > currentAmount && n <= 0
+			if deferring {
+				var finalizedWeek string
+				if err = tx.QueryRow(ctx, `SELECT coalesce(min(p.week_start)::text,'') FROM payroll_settlements p
+ WHERE p.driver_id=$1 AND p.week_start>$2::date AND p.finalized
+ AND EXISTS(SELECT 1 FROM driver_charge_occurrences o WHERE o.schedule_id=$3 AND o.week_start=p.week_start)`, driver, week, s.ID).Scan(&finalizedWeek); err != nil {
+					return nil, err
+				}
+				if finalizedWeek != "" {
+					return nil, chargeInvalid("Reopen this driver's settlement for week %s before carrying %s into later weeks", finalizedWeek, s.Name)
+				}
+			}
 			for _, later := range s.Occurrences {
 				laterAmount, _ := chargeCents(later.Amount)
 				if later.WeekStart > week && (laterAmount != 0 || later.WaiveRemainder) {
+					if deferring && !later.WaiveRemainder {
+						continue
+					}
 					return nil, chargeInvalid("Set later saved deductions of %s to zero with carry enabled before correcting this week, then reapply them", s.Name)
 				}
 			}

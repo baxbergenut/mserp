@@ -79,7 +79,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }, [changes, dirty, invalid, loading, refreshing, savePay]);
   useEffect(() => {
     if (!dirty || invalid || saving || loading || refreshing || error) return;
-    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 5000);
+    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 750);
     return () => clearTimeout(timer);
   }, [dirty, invalid, saving, loading, refreshing, error, save, pendingWeek, pendingLink]);
   useEffect(() => {

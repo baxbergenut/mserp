@@ -64,8 +64,10 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
             checked={allIncluded}
             ref={node => { if (node) node.indeterminate = included > 0 && !allIncluded; }}
             disabled={busy || Object.keys(pending).length > 0 || !validWeek || !cells.length}
-            onChange={event => {
-              const select = event.target.checked;
+            onChange={() => {
+              // A partially selected column must clear on the first click too.
+              // Investor-truck handoffs can keep some rows permanently paused.
+              const select = included === 0;
               const targets = cells.flatMap(({ driver, cell }) => cell.included === select ? [] : [{ input: inputFor(driver, type, select, cell.phase?.amount ?? type.amount), driverName: driver.fullName }]);
               if (targets.length) onSaveAll(targets, type.name);
             }}

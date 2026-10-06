@@ -208,4 +208,84 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 	if !read(w1).Edits.GeneratedCharges[0].WaiveRemainder {
 		t.Fatal("finalized reduction lost")
 	}
+	testReopenedRecurringDeferral(t, pool, actor)
+}
+
+func testReopenedRecurringDeferral(t *testing.T, pool *pgxpool.Pool, actor string) {
+	t.Helper()
+	ctx := context.Background()
+	var driver string
+	if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Reopened Fee','reopened fee','cpm',0.75) RETURNING id::text`).Scan(&driver); err != nil {
+		t.Fatal(err)
+	}
+	pay, charges := NewDriverPayRepository(pool), NewDriverChargeRepository(pool)
+	w1, w2, w3 := "2026-09-28", "2026-10-05", "2026-10-12"
+	typ, err := charges.SaveType(ctx, ChargeType{Name: "Reopened admin fee", Direction: "charge", Amount: "120", Eligibility: "calendar"}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = charges.SaveCell(ctx, ChargeCell{DriverID: driver, TypeID: typ.ID, TypeVersion: typ.Version, Included: true, Amount: "120", WeekStart: w1}, actor); err != nil {
+		t.Fatal(err)
+	}
+	read := func(week string) DriverPayEdits {
+		t.Helper()
+		monday, _ := chargeWeek(week)
+		report, err := pay.GetDriverWeek(ctx, monday, driver)
+		if err != nil || len(report.Drivers) != 1 {
+			t.Fatalf("read reopened fee: %+v %v", report, err)
+		}
+		return report.Drivers[0].Edits
+	}
+	settle := func(week string, reopen bool) {
+		t.Helper()
+		monday, _ := chargeWeek(week)
+		report, err := pay.Get(ctx, monday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pay.Settle(ctx, monday, driver, report.Revision, actor, "Correct admin fee", reopen); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settle(w1, false)
+	settle(w2, false)
+	settle(w1, true)
+	e := read(w1)
+	e.GeneratedCharges[0].Amount = "0.00"
+	if _, err = pay.Save(ctx, e, actor); err == nil {
+		t.Fatal("deferral changed carry through a finalized later settlement")
+	}
+	settle(w2, true)
+	later := read(w2)
+	e = read(w1)
+	e.GeneratedCharges[0].Amount = "-60.00"
+	if _, err = pay.Save(ctx, e, actor); err != nil {
+		t.Fatalf("partial deferral after reopening: %v", err)
+	}
+	if _, err = pay.Save(ctx, later, actor); err == nil {
+		t.Fatal("accepted stale later-week amounts after deferral")
+	}
+	e = read(w1)
+	e.GeneratedCharges[0].Amount = "0.00"
+	if _, err = pay.Save(ctx, e, actor); err != nil {
+		t.Fatalf("zero deferral after reopening: %v", err)
+	}
+	row := read(w2).GeneratedCharges[0]
+	if row.Amount != "-120.00" || row.CarryForward != "120.00" || row.ScheduledAmount != "-240.00" || row.Version != later.GeneratedCharges[0].Version {
+		t.Fatalf("later saved deduction was rewritten or lost carry: %+v", row)
+	}
+	if row = read(w3).GeneratedCharges[0]; row.Amount != "-240.00" || row.CarryForward != "120.00" {
+		t.Fatalf("unpaid balance lost after later saved payment: %+v", row)
+	}
+	// A later explicit waiver cannot silently erase the newly deferred debt.
+	e = read(w3)
+	e.GeneratedCharges[0].WaiveRemainder = true
+	if _, err = pay.Save(ctx, e, actor); err != nil {
+		t.Fatal(err)
+	}
+	e = read(w2)
+	e.GeneratedCharges[0].Amount = "0.00"
+	if _, err = pay.Save(ctx, e, actor); err == nil {
+		t.Fatal("correction crossed a later waiver")
+	}
 }

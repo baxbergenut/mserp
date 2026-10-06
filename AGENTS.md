@@ -601,9 +601,10 @@ assignment lookup lists.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.
-  Each active fee column offers Apply to all (or Apply to filtered drivers),
-  enabling only unchecked visible active drivers from the selected week and
-  retaining existing amounts. Bounded per-driver saves preserve later phases
+  Each active fee column has an all/visible-drivers checkbox. A checked or mixed
+  column clears its selected drivers on one click; an empty column enables all
+  visible active drivers, retaining existing amounts. Investor handoffs cannot
+  trap a mixed column in repeated add attempts. Bounded saves preserve later phases
   and version checks; a combined notice reports any partial failures.
   Driver and truck matrices use the payroll-style previous/next week range and
   This week controls. Valid effective weeks remain remembered. Driver matrices
@@ -820,7 +821,8 @@ assignment lookup lists.
   editor applies valid edits and awaits Gross Board autosave before Back to
   Driver Pay returns to the accountant's prior view.
   Notes, load comments, and named additions/reimbursements/deductions belong to
-  a driver/week in `driver_pay_weeks`, with version checks and five-second autosave.
+  a driver/week in `driver_pay_weeks`, with version checks and autosave after a
+  750ms editing pause. Navigation flushes immediately; in-flight edits stay queued.
   Comments are keyed by date, slot, and normalized load number so replacing a
   load does not reuse its old comment. DataTruck stop ordering selects the first
   pickup and final delivery; trip `mile`/`empty_mile` supply loaded/deadhead miles.
@@ -840,6 +842,10 @@ assignment lookup lists.
   amount, later saved deductions must be zeroed (and finalized weeks reopened),
   then reapplied; prior collections cannot silently change a later saved payment.
   Recurring deduction occurrences retain a base amount separately from carry.
+  Earlier recurring deductions can be reduced or zeroed with carry enabled even
+  when later open/reopened weeks have saved payments. Those payments retain their
+  amounts, and unpaid balances carry onward. Later finalized weeks must be reopened;
+  later waivers and corrections that could invalidate payments remain protected.
   Reduced/zero amounts carry by default, even after pause/end or in ineligible
   weeks; those weeks add no new base charge. Right-click/Shift+F10 on a recurring
   row offers an explicit audited this-week-only reduction (waiveRemainder), with
