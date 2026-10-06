@@ -7,7 +7,7 @@ import { PageHeader } from "@/app/components/PageHeader";
 import { fetchTruck, fileDownloadUrl } from "@/app/lib/api";
 import type { Truck } from "@/app/lib/types";
 import { useViewState } from "@/app/lib/viewMemory";
-import { usePermissions } from "@/app/lib/access";
+import { useExpenseCategoryAccess, usePermissions } from "@/app/lib/access";
 import { ErrorBanner } from "@/app/components/management/ManagementUI";
 import { RelatedExpenses } from "@/app/components/expenses/RelatedExpenses";
 import { TruckLocationPanel } from "@/app/components/fleet/TruckLocationPanel";
@@ -27,6 +27,12 @@ export default function TruckDetailPage() {
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useViewState<typeof tabs[number]>("page:tab", "Overview");
   const permissions = usePermissions();
+  const expenseCategoryAccess = useExpenseCategoryAccess();
+  const expenseTabsVisible = expenseCategoryAccess.length > 0;
+  const visibleTabs: readonly (typeof tabs)[number][] = expenseTabsVisible ? tabs : tabs.filter(name => name !== "Expenses");
+  useEffect(() => {
+    if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
+  }, [expenseTabsVisible, setTab, tab]);
   useEffect(() => {
     let cancelled = false;
     const id = new URLSearchParams(window.location.search).get("id") ?? "";
@@ -50,7 +56,7 @@ export default function TruckDetailPage() {
           {[["Status", truck.status.replaceAll("_", " ")], ["Mileage", truck.mileage === null ? "Not recorded" : `${truck.mileage.toLocaleString()} mi`]].map(([label, value]) => <div key={label} className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-sm font-medium capitalize text-zinc-200">{value}</dd></div>)}
         </dl>
       </header>
-      <nav className="flex flex-wrap gap-1 border-b border-zinc-800" aria-label="Truck sections">{tabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`border-b-2 px-3 py-3 text-xs font-medium ${tab === name ? "border-blue-500 text-blue-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{name}</button>)}</nav>
+      <nav className="flex flex-wrap gap-1 border-b border-zinc-800" aria-label="Truck sections">{visibleTabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`border-b-2 px-3 py-3 text-xs font-medium ${tab === name ? "border-blue-500 text-blue-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{name}</button>)}</nav>
       {tab === "Overview" && <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
           <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Vehicle details</h2><Details values={[["Unit number", truck.unitNumber], ["VIN", truck.vin], ["Year", truck.year], ["Make", truck.make], ["Model", truck.model], ["License plate", [truck.licensePlate, truck.licenseState].filter(Boolean).join(" · ")]]} /></section>
@@ -60,7 +66,7 @@ export default function TruckDetailPage() {
         </div>
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
-      {tab === "Expenses" && <RelatedExpenses truckId={truck.id} />}
+      {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} />}
       {editing && <TruckEditor truck={truck} onClose={() => setEditing(false)} onSaved={value => { setTruck(value); setEditing(false); }} />}
     </>}
   </div>;

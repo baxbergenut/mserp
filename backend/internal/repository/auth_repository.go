@@ -12,14 +12,15 @@ import (
 var ErrAuthRecordNotFound = errors.New("authentication record not found")
 
 type AuthUser struct {
-	ID            string
-	Username      string
-	PasswordHash  string
-	Email         string
-	RoleID        string
-	Permissions   []string
-	Version       int
-	Administrator bool
+	ID                    string
+	Username              string
+	PasswordHash          string
+	Email                 string
+	RoleID                string
+	Permissions           []string
+	Version               int
+	Administrator         bool
+	ExpenseCategoryAccess []ExpenseCategoryAccess
 }
 type AuthSession struct {
 	User      AuthUser
@@ -89,6 +90,37 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 	if system {
 		s.User.Administrator = true
 		s.User.Permissions = PermissionKeys()
+	}
+	s.User.ExpenseCategoryAccess = []ExpenseCategoryAccess{}
+	query := `SELECT s.id::text,true,true,true,true FROM expense_settings s WHERE s.kind='category'`
+	args := []any{}
+	if !system {
+		query = `SELECT category_id::text,can_view,can_create,can_edit,can_delete FROM role_expense_category_access WHERE role_id=$1`
+		args = append(args, s.User.RoleID)
+	}
+	rows, accessErr := r.pool.Query(ctx, query, args...)
+	if accessErr != nil {
+		return AuthSession{}, accessErr
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var access ExpenseCategoryAccess
+		if accessErr = rows.Scan(&access.CategoryID, &access.CanView, &access.CanCreate, &access.CanEdit, &access.CanDelete); accessErr != nil {
+			return AuthSession{}, accessErr
+		}
+		s.User.ExpenseCategoryAccess = append(s.User.ExpenseCategoryAccess, access)
+	}
+	if accessErr = rows.Err(); accessErr != nil {
+		return AuthSession{}, accessErr
+	}
+	if len(s.User.ExpenseCategoryAccess) > 0 {
+		s.User.Permissions = append(s.User.Permissions, "expenses.read")
+	}
+	for _, access := range s.User.ExpenseCategoryAccess {
+		if access.CanCreate || access.CanEdit || access.CanDelete {
+			s.User.Permissions = append(s.User.Permissions, "expenses.write")
+			break
+		}
 	}
 	return s, err
 }

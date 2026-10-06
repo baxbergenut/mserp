@@ -1,12 +1,29 @@
 package httpapi
 
-import "testing"
+import (
+	"testing"
+
+	"mserp/internal/repository"
+)
+
+const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
+
+func TestExpenseCategoryActions(t *testing.T) {
+	access := []repository.ExpenseCategoryAccess{{CategoryID: testExpenseCategoryID, CanView: true, CanCreate: true}}
+	visible, accessible := expenseCategoryIDs(access)
+	if len(visible) != 1 || len(accessible) != 1 || !hasExpenseCategoryAction(access, testExpenseCategoryID, "view") || !hasExpenseCategoryAction(access, testExpenseCategoryID, "create") {
+		t.Fatal("expected view and create category access")
+	}
+	if hasExpenseCategoryAction(access, testExpenseCategoryID, "edit") || hasExpenseCategoryAction(access, "00000000-0000-4000-8000-000000000098", "view") {
+		t.Fatal("category action escaped its assigned category")
+	}
+}
 
 func TestExpenseRequestValidate(t *testing.T) {
 	t.Parallel()
 
 	request := expenseRequest{
-		Company: " MS Express ", Category: "Maintenance", ExpenseDate: "2026-09-23",
+		Company: " MS Express ", CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-23",
 		Amount: "1234.50", UnitNumber: " 010 ", ExpenseType: " Oil change ", Description: " oil change ",
 	}
 	input, err := request.validate()
@@ -29,7 +46,7 @@ func TestExpenseRequestValidate(t *testing.T) {
 
 func TestExpenseNameRequired(t *testing.T) {
 	for _, name := range []string{"", " \t\n "} {
-		request := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100", ExpenseType: name}
+		request := expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-29", Amount: "100", ExpenseType: name}
 		if _, err := request.validate(); err == nil || err.Error() != "expense name is required" {
 			t.Fatalf("name %q: expected required name error, got %v", name, err)
 		}
@@ -37,7 +54,7 @@ func TestExpenseNameRequired(t *testing.T) {
 }
 
 func TestDriverExpenseValidation(t *testing.T) {
-	r := expenseRequest{Company: "MS Express", Category: "Penalties", ExpenseDate: "2026-09-29", Amount: "100.25", ExpenseType: "Parking violation", CoveredBy: " driver "}
+	r := expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-29", Amount: "100.25", ExpenseType: "Parking violation", CoveredBy: " driver "}
 	if _, err := r.validate(); err == nil {
 		t.Fatal("driver responsibility requires a linked driver")
 	}
@@ -89,11 +106,11 @@ func TestExpenseRequestValidateRejectsInvalidValues(t *testing.T) {
 		name    string
 		request expenseRequest
 	}{
-		{name: "missing company", request: expenseRequest{Category: "Safety", ExpenseDate: "2026-09-23", Amount: "10.00"}},
-		{name: "empty category", request: expenseRequest{Company: "MS Express", Category: "", ExpenseDate: "2026-09-23", Amount: "10.00"}},
-		{name: "invalid date", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "09/23/2026", Amount: "10.00"}},
-		{name: "missing amount", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "2026-09-23"}},
-		{name: "too many cents", request: expenseRequest{Company: "MS Express", Category: "Safety", ExpenseDate: "2026-09-23", Amount: "10.001"}},
+		{name: "missing company", request: expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-23", Amount: "10.00"}},
+		{name: "empty category", request: expenseRequest{Company: "MS Express", CategoryID: "", ExpenseDate: "2026-09-23", Amount: "10.00"}},
+		{name: "invalid date", request: expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID, ExpenseDate: "09/23/2026", Amount: "10.00"}},
+		{name: "missing amount", request: expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-23"}},
+		{name: "too many cents", request: expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-23", Amount: "10.001"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

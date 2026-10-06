@@ -11,11 +11,24 @@ import (
 var ErrAccessConflict = errors.New("record changed, email/name already used, or last administrator would be removed")
 
 type AccessRole struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Permissions []string `json:"permissions"`
-	System      bool     `json:"system"`
-	Version     int      `json:"version"`
+	ID                    string                  `json:"id"`
+	Name                  string                  `json:"name"`
+	Permissions           []string                `json:"permissions"`
+	ExpenseCategoryAccess []ExpenseCategoryAccess `json:"expenseCategoryAccess"`
+	System                bool                    `json:"system"`
+	Version               int                     `json:"version"`
+}
+type ExpenseCategoryAccess struct {
+	CategoryID string `json:"categoryId"`
+	CanView    bool   `json:"canView"`
+	CanCreate  bool   `json:"canCreate"`
+	CanEdit    bool   `json:"canEdit"`
+	CanDelete  bool   `json:"canDelete"`
+}
+type ExpenseAccessCategory struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
 }
 type ManagedUser struct {
 	ID       string `json:"id"`
@@ -27,13 +40,31 @@ type ManagedUser struct {
 	Version  int    `json:"version"`
 }
 type AccessData struct {
-	Users       []ManagedUser `json:"users"`
-	Roles       []AccessRole  `json:"roles"`
-	Permissions []Permission  `json:"permissions"`
+	Users             []ManagedUser           `json:"users"`
+	Roles             []AccessRole            `json:"roles"`
+	Permissions       []Permission            `json:"permissions"`
+	ExpenseCategories []ExpenseAccessCategory `json:"expenseCategories"`
 }
 
 func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
-	data := AccessData{Users: []ManagedUser{}, Roles: []AccessRole{}, Permissions: Permissions}
+	data := AccessData{Users: []ManagedUser{}, Roles: []AccessRole{}, Permissions: Permissions, ExpenseCategories: []ExpenseAccessCategory{}}
+	categoryRows, err := r.pool.Query(ctx, `SELECT id::text,name,active FROM expense_settings WHERE kind='category' ORDER BY active DESC,lower(name),id`)
+	if err != nil {
+		return data, err
+	}
+	for categoryRows.Next() {
+		var category ExpenseAccessCategory
+		if err = categoryRows.Scan(&category.ID, &category.Name, &category.Active); err != nil {
+			categoryRows.Close()
+			return data, err
+		}
+		data.ExpenseCategories = append(data.ExpenseCategories, category)
+	}
+	if err = categoryRows.Err(); err != nil {
+		categoryRows.Close()
+		return data, err
+	}
+	categoryRows.Close()
 	rows, err := r.pool.Query(ctx, `SELECT id::text,username,coalesce(email,''),coalesce(role_id::text,''),active,version FROM app_users ORDER BY lower(username),id`)
 	if err != nil {
 		return data, err
@@ -57,12 +88,33 @@ func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var role AccessRole
+		role := AccessRole{ExpenseCategoryAccess: []ExpenseCategoryAccess{}}
 		if err = rows.Scan(&role.ID, &role.Name, &role.Permissions, &role.System, &role.Version); err != nil {
 			return data, err
 		}
 		if role.System {
 			role.Permissions = PermissionKeys()
+			for _, category := range data.ExpenseCategories {
+				role.ExpenseCategoryAccess = append(role.ExpenseCategoryAccess, ExpenseCategoryAccess{CategoryID: category.ID, CanView: true, CanCreate: true, CanEdit: true, CanDelete: true})
+			}
+		} else {
+			accessRows, accessErr := r.pool.Query(ctx, `SELECT category_id::text,can_view,can_create,can_edit,can_delete FROM role_expense_category_access WHERE role_id=$1 ORDER BY category_id`, role.ID)
+			if accessErr != nil {
+				return data, accessErr
+			}
+			for accessRows.Next() {
+				var access ExpenseCategoryAccess
+				if accessErr = accessRows.Scan(&access.CategoryID, &access.CanView, &access.CanCreate, &access.CanEdit, &access.CanDelete); accessErr != nil {
+					accessRows.Close()
+					return data, accessErr
+				}
+				role.ExpenseCategoryAccess = append(role.ExpenseCategoryAccess, access)
+			}
+			if accessErr = accessRows.Err(); accessErr != nil {
+				accessRows.Close()
+				return data, accessErr
+			}
+			accessRows.Close()
 		}
 		data.Roles = append(data.Roles, role)
 	}
@@ -168,6 +220,21 @@ func (r *AuthRepository) SaveRole(ctx context.Context, actor string, input Acces
 	}
 	if err != nil {
 		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM role_expense_category_access WHERE role_id=$1`, input.ID); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, access := range input.ExpenseCategoryAccess {
+		if access.CategoryID == "" || seen[access.CategoryID] || (!access.CanView && !access.CanCreate && !access.CanEdit && !access.CanDelete) {
+			return ErrAccessConflict
+		}
+		seen[access.CategoryID] = true
+		command, insertErr := tx.Exec(ctx, `INSERT INTO role_expense_category_access(role_id,category_id,can_view,can_create,can_edit,can_delete)
+			SELECT $1,id,$3,$4,$5,$6 FROM expense_settings WHERE id=$2 AND kind='category'`, input.ID, access.CategoryID, access.CanView, access.CanCreate, access.CanEdit, access.CanDelete)
+		if insertErr != nil || command.RowsAffected() != 1 {
+			return ErrAccessConflict
+		}
 	}
 	if err = accessAudit(ctx, tx, actor, "save_role", input.ID, input); err != nil {
 		return err

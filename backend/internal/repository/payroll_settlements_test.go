@@ -29,7 +29,11 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	week, _ := time.Parse(time.DateOnly, ChargeCurrentWeek())
 	pay := NewDriverPayRepository(pool)
 	expenses := NewExpenseRepository(pool)
-	input := ExpenseInput{Company: "MS Express", Category: "Penalties", ExpenseDate: week, DriverID: &operator, OwnerID: &owner, Amount: "50.25", CoveredBy: payTestString("Truck Owner")}
+	var penaltyCategory string
+	if err := admin.QueryRow(ctx, `SELECT id::text FROM expense_settings WHERE kind='category' AND name='Penalties'`).Scan(&penaltyCategory); err != nil {
+		t.Fatal(err)
+	}
+	input := ExpenseInput{Company: "MS Express", CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &operator, OwnerID: &owner, Amount: "50.25", CoveredBy: payTestString("Truck Owner")}
 	expense, err := expenses.CreateExpense(ctx, input)
 	if err != nil {
 		t.Fatal(err)
@@ -42,11 +46,11 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err != nil || external.ChargeDriverID != nil {
 		t.Fatal("independent investor charged to operator", err)
 	}
-	personal, err := expenses.ListExpensesPage(ctx, ExpensePageQuery{ChargeDriverID: &ownerDriver, Pagination: Pagination{PageSize: 100}})
+	personal, err := expenses.ListExpensesPage(ctx, ExpensePageQuery{ChargeDriverID: &ownerDriver, VisibleCategoryIDs: []string{penaltyCategory}, AccessibleCategoryIDs: []string{penaltyCategory}, Pagination: Pagination{PageSize: 100}})
 	if err != nil || personal.Total != 1 {
 		t.Fatal("personal responsibility filter", personal.Total, err)
 	}
-	linked, err := expenses.ListExpensesPage(ctx, ExpensePageQuery{DriverID: &operator, Responsibility: "non_personal", Pagination: Pagination{PageSize: 100}})
+	linked, err := expenses.ListExpensesPage(ctx, ExpensePageQuery{DriverID: &operator, Responsibility: "non_personal", VisibleCategoryIDs: []string{penaltyCategory}, AccessibleCategoryIDs: []string{penaltyCategory}, Pagination: Pagination{PageSize: 100}})
 	if err != nil || linked.Total < 2 {
 		t.Fatal("company/other responsibility filter", linked.Total, err)
 	}

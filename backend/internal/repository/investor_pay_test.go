@@ -173,7 +173,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatalf("driver charged truck fees: %+v", payroll)
 			}
 
-			expense := mustID(`INSERT INTO expenses(company,category,expense_type,truck_id,driver_id,owner_id,covered_by,expense_date,amount) VALUES('MS Express','Maintenance','Repair',$1,$2,$3,'Truck Owner','2026-09-28',300) RETURNING id`, truck, driver, investor)
+			expense := mustID(`INSERT INTO expenses(company,category_id,category,expense_type,truck_id,driver_id,owner_id,covered_by,expense_date,amount) SELECT 'MS Express',id,name,'Repair',$1,$2,$3,'Truck Owner','2026-09-28',300 FROM expense_settings WHERE kind='category' AND name='Maintenance' RETURNING id`, truck, driver, investor)
 			fuelID := mustID(`INSERT INTO fuel_transactions(relay_environment,relay_transaction_id,driver_id,relay_driver_id,purchased_at,total_amount_paid,total_retail_price,total_amount_saved,is_direct_bill,currency_code,merchant_id,merchant_name,merchant_number,location_id,location_name,merchant_location_id,address,city,state,postal_code,latitude,longitude,timezone,prompts,raw_payload) VALUES('production','pay-test',$1,'relay-test','2026-09-28 12:00+00',1500,1500,0,false,'USD','','','','','','','','','','',0,0,'America/New_York','[{"label":"Truck #","value":"TRUCK-A"}]','{}') RETURNING id`, driver)
 			if _, e = pool.Exec(ctx, `INSERT INTO fuel_transaction_items(fuel_transaction_id,line_number,item_kind,category,total_amount_paid) VALUES($1,0,'fuel','diesel',1500),($1,1,'fuel','def',50)`, fuelID); e != nil {
 				t.Fatal(e)

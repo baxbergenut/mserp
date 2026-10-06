@@ -72,6 +72,24 @@ func TestAccessDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(m))
+				exec(`INSERT INTO app_roles(name,permissions) VALUES
+					('Legacy expense reader',ARRAY['expenses.read']),
+					('Legacy expense writer',ARRAY['expenses.write'])`)
+				expenseAccess, e := os.ReadFile("../../sql/056_expense_category_access.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(expenseAccess))
+				var readerView, writerActions, writerSettings int
+				if e = admin.QueryRow(ctx, `SELECT count(*) FROM role_expense_category_access a JOIN app_roles r ON r.id=a.role_id WHERE r.name='Legacy expense reader' AND a.can_view AND NOT a.can_create AND NOT a.can_edit AND NOT a.can_delete`).Scan(&readerView); e != nil || readerView == 0 {
+					t.Fatalf("legacy expense reader was not migrated: count=%d err=%v", readerView, e)
+				}
+				if e = admin.QueryRow(ctx, `SELECT count(*) FROM role_expense_category_access a JOIN app_roles r ON r.id=a.role_id WHERE r.name='Legacy expense writer' AND NOT a.can_view AND a.can_create AND a.can_edit AND a.can_delete`).Scan(&writerActions); e != nil || writerActions == 0 {
+					t.Fatalf("legacy expense writer was not migrated: count=%d err=%v", writerActions, e)
+				}
+				if e = admin.QueryRow(ctx, `SELECT count(*) FROM app_roles WHERE name='Legacy expense writer' AND 'expense_settings.manage'=ANY(permissions) AND NOT 'expenses.write'=ANY(permissions)`).Scan(&writerSettings); e != nil || writerSettings != 1 {
+					t.Fatalf("legacy expense settings permission was not migrated: count=%d err=%v", writerSettings, e)
+				}
 				var count int
 				if e = admin.QueryRow(ctx, `SELECT count(*) FROM auth_sessions`).Scan(&count); e != nil || count != 0 {
 					t.Fatal("legacy sessions survived migration")
@@ -161,6 +179,24 @@ func TestAccessDatabase(t *testing.T) {
 			data, e := repo.AccessData(ctx)
 			if e != nil {
 				t.Fatal(e)
+			}
+			if len(data.ExpenseCategories) == 0 {
+				t.Fatal("expense categories missing from access settings")
+			}
+			categoryID := data.ExpenseCategories[0].ID
+			status(call("POST", "/settings/roles", repository.AccessRole{Name: "Safety team", Permissions: []string{"fleet.read"}, ExpenseCategoryAccess: []repository.ExpenseCategoryAccess{{CategoryID: categoryID, CanView: true, CanCreate: true}}}, sessionCookie, session.CSRFToken), 204)
+			data, e = repo.AccessData(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+			foundScoped := false
+			for _, role := range data.Roles {
+				if role.Name == "Safety team" && len(role.ExpenseCategoryAccess) == 1 && role.ExpenseCategoryAccess[0].CanView && role.ExpenseCategoryAccess[0].CanCreate && !role.ExpenseCategoryAccess[0].CanEdit {
+					foundScoped = true
+				}
+			}
+			if !foundScoped {
+				t.Fatal("category-scoped role access was not saved")
 			}
 			var viewerRole string
 			for _, r := range data.Roles {

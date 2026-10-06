@@ -54,11 +54,12 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	Email       string   `json:"email"`
-	RoleID      string   `json:"roleId"`
-	Permissions []string `json:"permissions"`
+	ID                    string                             `json:"id"`
+	Username              string                             `json:"username"`
+	Email                 string                             `json:"email"`
+	RoleID                string                             `json:"roleId"`
+	Permissions           []string                           `json:"permissions"`
+	ExpenseCategoryAccess []repository.ExpenseCategoryAccess `json:"expenseCategoryAccess"`
 }
 
 type sessionResponse struct {
@@ -281,7 +282,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions},
+		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
 	}

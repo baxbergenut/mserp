@@ -62,8 +62,17 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
+			expenseAccessMigration, readErr := os.ReadFile("../../sql/056_expense_category_access.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(truckMigration), "\r\n", "\n"), "", 1)
+				var found bool
+				sql, _, found = strings.Cut(sql, "BEGIN;\n\n-- Durable expense categories")
+				if !found {
+					t.Fatal("missing migration 056 boundary")
+				}
 			}
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(settlementMigration), "\r\n", "\n"), "", 1)
@@ -91,6 +100,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				if _, truckErr := admin.Exec(ctx, string(truckMigration)); truckErr != nil {
 					t.Fatal(truckErr)
 				}
+				exec(string(expenseAccessMigration))
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
@@ -106,7 +116,11 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			expenses := NewExpenseRepository(pool)
 			pay := NewDriverPayRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-09-28")
-			input := ExpenseInput{Company: "MS Express", Category: "Penalties", ExpenseDate: week, DriverID: &driver, Amount: "100.25", ExpenseType: payTestString("Parking violation"), Description: payTestString("Long explanation that must not appear in Driver Pay"), CoveredBy: payTestString("Driver")}
+			var penaltyCategory string
+			if err = admin.QueryRow(ctx, `SELECT id::text FROM expense_settings WHERE kind='category' AND name='Penalties'`).Scan(&penaltyCategory); err != nil {
+				t.Fatal(err)
+			}
+			input := ExpenseInput{Company: "MS Express", CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &driver, Amount: "100.25", ExpenseType: payTestString("Parking violation"), Description: payTestString("Long explanation that must not appear in Driver Pay"), CoveredBy: payTestString("Driver")}
 			e, err := expenses.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)

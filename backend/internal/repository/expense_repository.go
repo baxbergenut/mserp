@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,6 +34,8 @@ type Expense struct {
 	DriverID            *string          `json:"driverId"`
 	Company             string           `json:"company"`
 	Category            string           `json:"category"`
+	CategoryID          string           `json:"categoryId"`
+	CreatedByName       *string          `json:"createdByName"`
 	WeekStart           *string          `json:"weekStart"`
 	ExpenseDate         *string          `json:"expenseDate"`
 	UnitNumber          *string          `json:"unitNumber"`
@@ -58,7 +59,9 @@ type Expense struct {
 type ExpenseInput struct {
 	OwnerID            *string
 	Company            string
-	Category           string
+	CategoryID         string
+	CreatedBy          string
+	CreatedByName      string
 	ExpenseDate        time.Time
 	TruckID            *string
 	DriverID           *string
@@ -76,26 +79,33 @@ type ExpenseInput struct {
 }
 
 type ExpensePageQuery struct {
-	Responsibility string
-	ChargeDriverID *string
-	Pagination     Pagination
-	Search         string
-	Category       string
-	Company        string
-	DateFrom       *time.Time
-	DateTo         *time.Time
-	TruckID        *string
-	DriverID       *string
+	Responsibility        string
+	ChargeDriverID        *string
+	Pagination            Pagination
+	Search                string
+	CategoryID            string
+	VisibleCategoryIDs    []string
+	AccessibleCategoryIDs []string
+	Company               string
+	DateFrom              *time.Time
+	DateTo                *time.Time
+	TruckID               *string
+	DriverID              *string
 }
 
 type ExpenseFilterOptions struct {
-	Settings     []ExpenseSetting `json:"settings"`
-	Categories   []string         `json:"categories"`
-	Companies    []string         `json:"companies"`
-	PaymentTypes []string         `json:"paymentTypes"`
-	ExpenseTypes []string         `json:"expenseTypes"`
-	PaidBy       []string         `json:"paidBy"`
-	CoveredBy    []string         `json:"coveredBy"`
+	Settings     []ExpenseSetting        `json:"settings"`
+	Categories   []ExpenseFilterCategory `json:"categories"`
+	Companies    []string                `json:"companies"`
+	PaymentTypes []string                `json:"paymentTypes"`
+	ExpenseTypes []string                `json:"expenseTypes"`
+	PaidBy       []string                `json:"paidBy"`
+	CoveredBy    []string                `json:"coveredBy"`
+}
+
+type ExpenseFilterCategory struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type ExpenseSummary struct {
@@ -115,16 +125,17 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 		COALESCE(d.full_name, e.driver_name), e.payment_type, e.expense_type,
 		e.reference_number, e.description, e.covered_by, e.paid_by)
 	ILIKE '%' || $1 || '%')
-	AND ($2 = '' OR e.category = $2)
-	AND ($3 = '' OR e.company = $3)
-	AND ($4::date IS NULL OR e.expense_date >= $4)
-	AND ($5::date IS NULL OR e.expense_date <= $5)
-	AND ($6::uuid IS NULL OR e.truck_id = $6)
-	AND ($7::uuid IS NULL OR e.driver_id = $7)
- AND ($8::uuid IS NULL OR e.charge_driver_id=$8)
- AND ($9='' OR ($9='non_personal' AND e.charge_driver_id IS DISTINCT FROM $7::uuid))`
+	AND e.category_id=ANY($2::uuid[])
+	AND ($3 = '' OR e.category_id = $3::uuid)
+	AND ($4 = '' OR e.company = $4)
+	AND ($5::date IS NULL OR e.expense_date >= $5)
+	AND ($6::date IS NULL OR e.expense_date <= $6)
+	AND ($7::uuid IS NULL OR e.truck_id = $7)
+	AND ($8::uuid IS NULL OR e.driver_id = $8)
+ AND ($9::uuid IS NULL OR e.charge_driver_id=$9)
+ AND ($10='' OR ($10='non_personal' AND e.charge_driver_id IS DISTINCT FROM $8::uuid))`
 	args := []any{
-		query.Search, query.Category, query.Company, query.DateFrom, query.DateTo,
+		query.Search, query.VisibleCategoryIDs, query.CategoryID, query.Company, query.DateFrom, query.DateTo,
 		query.TruckID, query.DriverID, query.ChargeDriverID, query.Responsibility,
 	}
 
@@ -145,7 +156,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
 		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		LIMIT $10 OFFSET $11`, pageArgs...)
+		LIMIT $11 OFFSET $12`, pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -163,17 +174,15 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 		return ExpensePage{}, err
 	}
 
-	options := ExpenseFilterOptions{}
+	options := ExpenseFilterOptions{Categories: []ExpenseFilterCategory{}}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
-			COALESCE(array_agg(DISTINCT category ORDER BY category)
-				FILTER (WHERE category <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT company ORDER BY company)
 				FILTER (WHERE company <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT covered_by ORDER BY covered_by)
 				FILTER (WHERE covered_by IS NOT NULL AND covered_by <> ''), '{}')
-		FROM expenses e`).Scan(
-		&options.Categories, &options.Companies, &options.CoveredBy,
+		FROM expenses e WHERE e.category_id=ANY($1::uuid[])`, query.VisibleCategoryIDs).Scan(
+		&options.Companies, &options.CoveredBy,
 	); err != nil {
 		return ExpensePage{}, err
 	}
@@ -182,33 +191,43 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	if err != nil {
 		return ExpensePage{}, err
 	}
-	options.Settings = settings
+	accessible := map[string]bool{}
+	for _, id := range query.AccessibleCategoryIDs {
+		accessible[id] = true
+	}
+	visible := map[string]bool{}
+	for _, id := range query.VisibleCategoryIDs {
+		visible[id] = true
+	}
+	for _, item := range settings {
+		if item.Kind == "category" && accessible[item.ID] {
+			options.Settings = append(options.Settings, item)
+			if visible[item.ID] {
+				options.Categories = append(options.Categories, ExpenseFilterCategory{ID: item.ID, Name: item.Name})
+			}
+		}
+		if item.Kind == "name" && item.CategoryID != nil && accessible[*item.CategoryID] {
+			options.Settings = append(options.Settings, item)
+		}
+		if item.Kind == "payment_method" || item.Kind == "payer" {
+			options.Settings = append(options.Settings, item)
+		}
+	}
 	options.PaymentTypes = []string{}
 	options.PaidBy = []string{}
 	// Keep the legacy field; defaults now come from category-linked settings.
 	options.ExpenseTypes = []string{}
-	categories := map[string]bool{}
-	for _, name := range options.Categories {
-		categories[name] = true
-	}
-	for _, item := range settings {
+	for _, item := range options.Settings {
 		if !item.Active {
 			continue
 		}
 		switch item.Kind {
-		case "category":
-			categories[item.Name] = true
 		case "payment_method":
 			options.PaymentTypes = append(options.PaymentTypes, item.Name)
 		case "payer":
 			options.PaidBy = append(options.PaidBy, item.Name)
 		}
 	}
-	options.Categories = []string{}
-	for name := range categories {
-		options.Categories = append(options.Categories, name)
-	}
-	sort.Strings(options.Categories)
 	return ExpensePage{
 		Page:    NewPage(values, total, query.Pagination),
 		Options: options,
@@ -339,19 +358,19 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 	var id string
 	err := queryer.QueryRow(ctx, `
 		INSERT INTO expenses (
-			company, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
+			company, category_id, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, manager_verified, accounting_verified, owner_id
+			paid_by, manager_verified, accounting_verified, owner_id, created_by, created_by_name
 		) VALUES (
-			$1, $2, $3, $4, $5,
+			$1, $2, (SELECT name FROM expense_settings WHERE id=$2 AND kind='category' AND active), $3, $4, $5,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT unit_number FROM trucks WHERE id = $4) END,
 			CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
-			$8::numeric, $9, $10, $11, $12, $13, $14, $15, $16, $17
+			$8::numeric, $9, $10, $11, $12, $13, $14, $15, $16, $17, NULLIF($18,'')::uuid, NULLIF($19,'')
 		) RETURNING id`,
-		input.Company, input.Category, input.ExpenseDate, input.TruckID, input.DriverID,
+		input.Company, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.ManagerVerified, input.AccountingVerified, input.OwnerID,
+		input.ManagerVerified, input.AccountingVerified, input.OwnerID, input.CreatedBy, input.CreatedByName,
 	).Scan(&id)
 	return id, err
 }
@@ -359,7 +378,7 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
 	command, err := r.pool.Exec(ctx, `
 		UPDATE expenses SET
-			company = $2, category = $3, expense_date = $4, truck_id = $5, driver_id = $6,
+			company = $2, category_id = $3, category = CASE WHEN category_id=$3::uuid THEN category ELSE (SELECT name FROM expense_settings WHERE id=$3 AND kind='category' AND active) END, expense_date = $4, truck_id = $5, driver_id = $6,
 			unit_number = CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT unit_number FROM trucks WHERE id = $5) END,
 			driver_name = CASE WHEN $6::uuid IS NULL THEN $8 ELSE (SELECT full_name FROM drivers WHERE id = $6) END,
 			amount = $9::numeric, payment_type = $10,
@@ -367,7 +386,7 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 			covered_by = $14, paid_by = $15, manager_verified = $16,
 			accounting_verified = $17, owner_id = $18, updated_at = now()
 		WHERE id = $1`,
-		id, input.Company, input.Category, input.ExpenseDate, input.TruckID, input.DriverID,
+		id, input.Company, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.ManagerVerified, input.AccountingVerified, input.OwnerID,
@@ -393,7 +412,7 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string) error 
 }
 
 const selectExpensesSQL = `
-SELECT e.id, e.truck_id, e.driver_id, e.company, e.category,
+SELECT e.id, e.truck_id, e.driver_id, e.company, e.category, e.category_id, e.created_by_name,
 	to_char(date_trunc('week', e.expense_date)::date, 'YYYY-MM-DD'),
 	to_char(e.expense_date, 'YYYY-MM-DD'), COALESCE(t.unit_number, e.unit_number),
 	COALESCE(d.full_name, e.driver_name), e.amount::text, e.payment_type,
@@ -413,7 +432,7 @@ LEFT JOIN drivers d ON d.id = e.driver_id`
 func scanExpense(row rowScanner) (Expense, error) {
 	var value Expense
 	err := row.Scan(
-		&value.ID, &value.TruckID, &value.DriverID, &value.Company, &value.Category, &value.WeekStart,
+		&value.ID, &value.TruckID, &value.DriverID, &value.Company, &value.Category, &value.CategoryID, &value.CreatedByName, &value.WeekStart,
 		&value.ExpenseDate, &value.UnitNumber, &value.DriverName, &value.Amount,
 		&value.PaymentType, &value.ExpenseType, &value.ReferenceNumber,
 		&value.Description, &value.CoveredBy, &value.PaidBy,

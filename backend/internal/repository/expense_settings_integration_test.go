@@ -38,6 +38,10 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	accessMigration, err := os.ReadFile("../../sql/056_expense_category_access.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("expense_settings_test_%d", time.Now().UnixNano())
@@ -53,11 +57,22 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
+				var found bool
+				sql, _, found = strings.Cut(sql, "BEGIN;\n\n-- Durable expense categories")
+				if !found {
+					t.Fatal("missing migration 056 boundary")
+				}
 			}
 			exec(sql)
-			exec(`INSERT INTO expenses(company,category,expense_type,payment_type,paid_by,expense_date,amount) VALUES('MS Express','Maintenance','Old custom repair','Legacy card','Legacy payer','2026-09-28',10)`)
 			if mode == "migration" {
+				exec(`INSERT INTO expenses(company,category,expense_type,payment_type,paid_by,expense_date,amount) VALUES('MS Express','Maintenance','Old custom repair','Legacy card','Legacy payer','2026-09-28',10)`)
 				exec(string(migration))
+				exec(`INSERT INTO expense_settings(kind,name) VALUES('category','Legacy customs')`)
+				exec(`INSERT INTO expenses(company,category,expense_type,expense_date,amount) VALUES('MS Express','Legacy customs','Historical unmatched entry','2026-09-21',20)`)
+				exec(`UPDATE expense_settings SET name='Modern customs' WHERE kind='category' AND name='Legacy customs'`)
+				exec(string(accessMigration))
+			} else {
+				exec(`INSERT INTO expenses(company,category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT 'MS Express',id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
 			cfg, err := pgxpool.ParseConfig(dsn)
@@ -85,13 +100,20 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			categories := map[string]string{}
+			legacyArchived := false
 			for _, item := range items {
 				if item.Kind == "category" {
 					categories[item.Name] = item.ID
+					if item.Name == "Legacy customs" && !item.Active {
+						legacyArchived = true
+					}
 				}
 				if item.Kind == "name" && item.Name == "Old custom repair" {
 					t.Fatal("custom expense became a default")
 				}
+			}
+			if mode == "migration" && !legacyArchived {
+				t.Fatal("unmatched historical category was not archived")
 			}
 			for _, item := range items {
 				if item.Name == "Tire replacement" && (item.CategoryID == nil || *item.CategoryID != categories["Maintenance"]) {
@@ -112,7 +134,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			if !errors.As(err, &pg) || pg.Code != "23505" {
 				t.Fatalf("duplicate accepted: %v", err)
 			}
-			input := ExpenseInput{Company: "MS Express", Category: cat.Name, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
+			input := ExpenseInput{Company: "MS Express", CategoryID: cat.ID, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
 			expense, err := repo.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)
@@ -129,12 +151,12 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			if err != nil || expense.Category != "Travel costs" {
 				t.Fatalf("history changed: %+v %v", expense, err)
 			}
-			if _, err = repo.CreateExpense(ctx, input); err == nil {
-				t.Fatal("renamed category accepted for a new expense")
+			renamed, err := repo.CreateExpense(ctx, input)
+			if err != nil || renamed.Category != "Travel" || renamed.CategoryID != cat.ID {
+				t.Fatalf("renamed category identity was not used: %+v %v", renamed, err)
 			}
 			cat.Active = false
 			cat = save(cat.ID, cat)
-			input.Category = cat.Name
 			if _, err = repo.CreateExpense(ctx, input); err == nil {
 				t.Fatal("archived category accepted")
 			}
@@ -149,7 +171,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			method := save("", ExpenseSetting{Kind: "payment_method", Name: "Card 1456", Active: true})
 			method.Active = false
 			save(method.ID, method)
-			page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{})
+			page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{VisibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}, AccessibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,7 +182,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			}
 			found := false
 			for _, v := range page.Options.Categories {
-				if v == "Travel costs" {
+				if v.ID == cat.ID {
 					found = true
 				}
 			}

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -47,7 +46,7 @@ func registerExpenseRoutes(
 type expenseRequest struct {
 	OwnerID            *string `json:"ownerId"`
 	Company            string  `json:"company"`
-	Category           string  `json:"category"`
+	CategoryID         string  `json:"categoryId"`
 	ExpenseDate        string  `json:"expenseDate"`
 	TruckID            *string `json:"truckId"`
 	DriverID           *string `json:"driverId"`
@@ -71,6 +70,7 @@ type expenseBatchRequest struct {
 type extractedExpense struct {
 	Company         string   `json:"company"`
 	Category        string   `json:"category"`
+	CategoryID      string   `json:"categoryId"`
 	ExpenseDate     string   `json:"expenseDate"`
 	TruckID         *string  `json:"truckId"`
 	DriverID        *string  `json:"driverId"`
@@ -93,14 +93,14 @@ type expenseExtractionResponse struct {
 
 func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	request.Company = strings.TrimSpace(request.Company)
-	request.Category = strings.TrimSpace(request.Category)
+	request.CategoryID = strings.TrimSpace(request.CategoryID)
 	request.Amount = strings.TrimSpace(request.Amount)
 	request.ExpenseType = strings.TrimSpace(request.ExpenseType)
 	if request.Company == "" {
 		return repository.ExpenseInput{}, errors.New("company is required")
 	}
-	if request.Category == "" || utf8.RuneCountInString(request.Category) > 100 {
-		return repository.ExpenseInput{}, errors.New("category is required and must be at most 100 characters")
+	if !isUUID(request.CategoryID) {
+		return repository.ExpenseInput{}, errors.New("select a valid category")
 	}
 	if request.ExpenseType == "" {
 		return repository.ExpenseInput{}, errors.New("expense name is required")
@@ -144,7 +144,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	}
 	return repository.ExpenseInput{
 		OwnerID: request.OwnerID,
-		Company: request.Company, Category: request.Category, ExpenseDate: *expenseDate,
+		Company: request.Company, CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
 		TruckID: request.TruckID, DriverID: request.DriverID,
 		UnitNumber: optionalString(request.UnitNumber), DriverName: optionalString(request.DriverName),
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
@@ -156,6 +156,12 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 }
 
 func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Request) {
+	session, _ := authSessionFromContext(r.Context())
+	visible, accessible := expenseCategoryIDs(session.User.ExpenseCategoryAccess)
+	if len(accessible) == 0 {
+		writeAPIError(w, http.StatusForbidden, "your role does not have access to any Expenses & Charges category")
+		return
+	}
 	pagination, err := parsePagination(r)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
@@ -191,11 +197,16 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, 400, "invalid responsibility filter")
 		return
 	}
+	categoryID := strings.TrimSpace(r.URL.Query().Get("categoryId"))
+	if categoryID != "" && (!isUUID(categoryID) || !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, categoryID, "view")) {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to view that category")
+		return
+	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
 		Pagination:     pagination,
 		ChargeDriverID: chargeDriverID, Responsibility: responsibility,
-		Search:   strings.TrimSpace(r.URL.Query().Get("search")),
-		Category: strings.TrimSpace(r.URL.Query().Get("category")),
+		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
+		CategoryID: categoryID, VisibleCategoryIDs: visible, AccessibleCategoryIDs: accessible,
 		Company:  strings.TrimSpace(r.URL.Query().Get("company")),
 		DateFrom: dateFrom,
 		DateTo:   dateTo,
@@ -231,6 +242,12 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to add entries in that category")
+		return
+	}
+	input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
 	value, err := handler.repo.CreateExpense(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -250,12 +267,18 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	inputs := make([]repository.ExpenseInput, 0, len(request.Expenses))
+	session, _ := authSessionFromContext(r.Context())
 	for index, expense := range request.Expenses {
 		input, err := expense.validate()
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, "expense "+strconv.Itoa(index+1)+": "+err.Error())
 			return
 		}
+		if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {
+			writeAPIError(w, http.StatusForbidden, "expense "+strconv.Itoa(index+1)+": you do not have permission to add entries in that category")
+			return
+		}
+		input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
 		inputs = append(inputs, input)
 	}
 	values, err := handler.repo.CreateExpenses(r.Context(), inputs)
@@ -267,6 +290,17 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 }
 
 func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Request) {
+	session, _ := authSessionFromContext(r.Context())
+	createIDs := map[string]bool{}
+	for _, access := range session.User.ExpenseCategoryAccess {
+		if access.CanCreate {
+			createIDs[access.CategoryID] = true
+		}
+	}
+	if len(createIDs) == 0 {
+		writeAPIError(w, http.StatusForbidden, "your role cannot add Expenses & Charges entries")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 22<<20)
 	if err := r.ParseMultipartForm(2 << 20); err != nil {
 		var maxBytesError *http.MaxBytesError
@@ -312,11 +346,13 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 	}
 	input.Categories = map[string][]string{}
 	categoryIDs := map[string]string{}
+	categoryNames := map[string]string{}
 	categories := []string{}
 	for _, item := range settings {
-		if item.Active && item.Kind == "category" {
+		if item.Active && item.Kind == "category" && createIDs[item.ID] {
 			input.Categories[item.Name] = []string{}
 			categoryIDs[item.ID] = item.Name
+			categoryNames[strings.ToLower(item.Name)] = item.ID
 			categories = append(categories, item.Name)
 		}
 	}
@@ -361,8 +397,9 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			handler.writeError(w, err)
 			return
 		}
+		category := validExtractedCategory(item.Category, categories)
 		values = append(values, extractedExpense{
-			Company: validExtractedCompany(item.Company), Category: validExtractedCategory(item.Category, categories),
+			Company: validExtractedCompany(item.Company), Category: category, CategoryID: categoryNames[strings.ToLower(category)],
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
@@ -448,6 +485,20 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	existing, err := handler.repo.GetExpense(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, existing.CategoryID, "edit") {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to edit entries in that category")
+		return
+	}
+	if input.CategoryID != existing.CategoryID && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to move the entry to that category")
+		return
+	}
 	value, err := handler.repo.UpdateExpense(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -461,11 +512,54 @@ func (handler expenseHandler) deleteExpense(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	existing, err := handler.repo.GetExpense(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, existing.CategoryID, "delete") {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to delete entries in that category")
+		return
+	}
 	if err := handler.repo.DeleteExpense(r.Context(), id); err != nil {
 		handler.writeError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func expenseCategoryIDs(access []repository.ExpenseCategoryAccess) ([]string, []string) {
+	visible := []string{}
+	accessible := []string{}
+	for _, item := range access {
+		if item.CanView {
+			visible = append(visible, item.CategoryID)
+		}
+		if item.CanView || item.CanCreate || item.CanEdit || item.CanDelete {
+			accessible = append(accessible, item.CategoryID)
+		}
+	}
+	return visible, accessible
+}
+
+func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categoryID, action string) bool {
+	for _, item := range access {
+		if item.CategoryID != categoryID {
+			continue
+		}
+		switch action {
+		case "view":
+			return item.CanView
+		case "create":
+			return item.CanCreate
+		case "edit":
+			return item.CanEdit
+		case "delete":
+			return item.CanDelete
+		}
+	}
+	return false
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {

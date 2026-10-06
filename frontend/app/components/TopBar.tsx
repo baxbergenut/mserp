@@ -5,17 +5,18 @@ import { useRouter } from "next/navigation";
 import { Search, Plus, UserRound, X, LogOut, ChevronDown } from "lucide-react";
 import { IntentLink } from "./IntentLink";
 import { PageHeaderSlot } from "./PageHeader";
-import { usePermissions, pagePermission } from "@/app/lib/access";
+import { useExpenseCategoryAccess, usePermissions, pagePermission } from "@/app/lib/access";
 import { fetchDriversPage, fetchTrucksPage, fetchLoadsPage, fetchExpensesPage, fetchInvestorsPage, logout } from "@/app/lib/api";
 
 type Result = { label: string; detail: string; href: string };
 type Group = { name: string; results: Result[]; failed?: boolean };
-const quickActions = [{ label: "Expense", path: "/expenses" }, { label: "Driver", path: "/drivers" }, { label: "Truck", path: "/trucks" }, { label: "Task", path: "/tasks" }];
+const quickActions = [{ label: "Expenses & Charges entry", path: "/expenses" }, { label: "Driver", path: "/drivers" }, { label: "Truck", path: "/trucks" }, { label: "Task", path: "/tasks" }];
 const itemClass = "block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400";
 
 export function TopBar({ username }: { username: string }) {
   const permissions = usePermissions();
-  const allowedActions = quickActions.filter(a => permissions.includes(pagePermission(a.path).replace(".read", ".write")));
+  const expenseCategoryAccess = useExpenseCategoryAccess();
+  const allowedActions = quickActions.filter(a => a.path === "/expenses" ? expenseCategoryAccess.some(item => item.canCreate) : permissions.includes(pagePermission(a.path).replace(".read", ".write")));
   const router = useRouter();
   const [menu, setMenu] = useState<"search" | "new" | "account" | null>(null);
   const [createToken, setCreateToken] = useState(0);
@@ -52,10 +53,10 @@ export function TopBar({ username }: { username: string }) {
         { name: "Drivers", request: () => fetchDriversPage({ ...page, includeInactive: true }).then(r => r.items.map(d => ({ label: d.fullName, detail: [d.truckUnit && `Truck ${d.truckUnit}`, d.active ? "Active" : "Inactive"].filter(Boolean).join(" · "), href: `/drivers/detail?id=${encodeURIComponent(d.id)}` }))) },
         { name: "Trucks", request: () => fetchTrucksPage(page).then(r => r.items.map(t => ({ label: `Truck ${t.unitNumber}`, detail: t.driverName ?? t.status, href: `/trucks/detail?id=${encodeURIComponent(t.id)}` }))) },
         { name: "Loads", request: () => fetchLoadsPage(page).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
-        { name: "Expenses", request: () => fetchExpensesPage(page).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
+        { name: "Expenses & Charges", request: () => fetchExpensesPage(page).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
         { name: "Investors", request: () => fetchInvestorsPage(page).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.trucks.length} trucks`, href: i.driverId ? `/drivers/detail?id=${encodeURIComponent(i.driverId)}` : `/investors?search=${encodeURIComponent(i.fullName)}` }))) },
       ];
-      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", Expenses: "expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
+      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses & Charges": "expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
       if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ name: allowedRequests[i].name, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
     }, 250);
@@ -70,12 +71,12 @@ export function TopBar({ username }: { username: string }) {
       <div className="relative min-w-0 flex-1 lg:max-w-md">
         <button ref={trigger} onClick={() => setMenu(menu === "search" ? null : "search")} aria-expanded={menu === "search"} aria-controls="global-search" className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-600"><Search className="h-4 w-4 shrink-0" /><span className="truncate">Search MSERP…</span><kbd className="ml-auto hidden whitespace-nowrap text-[11px] sm:block">Ctrl / ⌘ K</kbd></button>
         {menu === "search" && <section id="global-search" aria-label="Global search" className="absolute left-0 top-full mt-2 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl">
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3"><Search className="h-4 w-4 text-zinc-500" /><input ref={input} aria-label="Search records" value={query} onChange={e => setQuery(e.target.value)} placeholder="Driver, truck, load, expense or investor…" className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none" onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); root.current?.querySelector<HTMLAnchorElement>("#global-search a")?.focus(); } }} /><button aria-label="Close search" onClick={close} className="p-1 text-zinc-400"><X className="h-4 w-4" /></button></div>
+      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3"><Search className="h-4 w-4 text-zinc-500" /><input ref={input} aria-label="Search records" value={query} onChange={e => setQuery(e.target.value)} placeholder="Driver, truck, load, expense, charge or investor…" className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none" onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); root.current?.querySelector<HTMLAnchorElement>("#global-search a")?.focus(); } }} /><button aria-label="Close search" onClick={close} className="p-1 text-zinc-400"><X className="h-4 w-4" /></button></div>
       <div className="max-h-[65dvh] overflow-auto p-3" aria-live="polite">
         {term.length < 2 ? <p className="p-3 text-sm text-zinc-500">Type at least two characters to search records.</p> : !groups ? <p role="status" className="p-3 text-sm text-zinc-500">Searching…</p> : <>
           {groups.map(group => <div key={group.name}>{(group.results.length > 0 || group.failed) && <h2 className="px-3 pb-1 pt-3 text-xs font-medium text-zinc-500">{group.name}</h2>}{group.failed && <p className="px-3 py-2 text-xs text-amber-400">Could not search {group.name.toLowerCase()}. Try closing and reopening search.</p>}{group.results.map((result, index) => <IntentLink key={`${result.href}:${index}`} href={result.href} onClick={close} className={itemClass}><span className="block text-zinc-200">{result.label}</span><span className="block text-xs text-zinc-500">{result.detail}</span></IntentLink>)}</div>)}
           {groups.every(g => !g.results.length && !g.failed) && <p className="p-3 text-sm text-zinc-500">No records found for “{term}”.</p>}
-          <p className="px-3 pt-3 text-xs text-zinc-600">Up to five matches per category. Loads, expenses and independent investors open in their searchable lists.</p>
+          <p className="px-3 pt-3 text-xs text-zinc-600">Up to five matches per category. Loads, expenses and charges, and independent investors open in their searchable lists.</p>
         </>}
       </div>
     </section>}

@@ -4,12 +4,19 @@ import { join } from 'node:path';
 
 export async function runAccessE2E({ page, base, temp }) {
   const password = randomBytes(20).toString('hex');
+  const accessData = await (await page.request.get(`${base}/api/settings/access`)).json();
+  const maintenance = accessData.expenseCategories.find(category => category.name === 'Maintenance');
+  const penalties = accessData.expenseCategories.find(category => category.name === 'Penalties');
+  expect(maintenance).toBeTruthy();
+  expect(penalties).toBeTruthy();
   await page.goto(`${base}/settings`);
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Roles & permissions', exact: true }).click();
   await page.getByRole('button', { name: 'Create role', exact: true }).click();
   await page.getByLabel('Role name', { exact: true }).fill('Loads viewer');
   await page.getByLabel('View imported loads').check();
+  await page.getByLabel('Maintenance View', { exact: true }).check();
+  await page.getByLabel('Maintenance Add', { exact: true }).check();
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Loads viewer', exact: true })).toBeVisible();
@@ -40,6 +47,14 @@ export async function runAccessE2E({ page, base, temp }) {
     await viewer.getByLabel('Trust this device for 30 days', { exact: false }).check();
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(viewer).toHaveURL(`${base}/loads`);
+    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses & Charges', exact: true })).toBeVisible();
+    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses & Charges settings', exact: true })).toHaveCount(0);
+    expect((await viewer.request.get(`${base}/api/expenses?categoryId=${maintenance.id}&page=1&pageSize=10`)).status()).toBe(200);
+    expect((await viewer.request.get(`${base}/api/expenses?categoryId=${penalties.id}&page=1&pageSize=10`)).status()).toBe(403);
+    const viewerSession = await (await viewer.request.get(`${base}/api/auth/session`)).json();
+    expect(viewerSession.user.expenseCategoryAccess).toEqual(expect.arrayContaining([
+      expect.objectContaining({ categoryId: maintenance.id, canView: true, canCreate: true, canEdit: false, canDelete: false }),
+    ]));
     const cookie = (await context.cookies()).find(c => c.name === 'mserp_session');
     expect(cookie.expires - Date.now()/1000).toBeGreaterThan(29 * 86400);
     await expect(viewer.locator('aside').getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);

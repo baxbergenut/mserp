@@ -9,7 +9,7 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { PageHeaderProvider } from "./PageHeader";
 import Link from "next/link";
-import { PermissionsContext, pagePermission, firstAllowedPage } from "@/app/lib/access";
+import { ExpenseCategoryAccessContext, PermissionsContext, pagePermission, firstAllowedPage } from "@/app/lib/access";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -55,6 +55,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
 
   return (
     <PermissionsContext.Provider value={session.user.permissions}>
+    <ExpenseCategoryAccessContext.Provider value={session.user.expenseCategoryAccess ?? []}>
     <div className="flex h-full">
       <Sidebar username={session.user.username} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -64,6 +65,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
         </PageHeaderProvider>
       </div>
     </div>
+    </ExpenseCategoryAccessContext.Provider>
     </PermissionsContext.Provider>
   );
 }

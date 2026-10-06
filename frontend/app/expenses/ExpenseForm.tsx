@@ -13,7 +13,7 @@ import {
 
 export const emptyExpenseInput: ExpenseInput = {
   company: "MS Express",
-  category: "",
+  categoryId: "",
   expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
   driverId: null,
@@ -34,7 +34,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
   return {
     ownerId: expense.ownerId,
     company: expense.company,
-    category: expense.category,
+    categoryId: expense.categoryId,
     expenseDate: expense.expenseDate ?? "",
     truckId: expense.truckId,
     driverId: expense.driverId,
@@ -56,6 +56,7 @@ export function ExpenseForm({
   value,
   options,
   originalCategory,
+  allowedCategoryIds,
   drivers,
   trucks,
   owners,
@@ -63,7 +64,8 @@ export function ExpenseForm({
 }: {
   value: ExpenseInput;
   options: ExpensePage["options"];
-  originalCategory?: string;
+  originalCategory?: { id: string; name: string };
+  allowedCategoryIds: string[];
   drivers: Driver[];
   trucks: Truck[];
   owners: Investor[];
@@ -92,13 +94,13 @@ export function ExpenseForm({
         <Field label="Category">
           <select aria-label="Category"
             required
-            value={value.category}
+            value={value.categoryId}
             onChange={(event) => onChange(changeExpenseCategory(value, event.target.value, options.settings))}
             className={controlClass}
           >
             <option value="">Select category</option>
-            {originalCategory && !activeExpenseCategories(options.settings).some(item => item.name === originalCategory) && <option value={originalCategory}>{originalCategory} (saved category)</option>}
-            {activeExpenseCategories(options.settings).map(item => <option key={item.id}>{item.name}</option>)}
+            {originalCategory && !activeExpenseCategories(options.settings, allowedCategoryIds).some(item => item.id === originalCategory.id) && <option value={originalCategory.id}>{originalCategory.name} (saved category)</option>}
+            {activeExpenseCategories(options.settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
         <Field label="Name" hint="Choose a default for this category or enter a custom name.">
@@ -112,7 +114,7 @@ export function ExpenseForm({
             placeholder="e.g. Parking violation"
           />
           <datalist id="expense-names">
-            {expenseNames(options.settings, value.category).map((option) => <option key={option} value={option} />)}
+            {expenseNames(options.settings, value.categoryId).map((option) => <option key={option} value={option} />)}
           </datalist>
         </Field>
         <Field label="Expense date">

@@ -658,6 +658,8 @@ export interface Expense {
   driverId: string | null;
   company: string;
   category: ExpenseCategory;
+  categoryId: string;
+  createdByName: string | null;
   weekStart: string | null;
   expenseDate: string | null;
   unitNumber: string | null;
@@ -692,7 +694,7 @@ export interface ExpenseSetting {
 export interface ExpenseInput {
  ownerId?: string | null;
   company: string;
-  category: ExpenseCategory;
+  categoryId: string;
   expenseDate: string;
   truckId: string | null;
   driverId: string | null;
@@ -712,7 +714,7 @@ export interface ExpenseInput {
 export interface ExpensePage extends PaginatedResponse<Expense> {
   options: {
     settings: ExpenseSetting[];
-    categories: string[];
+    categories: { id: string; name: string }[];
     companies: string[];
     paymentTypes: string[];
     expenseTypes: string[];
@@ -726,6 +728,7 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
 }
 
 export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified"> {
+  category: ExpenseCategory;
   confidence: number;
   evidence: string[];
 }
@@ -740,6 +743,7 @@ export interface AuthUser {
   email: string;
   roleId: string;
   permissions: string[];
+  expenseCategoryAccess: ExpenseCategoryAccess[];
 }
 
 export interface ManagedUser {
@@ -747,10 +751,19 @@ export interface ManagedUser {
   active: boolean; version: number; password?: string;
 }
 export interface AccessRole {
-  id: string; name: string; permissions: string[]; system: boolean; version: number;
+  id: string; name: string; permissions: string[]; expenseCategoryAccess: ExpenseCategoryAccess[]; system: boolean; version: number;
 }
 export interface AccessData {
   users: ManagedUser[]; roles: AccessRole[]; permissions: { key: string; label: string }[];
+  expenseCategories: { id: string; name: string; active: boolean }[];
+}
+
+export interface ExpenseCategoryAccess {
+  categoryId: string;
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
 export interface AuthSession {

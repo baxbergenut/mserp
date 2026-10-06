@@ -359,27 +359,27 @@ export function RowActions({
   onEdit,
   onDelete,
 }: {
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div className="flex justify-end gap-1">
-      <button
+      {onEdit && <button
         type="button"
         onClick={onEdit}
         className="rounded-md p-1.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-zinc-200"
         aria-label="Edit"
       >
         <Pencil className="h-3.5 w-3.5" />
-      </button>
-      <button
+      </button>}
+      {onDelete && <button
         type="button"
         onClick={onDelete}
         className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
         aria-label="Delete"
       >
         <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      </button>}
     </div>
   );
 }

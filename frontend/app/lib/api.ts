@@ -359,7 +359,7 @@ export const syncTolls = () =>
 export const fetchExpensesPage = (query: PageQuery & {
   responsibility?: "non_personal";
   chargeDriverId?: string;
-  category?: string;
+  categoryId?: string;
   company?: string;
   dateFrom?: string;
   dateTo?: string;

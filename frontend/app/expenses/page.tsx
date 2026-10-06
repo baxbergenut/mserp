@@ -36,6 +36,7 @@ import {
   expenseToInput,
 } from "./ExpenseForm";
 import { ExpenseAIImport, ExpenseBatchEditor } from "./ExpenseAIImport";
+import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
@@ -86,9 +87,12 @@ function Verification({ checked, label }: { checked: boolean; label: string }) {
 }
 
 export default function ExpensesPage() {
+	const categoryAccess = useExpenseCategoryAccess();
+	const permissions = usePermissions();
+	const canLoadFleetSelectors = categoryAccess.some(item => item.canCreate || item.canEdit);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
-  const [category, setCategory] = useViewState("page:category", "");
+  const [category, setCategory] = useViewState("page:categoryId", "");
   const [company, setCompany] = useViewState("page:company", "");
   const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
   const [dateTo, setDateTo] = useViewState("page:dateTo", "");
@@ -99,6 +103,9 @@ export default function ExpensesPage() {
   const [summaryAmount, setSummaryAmount] = useState("0");
   const [incompleteCount, setIncompleteCount] = useState(0);
   const [options, setOptions] = useState(emptyOptions);
+  const createCategoryIds = options.settings
+    .filter(item => item.kind === "category" && item.active && categoryAccess.some(access => access.categoryId === item.id && access.canCreate))
+    .map(item => item.id);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [owners, setOwners] = useState<Investor[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
@@ -117,7 +124,7 @@ export default function ExpensesPage() {
     setIsLoading(true);
     try {
       const response = await fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, category, company, dateFrom, dateTo,
+        page, pageSize, search: debouncedSearch, categoryId: category, company, dateFrom, dateTo,
       });
       setExpenses(response.items);
       setPage(response.page);
@@ -128,7 +135,7 @@ export default function ExpensesPage() {
       setOptions(response.options);
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to load expenses");
+      setError(reason instanceof Error ? reason.message : "Failed to load entries");
     } finally {
       setIsLoading(false);
     }
@@ -140,6 +147,7 @@ export default function ExpensesPage() {
   }, [loadData]);
 
   useEffect(() => {
+    if (!canLoadFleetSelectors) return;
     let cancelled = false;
     Promise.all([fetchDrivers(), fetchTrucks(), fetchInvestors()])
       .then(([driverValues, truckValues, ownerValues]) => {
@@ -155,19 +163,19 @@ export default function ExpensesPage() {
         }
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [canLoadFleetSelectors]);
 
   const hasFilters = Boolean(search || category || company || dateFrom || dateTo);
 
   function openCreate() {
-    setForm({ ...emptyExpenseInput, category: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance")?.name ?? options.settings.find(item => item.kind === "category" && item.active)?.name ?? "", expenseDate: new Date().toISOString().slice(0, 10) });
+    setForm({ ...emptyExpenseInput, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Date().toISOString().slice(0, 10) });
     setBatchForms([]);
     setAIMessage("");
     setError("");
     setEditing(null);
   }
 
-  useQuickCreate(openCreate, !isLoading);
+  useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
 
   function openEdit(expense: Expense) {
     setForm(expenseToInput(expense));
@@ -187,7 +195,7 @@ export default function ExpensesPage() {
       setEditing(undefined);
       await loadData();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to save expense");
+      setError(reason instanceof Error ? reason.message : "Failed to save entry");
     } finally {
       setIsSaving(false);
     }
@@ -202,7 +210,7 @@ export default function ExpensesPage() {
       setPendingDelete(null);
       await loadData();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to delete expense");
+      setError(reason instanceof Error ? reason.message : "Failed to delete entry");
       setPendingDelete(null);
     } finally {
       setIsDeleting(false);
@@ -222,12 +230,12 @@ export default function ExpensesPage() {
     <div className="space-y-5 animate-fade-in">
       <ManagementHeader
         icon={WalletCards}
-        title="Expenses"
-        description="Record, verify, and review company expenses across every department."
+        title="Expenses & Charges"
+        description="Record and review the costs and charges assigned to your categories."
         count={total}
-        actionLabel="Add expense"
-        onAction={openCreate}
-        secondaryAction={<Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expense settings</Link>}
+        actionLabel={createCategoryIds.length ? "Add entry" : undefined}
+        onAction={createCategoryIds.length ? openCreate : undefined}
+        secondaryAction={permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses & Charges settings</Link> : undefined}
       />
 
       {error && <ErrorBanner message={error} />}
@@ -248,10 +256,10 @@ export default function ExpensesPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
+        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses and charges…" />
         <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">All categories</option>
-          {options.categories.map((value) => <option key={value}>{value}</option>)}
+          {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select>
         <select value={company} onChange={(event) => { setCompany(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">All companies</option>
@@ -273,7 +281,7 @@ export default function ExpensesPage() {
         {isLoading ? (
           <LoadingTable columns={8} />
         ) : expenses.length === 0 ? (
-          <EmptyState message={hasFilters ? "No expenses match these filters." : "No expenses yet. Add the first expense."} />
+          <EmptyState message={hasFilters ? "No entries match these filters." : createCategoryIds.length ? "No entries yet. Add the first entry." : "No entries are available in your categories."} />
         ) : (
           <table className="w-full min-w-[1380px] text-left text-[13px]">
             <thead>
@@ -295,6 +303,7 @@ export default function ExpensesPage() {
                   <td className="px-4 py-3">
                     <div className={expense.expenseDate ? "font-mono tabular-nums text-zinc-200" : "text-amber-400"}>{formatDate(expense.expenseDate)}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{formatWeek(expense.weekStart)}</div>
+					<div className="mt-0.5 text-[11px] text-zinc-600">{expense.createdByName ? `Added by ${expense.createdByName}` : "Added before tracking"}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-zinc-200">{expense.category}</div>
@@ -332,7 +341,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums" title={expense.driverSettled ? "Existing driver expense: assumed fully paid" : "Saved Driver Pay deductions"}>{expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)}</td>
-                  <td className="px-4 py-3"><RowActions onEdit={() => openEdit(expense)} onDelete={() => setPendingDelete(expense)} /></td>
+                  <td className="px-4 py-3"><RowActions onEdit={categoryAccess.some(item => item.categoryId === expense.categoryId && item.canEdit) ? () => openEdit(expense) : undefined} onDelete={categoryAccess.some(item => item.categoryId === expense.categoryId && item.canDelete) ? () => setPendingDelete(expense) : undefined} /></td>
                 </tr>
               ))}
             </tbody>
@@ -353,10 +362,10 @@ export default function ExpensesPage() {
 
       {editing !== undefined && (
         <Modal
-          title={editing ? "Edit expense" : "Add expense"}
-          description={editing?.sourceSheet ? `Imported from ${editing.sourceSheet}, row ${editing.sourceRow}.` : batchForms.length > 0 ? "Review every AI suggestion before creating these expenses." : "Enter an expense manually or use AI to fill the details."}
+          title={editing ? "Edit entry" : "Add entry"}
+          description={editing?.sourceSheet ? `Imported from ${editing.sourceSheet}, row ${editing.sourceRow}.` : batchForms.length > 0 ? "Review every AI suggestion before creating these entries." : "Enter an expense or charge manually, or use AI to fill the details."}
           isSaving={isSaving}
-          submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} expenses` : "Create expense"}
+          submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} entries` : "Create entry"}
           wide={batchForms.length > 0}
           onClose={() => setEditing(undefined)}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
@@ -386,17 +395,17 @@ export default function ExpensesPage() {
             </div>
           )}
           {batchForms.length > 0 && !editing ? (
-            <ExpenseBatchEditor settings={options.settings} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
+            <ExpenseBatchEditor settings={options.settings} allowedCategoryIds={createCategoryIds} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
           ) : (
-            <ExpenseForm originalCategory={editing?.category} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+            <ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
           )}
         </Modal>
       )}
 
       {pendingDelete && (
         <ConfirmDialog
-          title="Delete expense?"
-          message={`This permanently deletes the ${formatMoney(pendingDelete.amount)} ${pendingDelete.category.toLowerCase()} expense${pendingDelete.description ? ` for ${pendingDelete.description}` : ""}.`}
+          title="Delete entry?"
+          message={`This permanently deletes the ${formatMoney(pendingDelete.amount)} ${pendingDelete.category.toLowerCase()} entry${pendingDelete.description ? ` for ${pendingDelete.description}` : ""}.`}
           isDeleting={isDeleting}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => void remove()}

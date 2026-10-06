@@ -31,11 +31,12 @@ const NAV_ITEMS = [
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/tolls", label: "Tolls", icon: Receipt },
-  { href: "/expenses", label: "Expenses", icon: WalletCards },
+  { href: "/expenses", label: "Expenses & Charges", icon: WalletCards },
+  { href: "/expenses/settings", label: "Expenses & Charges settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/investor-pay", label: "Investor Pay", icon: Banknote },
-    { href: "/accounting/driver-charges", label: "Charges", icon: Receipt },
+    { href: "/accounting/driver-charges", label: "Recurring Charges", icon: Receipt },
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },
@@ -86,6 +87,7 @@ export function Sidebar({ username }: { username: string }) {
       {/* ── Navigation ── */}
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
+		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href))) : [];
           if ("children" in item ? children.length === 0 : !permissions.includes(pagePermission(item.href))) return null;
           const active =

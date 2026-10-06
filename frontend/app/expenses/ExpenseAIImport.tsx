@@ -31,7 +31,7 @@ function isSupportedAttachment(file: File) {
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
     company: draft.company,
-    category: draft.category,
+    categoryId: draft.categoryId,
     expenseDate: draft.expenseDate,
     truckId: draft.truckId,
     driverId: draft.driverId,
@@ -212,6 +212,7 @@ export function ExpenseBatchEditor({
   drivers,
   trucks,
   owners,
+  allowedCategoryIds,
   onChange,
 }: {
   settings: ExpenseSetting[];
@@ -219,6 +220,7 @@ export function ExpenseBatchEditor({
   drivers: Driver[];
   trucks: Truck[];
   owners: Investor[];
+  allowedCategoryIds: string[];
   onChange: (values: ExpenseInput[]) => void;
 }) {
   function update(index: number, patch: Partial<ExpenseInput>) {
@@ -260,11 +262,11 @@ export function ExpenseBatchEditor({
                 <td className="px-2 py-2 font-mono text-zinc-500">{index + 1}</td>
                 <td className="px-2 py-2"><input required value={value.company} onChange={(event) => update(index, { company: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2">
-                  <select required value={value.category} aria-label={`Transaction ${index + 1} category`} onChange={(event) => update(index, changeExpenseCategory(value, event.target.value, settings))} className={compactControl}>
-                    <option value="">Select category</option>{activeExpenseCategories(settings).map(item => <option key={item.id}>{item.name}</option>)}
+                  <select required value={value.categoryId} aria-label={`Transaction ${index + 1} category`} onChange={(event) => update(index, changeExpenseCategory(value, event.target.value, settings))} className={compactControl}>
+                    <option value="">Select category</option>{activeExpenseCategories(settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-2"><input required pattern=".*\S.*" aria-label={`Transaction ${index + 1} name`} list={`transaction-${index}-names`} value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /><datalist id={`transaction-${index}-names`}>{expenseNames(settings,value.category).map(name => <option key={name} value={name} />)}</datalist></td>
+                <td className="px-2 py-2"><input required pattern=".*\S.*" aria-label={`Transaction ${index + 1} name`} list={`transaction-${index}-names`} value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /><datalist id={`transaction-${index}-names`}>{expenseNames(settings,value.categoryId).map(name => <option key={name} value={name} />)}</datalist></td>
                 <td className="px-2 py-2"><input required type="date" value={value.expenseDate} onChange={(event) => update(index, { expenseDate: event.target.value })} className={compactControl} /></td>
                 <td className="space-y-1 px-2 py-2">
                   <select

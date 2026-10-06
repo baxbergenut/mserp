@@ -17,7 +17,7 @@ var Permissions = []Permission{
 	{"board.read", "View Gross Board and balances"}, {"board.write", "Edit Gross Board"},
 	{"fuel.read", "View fuel transactions and dashboard"}, {"fuel.sync", "Sync fuel"},
 	{"tolls.read", "View toll transactions and dashboard"}, {"tolls.sync", "Sync tolls"},
-	{"expenses.read", "View expenses and expense settings"}, {"expenses.write", "Manage expenses and expense settings"},
+	{"expense_settings.manage", "Manage Expenses & Charges categories and entry options"},
 	{"payroll.read", "View payroll and settlement history"}, {"payroll.write", "Edit payroll and refresh linked loads"},
 	{"payroll.finalize", "Finalize and reopen settlements"},
 	{"charges.read", "View driver and truck charges"}, {"charges.write", "Manage charges and collections"},

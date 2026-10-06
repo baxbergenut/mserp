@@ -305,9 +305,12 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`.
 - Updaters: `GET/POST /updaters`, `PUT/DELETE /updaters/{id}` (fleet permissions).
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
-- Expenses: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`
+- Expenses & Charges: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`. Roles
+  receive independent View/Add/Edit/Delete access per configurable category;
+  every list, summary, related-record view and write is category-scoped.
 - Expense settings: `GET/POST /expense-settings`, `PUT /expense-settings/{id}`
-  (category, name, payment_method, payer; updates require the current version).
+  (category, name, payment_method, payer; updates require the current version)
+  require `expense_settings.manage`.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
@@ -498,6 +501,14 @@ assignment lookup lists.
   canonical phone column; Relay retains raw upstream payloads but never uses
   malformed contacts as matching evidence. Database checks use only disposable
   MSERP_PHONE_TEST_DATABASE_URL (_test database), as mserp_app.
+
+- Expenses & Charges category access uses migration 056. Expenses retain their
+  saved category label but link to a stable category ID, so renames do not change
+  history or role access. Non-administrator roles store independent View/Add/Edit/
+  Delete rights per category; Administrator implicitly has all rights, including
+  for newly created categories. New categories are otherwise unassigned. Creator
+  identity is server-recorded for new entries; pre-056 entries have no invented
+  creator. Expense settings management is independent of category access.
 
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
   and DriverCard.tsx with Driver Pay. Reports group trucks by investor, retain

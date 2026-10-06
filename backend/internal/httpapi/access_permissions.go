@@ -60,8 +60,10 @@ func routePermission(method, path string) string {
 		if read {
 			return "tolls.read"
 		}
-	case "expenses", "expense-settings":
-		return pair("expenses")
+	case "expenses":
+		return "authenticated"
+	case "expense-settings":
+		return "expense_settings.manage"
 	case "driver-pay", "investor-pay":
 		if strings.HasSuffix(path, "/finalize") || strings.HasSuffix(path, "/reopen") {
 			return "payroll.finalize"

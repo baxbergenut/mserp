@@ -75,12 +75,12 @@ export function RelatedExpenses({
         <div>
           <div className="flex items-center gap-2">
             <WalletCards className="h-4 w-4 text-zinc-500" />
-            <h2 className="text-sm font-semibold text-zinc-100">{scope === "personal" ? "Personal expense charges" : scope === "non_personal" ? "Company & other-party expenses" : "Expenses"}</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">{scope === "personal" ? "Personal expense charges" : scope === "non_personal" ? "Company & other-party expenses" : "Expenses & Charges"}</h2>
             <span className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-[11px] text-zinc-400">{total}</span>
           </div>
           <p className="mt-1 text-[12px] text-zinc-500">{scope === "personal" ? "Total charged" : "Linked total"}: {formatMoney(amount)}</p>
         </div>
-        <Link href="/expenses" className="text-[12px] font-medium text-blue-400 transition hover:text-blue-300">Open expense manager</Link>
+        <Link href="/expenses" className="text-[12px] font-medium text-blue-400 transition hover:text-blue-300">Open Expenses & Charges</Link>
       </div>
       {error && <ErrorBanner message={error} />}
       <TableShell>
@@ -104,7 +104,7 @@ export function RelatedExpenses({
             <tbody>
               {expenses.map((expense) => (
                 <tr key={expense.id} className="border-b border-zinc-900/70 text-zinc-300 last:border-0">
-                  <td className="px-4 py-3 font-mono tabular-nums">{formatDate(expense.expenseDate)}</td>
+                  <td className="px-4 py-3 font-mono tabular-nums">{formatDate(expense.expenseDate)}<span className="mt-1 block font-sans text-[11px] text-zinc-600">{expense.createdByName ? `Added by ${expense.createdByName}` : "Added before tracking"}</span></td>
                   <td className="px-4 py-3">{expense.category}</td>
                   <td className="px-4 py-3 text-zinc-400">{expense.expenseType || "—"}</td>
                   <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <RememberedDetails memoryKey={`expense-payments:${expense.id}`} className="mt-1 whitespace-normal"><summary className="cursor-pointer text-xs text-blue-400">Payment history</summary>{expense.driverSettled ? <p className="py-2 text-xs">Opening balance marked fully paid.</p> : expense.payments.length ? expense.payments.map(p => <div className="flex gap-3 py-1 text-xs" key={p.weekStart}><Link className="text-blue-400" href={`/accounting/driver-pay?weekStart=${p.weekStart}&driverId=${driverId}`}>Week of {p.weekStart}</Link><span className="ml-auto font-mono">{formatMoney(p.amount)}</span></div>) : <p className="py-2 text-xs">No saved payments yet.</p>}</RememberedDetails>}</td>

@@ -146,7 +146,7 @@ $lines = [Collections.Generic.List[string]]::new()
 $lines.Add('BEGIN;')
 $lines.Add('SET LOCAL statement_timeout = ''10min'';')
 $columns = @(
-    'company', 'category', 'expense_date', 'unit_number', 'driver_name', 'amount',
+    'company', 'category', 'category_id', 'expense_date', 'unit_number', 'driver_name', 'amount',
     'payment_type', 'expense_type', 'reference_number', 'description', 'covered_by',
     'paid_by', 'manager_verified', 'accounting_verified', 'source_spreadsheet_id',
     'source_sheet', 'source_row'
@@ -157,7 +157,7 @@ for ($offset = 0; $offset -lt $records.Count; $offset += 250) {
     $tuples = [Collections.Generic.List[string]]::new()
     for ($index = $offset; $index -le $end; $index++) {
         $row = $records[$index]
-        $tuples.Add("($($row.Company), $($row.Category), $($row.ExpenseDate), $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.ManagerVerified), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
+        $tuples.Add("($($row.Company), $($row.Category), (SELECT id FROM expense_settings WHERE kind = 'category' AND active AND name = $($row.Category)), $($row.ExpenseDate), $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.ManagerVerified), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
     }
     $lines.Add("INSERT INTO expenses ($columns) VALUES")
     $lines.Add(($tuples -join ",`n"))
@@ -167,6 +167,7 @@ ON CONFLICT (source_spreadsheet_id, source_sheet, source_row)
 DO UPDATE SET
     company = EXCLUDED.company,
     category = EXCLUDED.category,
+    category_id = EXCLUDED.category_id,
     expense_date = EXCLUDED.expense_date,
     unit_number = EXCLUDED.unit_number,
     driver_name = EXCLUDED.driver_name,
