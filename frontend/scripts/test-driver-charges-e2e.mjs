@@ -70,7 +70,7 @@ try {
   await page.getByLabel('Email or existing username', { exact: true }).fill('charges-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Charges', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
   await verifyExpenseSettings(page, base, temp);
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
@@ -440,7 +440,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(page.locator('aside')).toHaveCSS('width', '64px');
-  await expect(page.getByRole('heading', { name: 'Charges', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'driver-charges-mobile.png'), fullPage: true });
   // Payroll navigation uses placement identity, not a possibly duplicated load number.
