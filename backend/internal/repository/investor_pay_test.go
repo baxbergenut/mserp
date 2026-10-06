@@ -178,7 +178,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pool.Exec(ctx, `INSERT INTO fuel_transaction_items(fuel_transaction_id,line_number,item_kind,category,total_amount_paid) VALUES($1,0,'fuel','diesel',1500),($1,1,'fuel','def',50)`, fuelID); e != nil {
 				t.Fatal(e)
 			}
-			if _, e = pool.Exec(ctx, `INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint) VALUES($1,'2026-09-29','2026-09-29','','','','','TRUCK-A','','','2026-09-28','12:00','',200,repeat('a',64))`, truck); e != nil {
+			if _, e = pool.Exec(ctx, `INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint) VALUES($1,'2026-09-29','2026-09-29','','','','','TRUCK-A','','','2026-09-27','12:00','',200,repeat('a',64))`, truck); e != nil {
 				t.Fatal(e)
 			}
 			report, e = pr.InvestorPay(ctx, week)
@@ -186,7 +186,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			card = report.Drivers[0]
-			if card.FuelTotal != "1500.00" || card.TollTotal != "200.00" || len(card.Edits.ExpenseDeductions) != 1 || card.Edits.ExpenseDeductions[0].ExpenseID != expense {
+			if card.FuelTotal != "1550.00" || card.TollTotal != "200.00" || len(card.Edits.ExpenseDeductions) != 1 || card.Edits.ExpenseDeductions[0].ExpenseID != expense {
 				t.Fatalf("truck costs: %+v", card)
 			}
 			payroll, e = pr.Get(ctx, week)

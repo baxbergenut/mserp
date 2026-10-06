@@ -24,7 +24,7 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	rows, err := tx.Query(ctx, `SELECT matched.id::text,coalesce(f.driver_id::text,''),sum(i.total_amount_paid)::text FROM fuel_transactions f
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
  JOIN LATERAL(SELECT (array_agg(t.id))[1] id FROM trucks t WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND upper(btrim(t.unit_number))=upper(btrim(p->>'value'))) HAVING count(*)=1) matched ON true
- WHERE matched.id IS NOT NULL AND f.relay_environment='production' AND i.item_kind='fuel' AND lower(i.category)<>'def'
+	WHERE matched.id IS NOT NULL AND f.relay_environment='production' AND i.item_kind='fuel'
  AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date >= $1::date
  AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date < $1::date+7
  AND (SELECT count(DISTINCT upper(btrim(p->>'value'))) FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND btrim(p->>'value')<>'')=1
@@ -59,7 +59,7 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	rows, err = tx.Query(ctx, `SELECT t.truck_id::text,coalesce(a.driver_id::text,''),sum(t.amount)::text FROM tolls t
  LEFT JOIN LATERAL(SELECT (array_agg(DISTINCT a.driver_id))[1] driver_id FROM truck_driver_assignments a WHERE a.truck_id=t.truck_id
  AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=t.exit_date AND (a.unassigned_at IS NULL OR t.exit_date<(a.unassigned_at AT TIME ZONE 'America/New_York')::date) HAVING count(DISTINCT a.driver_id)=1) a ON true
- WHERE t.truck_id IS NOT NULL AND (t.prepass_environment IS NULL OR t.prepass_environment='production') AND t.exit_date>=$1::date AND t.exit_date<$1::date+7 GROUP BY t.truck_id,a.driver_id`, week)
+	WHERE t.truck_id IS NOT NULL AND (t.prepass_environment IS NULL OR t.prepass_environment='production') AND t.posting_date>=$1::date AND t.posting_date<$1::date+7 GROUP BY t.truck_id,a.driver_id`, week)
 	if err != nil {
 		return nil, err
 	}
