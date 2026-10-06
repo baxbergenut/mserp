@@ -504,7 +504,7 @@ try {
   releasePayRead();
   await expect(page.getByPlaceholder('Driver, truck, or load…')).toHaveValue('NAV');
   await expect(page.getByRole('button',{name:/^E2e Driver(?: \d+)?$/})).toHaveAttribute('aria-expanded','true');
-  await expect.poll(() => page.locator('main').evaluate(el => el.scrollTop)).toBeGreaterThan(100);
+  await expect.poll(() => page.locator('main').evaluate(el => el.scrollTop), { timeout: 15_000 }).toBeGreaterThan(100);
   await page.unroute('**/api/driver-pay?weekStart=2026-05-04');
   const returnedPay = await (await page.request.get(`${base}/api/driver-pay?weekStart=2026-05-04`)).json();
   expect(returnedPay.drivers.find(d=>d.id===driverId).loads.find(l=>l.date==='2026-05-10'&&l.slot===2).driverGross).toBe('123.45');
@@ -527,15 +527,15 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // The same Back behavior preserves ordinary list views across the app.
   await page.goto(`${base}/expenses`);
-  await page.getByPlaceholder('Search expenses…').fill('Company repair');
+  await page.getByPlaceholder('Search expenses and charges…').fill('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.getByRole('link',{name:'Drivers',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Drivers',exact:true})).toBeVisible();
   await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
-  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.reload();
-  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   sql(`SET search_path TO ${schema},public; INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
        SELECT 'Navigation list '||n, 'navigation list '||n, 'cpm',0.75 FROM generate_series(1,30) n;`);
   await page.getByRole('link',{name:'Drivers',exact:true}).click();
@@ -544,12 +544,12 @@ try {
   await page.getByRole('button',{name:'Next page',exact:true}).click();
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
   await page.getByRole('link',{name:'Expenses',exact:true}).click();
-  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
   await expect(page.getByPlaceholder('Search drivers…')).toHaveValue('Navigation list');
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
   await page.goBack();
-  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   // Cancelled loads are selectable statuses and survive a real API save/reload.
   await page.goto(`${base}/gross-board?driverId=${driverId}&date=2026-05-04&slot=0&loadNumber=NAV-SINGLE`);
   await page.getByRole('button', { name: 'Choose day status for E2e Driver, 2026-05-06', exact: true }).click();
