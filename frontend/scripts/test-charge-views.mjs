@@ -8,9 +8,16 @@ const week = '2026-10-05';
 const driver = { id: 'driver', fullName: 'Test Driver', active: true, driverType: 'Company', phone: '' };
 const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00'], archived: false, version: 1, eligibility: 'calendar', rules: [] };
 const schedule = { id: 'schedule', driverId: driver.id, driverName: driver.fullName, typeId: type.id, kind: 'recurring', name: type.name, startWeek: week, endWeek: null, version: 1, phases: [{ weekStart: week, amount: '50.00', paused: false }], occurrences: [] };
+const secondDriver = { ...driver, id: 'second', fullName: 'Second Driver' };
+const thirdDriver = { ...driver, id: 'third', fullName: 'Third Driver' };
+const fourthDriver = { ...driver, id: 'fourth', fullName: 'Fourth Driver' };
+const inactiveDriver = { ...driver, id: 'inactive', fullName: 'Inactive Driver', active: false };
+const pausedSchedule = { ...schedule, id: 'paused', driverId: secondDriver.id, driverName: secondDriver.fullName, version: 3, phases: [{ weekStart: week, amount: '25.00', paused: true }] };
+const writes = [];
+let failThirdDriver = true;
 const archivedType = { ...type, id: 'archived', name: 'Archived fee', archived: true };
 const extraTypes = Array.from({ length: 6 }, (_, index) => ({ ...type, id: `fee-${index}`, name: `Other fee ${index}` }));
-const data = { currentWeek: week, types: [type, ...extraTypes, archivedType], schedules: [schedule] };
+const data = { currentWeek: week, types: [type, ...extraTypes, archivedType], schedules: [schedule, pausedSchedule] };
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -31,6 +38,18 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(4);
+    if (route.request().method() === 'PUT' && path === '/driver-charges/recurring') {
+      const input = route.request().postDataJSON();
+      writes.push(input);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      if (input.driverId === thirdDriver.id && failThirdDriver) {
+        await route.fulfill({ status: 409, json: { error: 'Charge changed; reload and try again.' } }); return;
+      }
+      const existing = data.schedules.find(s => s.id === input.scheduleId);
+      const updated = { ...(existing ?? schedule), id: existing?.id ?? `new-${input.driverId}`, driverId: input.driverId, version: (existing?.version ?? 0) + 1, phases: [{ weekStart: input.weekStart, amount: input.amount, paused: !input.included }] };
+      data.schedules = [...data.schedules.filter(s => s.id !== updated.id), updated];
+      await route.fulfill({ status: 204 }); return;
+    }
     if (route.request().method() === 'DELETE' && path.startsWith('/driver-charges/types/')) {
       const id = path.split('/').at(-1);
       expect(route.request().postDataJSON()).toEqual({ version: 1 });
@@ -39,7 +58,8 @@ try {
     }
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
-      '/driver-charges': data, '/drivers': [driver], '/truck-charges': { terms: [], phases: [], eligibleTruckIds: [] }, '/trucks': [], '/investors': [],
+      '/driver-charges': url.searchParams.has('driverId') ? { ...data, schedules: data.schedules.filter(s => s.driverId === url.searchParams.get('driverId')) } : data,
+      '/drivers': [driver, secondDriver, thirdDriver, fourthDriver, inactiveDriver], '/truck-charges': { terms: [], phases: [], eligibleTruckIds: [] }, '/trucks': [], '/investors': [],
     };
     await route.fulfill({ json: path === '/trucks' && url.searchParams.has('page') ? { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } : fixtures[path] ?? [] });
   });
@@ -120,6 +140,34 @@ try {
   await page.evaluate(key => sessionStorage.setItem(key, JSON.stringify('')), memoryKey('RecurringMatrix:week'));
   await page.reload();
   await expect(checked).toBeChecked();
+  // Applying a fee respects filters, preserves paused amounts/versions, skips
+  // existing selections and inactive drivers, and reports partial failures.
+  await page.getByLabel('Filter driver').selectOption(secondDriver.id);
+  const filteredApply = page.getByRole('button', { name: 'Apply to filtered drivers: Admin fee', exact: true });
+  await filteredApply.click();
+  await expect(filteredApply).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Second Driver, Admin fee', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  expect(writes).toEqual([{ driverId: secondDriver.id, typeId: type.id, weekStart: week, included: true, amount: '25.00', scheduleId: pausedSchedule.id, version: 3, typeVersion: 1 }]);
+  await page.getByLabel('Filter driver').selectOption('');
+  const applyAll = page.getByRole('button', { name: 'Apply to all: Admin fee', exact: true });
+  await applyAll.click();
+  const failureNotice = page.getByRole('alert').filter({ hasText: 'Admin fee:' });
+  await expect(failureNotice).toContainText('Third Driver');
+  await expect(failureNotice).toContainText('1 of 2 drivers updated');
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).toBeChecked();
+  failThirdDriver = false;
+  await applyAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).toBeChecked();
+  await expect(applyAll).toBeDisabled();
+  expect(writes.map(w => w.driverId)).toEqual([secondDriver.id, thirdDriver.id, fourthDriver.id, thirdDriver.id]);
+  expect(writes[3]).toEqual({ driverId: thirdDriver.id, typeId: type.id, weekStart: week, included: true, amount: '50.00', scheduleId: '', version: 0, typeVersion: 1 });
+  await page.getByLabel('Show archived charge types').check();
+  await expect(page.getByRole('button', { name: 'Apply to all: Archived fee', exact: true })).toHaveCount(0);
+  await page.getByLabel('Show archived charge types').uncheck();
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
   await page.getByRole('button', { name: 'Delete Other fee 0', exact: true }).click();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -129,7 +177,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Other fee 0', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Charge views checks passed: type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
+  console.log('Charge views checks passed: apply-to-all, filtered assignment, existing amounts, partial failures/retry, type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -589,6 +589,10 @@ assignment lookup lists.
   Bulk changes are current/future only and replace subsequent planned phases;
   saved overrides/confirmations must be explicitly corrected first.
   Recurring assignments use an active-driver matrix with charge types as columns.
+  Each active fee column offers Apply to all (or Apply to filtered drivers),
+  enabling only unchecked visible active drivers from the selected week and
+  retaining existing amounts. Bounded per-driver saves preserve later phases
+  and version checks; a combined notice reports any partial failures.
   Driver and truck matrices use the payroll-style previous/next week range and
   This week controls. Valid effective weeks remain remembered. Driver matrices
   open at the left edge so the first fee column remains visible;

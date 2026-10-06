@@ -1,5 +1,11 @@
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
-import { hundredths, validDecimal } from "@/app/gross-board/board";
+import { decimalDisplay, hundredths, validDecimal } from "@/app/gross-board/board";
+
+export function carryBreakdown(current: bigint, carried: bigint): string | undefined {
+  if (carried <= BigInt(0)) return undefined;
+  const money = (value: bigint) => decimalDisplay(value, true).replace(/\.00$/, "");
+  return current === BigInt(0) ? `${money(carried)} carried` : `${money(current)} this week + ${money(carried)} carried`;
+}
 
 export function adjustmentTotals(items: DriverPayAdjustment[]) {
   return items.reduce((sum, item) => ({ ...sum, [item.kind]: sum[item.kind] + hundredths(item.amount) }), {

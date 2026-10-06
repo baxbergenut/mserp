@@ -13,10 +13,11 @@ import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
 const money = (s: string) => decimalDisplay(hundredths(s), true);
 
-export default function RecurringMatrix({ data, drivers, search, driverFilter, typeFilter, archived, onArchivedChange, busy, pending, onSave, showHistory }: {
+export default function RecurringMatrix({ data, drivers, search, driverFilter, typeFilter, archived, onArchivedChange, busy, pending, onSave, onSaveAll, showHistory }: {
   data: ChargeData; drivers: Driver[]; search: string; driverFilter: string; typeFilter: string; busy: boolean;
   archived: boolean; onArchivedChange: (archived: boolean) => void;
   pending: Record<string, ChargeCell>; onSave: (input: ChargeCell, driverName: string, typeName: string) => void;
+  onSaveAll: (targets: { input: ChargeCell; driverName: string }[], typeName: string) => void;
   showHistory: (schedule: ChargeSchedule) => void;
 }) {
   const [rememberedWeek, setWeek] = useViewState("RecurringMatrix:week", data.currentWeek);
@@ -32,9 +33,12 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
   const visible = drivers.filter(d => (!driverFilter || driverFilter === d.id) && d.fullName.toLowerCase().includes(search.toLowerCase()));
   const types = data.types.filter(t => (!typeFilter || t.id === typeFilter) && (!t.archived || archived));
   const validWeek = validChargeWeek(week);
-  function save(driver: Driver, type: ChargeType, included: boolean, amount: string) {
+  function inputFor(driver: Driver, type: ChargeType, included: boolean, amount: string): ChargeCell {
     const { schedule } = recurringCell(schedulesByDriver.get(driver.id) ?? [], driver.id, type.id, week);
-    onSave({ driverId: driver.id, typeId: type.id, weekStart: week, included, amount, scheduleId: schedule?.id ?? "", version: schedule?.version ?? 0, typeVersion: type.version }, driver.fullName, type.name);
+    return { driverId: driver.id, typeId: type.id, weekStart: week, included, amount, scheduleId: schedule?.id ?? "", version: schedule?.version ?? 0, typeVersion: type.version };
+  }
+  function save(driver: Driver, type: ChargeType, included: boolean, amount: string) {
+    onSave(inputFor(driver, type, included, amount), driver.fullName, type.name);
   }
   return <div className="space-y-3">
     <div className="flex flex-wrap items-end gap-4">
@@ -46,7 +50,14 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a Monday between 2000 and 2100.</p>}
     <div data-scroll-key="driver-recurring-charges" data-scroll-initial-x="start" className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-left text-xs text-zinc-300">
-        <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(t => <th scope="col" key={t.id} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{t.name}{t.archived && " (archived)"}</span></th>)}</tr></thead>
+        <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(type => {
+          const targets = visible.filter(driver => driver.active).flatMap(driver => {
+            const cell = recurringCell(schedulesByDriver.get(driver.id) ?? [], driver.id, type.id, week);
+            return cell.included ? [] : [{ input: inputFor(driver, type, true, cell.phase?.amount ?? type.amount), driverName: driver.fullName }];
+          });
+          const label = search || driverFilter ? "Apply to filtered drivers" : "Apply to all";
+          return <th scope="col" key={type.id} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{type.name}{type.archived && " (archived)"}</span>{!type.archived && <button type="button" aria-label={`${label}: ${type.name}`} disabled={busy || Object.keys(pending).length > 0 || !validWeek || !targets.length} onClick={() => onSaveAll(targets, type.name)} className="mt-1 block text-[11px] font-normal text-blue-400 hover:text-blue-300 disabled:cursor-not-allowed disabled:text-zinc-600">{label}{targets.length > 0 && ` (${targets.length})`}</button>}</th>;
+        })}</tr></thead>
         <tbody>{visible.map(driver => <tr key={driver.id} className="group h-8">
           <th scope="row" className="sticky left-0 z-10 border-b border-r border-zinc-800 bg-zinc-950 h-8 whitespace-nowrap px-3 py-0 font-medium"><Link className="text-blue-400" href={`/drivers/detail?id=${driver.id}`}>{driver.fullName}</Link><span className="ml-2 font-mono text-[10px] font-normal text-zinc-500">{driver.driverType}</span>{!driver.active && <span className="ml-2 text-[10px] text-zinc-500">Inactive</span>}</th>
           {types.map(type => {
