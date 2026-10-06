@@ -52,7 +52,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			exec(`CREATE SCHEMA ` + quoted + `;SET search_path TO ` + quoted + `,public`)
+			exec(`CREATE SCHEMA ` + quoted + `;SET search_path TO ` + quoted + `,public;GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app`)
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public;DROP SCHEMA `+quoted+` CASCADE`) }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
@@ -74,7 +74,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			} else {
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT 'MS Express',id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
-			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
+			exec(`GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)

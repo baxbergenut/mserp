@@ -62,6 +62,10 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			expenseAccessMigration, e := os.ReadFile("../../sql/056_expense_category_access.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
 			normalized := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
 				before, _, ok := strings.Cut(normalized, strings.ReplaceAll(string(migration), "\r\n", "\n"))
@@ -73,6 +77,7 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
     INSERT INTO fleetscope_driver_terminations(company_id,fleetscope_driver_id,driver_name,termination_date,occurred_at,task_id)
     VALUES(gen_random_uuid(),gen_random_uuid(),'Legacy','2026-10-01',now(),'05400000-0000-0000-0000-000000000001')`)
 				exec(string(migration))
+				exec(string(expenseAccessMigration))
 				var kind string
 				if e = admin.QueryRow(ctx, `SELECT system_task_kind FROM custom_tasks WHERE title='Legacy offboarding'`).Scan(&kind); e != nil || kind != "driver_offboarding" {
 					t.Fatal("offboarding backfill", kind, e)
