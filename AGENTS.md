@@ -1039,6 +1039,9 @@ assignment lookup lists.
   the browser timezone or a single UTC offset so ERP totals reconcile with Relay.
   Legacy `US/*` timezone aliases are normalized to canonical IANA names, and
   reporting falls back to `America/New_York` for an unrecognized source value.
+  Driver Pay fuel deductions include both diesel and DEF fuel line items. Driver
+  Pay toll weeks use PrePass posting dates to reconcile with the Tolls report;
+  each toll is still attributed through the truck assignment on its crossing date.
 - DataTruck load timestamps frequently encode schedule dates at `00:01 UTC`.
   Load reporting must use the encoded UTC calendar date; converting those values
   to America/New_York shifts them to the prior day. This rule is load-specific:

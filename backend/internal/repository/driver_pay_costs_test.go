@@ -9,7 +9,8 @@ import (
 func seedDriverPayCosts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, driver string) {
 	t.Helper()
 	// Week boundaries must use merchant-local dates, not UTC. Staging, unlinked
-	// identities, DEF and products must not enter diesel deductions; credits do.
+	// identities and products must not enter fuel deductions; diesel, DEF and
+	// credits do.
 	_, err := pool.Exec(ctx, `WITH fixtures(id,stamp,amount,env,linked,category,kind) AS (VALUES
  ('included','2026-09-29 03:00+00',100.10,'production',true,'diesel','fuel'),
  ('credit','2026-09-30 16:00+00',-10.00,'production',true,'diesel','fuel'),
@@ -43,8 +44,14 @@ func seedDriverPayCosts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, d
 		t.Fatal(err)
 	}
 	_, err = pool.Exec(ctx, `INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint,prepass_environment)
- SELECT '00000000-0000-0000-0000-000000000010','2026-10-10','2026-10-10','','','','','TEST-10','','',day::date,'12:00','',amount,md5(label)||md5(label),env
- FROM (VALUES ('included','2026-09-28',15.50,'production'),('credit','2026-09-29',-3.25,NULL),('ambiguous','2026-09-30',999.00,'production'),('changed-driver','2026-10-02',999.00,'production'),('before','2026-09-27',999.00,'production'),('test','2026-09-29',999.00,'nonproduction')) v(label,day,amount,env)`)
+ SELECT '00000000-0000-0000-0000-000000000010',posted::date,posted::date,'','','','','TEST-10','','',crossed::date,'12:00','',amount,md5(label)||md5(label),env
+ FROM (VALUES
+ ('included','2026-09-28','2026-09-27',15.50,'production'),
+ ('credit','2026-09-30','2026-09-29',-3.25,NULL),
+ ('ambiguous','2026-09-30','2026-09-30',999.00,'production'),
+ ('changed-driver','2026-10-02','2026-10-02',999.00,'production'),
+ ('posted-before','2026-09-27','2026-09-28',999.00,'production'),
+ ('test','2026-09-29','2026-09-29',999.00,'nonproduction')) v(label,posted,crossed,amount,env)`)
 	if err != nil {
 		t.Fatal(err)
 	}

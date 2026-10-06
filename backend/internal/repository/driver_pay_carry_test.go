@@ -66,7 +66,7 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 	}
 	w1, w2, w3, w4 := "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19"
 	d := read(w1)
-	if d.Edits.Costs.FuelDue != "90.30" || d.Edits.Costs.TollDue != "12.25" {
+	if d.Edits.Costs.FuelDue != "1089.30" || d.Edits.Costs.TollDue != "12.25" {
 		t.Fatalf("sources %+v", d.Edits.Costs)
 	}
 	// Simulate a saved partial deduction from the previous release.
@@ -74,11 +74,11 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 		t.Fatal(err)
 	}
 	d = read(w2)
-	if d.Edits.Costs.FuelCarry != "40.30" || d.Edits.Costs.TollCarry != "7.25" {
+	if d.Edits.Costs.FuelCarry != "1039.30" || d.Edits.Costs.TollCarry != "7.25" {
 		t.Fatal("legacy overrides lost their remainders")
 	}
 	d = read(w2)
-	if d.Edits.Costs.FuelCarry != "40.30" || d.Edits.Costs.FuelDue != "1039.30" || d.Edits.Costs.TollCarry != "7.25" {
+	if d.Edits.Costs.FuelCarry != "1039.30" || d.Edits.Costs.FuelDue != "2038.30" || d.Edits.Costs.TollCarry != "7.25" {
 		t.Fatalf("carry %+v", d.Edits.Costs)
 	}
 	stale := read(w3)
@@ -87,12 +87,12 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 		t.Fatalf("stale cross-week save accepted: %v", err)
 	}
 	d = read(w3)
-	if d.Edits.Costs.FuelDue != "1039.30" || len(d.Loads) != 0 {
+	if d.Edits.Costs.FuelDue != "2038.30" || len(d.Loads) != 0 {
 		t.Fatalf("empty-week remainder lost: %+v", d)
 	}
 	save(d, "-500.00", "-7.25")
 	d = read(w4)
-	if d.Edits.Costs.FuelDue != "539.30" || d.Edits.Costs.TollDue != "0.00" {
+	if d.Edits.Costs.FuelDue != "1538.30" || d.Edits.Costs.TollDue != "0.00" {
 		t.Fatalf("partial carry %+v", d.Edits.Costs)
 	}
 	prior := read(w1)
@@ -106,10 +106,10 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 		t.Fatal(err)
 	}
 	d = read(w4)
-	if d.Edits.Costs.FuelDue != "539.30" {
+	if d.Edits.Costs.FuelDue != "1538.30" {
 		t.Fatal("tariff change lost debt")
 	}
-	save(d, "-539.30", "0.00")
+	save(d, "-1538.30", "0.00")
 	w, _ := chargeWeek("2026-10-26")
 	r, err := pay.GetDriverWeek(ctx, w, driver)
 	if err != nil {

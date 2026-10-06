@@ -51,12 +51,26 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
     <div data-scroll-key="driver-recurring-charges" data-scroll-initial-x="start" className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-left text-xs text-zinc-300">
         <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(type => {
-          const targets = visible.filter(driver => driver.active).flatMap(driver => {
+          const cells = visible.filter(driver => driver.active).map(driver => {
             const cell = recurringCell(schedulesByDriver.get(driver.id) ?? [], driver.id, type.id, week);
-            return cell.included ? [] : [{ input: inputFor(driver, type, true, cell.phase?.amount ?? type.amount), driverName: driver.fullName }];
+            return { driver, cell };
           });
-          const label = search || driverFilter ? "Apply to filtered drivers" : "Apply to all";
-          return <th scope="col" key={type.id} aria-label={`${type.name}${type.archived ? " (archived)" : ""}`} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{type.name}{type.archived && " (archived)"}</span>{!type.archived && <button type="button" aria-label={`${label}: ${type.name}`} disabled={busy || Object.keys(pending).length > 0 || !validWeek || !targets.length} onClick={() => onSaveAll(targets, type.name)} className="mt-1 block text-[11px] font-normal text-blue-400 hover:text-blue-300 disabled:cursor-not-allowed disabled:text-zinc-600">{label}{targets.length > 0 && ` (${targets.length})`}</button>}</th>;
+          const included = cells.filter(({ cell }) => cell.included).length;
+          const allIncluded = cells.length > 0 && included === cells.length;
+          const scope = search || driverFilter ? "visible drivers" : "all drivers";
+          return <th scope="col" key={type.id} aria-label={`${type.name}${type.archived ? " (archived)" : ""}`} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><span>{type.name}{type.archived && " (archived)"}</span>{!type.archived && <label className="mt-1 flex w-fit items-center gap-1.5 text-[11px] font-normal text-zinc-400"><input
+            type="checkbox"
+            aria-label={`${type.name}: select ${scope}`}
+            checked={allIncluded}
+            ref={node => { if (node) node.indeterminate = included > 0 && !allIncluded; }}
+            disabled={busy || Object.keys(pending).length > 0 || !validWeek || !cells.length}
+            onChange={event => {
+              const select = event.target.checked;
+              const targets = cells.flatMap(({ driver, cell }) => cell.included === select ? [] : [{ input: inputFor(driver, type, select, cell.phase?.amount ?? type.amount), driverName: driver.fullName }]);
+              if (targets.length) onSaveAll(targets, type.name);
+            }}
+            className="h-3.5 w-3.5 accent-blue-500"
+          />{scope}</label>}</th>;
         })}</tr></thead>
         <tbody>{visible.map(driver => <tr key={driver.id} className="group h-8">
           <th scope="row" className="sticky left-0 z-10 border-b border-r border-zinc-800 bg-zinc-950 h-8 whitespace-nowrap px-3 py-0 font-medium"><Link className="text-blue-400" href={`/drivers/detail?id=${driver.id}`}>{driver.fullName}</Link><span className="ml-2 font-mono text-[10px] font-normal text-zinc-500">{driver.driverType}</span>{!driver.active && <span className="ml-2 text-[10px] text-zinc-500">Inactive</span>}</th>

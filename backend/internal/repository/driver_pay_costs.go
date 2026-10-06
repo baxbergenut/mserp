@@ -1,16 +1,18 @@
 package repository
 
-// Fuel follows confirmed Relay identities and merchant-local dates. Toll weeks
-// follow crossing dates, with historical assignments on that date (New York,
-// matching financial reporting). Never substitute today's truck assignment or
-// guess from a nearby load. Ambiguous/unassigned tolls remain outside payroll.
-// Aggregate before joining load slots so repeated board entries cannot multiply costs.
+// Fuel follows confirmed Relay identities and merchant-local dates and includes
+// diesel and DEF line items. Toll weeks follow PrePass posting dates so payroll
+// reconciles with the Tolls report, while driver attribution follows the actual
+// crossing date and its historical truck assignment (New York). Never substitute
+// today's truck assignment or guess from a nearby load. Ambiguous/unassigned
+// tolls remain outside payroll. Aggregate before joining load slots so repeated
+// board entries cannot multiply costs.
 var driverPayCostsSQL = `WITH weekly_fuel AS (
  SELECT f.driver_id, SUM(i.total_amount_paid) AS total
  FROM fuel_transactions f
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
  WHERE f.relay_environment='production' AND f.driver_id IS NOT NULL
- AND i.item_kind='fuel' AND lower(i.category)<>'def'
+ AND i.item_kind='fuel'
  AND (f.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("f.timezone") + `)::date >= $1::date
  AND (f.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("f.timezone") + `)::date < $1::date+7
  GROUP BY f.driver_id
@@ -26,6 +28,6 @@ var driverPayCostsSQL = `WITH weekly_fuel AS (
    HAVING count(DISTINCT a.driver_id)=1
  ) assignment ON true
  WHERE (t.prepass_environment IS NULL OR t.prepass_environment='production')
- AND t.exit_date >= $1::date AND t.exit_date < $1::date+7
+ AND t.posting_date >= $1::date AND t.posting_date < $1::date+7
  GROUP BY assignment.driver_id
 )`

@@ -84,7 +84,7 @@ try {
   await page.goto(`${base}/trucks`);
   await expect(page.getByRole('heading', { name: 'Trucks', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Accounting', exact: true }).click();
-  await page.getByRole('link', { name: 'Charges', exact: true }).click();
+  await page.getByRole('link', { name: 'Recurring Charges', exact: true }).click();
   await expect(checked).toBeChecked();
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect.poll(() => page.locator('table').evaluate(table => table.parentElement.scrollLeft)).toBe(0);
@@ -140,18 +140,18 @@ try {
   await page.evaluate(key => sessionStorage.setItem(key, JSON.stringify('')), memoryKey('RecurringMatrix:week'));
   await page.reload();
   await expect(checked).toBeChecked();
-  // Applying a fee respects filters, preserves paused amounts/versions, skips
-  // existing selections and inactive drivers, and reports partial failures.
+  // The column checkbox respects filters, preserves paused amounts/versions,
+  // skips matching rows and inactive drivers, and reports partial failures.
   await page.getByLabel('Filter driver').selectOption(secondDriver.id);
-  const filteredApply = page.getByRole('button', { name: 'Apply to filtered drivers: Admin fee', exact: true });
-  await filteredApply.click();
-  await expect(filteredApply).toBeDisabled();
+  const filteredSelectAll = page.getByRole('checkbox', { name: 'Admin fee: select visible drivers', exact: true });
+  await filteredSelectAll.click();
+  await expect(filteredSelectAll).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Second Driver, Admin fee', exact: true })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   expect(writes).toEqual([{ driverId: secondDriver.id, typeId: type.id, weekStart: week, included: true, amount: '25.00', scheduleId: pausedSchedule.id, version: 3, typeVersion: 1 }]);
   await page.getByLabel('Filter driver').selectOption('');
-  const applyAll = page.getByRole('button', { name: 'Apply to all: Admin fee', exact: true });
-  await applyAll.click();
+  const selectAll = page.getByRole('checkbox', { name: 'Admin fee: select all drivers', exact: true });
+  await selectAll.click();
   const failureNotice = page.getByRole('alert').filter({ hasText: 'Admin fee:' });
   await expect(failureNotice).toContainText('Third Driver');
   await expect(failureNotice).toContainText('1 of 2 drivers updated');
@@ -159,14 +159,23 @@ try {
   await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).toBeChecked();
   failThirdDriver = false;
-  await applyAll.click();
+  await selectAll.click();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).toBeChecked();
-  await expect(applyAll).toBeDisabled();
+  await expect(selectAll).toBeChecked();
   expect(writes.map(w => w.driverId)).toEqual([secondDriver.id, thirdDriver.id, fourthDriver.id, thirdDriver.id]);
   expect(writes[3]).toEqual({ driverId: thirdDriver.id, typeId: type.id, weekStart: week, included: true, amount: '50.00', scheduleId: '', version: 0, typeVersion: 1 });
+  await selectAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(selectAll).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Test Driver, Admin fee', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Second Driver, Admin fee', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Third Driver, Admin fee', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Fourth Driver, Admin fee', exact: true })).not.toBeChecked();
+  expect(writes.slice(4)).toHaveLength(4);
+  expect(writes.slice(4).every(write => write.included === false)).toBe(true);
   await page.getByLabel('Show archived charge types').check();
-  await expect(page.getByRole('button', { name: 'Apply to all: Archived fee', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Archived fee: select all drivers', exact: true })).toHaveCount(0);
   await page.getByLabel('Show archived charge types').uncheck();
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
   await page.getByRole('button', { name: 'Delete Other fee 0', exact: true }).click();
@@ -177,7 +186,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Other fee 0', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Charge views checks passed: apply-to-all, filtered assignment, existing amounts, partial failures/retry, type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
+  console.log('Charge views checks passed: select-all add/remove, filtered assignment, existing amounts, partial failures/retry, type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

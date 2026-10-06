@@ -171,7 +171,7 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatalf("all planned/inactive/non-delivered entries must appear: %+v", report)
 			}
 			loads := report.Drivers[0].Loads
-			if report.Drivers[0].FuelTotal != "90.30" || report.Drivers[0].TollTotal != "12.25" {
+			if report.Drivers[0].FuelTotal != "1089.30" || report.Drivers[0].TollTotal != "12.25" {
 				t.Fatalf("weekly costs (must not multiply by load slots): fuel=%s toll=%s", report.Drivers[0].FuelTotal, report.Drivers[0].TollTotal)
 			}
 			if loads[0].PickupDate != "2026-09-28" || loads[0].PickupLocation != "First, OH" || loads[0].DeliveryLocation != "Last, PA" || loads[0].Fee != "635.51" || loads[0].LoadedMiles != "725.78" {
