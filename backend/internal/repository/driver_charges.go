@@ -83,6 +83,9 @@ type ChargePhase struct {
 	Paused    bool   `json:"paused"`
 }
 type ChargeOccurrence struct {
+	BaseAmount      string     `json:"baseAmount,omitempty"`
+	CarryForward    string     `json:"carryForward,omitempty"`
+	WaiveRemainder  bool       `json:"waiveRemainder"`
 	TypeVersion     int        `json:"typeVersion"`
 	ScheduleID      string     `json:"scheduleId"`
 	WeekStart       string     `json:"weekStart"`
@@ -210,14 +213,27 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 	}
 	out := []ChargeOccurrence{}
 	position := 0
+	carry := int64(0)
 	for d := start; d.Format(time.DateOnly) <= through; d = d.AddDate(0, 0, 7) {
 		week := d.Format(time.DateOnly)
 		if o, ok := fixed[week]; ok {
+			if s.Direction == "charge" {
+				base := o.BaseAmount
+				if base == "" {
+					base = o.ScheduledAmount
+				}
+				n, _ := chargeCents(base)
+				o.BaseAmount = base
+				o.CarryForward = chargeMoney(carry)
+				o.ScheduledAmount = chargeMoney(n - carry)
+				paid, _ := chargeCents(o.Amount)
+				carry = max(0, carry-n+paid)
+				if o.WaiveRemainder {
+					carry = 0
+				}
+			}
 			out = append(out, o)
 			position++
-			continue
-		}
-		if s.EndWeek != nil && week > *s.EndWeek {
 			continue
 		}
 		p := phaseAt(s, week)
@@ -227,19 +243,27 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 				rule = r
 			}
 		}
-		if p.Paused || (rule.Eligibility == "loads" && !loads[week] && !(forecast && week >= ChargeCurrentWeek())) || (rule.Eligibility == "no_loads" && loads[week]) {
+		eligible := !(s.EndWeek != nil && week > *s.EndWeek) && !p.Paused && !(rule.Eligibility == "loads" && !loads[week] && !(forecast && week >= ChargeCurrentWeek())) && !(rule.Eligibility == "no_loads" && loads[week])
+		if !eligible && carry == 0 {
 			continue
 		}
 		n, _ := chargeCents(p.Amount)
+		if !eligible {
+			n = 0
+		}
 		if s.InstallmentCount > 0 && p.WeekStart == s.StartWeek && position == s.InstallmentCount-1 {
 			total, _ := chargeCents(*s.Total)
 			n += total % int64(s.InstallmentCount)
 		}
 		position++
+		installmentCarry := int64(0)
 		if s.Kind == "installment" {
 			if remaining == 0 {
 				continue
 			}
+			installmentCarry = min(carry, remaining)
+			n += installmentCarry
+			carry = 0
 			if n > remaining {
 				n = remaining
 			}
@@ -248,7 +272,18 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 		if s.Direction == "charge" {
 			n = -n
 		}
-		out = append(out, ChargeOccurrence{ScheduleID: s.ID, WeekStart: week, Kind: s.Kind, Name: s.Name, Amount: chargeMoney(n), ScheduledAmount: chargeMoney(n), ScheduleVersion: s.Version, TypeVersion: s.TypeVersion})
+		o := ChargeOccurrence{ScheduleID: s.ID, WeekStart: week, Kind: s.Kind, Name: s.Name, Amount: chargeMoney(n), ScheduledAmount: chargeMoney(n), ScheduleVersion: s.Version, TypeVersion: s.TypeVersion}
+		if s.Kind == "installment" {
+			o.BaseAmount = chargeMoney(n + installmentCarry)
+			o.CarryForward = chargeMoney(installmentCarry)
+		}
+		if s.Kind == "recurring" && s.Direction == "charge" {
+			o.BaseAmount = chargeMoney(n)
+			o.CarryForward = chargeMoney(carry)
+			o.ScheduledAmount = chargeMoney(n - carry)
+			o.Amount = o.ScheduledAmount
+		}
+		out = append(out, o)
 	}
 	return out, nil
 }

@@ -64,11 +64,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   also owns assignment transactions; `naming.go` owns canonical person and truck
   naming; `load_repository.go` maps DataTruck records to local loads.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
+  A shared priority request gate paces all attempts at 15/minute; discovery
+  takes priority over queued refreshes and 429 cooldowns apply to every caller.
 - `backend/internal/relay/`: Relay Payments fuel transaction client.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
 - `backend/internal/jobs/sync_loads.go`: synchronous load sync for new upstream
-  record IDs plus a rolling 21-day service-date reconciliation.
+  record IDs, five-minute operational refresh, and morning 21-day reconciliation.
+  `backend/internal/repository/load_sync_repository.go` owns operational candidate
+  selection and source-only refreshes without replaying fleet assignments.
 - `backend/internal/jobs/sync_fuel.go`: synchronous missing-day Relay fuel sync.
 - `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
   sync in API-compatible date windows.
@@ -81,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `052_fleetscope_termination.sql`:
+  `055_charge_type_deletion.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -190,6 +194,8 @@ FLEETSCOPE_WEBHOOK_SECRET=...
 SCHEDULED_SYNCS_ENABLED=true
 SCHEDULED_SYNCS_TIMEZONE=America/New_York
 SCHEDULED_LOADS_SYNC_TIME=06:00
+DATATRUCK_NEW_LOADS_INTERVAL=1m
+DATATRUCK_OPERATIONAL_SYNC_INTERVAL=5m
 SCHEDULED_FUEL_SYNC_TIME=06:30
 SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
@@ -276,7 +282,8 @@ browser bundle.
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
 - Driver charges: `GET /driver-charges` (optional driverId),
-  `POST /driver-charges/types`, `POST /driver-charges/schedules`,
+  `POST /driver-charges/types`, `DELETE /driver-charges/types/{id}` (version),
+  `POST /driver-charges/schedules`,
   `POST /driver-charges/schedules/preview`, `POST /driver-charges/bulk`,
   `GET /driver-charges/schedules/{id}/preview` and `/history`,
   `POST /driver-charges/confirm` and `/reopen`.
@@ -310,6 +317,10 @@ browser bundle.
 - Custom tasks: `GET/POST /tasks/custom`, `PUT/PATCH/DELETE /tasks/custom/{id}`.
   GET accepts pagination, search, and status (`open`, `completed`, `all`);
   PUT edits title/notes and PATCH sets `completed` without replacing content.
+  POST/PUT accept `assignedTo` (active user UUID, empty string to clear; omitted
+  on PUT preserves assignment). `GET /tasks/users` returns active user ID/name
+  options. `GET /settings/system-tasks` and `PUT /settings/system-tasks/{kind}`
+  manage versioned system category assignments, requiring `access.manage`.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
@@ -345,7 +356,7 @@ assignment lookup lists.
   are persistent per driver, not weekly snapshots; Gross Board alone supplies
   the current New York Monday–Sunday gross and miles (same entered/source and
   status/deletion rules). Filters scope cards and dispatcher totals to shown
-  drivers. Type badges use actual truck ownership plus driver pay method: O for
+  drivers. Plain type codes use actual truck ownership plus driver pay method: O for
   percentage owner operators, M for CPM company/own-truck drivers, %-O/M-O for
   percentage/CPM hired drivers on other investors' trucks, % for company
   percentage drivers. No ownership or pay settings change from this view.
@@ -368,6 +379,7 @@ assignment lookup lists.
   value. Unrelated later fields remain intact. The history side panel opens per
   driver or for the shown view. All drivers, My view and named dispatcher-group
   views use per-user, per-tab viewMemory; these filters are not access restrictions.
+  Double-clicking My view opens customization; there is no separate Customize button.
   Gross cards and group totals follow all visible filters. Migration 048 adds
   stable Gross Board plan UUIDs and separate driver_board_load_state JSON storage
   for current selection, stop/source choice, order and removed-from-queue plans.
@@ -542,7 +554,10 @@ assignment lookup lists.
   Earlier clients cannot display truck settlements after rollback; new expense
   payment destinations remain protected.
 
-- Navigation preserves view state throughout the app. PageNavigation supplies a
+- Navigation preserves view state throughout the app. Gross Board always opens
+  at the current New York week on ordinary visits/reloads; explicit payroll load
+  links still select their historical week. Other weekly pages retain their week.
+  PageNavigation supplies a
   shared Back link and restores main/nested scroll positions after data loads;
   viewMemory.useViewState retains filters, sorting, weeks, pagination, tabs and
   expanded rows in session storage, scoped by authenticated user, page and detail
@@ -602,7 +617,8 @@ assignment lookup lists.
   account for all elapsed eligible weeks regardless of browsing order. Writes
   snapshot prior projected occurrences; explicit weekly edits, zero skips and
   confirmed rows survive source changes. Installment overrides reserve principal
-  before future allocation; underpayments extend schedules. Confirming selected
+  before future allocation; unpaid installments add to the following week's
+  deduction, capped by unallocated principal. Confirming selected
   deductions is explicit and idempotent, records the session user, and locks
   those rows. Reopening requires a reason and reverses only collection status.
   Viewing/autosave never confirms generated installments; finalizing payroll does.
@@ -615,6 +631,9 @@ assignment lookup lists.
   after rollback but cannot erase them through the legacy adjustment contract.
   Tests use disposable MSERP_DRIVER_CHARGES_TEST_DATABASE_URL (_test database),
   fresh and migrated schemas as mserp_app, and test-driver-charges-e2e.mjs.
+  Migration 055 permits deletion of unused charge types with version checks and
+  retained audit snapshots. Any driver schedule or truck phase prevents deletion;
+  use Archive for those types to preserve financial history.
 
 - Investors own trucks independently of operating-driver assignments. A driver may
   have one investor profile, sharing live name/contact details; independent owners
@@ -634,14 +653,34 @@ assignment lookup lists.
   disposable MSERP_INVESTOR_TEST_DATABASE_URL (_test database), checking fresh and
   migrated schemas as mserp_app. CI runs these and real-API Chromium E2E flows.
 
-- Custom tasks are shared by all authenticated users, separate from generated
-  driver setup and Relay review tasks. Titles are required (200 characters max),
+- Task assignments use migration 054. Settings > System tasks assigns each
+  generated category (driver onboarding, driver offboarding, Relay review) to one
+  active user. Existing and future tasks follow the current assignment; only the
+  built-in Administrator role and that user can read/change them, subject to the
+  usual role permissions. Unassigned system tasks are Administrator-only.
+  API sessions carry the actual system-role flag, rather than inferring admin
+  status from access.manage. Lists/counts, intake details/completion, pending
+  driver-directory rows, Relay reviews and offboarding custom-task mutations all
+  enforce visibility. Offboarding is marked by its integration link, never title
+  matching. Assignment changes are versioned/audited and take effect immediately.
+  `task_assignments.go` owns the shared authenticated-viewer context and settings.
+  Its unscoped repository calls are trusted background/internal operations only.
+  Older app releases do not enforce task privacy; rollback to them is unsafe
+  once private assignments are in use.
+
+- Unassigned custom tasks are shared by users with Tasks permissions. Any user
+  with tasks.write may assign a custom task to themselves or another active user;
+  assigned tasks are visible only to Administrators, the assignee and the assigning
+  user. Reassigning changes that assigning user only when the assignee changes;
+  editing content/completion preserves assignment. System offboarding assignment
+  stays in Settings. Titles are required (200 characters max),
   notes are optional (5,000 max), and completion is reversible. Creation records
   the session user; editing content preserves completion and vice versa.
   `custom_task_repository.go` and `custom_task_handlers.go` own persistence and
   validation. Database tests use only `MSERP_CUSTOM_TASK_TEST_DATABASE_URL`, a
   disposable administrator connection with an `mserp_app` role, and verify both
-  fresh schema and migration 026 as that application role.
+  fresh schema and migrations 026/054 as that application role. Real session/API
+  privacy checks use MSERP_ACCESS_TEST_DATABASE_URL in task_assignments_integration_test.go.
 
 - FleetScope is a one-way hire/termination handoff for the configured MS Express company
   UUID. Both `FLEETSCOPE_COMPANY_ID` and `FLEETSCOPE_WEBHOOK_SECRET` must be set
@@ -774,6 +813,27 @@ assignment lookup lists.
   Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
   verify fresh schema and migrations 029-030 as `mserp_app`.
 
+- Migration 053 makes reduced Driver Pay deductions carry forward. Fuel/Toll
+  source totals remain separate from opening unpaid balances; collection snapshots
+  in driver_pay_cost_collections are written atomically on payroll save/finalize,
+  never on reads. Existing cost overrides resolve against routed historical source
+  reports or frozen settlements and are pinned when a later collection uses them.
+  Unpaid balances remain visible through empty weeks and later tariff changes.
+  CPM drivers do not acquire new fuel/toll obligations, but retain existing debt.
+  Cost revisions reject stale cross-week saves. Before correcting an earlier
+  amount, later saved deductions must be zeroed (and finalized weeks reopened),
+  then reapplied; prior collections cannot silently change a later saved payment.
+  Recurring deduction occurrences retain a base amount separately from carry.
+  Reduced/zero amounts carry by default, even after pause/end or in ineligible
+  weeks; those weeks add no new base charge. Right-click/Shift+F10 on a recurring
+  row offers an explicit audited this-week-only reduction (waiveRemainder), with
+  a small This week marker. It does not change future schedule rates. Reset removes
+  that exception. Fuel/Toll have no waiver action. Expense balances continue their
+  existing principal-based behavior. Freeform adjustments have no separate unpaid
+  principal, and negative net pay itself never creates a second debt. Investor Pay
+  keeps its existing truck-cost rules. Tests cover fresh/migrated schemas and the
+  charge E2E right-click/keyboard workflow.
+
 - Toll overview aggregates production PrePass and historical imported records by
   stored posting date (inclusive range, year-to-date default, maximum five years).
   Credits reduce net spend, weeks begin Monday, and truck breakdowns use source
@@ -815,7 +875,33 @@ assignment lookup lists.
   DataTruck does not expose an
   order last-modified timestamp. The server write timeout is fifteen minutes to
   permit pagination, rate-limit retry, and an initial Relay historical backfill.
-- DataTruck imports never create managed `drivers` or `trucks`. They retain the
+  Additional interval jobs run immediately at startup: new-load discovery every
+  minute, operational refresh every five minutes. Both interval environment
+  settings accept 1m–24h and obey SCHEDULED_SYNCS_ENABLED. Discovery has no date
+  cutoff and saves before reconciliation, so refresh failures do not hide new
+  loads. Discovery serializes separately from full/operational/payroll refreshes;
+  the shared HTTP gate prioritizes discovery between pages, with four-second
+  request spacing and a shared Retry-After cooldown (including waits over 60s).
+  Without Retry-After, a 429 pauses the client for at least a minute. The gate is
+  process-local: run only one scheduled API instance and avoid concurrent operator
+  recovery processes using the same token.
+  Operational refresh selects existing IDs once from cached pickup/delivery
+  actual/appointment dates: seven calendar days back through three days ahead,
+  plus recent creations with incomplete dates and active drivers' selected current
+  loads regardless of age. Today's date is New York; comparisons retain DataTruck's
+  encoded UTC schedule dates. Current IDs go first; batches use array-valued
+  is_in filters, at most 25 IDs, all statuses. Changed upstream dates that move
+  a previously out-of-window, unselected load into the window are caught by the
+  morning reconciliation. Repeated operational runs never overlap or accumulate
+  behind full/payroll refreshes. Existing-load refreshes update source fields and
+  identity links without changing fleet profiles/assignments. Morning scans can
+  recover missing records below their starting watermark; only discovery advances
+  it. Gross Board still owns planning and Status Board still requires its plans.
+  A selected plan with no original stops gains a pickup/delivery source on reads
+  after an exact unique import, according to its existing dispatch status. Reads
+  do not write history or advance loads. Explicit manual destinations (including
+  a saved manual blank), changed identities and ambiguous matches stay protected.
+- New DataTruck imports never create managed `drivers` or `trucks`. They retain the
   upstream driver name and truck unit on the load, link only to an existing
   unambiguous fleet record, and create a current assignment only when both
   links resolve. Add fleet master records through the management UI first.
@@ -1026,6 +1112,7 @@ node scripts/test-investors-e2e.mjs
 node scripts/test-driver-charges-e2e.mjs
 # Browser view regressions use isolated API fixtures, with no database needed.
 node scripts/test-charge-views.mjs
+node scripts/test-task-board-views.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build

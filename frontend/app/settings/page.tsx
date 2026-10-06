@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Settings, ShieldCheck, Users, KeyRound, Pencil, RefreshCw } from "lucide-react";
+import { Settings, ShieldCheck, Users, KeyRound, Pencil, RefreshCw, ListChecks } from "lucide-react";
+import { SystemTasks } from "./SystemTasks";
 import { fetchAccess, saveUser, saveRole, revokeUserAccess } from "@/app/lib/api";
 import type { AccessData, ManagedUser, AccessRole } from "@/app/lib/types";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -13,7 +14,7 @@ const newRole = (): AccessRole => ({ id: "", name: "", permissions: [], system: 
 
 export default function SettingsPage() {
   const [data, setData] = useState<AccessData | null>(null);
-  const [tab, setTab] = useViewState<"users" | "roles">("access:tab", "users");
+  const [tab, setTab] = useViewState<"users" | "roles" | "tasks">("access:tab", "users");
   const [search, setSearch] = useViewState("access:search", "");
   const [user, setUser] = useState<ManagedUser | null>(null);
   const [role, setRole] = useState<AccessRole | null>(null);
@@ -32,12 +33,12 @@ export default function SettingsPage() {
   const users = data?.users.filter(u => `${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase())) ?? [];
 
   return <div className="space-y-5 animate-fade-in">
-    <ManagementHeader icon={Settings} title="Settings" description="Manage team accounts, roles and permissions." count={tab === "users" ? data?.users.length ?? 0 : data?.roles.length ?? 0} actionLabel={tab === "users" ? "Add user" : "Create role"} onAction={() => { if (busy || !data) return; setError(""); if (tab === "users") setUser(newUser()); else setRole(newRole()); }} secondaryAction={<button className={button} disabled={busy || loading} onClick={() => void refresh()}><RefreshCw className="h-3.5 w-3.5" />Refresh</button>} />
-    <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">{([['users', Users, 'Users'], ['roles', ShieldCheck, 'Roles & permissions']] as const).map(([value, Icon, label]) => <button key={value} onClick={() => setTab(value)} className={`${button} ${tab === value ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : ''}`}><Icon className="h-4 w-4" />{label}</button>)}</div>
+    <ManagementHeader icon={Settings} title="Settings" description="Manage team accounts, roles, permissions and system task assignments." count={tab === "tasks" ? 3 : tab === "users" ? data?.users.length ?? 0 : data?.roles.length ?? 0} actionLabel={tab === "tasks" ? undefined : tab === "users" ? "Add user" : "Create role"} onAction={tab === "tasks" ? undefined : () => { if (busy || !data) return; setError(""); if (tab === "users") setUser(newUser()); else setRole(newRole()); }} secondaryAction={<button className={button} disabled={busy || loading} onClick={() => void refresh()}><RefreshCw className="h-3.5 w-3.5" />Refresh</button>} />
+    <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">{([['users', Users, 'Users'], ['roles', ShieldCheck, 'Roles & permissions'], ['tasks', ListChecks, 'System tasks']] as const).map(([value, Icon, label]) => <button key={value} onClick={() => setTab(value)} className={`${button} ${tab === value ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : ''}`}><Icon className="h-4 w-4" />{label}</button>)}</div>
     {error && <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</p>}
     {loading && !data ? <p role="status" className="text-sm text-zinc-500">Loading access settings…</p> : data && <>
-      {tab === "users" ? <>
+      {tab === "tasks" ? <SystemTasks users={data.users} /> : tab === "users" ? <>
         <div className="flex flex-wrap items-center justify-between gap-3"><ManagementSearch value={search} onChange={setSearch} placeholder="Search names or emails…" /><p className="text-xs text-zinc-500">Administrator-created accounts · No public sign-up</p></div>
         <div className="overflow-x-auto rounded-xl border border-zinc-800"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{['User', 'Role', 'Status', 'Actions'].map(h => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead><tbody>{users.map(u => <tr key={u.id} className="border-t border-zinc-800/70"><td className="px-4 py-3"><p className="text-zinc-200">{u.username}</p><p className="text-xs text-zinc-500">{u.email || 'Email required'}</p></td><td className="px-4 py-3 text-zinc-400">{data.roles.find(r => r.id === u.roleId)?.name ?? 'Unassigned'}</td><td className="px-4 py-3"><span className={u.active ? 'text-emerald-400' : 'text-zinc-500'}>{u.active ? 'Active' : 'Disabled'}</span></td><td className="px-4 py-3"><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => { setError(""); setUser({ ...u }); }}><Pencil className="h-3.5 w-3.5" />Edit</button><button className={button} disabled={busy} onClick={() => setRevoke(u)}><KeyRound className="h-3.5 w-3.5" />Revoke access</button></div></td></tr>)}</tbody></table>{users.length === 0 && <p className="p-8 text-center text-sm text-zinc-500">No users match this search.</p>}</div>
       </> : <div className="grid gap-4 xl:grid-cols-2">{data.roles.map(r => <section key={r.id} className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-medium text-zinc-100">{r.name}</h2><p className="mt-1 text-xs text-zinc-500">{data.users.filter(u => u.roleId === r.id).length} users · {r.permissions.length} permissions</p></div>{!r.system && <button className={button} disabled={busy} onClick={() => { setError(""); setRole({ ...r, permissions: [...r.permissions] }); }}><Pencil className="h-3.5 w-3.5" />Edit role</button>}</div><p className="mt-4 text-xs leading-6 text-zinc-400">{r.system ? 'Full access. This built-in role cannot be edited. At least one active, administrator must remain.' : r.permissions.map(p => data.permissions.find(v => v.key === p)?.label ?? p).join(' · ') || 'No permissions assigned.'}</p></section>)}</div>}

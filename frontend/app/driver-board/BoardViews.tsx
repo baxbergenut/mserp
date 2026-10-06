@@ -15,15 +15,14 @@ export function BoardViews({ mode, myIds, saved, dispatchers, onSelect, onSave, 
   const [draft, setDraft] = useState<string[] | null>(null);
   const [name, setName] = useState("");
   function configure() {
-    setDraft(mode === "all" || mode === "my" ? myIds : saved.find(v => v.id === mode)?.dispatcherIds ?? myIds);
+    setDraft(myIds);
     setName("");
   }
   return <>
     <div className="flex flex-wrap items-center gap-2">
       <button aria-pressed={mode === "all"} className={`${buttonClass} ${mode === "all" ? "bg-blue-500/15 text-blue-200" : ""}`} onClick={() => onSelect("all")}>All drivers</button>
-      <button aria-pressed={mode === "my"} className={`${buttonClass} ${mode === "my" ? "bg-blue-500/15 text-blue-200" : ""}`} onClick={() => { if (!myIds.length) configure(); else onSelect("my"); }}>My view</button>
+      <button aria-pressed={mode === "my"} className={`${buttonClass} ${mode === "my" ? "bg-blue-500/15 text-blue-200" : ""}`} onClick={() => onSelect("my")} onDoubleClick={configure} onKeyDown={event => { if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); configure(); } }}>My view</button>
       {saved.length > 0 && <select aria-label="Saved board view" className={`${controlClass} max-w-48`} value={saved.some(v => v.id === mode) ? mode : ""} onChange={e => { if (e.target.value) onSelect(e.target.value); }}><option value="">Saved views</option>{saved.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select>}
-      <button className={buttonClass} onClick={configure}>Customize view</button>
       {saved.some(v => v.id === mode) && <button className={buttonClass} onClick={() => onDelete(mode)}>Remove saved view</button>}
     </div>
     {draft !== null && <Modal title="Customize Status Board view" description="Choose dispatcher groups. Views are personal and remembered in this browser tab." isSaving={false} submitLabel={name.trim() ? "Save named view" : "Use as My view"} onClose={() => setDraft(null)} onSubmit={event => { event.preventDefault(); if (!draft.length) return; onSave(draft, name.trim()); setDraft(null); }}>

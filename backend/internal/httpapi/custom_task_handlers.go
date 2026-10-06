@@ -59,6 +59,10 @@ func registerCustomTaskRoutes(r chi.Router, logger *slog.Logger, repo customTask
 		}
 		input.Title = strings.TrimSpace(input.Title)
 		input.Notes = strings.TrimSpace(input.Notes)
+		if input.AssignedTo != nil && *input.AssignedTo != "" && !isUUID(*input.AssignedTo) {
+			writeAPIError(w, 400, "Select a valid assignee")
+			return input, false
+		}
 		if input.Title == "" || utf8.RuneCountInString(input.Title) > 200 || utf8.RuneCountInString(input.Notes) > 5000 || strings.ContainsRune(input.Title+input.Notes, '\x00') {
 			writeAPIError(w, 400, "Title must be 1–200 characters and notes at most 5,000 characters, without null characters")
 			return input, false

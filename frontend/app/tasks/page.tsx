@@ -4,6 +4,7 @@ import { formatPhone, normalizePhone } from "../lib/phone";
 
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
+import { usePermissions } from "@/app/lib/access";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { controlClass, ErrorBanner, ManagementHeader, ManagementSearch, Modal, T
 type Decision = { task: RelayIdentityTask; driver: { id: string; name: string }; action: "link" | "reject" };
 
 export default function TasksPage() {
+  const canReadFleet = usePermissions().includes("fleet.read");
   const [data, setData] = useState<PaginatedResponse<RelayIdentityTask> | null>(null);
   const [setupTotal, setSetupTotal] = useState(0);
   const [customTotal, setCustomTotal] = useState(0);
@@ -42,13 +44,13 @@ export default function TasksPage() {
       if (cancelled) return Promise.reject(new Error("cancelled"));
       setLoading(true);
       setError("");
-      return Promise.all([fetchRelayIdentityTasks({ page, pageSize, search: debouncedSearch }), fetchDrivers()]);
+      return Promise.all([fetchRelayIdentityTasks({ page, pageSize, search: debouncedSearch }), canReadFleet ? fetchDrivers() : Promise.resolve([])]);
     })
       .then(([tasks, fleet]) => { if (!cancelled) { setData(tasks); setDrivers(fleet); } })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load tasks"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [page, pageSize, debouncedSearch, revision]);
+  }, [page, pageSize, debouncedSearch, revision, canReadFleet]);
 
   async function confirm() {
     if (!decision || saving) return;
@@ -81,7 +83,7 @@ export default function TasksPage() {
       </div>
       <CustomTasks search={debouncedSearch} revision={revision} creating={creatingTask}
         onCloseCreate={() => setCreatingTask(false)} onCount={setCustomTotal} />
-      <DriverSetupTasks search={debouncedSearch} revision={revision} onCount={setSetupTotal} />
+      {canReadFleet && <DriverSetupTasks search={debouncedSearch} revision={revision} onCount={setSetupTotal} />}
       {error && !decision && <ErrorBanner message={error} />}
       {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-300">{notice}</p>}
       {loading ? <p role="status" className="py-12 text-center text-sm text-zinc-400">Loading Relay tasks…</p>

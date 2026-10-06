@@ -25,11 +25,11 @@ export const costRows = [{ key: "fuel", label: "Fuel" }, { key: "toll", label: "
 export type CostKey = typeof costRows[number]["key"];
 
 export function costAmount(driver: DriverPayDriver, edits: DriverPayEdits, key: CostKey): string {
-  if (driver.payType === "cpm") return "0.00";
+  if (driver.payType === "cpm" && hundredths(edits.costs?.[`${key}Carry`] ?? "0") === BigInt(0)) return "0.00";
   const override = edits[`${key}Override`];
   if (override != null) return override;
-  if (!driver.isOwnerOperator || driver.payType !== "gross_percentage") return "0.00";
-  const cents = -hundredths(driver[`${key}Total`] ?? "0");
+  if (!edits.costs && (!driver.isOwnerOperator || driver.payType !== "gross_percentage")) return "0.00";
+  const cents = -hundredths(edits.costs?.[`${key}Due`] ?? driver[`${key}Total`] ?? "0");
   const magnitude = cents < BigInt(0) ? -cents : cents;
   return `${cents < BigInt(0) ? "-" : ""}${magnitude / BigInt(100)}.${String(magnitude % BigInt(100)).padStart(2, "0")}`;
 }
@@ -39,6 +39,7 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   const result = { ...current };
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
   else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version,
+    ...(saved.costs && { costs: saved.costs }),
     expenseDeductions: result[saved.driverId].expenseDeductions?.map(row => {
       const committed = saved.expenseDeductions?.find(r => r.expenseId === row.expenseId);
       const submitted = snapshot.expenseDeductions?.find(r => r.expenseId === row.expenseId);

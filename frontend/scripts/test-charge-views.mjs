@@ -31,6 +31,12 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(4);
+    if (route.request().method() === 'DELETE' && path.startsWith('/driver-charges/types/')) {
+      const id = path.split('/').at(-1);
+      expect(route.request().postDataJSON()).toEqual({ version: 1 });
+      data.types = data.types.filter(t => t.id !== id);
+      await route.fulfill({ status: 204 }); return;
+    }
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
       '/driver-charges': data, '/drivers': [driver], '/truck-charges': { terms: [], phases: [], eligibleTruckIds: [] }, '/trucks': [], '/investors': [],
@@ -114,8 +120,16 @@ try {
   await page.evaluate(key => sessionStorage.setItem(key, JSON.stringify('')), memoryKey('RecurringMatrix:week'));
   await page.reload();
   await expect(checked).toBeChecked();
+  await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete Other fee 0', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'Other fee 0', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete Other fee 0', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete type', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'Other fee 0', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Charge views checks passed: initial selections, independent matrix scrolls, stale/archived filters, week navigation, remembered weeks and tab return.');
+  console.log('Charge views checks passed: type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -24,9 +24,9 @@ import { CurrentLoadInput } from "./CurrentLoadInput";
 import { ETAEditor } from "./ETAEditor";
 
 const columns = [
-  ["Current load", 95], ["Driver", 125], ["Driver type", 55], ["Truck", 50], ["Trailer", 70],
+  ["Current load", 95], ["Driver", 125], ["Driver type", 76], ["Truck", 50], ["Trailer", 60],
   ["Original gross", 90], ["Driver gross", 90], ["Phone", 115], ["Status", 95],
-  ["Latest location", 110], ["Destination", 130], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
+  ["Latest location", 110], ["Destination", 119], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -153,7 +153,7 @@ export default function DriverBoardPage() {
               <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><div className="flex items-center"><div className="min-w-0 flex-1">{<CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} />}</div><button aria-label={`${d.fullName} · Loads`} title={loads?.current?.warning || "Current and next loads"} disabled={!loads} className={`shrink-0 p-1 ${loads?.current?.warning ? "text-amber-300" : "text-zinc-500 hover:text-blue-300"}`} onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}><ListOrdered className="h-3.5 w-3.5" /></button></div></td>
                 <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1"><span className="min-w-0 flex-1 truncate">{permissions.includes("fleet.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><button aria-label={`${d.fullName} · History`} title="Driver history" className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" onClick={() => setHistory({ driverId: d.id, name: `${d.fullName} · History`, ids: [d.id] })}><History className="h-3 w-3" /></button></div></th>
-                <td className={`${cellClass} px-0.5 text-center`}><span className="rounded bg-zinc-800 px-0.5 py-0.5 font-mono text-[10px] text-zinc-300">{d.driverType}</span></td>
+                <td className={`${cellClass} px-1.5 text-center font-mono text-[10px] text-zinc-300`}>{d.driverType}</td>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("fleet.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "trailerNumber", "Trailer", 100)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>

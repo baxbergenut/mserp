@@ -99,3 +99,11 @@ assert.equal(driverTotals(investorTruck, investorEdits).payable, 420000n);
 assert.equal(driverTotals({ ...investorTruck, issues: ["Ownership requires review"] }, investorEdits).review, 1);
 assert.equal(driverTotals({ ...owner, autoCharges: [{ name: "Admin", amount: "-100.00", source: "truck_charge:truck:admin" }] }, auto).payable, 42316n);
 console.log("Investor pay checks passed: earnings charged once, truck costs and expenses, owner-only fees, review indicators.");
+
+const carryEdits = { ...auto, costs: { revision: 'v1', fuelCarry: '40.30', tollCarry: '7.25', fuelDue: '140.40', tollDue: '19.50' } };
+assert.equal(costAmount(owner, carryEdits, 'fuel'), '-140.40');
+assert.equal(costAmount(owner, { ...carryEdits, fuelOverride: '0.00' }, 'fuel'), '0.00');
+assert.equal(costAmount({ ...owner, payType: 'cpm' }, { ...carryEdits, costs: { ...carryEdits.costs, fuelDue: '40.30' } }, 'fuel'), '-40.30');
+const carrySaved = { ...carryEdits, version: 9, costs: { ...carryEdits.costs, revision: 'v2' } };
+assert.equal(reconcilePaySave({ driver: { ...carryEdits, notes: 'typing' } }, carryEdits, carrySaved).driver.costs.revision, 'v2');
+console.log('Remainder checks passed: automatic carry, zero deferral, tariff changes and cross-week revision reconciliation.');

@@ -237,7 +237,8 @@ func (h *authHandler) requireSession(next http.Handler) http.Handler {
 			writeAPIError(w, http.StatusInternalServerError, "authentication could not be verified")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authContextKey{}, session)))
+		ctx := repository.WithTaskViewer(r.Context(), session.User.ID, session.User.Administrator)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authContextKey{}, session)))
 	})
 }
 

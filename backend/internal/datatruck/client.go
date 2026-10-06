@@ -22,12 +22,14 @@ type Client struct {
 	httpClient *http.Client
 	apiKey     string
 	baseURL    string
+	gate       *requestGate
 }
 
 func NewClient(apiKey, companyName string) *Client {
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		apiKey:     strings.TrimSpace(apiKey),
+		gate:       &requestGate{interval: 4 * time.Second},
 		baseURL:    fmt.Sprintf("https://%s.datatruck.io/api/v1/openapi", strings.ToLower(strings.TrimSpace(companyName))),
 	}
 }
@@ -162,6 +164,29 @@ func (c *Client) FetchLoadsAfterID(ctx context.Context, afterID int) ([]Load, er
 	})
 }
 
+// FetchLoadsByIDs uses the documented array-valued is_in filter. Reject an
+// ignored filter before pagination can turn a small refresh into a full import.
+func (c *Client) FetchLoadsByIDs(ctx context.Context, ids []int) ([]Load, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	wanted := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, errors.New("load IDs must be positive")
+		}
+		wanted[id] = true
+	}
+	return c.fetchLoads(ctx, []map[string]any{{"column": "id", "contains": "is_in", "value": ids}}, "id", func(loads []Load) error {
+		for _, load := range loads {
+			if !wanted[load.ID] {
+				return fmt.Errorf("datatruck ID filter returned unexpected record %d", load.ID)
+			}
+		}
+		return nil
+	})
+}
+
 func (c *Client) FetchLoadsByDateSince(
 	ctx context.Context,
 	column string,
@@ -190,12 +215,19 @@ func (c *Client) fetchLoadsByDateSince(ctx context.Context, column string, since
 			"column": "id", "value": strconv.Itoa(*throughID), "contains": "less_than",
 		})
 	}
-	return c.fetchLoads(ctx, filters, "-"+column, nil)
+	return c.fetchLoads(ctx, filters, "-"+column, func(loads []Load) error {
+		for _, load := range loads {
+			if throughID != nil && load.ID > *throughID {
+				return fmt.Errorf("datatruck reconciliation exceeded watermark %d", *throughID)
+			}
+		}
+		return nil
+	})
 }
 
 func (c *Client) fetchLoads(
 	ctx context.Context,
-	filters []map[string]string,
+	filters any,
 	ordering string,
 	validatePage func([]Load) error,
 ) ([]Load, error) {
@@ -243,8 +275,16 @@ func (c *Client) doRequest(ctx context.Context, requestURL string) (*LoadListRes
 		request.Header.Set("Authorization", "Token "+c.apiKey)
 		request.Header.Set("Content-Type", "application/json")
 
+		release := func() {}
+		if c.gate != nil {
+			release, err = c.gate.acquire(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
 		response, err := c.httpClient.Do(request)
 		if err != nil {
+			release()
 			return nil, err
 		}
 
@@ -252,6 +292,7 @@ func (c *Client) doRequest(ctx context.Context, requestURL string) (*LoadListRes
 			var payload LoadListResponse
 			decodeErr := json.NewDecoder(response.Body).Decode(&payload)
 			closeErr := response.Body.Close()
+			release()
 			if decodeErr != nil {
 				return nil, decodeErr
 			}
@@ -265,11 +306,20 @@ func (c *Client) doRequest(ctx context.Context, requestURL string) (*LoadListRes
 		retryAfter := response.Header.Get("Retry-After")
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 		_ = response.Body.Close()
+		delay := retryDelay(retryAfter, attempt)
+		if c.gate != nil && response.StatusCode == http.StatusTooManyRequests {
+			// Without Retry-After, allow the upstream minute window to reset.
+			if strings.TrimSpace(retryAfter) == "" {
+				delay = max(delay, time.Minute)
+			}
+			c.gate.cooldown(delay)
+		}
+		release()
 
 		if !isRetryableStatus(response.StatusCode) || attempt == maxRequestAttempts-1 {
 			return nil, fmt.Errorf("datatruck request failed: %s", status)
 		}
-		if err := waitForRetry(ctx, retryDelay(retryAfter, attempt)); err != nil {
+		if err := waitForRetry(ctx, delay); err != nil {
 			return nil, err
 		}
 	}
@@ -287,10 +337,10 @@ func isRetryableStatus(status int) bool {
 func retryDelay(retryAfter string, attempt int) time.Duration {
 	trimmed := strings.TrimSpace(retryAfter)
 	if seconds, err := strconv.Atoi(trimmed); err == nil && seconds >= 0 {
-		return min(time.Duration(seconds)*time.Second, maxRetryDelay)
+		return time.Duration(seconds) * time.Second
 	}
 	if retryAt, err := http.ParseTime(trimmed); err == nil {
-		return min(max(time.Until(retryAt), 0), maxRetryDelay)
+		return max(time.Until(retryAt), 0)
 	}
 	return min(time.Second*time.Duration(1<<attempt), maxRetryDelay)
 }

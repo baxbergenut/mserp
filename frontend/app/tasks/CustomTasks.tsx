@@ -4,14 +4,15 @@ import { useViewState } from "@/app/lib/viewMemory";
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, RotateCcw, Trash2 } from "lucide-react";
-import { createCustomTask, deleteCustomTask, fetchCustomTasks, setCustomTaskCompleted, updateCustomTask } from "../lib/api";
-import type { CustomTask, CustomTaskInput, PaginatedResponse } from "../lib/types";
+import { createCustomTask, deleteCustomTask, fetchCustomTasks, fetchTaskUsers, setCustomTaskCompleted, updateCustomTask } from "../lib/api";
+import type { CustomTask, CustomTaskInput, PaginatedResponse, TaskUser } from "../lib/types";
 import { ConfirmDialog, controlClass, ErrorBanner, Modal, TablePagination } from "../components/management/ManagementUI";
 
 export function CustomTasks({ search, revision, creating, onCloseCreate, onCount }: {
   search: string; revision: number; creating: boolean; onCloseCreate: () => void; onCount: (count: number) => void;
 }) {
   const [data, setData] = useState<PaginatedResponse<CustomTask> | null>(null);
+  const [users, setUsers] = useState<TaskUser[]>([]);
   const [status, setStatus] = useViewState<"open" | "completed" | "all">("CustomTasks:status", "open");
   const [position, setPosition] = useViewState("CustomTasks:position", { search, page: 1 });
   const page = position.search === search ? position.page : 1;
@@ -25,6 +26,12 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
   const [deleting, setDeleting] = useState<CustomTask | null>(null);
   const [saving, setSaving] = useState(false);
   const mutation = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchTaskUsers().then(value => { if (active) setUsers(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load assignees"); });
+    return () => { active = false; };
+  }, [revision]);
 
   useEffect(() => {
     const refreshVisible = () => {
@@ -79,7 +86,7 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-200">Custom tasks</h2>
-          <p className="mt-1 text-xs text-zinc-500">Shared with everyone on your team.</p>
+          <p className="mt-1 text-xs text-zinc-500">Assigned tasks are visible to the assignee, assigning user and Administrators.</p>
         </div>
         <select aria-label="Custom task status" value={status} className={`${controlClass} sm:w-48`}
           onChange={(event) => { setStatus(event.target.value as typeof status); setPage(1); }}>
@@ -96,6 +103,7 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
               <div className="min-w-0 flex-1">
                 <h3 className={`break-words text-sm font-semibold ${task.completedAt ? "text-zinc-500 line-through" : "text-zinc-100"}`}>{task.title}</h3>
                 <p className="mt-1 text-xs text-zinc-500">{task.completedAt ? "Completed" : "Open"} · Created {new Date(task.createdAt).toLocaleDateString()}</p>
+                {!task.systemTaskKind && <p className="mt-1 text-xs text-zinc-400">{task.assignedTo ? `Assigned to ${task.assigneeName || "Unavailable user"}` : "Unassigned · Shared with the team"}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button disabled={saving} className={actionClass} onClick={() => { void mutate(() => setCustomTaskCompleted(task.id, !task.completedAt), task.completedAt ? "Task reopened." : "Task completed.").catch(() => {}); }}>
@@ -111,6 +119,7 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
       {!loading && data && data.total > 0 && <TablePagination page={data.page} pageSize={data.pageSize} totalItems={data.total} totalPages={data.totalPages}
         onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
       {(creating || editing) && <TaskForm key={editing?.id ?? "new"} task={editing} saving={saving}
+        users={users}
         onClose={() => { onCloseCreate(); setEditing(null); setError(""); }}
         onSave={(input) => mutate(() => editing ? updateCustomTask(editing.id, input) : createCustomTask(input), editing ? "Task updated." : "Task created.")} />}
       {deleting && <ConfirmDialog title="Delete custom task" message={`Delete “${deleting.title}”? This cannot be undone.`} isDeleting={saving}
@@ -119,23 +128,32 @@ export function CustomTasks({ search, revision, creating, onCloseCreate, onCount
   );
 }
 
-function TaskForm({ task, saving, onClose, onSave }: {
+function TaskForm({ task, saving, users, onClose, onSave }: {
   task: CustomTask | null; saving: boolean; onClose: () => void; onSave: (input: CustomTaskInput) => Promise<void>;
+  users: TaskUser[];
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [notes, setNotes] = useState(task?.notes ?? "");
+  const [assignedTo, setAssignedTo] = useState(task?.assignedTo ?? "");
   const [error, setError] = useState("");
-  return <Modal title={task ? "Edit custom task" : "Add custom task"} description="This task will be visible to everyone on your team."
+  return <Modal title={task ? "Edit task" : "Add custom task"} description={task?.systemTaskKind ? "System task assignments are managed in Settings." : "Unassigned tasks are shared. Assigned tasks are private to the assignee, assigning user and Administrators."}
     isSaving={saving} submitLabel={task ? "Save changes" : "Add task"} onClose={onClose}
     onSubmit={(event) => {
       event.preventDefault();
       if (saving) return;
       if (!title.trim()) { setError("Enter a task title."); return; }
       setError("");
-      void onSave({ title: title.trim(), notes: notes.trim() }).catch((e) => setError(e instanceof Error ? e.message : "Could not save task"));
+      void onSave({ title: title.trim(), notes: notes.trim(), ...(task?.systemTaskKind ? {} : { assignedTo }) }).catch((e) => setError(e instanceof Error ? e.message : "Could not save task"));
     }}>
     <div className="space-y-4">
       {error && <ErrorBanner message={error} />}
+      {!task?.systemTaskKind && <label className="block text-sm text-zinc-300">Assign to
+        <select aria-label="Assign to" disabled={saving} value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className={`${controlClass} mt-2`}>
+          <option value="">Unassigned · Shared with the team</option>
+          {assignedTo && !users.some(u => u.id === assignedTo) && <option value={assignedTo}>{task?.assigneeName || "Unavailable user"} (disabled)</option>}
+          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      </label>}
       <label className="block text-sm text-zinc-300">Title
         <input autoFocus required maxLength={200} disabled={saving} value={title} onChange={(e) => setTitle(e.target.value)} className={`${controlClass} mt-2`} placeholder="What needs to be done?" />
       </label>

@@ -86,6 +86,24 @@ func registerDriverChargeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 		}
 		writeJSON(w, 200, saved)
 	})
+	r.Delete("/driver-charges/types/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Version int `json:"version"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		id := chi.URLParam(r, "id")
+		if !isUUID(id) || input.Version < 1 {
+			writeAPIError(w, 400, "Provide a valid charge type and version")
+			return
+		}
+		if err := repo.DeleteType(r.Context(), id, input.Version, actor(r)); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(204)
+	})
 	for _, preview := range []bool{false, true} {
 		path := "/driver-charges/schedules"
 		if preview {

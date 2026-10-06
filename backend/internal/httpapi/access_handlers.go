@@ -37,6 +37,40 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		}
 		writeJSON(w, http.StatusOK, data)
 	})
+	r.Get("/tasks/users", func(w http.ResponseWriter, r *http.Request) {
+		users, err := repo.TaskUsers(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, users)
+	})
+	r.Get("/settings/system-tasks", func(w http.ResponseWriter, r *http.Request) {
+		data, err := repo.SystemTaskAssignments(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, data)
+	})
+	r.Put("/settings/system-tasks/{kind}", func(w http.ResponseWriter, r *http.Request) {
+		var input repository.SystemTaskAssignment
+		if err := decodeJSON(r, &input); err != nil {
+			writeAPIError(w, 400, "Provide an assignee and version")
+			return
+		}
+		input.Kind = chi.URLParam(r, "kind")
+		if (input.Kind != "driver_onboarding" && input.Kind != "driver_offboarding" && input.Kind != "relay_review") || input.Version < 1 || (input.AssigneeID != nil && !isUUID(*input.AssigneeID)) {
+			writeAPIError(w, 400, "Provide a valid system task, assignee and version")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := repo.SaveSystemTaskAssignment(r.Context(), session.User.ID, input); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	saveUser := func(w http.ResponseWriter, r *http.Request) {
 		var in repository.ManagedUser
 		if err := decodeJSON(r, &in); err != nil {

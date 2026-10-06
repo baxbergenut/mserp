@@ -189,7 +189,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/driver-board`);
   await expect(field('Driver home')).toHaveValue('Dayton, OH');
   // Personal group selection changes rows/totals, survives reload and never writes board data.
-  await page.getByRole('button', { name: 'My view', exact: true }).click();
+  await page.getByRole('button', { name: 'My view', exact: true }).dblclick();
   await page.getByRole('checkbox', { name: 'Board Dispatcher', exact: true }).check();
   await page.getByRole('button', { name: 'Use as My view', exact: true }).click();
   await expect(page.getByRole('button', { name: 'My view', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -197,7 +197,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await page.reload();
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Customize view', exact: true }).click();
+  await page.getByRole('button', { name: 'My view', exact: true }).dblclick();
   await page.getByLabel('Save with a name (optional)').fill('Weekend coverage');
   await page.getByRole('button', { name: 'Save named view', exact: true }).click();
   await expect(page.getByLabel('Saved board view')).toHaveValue(/.+/);

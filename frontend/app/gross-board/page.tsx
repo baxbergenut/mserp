@@ -14,9 +14,10 @@ import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSk
 import { MetricCard } from "@/app/components/MetricCard";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { parseBoardLoadTarget } from "./loadLink";
+import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
-import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, monday, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 112, 112];
@@ -30,7 +31,7 @@ export default function GrossBoardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
-  const [week, setWeek] = useViewState("page:week", () => monday(), loadTarget?.week);
+  const [week, setWeek] = useState(() => loadTarget?.week ?? currentChargeWeek());
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", loadTarget ? "all" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
@@ -261,7 +262,7 @@ export default function GrossBoardPage() {
           <button aria-label="Next week" className={buttonClass} disabled={loading || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button>
         </div>
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
-        <button className={buttonClass} disabled={loading} onClick={() => switchWeek(monday())}>This week</button>
+        <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
         <label className="ml-auto flex items-center gap-2 text-xs text-zinc-400">Dispatcher
           <select aria-label="Dispatcher" className={`${controlClass} !w-48`} value={dispatcher} onChange={(event) => setDispatcher(event.target.value)} disabled={saving}>
             <option value="all">All dispatchers</option>

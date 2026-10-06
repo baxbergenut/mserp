@@ -47,10 +47,17 @@ type DriverDirectoryEntry struct {
 }
 
 func (r *FleetRepository) GetDriverIntake(ctx context.Context, id string) (DriverIntake, error) {
+	visible, err := systemTaskVisible(ctx, r.pool, "driver_onboarding", false)
+	if err != nil {
+		return DriverIntake{}, err
+	}
+	if !visible {
+		return DriverIntake{}, ErrNotFound
+	}
 	var item DriverIntake
 	var data []byte
 	var canonicalPhone *string
-	err := r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL AND terminated_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone)
+	err = r.pool.QueryRow(ctx, `SELECT id, driver_data, received_at, phone FROM fleetscope_driver_intake WHERE id=$1 AND completed_at IS NULL AND terminated_at IS NULL`, id).Scan(&item.ID, &data, &item.ReceivedAt, &canonicalPhone)
 	if err != nil {
 		return item, mapNotFound(err)
 	}
@@ -63,6 +70,10 @@ func (r *FleetRepository) GetDriverIntake(ctx context.Context, id string) (Drive
 }
 
 func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pagination, search string, includeInactive bool) (Page[DriverDirectoryEntry], error) {
+	visible, err := systemTaskVisible(ctx, r.pool, "driver_onboarding", false)
+	if err != nil {
+		return Page[DriverDirectoryEntry]{}, err
+	}
 	search = phone.Search(search)
 	const directory = `WITH directory AS (
 	 SELECT d.id, d.full_name, false AS pending, NULL::jsonb AS data, d.created_at AS received_at, d.phone
@@ -73,14 +84,14 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 	 WHERE ($1='' OR concat_ws(' ',d.full_name,d.email,d.phone,t.unit_number,dp.full_name,d.license_number) ILIKE '%' || $1 || '%') AND ($2 OR d.active)
 	 UNION ALL
 	 SELECT id, driver_data->>'fullName', true, driver_data, received_at, phone FROM fleetscope_driver_intake
-	 WHERE completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
+	 WHERE $3::boolean AND completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
 	) `
 	var total int
-	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive, visible).Scan(&total); err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at,phone FROM directory ORDER BY pending DESC,full_name,id LIMIT $3 OFFSET $4`, search, includeInactive, pagination.PageSize, pagination.Offset())
+	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at,phone FROM directory ORDER BY pending DESC,full_name,id LIMIT $4 OFFSET $5`, search, includeInactive, visible, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}
@@ -203,6 +214,13 @@ func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleets
 }
 
 func (r *FleetRepository) ListDriverIntake(ctx context.Context, pagination Pagination, searches ...string) (Page[DriverIntake], error) {
+	visible, err := systemTaskVisible(ctx, r.pool, "driver_onboarding", false)
+	if err != nil {
+		return Page[DriverIntake]{}, err
+	}
+	if !visible {
+		return NewPage([]DriverIntake{}, 0, pagination.Normalize(0)), nil
+	}
 	search := ""
 	if len(searches) > 0 {
 		search = phone.Search(searches[0])
@@ -281,6 +299,13 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	visible, err := systemTaskVisible(ctx, tx, "driver_onboarding", true)
+	if err != nil {
+		return Driver{}, err
+	}
+	if !visible {
+		return Driver{}, ErrNotFound
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('fleetscope:intake', 0))`); err != nil {
 		return Driver{}, err
 	}

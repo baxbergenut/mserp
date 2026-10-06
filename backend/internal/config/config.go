@@ -13,39 +13,41 @@ import (
 )
 
 type Config struct {
-	FleetScope             fleetscope.Options
-	BindAddress            string
-	Port                   string
-	DatabaseURL            string
-	DataTruckAPIKey        string
-	DataTruckCompanyName   string
-	GroqAPIKey             string
-	GroqModel              string
-	GeminiAPIKey           string
-	GeminiExpenseModel     string
-	RelayEnvironment       string
-	RelayAPIURL            string
-	RelayAPIKey            string
-	RelayFuelSyncStart     time.Time
-	PrePassEnvironment     string
-	PrePassAPIURL          string
-	PrePassClientID        string
-	PrePassClientSecret    string
-	PrePassTollSyncStart   time.Time
-	FrontendOrigin         string
-	AuthCookieSecure       bool
-	AuthSessionTTL         time.Duration
-	ScheduledSyncsEnabled  bool
-	ScheduledSyncsLocation *time.Location
-	ScheduledLoadsSyncTime DailySyncTime
-	ScheduledFuelSyncTime  DailySyncTime
-	ScheduledTollsSyncTime DailySyncTime
-	FiveELDEnabled         bool
-	FiveELDAPIURL          string
-	FiveELDAPIKey          string
-	FiveELDProviderToken   string
-	FiveELDUSDOT           string
-	FiveELDSyncInterval    time.Duration
+	FleetScope                   fleetscope.Options
+	BindAddress                  string
+	Port                         string
+	DatabaseURL                  string
+	DataTruckAPIKey              string
+	DataTruckCompanyName         string
+	DataTruckNewLoadsInterval    time.Duration
+	DataTruckOperationalInterval time.Duration
+	GroqAPIKey                   string
+	GroqModel                    string
+	GeminiAPIKey                 string
+	GeminiExpenseModel           string
+	RelayEnvironment             string
+	RelayAPIURL                  string
+	RelayAPIKey                  string
+	RelayFuelSyncStart           time.Time
+	PrePassEnvironment           string
+	PrePassAPIURL                string
+	PrePassClientID              string
+	PrePassClientSecret          string
+	PrePassTollSyncStart         time.Time
+	FrontendOrigin               string
+	AuthCookieSecure             bool
+	AuthSessionTTL               time.Duration
+	ScheduledSyncsEnabled        bool
+	ScheduledSyncsLocation       *time.Location
+	ScheduledLoadsSyncTime       DailySyncTime
+	ScheduledFuelSyncTime        DailySyncTime
+	ScheduledTollsSyncTime       DailySyncTime
+	FiveELDEnabled               bool
+	FiveELDAPIURL                string
+	FiveELDAPIKey                string
+	FiveELDProviderToken         string
+	FiveELDUSDOT                 string
+	FiveELDSyncInterval          time.Duration
 }
 
 type DailySyncTime struct {
@@ -54,6 +56,14 @@ type DailySyncTime struct {
 }
 
 func Load() (Config, error) {
+	newLoadsInterval, err := parseDataTruckInterval("DATATRUCK_NEW_LOADS_INTERVAL", "1m")
+	if err != nil {
+		return Config{}, err
+	}
+	operationalInterval, err := parseDataTruckInterval("DATATRUCK_OPERATIONAL_SYNC_INTERVAL", "5m")
+	if err != nil {
+		return Config{}, err
+	}
 	relayEnvironment := strings.ToLower(envOrDefault("RELAY_ENVIRONMENT", "production"))
 	relayAPIURL := strings.TrimSpace(os.Getenv("RELAY_API_URL"))
 	relayAPIKey := strings.TrimSpace(os.Getenv("RELAY_API_KEY"))
@@ -178,39 +188,41 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		FleetScope:             fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
-		BindAddress:            envOrDefault("BIND_ADDRESS", "127.0.0.1"),
-		Port:                   envOrDefault("PORT", "8080"),
-		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		DataTruckAPIKey:        strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
-		DataTruckCompanyName:   strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
-		GroqAPIKey:             strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
-		GroqModel:              envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
-		GeminiAPIKey:           strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiExpenseModel:     envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.5-flash-lite"),
-		RelayEnvironment:       relayEnvironment,
-		RelayAPIURL:            relayAPIURL,
-		RelayAPIKey:            relayAPIKey,
-		RelayFuelSyncStart:     relaySyncStart,
-		PrePassEnvironment:     prePassEnvironment,
-		PrePassAPIURL:          prePassAPIURL,
-		PrePassClientID:        prePassClientID,
-		PrePassClientSecret:    prePassClientSecret,
-		PrePassTollSyncStart:   prePassSyncStart,
-		FrontendOrigin:         frontendOrigin,
-		AuthCookieSecure:       authCookieSecure,
-		AuthSessionTTL:         authSessionTTL,
-		ScheduledSyncsEnabled:  scheduledSyncsEnabled,
-		ScheduledSyncsLocation: scheduledSyncsLocation,
-		ScheduledLoadsSyncTime: scheduledLoadsSyncTime,
-		ScheduledFuelSyncTime:  scheduledFuelSyncTime,
-		ScheduledTollsSyncTime: scheduledTollsSyncTime,
-		FiveELDEnabled:         fiveELDEnabled,
-		FiveELDAPIURL:          fiveELDAPIURL,
-		FiveELDAPIKey:          fiveELDAPIKey,
-		FiveELDProviderToken:   fiveELDProviderToken,
-		FiveELDUSDOT:           fiveELDUSDOT,
-		FiveELDSyncInterval:    fiveELDSyncInterval,
+		FleetScope:                   fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
+		BindAddress:                  envOrDefault("BIND_ADDRESS", "127.0.0.1"),
+		Port:                         envOrDefault("PORT", "8080"),
+		DatabaseURL:                  strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		DataTruckAPIKey:              strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
+		DataTruckCompanyName:         strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
+		GroqAPIKey:                   strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
+		GroqModel:                    envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
+		GeminiAPIKey:                 strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiExpenseModel:           envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.5-flash-lite"),
+		RelayEnvironment:             relayEnvironment,
+		RelayAPIURL:                  relayAPIURL,
+		RelayAPIKey:                  relayAPIKey,
+		RelayFuelSyncStart:           relaySyncStart,
+		PrePassEnvironment:           prePassEnvironment,
+		PrePassAPIURL:                prePassAPIURL,
+		PrePassClientID:              prePassClientID,
+		PrePassClientSecret:          prePassClientSecret,
+		PrePassTollSyncStart:         prePassSyncStart,
+		FrontendOrigin:               frontendOrigin,
+		AuthCookieSecure:             authCookieSecure,
+		AuthSessionTTL:               authSessionTTL,
+		ScheduledSyncsEnabled:        scheduledSyncsEnabled,
+		ScheduledSyncsLocation:       scheduledSyncsLocation,
+		ScheduledLoadsSyncTime:       scheduledLoadsSyncTime,
+		DataTruckNewLoadsInterval:    newLoadsInterval,
+		DataTruckOperationalInterval: operationalInterval,
+		ScheduledFuelSyncTime:        scheduledFuelSyncTime,
+		ScheduledTollsSyncTime:       scheduledTollsSyncTime,
+		FiveELDEnabled:               fiveELDEnabled,
+		FiveELDAPIURL:                fiveELDAPIURL,
+		FiveELDAPIKey:                fiveELDAPIKey,
+		FiveELDProviderToken:         fiveELDProviderToken,
+		FiveELDUSDOT:                 fiveELDUSDOT,
+		FiveELDSyncInterval:          fiveELDSyncInterval,
 	}
 
 	if err := cfg.FleetScope.Validate(); err != nil {
@@ -239,6 +251,10 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseDataTruckInterval(name, fallback string) (time.Duration, error) {
+	return parseDurationRange(name, fallback, time.Minute, 24*time.Hour)
 }
 
 func parseDurationRange(key, fallback string, minimum, maximum time.Duration) (time.Duration, error) {

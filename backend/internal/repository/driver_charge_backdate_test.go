@@ -109,6 +109,7 @@ func testBackdatedChargeMatrix(t *testing.T, pool *pgxpool.Pool, actor string) {
 	amount(middle, "-175.00")
 	edits = get(middle)
 	edits.GeneratedCharges[0].Amount = "-160"
+	edits.GeneratedCharges[0].WaiveRemainder = true // An intentional reduction for this historical week.
 	if _, err = pay.Save(ctx, edits, actor); err != nil {
 		t.Fatal(err)
 	}

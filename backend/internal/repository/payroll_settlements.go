@@ -158,6 +158,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				}
 			}
 		} else {
+			if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
+				return empty, err
+			}
 			if len(d.Issues) > 0 {
 				return empty, chargeInvalid("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
 			}

@@ -12,13 +12,14 @@ import (
 var ErrAuthRecordNotFound = errors.New("authentication record not found")
 
 type AuthUser struct {
-	ID           string
-	Username     string
-	PasswordHash string
-	Email        string
-	RoleID       string
-	Permissions  []string
-	Version      int
+	ID            string
+	Username      string
+	PasswordHash  string
+	Email         string
+	RoleID        string
+	Permissions   []string
+	Version       int
+	Administrator bool
 }
 type AuthSession struct {
 	User      AuthUser
@@ -86,6 +87,7 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 		return AuthSession{}, ErrAuthRecordNotFound
 	}
 	if system {
+		s.User.Administrator = true
 		s.User.Permissions = PermissionKeys()
 	}
 	return s, err

@@ -195,6 +195,22 @@ func main() {
 					},
 				)
 			}()
+			for _, loadSync := range []jobs.IntervalJob{
+				{Name: "new-loads", Interval: cfg.DataTruckNewLoadsInterval, Run: func(runCtx context.Context) error {
+					_, err := loadJob.RunNew(runCtx)
+					return err
+				}},
+				{Name: "operational-loads", Interval: cfg.DataTruckOperationalInterval, Run: func(runCtx context.Context) error {
+					_, err := loadJob.RunOperational(runCtx)
+					return err
+				}},
+			} {
+				workers.Add(1)
+				go func(job jobs.IntervalJob) {
+					defer workers.Done()
+					jobs.RunIntervalJob(ctx, logger, job)
+				}(loadSync)
+			}
 			if fiveELDJob != nil {
 				workers.Add(1)
 				go func() {

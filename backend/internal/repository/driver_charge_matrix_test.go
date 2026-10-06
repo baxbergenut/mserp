@@ -169,7 +169,7 @@ func TestChargeTypeEffectiveEligibility(t *testing.T) {
 	}
 	s.Occurrences = []ChargeOccurrence{{ScheduleID: s.ID, WeekStart: "2026-09-14", Amount: "0.00", ScheduledAmount: "-150.00", Overridden: true}}
 	rows, err = projectCharges(s, "2026-10-05", nil, false)
-	if err != nil || len(rows) != 3 || rows[1].Amount != "0.00" {
+	if err != nil || len(rows) != 5 || rows[1].Amount != "0.00" || rows[4].Amount != "-150.00" {
 		t.Fatalf("saved skip lost: %+v %v", rows, err)
 	}
 }

@@ -112,13 +112,13 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR s.driver_id::text=$1) ORDER BY o.week_start`, driver)
+	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version,coalesce(o.base_amount,o.scheduled_amount)::text,o.waive_remainder FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR s.driver_id::text=$1) ORDER BY o.week_start`, driver)
 	if err != nil {
 		return data, loads, err
 	}
 	for rows.Next() {
 		var o ChargeOccurrence
-		if err = rows.Scan(&o.ScheduleID, &o.WeekStart, &o.Name, &o.ScheduledAmount, &o.Amount, &o.Overridden, &o.ConfirmedAt, &o.ConfirmedBy, &o.Version); err != nil {
+		if err = rows.Scan(&o.ScheduleID, &o.WeekStart, &o.Name, &o.ScheduledAmount, &o.Amount, &o.Overridden, &o.ConfirmedAt, &o.ConfirmedBy, &o.Version, &o.BaseAmount, &o.WaiveRemainder); err != nil {
 			rows.Close()
 			return data, loads, err
 		}
@@ -323,7 +323,7 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 	return ids, tx.Commit(ctx)
 }
 func storeOccurrence(ctx context.Context, tx pgx.Tx, o ChargeOccurrence) error {
-	_, err := tx.Exec(ctx, `INSERT INTO driver_charge_occurrences(schedule_id,week_start,name,scheduled_amount,amount,overridden,confirmed_at,confirmed_by) VALUES($1,$2::date,$3,$4::numeric,$5::numeric,$6,$7,$8::uuid) ON CONFLICT(schedule_id,week_start) DO UPDATE SET name=EXCLUDED.name,scheduled_amount=EXCLUDED.scheduled_amount,amount=EXCLUDED.amount,overridden=EXCLUDED.overridden,confirmed_at=EXCLUDED.confirmed_at,confirmed_by=EXCLUDED.confirmed_by,version=driver_charge_occurrences.version+1`, o.ScheduleID, o.WeekStart, o.Name, o.ScheduledAmount, o.Amount, o.Overridden, o.ConfirmedAt, o.ConfirmedBy)
+	_, err := tx.Exec(ctx, `INSERT INTO driver_charge_occurrences(schedule_id,week_start,name,scheduled_amount,amount,overridden,confirmed_at,confirmed_by,base_amount,waive_remainder) VALUES($1,$2::date,$3,$4::numeric,$5::numeric,$6,$7,$8::uuid,nullif($9,'')::numeric,$10) ON CONFLICT(schedule_id,week_start) DO UPDATE SET name=EXCLUDED.name,scheduled_amount=EXCLUDED.scheduled_amount,amount=EXCLUDED.amount,overridden=EXCLUDED.overridden,confirmed_at=EXCLUDED.confirmed_at,confirmed_by=EXCLUDED.confirmed_by,base_amount=EXCLUDED.base_amount,waive_remainder=EXCLUDED.waive_remainder,version=driver_charge_occurrences.version+1`, o.ScheduleID, o.WeekStart, o.Name, o.ScheduledAmount, o.Amount, o.Overridden, o.ConfirmedAt, o.ConfirmedBy, o.BaseAmount, o.WaiveRemainder)
 	return err
 }
 
@@ -337,6 +337,10 @@ func freezeChargesBefore(ctx context.Context, tx pgx.Tx, s *ChargeSchedule, week
 	}
 	for _, o := range rows {
 		if o.Version == 0 {
+			// Prior projected weeks were never explicitly charged the carried debt.
+			if s.Kind == "recurring" && s.Direction == "charge" {
+				o.Amount = o.BaseAmount
+			}
 			if err = storeOccurrence(ctx, tx, o); err != nil {
 				return err
 			}

@@ -41,19 +41,19 @@ export function ManagementHeader({
   title: string;
   description: string;
   count: number;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   actionIcon?: LucideIcon;
   secondaryAction?: ReactNode;
 }) {
-  const action = <button
+  const action = actionLabel && onAction ? <button
     type="button"
     onClick={onAction}
     className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
   >
     <ActionIcon className="h-4 w-4" />
     {actionLabel}
-  </button>;
+  </button> : null;
   return (
     
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">

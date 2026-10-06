@@ -3,7 +3,7 @@ import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
   DriverBoard, DriverBoardEntry, DriverBoardHistory, BoardLoads, BoardLoadAction,
-  AccessData, AccessRole, ManagedUser,
+  AccessData, AccessRole, ManagedUser, SystemTaskAssignment, TaskUser,
  ChargeCell, ChargeData, ChargeType, ChargeCreate, ChargeBulk, ChargeOccurrence, ChargeEvent,
   Investor,
   InvestorInput,
@@ -240,6 +240,9 @@ export async function login(email: string, password: string, trustDevice = false
 
 export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
+export const fetchSystemTaskAssignments = () => apiRequest<SystemTaskAssignment[]>("/settings/system-tasks");
+export const saveSystemTaskAssignment = (input: SystemTaskAssignment) => apiRequest<void>(`/settings/system-tasks/${input.kind}`, { method: "PUT", body: JSON.stringify(input) });
+export const fetchTaskUsers = () => apiRequest<TaskUser[]>("/tasks/users");
 export const saveUser = (user: ManagedUser) => apiRequest<{id: string}>(`/settings/users${user.id ? `/${user.id}` : ""}`, { method: user.id ? "PUT" : "POST", body: JSON.stringify(user) });
 export const saveRole = (role: AccessRole) => apiRequest<void>(`/settings/roles${role.id ? `/${role.id}` : ""}`, { method: role.id ? "PUT" : "POST", body: JSON.stringify(role) });
 export const revokeUserAccess = (id: string) => apiRequest<void>(`/settings/users/${id}/revoke`, { method: "POST" });
@@ -404,6 +407,7 @@ export const updateInvestor = (id: string, input: InvestorInput) =>
 
 export const fetchDriverCharges = (driverId?: string) => apiRequest<ChargeData>(withQuery("/driver-charges", { driverId }));
 export const saveChargeType = (input: ChargeType) => apiRequest<ChargeType>("/driver-charges/types", { method: "POST", body: JSON.stringify(input) });
+export const deleteChargeType = (input: ChargeType) => apiRequest<void>(`/driver-charges/types/${input.id}`, { method: "DELETE", body: JSON.stringify({ version: input.version }) });
 export const previewNewCharges = (input: ChargeCreate) => apiRequest<ChargeOccurrence[]>("/driver-charges/schedules/preview", { method: "POST", body: JSON.stringify(input) });
 export const createDriverCharges = (input: ChargeCreate) => apiRequest<string[]>("/driver-charges/schedules", { method: "POST", body: JSON.stringify(input) });
 export const bulkDriverCharges = (input: ChargeBulk) => apiRequest<void>("/driver-charges/bulk", { method: "POST", body: JSON.stringify(input) });

@@ -101,7 +101,7 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 		if len(name) > 190 {
 			name = name[:190]
 		}
-		if err = tx.QueryRow(ctx, `INSERT INTO custom_tasks(title,notes) VALUES($1,$2) RETURNING id`, "Offboard "+string(name), notes).Scan(&taskID); err != nil {
+		if err = tx.QueryRow(ctx, `INSERT INTO custom_tasks(title,notes,system_task_kind) VALUES($1,$2,'driver_offboarding') RETURNING id`, "Offboard "+string(name), notes).Scan(&taskID); err != nil {
 			return IntakeResult{}, err
 		}
 		if err = tx.QueryRow(ctx, `INSERT INTO fleetscope_driver_terminations(company_id,fleetscope_driver_id,driver_name,termination_date,occurred_at,driver_id,task_id)

@@ -381,7 +381,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	})
 	keptDrivers := []DriverPayDriver{}
 	for _, d := range source.Drivers {
-		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || len(d.AutoCharges) > 0 || len(d.Issues) > 0 {
+		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || len(d.AutoCharges) > 0 || len(d.Issues) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0.00" || d.TollTotal != "0.00")) {
 			keptDrivers = append(keptDrivers, d)
 		}
 	}

@@ -13,12 +13,12 @@ func TestChargeProjection(t *testing.T) {
 	}
 	s.Occurrences = []ChargeOccurrence{{ScheduleID: s.ID, WeekStart: s.StartWeek, Name: s.Name, Amount: "-60.00", ScheduledAmount: "-100.00", Overridden: true, Version: 1}}
 	rows, err = projectCharges(s, "2027-01-04", nil, false)
-	if err != nil || len(rows) != 7 || rows[6].Amount != "-90.00" {
+	if err != nil || len(rows) != 7 || rows[6].Amount != "-50.00" || rows[1].Amount != "-140.00" {
 		t.Fatalf("reduced: %+v %v", rows, err)
 	}
 	s.Occurrences[0].Amount = "0.00"
 	rows, err = projectCharges(s, "2027-01-04", nil, false)
-	if err != nil || len(rows) != 8 || rows[0].Amount != "0.00" || rows[7].Amount != "-50.00" {
+	if err != nil || len(rows) != 7 || rows[0].Amount != "0.00" || rows[1].Amount != "-200.00" || rows[6].Amount != "-50.00" {
 		t.Fatalf("skip: %+v %v", rows, err)
 	}
 	s.Occurrences[0].Amount = "-650.01"

@@ -41,6 +41,7 @@ type boardLoadState struct {
 	OrderLabels       []string   `json:"orderLabels"`
 	Hidden            []string   `json:"hidden"`
 	DestinationSource bool       `json:"destinationSource"`
+	DestinationManual bool       `json:"destinationManual,omitempty"`
 	StopKey           string     `json:"stopKey"`
 	Completed         []string   `json:"completed,omitempty"`
 }
@@ -65,6 +66,7 @@ func boardProgressStatus(status string, next []BoardLoad) string {
 func useBoardStop(s *boardLoadState, kind string) {
 	s.StopKey = ""
 	s.DestinationSource = false
+	s.DestinationManual = false
 	if s.Current == nil {
 		return
 	}
@@ -74,6 +76,29 @@ func useBoardStop(s *boardLoadState, kind string) {
 			return
 		}
 	}
+}
+
+// A selected plan may have had no stops when it was saved. Once its source
+// arrives, project the appropriate location without changing dispatch progress,
+// creating history on reads, or replacing an explicit manual destination.
+func lateBoardStop(s boardLoadState, current BoardLoad, status, destination string) *BoardStop {
+	if s.Current == nil || s.Current.PlanID != current.PlanID || s.DestinationManual ||
+		s.DestinationSource || s.StopKey != "" || destination != "" || len(s.Current.Stops) != 0 ||
+		current.LoadID == nil || (s.Current.LoadID != nil && *s.Current.LoadID != *current.LoadID) {
+		return nil
+	}
+	kind := "pickup"
+	if status == "ENROUTE" || status == "RESERVED" {
+		kind = "delivery"
+	} else if status != "DISPATCHED" {
+		return nil
+	}
+	for _, stop := range current.Stops {
+		if strings.EqualFold(stop.Type, kind) && strings.TrimSpace(stop.Location) != "" {
+			return &stop
+		}
+	}
+	return nil
 }
 
 type BoardLoads struct {
@@ -242,12 +267,13 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	result := map[string]BoardLoads{}
 	states := map[string]boardLoadState{}
 	manualMismatch := map[string]bool{}
+	entries := map[string]DriverBoardEntry{}
 	selected := []string{}
 	for _, id := range ids {
 		states[id] = boardLoadState{}
 		result[id] = BoardLoads{Week: []BoardLoad{}, Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
-	rows, err := tx.Query(ctx, `SELECT s.driver_id,s.payload,coalesce(b.current_load,'') FROM driver_board_load_state s LEFT JOIN driver_board b ON b.driver_id=s.driver_id WHERE s.driver_id=ANY($1::uuid[])`, ids)
+	rows, err := tx.Query(ctx, `SELECT s.driver_id,s.payload,coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,'') FROM driver_board_load_state s LEFT JOIN driver_board b ON b.driver_id=s.driver_id WHERE s.driver_id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -255,11 +281,13 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		var id string
 		var s boardLoadState
 		var currentText string
-		if err = rows.Scan(&id, &s, &currentText); err != nil {
+		var entry DriverBoardEntry
+		if err = rows.Scan(&id, &s, &currentText, &entry.Status, &entry.Destination); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		states[id] = s
+		entries[id] = entry
 		if s.Current != nil {
 			selected = append(selected, s.Current.PlanID)
 			manualMismatch[id] = !strings.EqualFold(strings.TrimSpace(currentText), strings.TrimSpace(s.Current.Number))
@@ -323,16 +351,21 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 			}
 			view.Current = &current
+			if !manualMismatch[id] {
+				if stop := lateBoardStop(s, current, entries[id].Status, entries[id].Destination); stop != nil {
+					view.StopKey, view.DestinationSource = stop.Key, true
+				}
+			}
 			if manualMismatch[id] {
 				view.Current.Warning = "Current load text differs from the selected plan; clear or reselect the load"
 				view.DestinationSource = false
 			}
 			for _, stop := range current.Stops {
-				if stop.Key == s.StopKey {
+				if stop.Key == view.StopKey {
 					view.SourceDestination = stop.Location
 				}
 			}
-			if s.DestinationSource && view.SourceDestination == "" {
+			if view.DestinationSource && view.SourceDestination == "" {
 				view.Current.Warning = strings.TrimSpace(view.Current.Warning + " Selected stop is missing or has no location; select a stop or use a manual destination")
 			}
 		}
@@ -580,11 +613,14 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		s.Current = view.Current
 		s.StopKey = a.StopKey
 		s.DestinationSource = true
+		s.DestinationManual = false
 	case "manual":
-		if s.DestinationSource && view.SourceDestination != "" {
+		if view.DestinationSource && view.SourceDestination != "" {
 			e.Destination = view.SourceDestination
 		}
+		s.Current = view.Current
 		s.DestinationSource = false
+		s.DestinationManual = true
 	default:
 		return result, ErrBoardLoadSelection
 	}

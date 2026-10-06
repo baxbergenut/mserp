@@ -79,16 +79,18 @@ FIVE_ELD_API_KEY=your-company-api-key
 FIVE_ELD_PROVIDER_TOKEN=your-integration-provider-token
 FIVE_ELD_USDOT=your-usdot-number
 FIVE_ELD_SYNC_INTERVAL=5m
-FIVE_ELD_STALE_AFTER=15m
 ```
 
 All three identity/credential values must be present to enable the integration.
 The fleet position endpoint is called once per interval and the result is cached
 in PostgreSQL. Opening the Status Board only reads that shared cache; it does not
-call Five ELD. Coordinates older than the stale threshold are not returned.
+call Five ELD. Last known coordinates stay visible during outages; positions
+three hours old or more appear muted. The retired `FIVE_ELD_STALE_AFTER` setting
+is ignored.
 
-By default,
-loads sync at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM in
+By default, new DataTruck loads are checked every minute and operational load
+details refresh every five minutes. The morning 21-day load reconciliation runs
+at 6:00 AM, fuel at 6:30 AM, and tolls at 7:00 AM in
 `America/New_York`. The scheduler uses the same in-process jobs as the manual
 API actions, so it does not require an application user session.
 
@@ -98,9 +100,25 @@ The schedule can be customized in the backend environment:
 SCHEDULED_SYNCS_ENABLED=true
 SCHEDULED_SYNCS_TIMEZONE=America/New_York
 SCHEDULED_LOADS_SYNC_TIME=06:00
+DATATRUCK_NEW_LOADS_INTERVAL=1m
+DATATRUCK_OPERATIONAL_SYNC_INTERVAL=5m
 SCHEDULED_FUEL_SYNC_TIME=06:30
 SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
 
 Times use 24-hour `HH:MM` format. Set `SCHEDULED_SYNCS_ENABLED=false` to disable
 the scheduled jobs for a local or secondary API process.
+
+DataTruck intervals accept durations from `1m` to `24h` and also run at startup.
+New-load discovery has no date cutoff. Operational refresh covers cached pickup
+or delivery dates from seven days ago through three days ahead, recent creations,
+and active drivers' selected Status Board loads outside that window. It fetches
+25 IDs per batch and updates source details without replaying fleet assignments.
+Dates moved into the window only in DataTruck are caught by morning reconciliation.
+Gross Board remains the source of planned driver assignments.
+
+All DataTruck requests in one API process share a 15-request/minute limiter,
+prioritize new-load discovery, and honor rate-limit cooldowns. Run only one
+scheduled instance with a given token; do not overlap standalone recovery with
+the API's sync jobs. Frequent refreshes skip a cycle while full or payroll
+refreshes are running; new-load discovery can continue during a full scan.

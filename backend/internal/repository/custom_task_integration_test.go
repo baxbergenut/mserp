@@ -38,7 +38,7 @@ func TestCustomTaskDatabase(t *testing.T) {
 			filename := "../../sql/init.sql"
 			if mode == "migration" {
 				filename = "../../sql/026_add_custom_tasks.sql"
-				if _, err := admin.Exec(ctx, `CREATE TABLE app_users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text, password_hash text)`); err != nil {
+				if _, err := admin.Exec(ctx, `CREATE TABLE app_users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text, password_hash text, active boolean NOT NULL DEFAULT true)`); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -49,11 +49,20 @@ func TestCustomTaskDatabase(t *testing.T) {
 			if _, err := admin.Exec(ctx, string(source)); err != nil {
 				t.Fatal(err)
 			}
+			if mode == "migration" {
+				migration, err := os.ReadFile("../../sql/054_task_assignments.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = admin.Exec(ctx, string(migration)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			var user string
 			if err := admin.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('task-tester','$2test') RETURNING id::text`).Scan(&user); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app`); err != nil {
+			if _, err := admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app; GRANT SELECT ON app_users TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}
 			config, err := pgxpool.ParseConfig(dsn)

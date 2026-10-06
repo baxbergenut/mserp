@@ -222,6 +222,27 @@ try {
   await expect(page.getByLabel('E2e Driver, Admin fee, charge name', { exact: true })).toHaveAttribute('readonly', '');
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true })).toBeEditable();
   await expect(page.getByLabel('E2e Driver, Advance, charge name', { exact: true })).toBeEditable();
+  const recurringAmount = page.getByLabel('E2e Driver, Admin fee, charge amount', { exact: true });
+  await recurringAmount.fill('-30');
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  const remainderWeek = new Date(week + 'T12:00:00Z'); remainderWeek.setUTCDate(remainderWeek.getUTCDate() + 7);
+  const nextFee = async () => (await (await page.request.get(base + '/api/driver-pay?weekStart=' + remainderWeek.toISOString().slice(0,10))).json()).drivers.find(d => d.id === driverId).edits.generatedCharges.find(r => r.name === 'Admin fee');
+  expect((await nextFee()).amount).toBe('-70.00');
+  await recurringAmount.click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Recurring charge remainder' })).toBeVisible();
+  await page.screenshot({ path: join(temp, 'recurring-remainder-menu.png'), fullPage: true });
+  await page.getByRole('menuitemradio', { name: /Use this amount for this week only/ }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  expect((await nextFee()).amount).toBe('-50.00');
+  await expect(page.getByTitle('Reduced charge for this week only; no remainder', { exact: true })).toBeVisible();
+  await recurringAmount.focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitemradio', { name: 'Carry unpaid amount to next week' }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+  expect((await nextFee()).amount).toBe('-70.00');
+  await page.getByRole('button', { name: 'Admin fee, reset to scheduled amount', exact: true }).click();
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
+
   await expect(page.getByRole('link', { name: 'Assign recurring charge', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'New installment plan', exact: true })).toHaveCount(0);
 
@@ -240,7 +261,8 @@ try {
   if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(installment).toHaveValue('0.00');
   let preview = await (await page.request.get(`${base}/api/driver-charges/schedules/${plan.id}/preview`)).json();
-  expect(preview).toHaveLength(8);
+  expect(preview).toHaveLength(7);
+  expect(preview[1].amount).toBe("-200.00");
   await page.getByRole('button', { name: 'Advance, reset to scheduled amount', exact: true }).click();
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
   await expect(installment).toHaveValue('-100.00');

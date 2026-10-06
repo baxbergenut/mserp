@@ -821,6 +821,10 @@ export interface CustomTask {
   notes: string;
   completedAt: string | null;
   createdBy: string | null;
+  assignedTo: string | null;
+  assignedBy: string | null;
+  assigneeName: string;
+  systemTaskKind: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -828,7 +832,11 @@ export interface CustomTask {
 export interface CustomTaskInput {
   title: string;
   notes: string;
+  assignedTo?: string;
 }
+
+export interface TaskUser { id: string; name: string }
+export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review"; assigneeId: string | null; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -852,6 +860,7 @@ export interface ExpenseDeduction {
   apply?: boolean;
 }
 export interface DriverPayEdits {
+  costs?: { revision: string; fuelCarry: string; tollCarry: string; fuelDue: string; tollDue: string };
   expenseDeductions?: ExpenseDeduction[];
   generatedCharges?: ChargeOccurrence[];
   driverId: string;
@@ -954,6 +963,7 @@ export interface ChargeType {
 }
 export interface ChargePhase { weekStart: string; amount: string; paused: boolean }
 export interface ChargeOccurrence {
+  baseAmount?: string; carryForward?: string; waiveRemainder?: boolean;
   scheduleId: string; weekStart: string; kind: "recurring" | "installment"; name: string;
   scheduledAmount: string; amount: string; overridden: boolean; confirmedAt: string | null; confirmedBy: string | null;
   version: number; scheduleVersion: number; typeVersion: number; reset?: boolean;

@@ -58,6 +58,20 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
+			deletion, err := os.ReadFile("../../sql/055_charge_type_deletion.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "migration" {
+				source = strings.Replace(source, strings.ReplaceAll(string(deletion), "\r\n", "\n"), "", 1)
+			}
+			remainders, err := os.ReadFile("../../sql/053_payroll_remainders.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "migration" {
+				source = strings.Replace(source, strings.ReplaceAll(string(remainders), "\r\n", "\n"), "", 1)
+			}
 			truckMigration, readErr := os.ReadFile("../../sql/041_truck_settlements.sql")
 			if readErr != nil {
 				t.Fatal(readErr)
@@ -127,6 +141,11 @@ func TestDriverChargesDatabase(t *testing.T) {
 					t.Fatal(truckErr)
 				}
 			}
+			if mode == "migration" {
+				if _, err := admin.Exec(ctx, string(remainders)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)
@@ -138,6 +157,11 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer pool.Close()
+			if mode == "migration" {
+				if _, err = admin.Exec(ctx, string(deletion)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			repo := NewDriverChargeRepository(pool)
 			pay := NewDriverPayRepository(pool)
 			week := ChargeCurrentWeek()
@@ -324,7 +348,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal("reopen", err)
 			}
 			projection, err = repo.Preview(ctx, plans[0])
-			if err != nil || len(projection) != 7 || projection[6].Amount != "-90.00" {
+			if err != nil || len(projection) != 7 || projection[6].Amount != "-50.00" || projection[1].Amount != "-140.00" {
 				t.Fatal("reopen projection", err)
 			}
 			data, err = repo.List(ctx, driver)
@@ -372,7 +396,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal("deactivation", err)
 			}
 			projection, err = repo.Preview(ctx, plans[0])
-			if err != nil || len(projection) != 1 {
+			if err != nil || len(projection) != 2 || projection[1].Amount != "-40.00" {
 				t.Fatal("pause did not stop installments", err, len(projection))
 			}
 			input.Active = true
@@ -380,7 +404,7 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			projection, _ = repo.Preview(ctx, plans[0])
-			if len(projection) != 1 {
+			if len(projection) != 2 || projection[1].Amount != "-40.00" {
 				t.Fatal("reactivation resumed charges")
 			}
 			// Load eligibility belongs to the type, regardless of assignment input.
@@ -444,6 +468,8 @@ func TestDriverChargesDatabase(t *testing.T) {
 			}
 			testChargeMatrix(t, pool, actor)
 			testBackdatedChargeMatrix(t, pool, actor)
+			testChargeTypeDeletion(t, pool, actor, driver)
+			testPayrollRemainders(t, pool, actor)
 		})
 	}
 }

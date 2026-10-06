@@ -69,8 +69,20 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 			return nil, chargeInvalid("Provide a name and valid amount; installments must be negative or zero")
 		}
 		input.Amount = chargeMoney(n)
-		if !input.Reset && input.Name == current.Name && input.Amount == current.Amount {
+		if input.WaiveRemainder && (s.Kind != "recurring" || s.Direction != "charge" || n > 0) {
+			return nil, chargeInvalid("Only recurring deductions can use a reduced charge for this week")
+		}
+		carried, _ := chargeCents(current.CarryForward)
+		if !input.Reset && input.Name == current.Name && input.Amount == current.Amount && input.WaiveRemainder == current.WaiveRemainder && !(current.Version == 0 && carried > 0) {
 			continue
+		}
+		if s.Kind == "recurring" && s.Direction == "charge" {
+			for _, later := range s.Occurrences {
+				laterAmount, _ := chargeCents(later.Amount)
+				if later.WeekStart > week && (laterAmount != 0 || later.WaiveRemainder) {
+					return nil, chargeInvalid("Set later saved deductions of %s to zero with carry enabled before correcting this week, then reapply them", s.Name)
+				}
+			}
 		}
 		if current.ConfirmedAt != nil {
 			return nil, chargeInvalid("Reopen the confirmed installment before editing it")
@@ -93,6 +105,7 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 			o := *current
 			o.Name = input.Name
 			o.Amount = input.Amount
+			o.WaiveRemainder = input.WaiveRemainder
 			o.Overridden = true
 			if err = storeOccurrence(ctx, tx, o); err != nil {
 				return nil, err

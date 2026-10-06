@@ -110,3 +110,38 @@ func (r *DriverChargeRepository) SaveType(ctx context.Context, t ChargeType, act
 	}
 	return t, tx.Commit(ctx)
 }
+
+func (r *DriverChargeRepository) DeleteType(ctx context.Context, id string, version int, actor string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var typ ChargeType
+	err = tx.QueryRow(ctx, `SELECT id::text,name,direction,amount::text,archived,version,amounts::text[],eligibility
+ FROM driver_charge_types WHERE id=$1 FOR UPDATE`, id).Scan(&typ.ID, &typ.Name, &typ.Direction, &typ.Amount, &typ.Archived, &typ.Version, &typ.Amounts, &typ.Eligibility)
+	if err != nil {
+		return mapNotFound(err)
+	}
+	if typ.Version != version {
+		return ErrChargeConflict
+	}
+	var used bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_charge_schedules WHERE type_id=$1)
+ OR EXISTS(SELECT 1 FROM truck_charge_phases WHERE type_id=$1)`, id).Scan(&used); err != nil {
+		return err
+	}
+	if used {
+		return chargeInvalid("This charge type has driver or truck assignments. Archive it to retain accounting history.")
+	}
+	if err = chargeAudit(ctx, tx, "", id, actor, "type_deleted", typ); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_type_rules WHERE type_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_types WHERE id=$1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

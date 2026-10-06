@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,10 +20,17 @@ type fakeLoadSyncClient struct {
 	newLoads    []datatruck.Load
 	dateLoads   map[string][]datatruck.Load
 	throughIDs  []int
+	dateErr     error
+	dateHook    func()
+	newHook     func(int) ([]datatruck.Load, error)
+	batches     [][]int
 }
 
 func (f *fakeLoadSyncClient) FetchLoadsAfterID(_ context.Context, afterID int) ([]datatruck.Load, error) {
 	f.afterID = afterID
+	if f.newHook != nil {
+		return f.newHook(afterID)
+	}
 	return f.newLoads, nil
 }
 
@@ -34,21 +42,63 @@ func (f *fakeLoadSyncClient) FetchLoadsByDateSinceThroughID(
 ) ([]datatruck.Load, error) {
 	f.dateColumns = append(f.dateColumns, column)
 	f.throughIDs = append(f.throughIDs, throughID)
-	return f.dateLoads[column], nil
+	if f.dateHook != nil {
+		f.dateHook()
+	}
+	return f.dateLoads[column], f.dateErr
+}
+
+func (f *fakeLoadSyncClient) FetchLoadsByIDs(_ context.Context, ids []int) ([]datatruck.Load, error) {
+	f.batches = append(f.batches, append([]int(nil), ids...))
+	loads := []datatruck.Load{}
+	for _, id := range ids {
+		loads = append(loads, datatruck.Load{ID: id, Status: "delivered"})
+	}
+	return loads, nil
 }
 
 type fakeLoadSyncRepository struct {
-	maxID   int
-	records []repository.LoadRecord
+	mu        sync.Mutex
+	maxID     int
+	records   []repository.LoadRecord
+	ids       []int
+	refreshes int
+	upsertErr error
 }
 
 func (f *fakeLoadSyncRepository) MaxLoadID(context.Context) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.maxID, nil
 }
 
 func (f *fakeLoadSyncRepository) UpsertLoads(_ context.Context, records []repository.LoadRecord) error {
-	f.records = append([]repository.LoadRecord(nil), records...)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.upsertErr != nil {
+		return f.upsertErr
+	}
+	f.records = append(f.records, records...)
+	for _, record := range records {
+		f.maxID = max(f.maxID, record.ID)
+	}
 	return nil
+}
+
+func (f *fakeLoadSyncRepository) RefreshLoads(ctx context.Context, records []repository.LoadRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.records = append(f.records, records...)
+	f.refreshes++
+	return nil
+}
+
+func (f *fakeLoadSyncRepository) OperationalLoadIDs(context.Context, time.Time, time.Time) ([]int, error) {
+	return f.ids, nil
+}
+
+func (f *fakeLoadSyncRepository) ReconcileLoads(ctx context.Context, records []repository.LoadRecord) error {
+	return f.RefreshLoads(ctx, records)
 }
 
 func TestSyncLoadsCombinesNewIDsWithServiceDateReconciliation(t *testing.T) {

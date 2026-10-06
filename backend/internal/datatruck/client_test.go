@@ -3,9 +3,11 @@ package datatruck
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -231,4 +233,51 @@ func mustJSON(t *testing.T, value string) string {
 		t.Fatal(err)
 	}
 	return string(payload)
+}
+
+func TestFetchLoadsByIDsUsesArrayFilterAndValidatesEveryPage(t *testing.T) {
+	for _, ignored := range []bool{false, true} {
+		t.Run(fmt.Sprint(ignored), func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				var filter []struct {
+					Column   string `json:"column"`
+					Contains string `json:"contains"`
+					Value    []int  `json:"value"`
+				}
+				if err := json.Unmarshal([]byte(r.URL.Query().Get("filter")), &filter); err != nil {
+					t.Error(err)
+				}
+				if len(filter) != 1 || filter[0].Column != "id" || filter[0].Contains != "is_in" || !reflect.DeepEqual(filter[0].Value, []int{11, 12}) {
+					t.Errorf("filter: %+v", filter)
+				}
+				if ignored {
+					_, _ = w.Write([]byte(`{"next":"?page=2","results":[{"id":999}]}`))
+					return
+				}
+				if r.URL.Query().Get("page") == "2" {
+					_, _ = w.Write([]byte(`{"results":[{"id":12}]}`))
+					return
+				}
+				next := *r.URL
+				q := next.Query()
+				q.Set("page", "2")
+				next.RawQuery = q.Encode()
+				_ = json.NewEncoder(w).Encode(map[string]any{"next": next.String(), "results": []map[string]int{{"id": 11}}})
+			}))
+			defer server.Close()
+			client := &Client{httpClient: server.Client(), baseURL: server.URL}
+			loads, err := client.FetchLoadsByIDs(context.Background(), []int{11, 12})
+			if ignored {
+				if err == nil || requests.Load() != 1 {
+					t.Fatalf("ignored filter: %v, requests %d", err, requests.Load())
+				}
+				return
+			}
+			if err != nil || len(loads) != 2 {
+				t.Fatalf("loads %v, error %v", loads, err)
+			}
+		})
+	}
 }

@@ -97,6 +97,13 @@ func (r *FuelRepository) RelayIdentityTasks(ctx context.Context, pagination Pagi
 		return Page[RelayIdentityTask]{}, err
 	}
 	defer tx.Rollback(ctx)
+	visible, err := systemTaskVisible(ctx, tx, "relay_review", false)
+	if err != nil {
+		return Page[RelayIdentityTask]{}, err
+	}
+	if !visible {
+		return NewPage([]RelayIdentityTask{}, 0, pagination.Normalize(0)), nil
+	}
 	const where = ` WHERE l.driver_id IS NULL AND
  ($1 = '' OR concat_ws(' ',l.relay_first_name,l.relay_last_name,l.relay_email,l.relay_phone,l.relay_driver_id,l.relay_integration_id) ILIKE '%' || $1 || '%')`
 	var total int
@@ -168,6 +175,13 @@ func (r *FuelRepository) ReviewRelayIdentity(ctx context.Context, identityID, dr
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
+	visible, err := systemTaskVisible(ctx, tx, "relay_review", true)
+	if err != nil {
+		return 0, err
+	}
+	if !visible {
+		return 0, ErrNotFound
+	}
 	var environment, relayID string
 	var current *string
 	err = tx.QueryRow(ctx, `SELECT relay_environment,relay_driver_id,driver_id FROM relay_driver_links WHERE id=$1 FOR UPDATE`, identityID).Scan(&environment, &relayID, &current)
