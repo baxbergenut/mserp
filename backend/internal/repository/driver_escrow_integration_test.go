@@ -186,7 +186,7 @@ func verifyEscrowSummaryAndRoster(t *testing.T, ctx context.Context, pool *pgxpo
 	}
 	q.IncludeInactive = true
 	result, err = repo.List(ctx, q)
-	if err != nil || result.Total != 4 || result.Summary.Paid != "3100.25" || result.Summary.Remaining != "6899.75" || result.Summary.PartialDrivers != 2 {
+	if err != nil || result.Total != 4 || result.Summary.Paid != "3100.25" || result.Summary.Remaining != "6899.75" || result.Summary.PartialDrivers != 1 || result.Summary.Drivers != 3 || result.Summary.PaidDrivers != 1 {
 		t.Fatalf("include inactive summary: %+v %v", result, err)
 	}
 	q.Status = "unpaid"

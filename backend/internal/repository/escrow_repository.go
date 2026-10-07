@@ -69,7 +69,7 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 	var total int
 	var summary EscrowSummary
 	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
- drivers AS (SELECT coalesce(driver_id,id) id,sum(paid_amount) paid,sum(remaining_amount) remaining FROM filtered GROUP BY coalesce(driver_id,id))
+ drivers AS (SELECT coalesce(driver_id,id) id,sum(paid_amount) paid,sum(remaining_amount) remaining FROM filtered WHERE active GROUP BY coalesce(driver_id,id))
  SELECT count(*),coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
  (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE remaining<=0),
  (SELECT count(*) FROM drivers WHERE remaining>0 AND paid>0),(SELECT count(*) FROM drivers WHERE remaining>0 AND paid=0)

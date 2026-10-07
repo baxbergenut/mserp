@@ -1002,7 +1002,8 @@ assignment lookup lists.
   and deleted driver accounts. Profile tabs explicitly include inactive accounts.
   GET /escrows returns summary totals over all filtered records, independent of
   pagination. Compact cards show held, remaining, and paid driver counts, with
-  only a value and title per card.
+  only a value and title per card. Paid/total driver counts always include only
+  active drivers, even with Show inactive enabled; monetary totals follow filters.
   The default sits at the toolbar right edge: right-click (or keyboard/click) Edit,
   then save inline with Enter or cancel with Escape. Escrow and profile expense
   histories use the shared modal PaymentHistoryPanel without expanding rows.
