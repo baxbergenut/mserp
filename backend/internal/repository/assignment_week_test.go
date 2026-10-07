@@ -167,14 +167,6 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 			// Invalid/crossing boundaries roll the whole profile edit back.
 			input.FullName = "Must Roll Back"
 			input.DispatcherID = &mark.ID
-			input.AssignmentWeek = week(-3)
-			if _, err = repo.UpdateDriver(ctx, driver.ID, input); err == nil {
-				t.Fatal("accepted boundary before a later change")
-			}
-			input.AssignmentWeek = week(1)
-			if _, err = repo.UpdateDriver(ctx, driver.ID, input); err == nil {
-				t.Fatal("accepted future week")
-			}
 			input.AssignmentWeek = monday.AddDate(0, 0, -1).Format(time.DateOnly)
 			if _, err = repo.UpdateDriver(ctx, driver.ID, input); err == nil {
 				t.Fatal("accepted Sunday")
@@ -199,6 +191,156 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 			}
 			check(-1, "Cameron", "ONE")
 			check(0, "Unassigned", "")
+
+			// A setup week is the first roster week, even without a truck.
+			futureInput := DriverInput{FullName: "Future Driver", PayType: "cpm", PayRate: 0.75, Active: true, DispatcherID: &mark.ID, AssignmentWeek: week(2)}
+			future, err := repo.CreateDriver(ctx, futureInput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertVisible := func(offset int, want bool) {
+				t.Helper()
+				board, err := NewGrossBoardRepository(pool).Get(ctx, monday.AddDate(0, 0, offset*7))
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, d := range board.Drivers {
+					if d.ID == future.ID {
+						found = true
+					}
+				}
+				if found != want {
+					t.Fatalf("future driver visible in week %d: %v, want %v", offset, found, want)
+				}
+			}
+			assertVisible(-1, false)
+			assertVisible(0, false)
+			assertVisible(2, true)
+			// Reactivation starts a new roster period without erasing old history.
+			dormantInput := DriverInput{FullName: "Reactivated", PayType: "cpm", PayRate: .75, Active: false, AssignmentWeek: week(-4)}
+			dormant, err := repo.CreateDriver(ctx, dormantInput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dormantInput.Active = true
+			dormantInput.AssignmentWeek = week(0)
+			if _, err = repo.UpdateDriver(ctx, dormant.ID, dormantInput); err != nil {
+				t.Fatal(err)
+			}
+			for _, offset := range []int{-1, 0} {
+				board, err := NewGrossBoardRepository(pool).Get(ctx, monday.AddDate(0, 0, offset*7))
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, d := range board.Drivers {
+					if d.ID == dormant.ID {
+						found = true
+					}
+				}
+				if found != (offset == 0) {
+					t.Fatalf("reactivation week %d visible=%v", offset, found)
+				}
+			}
+			oldHistory, err := repo.DriverAssignmentHistory(ctx, dormant.ID)
+			if err != nil || len(oldHistory) != 1 || oldHistory[0].AssignedAt.In(loc).Format(time.DateOnly) != week(-4) {
+				t.Fatalf("reactivation changed old history: %+v %v", oldHistory, err)
+			}
+			// Legacy unknown starts must not acquire an invented cutoff.
+			exec(`UPDATE drivers SET roster_start_week=NULL WHERE id=$1`, future.ID)
+			assertVisible(-1, true)
+			exec(`UPDATE drivers SET roster_start_week=$2 WHERE id=$1`, future.ID, week(2))
+			// Pre-setup escrow projections cannot manufacture earlier payroll.
+			exec(`UPDATE driver_escrows SET start_date=$2::date WHERE driver_id=$1`, future.ID, week(-1))
+			tx, err = pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prior, err := readDriverPaySourceWeek(ctx, tx, monday, future.ID)
+			_ = tx.Rollback(ctx)
+			if err != nil || len(prior.Drivers) != 0 {
+				t.Fatalf("pre-setup payroll: %+v %v", prior, err)
+			}
+			// Explicit historical plans remain visible for review.
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES($1,$2,'EARLIER PLAN')`, future.ID, week(-1))
+			assertVisible(-1, true)
+			// Existing-driver changes accept future weeks and earlier corrections
+			// across planned changes without overlapping history periods.
+			futureInput.DispatcherID = &cameron.ID
+			futureInput.TruckID = &truck2.ID
+			futureInput.AssignmentWeek = week(3)
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err != nil {
+				t.Fatal(err)
+			}
+			futureInput.DispatcherID = &mark.ID
+			futureInput.AssignmentWeek = week(1)
+			futureInput.TruckID = &truck1.ID
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err != nil {
+				t.Fatal(err)
+			}
+			if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_driver_assignments a JOIN truck_driver_assignments b ON a.id<b.id AND (a.driver_id=b.driver_id OR a.truck_id=b.truck_id) AND tstzrange(a.assigned_at,a.unassigned_at,'[)') && tstzrange(b.assigned_at,b.unassigned_at,'[)')`).Scan(&overlaps); err != nil || overlaps != 0 {
+				t.Fatalf("backdated overlap %d: %v", overlaps, err)
+			}
+			// Same-week and later finalized payroll protect every fleet entry point.
+			exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,$2,'{}')`, future.ID, week(2))
+			futureInput.AssignmentWeek = week(1)
+			futureInput.DispatcherID = &cameron.ID
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err == nil || !strings.Contains(err.Error(), "Reopen finalized payroll") {
+				t.Fatalf("dispatcher settlement guard: %v", err)
+			}
+			futureInput.DispatcherID = &mark.ID
+			futureInput.TruckID = &truck2.ID
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err == nil || !strings.Contains(err.Error(), "Reopen finalized payroll") {
+				t.Fatalf("truck settlement guard: %v", err)
+			}
+			if _, err = repo.UpdateTruck(ctx, truck1.ID, TruckInput{UnitNumber: "ONE", Status: "assigned", Active: true, DriverID: &other.ID, AssignmentWeek: week(2)}); err == nil || !strings.Contains(err.Error(), "Reopen finalized payroll") {
+				t.Fatalf("displaced driver guard: %v", err)
+			}
+			if _, err = repo.UpdateDispatcher(ctx, mark.ID, DispatcherInput{FullName: "Mark", Active: true, DriverIDs: []string{}, AssignmentWeek: week(2)}); err == nil || !strings.Contains(err.Error(), "Reopen finalized payroll") {
+				t.Fatalf("dispatcher form guard: %v", err)
+			}
+			// Frozen payroll on a different driver does not prevent this change.
+			if _, err = repo.UpdateDriver(ctx, other.ID, DriverInput{FullName: "Other", PayType: "cpm", Active: true, DispatcherID: &cameron.ID, AssignmentWeek: week(0)}); err != nil {
+				t.Fatal(err)
+			}
+			// A boundary after all finalized payroll is valid.
+			futureInput.AssignmentWeek = week(3)
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err != nil {
+				t.Fatal(err)
+			}
+			// Reopening permits backdating across the previous boundary.
+			exec(`UPDATE payroll_settlements SET finalized=false WHERE driver_id=$1`, future.ID)
+			futureInput.AssignmentWeek = week(0)
+			futureInput.TruckID = &truck1.ID
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err != nil {
+				t.Fatal(err)
+			}
+			// Truck settlements protect the target truck even while unassigned.
+			exec(`INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,finalized) SELECT id,$2,owner_id,'{}',true FROM trucks WHERE id=$1`, truck2.ID, week(0))
+			futureInput.TruckID = &truck2.ID
+			if _, err = repo.UpdateDriver(ctx, future.ID, futureInput); err == nil || !strings.Contains(err.Error(), "Reopen finalized investor payroll") {
+				t.Fatalf("investor settlement guard: %v", err)
+			}
+			// A former driver's period ending at the boundary is unaffected.
+			spare, err := repo.CreateTruck(ctx, TruckInput{UnitNumber: "SPARE", Status: "available", Active: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			formerInput := DriverInput{FullName: "Former", PayType: "cpm", Active: true, TruckID: &spare.ID, AssignmentWeek: week(-2)}
+			former, err := repo.CreateDriver(ctx, formerInput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			formerInput.TruckID = nil
+			formerInput.AssignmentWeek = week(-1)
+			if _, err = repo.UpdateDriver(ctx, former.ID, formerInput); err != nil {
+				t.Fatal(err)
+			}
+			exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,$2,'{}')`, former.ID, week(0))
+			if _, err = repo.UpdateTruck(ctx, spare.ID, TruckInput{UnitNumber: "SPARE", Status: "assigned", Active: true, DriverID: &other.ID, AssignmentWeek: week(-1)}); err != nil {
+				t.Fatalf("unaffected former driver blocked assignment: %v", err)
+			}
 		})
 	}
 }

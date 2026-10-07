@@ -85,6 +85,8 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				if err := admin.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES($1,$1,'cpm',0.75) RETURNING id`, fmt.Sprintf("Expense driver %d", i)).Scan(id); err != nil {
 					t.Fatal(err)
 				}
+				// These drivers were already set up for the historical expense week.
+				exec(`UPDATE driver_dispatcher_assignments SET assigned_at='2026-09-28'::timestamp AT TIME ZONE 'America/New_York' WHERE driver_id=$1`, *id)
 			}
 			var legacy string
 			if mode == "migration" {
@@ -101,7 +103,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(truckErr)
 				}
 				exec(string(expenseAccessMigration))
-				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql", "060_escrow_releases.sql", "061_escrow_replenishment.sql"} {
+				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql", "060_escrow_releases.sql", "061_escrow_replenishment.sql", "062_assignment_week_boundaries.sql"} {
 					body, readErr := os.ReadFile("../../sql/" + name)
 					if readErr != nil {
 						t.Fatal(readErr)

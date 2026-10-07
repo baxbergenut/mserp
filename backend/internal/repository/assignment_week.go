@@ -21,8 +21,12 @@ func setAssignmentWeek(ctx context.Context, tx pgx.Tx, week string) error {
 		week = monday.Format(time.DateOnly)
 	}
 	date, err := time.ParseInLocation(time.DateOnly, week, loc)
-	if err != nil || date.Weekday() != time.Monday || date.After(monday) {
-		return chargeInvalid("Assignment start must be a Monday in this week or a past week")
+	if err != nil || date.Weekday() != time.Monday {
+		return chargeInvalid("Assignment start must be a Monday")
+	}
+	// Finalization takes the exclusive counterpart before reading its snapshot.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+		return err
 	}
 	// Serialize fleet form changes before acquiring payroll/driver row locks.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(734912086)`); err != nil {
@@ -40,15 +44,23 @@ func prepareTruckAssignmentBoundary(ctx context.Context, tx pgx.Tx, column, id s
 	if week == "" {
 		return nil
 	} // Upstream imports retain their observed timestamps.
-	var conflict bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments WHERE `+column+`=$1
- AND assigned_at >= (($2::date+7)::timestamp AT TIME ZONE 'America/New_York'))`, id, week).Scan(&conflict); err != nil {
+	// Protect the selected driver even when they have no truck history, plus
+	// every driver/truck whose period is being shortened (including displacement).
+	if column == "driver_id" {
+		if _, err := tx.Exec(ctx, `SELECT assert_assignment_payroll_open($1::uuid,NULL,$2::date)`, id, week); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(ctx, `SELECT assert_assignment_payroll_open(NULL,$1::uuid,$2::date)`, id, week); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `SELECT assert_assignment_payroll_open(driver_id,truck_id,$2::date)
+ FROM truck_driver_assignments WHERE `+column+`=$1
+ AND (unassigned_at IS NULL OR unassigned_at > $2::date::timestamp AT TIME ZONE 'America/New_York')`, id, week); err != nil {
 		return err
 	}
-	if conflict {
-		return chargeInvalid("The selected week precedes a later truck assignment; choose that week or a later one")
-	}
-	// Multiple edits in one week retain zero-length history records. Their boundaries
+	// Superseded edits retain zero-length history records. Their boundaries
 	// must move together so truck cost attribution never sees overlapping periods.
 	_, err := tx.Exec(ctx, `UPDATE truck_driver_assignments SET
  assigned_at=least(assigned_at,$2::date::timestamp AT TIME ZONE 'America/New_York'),
@@ -57,6 +69,10 @@ func prepareTruckAssignmentBoundary(ctx context.Context, tx pgx.Tx, column, id s
  OR unassigned_at >= $2::date::timestamp AT TIME ZONE 'America/New_York')`, id, week)
 	return err
 }
+
+// Setup/reactivation controls the unsaved roster. Saved historical work remains
+// visible separately; legacy drivers with unknown starts keep their old coverage.
+const weeklyDriverStartedSQL = `(d.roster_start_week IS NULL OR d.roster_start_week < $1::date+7)`
 
 // Weekly boards use the assignment at the end of the selected New York week.
 // An unknown migration start is a baseline; a known start is never extrapolated.

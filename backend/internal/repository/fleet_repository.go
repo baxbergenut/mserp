@@ -878,6 +878,12 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 	if err := releaseTruckDriver(ctx, tx, truckID); err != nil {
 		return err
 	}
+	// An explicitly backdated new truck may precede setup/reactivation. Extend
+	// the current roster to that selected week without changing legacy unknowns.
+	if _, err := tx.Exec(ctx, `UPDATE drivers SET roster_start_week=nullif(current_setting('mserp.assignment_week',true),'')::date
+ WHERE id=$1 AND roster_start_week>nullif(current_setting('mserp.assignment_week',true),'')::date`, driverID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO truck_driver_assignments (truck_id, driver_id,assigned_at) VALUES ($1, $2,coalesce(nullif(current_setting('mserp.assignment_week',true),'')::date::timestamp AT TIME ZONE 'America/New_York',now()))`,
 		truckID, driverID); err != nil {
