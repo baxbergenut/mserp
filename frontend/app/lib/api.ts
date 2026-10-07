@@ -48,6 +48,7 @@ import type {
   ExpenseInput,
   ExpenseSetting,
   DriverEscrowSetting,
+  Escrow,
   ExpensePage,
   ExpenseExtraction,
 } from "./types";
@@ -427,8 +428,8 @@ export const settleDriverPay = (weekStart: string, revision: string, driverId: s
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
 export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
-export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/expense-settings/driver-escrow");
-export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/expense-settings/driver-escrow", { method: "PUT", body: JSON.stringify(input) });
+export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/escrows/settings");
+export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 
 export const fetchInvestorPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart }));
 export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });
@@ -441,3 +442,5 @@ export const fetchUpdaters = () => apiRequest<Updater[]>("/updaters");
 export const createUpdater = (value: UpdaterInput) => apiRequest<Updater>("/updaters", { method: "POST", body: JSON.stringify(value) });
 export const updateUpdater = (id: string, value: UpdaterInput) => apiRequest<Updater>(`/updaters/${id}`, { method: "PUT", body: JSON.stringify(value) });
 export const deleteUpdater = (id: string) => apiRequest<void>(`/updaters/${id}`, { method: "DELETE" });
+
+export const fetchEscrows = (query: PageQuery & { driverId?: string; status?: string }) => apiRequest<PaginatedResponse<Escrow>>(withQuery("/escrows", query));

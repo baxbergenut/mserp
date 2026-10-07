@@ -12,6 +12,7 @@ import (
 // Positive amounts are deductions. Suggested rows are read-only until Apply is
 // submitted; a saved zero explicitly defers the expense for that week.
 type ExpenseDeduction struct {
+	Source         string `json:"source,omitempty"`
 	ExpenseID      string `json:"expenseId"`
 	Name           string `json:"name"`
 	Category       string `json:"category,omitempty"`
@@ -54,7 +55,13 @@ func expenseDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]E
 		}
 		result = append(result, d)
 	}
-	return result, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	escrows, err := escrowDeductions(ctx, tx, driver, week)
+	return append(result, escrows...), err
 }
 
 func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor string, input []ExpenseDeduction) ([]ExpenseDeduction, error) {
@@ -73,6 +80,9 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 		}
 		var version int
 		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND charge_driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = tx.QueryRow(ctx, `SELECT balance_version FROM driver_escrows WHERE id=$1 AND driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
+		}
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && version != item.Version) {
 			return nil, ErrDriverPayConflict
 		}
@@ -100,6 +110,14 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 		limit, _ := new(big.Rat).SetString(old.Available)
 		if !valid || amount.Sign() < 0 || amount.Cmp(limit) > 0 || new(big.Rat).Mul(amount, big.NewRat(100, 1)).Denom().Cmp(big.NewInt(1)) != 0 {
 			return nil, chargeInvalid("Expense deduction must be between zero and the available balance (%s)", old.Available)
+		}
+		if old.Source == "escrow" {
+			if _, err = tx.Exec(ctx, `INSERT INTO driver_escrow_payments(escrow_id,week_start,amount,updated_by)
+    VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid)
+    ON CONFLICT(escrow_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now()`, item.ExpenseID, week, item.Amount, actor); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by)
    VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid)

@@ -1,0 +1,55 @@
+import { expect } from '@playwright/test';
+import { join } from 'node:path';
+
+export async function verifyEscrow(page, base, temp, driver) {
+  const read = async () => (await (await page.request.get(`${base}/api/escrows?driverId=${driver.id}`)).json()).items[0];
+  expect(await read()).toMatchObject({ amount: '2650.00', paidAmount: '0.00', remainingAmount: '2650.00', status: 'unpaid' });
+  await page.goto(`${base}/accounting/driver-pay?weekStart=2026-09-21`);
+  await expect(page.getByRole('button', { name: driver.fullName, exact: true })).toHaveCount(0);
+  const openPay = async week => {
+    await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
+    const toggle = page.getByRole('button', { name: driver.fullName, exact: true });
+    await expect(toggle).toBeVisible();
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    return page.getByLabel(`${driver.fullName}, expense Escrow, deduction`, { exact: true });
+  };
+  const deduction = await openPay('2026-09-28');
+  await expect(deduction).toHaveValue('-2650.00');
+  await deduction.fill('-100.25');
+  await expect.poll(async () => (await read()).paidAmount).toBe('100.25');
+  await page.goto(`${base}/accounting/escrow`);
+  await page.getByPlaceholder('Search drivers…').fill(driver.fullName);
+  await page.getByLabel('Escrow payment status').selectOption('partial');
+  const row = page.getByRole('row').filter({ hasText: driver.fullName });
+  await expect(row).toContainText('$2,549.75');
+  await expect(row).toContainText('Partially paid');
+  await page.screenshot({ path: join(temp, 'escrow-partial.png'), fullPage: true });
+  await page.getByLabel('Escrow payment status').selectOption('unpaid');
+  await expect(row).toHaveCount(0);
+  await expect(page.getByText('No escrow records match these filters.')).toBeVisible();
+  const next = await openPay('2026-10-05');
+  await expect(next).toHaveValue('-2549.75');
+  await next.fill('-2549.75');
+  // A new draft must be created to collect an unchanged suggested amount.
+  await next.fill('-2549.74');
+  await next.fill('-2549.75');
+  await expect.poll(async () => (await read()).status).toBe('paid');
+  await page.goto(`${base}/accounting/escrow`);
+  await page.getByLabel('Escrow payment status').selectOption('paid');
+  await expect(row).toContainText('Fully paid');
+  await row.getByText('Payment history', { exact: true }).click();
+  await expect(row).toContainText('Week of 2026-09-28');
+  await expect(row).toContainText('$100.25');
+  await page.goto(`${base}/drivers/detail?id=${driver.id}`);
+  await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Driver escrow balances' })).toContainText('Fully paid');
+  await page.screenshot({ path: join(temp, 'driver-profile-escrow.png'), fullPage: true });
+  await page.goto(`${base}/accounting/escrow`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(page.locator('aside')).toHaveCSS('width', '64px');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: join(temp, 'escrow-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Expand sidebar' }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+}

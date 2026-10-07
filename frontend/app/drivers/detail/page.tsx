@@ -18,14 +18,16 @@ import { AssignmentHistory } from "./AssignmentHistory";
 import { DriverEditor } from "./DriverEditor";
 import { PayHistory } from "./PayHistory";
 import { TruckLocationPanel } from "@/app/components/fleet/TruckLocationPanel";
-import { useExpenseCategoryAccess } from "@/app/lib/access";
+import { EscrowTable } from "@/app/accounting/escrow/EscrowTable";
+import { useExpenseCategoryAccess, usePermissions } from "@/app/lib/access";
 
-const tabs = ["Overview", "Pay history", "Personal charges", "Company & other expenses", "Assignments"] as const;
+const tabs = ["Overview", "Pay history", "Escrow", "Personal charges", "Company & other expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 export default function DriverDetailPage() {
+  const canReadEscrow = usePermissions().includes("escrow.read");
   const expenseCategoryAccess = useExpenseCategoryAccess();
   const expenseTabsVisible = expenseCategoryAccess.length > 0;
-  const visibleTabs: readonly (typeof tabs)[number][] = expenseTabsVisible ? tabs : tabs.filter(name => name !== "Personal charges" && name !== "Company & other expenses");
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Escrow" || canReadEscrow) && (expenseTabsVisible || (name !== "Personal charges" && name !== "Company & other expenses")));
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<Truck | null>(null);
   const [error, setError] = useState("");
@@ -33,8 +35,9 @@ export default function DriverDetailPage() {
   const [editing, setEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!canReadEscrow && tab === "Escrow") setTab("Overview");
     if (!expenseTabsVisible && (tab === "Personal charges" || tab === "Company & other expenses")) setTab("Overview");
-  }, [expenseTabsVisible, setTab, tab]);
+  }, [canReadEscrow, expenseTabsVisible, setTab, tab]);
   useEffect(() => {
     let cancelled = false;
     const id = new URLSearchParams(window.location.search).get("id") ?? "";
@@ -65,6 +68,7 @@ export default function DriverDetailPage() {
         <DriverChargeSummary driverId={driver.id} />
         <section className="rounded-xl border border-zinc-800 p-5"><h2 className="text-sm font-semibold text-zinc-100">Internal notes</h2><p className="mt-3 whitespace-pre-wrap text-sm text-zinc-400">{driver.notes || "No notes recorded."}</p></section>
       </div><aside className="min-w-0"><TruckLocationPanel key={`${driver.id}:${driver.updatedAt}`} driverId={driver.id} /></aside></div>}
+      {canReadEscrow && tab === "Escrow" && <EscrowTable driverId={driver.id} />}
       {tab === "Pay history" && <PayHistory key={driver.updatedAt} driverId={driver.id} />}
       {expenseCategoryAccess.length > 0 && tab === "Personal charges" && <div className="space-y-6"><RelatedExpenses driverId={driver.id} scope="personal" /><DriverChargeSummary driverId={driver.id} expanded /></div>}
       {expenseCategoryAccess.length > 0 && tab === "Company & other expenses" && <><p className="text-xs text-zinc-500">Expenses associated with this driver that are paid by the company or another responsible party. These are not personal payroll charges.</p><RelatedExpenses driverId={driver.id} scope="non_personal" /></>}

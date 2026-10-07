@@ -101,6 +101,16 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(truckErr)
 				}
 				exec(string(expenseAccessMigration))
+				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql"} {
+					body, readErr := os.ReadFile("../../sql/" + name)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					exec(string(body))
+				}
+				// This fixture exercises ordinary expenses independently of onboarding escrow.
+				exec(`DELETE FROM driver_escrows`)
+
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

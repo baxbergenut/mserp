@@ -303,20 +303,10 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 
 func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, actor string) error {
 	_, err := tx.Exec(ctx, `
-		INSERT INTO expenses(
-			company,category_id,category,expense_date,driver_id,driver_name,amount,
-			expense_type,description,covered_by,paid_by,created_by,created_by_name,system_kind
-		)
-		SELECT 'MS Express',s.category_id,c.name,
-		       coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),
-		       d.id,d.full_name,coalesce(nullif($2,'')::numeric,s.default_amount),
-		       'Escrow','Driver safety escrow','Driver','MS Express',
-		       nullif($3,'')::uuid,(SELECT username FROM app_users WHERE id=nullif($3,'')::uuid),
-		       'driver_escrow'
-		FROM drivers d
-		CROSS JOIN driver_escrow_settings s
-		JOIN expense_settings c ON c.id=s.category_id AND c.kind='category' AND c.active
-		WHERE d.id=$1`, driverID, amount, actor)
+        INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,created_by)
+        SELECT d.id,d.full_name,greatest(coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),DATE '2026-09-28'),
+               coalesce(nullif($2,'')::numeric,s.default_amount),nullif($3,'')::uuid
+        FROM drivers d CROSS JOIN driver_escrow_settings s WHERE d.id=$1`, driverID, amount, actor)
 	return err
 }
 

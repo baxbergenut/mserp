@@ -217,7 +217,8 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("task search: %+v %v", tasks, err)
 	}
 	missingTruck := "00000000-0000-0000-0000-000000000099"
-	input := DriverInput{FullName: event.Driver.FullName, PayType: "cpm", PayRate: 0.65, Active: true, TruckID: &missingTruck}
+	hireDate, _ := time.Parse(time.DateOnly, event.Driver.HireDate)
+	input := DriverInput{HireDate: &hireDate, FullName: event.Driver.FullName, PayType: "cpm", PayRate: 0.65, Active: true, TruckID: &missingTruck}
 	if _, err = repo.CompleteDriverIntake(ctx, intakeID, userID, "", &input, false); err == nil {
 		t.Fatal("invalid assignment succeeded")
 	}
@@ -263,6 +264,7 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("setup missing assignments: %+v", driver)
 	}
 	assertDriverCount(1)
+	assertEscrowAccount(t, ctx, pool, driver.ID, "2500.00", "2026-09-28")
 	directory, err = repo.ListDriverDirectory(ctx, Pagination{}, "", false)
 	if err != nil || directory.Total != 1 || directory.Items[0].IntakeID != "" || directory.Items[0].ID != driver.ID || directory.Items[0].PayRate != .65 {
 		t.Fatalf("completed directory row: %+v %v", directory, err)

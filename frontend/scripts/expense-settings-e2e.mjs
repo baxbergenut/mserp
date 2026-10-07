@@ -1,11 +1,14 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
+import { verifyEscrow } from './escrow-e2e.mjs';
 
 export async function verifyExpenseSettings(page, base, temp) {
   expect((await page.request.post(`${base}/api/expense-settings`, { data: { kind: 'category', name: 'No CSRF', active: true } })).status()).toBe(403);
   await page.goto(`${base}/expenses`);
   await page.getByRole('link', { name: 'Expenses & Charges settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Expenses & Charges settings', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Default driver escrow amount')).toHaveCount(0);
+  await page.goto(`${base}/accounting/escrow`);
   const escrowDefault = page.getByLabel('Default driver escrow amount', { exact: true });
   await expect(escrowDefault).toHaveValue('2500.00');
   await escrowDefault.fill('2600');
@@ -18,18 +21,19 @@ export async function verifyExpenseSettings(page, base, temp) {
   await page.getByLabel('Full name', { exact: true }).fill('Escrow Test Driver');
   await page.getByRole('spinbutton', { name: /^Rate per mile/ }).fill('0.75');
   await setupEscrow.fill('2650');
+  await page.getByLabel('Hire date', { exact: true }).fill('2026-09-28');
   await page.getByRole('button', { name: 'Create driver', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const drivers = await (await page.request.get(`${base}/api/drivers?page=1&pageSize=100`)).json();
   const escrowDriver = drivers.items.find(driver => driver.fullName === 'Escrow Test Driver');
   expect(escrowDriver).toBeTruthy();
   const escrowExpenses = await (await page.request.get(`${base}/api/expenses?page=1&pageSize=100&chargeDriverId=${escrowDriver.id}`)).json();
-  const escrowExpense = escrowExpenses.items.find(expense => expense.expenseType === 'Escrow');
-  expect(escrowExpense).toMatchObject({ category: 'Safety', amount: '2650.00', remainingAmount: '2650.00', coveredBy: 'Driver' });
+  expect(escrowExpenses.items).toEqual([]);
   const driverRow = page.getByRole('row').filter({ has: page.getByText('Escrow Test Driver', { exact: true }) });
   await driverRow.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: /^Escrow amount/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await verifyEscrow(page, base, temp, escrowDriver);
   await page.goto(`${base}/expenses/settings`);
   const add = async (kind, name) => {
     await page.getByRole('button', { name: `Add ${kind}`, exact: true }).click();

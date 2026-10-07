@@ -11,7 +11,6 @@ import (
 
 var ErrExpenseSettingConflict = errors.New("expense setting changed; reload and try again")
 var ErrExpenseSettingInvalid = errors.New("invalid expense setting")
-var ErrDriverEscrowSettingConflict = errors.New("driver escrow default changed; reload and try again")
 
 type ExpenseSetting struct {
 	ID         string  `json:"id"`
@@ -20,30 +19,6 @@ type ExpenseSetting struct {
 	Name       string  `json:"name"`
 	Active     bool    `json:"active"`
 	Version    int     `json:"version"`
-}
-
-type DriverEscrowSetting struct {
-	DefaultAmount string `json:"defaultAmount"`
-	Version       int    `json:"version"`
-}
-
-func (r *ExpenseRepository) GetDriverEscrowSetting(ctx context.Context) (DriverEscrowSetting, error) {
-	var value DriverEscrowSetting
-	err := r.pool.QueryRow(ctx, `SELECT default_amount::text,version FROM driver_escrow_settings WHERE singleton`).Scan(&value.DefaultAmount, &value.Version)
-	return value, err
-}
-
-func (r *ExpenseRepository) SaveDriverEscrowSetting(ctx context.Context, input DriverEscrowSetting) (DriverEscrowSetting, error) {
-	var value DriverEscrowSetting
-	err := r.pool.QueryRow(ctx, `
-		UPDATE driver_escrow_settings
-		SET default_amount=$1::numeric,version=version+1,updated_at=now()
-		WHERE singleton AND version=$2
-		RETURNING default_amount::text,version`, input.DefaultAmount, input.Version).Scan(&value.DefaultAmount, &value.Version)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = ErrDriverEscrowSettingConflict
-	}
-	return value, err
 }
 
 func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseSetting, error) {

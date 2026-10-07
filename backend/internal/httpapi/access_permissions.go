@@ -62,6 +62,8 @@ func routePermission(method, path string) string {
 		}
 	case "expenses":
 		return "authenticated"
+	case "escrows":
+		return pair("escrow")
 	case "expense-settings":
 		return "expense_settings.manage"
 	case "driver-pay", "investor-pay":

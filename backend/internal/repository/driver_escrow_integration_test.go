@@ -42,6 +42,11 @@ func TestDriverEscrowDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	standalone, err := os.ReadFile("../../sql/059_standalone_escrow.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("driver_escrow_test_%d", time.Now().UnixNano())
@@ -56,11 +61,13 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public;DROP SCHEMA `+quoted+` CASCADE`) }()
 			source := strings.ReplaceAll(string(initSQL), "\r\n", "\n")
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
+			standaloneBody := strings.ReplaceAll(string(standalone), "\r\n", "\n")
 			renameBody := strings.ReplaceAll(string(renameMigration), "\r\n", "\n")
 			if mode == "migration" {
 				if !strings.Contains(source, body) || !strings.Contains(source, renameBody) {
 					t.Fatal("driver escrow migrations must match the fresh schema")
 				}
+				source = strings.Replace(source, standaloneBody, "", 1)
 				source = strings.Replace(source, body, "", 1)
 				source = strings.Replace(source, renameBody, "", 1)
 			}
@@ -72,10 +79,14 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				}
 				exec(body)
 				exec(renameBody)
+				exec(`INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-01-05',500.25 FROM expenses WHERE driver_id=$1`, legacyDriver)
+				exec(standaloneBody)
 			}
-			var owner string
-			if err = admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='driver_escrow_settings'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
-				t.Fatalf("driver escrow settings owner=%q err=%v", owner, err)
+			for _, table := range []string{"driver_escrow_settings", "driver_escrows", "driver_escrow_payments"} {
+				var owner string
+				if err = admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename=$2`, schema, table).Scan(&owner); err != nil || owner != "mserp_app" {
+					t.Fatalf("%s owner=%q err=%v", table, owner, err)
+				}
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 
@@ -91,7 +102,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			}
 			defer pool.Close()
 
-			expenses := NewExpenseRepository(pool)
+			expenses := NewEscrowRepository(pool)
 			setting, err := expenses.GetDriverEscrowSetting(ctx)
 			if err != nil || setting.DefaultAmount != "2500.00" || setting.Version != 1 {
 				t.Fatalf("initial setting=%+v err=%v", setting, err)
@@ -104,7 +115,11 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				t.Fatalf("stale setting accepted: %v", err)
 			}
 			if legacyDriver != "" {
-				assertEscrowExpense(t, ctx, pool, legacyDriver, "2500.00", "2026-09-28")
+				assertEscrowAccount(t, ctx, pool, legacyDriver, "2500.00", "2026-09-28")
+				balances, e := expenses.List(ctx, EscrowQuery{DriverID: legacyDriver, Status: "partial"})
+				if e != nil || balances.Total != 1 || balances.Items[0].PaidAmount != "500.25" || balances.Items[0].RemainingAmount != "1999.75" || len(balances.Items[0].Payments) != 1 {
+					t.Fatalf("migration lost paid balances: %+v %v", balances, e)
+				}
 			}
 
 			hireDate := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
@@ -113,7 +128,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertEscrowExpense(t, ctx, pool, driver.ID, "3100.00", "2026-09-28")
+			assertEscrowAccount(t, ctx, pool, driver.ID, "3100.00", "2026-09-28")
 			report, err := NewDriverPayRepository(pool).Get(ctx, hireDate)
 			if err != nil {
 				t.Fatal(err)
@@ -131,22 +146,123 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			if _, err = fleet.UpdateDriver(ctx, driver.ID, DriverInput{FullName: driver.FullName, PayType: driver.PayType, PayRate: driver.PayRate, Active: true, HireDate: driver.HireDate, EscrowAmount: "9999"}); err != nil {
 				t.Fatal(err)
 			}
-			assertEscrowExpense(t, ctx, pool, driver.ID, "3100.00", "2026-09-28")
+			assertEscrowAccount(t, ctx, pool, driver.ID, "3100.00", "2026-09-28")
 			defaulted, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Default Escrow", PayType: "cpm", PayRate: .75, Active: true, HireDate: &hireDate})
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertEscrowExpense(t, ctx, pool, defaulted.ID, "2750.00", "2026-09-28")
+			assertEscrowAccount(t, ctx, pool, defaulted.ID, "2750.00", "2026-09-28")
+			verifyEscrowCollections(t, ctx, pool, driver.ID, hireDate)
 		})
 	}
 }
 
-func assertEscrowExpense(t *testing.T, ctx context.Context, pool *pgxpool.Pool, driver, amount, date string) {
+func verifyEscrowCollections(t *testing.T, ctx context.Context, pool *pgxpool.Pool, driver string, week time.Time) {
+	t.Helper()
+	pay := NewDriverPayRepository(pool)
+	escrows := NewEscrowRepository(pool)
+	read := func(w time.Time) DriverPayEdits {
+		t.Helper()
+		report, err := pay.GetDriverWeek(ctx, w, driver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range report.Drivers {
+			if d.ID == driver {
+				return d.Edits
+			}
+		}
+		return DriverPayEdits{}
+	}
+	balance := func(status, paid, remaining string) {
+		t.Helper()
+		result, err := escrows.List(ctx, EscrowQuery{DriverID: driver, Status: status})
+		if err != nil || result.Total != 1 || result.Items[0].PaidAmount != paid || result.Items[0].RemainingAmount != remaining {
+			t.Fatalf("balance: %+v %v", result, err)
+		}
+	}
+	if len(read(week.AddDate(0, 0, -7)).ExpenseDeductions) != 0 {
+		t.Fatal("escrow suggested before September 28")
+	}
+	first := read(week)
+	stale := read(week.AddDate(0, 0, 7))
+	balance("unpaid", "0.00", "3100.00")
+	first.ExpenseDeductions[0].Amount = "100.25"
+	first.ExpenseDeductions[0].Apply = true
+	if _, err := pay.Save(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	balance("partial", "100.25", "2999.75")
+	stale.ExpenseDeductions[0].Apply = true
+	if _, err := pay.Save(ctx, stale); !errors.Is(err, ErrDriverPayConflict) {
+		t.Fatalf("stale cross-week payment accepted: %v", err)
+	}
+	next := read(week.AddDate(0, 0, 7))
+	if next.ExpenseDeductions[0].Amount != "2999.75" || next.ExpenseDeductions[0].Source != "escrow" {
+		t.Fatalf("bad carry: %+v", next)
+	}
+	next.ExpenseDeductions[0].Amount = "3000"
+	next.ExpenseDeductions[0].Apply = true
+	if _, err := pay.Save(ctx, next); err == nil {
+		t.Fatal("overpayment accepted")
+	}
+	next.ExpenseDeductions[0].Amount = "0"
+	if _, err := pay.Save(ctx, next); err != nil {
+		t.Fatal(err)
+	}
+	balance("partial", "100.25", "2999.75")
+	// Reserve a future payment. An earlier week may only use unallocated principal.
+	later := read(week.AddDate(0, 0, 14))
+	later.ExpenseDeductions[0].Amount = "50.50"
+	later.ExpenseDeductions[0].Apply = true
+	if _, err := pay.Save(ctx, later); err != nil {
+		t.Fatal(err)
+	}
+	first = read(week)
+	if first.ExpenseDeductions[0].Available != "3049.50" {
+		t.Fatal("future payment not reserved", first)
+	}
+	// Finalization locks escrow collections; reopening retains them for correction.
+	report, err := pay.Get(ctx, week)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := pay.Settle(ctx, week, driver, report.Revision, "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_escrow_payments SET amount=0 WHERE escrow_id=$1 AND week_start=$2`, first.ExpenseDeductions[0].ExpenseID, week); err == nil {
+		t.Fatal("database allowed finalized escrow edit")
+	}
+	if _, err = pay.Settle(ctx, week, driver, final.Revision, "", "Correction", true); err != nil {
+		t.Fatal(err)
+	}
+	balance("partial", "150.75", "2949.25")
+	first = read(week)
+	first.ExpenseDeductions[0].Amount = first.ExpenseDeductions[0].Available
+	first.ExpenseDeductions[0].Apply = true
+	if _, err = pay.Save(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	balance("paid", "3100.00", "0.00")
+	if len(read(week.AddDate(0, 0, 21)).ExpenseDeductions) > 0 {
+		t.Fatal("paid escrow suggested again")
+	}
+	history, err := pay.History(ctx, driver, Pagination{PageSize: 100})
+	if err != nil || history.Total == 0 {
+		t.Fatalf("missing payroll history: %+v %v", history, err)
+	}
+}
+
+func assertEscrowAccount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, driver, amount, date string) {
 	t.Helper()
 	var count int
-	var gotAmount, gotDate, category, name, coveredBy, chargeDriver string
-	err := pool.QueryRow(ctx, `SELECT count(*)::int,min(amount)::text,min(expense_date)::text,min(category),min(expense_type),min(covered_by),min(charge_driver_id::text) FROM expenses WHERE driver_id=$1 AND system_kind='driver_escrow'`, driver).Scan(&count, &gotAmount, &gotDate, &category, &name, &coveredBy, &chargeDriver)
-	if err != nil || count != 1 || gotAmount != amount || gotDate != date || category != "Safety" || name != "Escrow" || coveredBy != "Driver" || chargeDriver != driver {
-		t.Fatalf("escrow count=%d amount=%q date=%q category=%q name=%q coveredBy=%q chargeDriver=%q err=%v", count, gotAmount, gotDate, category, name, coveredBy, chargeDriver, err)
+	var gotAmount, gotDate string
+	err := pool.QueryRow(ctx, `SELECT count(*)::int,min(amount)::text,min(start_date)::text FROM driver_escrows WHERE driver_id=$1`, driver).Scan(&count, &gotAmount, &gotDate)
+	if err != nil || count != 1 || gotAmount != amount || gotDate != date {
+		t.Fatalf("escrow count=%d amount=%s date=%s err=%v", count, gotAmount, gotDate, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM expenses WHERE driver_id=$1`, driver).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("escrow leaked into expenses: %d %v", count, err)
 	}
 }

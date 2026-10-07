@@ -252,7 +252,7 @@ export function DriverForm({
             className={controlClass}
           />
         </Field>
-        {showEscrow && <Field label="Escrow amount ($)" hint="Creates a Safety expense and carries the unpaid balance into weekly Driver Pay.">
+        {showEscrow && <Field label="Escrow amount ($)" hint="Creates a driver escrow account. The unpaid balance carries into weekly Driver Pay.">
           <input
             required
             type="number"

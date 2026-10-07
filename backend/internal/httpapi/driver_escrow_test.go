@@ -20,3 +20,14 @@ func TestDriverEscrowAmountValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestEscrowPermissions(t *testing.T) {
+	for _, path := range []string{"/escrows", "/escrows/settings"} {
+		if routePermission("GET", path) != "escrow.read" {
+			t.Fatal("escrow read must have its own permission")
+		}
+	}
+	if routePermission("PUT", "/escrows/settings") != "escrow.write" {
+		t.Fatal("escrow settings must have their own permission")
+	}
+}

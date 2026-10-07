@@ -33,8 +33,6 @@ func registerExpenseRoutes(
 ) {
 	handler := expenseHandler{logger: logger, repo: repo, extractor: extractor}
 	r.Get("/expense-settings", handler.listSettings)
-	r.Get("/expense-settings/driver-escrow", handler.getDriverEscrowSetting)
-	r.Put("/expense-settings/driver-escrow", handler.saveDriverEscrowSetting)
 	r.Post("/expense-settings", handler.saveSetting)
 	r.Put("/expense-settings/{id}", handler.saveSetting)
 	r.Get("/expenses", handler.listExpenses)

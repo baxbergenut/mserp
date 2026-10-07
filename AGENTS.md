@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `058_rename_driver_escrow.sql`:
+  `059_standalone_escrow.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -107,6 +107,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/accounting/driver-charges/`: reusable charge types, effective-dated
   an active-driver recurring fee matrix and installment plans, schedules and audit
   history. Driver profiles link to this centralized management view.
+- `frontend/app/accounting/escrow/`: standalone escrow directory, payment status
+  filters, collection history and the new-driver default; shared table in Driver
+  details. `escrow_repository.go` and `escrow_handlers.go` own its API.
 - `frontend/app/accounting/dispatcher-pay/`: weekly dispatcher commission reports.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
@@ -281,6 +284,9 @@ browser bundle.
   GET accepts Monday `weekStart`; PUT saves one driver's versioned weekly notes,
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
+- Escrow: `GET /escrows` (pagination, search, driverId, status: paid/partial/unpaid),
+  `GET/PUT /escrows/settings` for the versioned new-driver default. Dedicated
+  `escrow.read`/`escrow.write` permissions; collection writes use payroll permissions.
 - Driver charges: `GET /driver-charges` (optional driverId),
   `POST /driver-charges/types`, `DELETE /driver-charges/types/{id}` (version),
   `POST /driver-charges/schedules`,
@@ -311,8 +317,7 @@ browser bundle.
   every list, summary, related-record view and write is category-scoped.
 - Expense settings: `GET/POST /expense-settings`, `PUT /expense-settings/{id}`
   (category, name, payment_method, payer; updates require the current version)
-  plus `GET/PUT /expense-settings/driver-escrow` for the versioned new-driver
-  escrow default; all expense settings routes require `expense_settings.manage`.
+  All expense settings routes require `expense_settings.manage`.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
@@ -989,13 +994,30 @@ assignment lookup lists.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
 
-- Migration 057 creates one driver-covered `Escrow` expense in the
-  protected Safety category for every existing driver. New manual and FleetScope
-  driver setup creates the same expense atomically, using the versioned default
-  from Expenses & Charges settings (initially $2,500) unless setup supplies a
-  positive custom amount. The amount is editable only during first setup; later
-  profile edits never rewrite the escrow principal. Escrow uses the ordinary
-  unpaid expense balance and weekly Driver Pay deduction flow until fully paid.
+- Escrow is a standalone Accounting feature at /accounting/escrow and a Driver
+  detail tab, with target, paid, remaining, status filters, and payment history.
+  Its new-driver default lives on Escrow, independently of Expenses & Charges.
+  Migration 059 transfers system and named driver escrow expenses and their
+  payments to driver_escrows/driver_escrow_payments, preserving IDs, exact amounts,
+  actors, source snapshots, and frozen payroll/audit JSON. Settled legacy records
+  retain paid credit. Pre-September-28 collections display as Previously paid.
+  Remaining deductions begin the week of September 28, 2026, or a later known
+  hire week. Manual/FleetScope setup atomically creates an escrow account with
+  zero paid and the selected/default target; later profile edits preserve it.
+  Expenses no longer contain escrow records and reject new driver escrow entry.
+  Safety is no longer protected for escrow. GET /drivers/setup-defaults retains
+  the fleet-readable onboarding default without requiring escrow management.
+  Payroll retains its expenseDeductions wire array for compatible rendering;
+  source=escrow identifies standalone ledger entries. Reads never collect money;
+  autosave/finalize use the existing explicit amount, zero-deferral and carry
+  rules. Cross-week versions and reserved payments prevent double collection;
+  database guards protect finalized weeks. Reopening retains paid collections.
+  Deleting a driver retains their escrow/name snapshot. Separate escrow.read and
+  escrow.write permissions control the directory/default, while payroll writes
+  retain payroll permissions. Older binaries cannot display migrated escrow and
+  cannot create expense-backed escrow; use a forward fix after this migration.
+  Tests use MSERP_DRIVER_PAY_TEST_DATABASE_URL as mserp_app for fresh/migrated
+  schemas; test-driver-charges-e2e.mjs includes escrow-e2e.mjs.
 
 - Expense settings at /expenses/settings (linked from Expenses) manage categories,
   category-specific default names, payment methods and common payer suggestions.

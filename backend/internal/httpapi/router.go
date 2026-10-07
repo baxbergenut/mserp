@@ -154,6 +154,7 @@ func NewRouter(
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
 	registerDashboardRoutes(protected, logger, dashboardRepo)
 	registerExpenseRoutes(protected, logger, expenseRepo, expenseExtractor)
+	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
 	return r

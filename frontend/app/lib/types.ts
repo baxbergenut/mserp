@@ -870,6 +870,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
+  source?: "escrow";
   category?: ExpenseCategory;
   expenseId: string;
   name: string;
@@ -1018,3 +1019,18 @@ export interface SettlementEvent { action: string; version: number; actor: strin
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
 export interface TruckChargeData { eligibleTruckIds: string[]; terms: TruckTerm[]; phases: TruckChargePhase[] }
+
+export interface Escrow {
+  id: string;
+  driverId: string | null;
+  driverName: string;
+  active: boolean;
+  startDate: string;
+  amount: string;
+  openingPaid: string;
+  paidAmount: string;
+  remainingAmount: string;
+  status: "paid" | "partial" | "unpaid";
+  version: number;
+  payments: { weekStart: string; amount: string }[];
+}
