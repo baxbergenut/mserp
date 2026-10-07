@@ -22,7 +22,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await page.getByLabel('Escrow payment status').selectOption('partial');
   const row = page.getByRole('row').filter({ hasText: driver.fullName });
   await expect(row).toContainText('$2,549.75');
-  await expect(row).toContainText('Partially paid');
+  await expect(row).toContainText('Partially funded');
   await page.screenshot({ path: join(temp, 'escrow-partial.png'), fullPage: true });
   await page.getByLabel('Escrow payment status').selectOption('unpaid');
   await expect(row).toHaveCount(0);
@@ -36,7 +36,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await expect.poll(async () => (await read()).status).toBe('paid');
   await page.goto(`${base}/accounting/escrow`);
   await page.getByLabel('Escrow payment status').selectOption('paid');
-  await expect(row).toContainText('Fully paid');
+  await expect(row).toContainText('Fully funded');
   const rowBefore = await row.boundingBox();
   const history = row.getByRole('button', { name: 'Payment history', exact: true });
   await history.click();
@@ -49,7 +49,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await expect(history).toBeFocused();
   await page.goto(`${base}/drivers/detail?id=${driver.id}`);
   await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
-  await expect(page.getByRole('table', { name: 'Driver escrow balances' })).toContainText('Fully paid');
+  await expect(page.getByRole('table', { name: 'Driver escrow balances' })).toContainText('Fully funded');
   await page.screenshot({ path: join(temp, 'driver-profile-escrow.png'), fullPage: true });
   await page.goto(`${base}/accounting/escrow`);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -108,6 +108,31 @@ async function verifyReleases(page, base, temp, driver) {
   await form.getByLabel('Release amount').fill('25'); await form.getByRole('button', { name: 'Release', exact: true }).click(); await expect(form).toHaveCount(0);
   await expect.poll(async () => (await read()).heldAmount).toBe('2625.00');
   expect((await credits(week)).map(r => r.amount)).toEqual(['25.00']); expect(await credits(nextWeek)).toHaveLength(0);
-  const account = await read(); expect(account.paidAmount).toBe('2650.00'); expect(account.remainingAmount).toBe('0.00');
+  const account = await read(); expect(account.paidAmount).toBe('2650.00'); expect(account.remainingAmount).toBe('25.00');
   expect(account.releases.some(r => r.cancelled)).toBe(true);
+  expect(account.status).toBe('partial');
+  // Repay the release through normal deductions in subsequent weeks.
+  const repay = async (selectedWeek, expected, amount) => {
+    await page.goto(`${base}/accounting/driver-pay?weekStart=${selectedWeek}`);
+    const driverToggle = page.getByRole('button', { name: driver.fullName, exact: true });
+    await expect(driverToggle).toBeVisible();
+    if (await driverToggle.getAttribute('aria-expanded') !== 'true') await driverToggle.click();
+    await expect(page.getByLabel(`${driver.fullName}, escrow release`, { exact: true })).toHaveCount(0);
+    const deduction = page.getByLabel(`${driver.fullName}, expense Escrow, deduction`, { exact: true });
+    await expect(deduction).toHaveValue(expected);
+    await deduction.fill('-0.01');
+    await deduction.fill(amount);
+  };
+  await repay(nextWeek, '-25.00', '-10.00');
+  await expect.poll(async () => (await read()).remainingAmount).toBe('15.00');
+  monday.setUTCDate(monday.getUTCDate() + 7);
+  await repay(monday.toISOString().slice(0, 10), '-15.00', '-15.00');
+  await expect.poll(async () => (await read()).status).toBe('paid');
+  expect((await read()).heldAmount).toBe('2650.00');
+  await page.goto(`${base}/drivers/detail?id=${driver.id}`);
+  await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
+  const table = page.getByRole('table', { name: 'Driver escrow balances' });
+  await expect(table.getByRole('columnheader')).toHaveText(['Driver', 'Required', 'Balance', 'Still owed', 'Status', 'Actions']);
+  await expect(table).toContainText('Fully funded');
+  await page.screenshot({ path: join(temp, 'escrow-replenished.png'), fullPage: true });
 }

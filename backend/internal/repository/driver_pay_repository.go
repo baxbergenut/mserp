@@ -155,7 +155,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
  AND NOT x.driver_settled AND x.expense_date<$1::date+7)
  OR EXISTS (SELECT 1 FROM driver_escrows x WHERE x.driver_id=d.id AND x.start_date<$1::date+7
- AND (x.amount>x.opening_paid+coalesce((SELECT sum(p.amount) FROM driver_escrow_payments p WHERE p.escrow_id=x.id),0)
+ AND (escrow_collection_available(x.id,$1::date)>0
  OR EXISTS (SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date)))
  OR (d.is_owner_operator AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID)

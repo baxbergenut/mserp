@@ -59,9 +59,9 @@ type EscrowPage struct {
 const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
  coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
- e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0) remaining_amount,
- CASE WHEN e.amount-e.opening_paid-coalesce(p.paid,0)<=0 THEN 'paid'
- WHEN e.opening_paid+coalesce(p.paid,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version
+ e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0) remaining_amount,
+ CASE WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0)<=0 THEN 'paid'
+ WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
  LEFT JOIN LATERAL (SELECT sum(amount) released FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled) r ON true`
@@ -76,7 +76,7 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 	var total int
 	var summary EscrowSummary
 	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
- drivers AS (SELECT coalesce(driver_id,id) id,sum(paid_amount) paid,sum(remaining_amount) remaining FROM filtered WHERE active GROUP BY coalesce(driver_id,id))
+ drivers AS (SELECT coalesce(driver_id,id) id,sum(held_amount) paid,sum(remaining_amount) remaining FROM filtered WHERE active GROUP BY coalesce(driver_id,id))
  SELECT count(*),coalesce(sum(held_amount),0)::text,coalesce(sum(released_amount),0)::text,coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
  (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE remaining<=0),
  (SELECT count(*) FROM drivers WHERE remaining>0 AND paid>0),(SELECT count(*) FROM drivers WHERE remaining>0 AND paid=0)
@@ -168,15 +168,17 @@ func (r *EscrowRepository) SaveDriverEscrowSetting(ctx context.Context, input Dr
 
 func escrowDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]ExpenseDeduction, error) {
 	rows, err := tx.Query(ctx, `SELECT e.id,e.start_date::text,e.amount::text,
- (e.amount-e.opening_paid-coalesce(p.other,0))::text,
- coalesce(w.amount,e.amount-e.opening_paid-coalesce(p.other,0))::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0)-coalesce(w.amount,0))::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0))::text,e.balance_version,w.escrow_id IS NOT NULL
+ capacity.available::text,
+ coalesce(w.amount,capacity.available)::text,
+ (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0)-coalesce(w.amount,0))::text,
+ (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0))::text,e.balance_version,w.escrow_id IS NOT NULL
  FROM driver_escrows e
  LEFT JOIN driver_escrow_payments w ON w.escrow_id=e.id AND w.week_start=$2::date
- LEFT JOIN LATERAL (SELECT sum(amount) FILTER(WHERE week_start<>$2::date) other,sum(amount) FILTER(WHERE week_start<$2::date) prior FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
+ LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_payments WHERE escrow_id=e.id AND week_start<$2::date) p ON true
+ LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled AND week_start<$2::date) r ON true
+ CROSS JOIN LATERAL (SELECT escrow_collection_available(e.id,$2::date) available) capacity
  WHERE e.driver_id=$1 AND e.start_date<$2::date+7
- AND (w.escrow_id IS NOT NULL OR e.amount>e.opening_paid+coalesce(p.other,0)) ORDER BY e.start_date,e.id`, driver, week)
+ AND (w.escrow_id IS NOT NULL OR capacity.available>0) ORDER BY e.start_date,e.id`, driver, week)
 	if err != nil {
 		return nil, err
 	}

@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `060_escrow_releases.sql`:
+  `061_escrow_replenishment.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -1000,12 +1000,12 @@ assignment lookup lists.
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
 
 - Escrow is a standalone Accounting feature at /accounting/escrow and a Driver
-  detail tab, with target, paid, remaining, status filters, and payment history.
+  detail tab, with Required, Balance, Still owed, funding status filters and history.
   Its new-driver default lives on Escrow, independently of Expenses & Charges.
   The directory defaults to active drivers; includeInactive=true includes inactive
   and deleted driver accounts. Profile tabs explicitly include inactive accounts.
   GET /escrows returns summary totals over all filtered records, independent of
-  pagination. Compact cards show held, remaining, and paid driver counts, with
+  pagination. Compact cards show Escrow balance, Still owed and Fully funded drivers, with
   only a value and title per card. Paid/total driver counts always include only
   active drivers, even with Show inactive enabled; monetary totals follow filters.
   The default sits at the toolbar right edge: right-click (or keyboard/click) Edit,
@@ -1036,12 +1036,18 @@ assignment lookup lists.
   Client-generated release UUIDs plus escrow/release versions prevent duplicate
   submissions and stale writes. Driver/advisory locks serialize against payroll
   and finalization. Released amounts reserve collected funds, including scheduled
-  future credits; Held = collected minus noncancelled releases. Collections and
-  amounts left to collect never increase because of a release. Funding checks
+  future credits; Balance = collected minus noncancelled releases and Still owed
+  = required minus balance. Lifetime collected/released totals stay in History.
+  Migration 061 reopens released amounts for collection from the following week;
+  payroll's normal editable deductions allow partial repayments until fully funded.
+  Database and read-time capacity checks reserve later saved repayments and reject
+  overcollection, same-week replenishment and release edits/cancellations that
+  would leave already saved repayments overfunding escrow. Funding checks
   prevent spending later collections or lowering a collection below reserved funds.
   Each release is one fixed positive autoCharges entry with source escrow-release:ID
   in its selected Driver Pay week, retained in frozen settlements/history. Payroll
-  cannot edit it; no remainder or credit carries into later weeks. Explicit release
+  cannot edit it; the credit never repeats, while unpaid replenishment carries as
+  an escrow deduction into later weeks. Explicit release
   recipients appear even when inactive, but only in their selected release week
   unless other actual payroll history/work exists. Credits stay on the personal
   driver statement, never Investor Pay. Once releases exist, use a forward fix
