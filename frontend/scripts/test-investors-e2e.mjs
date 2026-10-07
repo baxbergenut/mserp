@@ -80,6 +80,10 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
+  if (process.argv.includes('--assignment-week-only')) {
+    await runAssignmentWeekE2E({ page, base, sql, schema });
+    console.log('Assignment week E2E passed: future Monday selection and historical assignment boundaries.');
+  } else {
   if (!process.argv.includes('--offboarding-only')) {
   await expect(page.getByText('No investors yet.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Show company')).not.toBeChecked();
@@ -158,6 +162,7 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await runOffboardingE2E({ page, base, sql, schema, apiBase: `http://127.0.0.1:${apiPort}`, webhookCompany, webhookSecret });
+  }
   expect(errors).toEqual([]);
 } finally {
   await browser?.close();

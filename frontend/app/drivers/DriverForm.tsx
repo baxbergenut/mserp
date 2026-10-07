@@ -369,7 +369,7 @@ export function DriverForm({
       <FormSection title="Status and notes">
         <Toggle
           checked={value.active}
-          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek(), ...(!checked ? { truckId: null, dispatcherId: null, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
+          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek(), assignmentWeek: value.assignmentWeek ?? "", ...(!checked ? { truckId: null, dispatcherId: null, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
           label="Active driver"
           description="Marking inactive disconnects the current truck and dispatcher. Historical records are retained."
         />

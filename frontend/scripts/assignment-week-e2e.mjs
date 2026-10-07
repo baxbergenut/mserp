@@ -5,6 +5,9 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   const date = new Date(`${today}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
   const week = date.toISOString().slice(0, 10);
+  date.setUTCDate(date.getUTCDate() + 7);
+  const next = date.toISOString().slice(0, 10);
+  date.setUTCDate(date.getUTCDate() - 7);
   date.setUTCDate(date.getUTCDate() - 7);
   const previous = date.toISOString().slice(0, 10);
   const driver = 'e4700000-0000-0000-0000-000000000001';
@@ -32,6 +35,9 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await expect(start).toBeVisible(); // Native validation prevents a date-free save.
   await page.getByRole('button', { name: 'This week', exact: true }).click();
   await expect(start).toHaveValue(week);
+  await expect(start).not.toHaveAttribute('max', /.+/);
+  await start.fill(next);
+  expect(await start.evaluate(input => input.checkValidity())).toBe(true);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(start).toHaveCount(0);
   await expect(row).toContainText('Week Mark');
@@ -41,7 +47,24 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
     return (await response.json()).drivers.find(item => item.id === driver);
   };
   expect(await getDriver(previous)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
-  expect(await getDriver(week)).toMatchObject({ dispatcherName: 'Week Mark', truckUnit: 'WEEK-TWO' });
+  expect(await getDriver(week)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
+  expect(await getDriver(next)).toMatchObject({ dispatcherName: 'Week Mark', truckUnit: 'WEEK-TWO' });
+  // A current finalized settlement blocks an earlier correction, with an
+  // actionable error. Reopening lets the same form save succeed.
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES('${driver}','${week}','{}');`);
+  await row.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel(/^Dispatcher/).selectOption(cameron);
+  await page.getByLabel(/^Truck/).selectOption(truck1);
+  await start.fill(week);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Reopen finalized payroll for this driver from the selected assignment week onward before changing assignments', { exact: true })).toBeVisible();
+  expect(await getDriver(next)).toMatchObject({ dispatcherName: 'Week Mark', truckUnit: 'WEEK-TWO' });
+  sql(`SET search_path TO ${schema},public; UPDATE payroll_settlements SET finalized=false WHERE driver_id='${driver}';`);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(start).toHaveCount(0);
+  expect(await getDriver(week)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
+  expect(await getDriver(next)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
   await page.goto(`${base}/driver-board`);
   await expect(page.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
   const nav = page.locator('aside a');

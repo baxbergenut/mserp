@@ -150,7 +150,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND (d.active OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present) AND (escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ AND ((d.active AND `+weeklyDriverStartedSQL+`) OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present) AND (escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
  OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
  AND NOT x.driver_settled AND x.expense_date<$1::date+7)

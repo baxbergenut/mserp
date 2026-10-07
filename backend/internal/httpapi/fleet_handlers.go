@@ -599,7 +599,7 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
 		case "23514":
-			if strings.HasPrefix(postgresError.Message, "The selected week precedes") {
+			if strings.HasPrefix(postgresError.Message, "The selected week precedes") || strings.HasPrefix(postgresError.Message, "Reopen finalized") {
 				writeAPIError(w, http.StatusConflict, postgresError.Message)
 				return
 			}

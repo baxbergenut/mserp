@@ -47,7 +47,8 @@ func TestGrossBoardDatabase(t *testing.T) {
  CREATE TEMP TABLE gross_board_entries(driver_id uuid REFERENCES pg_temp.drivers(id),service_date date,load_number text,load_record_id integer REFERENCES pg_temp.loads(id),original_rate numeric(12,2),driver_rate numeric(12,2),miles numeric(12,2),version integer DEFAULT 1,updated_at timestamptz DEFAULT now(),PRIMARY KEY(driver_id,service_date));
  INSERT INTO dispatchers VALUES('00000000-0000-0000-0000-000000000010','Dispatch A');
  INSERT INTO drivers VALUES('00000000-0000-0000-0000-000000000001','Test Driver','00000000-0000-0000-0000-000000000010',true),('00000000-0000-0000-0000-000000000002','Inactive',null,false);
- INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);`)
+ INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);
+ ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date;`)
 	if err != nil {
 		t.Fatal(err)
 	}

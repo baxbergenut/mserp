@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `061_escrow_replenishment.sql`:
+  `062_assignment_week_boundaries.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -746,7 +746,8 @@ assignment lookup lists.
   for its focused signed-webhook/form/task flow using the same isolated setup.
 
 - Gross board plans persist up to 100 load slots per driver and calendar day, separately
-  from imported loads and settlement accounting. Active drivers and inactive
+  from imported loads and settlement accounting. Active drivers whose known setup/
+  reactivation week starts by the selected week and inactive
   drivers with saved entries through the selected week appear. Gross Board and
   unfinalized Driver Pay resolve dispatcher/truck headings from assignment history
   for the selected New York week, never today's links. Weeks start Monday.
@@ -942,13 +943,23 @@ assignment lookup lists.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
-- Assignment changes in driver, truck, and dispatcher forms require a start Monday
-  in the current or a past New York week. The optional assignmentWeek API field
+- Assignment changes in driver, truck, and dispatcher forms accept any start Monday,
+  including future New York weeks. The optional assignmentWeek API field
   defaults to the current week for older clients. Migration 047 makes dispatcher
   history honor this boundary; truck writes use the same boundary. Same-week
-  corrections retain zero-length periods without overlaps. Changes cannot cross
-  a later recorded assignment week; unchanged links never reopen periods.
-  Tests cover fresh/migrated schemas and assignment-week-e2e.mjs. Migration 046
+  corrections retain zero-length periods without overlaps. Migration 062 permits
+  corrections across later assignment weeks, retaining superseded periods at zero
+  length. Finalized driver payroll from the selected week onward blocks changes,
+  including displaced drivers; affected finalized investor truck payroll is also
+  protected. Fleet writes share the payroll finalization lock. Unchanged links never
+  reopen periods. Gross Board and unsaved Driver Pay projections exclude drivers
+  before drivers.roster_start_week. Setup and reactivation save that Monday
+  independently of old assignment history; migration 062 backfills only known
+  initial starts. Unknown legacy starts and explicitly saved historical work
+  remain visible. Current fleet links still
+  represent the latest selection; weekly reports use the effective history.
+  Tests cover fresh/migrated schemas and assignment-week-e2e.mjs (run with
+  test-investors-e2e.mjs --assignment-week-only). Migration 046
   is reserved for the separate Driver Board history work.
 
 - Status Board is the visible name of /driver-board; route/permission identifiers

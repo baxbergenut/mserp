@@ -140,7 +140,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 
 			hireDate := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
 			fleet := NewFleetRepository(pool)
-			driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Custom Escrow", PayType: "cpm", PayRate: .75, Active: true, HireDate: &hireDate, EscrowAmount: "3100"})
+			driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Custom Escrow", PayType: "cpm", PayRate: .75, Active: true, HireDate: &hireDate, EscrowAmount: "3100", AssignmentWeek: hireDate.Format(time.DateOnly)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +163,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertEscrowAccount(t, ctx, pool, driver.ID, "3100.00", "2026-09-28")
-			defaulted, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Default Escrow", PayType: "cpm", PayRate: .75, Active: true, HireDate: &hireDate})
+			defaulted, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Default Escrow", PayType: "cpm", PayRate: .75, Active: true, HireDate: &hireDate, AssignmentWeek: hireDate.Format(time.DateOnly)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -183,7 +183,7 @@ func verifyEscrowSummaryAndRoster(t *testing.T, ctx context.Context, pool *pgxpo
 		active bool
 		paid   string
 	}{{"Summary Fully", true, "2500"}, {"Summary Partial", true, "100.25"}, {"Summary Unpaid", true, "0"}, {"Summary Inactive", false, "500"}} {
-		d, err := NewFleetRepository(pool).CreateDriver(ctx, DriverInput{FullName: seed.name, PayType: "cpm", PayRate: .75, Active: seed.active, HireDate: &week, EscrowAmount: "2500"})
+		d, err := NewFleetRepository(pool).CreateDriver(ctx, DriverInput{FullName: seed.name, PayType: "cpm", PayRate: .75, Active: seed.active, HireDate: &week, EscrowAmount: "2500", AssignmentWeek: week.Format(time.DateOnly)})
 		if err != nil {
 			t.Fatal(err)
 		}
