@@ -1807,6 +1807,15 @@ END $$;
 COMMIT;
 BEGIN;
 
+-- Tables created by earlier migrations are owned by the runtime role. PostgreSQL
+-- checks their foreign keys with that owner's privileges, including while this
+-- migration is run by an administrator in a private test schema.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='mserp_app') THEN
+        EXECUTE format('GRANT USAGE ON SCHEMA %I TO mserp_app', current_schema());
+    END IF;
+END $$;
+
 -- Driver escrow is a normal driver-covered Safety expense. The singleton
 -- setting supplies the default for new-driver setup while each created expense
 -- keeps its original principal independently.
