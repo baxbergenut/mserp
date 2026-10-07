@@ -233,7 +233,6 @@ export default function GrossBoardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {payReturn && <Link data-navigation-back href={payReturn} className={buttonClass}>← Back to Driver Pay</Link>}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <PageHeader><div>
           <div className="flex items-center gap-3">

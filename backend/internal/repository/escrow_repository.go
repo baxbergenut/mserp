@@ -34,6 +34,21 @@ type Escrow struct {
 type EscrowQuery struct {
 	Pagination
 	Search, DriverID, Status string
+	IncludeInactive          bool
+}
+
+type EscrowSummary struct {
+	Target         string `json:"target"`
+	Paid           string `json:"paid"`
+	Remaining      string `json:"remaining"`
+	Drivers        int    `json:"drivers"`
+	PaidDrivers    int    `json:"paidDrivers"`
+	PartialDrivers int    `json:"partialDrivers"`
+	UnpaidDrivers  int    `json:"unpaidDrivers"`
+}
+type EscrowPage struct {
+	Page[Escrow]
+	Summary EscrowSummary `json:"summary"`
 }
 
 const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
@@ -44,28 +59,34 @@ const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true`
 
-func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (Page[Escrow], error) {
+func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return Page[Escrow]{}, err
+		return EscrowPage{}, err
 	}
 	defer tx.Rollback(ctx)
-	const filter = ` WHERE ($1='' OR driver_name ILIKE '%'||$1||'%') AND ($2='' OR driver_id::text=$2) AND ($3='' OR status=$3)`
+	const filter = ` WHERE ($1='' OR driver_name ILIKE '%'||$1||'%') AND ($2='' OR driver_id::text=$2) AND ($3='' OR status=$3) AND ($4 OR active)`
 	var total int
-	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT count(*) FROM balances`+filter, q.Search, q.DriverID, q.Status).Scan(&total); err != nil {
-		return Page[Escrow]{}, err
+	var summary EscrowSummary
+	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
+ drivers AS (SELECT coalesce(driver_id,id) id,sum(paid_amount) paid,sum(remaining_amount) remaining FROM filtered GROUP BY coalesce(driver_id,id))
+ SELECT count(*),coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
+ (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE remaining<=0),
+ (SELECT count(*) FROM drivers WHERE remaining>0 AND paid>0),(SELECT count(*) FROM drivers WHERE remaining>0 AND paid=0)
+ FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive).Scan(&total, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
+		return EscrowPage{}, err
 	}
 	page := q.Pagination.Normalize(total)
-	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $4 OFFSET $5`, q.Search, q.DriverID, q.Status, page.PageSize, page.Offset())
+	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $5 OFFSET $6`, q.Search, q.DriverID, q.Status, q.IncludeInactive, page.PageSize, page.Offset())
 	if err != nil {
-		return Page[Escrow]{}, err
+		return EscrowPage{}, err
 	}
 	items := []Escrow{}
 	for rows.Next() {
 		var e Escrow
 		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version); err != nil {
 			rows.Close()
-			return Page[Escrow]{}, err
+			return EscrowPage{}, err
 		}
 		e.Payments = []EscrowPayment{}
 		items = append(items, e)
@@ -73,28 +94,28 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (Page[Escrow
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return Page[Escrow]{}, err
+		return EscrowPage{}, err
 	}
 	for i := range items {
 		payments, e := tx.Query(ctx, `SELECT week_start::text,amount::text FROM driver_escrow_payments WHERE escrow_id=$1 ORDER BY week_start DESC`, items[i].ID)
 		if e != nil {
-			return Page[Escrow]{}, e
+			return EscrowPage{}, e
 		}
 		for payments.Next() {
 			var p EscrowPayment
 			if e = payments.Scan(&p.WeekStart, &p.Amount); e != nil {
 				payments.Close()
-				return Page[Escrow]{}, e
+				return EscrowPage{}, e
 			}
 			items[i].Payments = append(items[i].Payments, p)
 		}
 		e = payments.Err()
 		payments.Close()
 		if e != nil {
-			return Page[Escrow]{}, e
+			return EscrowPage{}, e
 		}
 	}
-	return NewPage(items, total, page), tx.Commit(ctx)
+	return EscrowPage{Page: NewPage(items, total, page), Summary: summary}, tx.Commit(ctx)
 }
 
 var ErrDriverEscrowSettingConflict = errors.New("driver escrow default changed; reload and try again")

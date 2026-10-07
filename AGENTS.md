@@ -675,7 +675,8 @@ assignment lookup lists.
   explicitly. Truck settlements and charges are described above.
   investor_repository.go and investor_handlers.go own the API. Tests use only
   disposable MSERP_INVESTOR_TEST_DATABASE_URL (_test database), checking fresh and
-  migrated schemas as mserp_app. CI runs these and real-API Chromium E2E flows.
+  migrated schemas as mserp_app. CI always runs database checks; real-API Chromium
+  E2E flows are available through its optional full_browser_tests input.
 
 - Task assignments use migration 054. Settings > System tasks assigns each
   generated category (driver onboarding, driver offboarding, Relay review) to one
@@ -997,6 +998,17 @@ assignment lookup lists.
 - Escrow is a standalone Accounting feature at /accounting/escrow and a Driver
   detail tab, with target, paid, remaining, status filters, and payment history.
   Its new-driver default lives on Escrow, independently of Expenses & Charges.
+  The directory defaults to active drivers; includeInactive=true includes inactive
+  and deleted driver accounts. Profile tabs explicitly include inactive accounts.
+  GET /escrows returns summary totals over all filtered records, independent of
+  pagination. Compact cards show held, remaining, and paid driver counts, with
+  only a value and title per card.
+  The default sits at the toolbar right edge: right-click (or keyboard/click) Edit,
+  then save inline with Enter or cancel with Escape. Escrow and profile expense
+  histories use the shared modal PaymentHistoryPanel without expanding rows.
+  Inactive drivers do not enter Driver Pay through automatic charges, expenses,
+  escrow or carried fuel/tolls alone; actual weekly loads, saved payroll and frozen
+  settlements remain available. Fully paid escrow alone does not create empty weeks.
   Migration 059 transfers system and named driver escrow expenses and their
   payments to driver_escrows/driver_escrow_payments, preserving IDs, exact amounts,
   actors, source snapshots, and frozen payroll/audit JSON. Settled legacy records
@@ -1253,9 +1265,24 @@ Prefer these targeted searches over recursively reading the repository.
   `/var/backups/mserp` before migrations or release activation. Do not delete
   backups casually.
 
+### Local synthetic review
+
+Build frontend with NEXT_PUBLIC_API_URL=/api, then run from frontend/:
+`node scripts/review-local.mjs`. Set MSERP_REVIEW_TEST_DATABASE_URL to a local
+PostgreSQL database whose name ends in _test; PSQL_PATH optionally locates psql.
+The runner creates a temporary schema with synthetic escrow/expense examples,
+starts a real API on 18570 and static/proxy frontend on 13570, and disables
+scheduled syncs and telemetry. Login details and process IDs are written only
+into a temporary review-access.json file. Keep the process alive for review;
+Ctrl+C stops its servers and drops that schema. Production data is never loaded.
+
 ### CI/CD and access model
 
-- `.github/workflows/ci-deploy.yml` runs all tests/builds on pull requests.
+- `.github/workflows/ci-deploy.yml` runs backend/database tests, vet, lint,
+  calculation/autosave checks and production builds on pull requests and pushes.
+  The four full browser regression suites and Chromium installation are opt-in
+  through workflow_dispatch's full_browser_tests input (default false).
+  Go and npm dependency/build caches reduce repeat setup time.
   Every push or merge to `main` automatically builds and deploys production;
   `workflow_dispatch` redeploys the selected `main` commit. App updates should
   normally go through a branch and PR, then be verified through the resulting
@@ -1265,7 +1292,7 @@ Prefer these targeted searches over recursively reading the repository.
   restricted `mserp-deploy` user. Repository secrets are
   `MSERP_DEPLOY_SSH_KEY` and `MSERP_DEPLOY_KNOWN_HOSTS`; never print or replace
   them during routine work.
-- CI installs Playwright Chromium separately with a five-minute timeout, using
+- When full_browser_tests is enabled, CI installs Chromium with a five-minute timeout, using
   the hosted Ubuntu 24.04 runner's existing system libraries. Do not add
   `--with-deps` to routine browser setup: redundant apt upgrades have stalled
   on the runner's package mirror and exhausted the entire build timeout.

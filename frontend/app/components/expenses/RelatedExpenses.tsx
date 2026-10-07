@@ -1,6 +1,6 @@
 "use client";
 
-import { RememberedDetails } from "@/app/components/RememberedDetails";
+import { PaymentHistoryPanel } from "@/app/components/PaymentHistoryPanel";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
@@ -38,6 +38,7 @@ export function RelatedExpenses({
   driverId?: string;
   scope?: "personal" | "non_personal";
 }) {
+  const [selected, setSelected] = useState<Expense | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [page, setPage] = useViewState(`RelatedExpenses:${scope ?? "linked"}:page`, 1);
   const [pageSize, setPageSize] = useViewState(`RelatedExpenses:${scope ?? "linked"}:pageSize`, 10);
@@ -107,7 +108,7 @@ export function RelatedExpenses({
                   <td className="px-4 py-3 font-mono tabular-nums">{formatDate(expense.expenseDate)}<span className="mt-1 block font-sans text-[11px] text-zinc-600">{expense.createdByName ? `Added by ${expense.createdByName}` : "Added before tracking"}</span></td>
                   <td className="px-4 py-3">{expense.category}</td>
                   <td className="px-4 py-3 text-zinc-400">{expense.expenseType || "—"}</td>
-                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <RememberedDetails memoryKey={`expense-payments:${expense.id}`} className="mt-1 whitespace-normal"><summary className="cursor-pointer text-xs text-blue-400">Payment history</summary>{expense.driverSettled ? <p className="py-2 text-xs">Opening balance marked fully paid.</p> : expense.payments.length ? expense.payments.map(p => <div className="flex gap-3 py-1 text-xs" key={p.weekStart}><Link className="text-blue-400" href={`/accounting/driver-pay?weekStart=${p.weekStart}&driverId=${driverId}`}>Week of {p.weekStart}</Link><span className="ml-auto font-mono">{formatMoney(p.amount)}</span></div>) : <p className="py-2 text-xs">No saved payments yet.</p>}</RememberedDetails>}</td>
+                  <td className="max-w-[330px] truncate px-4 py-3 text-zinc-400" title={expense.description ?? undefined}>{expense.description || "—"}{scope === "personal" && <button className="mt-1 block text-xs text-blue-400 hover:text-blue-300" onClick={() => setSelected(expense)}>Payment history</button>}</td>
                   <td className="px-4 py-3">{expense.coveredBy || "Unspecified"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>{formatMoney(expense.amount)}</td>
                   {scope === "personal" && <><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.paidAmount)}</td><td className="px-4 py-3 text-right font-mono">{formatMoney(expense.remainingAmount)}</td></>}
@@ -127,6 +128,7 @@ export function RelatedExpenses({
           onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
         />
       )}
+      {selected && <PaymentHistoryPanel title={selected.description || selected.category} paid={selected.paidAmount ?? "0"} remaining={selected.remainingAmount ?? "0"} previouslyPaid={selected.driverSettled ? selected.paidAmount ?? "0" : "0"} payments={selected.driverSettled ? [] : selected.payments} driverId={driverId} onClose={() => setSelected(null)} />}
     </section>
   );
 }

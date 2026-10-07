@@ -1034,3 +1034,7 @@ export interface Escrow {
   version: number;
   payments: { weekStart: string; amount: string }[];
 }
+
+export interface EscrowPage extends PaginatedResponse<Escrow> {
+ summary: { target: string; paid: string; remaining: string; drivers: number; paidDrivers: number; partialDrivers: number; unpaidDrivers: number };
+}

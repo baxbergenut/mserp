@@ -91,7 +91,7 @@ type DriverPayWeek struct {
 
 // One repeatable-read transaction provides a consistent snapshot of placement,
 // source data, tariffs, accounting edits, and charge schedules. No load status
-// or active-driver filter.
+// filter. Inactive drivers require actual weekly work or saved payroll history.
 func (r *DriverPayRepository) Get(ctx context.Context, week time.Time) (DriverPayWeek, error) {
 	return r.GetDriverWeek(ctx, week, "")
 }
@@ -147,11 +147,14 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
- WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid) AND (e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
+ AND (d.active OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL) AND (e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
  OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
  AND NOT x.driver_settled AND x.expense_date<$1::date+7)
- OR EXISTS (SELECT 1 FROM driver_escrows x WHERE x.driver_id=d.id AND x.start_date<$1::date+7)
+ OR EXISTS (SELECT 1 FROM driver_escrows x WHERE x.driver_id=d.id AND x.start_date<$1::date+7
+ AND (x.amount>x.opening_paid+coalesce((SELECT sum(p.amount) FROM driver_escrow_payments p WHERE p.escrow_id=x.id),0)
+ OR EXISTS (SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date)))
  OR (d.is_owner_operator AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID)
 	if err != nil {

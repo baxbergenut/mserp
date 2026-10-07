@@ -153,7 +153,77 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			}
 			assertEscrowAccount(t, ctx, pool, defaulted.ID, "2750.00", "2026-09-28")
 			verifyEscrowCollections(t, ctx, pool, driver.ID, hireDate)
+			verifyEscrowSummaryAndRoster(t, ctx, pool, hireDate)
 		})
+	}
+}
+
+func verifyEscrowSummaryAndRoster(t *testing.T, ctx context.Context, pool *pgxpool.Pool, week time.Time) {
+	t.Helper()
+	ids := map[string]string{}
+	for _, seed := range []struct {
+		name   string
+		active bool
+		paid   string
+	}{{"Summary Fully", true, "2500"}, {"Summary Partial", true, "100.25"}, {"Summary Unpaid", true, "0"}, {"Summary Inactive", false, "500"}} {
+		d, err := NewFleetRepository(pool).CreateDriver(ctx, DriverInput{FullName: seed.name, PayType: "cpm", PayRate: .75, Active: seed.active, HireDate: &week, EscrowAmount: "2500"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[seed.name] = d.ID
+		if seed.paid != "0" {
+			if _, err = pool.Exec(ctx, `INSERT INTO driver_escrow_payments(escrow_id,week_start,amount) SELECT id,$2,$3::numeric FROM driver_escrows WHERE driver_id=$1`, d.ID, week, seed.paid); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	repo := NewEscrowRepository(pool)
+	q := EscrowQuery{Search: "Summary", Pagination: Pagination{Page: 1, PageSize: 1}}
+	result, err := repo.List(ctx, q)
+	want := EscrowSummary{Target: "7500.00", Paid: "2600.25", Remaining: "4899.75", Drivers: 3, PaidDrivers: 1, PartialDrivers: 1, UnpaidDrivers: 1}
+	if err != nil || result.Total != 3 || len(result.Items) != 1 || result.Summary != want {
+		t.Fatalf("filtered summary across pages: %+v %v", result, err)
+	}
+	q.IncludeInactive = true
+	result, err = repo.List(ctx, q)
+	if err != nil || result.Total != 4 || result.Summary.Paid != "3100.25" || result.Summary.Remaining != "6899.75" || result.Summary.PartialDrivers != 2 {
+		t.Fatalf("include inactive summary: %+v %v", result, err)
+	}
+	q.Status = "unpaid"
+	result, err = repo.List(ctx, q)
+	if err != nil || result.Total != 1 || result.Summary.Paid != "0.00" || result.Summary.UnpaidDrivers != 1 {
+		t.Fatalf("status summary: %+v %v", result, err)
+	}
+	q.Search = "does not exist"
+	result, err = repo.List(ctx, q)
+	if err != nil || result.Total != 0 || result.Summary.Drivers != 0 || result.Summary.Paid != "0" {
+		t.Fatalf("empty summary: %+v %v", result, err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO driver_pay_cost_collections(driver_id,week_start,fuel_base,toll_base,fuel_amount,toll_amount) VALUES($1,$2,100,0,0,0)`, ids["Summary Inactive"], week); err != nil {
+		t.Fatal(err)
+	}
+	pay := NewDriverPayRepository(pool)
+	next := week.AddDate(0, 0, 7)
+	report, err := pay.Get(ctx, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundUnpaid := false
+	for _, d := range report.Drivers {
+		if d.ID == ids["Summary Inactive"] || d.ID == ids["Summary Fully"] {
+			t.Fatalf("escrow created unwanted payroll entry: %s", d.FullName)
+		}
+		foundUnpaid = foundUnpaid || d.ID == ids["Summary Unpaid"]
+	}
+	if !foundUnpaid {
+		t.Fatal("active unpaid escrow missing from payroll")
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes) VALUES($1,$2,'Saved payroll history')`, ids["Summary Inactive"], week); err != nil {
+		t.Fatal(err)
+	}
+	historical, err := pay.GetDriverWeek(ctx, week, ids["Summary Inactive"])
+	if err != nil || len(historical.Drivers) != 1 || historical.Drivers[0].Edits.Notes != "Saved payroll history" {
+		t.Fatalf("inactive saved history hidden: %+v %v", historical, err)
 	}
 }
 

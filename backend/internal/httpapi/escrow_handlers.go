@@ -37,7 +37,7 @@ func (h escrowHandler) list(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "Unknown escrow status")
 		return
 	}
-	result, err := h.repo.List(r.Context(), repository.EscrowQuery{Pagination: page, Search: strings.TrimSpace(r.URL.Query().Get("search")), DriverID: r.URL.Query().Get("driverId"), Status: status})
+	result, err := h.repo.List(r.Context(), repository.EscrowQuery{Pagination: page, Search: strings.TrimSpace(r.URL.Query().Get("search")), DriverID: r.URL.Query().Get("driverId"), Status: status, IncludeInactive: r.URL.Query().Get("includeInactive") == "true"})
 	if err != nil {
 		h.writeError(w, err)
 		return

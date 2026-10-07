@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileBadge, Pencil, Truck as TruckIcon } from "lucide-react";
+import { FileBadge, Pencil, Truck as TruckIcon } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { fetchTruck, fileDownloadUrl } from "@/app/lib/api";
 import type { Truck } from "@/app/lib/types";
@@ -41,7 +41,6 @@ export default function TruckDetailPage() {
     return () => { cancelled = true; };
   }, [attempt]);
   return <div className="space-y-5 animate-fade-in">
-    <Link href="/trucks" className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300"><ArrowLeft className="h-3.5 w-3.5" />Back to trucks</Link>
     {error && <><ErrorBanner message={error} /><button className="text-sm text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry truck</button></>}
     {!truck && !error && <p className="py-12 text-center text-zinc-500">Loading truck…</p>}
     {truck && <>

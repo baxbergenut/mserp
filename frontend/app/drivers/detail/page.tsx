@@ -8,7 +8,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, UserRound, Truck as TruckIcon, Mail, Phone, FileBadge } from "lucide-react";
+import { Pencil, UserRound, Truck as TruckIcon, Mail, Phone, FileBadge } from "lucide-react";
 import { fetchDriver, fetchTruck, fileDownloadUrl } from "@/app/lib/api";
 import type { Driver, Truck } from "@/app/lib/types";
 import { ErrorBanner } from "@/app/components/management/ManagementUI";
@@ -52,7 +52,6 @@ export default function DriverDetailPage() {
   const currentTruck = truck?.id === driver?.truckId ? truck : null;
   const rate = driver ? driver.payType === "cpm" ? `$${driver.payRate.toFixed(2)} / mile` : `${driver.payRate}% of driver gross` : "";
   return <div className="space-y-5 animate-fade-in">
-    <Link href="/drivers" className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300"><ArrowLeft className="h-3.5 w-3.5" />Back to drivers</Link>
     {error && <><ErrorBanner message={error} /><button className="text-sm text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry driver</button></>}
     {!driver && !error && <p className="py-12 text-center text-zinc-500">Loading driver…</p>}
     {driver && <>

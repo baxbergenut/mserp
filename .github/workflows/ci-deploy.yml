@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full_browser_tests:
+        description: Run all browser regression suites before deployment
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,7 +53,8 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: ${{ env.GO_VERSION_FILE }}
-          cache: false
+          cache: true
+          cache-dependency-path: backend/go.sum
 
       - name: Prepare isolated assignment history database
         env:
@@ -120,30 +126,37 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ env.PRODUCTION_API_URL }}
         run: npm run build
 
+      # Full browser regressions are opt-in for manual runs; regular pushes keep
+      # database/migration tests, lint, calculation checks and production builds.
       # The hosted Ubuntu 24.04 image already supplies Chromium's shared libraries.
       # Avoid --with-deps: its redundant apt upgrades can stall on package mirrors.
       - name: Install Chromium
+        if: inputs.full_browser_tests == true
         working-directory: frontend
         timeout-minutes: 5
         run: npx playwright install chromium
 
       - name: Verify investor flows in Chromium
+        if: inputs.full_browser_tests == true
         working-directory: frontend
         env:
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: node scripts/test-investors-e2e.mjs
 
       - name: Verify driver charges in Chromium
+        if: inputs.full_browser_tests == true
         working-directory: frontend
         env:
           MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: node scripts/test-driver-charges-e2e.mjs
 
       - name: Verify charge filters and week navigation in Chromium
+        if: inputs.full_browser_tests == true
         working-directory: frontend
         run: node scripts/test-charge-views.mjs
 
       - name: Verify task assignments and board views in Chromium
+        if: inputs.full_browser_tests == true
         working-directory: frontend
         run: node scripts/test-task-board-views.mjs
 

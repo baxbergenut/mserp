@@ -9,11 +9,13 @@ export async function verifyExpenseSettings(page, base, temp) {
   await expect(page.getByRole('heading', { name: 'Expenses & Charges settings', exact: true })).toBeVisible();
   await expect(page.getByLabel('Default driver escrow amount')).toHaveCount(0);
   await page.goto(`${base}/accounting/escrow`);
+  await page.getByRole('button', { name: 'Escrow default', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   const escrowDefault = page.getByLabel('Default driver escrow amount', { exact: true });
   await expect(escrowDefault).toHaveValue('2500.00');
   await escrowDefault.fill('2600');
   await page.getByRole('button', { name: 'Save default', exact: true }).click();
-  await expect(escrowDefault).toHaveValue('2600.00');
+  await expect(page.getByRole('button', { name: 'Escrow default', exact: true })).toContainText('$2,600.00');
   await page.goto(`${base}/drivers`);
   await page.getByRole('button', { name: 'Add driver', exact: true }).click();
   const setupEscrow = page.getByRole('spinbutton', { name: /^Escrow amount/ });
