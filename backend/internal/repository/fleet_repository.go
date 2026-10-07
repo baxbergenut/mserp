@@ -61,6 +61,7 @@ type DriverInput struct {
 	HomeVersion      int
 	ChargePauseWeek  string
 	ChargeActor      string
+	EscrowAmount     string
 	FullName         string
 	IsOwnerOperator  bool
 	PayType          string
@@ -81,6 +82,16 @@ type DriverInput struct {
 	Active           bool
 	Notes            *string
 	CDLFileID        *string
+}
+
+type DriverSetupDefaults struct {
+	EscrowAmount string `json:"escrowAmount"`
+}
+
+func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSetupDefaults, error) {
+	var value DriverSetupDefaults
+	err := r.pool.QueryRow(ctx, `SELECT default_amount::text FROM driver_escrow_settings WHERE singleton`).Scan(&value.EscrowAmount)
+	return value, err
 }
 
 type Truck struct {
@@ -284,7 +295,29 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 	if err = setDriverTruck(ctx, tx, id, input.TruckID); err != nil {
 		return "", err
 	}
+	if err = createDriverEscrowTx(ctx, tx, id, input.EscrowAmount, input.ChargeActor); err != nil {
+		return "", err
+	}
 	return id, nil
+}
+
+func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, actor string) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO expenses(
+			company,category_id,category,expense_date,driver_id,driver_name,amount,
+			expense_type,description,covered_by,paid_by,created_by,created_by_name,system_kind
+		)
+		SELECT 'MS Express',s.category_id,c.name,
+		       coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),
+		       d.id,d.full_name,coalesce(nullif($2,'')::numeric,s.default_amount),
+		       'Escrow payment','Driver safety escrow','Driver','MS Express',
+		       nullif($3,'')::uuid,(SELECT username FROM app_users WHERE id=nullif($3,'')::uuid),
+		       'driver_escrow'
+		FROM drivers d
+		CROSS JOIN driver_escrow_settings s
+		JOIN expense_settings c ON c.id=s.category_id AND c.kind='category' AND c.active
+		WHERE d.id=$1`, driverID, amount, actor)
+	return err
 }
 
 func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input DriverInput) (Driver, error) {

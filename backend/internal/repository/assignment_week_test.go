@@ -41,7 +41,7 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public`)
+			exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public; GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app`)
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public; DROP SCHEMA `+quoted+` CASCADE`) }()
 			init, err := os.ReadFile("../../sql/init.sql")
 			if err != nil {
@@ -63,6 +63,7 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(updaterMigration))
+				applyLaterTestMigrations(t, ctx, admin, "049")
 			} else {
 				exec(string(init))
 			}

@@ -149,6 +149,11 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			writeAPIError(w, http.StatusBadRequest, "provide either driver details or linkDriverId")
 			return
 		}
+		session, ok := r.Context().Value(authContextKey{}).(repository.AuthSession)
+		if !ok {
+			writeAPIError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
 		var input *repository.DriverInput
 		if request.Driver != nil {
 			value, err := request.Driver.validate()
@@ -160,14 +165,10 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 				writeAPIError(w, http.StatusBadRequest, "set a positive pay rate before completing setup")
 				return
 			}
+			value.ChargeActor = session.User.ID
 			input = &value
 		} else if !isUUID(request.LinkDriverID) {
 			writeAPIError(w, http.StatusBadRequest, "invalid driver id")
-			return
-		}
-		session, ok := r.Context().Value(authContextKey{}).(repository.AuthSession)
-		if !ok {
-			writeAPIError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		value, err := repo.CompleteDriverIntake(r.Context(), id, session.User.ID, request.LinkDriverID, input, request.SeparateConfirmed)

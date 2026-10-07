@@ -17,6 +17,7 @@ import {
   fetchDispatchers,
   fetchDriverDirectory,
   fetchDriverIntakeById,
+  fetchDriverSetupDefaults,
   fetchDrivers,
   fetchTrucks,
   uploadCDLFile,
@@ -122,7 +123,10 @@ function DriversContent() {
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
-    setForm({ ...emptyDriverInput });
+    setForm({ ...emptyDriverInput, escrowAmount: "" });
+    void fetchDriverSetupDefaults().then(defaults => {
+      setForm(current => current.escrowAmount === "" ? { ...current, escrowAmount: defaults.escrowAmount } : current);
+    }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
     setCDLFileName(null);
     setEditing(null);
     setError("");
@@ -143,13 +147,16 @@ function DriversContent() {
   const openIntake = useCallback((hire: DriverIntake) => {
     void loadLookups();
     const source = hire.driver;
-    setForm({ ...emptyDriverInput, fullName: source.fullName,
+    setForm({ ...emptyDriverInput, escrowAmount: "", fullName: source.fullName,
       isOwnerOperator: source.driverType === "owner_operator", hireDate: source.hireDate,
       phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
       city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",
       licenseNumber: source.licenseNumber ?? "", licenseState: source.licenseState ?? "",
       licenseExpires: source.licenseExpires ?? "",
     });
+    void fetchDriverSetupDefaults().then(defaults => {
+      setForm(current => current.escrowAmount === "" ? { ...current, escrowAmount: defaults.escrowAmount } : current);
+    }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
     setIntake(hire);
     setLinkDriverID("");
     setSeparateConfirmed(false);
@@ -370,6 +377,7 @@ function DriversContent() {
             isUploadingCDL={isUploadingCDL}
             onUploadCDL={uploadCDL}
             onRemoveCDL={removeCDL}
+            showEscrow={editing === null}
           />}
         </Modal>
       )}

@@ -313,6 +313,7 @@ export interface DriverInput {
   driverHome?: string;
   homeVersion?: number;
   chargePauseWeek?: string;
+  escrowAmount: string;
   fullName: string;
   isOwnerOperator: boolean;
   payType: PayType;
@@ -334,6 +335,10 @@ export interface DriverInput {
   active: boolean;
   notes: string;
   cdlFileId: string | null;
+}
+
+export interface DriverSetupDefaults {
+  escrowAmount: string;
 }
 
 export interface DriverBoardEntry {
@@ -688,6 +693,11 @@ export interface ExpenseSetting {
   categoryId: string | null;
   name: string;
   active: boolean;
+  version: number;
+}
+
+export interface DriverEscrowSetting {
+  defaultAmount: string;
   version: number;
 }
 

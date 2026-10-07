@@ -92,6 +92,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 					}
 					exec(string(migration))
 				}
+				applyLaterTestMigrations(t, ctx, admin, "051")
 			} else {
 				exec(string(source))
 			}

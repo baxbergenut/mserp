@@ -22,6 +22,7 @@ import type {
   Driver,
   AssignmentHistoryEntry,
   DriverInput,
+  DriverSetupDefaults,
   DriverIntake,
   DriverDirectoryEntry,
   FuelDashboard,
@@ -46,6 +47,7 @@ import type {
   Expense,
   ExpenseInput,
   ExpenseSetting,
+  DriverEscrowSetting,
   ExpensePage,
   ExpenseExtraction,
 } from "./types";
@@ -256,6 +258,7 @@ export async function logout(): Promise<void> {
 }
 
 export const fetchDrivers = () => apiRequest<Driver[]>("/drivers");
+export const fetchDriverSetupDefaults = () => apiRequest<DriverSetupDefaults>("/drivers/setup-defaults");
 export const fetchDriverDirectory = (query: PageQuery & { includeInactive?: boolean }) =>
   paginatedRequest<PaginatedResponse<DriverDirectoryEntry>>(withQuery("/driver-directory", query));
 export const fetchDriverIntakeById = (id: string) => apiRequest<DriverIntake>(`/driver-intake/${id}`);
@@ -424,6 +427,8 @@ export const settleDriverPay = (weekStart: string, revision: string, driverId: s
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
 export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
+export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/expense-settings/driver-escrow");
+export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/expense-settings/driver-escrow", { method: "PUT", body: JSON.stringify(input) });
 
 export const fetchInvestorPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart }));
 export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });

@@ -19,6 +19,7 @@ export const emptyDriverInput: DriverInput = {
   fullName: "",
   driverHome: "",
   homeVersion: 0,
+  escrowAmount: "2500.00",
   isOwnerOperator: false,
   payType: "cpm",
   payRate: 0,
@@ -45,6 +46,7 @@ export function driverToInput(driver: Driver): DriverInput {
     fullName: driver.fullName,
     driverHome: driver.driverHome ?? "",
     homeVersion: driver.homeVersion ?? 0,
+    escrowAmount: "",
     isOwnerOperator: driver.isOwnerOperator,
     payType: driver.payType,
     payRate: driver.payRate,
@@ -76,6 +78,7 @@ export function DriverForm({
   isUploadingCDL,
   onUploadCDL,
   onRemoveCDL,
+  showEscrow = false,
 }: {
   value: DriverInput;
   dispatchers: Dispatcher[];
@@ -85,6 +88,7 @@ export function DriverForm({
   isUploadingCDL: boolean;
   onUploadCDL: (file: File) => Promise<void>;
   onRemoveCDL: () => void;
+  showEscrow?: boolean;
 }) {
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
     onChange({ ...value, [key]: next, ...(["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
@@ -248,6 +252,17 @@ export function DriverForm({
             className={controlClass}
           />
         </Field>
+        {showEscrow && <Field label="Escrow amount ($)" hint="Creates a Safety expense and carries the unpaid balance into weekly Driver Pay.">
+          <input
+            required
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={value.escrowAmount}
+            onChange={(event) => set("escrowAmount", event.target.value)}
+            className={controlClass}
+          />
+        </Field>}
       </FormSection>
 
       <FormSection title="Assignments">

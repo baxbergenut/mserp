@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `056_expense_category_access.sql`:
+  `057_driver_escrow.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -288,6 +288,7 @@ browser bundle.
   `GET /driver-charges/schedules/{id}/preview` and `/history`,
   `POST /driver-charges/confirm` and `/reopen`.
 - Drivers: `GET/POST /drivers`, `GET/PUT/DELETE /drivers/{id}`
+  plus `GET /drivers/setup-defaults` for the current new-driver escrow default.
 - Driver assignment history: `GET /drivers/{id}/assignments` returns truck and
   dispatcher periods, current links, source notes, and whether the start is known.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
@@ -310,7 +311,8 @@ browser bundle.
   every list, summary, related-record view and write is category-scoped.
 - Expense settings: `GET/POST /expense-settings`, `PUT /expense-settings/{id}`
   (category, name, payment_method, payer; updates require the current version)
-  require `expense_settings.manage`.
+  plus `GET/PUT /expense-settings/driver-escrow` for the versioned new-driver
+  escrow default; all expense settings routes require `expense_settings.manage`.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
@@ -986,6 +988,14 @@ assignment lookup lists.
   restricted. Legacy settled totals/responsibility cannot be repurposed.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
+
+- Migration 057 creates one driver-covered `Escrow payment` expense in the
+  protected Safety category for every existing driver. New manual and FleetScope
+  driver setup creates the same expense atomically, using the versioned default
+  from Expenses & Charges settings (initially $2,500) unless setup supplies a
+  positive custom amount. The amount is editable only during first setup; later
+  profile edits never rewrite the escrow principal. Escrow uses the ordinary
+  unpaid expense balance and weekly Driver Pay deduction flow until fully paid.
 
 - Expense settings at /expenses/settings (linked from Expenses) manage categories,
   category-specific default names, payment methods and common payer suggestions.

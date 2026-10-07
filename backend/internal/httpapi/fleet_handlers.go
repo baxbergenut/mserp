@@ -30,6 +30,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Post("/investors", handler.saveInvestor)
 	r.Put("/investors/{id}", handler.saveInvestor)
 	r.Get("/drivers", handler.listDrivers)
+	r.Get("/drivers/setup-defaults", handler.getDriverSetupDefaults)
 	r.Get("/drivers/{id}", handler.getDriver)
 	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
 	r.Get("/drivers/{id}/location", handler.getDriverTruckLocation)
@@ -50,6 +51,15 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Post("/dispatchers", handler.createDispatcher)
 	r.Put("/dispatchers/{id}", handler.updateDispatcher)
 	r.Delete("/dispatchers/{id}", handler.deleteDispatcher)
+}
+
+func (handler fleetHandler) getDriverSetupDefaults(w http.ResponseWriter, r *http.Request) {
+	value, err := handler.repo.GetDriverSetupDefaults(r.Context())
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
 }
 
 func (handler fleetHandler) getDriver(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +106,7 @@ type driverRequest struct {
 	DriverHome       *string `json:"driverHome"`
 	HomeVersion      int     `json:"homeVersion"`
 	ChargePauseWeek  string  `json:"chargePauseWeek"`
+	EscrowAmount     string  `json:"escrowAmount"`
 	FullName         string  `json:"fullName"`
 	IsOwnerOperator  bool    `json:"isOwnerOperator"`
 	PayType          string  `json:"payType"`
@@ -160,10 +171,15 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	if err != nil {
 		return repository.DriverInput{}, err
 	}
+	request.EscrowAmount = strings.TrimSpace(request.EscrowAmount)
+	if request.EscrowAmount != "" && !validDriverEscrowAmount(request.EscrowAmount) {
+		return repository.DriverInput{}, errors.New("escrow amount must be greater than zero with at most two decimal places")
+	}
 	return repository.DriverInput{
 		AssignmentWeek: request.AssignmentWeek,
 		DriverHome:     request.DriverHome, HomeVersion: request.HomeVersion,
 		ChargePauseWeek: request.ChargePauseWeek,
+		EscrowAmount:    request.EscrowAmount,
 		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
 		PayType: request.PayType, PayRate: request.PayRate,
 		Phone: optionalString(normalizedPhone), Email: optionalString(request.Email),
@@ -351,6 +367,8 @@ func (handler fleetHandler) createDriver(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.ChargeActor = session.User.ID
 	value, err := handler.repo.CreateDriver(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
