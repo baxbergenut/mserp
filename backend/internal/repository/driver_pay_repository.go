@@ -144,11 +144,13 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  AND e.service_date >= $1::date AND e.service_date < $1::date+7 AND NOT e.deleted AND btrim(e.load_number)<>''
  `+weeklyAssignmentJoins+`
  `+grossBoardResolvedLoad+`
+ LEFT JOIN LATERAL (SELECT true present FROM driver_escrow_releases r JOIN driver_escrows x ON x.id=r.escrow_id
+ WHERE x.driver_id=d.id AND r.week_start=$1::date AND NOT r.cancelled LIMIT 1) escrow_release ON true
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND (d.active OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL) AND (e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ AND (d.active OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present) AND (escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
  OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
  AND NOT x.driver_settled AND x.expense_date<$1::date+7)
@@ -232,6 +234,10 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	}
 	kept := []DriverPayDriver{}
 	for _, d := range result.Drivers {
+		d.AutoCharges, err = escrowReleaseCredits(ctx, tx, d.ID, result.WeekStart)
+		if err != nil {
+			return result, err
+		}
 		d.Edits.ExpenseDeductions, err = expenseDeductions(ctx, tx, d.ID, result.WeekStart)
 		if err != nil {
 			return result, err
@@ -240,7 +246,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if d.Edits.GeneratedCharges == nil {
 			d.Edits.GeneratedCharges = []ChargeOccurrence{}
 		}
-		if len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
+		if len(d.AutoCharges) > 0 || len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
 			kept = append(kept, d)
 		}
 	}

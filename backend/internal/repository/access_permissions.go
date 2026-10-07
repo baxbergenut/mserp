@@ -20,7 +20,7 @@ var Permissions = []Permission{
 	{"expense_settings.manage", "Manage Expenses & Charges categories and entry options"},
 	{"payroll.read", "View payroll and settlement history"}, {"payroll.write", "Edit payroll and refresh linked loads"},
 	{"payroll.finalize", "Finalize and reopen settlements"},
-	{"escrow.read", "View driver escrow balances and collections"}, {"escrow.write", "Manage the new-driver escrow default"},
+	{"escrow.read", "View driver escrow balances and collections"}, {"escrow.write", "Manage escrow releases and the new-driver default"},
 	{"charges.read", "View driver and truck charges"}, {"charges.write", "Manage charges and collections"},
 	{"tasks.read", "View tasks and Relay identity reviews"}, {"tasks.write", "Manage tasks and review Relay identities"},
 	{"reports.read", "View financial reports"},

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"mserp/internal/repository"
 )
 
@@ -21,10 +23,50 @@ func registerEscrowRoutes(r chi.Router, logger *slog.Logger, repo *repository.Es
 	r.Get("/escrows", h.list)
 	r.Get("/escrows/settings", h.getDriverEscrowSetting)
 	r.Put("/escrows/settings", h.saveDriverEscrowSetting)
+	r.Post("/escrows/{id}/releases", h.saveRelease)
+	r.Put("/escrows/{id}/releases/{releaseID}", h.saveRelease)
 }
 func (h escrowHandler) writeError(w http.ResponseWriter, err error) {
+	var invalid *repository.ChargeValidationError
+	var database *pgconn.PgError
+	if errors.As(err, &invalid) {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
+	if errors.Is(err, repository.ErrEscrowReleaseConflict) {
+		writeAPIError(w, 409, err.Error())
+		return
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, 404, "Escrow record not found")
+		return
+	}
+	if errors.As(err, &database) && database.Code == "23514" {
+		writeAPIError(w, 409, database.Message)
+		return
+	}
 	h.logger.Error("escrow request failed", "error", err)
 	writeAPIError(w, http.StatusInternalServerError, "Escrow could not be loaded or saved")
+}
+
+func (h escrowHandler) saveRelease(w http.ResponseWriter, r *http.Request) {
+	var input repository.EscrowReleaseInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeAPIError(w, 400, "Invalid release request")
+		return
+	}
+	if !isUUID(chi.URLParam(r, "id")) || !isUUID(input.ID) || !validDriverEscrowAmount(input.Amount) ||
+		(r.Method == http.MethodPost && input.Version != 0) ||
+		(r.Method == http.MethodPut && (input.Version < 1 || input.ID != chi.URLParam(r, "releaseID"))) {
+		writeAPIError(w, 400, "Enter a valid release amount and identity")
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if err := h.repo.SaveRelease(r.Context(), chi.URLParam(r, "id"), input, session.User.ID); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"saved": true})
 }
 func (h escrowHandler) list(w http.ResponseWriter, r *http.Request) {
 	page, err := parsePagination(r)

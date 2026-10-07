@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `059_standalone_escrow.sql`:
+  `060_escrow_releases.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -289,6 +289,8 @@ browser bundle.
 - Escrow: `GET /escrows` (pagination, search, driverId, status: paid/partial/unpaid),
   `GET/PUT /escrows/settings` for the versioned new-driver default. Dedicated
   `escrow.read`/`escrow.write` permissions; collection writes use payroll permissions.
+  `POST /escrows/{id}/releases` and `PUT /escrows/{id}/releases/{releaseID}`
+  create/edit/cancel a versioned release using escrow.write.
 - Driver charges: `GET /driver-charges` (optional driverId),
   `POST /driver-charges/types`, `DELETE /driver-charges/types/{id}` (version),
   `POST /driver-charges/schedules`,
@@ -1027,6 +1029,23 @@ assignment lookup lists.
   autosave/finalize use the existing explicit amount, zero-deferral and carry
   rules. Cross-week versions and reserved payments prevent double collection;
   database guards protect finalized weeks. Reopening retains paid collections.
+  Migration 060 adds driver_escrow_releases and actor-stamped release events.
+  Release is a compact anchored amount/week form in both directory and profile;
+  History offers edit/cancel for current/future unfinalized releases. Past weeks
+  cannot be selected or altered; the API and database use the New York week.
+  Client-generated release UUIDs plus escrow/release versions prevent duplicate
+  submissions and stale writes. Driver/advisory locks serialize against payroll
+  and finalization. Released amounts reserve collected funds, including scheduled
+  future credits; Held = collected minus noncancelled releases. Collections and
+  amounts left to collect never increase because of a release. Funding checks
+  prevent spending later collections or lowering a collection below reserved funds.
+  Each release is one fixed positive autoCharges entry with source escrow-release:ID
+  in its selected Driver Pay week, retained in frozen settlements/history. Payroll
+  cannot edit it; no remainder or credit carries into later weeks. Explicit release
+  recipients appear even when inactive, but only in their selected release week
+  unless other actual payroll history/work exists. Credits stay on the personal
+  driver statement, never Investor Pay. Once releases exist, use a forward fix
+  rather than an older binary that cannot display those credits.
   Deleting a driver retains their escrow/name snapshot. Separate escrow.read and
   escrow.write permissions control the directory/default, while payroll writes
   retain payroll permissions. Older binaries cannot display migrated escrow and

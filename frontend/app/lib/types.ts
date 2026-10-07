@@ -1020,7 +1020,12 @@ export interface TruckTerm { truckId: string; ownerId: string; weekStart: string
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
 export interface TruckChargeData { eligibleTruckIds: string[]; terms: TruckTerm[]; phases: TruckChargePhase[] }
 
+export interface EscrowRelease { id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
+export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
 export interface Escrow {
+  heldAmount: string;
+  releasedAmount: string;
+  releases: EscrowRelease[];
   id: string;
   driverId: string | null;
   driverName: string;
@@ -1036,5 +1041,5 @@ export interface Escrow {
 }
 
 export interface EscrowPage extends PaginatedResponse<Escrow> {
- summary: { target: string; paid: string; remaining: string; drivers: number; paidDrivers: number; partialDrivers: number; unpaidDrivers: number };
+ summary: { held: string; released: string; target: string; paid: string; remaining: string; drivers: number; paidDrivers: number; partialDrivers: number; unpaidDrivers: number };
 }

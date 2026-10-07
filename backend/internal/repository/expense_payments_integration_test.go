@@ -101,7 +101,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(truckErr)
 				}
 				exec(string(expenseAccessMigration))
-				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql"} {
+				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql", "060_escrow_releases.sql"} {
 					body, readErr := os.ReadFile("../../sql/" + name)
 					if readErr != nil {
 						t.Fatal(readErr)

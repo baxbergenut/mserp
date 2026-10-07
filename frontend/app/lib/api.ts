@@ -49,6 +49,7 @@ import type {
   ExpenseSetting,
   DriverEscrowSetting,
   EscrowPage,
+  EscrowReleaseInput,
   ExpensePage,
   ExpenseExtraction,
 } from "./types";
@@ -444,3 +445,5 @@ export const updateUpdater = (id: string, value: UpdaterInput) => apiRequest<Upd
 export const deleteUpdater = (id: string) => apiRequest<void>(`/updaters/${id}`, { method: "DELETE" });
 
 export const fetchEscrows = (query: PageQuery & { driverId?: string; status?: string; includeInactive?: boolean }) => apiRequest<EscrowPage>(withQuery("/escrows", query));
+
+export const saveEscrowRelease = (escrowId: string, input: EscrowReleaseInput) => apiRequest<{ saved: boolean }>(`/escrows/${escrowId}/releases${input.version ? `/${input.id}` : ""}`, { method: input.version ? "PUT" : "POST", body: JSON.stringify(input) });

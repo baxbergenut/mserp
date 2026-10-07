@@ -47,6 +47,10 @@ func TestDriverEscrowDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	releaseMigration, err := os.ReadFile("../../sql/060_escrow_releases.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("driver_escrow_test_%d", time.Now().UnixNano())
@@ -67,6 +71,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				if !strings.Contains(source, body) || !strings.Contains(source, renameBody) {
 					t.Fatal("driver escrow migrations must match the fresh schema")
 				}
+				source = strings.Replace(source, strings.ReplaceAll(string(releaseMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, standaloneBody, "", 1)
 				source = strings.Replace(source, body, "", 1)
 				source = strings.Replace(source, renameBody, "", 1)
@@ -81,6 +86,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				exec(renameBody)
 				exec(`INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-01-05',500.25 FROM expenses WHERE driver_id=$1`, legacyDriver)
 				exec(standaloneBody)
+				exec(string(releaseMigration))
 			}
 			for _, table := range []string{"driver_escrow_settings", "driver_escrows", "driver_escrow_payments"} {
 				var owner string
@@ -154,6 +160,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			assertEscrowAccount(t, ctx, pool, defaulted.ID, "2750.00", "2026-09-28")
 			verifyEscrowCollections(t, ctx, pool, driver.ID, hireDate)
 			verifyEscrowSummaryAndRoster(t, ctx, pool, hireDate)
+			verifyEscrowReleases(t, ctx, pool)
 		})
 	}
 }
@@ -180,7 +187,7 @@ func verifyEscrowSummaryAndRoster(t *testing.T, ctx context.Context, pool *pgxpo
 	repo := NewEscrowRepository(pool)
 	q := EscrowQuery{Search: "Summary", Pagination: Pagination{Page: 1, PageSize: 1}}
 	result, err := repo.List(ctx, q)
-	want := EscrowSummary{Target: "7500.00", Paid: "2600.25", Remaining: "4899.75", Drivers: 3, PaidDrivers: 1, PartialDrivers: 1, UnpaidDrivers: 1}
+	want := EscrowSummary{Held: "2600.25", Released: "0", Target: "7500.00", Paid: "2600.25", Remaining: "4899.75", Drivers: 3, PaidDrivers: 1, PartialDrivers: 1, UnpaidDrivers: 1}
 	if err != nil || result.Total != 3 || len(result.Items) != 1 || result.Summary != want {
 		t.Fatalf("filtered summary across pages: %+v %v", result, err)
 	}

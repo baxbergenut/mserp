@@ -109,6 +109,10 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			return
 		}
 		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+			writeAPIError(w, http.StatusConflict, pgErr.Message)
+			return
+		}
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			writeAPIError(w, http.StatusConflict, "the driver was removed; reload this week")
 			return

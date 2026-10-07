@@ -107,3 +107,6 @@ assert.equal(costAmount({ ...owner, payType: 'cpm' }, { ...carryEdits, costs: { 
 const carrySaved = { ...carryEdits, version: 9, costs: { ...carryEdits.costs, revision: 'v2' } };
 assert.equal(reconcilePaySave({ driver: { ...carryEdits, notes: 'typing' } }, carryEdits, carrySaved).driver.costs.revision, 'v2');
 console.log('Remainder checks passed: automatic carry, zero deferral, tariff changes and cross-week revision reconciliation.');
+
+assert.equal(driverTotals({ ...owner, autoCharges: [{ name: "Escrow release", amount: "100.25", source: "escrow-release:release" }] }, auto).payable, driverTotals(owner, auto).payable + 10025n);
+console.log("Escrow releases add the exact fixed credit to payroll totals.");

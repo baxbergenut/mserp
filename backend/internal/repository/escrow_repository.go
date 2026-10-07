@@ -18,6 +18,9 @@ type EscrowPayment struct {
 }
 
 type Escrow struct {
+	HeldAmount      string          `json:"heldAmount"`
+	ReleasedAmount  string          `json:"releasedAmount"`
+	Releases        []EscrowRelease `json:"releases"`
 	ID              string          `json:"id"`
 	DriverID        *string         `json:"driverId"`
 	DriverName      string          `json:"driverName"`
@@ -38,6 +41,8 @@ type EscrowQuery struct {
 }
 
 type EscrowSummary struct {
+	Held           string `json:"held"`
+	Released       string `json:"released"`
 	Target         string `json:"target"`
 	Paid           string `json:"paid"`
 	Remaining      string `json:"remaining"`
@@ -52,12 +57,14 @@ type EscrowPage struct {
 }
 
 const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
+ coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
  e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0) remaining_amount,
  CASE WHEN e.amount-e.opening_paid-coalesce(p.paid,0)<=0 THEN 'paid'
  WHEN e.opening_paid+coalesce(p.paid,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
- LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true`
+ LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
+ LEFT JOIN LATERAL (SELECT sum(amount) released FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled) r ON true`
 
 func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -70,25 +77,26 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 	var summary EscrowSummary
 	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
  drivers AS (SELECT coalesce(driver_id,id) id,sum(paid_amount) paid,sum(remaining_amount) remaining FROM filtered WHERE active GROUP BY coalesce(driver_id,id))
- SELECT count(*),coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
+ SELECT count(*),coalesce(sum(held_amount),0)::text,coalesce(sum(released_amount),0)::text,coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
  (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE remaining<=0),
  (SELECT count(*) FROM drivers WHERE remaining>0 AND paid>0),(SELECT count(*) FROM drivers WHERE remaining>0 AND paid=0)
- FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive).Scan(&total, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
+ FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive).Scan(&total, &summary.Held, &summary.Released, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
 		return EscrowPage{}, err
 	}
 	page := q.Pagination.Normalize(total)
-	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $5 OFFSET $6`, q.Search, q.DriverID, q.Status, q.IncludeInactive, page.PageSize, page.Offset())
+	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $5 OFFSET $6`, q.Search, q.DriverID, q.Status, q.IncludeInactive, page.PageSize, page.Offset())
 	if err != nil {
 		return EscrowPage{}, err
 	}
 	items := []Escrow{}
 	for rows.Next() {
 		var e Escrow
-		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version); err != nil {
+		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version, &e.HeldAmount, &e.ReleasedAmount); err != nil {
 			rows.Close()
 			return EscrowPage{}, err
 		}
 		e.Payments = []EscrowPayment{}
+		e.Releases = []EscrowRelease{}
 		items = append(items, e)
 	}
 	err = rows.Err()
@@ -113,6 +121,25 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 		payments.Close()
 		if e != nil {
 			return EscrowPage{}, e
+		}
+		releases, releaseErr := tx.Query(ctx, `SELECT r.id::text,r.week_start::text,r.amount::text,r.cancelled,r.version,
+ NOT r.cancelled AND $3::uuid IS NOT NULL AND r.week_start >= $2::date AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=$3 AND s.week_start=r.week_start AND s.finalized)
+ FROM driver_escrow_releases r WHERE r.escrow_id=$1 ORDER BY r.week_start DESC,r.created_at DESC`, items[i].ID, ChargeCurrentWeek(), items[i].DriverID)
+		if releaseErr != nil {
+			return EscrowPage{}, releaseErr
+		}
+		for releases.Next() {
+			var release EscrowRelease
+			if releaseErr = releases.Scan(&release.ID, &release.WeekStart, &release.Amount, &release.Cancelled, &release.Version, &release.Editable); releaseErr != nil {
+				releases.Close()
+				return EscrowPage{}, releaseErr
+			}
+			items[i].Releases = append(items[i].Releases, release)
+		}
+		releaseErr = releases.Err()
+		releases.Close()
+		if releaseErr != nil {
+			return EscrowPage{}, releaseErr
 		}
 	}
 	return EscrowPage{Page: NewPage(items, total, page), Summary: summary}, tx.Commit(ctx)
