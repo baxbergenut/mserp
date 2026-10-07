@@ -92,6 +92,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
   shell and sidebar; `frontend/app/login/` owns the login page.
+  `components/PageNavigation.tsx` places the shared Back link on its own row
+  above page content on every page; never float it alongside cards or tables.
 - `frontend/app/page.tsx`: redirects `/` to `/gross-board`.
 - `frontend/app/dashboard/`: redirects legacy Dashboard links to Gross Board.
   The old load-derived dashboard is removed pending a Gross Board-based replacement.

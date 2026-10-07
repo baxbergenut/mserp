@@ -92,7 +92,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
     : previous ?? ({ "/drivers/detail": "/drivers", "/trucks/detail": "/trucks" } as Record<string,string>)[parsed.pathname];
   return <ViewMemoryContext.Provider value={scope}><BackHrefContext.Provider value={back}><MarkBackContext.Provider value={markBack}><main ref={mainRef} className="min-w-0 flex-1 overflow-auto">
     <div className="w-full px-4 py-6 sm:px-6 xl:px-8">
-      {back && <Link data-navigation-back href={back} prefetch={false} scroll={false} aria-label={payTarget?.fromPay ? "Back to Driver Pay" : "Back to previous page"} className="relative z-10 float-left mr-3 inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-xs text-zinc-400 hover:text-blue-300"><ArrowLeft className="h-3.5 w-3.5" />{payTarget?.fromPay ? "Back to Driver Pay" : "Back"}</Link>}
+      {back && <div className="mb-4 flex"><Link data-navigation-back href={back} prefetch={false} scroll={false} aria-label={payTarget?.fromPay ? "Back to Driver Pay" : "Back to previous page"} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-xs text-zinc-400 hover:text-blue-300"><ArrowLeft className="h-3.5 w-3.5" />{payTarget?.fromPay ? "Back to Driver Pay" : "Back"}</Link></div>}
       <NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}>{children}</NavigationSearchContext.Provider>
     </div>
   </main></MarkBackContext.Provider></BackHrefContext.Provider></ViewMemoryContext.Provider>;
