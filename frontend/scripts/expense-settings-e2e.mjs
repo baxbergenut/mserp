@@ -24,7 +24,7 @@ export async function verifyExpenseSettings(page, base, temp) {
   const escrowDriver = drivers.items.find(driver => driver.fullName === 'Escrow Test Driver');
   expect(escrowDriver).toBeTruthy();
   const escrowExpenses = await (await page.request.get(`${base}/api/expenses?page=1&pageSize=100&chargeDriverId=${escrowDriver.id}`)).json();
-  const escrowExpense = escrowExpenses.items.find(expense => expense.expenseType === 'Escrow payment');
+  const escrowExpense = escrowExpenses.items.find(expense => expense.expenseType === 'Escrow');
   expect(escrowExpense).toMatchObject({ category: 'Safety', amount: '2650.00', remainingAmount: '2650.00', coveredBy: 'Driver' });
   const driverRow = page.getByRole('row').filter({ has: page.getByText('Escrow Test Driver', { exact: true }) });
   await driverRow.getByRole('button', { name: 'Edit', exact: true }).click();

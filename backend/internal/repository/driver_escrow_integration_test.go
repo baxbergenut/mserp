@@ -37,6 +37,10 @@ func TestDriverEscrowDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	renameMigration, err := os.ReadFile("../../sql/058_rename_driver_escrow.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
@@ -52,11 +56,13 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public;DROP SCHEMA `+quoted+` CASCADE`) }()
 			source := strings.ReplaceAll(string(initSQL), "\r\n", "\n")
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
+			renameBody := strings.ReplaceAll(string(renameMigration), "\r\n", "\n")
 			if mode == "migration" {
-				if !strings.Contains(source, body) {
-					t.Fatal("migration 057 must match the fresh schema")
+				if !strings.Contains(source, body) || !strings.Contains(source, renameBody) {
+					t.Fatal("driver escrow migrations must match the fresh schema")
 				}
 				source = strings.Replace(source, body, "", 1)
+				source = strings.Replace(source, renameBody, "", 1)
 			}
 			exec(source)
 			var legacyDriver string
@@ -65,6 +71,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(body)
+				exec(renameBody)
 			}
 			var owner string
 			if err = admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename='driver_escrow_settings'`, schema).Scan(&owner); err != nil || owner != "mserp_app" {
@@ -113,7 +120,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			}
 			found := false
 			for _, card := range report.Drivers {
-				if card.ID == driver.ID && len(card.Edits.ExpenseDeductions) == 1 && card.Edits.ExpenseDeductions[0].Name == "Escrow payment" && card.Edits.ExpenseDeductions[0].Amount == "3100.00" {
+				if card.ID == driver.ID && len(card.Edits.ExpenseDeductions) == 1 && card.Edits.ExpenseDeductions[0].Name == "Escrow" && card.Edits.ExpenseDeductions[0].Amount == "3100.00" {
 					found = true
 				}
 			}
@@ -139,7 +146,7 @@ func assertEscrowExpense(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	var count int
 	var gotAmount, gotDate, category, name, coveredBy, chargeDriver string
 	err := pool.QueryRow(ctx, `SELECT count(*)::int,min(amount)::text,min(expense_date)::text,min(category),min(expense_type),min(covered_by),min(charge_driver_id::text) FROM expenses WHERE driver_id=$1 AND system_kind='driver_escrow'`, driver).Scan(&count, &gotAmount, &gotDate, &category, &name, &coveredBy, &chargeDriver)
-	if err != nil || count != 1 || gotAmount != amount || gotDate != date || category != "Safety" || name != "Escrow payment" || coveredBy != "Driver" || chargeDriver != driver {
+	if err != nil || count != 1 || gotAmount != amount || gotDate != date || category != "Safety" || name != "Escrow" || coveredBy != "Driver" || chargeDriver != driver {
 		t.Fatalf("escrow count=%d amount=%q date=%q category=%q name=%q coveredBy=%q chargeDriver=%q err=%v", count, gotAmount, gotDate, category, name, coveredBy, chargeDriver, err)
 	}
 }

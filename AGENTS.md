@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `057_driver_escrow.sql`:
+  `058_rename_driver_escrow.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -989,7 +989,7 @@ assignment lookup lists.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
 
-- Migration 057 creates one driver-covered `Escrow payment` expense in the
+- Migration 057 creates one driver-covered `Escrow` expense in the
   protected Safety category for every existing driver. New manual and FleetScope
   driver setup creates the same expense atomically, using the versioned default
   from Expenses & Charges settings (initially $2,500) unless setup supplies a

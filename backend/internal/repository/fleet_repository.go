@@ -310,7 +310,7 @@ func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, acto
 		SELECT 'MS Express',s.category_id,c.name,
 		       coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),
 		       d.id,d.full_name,coalesce(nullif($2,'')::numeric,s.default_amount),
-		       'Escrow payment','Driver safety escrow','Driver','MS Express',
+		       'Escrow','Driver safety escrow','Driver','MS Express',
 		       nullif($3,'')::uuid,(SELECT username FROM app_users WHERE id=nullif($3,'')::uuid),
 		       'driver_escrow'
 		FROM drivers d
