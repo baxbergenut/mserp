@@ -2498,21 +2498,20 @@ BEGIN
 END $$;
 -- Materialize the timezone catalog once for the historical backfill.
 WITH zones AS MATERIALIZED (SELECT name FROM pg_timezone_names), derived AS (
- SELECT f.id,coalesce(z.name,'America/New_York') zone,z.name IS NOT NULL valid,
+ SELECT f.id,CASE f.timezone
+        WHEN 'US/Eastern' THEN 'America/New_York' WHEN 'US/Central' THEN 'America/Chicago'
+        WHEN 'US/Mountain' THEN 'America/Denver' WHEN 'US/Pacific' THEN 'America/Los_Angeles'
+        WHEN 'US/Arizona' THEN 'America/Phoenix' WHEN 'US/Alaska' THEN 'America/Anchorage'
+        WHEN 'US/Aleutian' THEN 'America/Adak' WHEN 'US/Hawaii' THEN 'Pacific/Honolulu'
+        WHEN 'US/East-Indiana' THEN 'America/Indiana/Indianapolis' WHEN 'US/Indiana-Starke' THEN 'America/Indiana/Knox'
+        WHEN 'US/Michigan' THEN 'America/Detroit' WHEN 'US/Samoa' THEN 'Pacific/Pago_Pago'
+        ELSE coalesce(z.name,'America/New_York') END zone,z.name IS NOT NULL valid,
  ARRAY(SELECT DISTINCT upper(btrim(p->>'value')) FROM jsonb_array_elements(f.prompts) p
  WHERE lower(btrim(p->>'label'))='truck #' AND btrim(p->>'value')<>'' ORDER BY 1) units
  FROM fuel_transactions f LEFT JOIN zones z ON z.name=nullif(f.timezone,'')
 )
 UPDATE fuel_transactions f SET reporting_timezone=d.zone,purchased_on=(f.purchased_at AT TIME ZONE d.zone)::date,
  reporting_timezone_valid=d.valid,reported_truck_units=d.units FROM derived d WHERE f.id=d.id;
--- Canonical aliases have identical date rules; store the same canonical label as new imports.
-UPDATE fuel_transactions SET reporting_timezone=CASE reporting_timezone
- WHEN 'US/Eastern' THEN 'America/New_York' WHEN 'US/Central' THEN 'America/Chicago'
- WHEN 'US/Mountain' THEN 'America/Denver' WHEN 'US/Pacific' THEN 'America/Los_Angeles'
- WHEN 'US/Arizona' THEN 'America/Phoenix' WHEN 'US/Alaska' THEN 'America/Anchorage'
- WHEN 'US/Aleutian' THEN 'America/Adak' WHEN 'US/Hawaii' THEN 'Pacific/Honolulu'
- WHEN 'US/East-Indiana' THEN 'America/Indiana/Indianapolis' WHEN 'US/Indiana-Starke' THEN 'America/Indiana/Knox'
- WHEN 'US/Michigan' THEN 'America/Detroit' WHEN 'US/Samoa' THEN 'Pacific/Pago_Pago' ELSE reporting_timezone END;
 CREATE TRIGGER fuel_reporting_fields_before BEFORE INSERT OR UPDATE ON fuel_transactions
 FOR EACH ROW EXECUTE FUNCTION fuel_reporting_fields();
 ALTER TABLE fuel_transactions ALTER COLUMN reporting_timezone SET NOT NULL;

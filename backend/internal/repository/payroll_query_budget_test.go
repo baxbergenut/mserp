@@ -71,7 +71,6 @@ func TestPayrollQueriesDoNotGrowPerDriver(t *testing.T) {
 	if one < 5 || many > one+2 || many > 50 {
 		t.Fatalf("payroll query growth: one driver=%d, 41 drivers=%d", one, many)
 	}
-	if warm := read(); warm > 3 {
-		t.Fatalf("warm report missed snapshot cache: %d calls", warm)
-	}
+	// Concurrent tests may commit unrelated transactions between calls. Cache
+	// reuse is tested against a pinned snapshot in TestPayrollSnapshotCacheDatabase.
 }
