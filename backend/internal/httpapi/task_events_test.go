@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -34,6 +36,27 @@ func TestTaskEventsDatabase(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	// NOTIFY channels are database-wide, not schema-scoped. Repository tests
+	// running in another package must not look like rollback notifications here.
+	admin, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	database := fmt.Sprintf("mserp_task_events_%d_test", time.Now().UnixNano())
+	quoted := pgx.Identifier{database}.Sanitize()
+	if _, err = admin.Exec(ctx, "CREATE DATABASE "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stop()
+		if _, err := admin.Exec(cleanup, "DROP DATABASE "+quoted+" WITH (FORCE)"); err != nil {
+			t.Error(err)
+		}
+	}()
+	cfg = cfg.Copy()
+	cfg.ConnConfig.Database = database
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
