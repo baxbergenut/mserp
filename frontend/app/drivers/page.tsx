@@ -37,7 +37,6 @@ import {
   ManagementSearch,
   Modal,
   RowActions,
-  StatusBadge,
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
@@ -271,7 +270,7 @@ function DriversContent() {
             onChange={(event) => { setShowInactiveDrivers(event.target.checked); setPage(1); }}
             className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600"
           />
-          Show inactive drivers
+          Show terminated drivers
         </label>
       </div>
 
@@ -284,7 +283,7 @@ function DriversContent() {
               search
                 ? "No drivers match your search."
                 : !showInactiveDrivers && drivers.some((driver) => !driver.active)
-                  ? "No active drivers. Check Show inactive drivers to view inactive records."
+                  ? "No active drivers. Check Show terminated drivers to view terminated records."
                   : "No drivers yet. Add your first driver to get started."
             }
           />
@@ -331,7 +330,7 @@ function DriversContent() {
                       <span className="text-zinc-600">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">{driver.intakeId ? <span className="text-xs text-zinc-500">Needs setup</span> : <StatusBadge active={driver.active} />}</td>
+                  <td className="px-4 py-3">{driver.intakeId ? <span className="text-xs text-zinc-500">Needs setup</span> : <span className="capitalize text-zinc-400">{driver.status ?? (driver.active ? "active" : "terminated")}</span>}</td>
                   <td className="px-4 py-3">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="float-right text-xs text-blue-400 hover:text-blue-300">Set up</button> : <RowActions onEdit={() => openEdit(driver)} onDelete={() => setPendingDelete(driver)} />}</td>
                 </tr>
               ))}
@@ -362,7 +361,7 @@ function DriversContent() {
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
           {intake && <div className="mb-5"><Field label="Already in MSERP?"><select className={controlClass} value={linkDriverID} onChange={(event) => setLinkDriverID(event.target.value)}>
             <option value="">Set up as a new driver</option>
-            {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {formatPhone(driver.phone) || driver.email || "No contact details"}{driver.active ? "" : " (inactive)"}</option>)}
+            {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {formatPhone(driver.phone) || driver.email || "No contact details"}{driver.active ? "" : " (terminated)"}</option>)}
           </select></Field>{linkDriverID && <p className="mt-3 text-sm text-zinc-400">Confirm this is the same person as {intake.driver.fullName}. Linking keeps the existing profile, pay rates and assignments.</p>}</div>}
           {intake && !linkDriverID && intake.candidates.length > 0 && <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
             <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${formatPhone(candidate.phone) || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>

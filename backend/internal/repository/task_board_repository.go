@@ -21,8 +21,10 @@ const boardTaskCTE = `WITH tasks AS (
  UNION ALL
  SELECT s.id,s.title,s.notes,s.completed_at,NULL::uuid,s.created_at,s.created_at,
  NULL::uuid,NULL::uuid,s.kind,s.completed_by_name,s.outcome,false FROM system_task_records s
+ WHERE s.kind<>'escrow_release' OR s.completed_at IS NOT NULL OR EXISTS(
+ SELECT 1 FROM escrow_release_reviews e WHERE e.id=s.id AND e.due_date<=(now() AT TIME ZONE 'America/New_York')::date)
 ), visible AS (
- SELECT t.*,coalesce(u.username,'') AS assignee_name,
+ SELECT t.*,CASE WHEN t.system_task_kind IS NULL THEN coalesce(u.username,'') ELSE coalesce((SELECT string_agg(au.username, ', ' ORDER BY au.username) FROM app_users au WHERE au.id=a.assignee_id OR au.id=ANY(a.assignee_ids)),'') END AS assignee_name,
  CASE WHEN t.system_task_kind IS NOT NULL THEN 'System' ELSE coalesce(b.username,'') END AS assigner_name,
  CASE WHEN t.system_task_kind IS NOT NULL THEN a.assignee_id ELSE t.assigned_to END AS effective_assignee
  FROM tasks t
@@ -31,7 +33,7 @@ const boardTaskCTE = `WITH tasks AS (
  LEFT JOIN app_users b ON b.id=coalesce(t.assigned_by,t.created_by)
  WHERE ($1::boolean OR
  (t.system_task_kind IS NULL AND (t.assigned_to IS NULL OR t.assigned_to=NULLIF($2,'')::uuid OR t.assigned_by=NULLIF($2,'')::uuid)) OR
- (t.system_task_kind IS NOT NULL AND a.assignee_id=NULLIF($2,'')::uuid AND u.active))
+ (t.system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM app_users au WHERE au.active AND au.id=NULLIF($2,'')::uuid AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids)))))
  AND (t.system_task_kind IS DISTINCT FROM 'driver_onboarding' OR $3::boolean)
 ) `
 

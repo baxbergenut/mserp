@@ -12,7 +12,6 @@ import {
   controlClass,
   Field,
   FormSection,
-  Toggle,
 } from "../components/management/ManagementUI";
 
 export const emptyDriverInput: DriverInput = {
@@ -37,6 +36,8 @@ export const emptyDriverInput: DriverInput = {
   dispatcherId: null,
   truckId: null,
   active: true,
+  status: "active",
+  terminationDate: "",
   notes: "",
   cdlFileId: null,
 };
@@ -64,6 +65,8 @@ export function driverToInput(driver: Driver): DriverInput {
     dispatcherId: driver.dispatcherId,
     truckId: driver.truckId,
     active: driver.active,
+    status: driver.status ?? (driver.active ? "active" : "terminated"),
+    terminationDate: driver.terminationDate?.slice(0,10) ?? "",
     notes: driver.notes ?? "",
     cdlFileId: driver.cdlFileId,
   };
@@ -367,12 +370,12 @@ export function DriverForm({
       </FormSection>
 
       <FormSection title="Status and notes">
-        <Toggle
-          checked={value.active}
-          onChange={(checked) => onChange({ ...value, active: checked, chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek(), assignmentWeek: value.assignmentWeek ?? "", ...(!checked ? { truckId: null, dispatcherId: null, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
-          label="Active driver"
-          description="Marking inactive disconnects the current truck and dispatcher. Historical records are retained."
-        />
+        <Field label="Driver status"><select aria-label="Driver status" className={controlClass} value={value.status ?? (value.active ? "active" : "terminated")} onChange={event => {
+          const status = event.target.value as NonNullable<DriverInput["status"]>;
+          const active = status !== "terminated";
+          onChange({ ...value, status, active, terminationDate: active ? "" : value.terminationDate || new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()), chargePauseWeek: value.chargePauseWeek ?? currentChargeWeek(), ...(!active ? { truckId: null, dispatcherId: null, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) });
+        }}>{["active", "vacation", "home", "terminated"].map(status => <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>)}</select></Field>
+        {!value.active && <Field label="Termination date"><input type="date" required className={controlClass} value={value.terminationDate ?? ""} onChange={event => set("terminationDate", event.target.value)} /></Field>}
         {!value.active && <Field label="Pause charges from (Monday)">
           <input type="date" min={currentChargeWeek()} required value={value.chargePauseWeek ?? currentChargeWeek()} onChange={event => set("chargePauseWeek", event.target.value)} className={controlClass} />
           <p className="mt-1 text-xs text-zinc-500">Charges pause from this week. Outstanding balances remain; reactivation does not resume charges.</p>

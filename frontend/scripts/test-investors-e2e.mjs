@@ -7,6 +7,7 @@ import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
 import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
+import { runEscrowTasksE2E } from './escrow-tasks-e2e.mjs';
 import { runOffboardingE2E } from './offboarding-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
@@ -42,18 +43,19 @@ try {
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);
   database.searchParams.set('role', 'mserp_app');
-  const apiPort = 18549;
+  const apiPort = Number(process.env.MSERP_E2E_API_PORT || 18549);
+  const webPort = Number(process.env.MSERP_E2E_WEB_PORT || 13549);
   api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     ...process.env, DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
-    AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: 'http://127.0.0.1:13549',
+    AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: `http://127.0.0.1:${webPort}`,
     FLEETSCOPE_COMPANY_ID: webhookCompany, FLEETSCOPE_WEBHOOK_SECRET: webhookSecret,
   }});
   let apiLog = ''; api.stdout.on('data', (chunk) => { apiLog += chunk; }); api.stderr.on('data', (chunk) => { apiLog += chunk; });
   await expect.poll(async () => { if (api.exitCode !== null) throw new Error(`Test API exited: ${apiLog}`); try { return (await fetch(`http://127.0.0.1:${apiPort}/readyz`)).status; } catch { return 0; } }, { timeout: 20000 }).toBe(200);
   server = createServer(async (req, res) => {
     try {
-      const url = new URL(req.url, 'http://127.0.0.1:13549');
+      const url = new URL(req.url, `http://127.0.0.1:${webPort}`);
       if (url.pathname.startsWith('/api/')) {
         const chunks = []; for await (const chunk of req) chunks.push(chunk);
         const headers = {};
@@ -78,18 +80,20 @@ try {
   // interval so a save/read does not race Node's default idle socket shutdown.
   server.keepAliveTimeout = 60000;
   server.headersTimeout = 65000;
-  await new Promise((done) => server.listen(13549, '127.0.0.1', done));
+  await new Promise((done) => server.listen(webPort, '127.0.0.1', done));
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = []; page.on('pageerror', (error) => errors.push(error.message));
-  const base = 'http://127.0.0.1:13549';
+  const base = `http://127.0.0.1:${webPort}`;
   expect((await page.request.get(`${base}/api/investors`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/investors`);
   await page.getByLabel('Email or existing username', { exact: true }).fill('investor-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--profiles-only')) {
+  if (process.argv.includes('--escrow-only')) {
+    await runEscrowTasksE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--profiles-only')) {
     await runProfilesE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--assignment-week-only')) {
     await runAssignmentWeekE2E({ page, base, sql, schema });
