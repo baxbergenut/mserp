@@ -1513,7 +1513,11 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 - Escrow `group=active|terminated` tabs have independent collection/release statuses.
   Active includes Vacation and Home. API status codes are paid/partial/unpaid and
   released/partially_released/not_released. Release status compares actual released
-  funds and held balances, so an unfunded zero balance is not automatically released.
+  funds and held balances. An explicitly completed released review for the current
+  termination also marks a zero balance Released, allowing approved historical
+  migration clearances without fabricated transactions. Unreviewed zero balances
+  are not automatically released; a later positive balance or new termination
+  cannot inherit that zero-balance clearance.
 - An internal worker runs at startup and every minute, independently of external
   sync settings, to materialize escrow reviews on termination date + 30 New York
   calendar days. Downtime catches up idempotently; system task notifications update

@@ -60,7 +60,9 @@ const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver
  coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
  e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0) remaining_amount,
- CASE WHEN NOT coalesce(d.active,false) THEN CASE WHEN coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
+ CASE WHEN NOT coalesce(d.active,false) THEN CASE WHEN
+ (coalesce(r.released,0)>0 OR EXISTS(SELECT 1 FROM escrow_release_reviews review WHERE review.id=d.termination_id AND review.decision='released' AND review.completed_at IS NOT NULL))
+ AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
  WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0)<=0 THEN 'paid'
  WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
@@ -77,10 +79,10 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 	var total int
 	var summary EscrowSummary
 	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
- drivers AS (SELECT coalesce(driver_id,id) id,sum(held_amount) paid,sum(remaining_amount) remaining,sum(released_amount) released,bool_and(active) active FROM filtered WHERE active OR $5='terminated' GROUP BY coalesce(driver_id,id))
+ drivers AS (SELECT coalesce(driver_id,id) id,sum(held_amount) paid,sum(remaining_amount) remaining,bool_and(status='released') fully_released,bool_and(active) active FROM filtered WHERE active OR $5='terminated' GROUP BY coalesce(driver_id,id))
  SELECT count(*),coalesce(sum(held_amount),0)::text,coalesce(sum(released_amount),0)::text,coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
- (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE (active AND remaining<=0) OR (NOT active AND released>0 AND paid=0)),
- (SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid>0) OR (NOT active AND remaining>0 AND paid>0)),(SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid=0) OR (NOT active AND (remaining<=0 OR (paid=0 AND released=0))))
+ (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE (active AND remaining<=0) OR (NOT active AND fully_released)),
+ (SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid>0) OR (NOT active AND remaining>0 AND paid>0)),(SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid=0) OR (NOT active AND NOT fully_released AND (remaining<=0 OR paid=0)))
  FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group).Scan(&total, &summary.Held, &summary.Released, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
 		return EscrowPage{}, err
 	}

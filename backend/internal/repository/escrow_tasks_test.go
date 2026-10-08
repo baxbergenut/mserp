@@ -222,6 +222,41 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 			if scalar(`SELECT count(*)::text FROM drivers WHERE status IN ('vacation','home') AND active`) != "2" {
 				t.Fatal("active status flags")
 			}
+			// An explicitly approved migration clearance records the historical
+			// outcome without inventing a payment or release transaction.
+			clearedDriver := scalar(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,status,termination_date) VALUES('Zero migration clearance','zero migration clearance','cpm',0.75,'terminated',(now() AT TIME ZONE 'America/New_York')::date-30) RETURNING id::text`)
+			clearedEscrow := scalar(`INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,opening_paid) VALUES($1,'Zero migration clearance',CURRENT_DATE,2500,0) RETURNING id::text`, clearedDriver)
+			clearedTask := scalar(`SELECT termination_id::text FROM drivers WHERE id=$1`, clearedDriver)
+			checkStatus := func(want string, released, unpaid int) {
+				t.Helper()
+				page, err := repo.List(ctx, EscrowQuery{Group: "terminated", DriverID: clearedDriver})
+				if err != nil || len(page.Items) != 1 || page.Items[0].Status != want || page.Summary.PaidDrivers != released || page.Summary.UnpaidDrivers != unpaid {
+					t.Fatalf("clearance status: %+v, %v", page, err)
+				}
+			}
+			checkStatus("not_released", 0, 1)
+			if err = tasks.GenerateEscrowTasks(ctx); err != nil {
+				t.Fatal(err)
+			}
+			run(`UPDATE escrow_release_reviews SET decision='released',reason='User-approved historical zero-balance clearance',completed_at=now() WHERE id=$1`, clearedTask)
+			run(`UPDATE system_task_records SET completed_at=now(),outcome='Migration clearance' WHERE id=$1`, clearedTask)
+			checkStatus("released", 1, 0)
+			if err = tasks.GenerateEscrowTasks(ctx); err != nil {
+				t.Fatal(err)
+			}
+			open, err := tasks.Board(viewer, Pagination{}, "Zero migration clearance", "open", true)
+			if err != nil || open.Total != 0 {
+				t.Fatal("cleared review recreated", open, err)
+			}
+			if scalar(`SELECT count(*)::text FROM driver_escrow_releases WHERE escrow_id=$1`, clearedEscrow) != "0" {
+				t.Fatal("clearance invented a release transaction")
+			}
+			run(`UPDATE driver_escrows SET opening_paid=100 WHERE id=$1`, clearedEscrow)
+			checkStatus("partially_released", 0, 0)
+			run(`UPDATE driver_escrows SET opening_paid=0 WHERE id=$1`, clearedEscrow)
+			run(`UPDATE drivers SET status='active' WHERE id=$1`, clearedDriver)
+			run(`UPDATE drivers SET status='terminated' WHERE id=$1`, clearedDriver)
+			checkStatus("not_released", 0, 1)
 		})
 	}
 }
