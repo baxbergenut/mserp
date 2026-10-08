@@ -90,6 +90,8 @@ func TestInvestorsDatabase(t *testing.T) {
 			}
 			// Grant only old tables: new runtime tables must already belong to mserp_app.
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,trucks,truck_driver_assignments,files,dispatchers TO mserp_app`)
+			// Migration 064 reconciles existing loads when fleet truck labels are saved.
+			exec(`GRANT SELECT,UPDATE ON loads TO mserp_app`)
 			appcfg := cfg.Copy()
 			appcfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			appcfg.ConnConfig.RuntimeParams["role"] = "mserp_app"
