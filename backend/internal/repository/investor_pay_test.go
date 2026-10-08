@@ -208,6 +208,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pool.Exec(ctx, `INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint) VALUES($1,'2026-09-29','2026-09-29','','','','','TRUCK-A','','','2026-09-27','12:00','',200,repeat('a',64))`, truck); e != nil {
 				t.Fatal(e)
 			}
+			testTruckCostAliases(t, ctx, pool, truck, ownTruck, fuelID)
 			report, e = pr.InvestorPay(ctx, week)
 			if e != nil {
 				t.Fatal(e)

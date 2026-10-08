@@ -21,7 +21,8 @@ export default function LoginPage() {
     try {
       const session = await login(email, password, trust);
       const next = searchParams.get("next");
-      const allowed = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") && next !== "/login" && session.user.permissions.includes(pagePermission(next.split("?")[0]));
+      const permission = pagePermission(next?.split("?")[0] ?? "");
+      const allowed = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") && next.split("?")[0] !== "/login" && (!permission || session.user.permissions.includes(permission));
       router.replace(allowed ? next! : firstAllowedPage(session.user.permissions));
       router.refresh();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Login failed"); }

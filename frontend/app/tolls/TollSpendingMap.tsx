@@ -39,7 +39,7 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
   }, []);
   const colorFor = (code: string) => {
     const point = byState.get(code);
-    if (!point) return "#27272a";
+    if (!point) return "var(--border-color)";
     if (point.spend < 0) return "#34d399";
     const ratio = maxSpend > 0 ? Math.max(0, point.spend) / maxSpend : 0;
     return `rgb(${Math.round(30 + 29 * ratio)}, ${Math.round(58 + 72 * ratio)}, ${Math.round(95 + 151 * ratio)})`;
@@ -57,7 +57,7 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
           <div className="rounded-xl border border-zinc-800/60 bg-zinc-950/35 p-2">
             <svg viewBox="0 0 960 520" className="block h-auto w-full" role="group" aria-label="Toll spending by state map">
               {paths.map(({ name, code, path }) => (
-                <path key={code} d={path} fill={colorFor(code)} stroke={activeCode === code ? "#e4e4e7" : "#09090b"} strokeWidth={activeCode === code ? 2.5 : 1.5}
+                <path key={code} d={path} fill={colorFor(code)} stroke={activeCode === code ? "var(--foreground)" : "var(--background)"} strokeWidth={activeCode === code ? 2.5 : 1.5}
                   role="button" tabIndex={0} aria-label={`${name}: ${byState.has(code) ? money.format(byState.get(code)!.spend) : "No mapped transactions"}`} aria-pressed={selected === code}
                   className="cursor-pointer outline-none transition-colors hover:opacity-80 focus:stroke-white focus:stroke-[3px]"
                   onMouseEnter={() => setHovered(code)} onMouseLeave={() => setHovered(null)}

@@ -77,7 +77,7 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href))) : [];
-          if ("children" in item ? children.length === 0 : !permissions.includes(pagePermission(item.href))) return null;
+          if ("children" in item ? children.length === 0 : pagePermission(item.href) && !permissions.includes(pagePermission(item.href))) return null;
           const active =
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));

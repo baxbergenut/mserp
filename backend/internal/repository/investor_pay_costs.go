@@ -23,7 +23,7 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	}
 	rows, err := tx.Query(ctx, `SELECT matched.id::text,coalesce(f.driver_id::text,''),sum(i.total_amount_paid)::text FROM fuel_transactions f
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
- JOIN LATERAL(SELECT (array_agg(t.id))[1] id FROM trucks t WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND upper(btrim(t.unit_number))=upper(btrim(p->>'value'))) HAVING count(*)=1) matched ON true
+ JOIN LATERAL(SELECT (array_agg(DISTINCT a.truck_id))[1] id FROM truck_unit_aliases a WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND a.unit_key=upper(btrim(p->>'value'))) HAVING count(DISTINCT a.truck_id)=1) matched ON true
 	WHERE matched.id IS NOT NULL AND f.relay_environment='production' AND i.item_kind='fuel'
  AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date >= $1::date
  AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date < $1::date+7

@@ -23,6 +23,7 @@ import (
 const sessionCookieName = "mserp_session"
 
 type authStore interface {
+	SetTheme(context.Context, string, string) error
 	FindUserByEmail(context.Context, string) (repository.AuthUser, error)
 	CreatePasswordSession(context.Context, repository.AuthUser, string, string, time.Time) error
 	ChangePassword(context.Context, string, string, string) error
@@ -54,6 +55,7 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
+	Theme                 string                             `json:"theme"`
 	ID                    string                             `json:"id"`
 	Username              string                             `json:"username"`
 	Email                 string                             `json:"email"`
@@ -208,6 +210,33 @@ func (h *authHandler) session(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), session.User, session.CSRFToken, session.ExpiresAt))
 }
 
+func (h *authHandler) setTheme(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Theme string `json:"theme"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	switch in.Theme {
+	case "default", "solarized-light", "solarized-dark", "monokai", "monokai-dimmed", "dark-modern", "default-light":
+	default:
+		writeAPIError(w, http.StatusBadRequest, "unknown color theme")
+		return
+	}
+	session, ok := authSessionFromContext(r.Context())
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	if err := h.store.SetTheme(r.Context(), session.User.ID, in.Theme); err != nil {
+		h.logger.Error("save color theme", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "could not save color theme")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		if err := h.store.DeleteSessionByTokenHash(r.Context(), hashToken(cookie.Value)); err != nil {
@@ -282,7 +311,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess},
+		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
 	}

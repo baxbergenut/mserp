@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `064_load_truck_identity.sql`:
+  `065_user_color_theme.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -154,6 +154,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   extraction; the original PDF is still uploaded and stored.
 - `frontend/app/globals.css`: Tailwind import, theme tokens, and global animation/
   scrollbar styles.
+- `frontend/app/themes.css`, `app/lib/themes.ts`, and `components/ThemeProvider.tsx`:
+  personal color themes. Settings > Appearance is available to all signed-in users;
+  administrative tabs still require `access.manage`. `PUT /auth/theme` stores only
+  the session user's validated choice in `app_users.theme` (migration 065), without
+  changing security versions or revoking sessions. The session response supplies
+  the theme before authenticated content paints; logout restores the original
+  appearance. Original MSERP remains the default. Neutral utilities and portal
+  surfaces inherit theme tokens; operational status fills retain their meaning.
 
 ## Runtime and setup
 
@@ -264,7 +272,7 @@ browser bundle.
 
 - Health: `GET /healthz`, `GET /readyz`
 - Auth: `POST /auth/login` (email/password, optional trustDevice),
-  `GET /auth/session`, `POST /auth/logout`, `POST /auth/password`.
+  `GET /auth/session`, `POST /auth/logout`, `POST /auth/password`, `PUT /auth/theme`.
 - Access administration: `GET /settings/access`, `POST /settings/users`,
   `PUT /settings/users/{id}`, `POST /settings/users/{id}/revoke`,
   `POST /settings/roles`, `PUT /settings/roles/{id}`. All require `access.manage`.
@@ -588,7 +596,10 @@ assignment lookup lists.
   assignments for unmatched plans determine truck attribution. Missing matches,
   duplicate system loads, ownership conflicts and unlinked fuel need review.
   Fuel uses confirmed Relay identities, unique source Truck # prompts, diesel
-  and DEF items and merchant-local dates; tolls use stored truck IDs and posting
+  and DEF items. Fuel truck matching and PrePass import/reconciliation resolve
+  unique `truck_unit_aliases`, including prior names; ambiguous aliases remain
+  unallocated. Source labels and provider payloads remain intact across renames.
+  Fuel uses merchant-local dates; tolls use stored truck IDs and posting
   dates, with crossing-date assignments, and include credits. Routed costs leave
   driver sources transaction by transaction;
   legacy manual cost overrides require review/reset. Owner-covered truck expenses
@@ -1262,6 +1273,7 @@ node scripts/test-driver-charges-e2e.mjs
 # Browser view regressions use isolated API fixtures, with no database needed.
 node scripts/test-charge-views.mjs
 node scripts/test-task-board-views.mjs
+node scripts/test-theme-views.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build
@@ -1355,6 +1367,8 @@ starts a real API on 18570 and static/proxy frontend on 13570, and disables
 scheduled syncs and telemetry. Login details and process IDs are written only
 into a temporary review-access.json file. Keep the process alive for review;
 Ctrl+C stops its servers and drops that schema. Production data is never loaded.
+`MSERP_REVIEW_API_PORT` and `MSERP_REVIEW_PORT` override these ports when another
+local review is already running.
 
 ### CI/CD and access model
 

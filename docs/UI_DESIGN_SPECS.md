@@ -1,7 +1,13 @@
 # MSERP UI design specifications
 
 Approved direction: October 8, 2026. This is the common contract for existing
-and new MSERP screens. Keep the compact dark zinc/blue appearance.
+and new MSERP screens. Keep the compact layout and original dark zinc/blue default.
+Settings > Appearance offers personal Solarized Light, Solarized Dark, Monokai,
+Monokai Dimmed, Dark Modern and Default Light alternatives adapted from VS Code's
+bundled themes. The choice follows the account across browsers. Use shared color
+tokens for neutral surfaces, labels, borders, charts and portal backgrounds;
+preserve operational status fills and financial color meanings. Light themes
+use darker semantic text for readable warnings and status labels.
 
 ## Shared foundations
 

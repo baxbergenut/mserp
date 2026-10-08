@@ -39,7 +39,7 @@ export function ManagementHeader({
 }: {
   icon: LucideIcon;
   title: string;
-  count: number;
+  count?: number;
   actionLabel?: string;
   onAction?: () => void;
   actionIcon?: LucideIcon;
@@ -62,9 +62,9 @@ export function ManagementHeader({
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">{title}</h1>
-          <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">
+          {count !== undefined && <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">
             {count}
-          </span>
+          </span>}
         </div>
 
       </div></PageHeader>
@@ -129,7 +129,7 @@ export function Modal({
         >
           <form
             onSubmit={onSubmit}
-            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#111113] shadow-2xl animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
+            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-card shadow-2xl animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
           >
             <div className="flex shrink-0 items-start justify-between border-b border-zinc-800/70 px-5 py-4">
               <div>
@@ -401,7 +401,7 @@ export function ConfirmDialog({
   return (
     <OverlayPortal>
       <div className="mserp-ui fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-[#111113] p-5 shadow-2xl animate-scale-in">
+        <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-card p-5 shadow-2xl animate-scale-in">
           <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
           <p className="mt-2 text-[13px] leading-5 text-zinc-500">{message}</p>
           <div className="mt-5 flex justify-end gap-2">

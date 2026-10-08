@@ -748,6 +748,7 @@ export interface ExpenseExtraction {
 }
 
 export interface AuthUser {
+  theme: string;
   id: string;
   username: string;
   email: string;

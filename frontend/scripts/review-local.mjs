@@ -19,7 +19,7 @@ const schema = `review_${randomBytes(8).toString('hex')}`;
 const temp = await mkdtemp(join(tmpdir(), 'mserp-review-'));
 const password = randomBytes(18).toString('base64url');
 const email = 'review@example.test';
-const apiPort = 18570, port = 13570;
+const apiPort = Number(process.env.MSERP_REVIEW_API_PORT || 18570), port = Number(process.env.MSERP_REVIEW_PORT || 13570);
 const base = `http://127.0.0.1:${port}`;
 const sql = input => execFileSync(process.env.PSQL_PATH || 'psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let api, server, stopping = false;

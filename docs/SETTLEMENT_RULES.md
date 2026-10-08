@@ -77,6 +77,12 @@ may guess a new identity. Only a missing unit permits dated-assignment fallback.
 Warnings are grouped on affected truck statements; unrelated fleet loads do not
 block every investor. Finalization still rejects unresolved affected statements.
 
+Fuel Truck # prompts and imported toll equipment units resolve through unique
+current/prior truck aliases. A rename must not remove fuel from a truck statement
+or prevent future toll imports from finding that truck. Ambiguous aliases remain
+unallocated. Assignment corrections do not rewrite provider fuel history; any
+explicit transaction correction needs its own retained original and audit reason.
+
 The regular Investor Pay list and whole-week actions contain active trucks only.
 Profile history and explicit statement links preserve access to inactive trucks'
 saved and historical statements, including their frozen finalized amounts.

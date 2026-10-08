@@ -233,10 +233,11 @@ func (r *TollRepository) CompletedDays(
 func (r *TollRepository) ReconcileTruckAssignments(ctx context.Context) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE tolls
-		SET truck_id = trucks.id
-		FROM trucks
+		SET truck_id = matched.truck_id
+		FROM (SELECT unit_key,(array_agg(truck_id))[1] truck_id
+			FROM truck_unit_aliases GROUP BY unit_key HAVING count(*)=1) matched
 		WHERE tolls.truck_id IS NULL
-			AND trucks.unit_number = tolls.equipment_unit`)
+			AND matched.unit_key = upper(btrim(tolls.equipment_unit))`)
 	return err
 }
 
@@ -255,7 +256,7 @@ func (r *TollRepository) UpsertDay(
 	defer tx.Rollback(ctx)
 
 	truckIDs := make(map[string]string)
-	truckRows, err := tx.Query(ctx, `SELECT unit_number, id FROM trucks`)
+	truckRows, err := tx.Query(ctx, `SELECT unit_key,(array_agg(truck_id))[1] FROM truck_unit_aliases GROUP BY unit_key HAVING count(*)=1`)
 	if err != nil {
 		return TollSyncDayResult{}, err
 	}
@@ -283,7 +284,7 @@ func (r *TollRepository) UpsertDay(
 				err,
 			)
 		}
-		truckID := optionalTruckID(truckIDs[value.EquipmentUnit])
+		truckID := optionalTruckID(truckIDs[strings.ToUpper(strings.TrimSpace(value.EquipmentUnit))])
 		if truckID == nil {
 			result.Unmatched++
 		}

@@ -65,6 +65,11 @@ func TestAccessDatabase(t *testing.T) {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before + "COMMIT;")
+				themeMigration, e := os.ReadFile("../../sql/065_user_color_theme.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(themeMigration))
 				exec(`INSERT INTO app_users(username,password_hash) VALUES('legacy',$1)`, string(hash))
 				exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) SELECT id,repeat('a',64),repeat('b',43),now()+interval '1 day' FROM app_users`)
 				m, e := os.ReadFile("../../sql/044_access_control.sql")
@@ -124,6 +129,7 @@ func TestAccessDatabase(t *testing.T) {
 				r.Get("/auth/session", h.session)
 				r.Post("/auth/logout", h.logout)
 				r.Post("/auth/password", h.changePassword)
+				r.Put("/auth/theme", h.setTheme)
 				r.Get("/loads", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 				r.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 			})
@@ -217,6 +223,24 @@ func TestAccessDatabase(t *testing.T) {
 			viewerCookie := viewer.Result().Cookies()[0]
 			var viewerSession sessionResponse
 			_ = json.Unmarshal(viewer.Body.Bytes(), &viewerSession)
+			if viewerSession.User.Theme != "default" {
+				t.Fatal("new users must retain the original theme")
+			}
+			status(call("PUT", "/auth/theme", map[string]string{"theme": "solarized-light"}, viewerCookie, ""), 403)
+			status(call("PUT", "/auth/theme", map[string]string{"theme": "solarized-light"}, viewerCookie, viewerSession.CSRFToken), 204)
+			var themed sessionResponse
+			themeRead := call("GET", "/auth/session", nil, viewerCookie, "")
+			status(themeRead, 200)
+			_ = json.Unmarshal(themeRead.Body.Bytes(), &themed)
+			if themed.User.Theme != "solarized-light" {
+				t.Fatal("theme was not persisted")
+			}
+			adminRead := call("GET", "/auth/session", nil, sessionCookie, "")
+			status(adminRead, 200)
+			_ = json.Unmarshal(adminRead.Body.Bytes(), &themed)
+			if themed.User.Theme != "default" {
+				t.Fatal("theme changed another user's preference")
+			}
 			status(call("GET", "/loads", nil, viewerCookie, ""), 204)
 			status(call("GET", "/settings/access", nil, viewerCookie, ""), 403)
 			status(call("POST", "/jobs/sync-loads", nil, viewerCookie, viewerSession.CSRFToken), 403)

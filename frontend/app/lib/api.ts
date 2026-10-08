@@ -252,6 +252,7 @@ export async function login(email: string, password: string, trustDevice = false
 
 export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
+export const saveTheme = (theme: string) => apiRequest<void>("/auth/theme", { method: "PUT", body: JSON.stringify({ theme }) });
 export const fetchSystemTaskAssignments = () => apiRequest<SystemTaskAssignment[]>("/settings/system-tasks");
 export const saveSystemTaskAssignment = (input: SystemTaskAssignment) => apiRequest<void>(`/settings/system-tasks/${input.kind}`, { method: "PUT", body: JSON.stringify(input) });
 export const fetchTaskUsers = () => apiRequest<TaskUser[]>("/tasks/users");

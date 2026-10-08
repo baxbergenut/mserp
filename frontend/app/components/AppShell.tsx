@@ -7,6 +7,7 @@ import { fetchAuthSession } from "@/app/lib/api";
 import { PageNavigation } from "./PageNavigation";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { ThemeProvider } from "./ThemeProvider";
 import { PageHeaderProvider } from "./PageHeader";
 import Link from "next/link";
 import { ExpenseCategoryAccessContext, PermissionsContext, pagePermission, firstAllowedPage } from "@/app/lib/access";
@@ -54,6 +55,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <ThemeProvider key={session.user.id} initialTheme={session.user.theme}>
     <PermissionsContext.Provider value={session.user.permissions}>
     <ExpenseCategoryAccessContext.Provider value={session.user.expenseCategoryAccess ?? []}>
     <div className="mserp-ui flex h-full">
@@ -67,5 +69,6 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     </div>
     </ExpenseCategoryAccessContext.Provider>
     </PermissionsContext.Provider>
+    </ThemeProvider>
   );
 }

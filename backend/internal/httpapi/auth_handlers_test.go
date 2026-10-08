@@ -22,6 +22,49 @@ type fakeAuthStore struct {
 	sessions map[string]repository.AuthSession
 }
 
+func (s *fakeAuthStore) SetTheme(_ context.Context, userID, theme string) error {
+	if userID != s.user.ID {
+		return repository.ErrAuthRecordNotFound
+	}
+	s.user.Theme = theme
+	return nil
+}
+
+func TestPersonalTheme(t *testing.T) {
+	store := &fakeAuthStore{user: repository.AuthUser{ID: "current-user"}}
+	h := newAuthHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), store, AuthOptions{})
+	router := chi.NewRouter()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), authContextKey{}, repository.AuthSession{User: store.user, CSRFToken: "csrf"})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+	router.Use(h.requireCSRF, requirePermission)
+	router.Put("/auth/theme", h.setTheme)
+	for _, tc := range []struct {
+		body, csrf string
+		status     int
+	}{
+		{`{"theme":"monokai"}`, "", 403},
+		{`{"theme":"unknown"}`, "csrf", 400},
+		{`{"theme":"solarized-light","userId":"someone-else"}`, "csrf", 400},
+		{`{"theme":"solarized-light"}`, "csrf", 204},
+		{`{"theme":"default"}`, "csrf", 204},
+	} {
+		req := httptest.NewRequest(http.MethodPut, "/auth/theme", strings.NewReader(tc.body))
+		req.Header.Set("X-CSRF-Token", tc.csrf)
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		if res.Code != tc.status {
+			t.Fatalf("%s: got %d want %d: %s", tc.body, res.Code, tc.status, res.Body.String())
+		}
+	}
+	if store.user.Theme != "default" {
+		t.Fatal("theme was not saved for the current user")
+	}
+}
+
 func (s *fakeAuthStore) FindUserByEmail(_ context.Context, username string) (repository.AuthUser, error) {
 	if !strings.EqualFold(username, s.user.Username) {
 		return repository.AuthUser{}, repository.ErrAuthRecordNotFound

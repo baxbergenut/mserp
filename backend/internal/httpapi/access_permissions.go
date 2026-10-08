@@ -10,7 +10,7 @@ import (
 // mapped. This middleware also covers child routers and direct API requests.
 func routePermission(method, path string) string {
 	path = strings.TrimSuffix(path, "/")
-	if path == "/auth/session" || path == "/auth/logout" || path == "/auth/password" {
+	if path == "/auth/session" || path == "/auth/logout" || path == "/auth/password" || path == "/auth/theme" {
 		return "authenticated"
 	}
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")

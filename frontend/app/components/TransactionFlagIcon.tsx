@@ -38,7 +38,7 @@ export function TransactionFlagIcon({ flag, kind }: { flag?: TransactionFlag; ki
         popover="auto"
         role="dialog"
         aria-label={title}
-        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-xl border border-zinc-800 bg-[#111113] p-5 text-left font-sans text-sm font-normal text-zinc-300 shadow-2xl backdrop:bg-black/50"
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-xl border border-zinc-800 bg-card p-5 text-left font-sans text-sm font-normal text-zinc-300 shadow-2xl backdrop:bg-black/50"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-semibold text-zinc-100">{title}</h2>

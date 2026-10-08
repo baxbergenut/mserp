@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./themes.css";
 
 :root {
   --ui-font-size: 13px;
@@ -18,22 +19,30 @@
   --accent-hover: #2563eb;
   --accent-dim: rgba(59, 130, 246, 0.08);
   --muted: #a1a1aa;
+  --ui-text: #d4d4d8;
+  --ui-heading: #f4f4f5;
+  --ui-focus: #60a5fa;
+  --ui-header: #18181b;
+  --ui-link: #93c5fd;
+  --ui-border-strong: #3f3f46;
+  --ui-primary: #2563eb;
+  --ui-primary-hover: #3b82f6;
 }
 
 /* MSERP UI contract. Unlayered rules deliberately unify legacy utility-based
    pages as well as new shared components. See docs/UI_DESIGN_SPECS.md. */
-.mserp-ui { font-size: var(--ui-font-size); line-height: 20px; color: #d4d4d8; }
-.mserp-ui :where(h1) { font-size: 16px; line-height: 24px; font-weight: 600; color: #f4f4f5; }
-.mserp-ui :where(h2, h3) { font-size: 13px; line-height: 20px; font-weight: 600; color: #f4f4f5; }
+.mserp-ui { font-size: var(--ui-font-size); line-height: 20px; color: var(--ui-text); }
+.mserp-ui :where(h1) { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ui-heading); }
+.mserp-ui :where(h2, h3) { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--ui-heading); }
 .mserp-ui :where(.text-sm, .text-base):not(h1):not(h2):not(h3):not(.ui-metric-value) { font-size: var(--ui-font-size); }
 .mserp-ui :where(.text-xs, .text-\[10px\], .text-\[11px\]) { font-size: var(--ui-label-size); }
-.mserp-ui :where(.text-zinc-500, .text-zinc-600) { color: #a1a1aa; }
+.mserp-ui :where(.text-zinc-500, .text-zinc-600) { color: var(--muted); }
 .mserp-ui :where(.font-mono) { font-family: var(--font-sans), sans-serif; font-variant-numeric: tabular-nums; }
 .mserp-ui :where(svg.lucide) { width: var(--ui-icon-size); height: var(--ui-icon-size); flex-shrink: 0; }
 .mserp-ui [data-page-header] { min-height: 24px; }
 .mserp-ui [data-page-header] :where(div) { min-width: 0; gap: 12px; }
 .mserp-ui [data-page-header] h1 { font-size: 16px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; }
-.mserp-ui [data-page-header] svg.lucide { width: 20px; height: 20px; color: #a1a1aa; }
+.mserp-ui [data-page-header] svg.lucide { width: 20px; height: 20px; color: var(--muted); }
 .mserp-ui :where(button, input, select, textarea) { font-family: inherit; }
 .mserp-ui :where(button, select, input:not([type=checkbox]):not([type=radio])) { font-size: var(--ui-font-size); }
 .mserp-ui :where(button.rounded-lg, button.rounded-md, button.ui-button, a.ui-button) {
@@ -43,15 +52,15 @@
   height: var(--ui-control-height); padding-block: 4px; border-radius: var(--ui-radius); line-height: 20px;
 }
 .mserp-ui :where(textarea) { font-size: var(--ui-font-size); line-height: 20px; border-radius: var(--ui-radius); }
-.mserp-ui :where(button, a, input, select, textarea):focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.mserp-ui :where(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 .mserp-ui :where(button:disabled) { cursor: not-allowed; opacity: .5; }
 .mserp-ui :where(table) { font-size: var(--ui-font-size); line-height: 20px; }
-.mserp-ui :where(thead th) { font-size: var(--ui-label-size); font-weight: 500; color: #a1a1aa; background-color: #18181b; }
-.mserp-ui :where(tbody td, tbody th) { border-bottom: 1px solid #27272a; }
+.mserp-ui :where(thead th) { font-size: var(--ui-label-size); font-weight: 500; color: var(--muted); background-color: var(--ui-header); }
+.mserp-ui :where(tbody td, tbody th) { border-bottom: 1px solid var(--border-color); }
 .mserp-ui :where(tbody tr:last-child > td, tbody tr:last-child > th) { border-bottom-width: 0; }
 .mserp-ui :where(td[colspan], td[rowspan]) { vertical-align: top; }
 .mserp-ui :where(td a, dd a) { text-decoration: none; text-underline-offset: 3px; }
-.mserp-ui :where(td a, dd a):hover { color: #93c5fd; text-decoration: underline; }
+.mserp-ui :where(td a, dd a):hover { color: var(--ui-link); text-decoration: underline; }
 .mserp-ui :where([role=tab]) { min-height: 32px; padding: 6px 12px; font-size: 13px; }
 .mserp-ui :where(.rounded-xl, .rounded-2xl) { border-radius: var(--ui-radius); }
 .mserp-ui :where(section.rounded-xl, section.rounded-2xl):is(.p-5, .p-6) { padding: var(--ui-card-padding); background-color: var(--card); }
@@ -59,11 +68,12 @@
 .mserp-ui :where(.space-y-5) > :not(:last-child) { margin-block-end: 16px; }
 .mserp-ui :where(header > .p-5, header > .p-6, header dl > div) { padding: 16px; }
 .ui-card { border: 1px solid var(--border-color); border-radius: var(--ui-radius); padding: var(--ui-card-padding); background: var(--card); }
-.ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 4px 12px; border: 1px solid #3f3f46; border-radius: 8px; font-size: 13px; font-weight: 500; color: #d4d4d8; cursor: pointer; }
-.ui-button:hover { background: #27272a; }
-.ui-button-primary { border-color: #2563eb; background: #2563eb; color: white; }
-.ui-button-primary:hover { background: #3b82f6; }
+.ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 4px 12px; border: 1px solid var(--ui-border-strong); border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ui-text); cursor: pointer; }
+.ui-button:hover { background: var(--border-color); }
+.ui-button-primary { border-color: var(--ui-primary); background: var(--ui-primary); color: white; }
+.ui-button-primary:hover { background: var(--ui-primary-hover); }
 .ui-metric { min-height: 80px; }
+.mserp-ui .theme-choice { padding: 0; }
 .mserp-ui .ui-metric-value { font-size: 20px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (pointer: coarse) {
   .mserp-ui :where(button.rounded-lg, button.rounded-md, .ui-button, [role=tab]) { min-height: 40px; }
@@ -97,7 +107,7 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #27272a transparent;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -110,12 +120,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: var(--border-color);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: var(--ui-border-strong);
 }
 
 /* ----- Micro-animations ----- */

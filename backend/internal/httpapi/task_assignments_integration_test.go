@@ -78,6 +78,11 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
     VALUES(gen_random_uuid(),gen_random_uuid(),'Legacy','2026-10-01',now(),'05400000-0000-0000-0000-000000000001')`)
 				exec(string(migration))
 				exec(string(expenseAccessMigration))
+				themeMigration, e := os.ReadFile("../../sql/065_user_color_theme.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(themeMigration))
 				var kind string
 				if e = admin.QueryRow(ctx, `SELECT system_task_kind FROM custom_tasks WHERE title='Legacy offboarding'`).Scan(&kind); e != nil || kind != "driver_offboarding" {
 					t.Fatal("offboarding backfill", kind, e)

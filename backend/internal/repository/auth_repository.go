@@ -12,6 +12,7 @@ import (
 var ErrAuthRecordNotFound = errors.New("authentication record not found")
 
 type AuthUser struct {
+	Theme                 string
 	ID                    string
 	Username              string
 	PasswordHash          string
@@ -83,7 +84,7 @@ func (r *AuthRepository) CreatePasswordSession(ctx context.Context, u AuthUser, 
 func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {
 	var s AuthSession
 	var system bool
-	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt)
+	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthSession{}, ErrAuthRecordNotFound
 	}
@@ -126,6 +127,15 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 }
 func (r *AuthRepository) DeleteSessionByTokenHash(ctx context.Context, hash string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE token_hash=$1`, hash)
+	return err
+}
+
+// Appearance changes do not change security versions or revoke sessions.
+func (r *AuthRepository) SetTheme(ctx context.Context, userID, theme string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE app_users SET theme=$2 WHERE id=$1 AND active`, userID, theme)
+	if err == nil && result.RowsAffected() != 1 {
+		return ErrAuthRecordNotFound
+	}
 	return err
 }
 

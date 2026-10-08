@@ -70,6 +70,7 @@ func NewRouter(
 	protected.Get("/auth/session", auth.session)
 	protected.Post("/auth/logout", auth.logout)
 	protected.Post("/auth/password", auth.changePassword)
+	protected.Put("/auth/theme", auth.setTheme)
 
 	protected.Post("/jobs/sync-loads", func(w http.ResponseWriter, r *http.Request) {
 		result, err := job.Run(r.Context())

@@ -37,16 +37,16 @@ function SpendingChart({ points, color, horizontal = false }: {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={points} layout={horizontal ? "vertical" : "horizontal"} margin={{ top: 5, right: 12, left: 0, bottom: 0 }} accessibilityLayer>
-        <CartesianGrid stroke="#27272a" vertical={horizontal} horizontal={!horizontal} />
+        <CartesianGrid stroke="var(--border-color)" vertical={horizontal} horizontal={!horizontal} />
         {horizontal ? (
           <>
-            <XAxis type="number" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="label" width={100} tickFormatter={(value: string) => value.length > 15 ? `${value.slice(0, 14)}…` : value} tick={{ fill: "#a1a1aa", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <XAxis type="number" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis type="category" dataKey="label" width={100} tickFormatter={(value: string) => value.length > 15 ? `${value.slice(0, 14)}…` : value} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
           </>
         ) : (
           <>
-            <XAxis dataKey="label" minTickGap={20} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} width={55} />
+            <XAxis dataKey="label" minTickGap={20} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={55} />
           </>
         )}
         <Tooltip cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} content={({ active, payload }) => {

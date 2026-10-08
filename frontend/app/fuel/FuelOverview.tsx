@@ -182,7 +182,7 @@ function FuelMap({ dashboard }: { dashboard: FuelDashboard }) {
 
   const colorFor = (state: string) => {
     const value = pricesByState.get(state)?.averagePrice;
-    if (value === undefined) return "#27272a";
+    if (value === undefined) return "var(--border-color)";
     return interpolateColor(max === min ? 0.7 : (value - min) / (max - min));
   };
 
@@ -197,7 +197,7 @@ function FuelMap({ dashboard }: { dashboard: FuelDashboard }) {
               key={code}
               d={path}
               fill={colorFor(code)}
-              stroke="#09090b"
+              stroke="var(--background)"
               strokeWidth={1.5}
               className="cursor-default outline-none transition-opacity hover:opacity-80 focus:opacity-80"
               tabIndex={0}
@@ -322,12 +322,12 @@ export function FuelOverview({ refreshKey }: { refreshKey: number }) {
         <ChartCard title="Monthly fuel spending" description={`${dashboard.year} diesel spend and gallons purchased.`}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthly} margin={{ top: 5, right: 4, left: 0, bottom: 0 }} accessibilityLayer>
-              <CartesianGrid stroke="#27272a" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="money" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} width={50} />
-              <YAxis yAxisId="gallons" orientation="right" tickFormatter={(value) => compact.format(Number(value))} tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
+              <CartesianGrid stroke="var(--border-color)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: "var(--muted)", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="money" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={50} />
+              <YAxis yAxisId="gallons" orientation="right" tickFormatter={(value) => compact.format(Number(value))} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
               <Tooltip content={({ active, payload, label }) => <ChartTooltip active={active} payload={payload} label={label} />} cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} />
-              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "#a1a1aa" }} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "var(--muted)" }} />
               <Bar yAxisId="money" dataKey="spend" name="Fuel spend" fill="#3b82f6" radius={[3, 3, 0, 0]} />
               <Bar yAxisId="gallons" dataKey="gallons" name="Gallons" fill="#22d3ee" radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -337,11 +337,11 @@ export function FuelOverview({ refreshKey }: { refreshKey: number }) {
         <ChartCard title="Price vs. discount per gallon" description="Weighted monthly averages; savings are retail price minus paid price.">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthly} margin={{ top: 5, right: 4, left: 0, bottom: 0 }} accessibilityLayer>
-              <CartesianGrid stroke="#27272a" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tickFormatter={(value) => `$${Number(value).toFixed(2)}`} tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} width={46} />
+              <CartesianGrid stroke="var(--border-color)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: "var(--muted)", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={(value) => `$${Number(value).toFixed(2)}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={46} />
               <Tooltip content={({ active, payload, label }) => <ChartTooltip active={active} payload={payload} label={label} />} cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} />
-              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "#a1a1aa" }} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "var(--muted)" }} />
               <Bar dataKey="pricePerGallon" name="Paid / gal" fill="#3b82f6" radius={[3, 3, 0, 0]} />
               <Bar dataKey="discountPerGallon" name="Saved / gal" fill="#34d399" radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -353,9 +353,9 @@ export function FuelOverview({ refreshKey }: { refreshKey: number }) {
             <div className="h-full w-full" style={{ minWidth: weekly.length * 42 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weekly} margin={{ top: 5, right: 4, left: 0, bottom: 0 }} accessibilityLayer>
-                  <CartesianGrid stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="label" interval={Math.max(0, Math.ceil(weekly.length / 10) - 1)} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} width={42} />
+                  <CartesianGrid stroke="var(--border-color)" vertical={false} />
+                  <XAxis dataKey="label" interval={Math.max(0, Math.ceil(weekly.length / 10) - 1)} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={42} />
                   <Tooltip content={({ active, payload, label }) => <ChartTooltip active={active} payload={payload} label={label} />} cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} />
                   <Bar dataKey="fuelToGrossRatio" name="Fuel / gross" fill="#a78bfa" radius={[3, 3, 0, 0]} />
                 </BarChart>
@@ -369,11 +369,11 @@ export function FuelOverview({ refreshKey }: { refreshKey: number }) {
             <div className="h-full w-full" style={{ minWidth: weekly.length * 50 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weekly} margin={{ top: 5, right: 4, left: 0, bottom: 0 }} accessibilityLayer>
-                  <CartesianGrid stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="label" interval={Math.max(0, Math.ceil(weekly.length / 10) - 1)} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={(value) => `$${Number(value).toFixed(2)}`} tick={{ fill: "#52525b", fontSize: 10 }} tickLine={false} axisLine={false} width={46} />
+                  <CartesianGrid stroke="var(--border-color)" vertical={false} />
+                  <XAxis dataKey="label" interval={Math.max(0, Math.ceil(weekly.length / 10) - 1)} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tickFormatter={(value) => `$${Number(value).toFixed(2)}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={46} />
                   <Tooltip content={({ active, payload, label }) => <ChartTooltip active={active} payload={payload} label={label} />} cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} />
-                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "#a1a1aa" }} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, color: "var(--muted)" }} />
                   <Bar dataKey="averageFuelPrice" name="Fuel price" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="revenuePerMile" name="RPM" fill="#f59e0b" radius={[3, 3, 0, 0]} />
                 </BarChart>
