@@ -123,6 +123,10 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			fail(w, err)
 			return
 		}
+		if r.URL.Query().Get("compact") == "1" {
+			writeJSON(w, 200, repository.CompactBoard(board))
+			return
+		}
 		writeJSON(w, 200, board)
 	})
 	r.Put("/driver-board", func(w http.ResponseWriter, r *http.Request) {

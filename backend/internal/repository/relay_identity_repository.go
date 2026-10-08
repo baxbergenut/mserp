@@ -105,7 +105,7 @@ func (r *FuelRepository) RelayIdentityTasks(ctx context.Context, pagination Pagi
 		return NewPage([]RelayIdentityTask{}, 0, pagination.Normalize(0)), nil
 	}
 	const where = ` WHERE l.driver_id IS NULL AND
- ($1 = '' OR concat_ws(' ',l.relay_first_name,l.relay_last_name,l.relay_email,l.relay_phone,l.relay_driver_id,l.relay_integration_id) ILIKE '%' || $1 || '%')`
+ ($1 = '' OR concat_ws(' ',l.id::text,l.relay_first_name,l.relay_last_name,l.relay_email,l.relay_phone,l.relay_driver_id,l.relay_integration_id) ILIKE '%' || $1 || '%')`
 	var total int
 	if err = tx.QueryRow(ctx, "SELECT count(*) FROM relay_driver_links l"+where, search).Scan(&total); err != nil {
 		return Page[RelayIdentityTask]{}, err

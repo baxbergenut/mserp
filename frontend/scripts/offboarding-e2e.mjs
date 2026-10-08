@@ -53,18 +53,25 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   expect(linked.status()).toBe(200);
   await page.goto(`${base}/tasks`);
   await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
+  // Exercise an idle SSE heartbeat before the webhook. A per-frame write
+  // deadline must not expire while the stream waits for the next task.
+  await page.waitForTimeout(27000);
   const term = { version: 1, eventId: randomUUID(), companyId: webhookCompany, type: 'driver.terminated', occurredAt: new Date().toISOString(),
     terminationDate: '2026-01-01', driver: { id: sourceId, fullName: 'Offboarding Driver' } };
   expect(await send(term, 'driver-terminated')).toMatchObject({ status: 'accepted' });
-  const task = page.getByRole('article').filter({ hasText: 'Offboard Offboarding Driver' });
+  const task = page.getByRole('row').filter({ hasText: 'Offboard Offboarding Driver' });
   await expect(task).toBeVisible({ timeout: 25000 }); // The open task list discovers webhook arrivals.
-  await expect(task).toContainText('current truck and dispatcher assignments disconnected');
+  await task.getByRole('button', { name: 'Offboard Offboarding Driver', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('current truck and dispatcher assignments disconnected');
   expect(await getDriver()).toMatchObject({ active: false, truckId: null, dispatcherId: null, payRate: 0.75 });
   expect(await getTruck()).toMatchObject({ active: true, driverId: null, status: 'available' });
-  await task.getByRole('button', { name: 'Complete', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Equipment and documents collected' }).check();
+  await page.getByRole('checkbox', { name: 'Fuel/toll cards and external access closed' }).check();
+  await page.getByRole('checkbox', { name: 'Driver status, charges and final settlement reviewed' }).check();
+  await page.getByRole('button', { name: 'Confirm offboarding', exact: true }).click();
   await expect(task).toHaveCount(0);
   expect(await send(term, 'driver-terminated')).toMatchObject({ status: 'duplicate' });
-  await page.getByLabel('Custom task status').selectOption('all');
+  await page.getByLabel('Task status').selectOption('all');
   await expect(task).toHaveCount(1);
   await expect(task).toContainText('Completed');
   console.log('Offboarding E2E passed: driver/truck inactive forms, signed hire/termination, idle task arrival, completion and retry deduplication.');

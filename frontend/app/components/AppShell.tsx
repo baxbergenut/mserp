@@ -6,6 +6,7 @@ import type { AuthSession } from "@/app/lib/types";
 import { fetchAuthSession } from "@/app/lib/api";
 import { PageNavigation } from "./PageNavigation";
 import { Sidebar } from "./Sidebar";
+import { TaskUpdatesProvider } from "./TaskUpdatesProvider";
 import { TopBar } from "./TopBar";
 import { ThemeProvider } from "./ThemeProvider";
 import { PageHeaderProvider } from "./PageHeader";
@@ -58,6 +59,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     <ThemeProvider key={session.user.id} initialTheme={session.user.theme}>
     <PermissionsContext.Provider value={session.user.permissions}>
     <ExpenseCategoryAccessContext.Provider value={session.user.expenseCategoryAccess ?? []}>
+    <TaskUpdatesProvider>
     <div className="mserp-ui flex h-full">
       <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -67,6 +69,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
         </PageHeaderProvider>
       </div>
     </div>
+    </TaskUpdatesProvider>
     </ExpenseCategoryAccessContext.Provider>
     </PermissionsContext.Provider>
     </ThemeProvider>

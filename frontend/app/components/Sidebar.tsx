@@ -21,13 +21,14 @@ import {
   Settings,
 } from "lucide-react";
 import { usePermissions, pagePermission } from "@/app/lib/access";
+import { useTaskUpdates } from "./TaskUpdatesProvider";
 
 const NAV_ITEMS = [
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
-  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/expenses", label: "Expenses & Charges", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses & Charges settings", icon: Settings },
@@ -46,6 +47,7 @@ const NAV_ITEMS = [
 ] as const;
 
 export function Sidebar() {
+  const { count } = useTaskUpdates();
   const permissions = usePermissions();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -150,7 +152,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={`
-                group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium
+                group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium
                 transition-all duration-150
                 ${
                   active
@@ -169,6 +171,8 @@ export function Sidebar() {
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
+              {item.href === "/tasks" && count > 0 && <span aria-label={`${count} open tasks`}
+                className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{count > 99 ? "99+" : count}</span>}
             </Link>
           );
         })}

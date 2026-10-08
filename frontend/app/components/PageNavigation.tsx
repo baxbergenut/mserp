@@ -4,7 +4,7 @@ import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoardLoadTarget } from "@/app/gross-board/loadLink";
 import { ArrowLeft } from "lucide-react";
-import { BackHrefContext, MarkBackContext, NavigationSearchContext, useBackHref, readMemory, ViewMemoryContext, writeMemory } from "@/app/lib/viewMemory";
+import { BackHrefContext, MarkBackContext, NavigationSearchContext, RestoringViewContext, useBackHref, readMemory, ViewMemoryContext, writeMemory } from "@/app/lib/viewMemory";
 
 type ScrollPosition = Record<string, { top: number; left: number }>;
 function scrollKey(element: HTMLElement, main: HTMLElement): string {
@@ -22,6 +22,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
   const scope = `mserp-navigation-v1:${userId}:${parsed.pathname}${parsed.searchParams.has("id") ? `:${parsed.searchParams.get("id")}` : ""}`;
   const explicitLoad = parsed.pathname === "/gross-board" && parsed.searchParams.has("date");
   const historyKey = `mserp-navigation-v1:${userId}:history`;
+  const [restoringView] = useState(() => readMemory<string | null>(`${historyKey}:back`, null) === url);
   const [trail] = useState(() => {
     const previous = readMemory<string[]>(historyKey, []).filter(item => item.startsWith("/") && !item.startsWith("//") && !item.startsWith("/login"));
     if (previous.at(-1) === url) return previous;
@@ -93,7 +94,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
   return <ViewMemoryContext.Provider value={scope}><BackHrefContext.Provider value={back}><MarkBackContext.Provider value={markBack}><main ref={mainRef} className="min-w-0 flex-1 overflow-auto">
     <div className="w-full px-4 py-6 sm:px-6 xl:px-8">
       {back && parsed.pathname !== "/accounting/driver-charges" && <div className="mb-4 flex"><Link data-navigation-back href={back} prefetch={false} scroll={false} aria-label={payTarget?.fromPay ? "Back to Driver Pay" : "Back to previous page"} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-xs text-zinc-400 hover:text-blue-300"><ArrowLeft className="h-3.5 w-3.5" />{payTarget?.fromPay ? "Back to Driver Pay" : "Back"}</Link></div>}
-      <NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}>{children}</NavigationSearchContext.Provider>
+      <RestoringViewContext.Provider value={restoringView}><NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}>{children}</NavigationSearchContext.Provider></RestoringViewContext.Provider>
     </div>
   </main></MarkBackContext.Provider></BackHrefContext.Provider></ViewMemoryContext.Provider>;
 }

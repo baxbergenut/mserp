@@ -116,6 +116,10 @@ jobs:
         working-directory: frontend
         run: node scripts/test-driver-pay.mjs
 
+      - name: Check read cancellation and compact board transport
+        working-directory: frontend
+        run: node scripts/test-read-requests.mjs
+
       - name: Check phone normalization and display
         working-directory: frontend
         run: node scripts/test-phone.mjs

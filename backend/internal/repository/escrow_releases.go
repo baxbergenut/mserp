@@ -87,18 +87,10 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 }
 
 func escrowReleaseCredits(ctx context.Context, tx pgx.Tx, driver, week string) ([]PayAutoCharge, error) {
-	rows, err := tx.Query(ctx, `SELECT r.id::text,r.amount::text FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=$1 AND r.week_start=$2::date AND NOT r.cancelled ORDER BY r.id`, driver, week)
-	if err != nil {
-		return nil, err
+	all, err := escrowReleaseCreditsBulk(ctx, tx, []string{driver}, week)
+	values := all[driver]
+	if values == nil {
+		values = []PayAutoCharge{}
 	}
-	defer rows.Close()
-	result := []PayAutoCharge{}
-	for rows.Next() {
-		var id, amount string
-		if err = rows.Scan(&id, &amount); err != nil {
-			return nil, err
-		}
-		result = append(result, PayAutoCharge{Name: "Escrow release", Amount: amount, Source: "escrow-release:" + id})
-	}
-	return result, rows.Err()
+	return values, err
 }

@@ -13,8 +13,8 @@ var driverPayCostsSQL = `WITH weekly_fuel AS (
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
  WHERE f.relay_environment='production' AND f.driver_id IS NOT NULL
  AND i.item_kind='fuel'
- AND (f.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("f.timezone") + `)::date >= $1::date
- AND (f.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("f.timezone") + `)::date < $1::date+7
+ AND f.purchased_on >= $1::date
+ AND f.purchased_on < $1::date+7
  GROUP BY f.driver_id
 ), weekly_tolls AS (
  SELECT assignment.driver_id, SUM(t.amount) AS total

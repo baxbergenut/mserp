@@ -39,6 +39,10 @@ func (f *fakeCustomTasks) SetCompleted(_ context.Context, _ string, completed bo
 	f.called, f.completed = true, completed
 	return repository.CustomTask{}, f.err
 }
+func (f *fakeCustomTasks) SetStatus(_ context.Context, _ string, status string) (repository.CustomTask, error) {
+	f.called, f.status = true, status
+	return repository.CustomTask{Status: status}, f.err
+}
 func (f *fakeCustomTasks) Delete(context.Context, string) error { f.called = true; return f.err }
 
 func TestCustomTaskRoutes(t *testing.T) {
@@ -69,6 +73,9 @@ func TestCustomTaskRoutes(t *testing.T) {
 		{name: "bad id", method: "PUT", path: "/tasks/custom/bad", body: `{"title":"test"}`, want: 400},
 		{name: "complete", method: "PATCH", path: path, body: `{"completed":true}`, want: 200, called: true},
 		{name: "reopen", method: "PATCH", path: path, body: `{"completed":false}`, want: 200, called: true},
+		{name: "in process", method: "PATCH", path: path, body: `{"status":"in_process"}`, want: 200, called: true},
+		{name: "invalid transition", method: "PATCH", path: path, body: `{"status":"other"}`, want: 400},
+		{name: "ambiguous transition", method: "PATCH", path: path, body: `{"status":"in_process","completed":true}`, want: 400},
 		{name: "missing status", method: "PATCH", path: path, body: `{}`, want: 400},
 		{name: "null status", method: "PATCH", path: path, body: `{"completed":null}`, want: 400},
 		{name: "delete", method: "DELETE", path: path, want: 204, called: true},

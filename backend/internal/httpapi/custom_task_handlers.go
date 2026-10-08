@@ -17,6 +17,7 @@ type customTaskStore interface {
 	Create(context.Context, repository.CustomTaskInput, string) (repository.CustomTask, error)
 	Update(context.Context, string, repository.CustomTaskInput) (repository.CustomTask, error)
 	SetCompleted(context.Context, string, bool) (repository.CustomTask, error)
+	SetStatus(context.Context, string, string) (repository.CustomTask, error)
 	Delete(context.Context, string) error
 }
 
@@ -27,7 +28,7 @@ func registerCustomTaskRoutes(r chi.Router, logger *slog.Logger, repo customTask
 			return
 		}
 		logger.Error("custom task operation failed", "error", err)
-		writeAPIError(w, 500, "The custom task could not be loaded or saved")
+		writeAPIError(w, 500, "The task could not be loaded or saved")
 	}
 	r.Get("/tasks/custom", func(w http.ResponseWriter, r *http.Request) {
 		pagination, err := parsePagination(r)
@@ -39,8 +40,8 @@ func registerCustomTaskRoutes(r chi.Router, logger *slog.Logger, repo customTask
 		if status == "" {
 			status = "open"
 		}
-		if status != "open" && status != "completed" && status != "all" {
-			writeAPIError(w, 400, "status must be open, completed or all")
+		if status != "open" && status != "in_process" && status != "completed" && status != "all" {
+			writeAPIError(w, 400, "status must be open, in_process, completed or all")
 			return
 		}
 		result, err := repo.List(r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), status)
@@ -110,14 +111,21 @@ func registerCustomTaskRoutes(r chi.Router, logger *slog.Logger, repo customTask
 		})
 		r.Patch("/", func(w http.ResponseWriter, r *http.Request) {
 			var input struct {
-				Completed *bool `json:"completed"`
+				Completed *bool   `json:"completed"`
+				Status    *string `json:"status"`
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, 1024)
-			if err := decodeJSON(r, &input); err != nil || input.Completed == nil {
-				writeAPIError(w, 400, "Provide completed as true or false")
+			if err := decodeJSON(r, &input); err != nil || (input.Completed == nil) == (input.Status == nil) || (input.Status != nil && *input.Status != "open" && *input.Status != "in_process" && *input.Status != "completed") {
+				writeAPIError(w, 400, "Provide status as open, in_process or completed, or completed as true or false")
 				return
 			}
-			task, err := repo.SetCompleted(r.Context(), chi.URLParam(r, "id"), *input.Completed)
+			var task repository.CustomTask
+			var err error
+			if input.Status != nil {
+				task, err = repo.SetStatus(r.Context(), chi.URLParam(r, "id"), *input.Status)
+			} else {
+				task, err = repo.SetCompleted(r.Context(), chi.URLParam(r, "id"), *input.Completed)
+			}
 			if err != nil {
 				failure(w, err)
 				return

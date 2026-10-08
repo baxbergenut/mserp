@@ -167,29 +167,10 @@ func (r *EscrowRepository) SaveDriverEscrowSetting(ctx context.Context, input Dr
 }
 
 func escrowDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]ExpenseDeduction, error) {
-	rows, err := tx.Query(ctx, `SELECT e.id,e.start_date::text,e.amount::text,
- capacity.available::text,
- coalesce(w.amount,capacity.available)::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0)-coalesce(w.amount,0))::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0))::text,e.balance_version,w.escrow_id IS NOT NULL
- FROM driver_escrows e
- LEFT JOIN driver_escrow_payments w ON w.escrow_id=e.id AND w.week_start=$2::date
- LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_payments WHERE escrow_id=e.id AND week_start<$2::date) p ON true
- LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled AND week_start<$2::date) r ON true
- CROSS JOIN LATERAL (SELECT escrow_collection_available(e.id,$2::date) available) capacity
- WHERE e.driver_id=$1 AND e.start_date<$2::date+7
- AND (w.escrow_id IS NOT NULL OR capacity.available>0) ORDER BY e.start_date,e.id`, driver, week)
-	if err != nil {
-		return nil, err
+	all, err := escrowDeductionsBulk(ctx, tx, []string{driver}, week)
+	values := all[driver]
+	if values == nil {
+		values = []ExpenseDeduction{}
 	}
-	defer rows.Close()
-	result := []ExpenseDeduction{}
-	for rows.Next() {
-		d := ExpenseDeduction{Name: "Escrow", Source: "escrow"}
-		if err = rows.Scan(&d.ExpenseID, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved); err != nil {
-			return nil, err
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
+	return values, err
 }

@@ -840,7 +840,10 @@ export interface GrossBoardLoad {
   driverName: string;
   pickupDate: string;
 }
+export type TaskStatus = "open" | "in_process" | "completed";
+
 export interface CustomTask {
+  status: TaskStatus;
   id: string;
   title: string;
   notes: string;
@@ -849,6 +852,9 @@ export interface CustomTask {
   assignedTo: string | null;
   assignedBy: string | null;
   assigneeName: string;
+  assignerName: string;
+  completedByName: string;
+  outcome?: string;
   systemTaskKind: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1058,3 +1064,9 @@ export interface Escrow {
 export interface EscrowPage extends PaginatedResponse<Escrow> {
  summary: { held: string; released: string; target: string; paid: string; remaining: string; drivers: number; paidDrivers: number; partialDrivers: number; unpaidDrivers: number };
 }
+
+// Versioned compact read transport; mutations still return complete queue values.
+export type CompactBoardLoads = Omit<BoardLoads, "current" | "week" | "next" | "earlier" | "hidden" | "unavailable"> & {
+  current: number | null; week: number[]; next: number[]; earlier: number[]; hidden: number[]; unavailable: number[];
+};
+export type CompactDriverBoard = Omit<DriverBoard, "loads"> & { plans: BoardLoad[]; loads: Record<string, CompactBoardLoads> };

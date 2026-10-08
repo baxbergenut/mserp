@@ -65,7 +65,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   };
   const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => load.date === addDays(edits.weekStart, index)).length), 0);
   const visibleCostRows = costRows.filter(({ key }) => driver.payType !== "cpm" || hundredths(edits.costs?.[`${key}Carry`] ?? "0") > BigInt(0));
-  const adjustmentCells = <td colSpan={2} rowSpan={weekRowCount} className="border-b border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
+  const adjustmentCells = open ? <td colSpan={2} rowSpan={weekRowCount} className="border-b border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="h-56 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
         <tbody>{visibleCostRows.map(({ key, label }, index) => {
@@ -95,7 +95,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
         })}</tbody>
       </table>
     </div>
-  </td>;
+  </td> : null;
 
   return <>
     <tr className={`h-9 cursor-pointer text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`} onClick={() => onToggle(driver.id)} onContextMenu={event => { if (onSettlement) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (onSettlement && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left + 12, y: rect.bottom }); } }}>

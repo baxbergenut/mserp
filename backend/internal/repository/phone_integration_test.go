@@ -94,7 +94,7 @@ func TestPhoneDatabase(t *testing.T) {
 				// Current repository reads require the complete upgraded schema.
 				applyLaterTestMigrations(t, ctx, admin, "042")
 			}
-			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,relay_driver_links TO mserp_app`)
+			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,relay_driver_links TO mserp_app; GRANT SELECT ON app_users TO mserp_app`)
 			appcfg := cfg.Copy()
 			appcfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			appcfg.ConnConfig.RuntimeParams["role"] = "mserp_app"

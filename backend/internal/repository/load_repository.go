@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -48,133 +47,10 @@ type LoadRecord struct {
 	RawPayload              []byte
 }
 
+// Discovery, reconciliation and refresh only maintain imported load records.
+// Fleet profiles and truck/dispatcher assignments are managed by MSERP users.
 func (r *LoadRepository) UpsertLoads(ctx context.Context, records []LoadRecord) error {
-	if len(records) == 0 {
-		return nil
-	}
-
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-	// Coordinate operational assignment changes with fleet forms/offboarding,
-	// before taking any driver/truck row locks. Import timestamps remain unchanged.
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(734912086)`); err != nil {
-		return err
-	}
-
-	// DataTruck normally returns newest loads first. Sort defensively so an
-	// older load can never overwrite a newer driver/truck assignment.
-	sort.SliceStable(records, func(left, right int) bool {
-		leftCreated := records[left].CreatedDatetime
-		rightCreated := records[right].CreatedDatetime
-		if leftCreated == nil {
-			return false
-		}
-		if rightCreated == nil {
-			return true
-		}
-		return leftCreated.After(*rightCreated)
-	})
-
-	assignments := make([]truckAssignment, 0)
-	assignedDrivers := make(map[string]struct{})
-	assignedTrucks := make(map[string]struct{})
-	for index := range records {
-		record := &records[index]
-		if record.DispatcherName != nil {
-			dispatcherID, ensureErr := ensureDispatcher(ctx, tx, *record.DispatcherName)
-			if ensureErr != nil {
-				return ensureErr
-			}
-			record.DispatcherID = &dispatcherID
-		}
-		if record.DriverName != nil {
-			driverID, found, ensureErr := resolveDriver(ctx, tx, *record.DriverName, record.DispatcherID, true)
-			if ensureErr != nil {
-				return ensureErr
-			}
-			if found {
-				record.DriverID = &driverID
-			}
-		}
-		if record.TeamDriverName != nil {
-			if _, _, ensureErr := resolveDriver(ctx, tx, *record.TeamDriverName, record.DispatcherID, true); ensureErr != nil {
-				return ensureErr
-			}
-		}
-		var truckID *string
-		if record.TruckUnit != nil {
-			resolvedTruckID, found, ensureErr := resolveTruck(ctx, tx, *record.TruckUnit)
-			if ensureErr != nil {
-				return ensureErr
-			}
-			if found {
-				truckID = &resolvedTruckID
-			}
-		}
-		if record.DriverID != nil && truckID != nil {
-			_, driverAlreadyAssigned := assignedDrivers[*record.DriverID]
-			_, truckAlreadyAssigned := assignedTrucks[*truckID]
-			if !driverAlreadyAssigned && !truckAlreadyAssigned {
-				assignments = append(assignments, truckAssignment{
-					driverID: *record.DriverID,
-					truckID:  *truckID,
-				})
-				assignedDrivers[*record.DriverID] = struct{}{}
-				assignedTrucks[*truckID] = struct{}{}
-			}
-		}
-	}
-	for _, assignment := range assignments {
-		if err := syncTruckAssignment(ctx, tx, assignment.truckID, assignment.driverID); err != nil {
-			return err
-		}
-	}
-
-	batch := &pgx.Batch{}
-	for _, record := range records {
-		batch.Queue(upsertLoadSQL,
-			record.ID,
-			record.LoadID,
-			record.DriverID,
-			record.DispatcherID,
-			nullableString(record.ShipmentID),
-			record.Status,
-			record.LoadPay,
-			record.TotalOtherPay,
-			record.TotalPay,
-			nullableString(record.TotalMiles),
-			nullableString(record.PerMileRevenue),
-			nullableString(record.DispatcherName),
-			nullableString(record.DriverName),
-			nullableString(record.TeamDriverName),
-			nullableString(record.TruckUnit),
-			nullableString(record.CustomerName),
-			record.PickupTime,
-			record.DeliveryTime,
-			record.PickupAppointmentTime,
-			record.DeliveryAppointmentTime,
-			record.CreatedDatetime,
-			record.SyncedAt,
-			record.RawPayload,
-		)
-	}
-
-	results := tx.SendBatch(ctx, batch)
-
-	for range records {
-		if _, err := results.Exec(); err != nil {
-			_ = results.Close()
-			return err
-		}
-	}
-	if err := results.Close(); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return r.refreshLoads(ctx, records, true)
 }
 
 func (r *LoadRepository) HealthCheck(ctx context.Context) error {
@@ -506,67 +382,17 @@ func ensureDispatcher(ctx context.Context, tx pgx.Tx, name string) (string, erro
 // resolveDriver only links source data to a pre-existing fleet driver. Imports
 // must never create a driver, because an upstream spelling or name-order change
 // is not reliable proof that a new person joined the fleet.
-func resolveDriver(ctx context.Context, tx pgx.Tx, name string, dispatcherID *string, preferMoreCompleteName bool) (string, bool, error) {
-	displayName := formatPersonName(name)
-	normalizedName := normalizeName(displayName)
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "driver:"+normalizedName); err != nil {
-		return "", false, err
-	}
-
-	var id, existingName string
-	err := tx.QueryRow(ctx, `
-		SELECT id, full_name FROM drivers
-		WHERE normalized_name = $1
-		ORDER BY created_at, id
-		LIMIT 1`, normalizedName).Scan(&id, &existingName)
+func resolveDriver(ctx context.Context, tx pgx.Tx, name string, _ *string, _ bool) (string, bool, error) {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT id FROM drivers WHERE normalized_name=$1 ORDER BY created_at,id LIMIT 1`, normalizeName(name)).Scan(&id)
 	if err == nil {
-		if err = enrichMatchedDriver(ctx, tx, id, existingName, displayName, dispatcherID, preferMoreCompleteName); err != nil {
-			return "", false, err
-		}
 		return id, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", false, err
 	}
-
-	compatibleID, existingName, found, err := findCompatibleDriver(ctx, tx, displayName)
-	if err != nil {
-		return "", false, err
-	}
-	if found {
-		err = enrichMatchedDriver(ctx, tx, compatibleID, existingName, displayName, dispatcherID, preferMoreCompleteName)
-		if err != nil {
-			return "", false, err
-		}
-		return compatibleID, true, nil
-	}
-	return "", false, nil
-}
-
-func enrichMatchedDriver(
-	ctx context.Context,
-	tx pgx.Tx,
-	id string,
-	existingName string,
-	incomingName string,
-	dispatcherID *string,
-	preferMoreCompleteName bool,
-) error {
-	if preferMoreCompleteName && shouldPreferMoreCompletePersonName(incomingName, existingName) {
-		if _, err := tx.Exec(ctx, `
-			UPDATE drivers SET full_name = $2, normalized_name = $3, updated_at = now()
-			WHERE id = $1`, id, incomingName, normalizeName(incomingName)); err != nil {
-			return err
-		}
-	}
-	if dispatcherID == nil {
-		return nil
-	}
-	_, err := tx.Exec(ctx, `
-		UPDATE drivers
-		SET dispatcher_id = COALESCE(dispatcher_id, $2), updated_at = now()
-		WHERE id = $1 AND active`, id, *dispatcherID)
-	return err
+	id, _, found, err := findCompatibleDriver(ctx, tx, name)
+	return id, found, err
 }
 
 type driverNameCandidate struct {

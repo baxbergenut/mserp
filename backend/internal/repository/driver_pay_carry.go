@@ -49,6 +49,10 @@ func payrollCostAmount(override *string, due int64, cpm bool) int64 {
 }
 
 func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error) {
+	memo := payrollReadMemo(ctx, tx)
+	if memo != nil && memo.costsLoaded {
+		return memo.costs, nil
+	}
 	rows, err := tx.Query(ctx, `SELECT driver_id::text,week_start::text,fuel_base::text,toll_base::text,fuel_amount::text,toll_amount::text FROM driver_pay_cost_collections ORDER BY week_start,driver_id`)
 	if err != nil {
 		return nil, err
@@ -118,6 +122,10 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 		}
 		return out[i].Week < out[j].Week
 	})
+	if memo != nil {
+		memo.costs = out
+		memo.costsLoaded = true
+	}
 	return out, nil
 }
 

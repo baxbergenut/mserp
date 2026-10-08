@@ -5,7 +5,7 @@ import { usePermissions } from "@/app/lib/access";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useViewState } from "@/app/lib/viewMemory";
+import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound, UsersRound } from "lucide-react";
@@ -22,12 +22,13 @@ import { driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } 
 
 export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const permissions = usePermissions();
+  const restoringView = useRestoringView();
   const savePay = investor ? saveInvestorPay : saveDriverPay;
   const router = useRouter();
   const params = useSearchParams();
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
-  const fetchPay = useCallback((selectedWeek: string) => investor ? fetchInvestorPay(selectedWeek, targetId ?? undefined) : fetchDriverPay(selectedWeek), [investor, targetId]);
+  const fetchPay = useCallback((selectedWeek: string, signal?: AbortSignal) => investor ? fetchInvestorPay(selectedWeek, targetId ?? undefined, signal) : fetchDriverPay(selectedWeek, signal), [investor, targetId]);
   const targetKey = investor && params.has("truckId") ? "truckId" : "driverId";
   const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? requested : undefined;
   const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
@@ -41,9 +42,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }, [setDriverFilter, setWeek, initialWeek, params, targetKey, targetId]);
   const [report, setReport] = useState<DriverPayWeek | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverPayEdits>>({});
-  const [search, setSearch] = useViewState("page:search", "", targetId ? "" : undefined);
-  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId ? "all" : undefined);
-  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId ? new Set([targetId]) : undefined);
+  const [search, setSearch] = useViewState("page:search", "", targetId && !restoringView ? "" : undefined);
+  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId && !restoringView ? "all" : undefined);
+  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,10 +60,11 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   useLayoutEffect(() => { savedRef.current = Object.fromEntries((report?.drivers ?? []).map(d => [d.id, d.edits])); }, [report]);
   useEffect(() => {
     let cancelled = false;
-    fetchPay(week).then(value => { if (!cancelled) { setReport(value); setError(""); } })
+    const controller = new AbortController();
+    fetchPay(week, controller.signal).then(value => { if (!cancelled) { setReport(value); setError(""); } })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load driver pay"); })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [week, fetchPay]);
   const edit = useCallback((id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => {
     setChanges(current => ({ ...current, [id]: update(current[id] ?? savedRef.current[id]) })); setMessage("");

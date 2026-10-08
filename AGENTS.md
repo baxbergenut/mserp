@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `065_user_color_theme.sql`:
+  `068_reporting_performance.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -349,12 +349,17 @@ browser bundle.
   `POST /tasks/relay-identities/{id}/review` (`driverId`, `action: link|reject`).
   `frontend/app/tasks/` owns the authenticated review queue.
 - Custom tasks: `GET/POST /tasks/custom`, `PUT/PATCH/DELETE /tasks/custom/{id}`.
-  GET accepts pagination, search, and status (`open`, `completed`, `all`);
+  GET accepts pagination, search, and status (`open`, `in_process`, `completed`, `all`);
   PUT edits title/notes and PATCH sets `completed` without replacing content.
   POST/PUT accept `assignedTo` (active user UUID, empty string to clear; omitted
   on PUT preserves assignment). `GET /tasks/users` returns active user ID/name
   options. `GET /settings/system-tasks` and `PUT /settings/system-tasks/{kind}`
   manage versioned system category assignments, requiring `access.manage`.
+- Unified tasks: `GET /tasks` (search/pagination/status), `GET /tasks/count`, and
+  `GET /tasks/events` (authenticated SSE invalidations). List and Kanban share
+  assignment privacy and include system completion history. Only user-created
+  tasks allow generic edits/deletion/status changes. Offboarding completes via
+  `POST /tasks/offboarding/{id}/confirm` with equipment/access/settlement checks.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
@@ -759,8 +764,8 @@ assignment lookup lists.
   deduplicate by event ID plus company/driver ID; never overwrite the first
   snapshot, import the historical fleet, or propagate later profile changes.
   New hires appear as regular Drivers table rows with a small New badge and
-  a corresponding Set up [name] task. Both views refresh every 15 seconds while
-  visible. The driver-directory endpoint combines pending and configured drivers
+  a corresponding Set up [name] task. The driver directory refreshes every 15 seconds
+  while visible; Tasks uses server push. The driver-directory endpoint combines pending and configured drivers
   with shared search/pagination; ordinary /drivers lookups exclude pending hires.
   They stay outside managed drivers/payroll until accounting completes
   setup with a positive pay rate or explicitly links an existing record. Creation,
@@ -779,7 +784,22 @@ assignment lookup lists.
   remain. First termination wins; retries never repeat work or recreate deleted
   tasks, and late hires cannot reopen setup. Rehire remains unsupported. See
   docs/FLEETSCOPE_TERMINATION_AGENT_PROMPT.md for the sender implementation prompt.
-  Tasks refresh every 15 seconds while visible and idle. Manual inactive drivers
+  Tasks uses one shared browser EventSource and one PostgreSQL LISTEN connection
+  per API process with subscribers. Migration 066 emits transaction-committed
+  invalidations via NOTIFY; reconnects and focus refresh the authorized feed/count.
+  No browser availability polling remains. SSE uses X-Accel-Buffering: no and
+  validates sessions/permissions on events and heartbeats. System task records
+  retain onboarding/Relay completion times and actor-name snapshots, including
+  source deletion; unknown legacy actors remain unknown. Offboarding stays in
+  custom_tasks for compatibility, but requires its checklist workflow to complete.
+  Migration 067 adds persisted in-process state for user tasks. List and three-column
+  Open/In process/Completed Kanban mix all task sources; only user tasks
+  are draggable, with equivalent complete/reopen buttons for keyboard/touch use.
+  Cards and list rows keep the assignee visible; assignment/completion metadata is
+  available by hovering the task title and in its detail dialog. Status PATCH accepts
+  open/in_process/completed; legacy completed booleans still work.
+  Tasks is third in the sidebar, with a permission-scoped incomplete count badge.
+  Manual inactive drivers
   clear truck/dispatcher links; inactive trucks release their driver. Imports
   preserve inactive status and cannot reconnect inactive fleet records.
   The investor E2E runner includes offboarding-e2e.mjs; pass --offboarding-only
@@ -1440,3 +1460,41 @@ login -> `/auth/session` -> authenticated page -> logout. Confirm browser
 requests stay on `https://erp.msexpressinc.net/api/...`; any request to the IP
 endpoint indicates a stale or incorrectly built frontend. Never expose session
 cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
+
+
+## October 2026 reporting performance
+
+- Migration 068 stores fuel `purchased_on` (merchant-local date), validated reporting
+  timezone and normalized truck-unit evidence. A trigger maintains them for imports,
+  corrections and older binaries; source timestamps/prompts remain unchanged. Weekly
+  reads use the date index instead of per-row timezone-catalog and JSON processing.
+- DataTruck discovery, refresh and reconciliation are source-only. They may resolve
+  existing fleet IDs onto a load but never create/enrich drivers or dispatchers, or
+  create/change truck/dispatcher assignments. Only managed fleet workflows own those.
+  Relay still creates review identities, never drivers.
+- Payroll reads bulk-load deductions and truck routing. Shared inputs are memoized
+  only inside the same read transaction. Histories share one repeatable-read snapshot;
+  finalized driver history reads frozen statements directly. Whole-week finalization
+  calculates the post-write fleet once before atomically freezing the selected rows.
+- Payroll's bounded process cache (32 reports, 8 MiB, 30 seconds) is keyed by the
+  PostgreSQL MVCC snapshot, report kind/week and current charge week. Equal snapshots
+  have equal committed inputs; any committed dependency write invalidates reuse.
+  TTL is only a memory limit. Writers never use this cache or reuse read memos across
+  mutation phases. Permission checks remain per request; cached JSON is cloned.
+- MSERP pool connections use jit=off. HTTP Server-Timing and structured performance
+  logs include route templates, duration, query count/time, pool acquisition time,
+  status and bytes, never SQL arguments or report contents. Streaming remains supported.
+- Status Board GET accepts compact=1, using a shared plan dictionary and integer
+  references. Different snapshots with the same plan ID remain separate. The frontend
+  expands it to the normal domain contract; older API responses remain supported.
+- Browser GETs share in-flight work only, with independent abortable consumers and
+  cloned results. Mutations clear reuse, logout aborts reads. Payroll/history/search
+  cleanup cancels obsolete requests; unsaved drafts retain existing protections.
+- Only hashed /_next/static/ assets receive immutable caching. HTML freshness and
+  security headers stay enforced. Install Nginx changes separately per deploy/README.md.
+- Read-only diagnostics: backend/cmd/perf-audit, MSERP_DIAGNOSTIC_DATABASE_URL,
+  optional MSERP_DIAGNOSTIC_ROLE. Modes driver/investor/driver-history/investor-history/
+  fuel/financial/board/gross; --week YYYY-MM-DD, --runs 1..5, --jit on|off. Output is
+  sanitized timings/counts/sizes/hashes. It never writes financial data.
+- Run node scripts/test-read-requests.mjs for cancellation/deduplication and compact
+  board transport regression coverage, in addition to the normal validation suite.

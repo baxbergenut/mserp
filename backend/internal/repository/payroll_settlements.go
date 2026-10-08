@@ -132,6 +132,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		return empty, ErrDriverPayConflict
 	}
 	selected := 0
+	pending := map[string][]string{}
 	for _, d := range report.Drivers {
 		if driver != "" && d.ID != driver {
 			continue
@@ -209,23 +210,10 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 					return empty, err
 				}
 			}
-			updated, e := readDriverPayWeek(ctx, tx, week, d.ID)
-			if e != nil {
-				return empty, e
-			}
-			if len(updated.Drivers) != 1 {
-				return empty, ErrDriverPayConflict
-			}
-			frozen := updated.Drivers[0]
-			frozen.Settlement = nil
-			body, e := json.Marshal(frozen)
-			if e != nil {
-				return empty, e
-			}
-			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid)
-   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=''`, d.ID, report.WeekStart, body, confirmed, actor); err != nil {
-				return empty, err
-			}
+			pending[d.ID] = confirmed
+		}
+		if !reopen {
+			continue
 		}
 		action := "finalized"
 		if reopen {
@@ -238,6 +226,38 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	}
 	if selected == 0 {
 		return empty, chargeInvalid("No eligible driver settlements selected")
+	}
+	// All selected financial writes are complete under the exclusive payroll
+	// lock. Calculate the resulting fleet once, then freeze those exact rows.
+	if len(pending) > 0 {
+		updated, e := readDriverPayWeek(ctx, tx, week, "")
+		if e != nil {
+			return empty, e
+		}
+		for _, d := range updated.Drivers {
+			confirmed, ok := pending[d.ID]
+			if !ok {
+				continue
+			}
+			frozen := d
+			frozen.Settlement = nil
+			body, e := json.Marshal(frozen)
+			if e != nil {
+				return empty, e
+			}
+			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid)
+   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=''`, d.ID, report.WeekStart, body, confirmed, actor); err != nil {
+				return empty, err
+			}
+			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
+ SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,'',report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor); err != nil {
+				return empty, err
+			}
+			delete(pending, d.ID)
+		}
+		if len(pending) != 0 {
+			return empty, ErrDriverPayConflict
+		}
 	}
 	result, err := readDriverPayWeek(ctx, tx, week, "")
 	if err != nil {

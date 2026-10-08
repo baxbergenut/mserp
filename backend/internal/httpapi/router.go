@@ -39,6 +39,7 @@ func NewRouter(
 	fleetScopeOptions ...fleetscope.Options,
 ) http.Handler {
 	r := chi.NewRouter()
+	r.Use(performance(logger))
 	auth := newAuthHandler(logger, authRepo, authOptions)
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -145,11 +146,14 @@ func NewRouter(
 	registerFleetRoutes(protected, logger, fleetRepo)
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
+	registerTaskBoardRoutes(protected, logger, customTaskRepo)
+	protected.Get("/tasks/events", newTaskEvents(pool, logger).serve(auth))
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool, fiveELDJob != nil))
-	registerDriverPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), job)
+	payRepo := repository.NewDriverPayRepository(pool)
+	registerDriverPayRoutes(protected, logger, payRepo, job)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
-	registerInvestorPayRoutes(protected, logger, repository.NewDriverPayRepository(pool), repository.NewDriverChargeRepository(pool))
+	registerInvestorPayRoutes(protected, logger, payRepo, repository.NewDriverChargeRepository(pool))
 	registerTollRoutes(protected, logger, tollJob, tollRepo)
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)

@@ -15,9 +15,9 @@ export function InvestorStatements({ investorId, truckId }: { investorId: string
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    let cancelled = false;
-    fetchInvestorHistory(investorId, page).then(value => { if (!cancelled) { setData(value); setError(""); } }).catch(e => { if (!cancelled) setError(e.message); });
-    return () => { cancelled = true; };
+    let cancelled = false; const controller = new AbortController();
+    fetchInvestorHistory(investorId, page, controller.signal).then(value => { if (!cancelled) { setData(value); setError(""); } }).catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; controller.abort(); };
   }, [investorId, page, attempt]);
   const rows = data?.items.flatMap(week => week.trucks.filter(t => !truckId || t.id === truckId).map(truck => ({ week: week.weekStart, truck })));
   return <section className="space-y-3"><h2>Investor statements</h2>

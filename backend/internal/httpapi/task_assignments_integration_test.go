@@ -83,6 +83,16 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(themeMigration))
+				boardMigration, e := os.ReadFile("../../sql/066_unified_tasks.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(boardMigration))
+				processMigration, e := os.ReadFile("../../sql/067_task_in_process.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(processMigration))
 				var kind string
 				if e = admin.QueryRow(ctx, `SELECT system_task_kind FROM custom_tasks WHERE title='Legacy offboarding'`).Scan(&kind); e != nil || kind != "driver_offboarding" {
 					t.Fatal("offboarding backfill", kind, e)
@@ -129,6 +139,7 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			router.Use(h.requireSession, h.requireCSRF, requirePermission)
 			registerAccessRoutes(router, h, repo)
 			registerCustomTaskRoutes(router, h.logger, repository.NewCustomTaskRepository(pool))
+			registerTaskBoardRoutes(router, h.logger, repository.NewCustomTaskRepository(pool))
 			registerDriverIntakeRoutes(router, h.logger, repository.NewFleetRepository(pool))
 			registerRelayIdentityRoutes(router, h.logger, repository.NewFuelRepository(pool))
 			call := func(user, method, path string, body any, status int) *httptest.ResponseRecorder {
@@ -171,6 +182,16 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if list("outsider", "/tasks/custom") != 0 {
 				t.Fatal("private task leaked to user with access.manage")
 			}
+			if list("outsider", "/tasks") != 0 || list("assignee", "/tasks") != 1 {
+				t.Fatal("unified task privacy")
+			}
+			var count struct {
+				Count int `json:"count"`
+			}
+			json.Unmarshal(call("outsider", "GET", "/tasks/count", nil, 200).Body.Bytes(), &count)
+			if count.Count != 0 {
+				t.Fatal("private task count leaked")
+			}
 			path := "/tasks/custom/" + task.ID
 			call("outsider", "PUT", path, map[string]any{"title": "Hijacked"}, 404)
 			call("outsider", "PATCH", path, map[string]any{"completed": true}, 404)
@@ -179,7 +200,20 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if list("assigner", "/tasks/custom") != 1 {
 				t.Fatal("editing content changed assigner")
 			}
+			call("assigner", "PATCH", path, map[string]any{"status": "in_process"}, 200)
+			if list("assignee", "/tasks?status=in_process") != 1 || list("assignee", "/tasks?status=open") != 0 {
+				t.Fatal("in-process status not persisted or filtered")
+			}
+			json.Unmarshal(call("assignee", "GET", "/tasks/count", nil, 200).Body.Bytes(), &count)
+			if count.Count != 1 {
+				t.Fatal("in-process task missing from incomplete count")
+			}
 			call("assigner", "PATCH", path, map[string]any{"completed": true}, 200)
+			var board repository.Page[repository.BoardTask]
+			json.Unmarshal(call("assigner", "GET", "/tasks?status=completed", nil, 200).Body.Bytes(), &board)
+			if len(board.Items) != 1 || board.Items[0].CompletedByName != "assigner" || board.Items[0].AssignerName != "assigner" || board.Items[0].AssigneeName != "assignee" {
+				t.Fatalf("task audit: %+v", board)
+			}
 			if list("outsider", "/tasks/custom?status=all") != 0 {
 				t.Fatal("completed task leaked")
 			}
@@ -227,6 +261,21 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if list("assignee", "/tasks/relay-identities") != 0 {
 				t.Fatal("assigned Relay review did not complete")
 			}
+			json.Unmarshal(call("assignee", "GET", "/tasks?status=completed&search=Relay", nil, 200).Body.Bytes(), &board)
+			if len(board.Items) != 1 || board.Items[0].ID != relayID || board.Items[0].CompletedByName != "assignee" || board.Items[0].AssignerName != "System" {
+				t.Fatalf("Relay completion history: %+v", board)
+			}
+			// System tasks cannot be dragged, edited or deleted through the custom API.
+			var offboardingID string
+			if e = admin.QueryRow(ctx, `SELECT id::text FROM custom_tasks WHERE title='Offboard test'`).Scan(&offboardingID); e != nil {
+				t.Fatal(e)
+			}
+			for _, actor := range []string{"assignee", "admin"} {
+				call(actor, "PATCH", "/tasks/custom/"+offboardingID, map[string]any{"completed": true}, 404)
+				call(actor, "PATCH", "/tasks/custom/"+offboardingID, map[string]any{"status": "in_process"}, 404)
+				call(actor, "PUT", "/tasks/custom/"+offboardingID, map[string]any{"title": "Changed"}, 404)
+				call(actor, "DELETE", "/tasks/custom/"+offboardingID, nil, 404)
+			}
 			if list("outsider", "/tasks/custom") != 0 {
 				t.Fatal("offboarding leaked")
 			}
@@ -242,6 +291,27 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			call("outsider", "POST", "/driver-intake/"+intakeID+"/complete", map[string]any{"linkDriverId": driverID}, 200)
 			if list("outsider", "/driver-intake") != 0 {
 				t.Fatal("assigned onboarding did not complete")
+			}
+			json.Unmarshal(call("outsider", "GET", "/tasks?status=completed", nil, 200).Body.Bytes(), &board)
+			if len(board.Items) != 1 || board.Items[0].ID != intakeID || board.Items[0].CompletedByName != "outsider" {
+				t.Fatalf("onboarding history: %+v", board)
+			}
+			checklist := map[string]bool{"equipment": true, "access": true, "settlement": true}
+			call("outsider", "POST", "/tasks/offboarding/"+offboardingID+"/confirm", checklist, 404)
+			call("assignee", "POST", "/tasks/offboarding/"+offboardingID+"/confirm", map[string]bool{"equipment": true}, 400)
+			call("assignee", "POST", "/tasks/offboarding/"+offboardingID+"/confirm", checklist, 204)
+			if list("assignee", "/tasks?status=completed&search=Offboard%20test") != 1 {
+				t.Fatal("offboarding completion missing")
+			}
+			// Deleting source identities and renaming an actor must not erase work history.
+			exec(`DELETE FROM fleetscope_driver_intake WHERE id=$1`, intakeID)
+			if list("outsider", "/tasks?status=completed") != 1 {
+				t.Fatal("source deletion erased completion")
+			}
+			exec(`UPDATE app_users SET username='Renamed' WHERE id=$1`, users["assignee"])
+			json.Unmarshal(call("assignee", "GET", "/tasks?status=completed&search=Relay", nil, 200).Body.Bytes(), &board)
+			if len(board.Items) != 1 || board.Items[0].CompletedByName != "assignee" {
+				t.Fatal("completed actor snapshot lost")
 			}
 			exec(`UPDATE app_users SET active=false WHERE id=$1`, users["outsider"])
 			call("admin", "PUT", "/settings/system-tasks/relay_review", map[string]any{"assigneeId": users["outsider"], "version": 2}, 409)

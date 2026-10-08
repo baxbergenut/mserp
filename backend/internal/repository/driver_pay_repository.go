@@ -17,7 +17,10 @@ import (
 
 var ErrDriverPayConflict = errors.New("this driver's week was edited elsewhere; reload before saving again")
 
-type DriverPayRepository struct{ pool *pgxpool.Pool }
+type DriverPayRepository struct {
+	pool  *pgxpool.Pool
+	cache payrollCache
+}
 
 func NewDriverPayRepository(pool *pgxpool.Pool) *DriverPayRepository {
 	return &DriverPayRepository{pool: pool}
@@ -121,13 +124,15 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := readDriverPayWeek(ctx, tx, week, driverID)
+	result, err := r.cachedWeek(ctx, tx, "driver", week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, "") })
+	result = selectPayDriver(result, driverID)
 	if err != nil {
 		return result, err
 	}
 	return result, tx.Commit(ctx)
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	ctx = payrollReadContext(ctx, tx)
 	result, err := readDriverPaySourceWeek(ctx, tx, week, "")
 	if err != nil {
 		return result, err
@@ -243,7 +248,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		return result, err
 	}
 	rows.Close()
-	data, loads, err := chargeData(ctx, tx, driverID)
+	data, loads, err := payrollChargeData(ctx, tx, driverID)
 	if err != nil {
 		return result, err
 	}
@@ -251,15 +256,27 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	if err != nil {
 		return result, err
 	}
+	ids := make([]string, 0, len(result.Drivers))
+	for _, d := range result.Drivers {
+		ids = append(ids, d.ID)
+	}
+	credits, err := escrowReleaseCreditsBulk(ctx, tx, ids, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
+	deductions, err := expenseDeductionsBulk(ctx, tx, ids, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
 	kept := []DriverPayDriver{}
 	for _, d := range result.Drivers {
-		d.AutoCharges, err = escrowReleaseCredits(ctx, tx, d.ID, result.WeekStart)
-		if err != nil {
-			return result, err
+		d.AutoCharges = credits[d.ID]
+		if d.AutoCharges == nil {
+			d.AutoCharges = []PayAutoCharge{}
 		}
-		d.Edits.ExpenseDeductions, err = expenseDeductions(ctx, tx, d.ID, result.WeekStart)
-		if err != nil {
-			return result, err
+		d.Edits.ExpenseDeductions = deductions[d.ID]
+		if d.Edits.ExpenseDeductions == nil {
+			d.Edits.ExpenseDeductions = []ExpenseDeduction{}
 		}
 		d.Edits.GeneratedCharges = generated[d.ID]
 		if d.Edits.GeneratedCharges == nil {
@@ -362,19 +379,9 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		}
 	}
 	if edits.ExpenseDeductions != nil {
-		week, e := chargeWeek(edits.WeekStart)
-		if e != nil {
-			return edits, e
-		}
-		routed, e := readDriverPayWeek(ctx, tx, week, edits.DriverID)
-		if e != nil {
-			return edits, e
-		}
 		allowed := map[string]bool{}
-		for _, d := range routed.Drivers {
-			for _, x := range d.Edits.ExpenseDeductions {
-				allowed[x.ExpenseID] = true
-			}
+		for _, x := range costDriver.Edits.ExpenseDeductions {
+			allowed[x.ExpenseID] = true
 		}
 		for _, x := range edits.ExpenseDeductions {
 			if x.Apply && !allowed[x.ExpenseID] {
@@ -416,10 +423,10 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	if err != nil {
 		return edits, err
 	}
-	refreshed, err := currentDriverPayCosts(ctx, tx, edits)
-	if err != nil {
+	refreshed := DriverPayWeek{WeekStart: edits.WeekStart, Drivers: []DriverPayDriver{costDriver}}
+	if err = applyDriverPayCarry(ctx, tx, &refreshed); err != nil {
 		return edits, err
 	}
-	edits.Costs = refreshed.Edits.Costs
+	edits.Costs = refreshed.Drivers[0].Edits.Costs
 	return edits, tx.Commit(ctx)
 }

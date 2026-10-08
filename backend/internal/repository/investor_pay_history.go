@@ -19,6 +19,7 @@ func (r *DriverPayRepository) InvestorHistory(ctx context.Context, owner string,
 		return Page[InvestorStatementWeek]{}, err
 	}
 	defer tx.Rollback(ctx)
+	ctx = payrollReadContext(ctx, tx)
 	var exists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investors WHERE id=$1)`, owner).Scan(&exists); err != nil {
 		return Page[InvestorStatementWeek]{}, err
@@ -54,7 +55,7 @@ func (r *DriverPayRepository) InvestorHistory(ctx context.Context, owner string,
 	result := []InvestorStatementWeek{}
 	for _, w := range weeks[page.Offset():min(page.Offset()+page.PageSize, len(weeks))] {
 		week, _ := time.Parse(time.DateOnly, w)
-		report, e := readInvestorPay(ctx, tx, week)
+		report, e := r.cachedWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
 		if e != nil {
 			return Page[InvestorStatementWeek]{}, e
 		}

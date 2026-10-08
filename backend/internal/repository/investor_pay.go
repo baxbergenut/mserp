@@ -119,7 +119,7 @@ func payCommentKey(date string, slot int, number string) string { // same stable
 
 func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
 	investor := DriverPayWeek{WeekStart: source.WeekStart, Drivers: []DriverPayDriver{}}
-	config, err := truckChargeData(ctx, tx)
+	config, err := payrollTruckData(ctx, tx)
 	if err != nil {
 		return source, investor, err
 	}
@@ -127,7 +127,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	if len(terms) == 0 {
 		return source, investor, nil
 	}
-	charges, _, err := chargeData(ctx, tx, "")
+	charges, _, err := payrollChargeData(ctx, tx, "")
 	if err != nil {
 		return source, investor, err
 	}
@@ -136,6 +136,10 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		return source, investor, err
 	}
 	costs, err := readTruckCostAllocations(ctx, tx, source.WeekStart)
+	if err != nil {
+		return source, investor, err
+	}
+	inputs, err := readTruckPayInputs(ctx, tx, source.WeekStart)
 	if err != nil {
 		return source, investor, err
 	}
@@ -161,10 +165,10 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	unresolved := map[string][]DriverPayLoad{}
 	for id, term := range terms {
 		g := &truckPayGroup{term: term, drivers: map[string]bool{}}
-		err = tx.QueryRow(ctx, `SELECT t.unit_number,coalesce(d.full_name,i.full_name),coalesce(i.driver_id::text,'') FROM trucks t JOIN investors i ON i.id=$2 LEFT JOIN drivers d ON d.id=i.driver_id WHERE t.id=$1`, id, term.OwnerID).Scan(&g.card.TruckUnit, &g.card.FullName, &g.ownerDriver)
-		if err != nil {
-			return source, investor, err
-		}
+		metadata := inputs.metadata[id]
+		g.card.TruckUnit = metadata.unit
+		g.card.FullName = metadata.name
+		g.ownerDriver = metadata.ownerDriver
 		g.card.ID = id
 		g.card.TruckID = id
 		g.card.InvestorID = term.OwnerID
@@ -176,11 +180,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		g.card.FuelTotal = "0.00"
 		g.card.TollTotal = "0.00"
 		g.card.Edits = DriverPayEdits{DriverID: id, WeekStart: source.WeekStart, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
-		var ownershipConflict bool
-		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_ownership_history WHERE truck_id=$1 AND owner_id<>$2 AND (assigned_at AT TIME ZONE 'America/New_York')::date<$3::date+7 AND (unassigned_at IS NULL OR (unassigned_at AT TIME ZONE 'America/New_York')::date>$3::date))`, id, term.OwnerID, source.WeekStart).Scan(&ownershipConflict)
-		if err != nil {
-			return source, investor, err
-		}
+		ownershipConflict := metadata.conflict
 		if ownershipConflict {
 			g.card.Issues = append(g.card.Issues, "Truck ownership changed during or before this week; review the dated investor agreement")
 		}
@@ -232,35 +232,18 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		}
 	}
 	for id, g := range groups {
-		driverIDs := make([]string, 0, len(g.drivers))
-		for driverID := range g.drivers {
-			driverIDs = append(driverIDs, driverID)
-		}
-		people, e := tx.Query(ctx, `SELECT d.id::text,d.full_name,coalesce(p.id::text,''),coalesce(p.full_name,'Unassigned') FROM drivers d LEFT JOIN dispatchers p ON p.id=d.dispatcher_id
-        WHERE d.id=ANY($2::uuid[]) OR (cardinality($2::uuid[])=0 AND EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.driver_id=d.id AND a.truck_id=$1 AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<$3::date+7 AND (a.unassigned_at IS NULL OR (a.unassigned_at AT TIME ZONE 'America/New_York')::date>$3::date))) ORDER BY d.full_name,d.id`, id, driverIDs, source.WeekStart)
-		if e != nil {
-			return source, investor, e
-		}
 		dispatcherNames := []string{}
 		dispatcherIDs := map[string]bool{}
-		for people.Next() {
-			var person PayPerson
-			var dispatcherID, dispatcherName string
-			if e = people.Scan(&person.ID, &person.Name, &dispatcherID, &dispatcherName); e != nil {
-				people.Close()
-				return source, investor, e
+		for _, person := range inputs.people {
+			if !g.drivers[person.person.ID] && !(len(g.drivers) == 0 && inputs.assigned[id][person.person.ID]) {
+				continue
 			}
-			g.card.OperatingDrivers = append(g.card.OperatingDrivers, person)
-			if !dispatcherIDs[dispatcherID] {
-				dispatcherIDs[dispatcherID] = true
-				dispatcherNames = append(dispatcherNames, dispatcherName)
+			g.card.OperatingDrivers = append(g.card.OperatingDrivers, person.person)
+			if !dispatcherIDs[person.dispatcherID] {
+				dispatcherIDs[person.dispatcherID] = true
+				dispatcherNames = append(dispatcherNames, person.dispatcherName)
 			}
-			g.card.DispatcherID = dispatcherID
-		}
-		e = people.Err()
-		people.Close()
-		if e != nil {
-			return source, investor, e
+			g.card.DispatcherID = person.dispatcherID
 		}
 		if len(dispatcherIDs) != 1 {
 			g.card.DispatcherID = ""
@@ -291,17 +274,9 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 
 		g.ownerOnly = len(g.drivers) == 1 && g.drivers[g.ownerDriver]
 		if len(g.drivers) == 0 && g.ownerDriver != "" {
-			// No-load weeks belong to the owner-operator only with a unique, full-week
-			// historical assignment. Unassigned trucks remain visible in Investor Pay.
-			err = tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(driver_id::text=$2) FROM truck_driver_assignments WHERE truck_id=$1 AND (assigned_at AT TIME ZONE 'America/New_York')::date<=$3::date AND (unassigned_at IS NULL OR (unassigned_at AT TIME ZONE 'America/New_York')::date>=$3::date+7)`, id, g.ownerDriver, source.WeekStart).Scan(&g.ownerOnly)
-			if err != nil {
-				return source, investor, err
-			}
+			g.ownerOnly = inputs.metadata[id].ownerFullWeek
 		}
-		var savedInvestor bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks WHERE truck_id=$1 AND week_start=$2::date)`, id, source.WeekStart).Scan(&savedInvestor); err != nil {
-			return source, investor, err
-		}
+		_, savedInvestor := inputs.edits[id]
 		if savedInvestor {
 			g.ownerOnly = false
 		}
@@ -365,12 +340,9 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 				}
 			}
 		}
-		g.card.Edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, id, g.term.OwnerID, source.WeekStart, g.ownerOnly)
-		if err != nil {
-			return source, investor, err
-		}
+		g.card.Edits.ExpenseDeductions = inputs.deductions(id, g.ownerOnly)
 		if !g.ownerOnly {
-			if err = readInvestorEdits(ctx, tx, &g.card); err != nil {
+			if err = inputs.applyEdits(&g.card); err != nil {
 				return source, investor, err
 			}
 			investor.Drivers = append(investor.Drivers, g.card)
@@ -518,7 +490,7 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, t
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := readInvestorPay(ctx, tx, week)
+	result, err := r.cachedWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
 	if err != nil {
 		return result, err
 	}
@@ -541,6 +513,7 @@ func investorPayView(report DriverPayWeek, target string) DriverPayWeek {
 }
 
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
+	ctx = payrollReadContext(ctx, tx)
 	source, err := readDriverPaySourceWeek(ctx, tx, week, "")
 	if err != nil {
 		return source, err

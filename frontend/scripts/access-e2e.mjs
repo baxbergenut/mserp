@@ -57,10 +57,11 @@ export async function runAccessE2E({ page, base, temp }) {
     ]));
     const cookie = (await context.cookies()).find(c => c.name === 'mserp_session');
     expect(cookie.expires - Date.now()/1000).toBeGreaterThan(29 * 86400);
-    await expect(viewer.locator('aside').getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);
+    await expect(viewer.locator('aside').getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
     expect((await viewer.request.get(`${base}/api/settings/access`)).status()).toBe(403);
     await viewer.goto(`${base}/settings`);
-    await expect(viewer.getByRole('heading', { name: 'Access restricted' })).toBeVisible();
+    await expect(viewer.getByRole('button', { name: 'Appearance', exact: true })).toBeVisible();
+    await expect(viewer.getByRole('button', { name: 'Users', exact: true })).toHaveCount(0);
     await page.screenshot({ path: join(temp, 'access-users-desktop.png'), fullPage: true });
     await row.getByRole('button', { name: 'Revoke access', exact: true }).click();
     await page.getByRole('button', { name: 'Revoke all sessions', exact: true }).click();

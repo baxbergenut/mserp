@@ -223,10 +223,9 @@ func transactionFlags(ctx context.Context, pool *pgxpool.Pool, kind string, ids 
 	var query string
 	switch kind {
 	case "fuel":
-		query = `SELECT t.id::text, COALESCE((SELECT array_agg(p->>'value')
-			FROM jsonb_array_elements(t.prompts) p WHERE lower(trim(p->>'label')) = 'truck #'), '{}'),
-			COALESCE(t.driver_id::text,''), (t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date,
-			EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = t.timezone),
+		query = `SELECT t.id::text, t.reported_truck_units,
+			COALESCE(t.driver_id::text,''), t.purchased_on,
+			t.reporting_timezone_valid,
 			t.total_amount_paid > 0, t.relay_environment = 'production'
 			FROM fuel_transactions t WHERE t.id = ANY($1::uuid[])`
 	case "toll":

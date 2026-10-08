@@ -13,6 +13,9 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
+	// Short ERP queries do not amortize LLVM compilation on the shared VPS.
+	config.ConnConfig.RuntimeParams["jit"] = "off"
+	config.ConnConfig.Tracer = Tracer{}
 	config.MaxConns = 10
 	config.MinConns = 1
 	config.MaxConnLifetime = 30 * time.Minute

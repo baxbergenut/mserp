@@ -23,11 +23,11 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	}
 	rows, err := tx.Query(ctx, `SELECT matched.id::text,coalesce(f.driver_id::text,''),sum(i.total_amount_paid)::text FROM fuel_transactions f
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
- JOIN LATERAL(SELECT (array_agg(DISTINCT a.truck_id))[1] id FROM truck_unit_aliases a WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND a.unit_key=upper(btrim(p->>'value'))) HAVING count(DISTINCT a.truck_id)=1) matched ON true
+ JOIN LATERAL(SELECT (array_agg(DISTINCT a.truck_id))[1] id FROM truck_unit_aliases a WHERE a.unit_key=ANY(f.reported_truck_units) HAVING count(DISTINCT a.truck_id)=1) matched ON true
 	WHERE matched.id IS NOT NULL AND f.relay_environment='production' AND i.item_kind='fuel'
- AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date >= $1::date
- AND (f.purchased_at AT TIME ZONE `+fuelTimezoneExpression("f.timezone")+`)::date < $1::date+7
- AND (SELECT count(DISTINCT upper(btrim(p->>'value'))) FROM jsonb_array_elements(f.prompts) p WHERE lower(btrim(p->>'label'))='truck #' AND btrim(p->>'value')<>'')=1
+ AND f.purchased_on >= $1::date
+ AND f.purchased_on < $1::date+7
+ AND cardinality(f.reported_truck_units)=1
  GROUP BY matched.id,f.driver_id`, week)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ import { chromium, expect } from '@playwright/test';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
@@ -50,13 +51,19 @@ try {
         const headers = {};
         for (const key of ['cookie', 'content-type', 'x-csrf-token', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
         const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
-        res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return;
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        if (response.headers.get('content-type')?.includes('text/event-stream')) {
+          const stream = Readable.fromWeb(response.body);
+          res.on('close', () => stream.destroy()); stream.on('error', () => res.end());
+          stream.pipe(res); return;
+        }
+        res.end(Buffer.from(await response.arrayBuffer())); return;
       }
       const path = url.pathname === '/' ? '/index.html' : extname(url.pathname) ? url.pathname : `${url.pathname}.html`;
       const content = await readFile(join(frontend, 'out', path));
       const type = { '.txt': 'text/plain', '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' }[extname(path)] ?? 'application/octet-stream';
       res.writeHead(200, { 'Content-Type': type }); res.end(content);
-    } catch { res.writeHead(404); res.end(); }
+    } catch { if (!res.headersSent) res.writeHead(404); res.end(); }
   });
   await new Promise((done) => server.listen(13559, '127.0.0.1', done));
   browser = await chromium.launch();

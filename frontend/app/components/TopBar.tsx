@@ -47,20 +47,21 @@ export function TopBar({ username }: { username: string }) {
   useEffect(() => {
     if (menu !== "search" || term.length < 2) return;
     let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       const page = { page: 1, pageSize: 5, search: term };
       const requests: Array<{ name: string; request: () => Promise<Result[]> }> = [
-        { name: "Drivers", request: () => fetchDriversPage({ ...page, includeInactive: true }).then(r => r.items.map(d => ({ label: d.fullName, detail: [d.truckUnit && `Truck ${d.truckUnit}`, d.active ? "Active driver" : "Inactive driver"].filter(Boolean).join(" · "), href: `/drivers/detail?id=${encodeURIComponent(d.id)}` }))) },
-        { name: "Investors", request: () => fetchInvestorsPage(page).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.active ? "Active investor" : "Inactive investor"} · ${i.trucks.length} trucks`, href: `/investors/detail?id=${encodeURIComponent(i.id)}` }))) },
-        { name: "Trucks", request: () => fetchTrucksPage(page).then(r => r.items.map(t => ({ label: `Truck ${t.unitNumber}`, detail: t.driverName ?? t.status, href: `/trucks/detail?id=${encodeURIComponent(t.id)}` }))) },
-        { name: "Loads", request: () => fetchLoadsPage(page).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
-        { name: "Expenses & Charges", request: () => fetchExpensesPage(page).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
+        { name: "Drivers", request: () => fetchDriversPage({ ...page, includeInactive: true }, controller.signal).then(r => r.items.map(d => ({ label: d.fullName, detail: [d.truckUnit && `Truck ${d.truckUnit}`, d.active ? "Active driver" : "Inactive driver"].filter(Boolean).join(" · "), href: `/drivers/detail?id=${encodeURIComponent(d.id)}` }))) },
+        { name: "Investors", request: () => fetchInvestorsPage(page, controller.signal).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.active ? "Active investor" : "Inactive investor"} · ${i.trucks.length} trucks`, href: `/investors/detail?id=${encodeURIComponent(i.id)}` }))) },
+        { name: "Trucks", request: () => fetchTrucksPage(page, controller.signal).then(r => r.items.map(t => ({ label: `Truck ${t.unitNumber}`, detail: t.driverName ?? t.status, href: `/trucks/detail?id=${encodeURIComponent(t.id)}` }))) },
+        { name: "Loads", request: () => fetchLoadsPage(page, controller.signal).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
+        { name: "Expenses & Charges", request: () => fetchExpensesPage(page, controller.signal).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
       ];
       const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses & Charges": "expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
       if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ name: allowedRequests[i].name, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
     }, 250);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [term, menu, permissions]);
 
   const groups = data?.query === term ? data.groups : null;

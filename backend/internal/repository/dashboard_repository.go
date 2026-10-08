@@ -450,7 +450,7 @@ WITH load_events AS (
 		  ) IS NOT NULL
 ), fuel_events AS (
 	SELECT t.driver_id,
-		(t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date AS purchased_on,
+		t.purchased_on AS purchased_on,
 		COALESCE(SUM(i.total_amount_paid), 0) AS spend
 	FROM fuel_transactions t
 	JOIN fuel_transaction_items i ON i.fuel_transaction_id = t.id

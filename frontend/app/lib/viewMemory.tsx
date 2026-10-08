@@ -5,6 +5,8 @@ import { createContext, useCallback, useContext, useState, type Dispatch, type S
 export const ViewMemoryContext = createContext("");
 export const BackHrefContext = createContext<string | undefined>(undefined);
 export const MarkBackContext = createContext<(url: string) => void>(() => {});
+export const RestoringViewContext = createContext(false);
+export const useRestoringView = () => useContext(RestoringViewContext);
 export const NavigationSearchContext = createContext<string | undefined>(undefined);
 export const useMarkBack = () => useContext(MarkBackContext);
 export const useBackHref = () => useContext(BackHrefContext);

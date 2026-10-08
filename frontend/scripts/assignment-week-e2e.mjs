@@ -70,5 +70,6 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   const nav = page.locator('aside a');
   await expect(nav.nth(0)).toHaveAttribute('href', '/driver-board');
   await expect(nav.nth(1)).toHaveAttribute('href', '/gross-board');
-  await expect(nav.nth(2)).toHaveAttribute('href', '/loads');
+  await expect(nav.nth(2)).toHaveAttribute('href', '/tasks');
+  await expect(nav.nth(3)).toHaveAttribute('href', '/loads');
 }

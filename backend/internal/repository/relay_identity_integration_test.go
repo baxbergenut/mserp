@@ -14,12 +14,15 @@ import (
 	"mserp/internal/relay"
 )
 
-// Every table is connection-local and shadows application tables. This test
-// never migrates or mutates the configured application's persistent records.
+// Tables, functions and triggers live in a disposable schema. Repeat runs never
+// leave functions in public or mutate another test fixture.
 func TestRelayIdentityDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_RELAY_REVIEW_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("set MSERP_RELAY_REVIEW_TEST_DATABASE_URL for temporary-table PostgreSQL checks")
+	}
+	if !strings.Contains(dsn, "_test") {
+		t.Fatal("disposable test database required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -37,18 +40,24 @@ func TestRelayIdentityDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema := strings.ReplaceAll(string(source), "CREATE TABLE ", "CREATE TEMP TABLE ")
-	schema = strings.ReplaceAll(schema, "CREATE EXTENSION IF NOT EXISTS pgcrypto;", "")
+	testSchema := fmt.Sprintf("relay_identity_%d", time.Now().UnixNano())
+	if _, err = pool.Exec(ctx, `CREATE SCHEMA `+testSchema+`;SET search_path TO `+testSchema+`,public`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), `SET search_path TO public;DROP SCHEMA `+testSchema+` CASCADE`)
+	}()
+	schema := string(source)
 	if _, err = pool.Exec(ctx, schema); err != nil {
 		t.Fatal(err)
 	}
 	// Recreate the previous constraints on empty temporary tables and exercise
 	// the actual upgrade migration, as well as the fresh-install schema above.
-	_, err = pool.Exec(ctx, `DROP TABLE pg_temp.relay_identity_reviews;
-	DROP INDEX pg_temp.relay_driver_links_pending_idx;
-	DROP INDEX pg_temp.fuel_transactions_relay_identity_idx;
-	ALTER TABLE pg_temp.relay_driver_links ALTER COLUMN driver_id SET NOT NULL;
-	ALTER TABLE pg_temp.fuel_transactions ALTER COLUMN driver_id SET NOT NULL;`)
+	_, err = pool.Exec(ctx, `DROP TABLE relay_identity_reviews;
+	DROP INDEX relay_driver_links_pending_idx;
+	DROP INDEX fuel_transactions_relay_identity_idx;
+	ALTER TABLE relay_driver_links ALTER COLUMN driver_id SET NOT NULL;
+	ALTER TABLE fuel_transactions ALTER COLUMN driver_id SET NOT NULL;`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +65,7 @@ func TestRelayIdentityDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, strings.ReplaceAll(string(migration), "CREATE TABLE ", "CREATE TEMP TABLE ")); err != nil {
+	if _, err = pool.Exec(ctx, string(migration)); err != nil {
 		t.Fatal(err)
 	}
 	const driverA = "00000000-0000-0000-0000-000000000001"
@@ -192,6 +201,26 @@ func TestRelayIdentityDatabase(t *testing.T) {
 	if loadedID != nil || sourceName != unknown || sourceUnit != unit {
 		t.Fatal("unmatched load snapshot lost")
 	}
+	// Even a matched primary/team driver must not be renamed, assigned a
+	// dispatcher, or assigned to the source truck by any DataTruck path.
+	name, dispatch, knownUnit := "Burligh James", "Unknown Dispatcher", "001"
+	records[0].DriverName, records[0].TeamDriverName = &name, &name
+	records[0].DispatcherName, records[0].TruckUnit = &dispatch, &knownUnit
+	for _, importLoads := range []func(context.Context, []LoadRecord) error{loadRepo.UpsertLoads, loadRepo.RefreshLoads, loadRepo.ReconcileLoads} {
+		if err = importLoads(ctx, records); err != nil {
+			t.Fatal(err)
+		}
+		var fleetName string
+		var dispatcher *string
+		var count int
+		if err = pool.QueryRow(ctx, `SELECT full_name,dispatcher_id,(SELECT count(*) FROM truck_driver_assignments)+(SELECT count(*) FROM dispatchers) FROM drivers WHERE id=$1`, driverA).Scan(&fleetName, &dispatcher, &count); err != nil {
+			t.Fatal(err)
+		}
+		if fleetName != "James Lee Burligh" || dispatcher != nil || count != 0 {
+			t.Fatalf("source changed managed fleet: %s %v %d", fleetName, dispatcher, count)
+		}
+	}
+
 }
 
 func relayTestPurchase(t *testing.T, id, account string, when time.Time, purchase relay.Transaction) relay.Transaction {

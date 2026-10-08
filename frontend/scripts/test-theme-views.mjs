@@ -63,7 +63,7 @@ try {
   // A failed save restores the last persisted appearance and offers a retry.
   failSave = true;
   await page.getByRole('button', { name: /^Monokai Charcoal/ }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not save theme' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'default-light');
   failSave = false;
   user = 'teammate'; await page.reload();

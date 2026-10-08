@@ -1,3 +1,5 @@
+import { expandBoard } from "./compactBoard";
+import { ReadRequests } from "./readRequests";
 import type { Updater, UpdaterInput } from "./types";
 import type { ProfileNote, InvestorStatementWeek } from "./types";
 
@@ -6,7 +8,7 @@ export const addProfileNote = (kind: "drivers" | "trucks", id: string, note: { i
 export const fetchTruckAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/trucks/${id}/assignments`);
 export const fetchInvestor = (id: string) => apiRequest<Investor>(`/investors/${id}`);
 export const fetchDispatcher = (id: string) => apiRequest<Dispatcher>(`/dispatchers/${id}`);
-export const fetchInvestorHistory = (investorId: string, page: number) => paginatedRequest<PaginatedResponse<InvestorStatementWeek>>(withQuery("/investor-pay/history", { investorId, page, pageSize: 10 }));
+export const fetchInvestorHistory = (investorId: string, page: number, signal?: AbortSignal) => paginatedRequest<PaginatedResponse<InvestorStatementWeek>>(withQuery("/investor-pay/history", { investorId, page, pageSize: 10 }), signal);
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {
@@ -18,6 +20,7 @@ import type {
   DriverPayWeek,
   DriverPayEdits,
   CustomTask,
+  TaskStatus,
   CustomTaskInput,
   RelayIdentityTask,
   GrossBoard,
@@ -79,9 +82,9 @@ function withQuery(path: string, values: Record<string, unknown>) {
 }
 
 async function paginatedRequest<T extends PaginatedResponse<unknown>>(
-  path: string,
+  path: string, signal?: AbortSignal,
 ): Promise<T> {
-  const value = await apiRequest<unknown>(path);
+  const value = await apiRequest<unknown>(path, { signal });
   if (
     typeof value === "object" &&
     value !== null &&
@@ -105,12 +108,26 @@ const API_BASE =
 
 let csrfToken = "";
 
-export const fetchCustomTasks = (query: PageQuery & { status: "open" | "completed" | "all" }) =>
+export const fetchTasks = (query: PageQuery & { status: TaskStatus | "all" }) =>
+  paginatedRequest<PaginatedResponse<CustomTask>>(withQuery("/tasks", query));
+export const fetchTaskCount = () => apiRequest<{ count: number }>("/tasks/count");
+export function subscribeTaskEvents(onChange: () => void, onUnauthorized: () => void) {
+  const events = new EventSource(`${API_BASE}/tasks/events`, { withCredentials: true });
+  events.addEventListener("changed", onChange);
+  events.addEventListener("unauthorized", () => { events.close(); onUnauthorized(); });
+  return () => events.close();
+}
+export const confirmOffboarding = (id: string, checklist: { equipment: boolean; access: boolean; settlement: boolean }) =>
+  apiRequest<void>(`/tasks/offboarding/${id}/confirm`, { method: "POST", body: JSON.stringify(checklist) });
+
+export const fetchCustomTasks = (query: PageQuery & { status: TaskStatus | "all" }) =>
   paginatedRequest<PaginatedResponse<CustomTask>>(withQuery("/tasks/custom", query));
 export const createCustomTask = (input: CustomTaskInput) =>
   apiRequest<CustomTask>("/tasks/custom", { method: "POST", body: JSON.stringify(input) });
 export const updateCustomTask = (id: string, input: CustomTaskInput) =>
   apiRequest<CustomTask>(`/tasks/custom/${id}`, { method: "PUT", body: JSON.stringify(input) });
+export const setTaskStatus = (id: string, status: TaskStatus) =>
+  apiRequest<CustomTask>(`/tasks/custom/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
 export const setCustomTaskCompleted = (id: string, completed: boolean) =>
   apiRequest<CustomTask>(`/tasks/custom/${id}`, { method: "PATCH", body: JSON.stringify({ completed }) });
 export const deleteCustomTask = (id: string) =>
@@ -126,7 +143,7 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
 export const fetchDriverBoard = (weekStart: string) =>
-  apiRequest<DriverBoard>(withQuery("/driver-board", { weekStart }));
+  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, compact: 1 })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
@@ -171,7 +188,7 @@ export const fetchLoadsPage = (query: PageQuery & {
   pickupTo?: string;
   sort?: string;
   direction?: string;
-}) => paginatedRequest<LoadPage>(withQuery("/loads", query));
+}, signal?: AbortSignal) => paginatedRequest<LoadPage>(withQuery("/loads", query), signal);
 
 export const syncLoads = () =>
   apiRequest<SyncLoadsResult>("/jobs/sync-loads", { method: "POST" });
@@ -199,7 +216,15 @@ export const fetchFinancialDashboard = (query: { weekStart?: string }) =>
 export const syncFuelTransactions = () =>
   apiRequest<SyncFuelResult>("/jobs/sync-fuel", { method: "POST" });
 
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+const reads = new ReadRequests();
+function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  if ((init?.method ?? "GET").toUpperCase() === "GET" && !init?.headers) {
+    return reads.read(path, signal => performRequest<T>(path, { ...init, signal }), init?.signal);
+  }
+  reads.clear();
+  return performRequest<T>(path, init).finally(() => reads.clear());
+}
+async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 	const method = (init?.method ?? "GET").toUpperCase();
 	const needsCSRF = !["GET", "HEAD", "OPTIONS"].includes(method);
 	const response = await fetch(`${API_BASE}${path}`, {
@@ -265,6 +290,7 @@ export async function logout(): Promise<void> {
 		await apiRequest<void>("/auth/logout", { method: "POST" });
 	} finally {
 		csrfToken = "";
+    reads.clear(true);
 	}
 }
 
@@ -280,8 +306,8 @@ export const completeDriverIntake = (id: string, input:
   apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify("driver" in input ? { ...input, driver: withPhone(input.driver) } : input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriverAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/drivers/${id}/assignments`);
-export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }) =>
-  paginatedRequest<PaginatedResponse<Driver>>(withQuery("/drivers", query));
+export const fetchDriversPage = (query: PageQuery & { includeInactive?: boolean }, signal?: AbortSignal) =>
+  paginatedRequest<PaginatedResponse<Driver>>(withQuery("/drivers", query), signal);
 export const createDriver = (input: DriverInput) =>
   apiRequest<Driver>("/drivers", {
     method: "POST",
@@ -311,8 +337,8 @@ export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
 export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);
 export const fetchTruckLocation = (id: string) => apiRequest<FleetLocation>(`/trucks/${id}/location`);
 export const fetchDriverTruckLocation = (id: string) => apiRequest<FleetLocation>(`/drivers/${id}/location`);
-export const fetchTrucksPage = (query: PageQuery) =>
-  paginatedRequest<PaginatedResponse<Truck>>(withQuery("/trucks", query));
+export const fetchTrucksPage = (query: PageQuery, signal?: AbortSignal) =>
+  paginatedRequest<PaginatedResponse<Truck>>(withQuery("/trucks", query), signal);
 export const createTruck = (input: TruckInput) =>
   apiRequest<Truck>("/trucks", {
     method: "POST",
@@ -379,7 +405,7 @@ export const fetchExpensesPage = (query: PageQuery & {
   dateTo?: string;
   truckId?: string;
   driverId?: string;
-}) => paginatedRequest<ExpensePage>(withQuery("/expenses", query));
+}, signal?: AbortSignal) => paginatedRequest<ExpensePage>(withQuery("/expenses", query), signal);
 export const createExpense = (input: ExpenseInput) =>
   apiRequest<Expense>("/expenses", {
     method: "POST",
@@ -407,13 +433,13 @@ export const updateExpense = (id: string, input: ExpenseInput) =>
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
 
-export const fetchDriverPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart }));
+export const fetchDriverPay = (weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart }), { signal });
 export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
 
 export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
-export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }) =>
-  paginatedRequest<PaginatedResponse<Investor>>(withQuery("/investors", query));
+export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }, signal?: AbortSignal) =>
+  paginatedRequest<PaginatedResponse<Investor>>(withQuery("/investors", query), signal);
 export const createInvestor = (input: InvestorInput) =>
   apiRequest<Investor>("/investors", { method: "POST", body: JSON.stringify(withPhone(input)) });
 export const updateInvestor = (id: string, input: InvestorInput) =>
@@ -432,7 +458,7 @@ export const confirmDriverCharges = (driverId: string, weekStart: string, rows: 
 
 export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/driver-charges/recurring", { method: "PUT", body: JSON.stringify(input) });
 
-export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }));
+export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25, signal?: AbortSignal) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }), { signal });
 export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequest<SettlementEvent[]>(withQuery(`/drivers/${id}/settlement-history`, { weekStart }));
 export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason}) });
 
@@ -441,7 +467,7 @@ export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: st
 export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/escrows/settings");
 export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 
-export const fetchInvestorPay = (weekStart: string, truckId?: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId }));
+export const fetchInvestorPay = (weekStart: string, truckId?: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId }), { signal });
 export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });
 export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason }) });
 export const fetchTruckCharges = () => apiRequest<import("./types").TruckChargeData>("/truck-charges");

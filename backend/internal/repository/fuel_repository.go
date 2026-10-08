@@ -750,7 +750,7 @@ func (r *FuelRepository) GetDriverFuelReport(ctx context.Context, driverID strin
 var fuelDriverReportCTE = `
 WITH transaction_totals AS (
 	SELECT t.id, t.relay_transaction_id, t.purchased_at,
-		(t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date AS purchased_on,
+		t.purchased_on AS purchased_on,
 		t.merchant_name, t.location_name, t.city, t.state, t.timezone, t.synced_at,
 		t.total_amount_paid AS total_charged, t.total_retail_price AS retail_value,
 		t.total_amount_saved AS savings, COALESCE(t.cash_advance,0) AS cash_advance,
@@ -936,7 +936,7 @@ var fuelDashboardWeeklySQL = fuelDashboardBaseSQL + `
 var fuelDashboardBaseSQL = `
 WITH fuel_purchase_totals AS (
 	SELECT t.id,
-		(t.purchased_at AT TIME ZONE ` + fuelTimezoneExpression("t.timezone") + `)::date AS purchased_on,
+		t.purchased_on AS purchased_on,
 		t.state,
 		COALESCE(SUM(i.total_amount_paid), 0) AS spend,
 		COALESCE(SUM(i.quantity) FILTER (WHERE lower(COALESCE(i.unit_of_measure, '')) = 'gallons'), 0) AS gallons,
@@ -957,8 +957,8 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	AND ($3 = '' OR state = $3)
 	AND ($4 = '' OR ($4 = 'fuel' AND fuel_amount > 0)
 		OR ($4 = 'def' AND def_amount > 0) OR ($4 = 'other' AND other_amount > 0))
-	AND ($5::date IS NULL OR (purchased_at AT TIME ZONE ` + fuelTimezoneExpression("timezone") + `)::date >= $5)
-	AND ($6::date IS NULL OR (purchased_at AT TIME ZONE ` + fuelTimezoneExpression("timezone") + `)::date <= $6)`
+	AND ($5::date IS NULL OR purchased_on >= $5)
+	AND ($6::date IS NULL OR purchased_on <= $6)`
 	args := []any{query.Search, query.Driver, query.State, query.Category, query.DateFrom, query.DateTo}
 	cte := "WITH transactions AS (" + fuelTransactionsSQL + ")"
 	var total int
@@ -1031,7 +1031,7 @@ SELECT
 	COALESCE(items.other_amount, 0)::float8 AS other_amount,
 	COALESCE(items.fuel_volume, 0)::float8 AS fuel_volume,
 	COALESCE(items.def_volume, 0)::float8 AS def_volume,
-	t.fuel_code_type, t.is_direct_bill
+	t.fuel_code_type, t.is_direct_bill, t.purchased_on
 FROM fuel_transactions t
 LEFT JOIN drivers d ON d.id = t.driver_id
 LEFT JOIN LATERAL (
@@ -1047,6 +1047,7 @@ LEFT JOIN LATERAL (
 
 func scanFuelTransaction(row rowScanner) (FuelTransaction, error) {
 	var transaction FuelTransaction
+	var purchasedOn time.Time
 	err := row.Scan(
 		&transaction.ID, &transaction.RelayTransactionID, &transaction.DriverID,
 		&transaction.DriverName, &transaction.RelayDriverID,
@@ -1056,7 +1057,7 @@ func scanFuelTransaction(row rowScanner) (FuelTransaction, error) {
 		&transaction.TotalRetailPrice, &transaction.TotalAmountSaved,
 		&transaction.CashAdvance, &transaction.CurrencyCode, &transaction.FuelAmount,
 		&transaction.DEFAmount, &transaction.OtherAmount, &transaction.FuelVolume,
-		&transaction.DEFVolume, &transaction.FuelCodeType, &transaction.IsDirectBill,
+		&transaction.DEFVolume, &transaction.FuelCodeType, &transaction.IsDirectBill, &purchasedOn,
 	)
 	transaction.DriverName = formatPersonName(transaction.DriverName)
 	return transaction, err
