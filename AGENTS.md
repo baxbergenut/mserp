@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `069_driver_status_escrow_tasks.sql`:
+  `070_escrow_review_notifications.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -1534,3 +1534,6 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   `node scripts/test-investors-e2e.mjs --escrow-only` exercises real worker/SSE,
   multi-assignee privacy, opening corrections and full/partial/kept decisions.
   MSERP_E2E_API_PORT and MSERP_E2E_WEB_PORT optionally isolate this browser runner.
+
+Migration 070 also publishes task invalidations when a termination review date is
+corrected, so an open Tasks page removes reviews whose due date moves forward.
