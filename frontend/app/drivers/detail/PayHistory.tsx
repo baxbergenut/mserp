@@ -24,7 +24,7 @@ export function PayHistory({ driverId }: { driverId: string }) {
   const [open, setOpen] = useViewState<string | null>("PayHistory:open", null);
   const [error, setError] = useState("");
   useEffect(() => { let cancelled = false; fetchDriverPayHistory(driverId, page, pageSize).then(result => { if (!cancelled) { setData(result); setError(""); } }).catch(e => { if (!cancelled) setError(e.message); }); return () => { cancelled = true; }; }, [driverId, page, pageSize]);
-  return <section className="space-y-4"><div><h2 className="text-sm font-semibold text-zinc-100">Weekly pay history</h2><p className="mt-1 text-xs text-zinc-500">Earnings, reimbursements and deductions from Driver Pay. Finalized settlements are fixed records; draft weeks follow current source details.</p></div>
+  return <section className="space-y-4"><div><h2 className="text-sm font-semibold text-zinc-100">Weekly pay history</h2></div>
     {error && <ErrorBanner message={error} />}
     {!data ? <p className="py-10 text-center text-sm text-zinc-500">Loading pay history…</p> : !data.items.length ? <p className="py-10 text-center text-sm text-zinc-500">No payroll weeks recorded yet.</p> : <div className="space-y-2">{data.items.map(({ weekStart, driver }) => {
       const totals = driverTotals(driver, driver.edits); const expanded = open === weekStart;

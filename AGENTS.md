@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `062_assignment_week_boundaries.sql`:
+  `063_profile_notes.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -128,8 +128,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   assignments, CRUD forms, and review-first AI transaction entry.
 - `frontend/app/investors/`: truck owners, independent investors and driver-linked
   investors. The company is hidden by default with a Show company filter.
-  The directory hides driver-linked owners with fewer than two owned trucks;
-  unpaginated owner lookups retain them for forms and history.
+  The directory includes driver-linked owners regardless of truck count.
+  `/investors/detail` and linked drivers' Ownership tabs share owned-truck and
+  investor statement summaries. Driver and investor statements stay separate.
   Truck forms select explicit owners; ownership is separate from operation.
 - `frontend/app/drivers/`, `trucks/`, and `dispatchers/`: client-side CRUD pages;
   their colocated `*Form.tsx` files own form conversion/defaults. Driver and
@@ -139,8 +140,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   before creating parallel UI patterns.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
 - `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
-  links and account menu. PageHeader portals render each page title, icon, count,
-  and description on the left of the top bar, preserving page context/handlers.
+  links and account menu. PageHeader portals render each page title, icon and count
+  on the left of the top bar, preserving page context/handlers. Page headers
+  have no descriptions. Sign out exists only in the top-bar account menu.
   Page action buttons/status controls remain in the main content; global controls
   stay on the right.
   Explicit search query parameters override remembered
@@ -301,6 +303,15 @@ browser bundle.
   plus `GET /drivers/setup-defaults` for the current new-driver escrow default.
 - Driver assignment history: `GET /drivers/{id}/assignments` returns truck and
   dispatcher periods, current links, source notes, and whether the start is known.
+- Truck assignment history: `GET /trucks/{id}/assignments` returns driver periods.
+- Profile notes: `GET/POST /drivers/{id}/notes` and `/trucks/{id}/notes` use fleet
+  read/write. POST accepts a client UUID `id` and `body` (1–5000 characters),
+  records the authenticated author, and is idempotent for an identical retry.
+  New entries are separate dated records; existing freeform notes remain undated.
+- Detail lookups: `GET /investors/{id}` and `GET /dispatchers/{id}` use fleet.read.
+- Investor profile history: `GET /investor-pay/history?investorId=...&page=...`
+  uses payroll.read, returns up to ten complete weeks per page, and shares the
+  read-only Investor Pay calculation/frozen reports. Reads never collect payments.
 - New hires: `POST /integrations/fleetscope/driver-hired`, `GET /driver-intake`,
   `GET /driver-intake/{id}`, `GET /driver-directory`, `POST /driver-intake/{id}/complete`.
 - Terminations: `POST /integrations/fleetscope/driver-terminated` (same HMAC/company
@@ -522,7 +533,8 @@ assignment lookup lists.
   creator. Expense settings management is independent of category access.
 
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
-  and DriverCard.tsx with Driver Pay. Reports group trucks by investor, retain
+  and DriverCard.tsx with Driver Pay, using the same compact expandable rows.
+  Each row is one truck statement named with investor and truck unit. Reports retain
   full load details, and deduct hired driver earnings in the charges column.
   Earnings use percentage/CPM tariffs before personal deductions; finalized
   driver load fees take precedence over later tariff changes. Truck shares use
@@ -1175,6 +1187,17 @@ assignment lookup lists.
 
 ## Implementation conventions
 
+- Follow `docs/UI_DESIGN_SPECS.md` for all UI work: shared headers without
+  introductions, 32px ordinary rows/controls, 13px body text, 12px labels,
+  16px icons (20px page icons), 16px card padding and 8px radii. The shell and
+  shared modal portals use `.mserp-ui`; reuse ManagementUI and MetricCard.
+- `docs/SETTLEMENT_RULES.md` records the customer-confirmed gross basis. Original
+  minus driver gross is a dispatch rate-adjustment balance, not automatically
+  anyone's earnings. Percentage driver/investor pay uses Gross Board driver
+  gross; CPM still uses miles. Never merge personal and investor statements or
+  deduct the dispatch difference again. Missing truck terms are configuration
+  gaps (`setupRequired` in Investor Pay), not zero-valued statements.
+
 - Backend flow is handler -> repository, with integrations/jobs injected in
   `main.go`. Keep transport validation in `httpapi` and SQL/transactions in
   `repository`.
@@ -1216,6 +1239,7 @@ npm run build
 # E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
 npx playwright install chromium
 node scripts/test-investors-e2e.mjs
+node scripts/test-investors-e2e.mjs --profiles-only
 # Same isolated database safety requirement, using MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
 node scripts/test-driver-charges-e2e.mjs
 # Browser view regressions use isolated API fixtures, with no database needed.

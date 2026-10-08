@@ -83,10 +83,18 @@ type DriverPayDriver struct {
 	Edits           DriverPayEdits     `json:"edits"`
 }
 type DriverPayWeek struct {
-	Issues    []string          `json:"issues,omitempty"`
-	Revision  string            `json:"revision"`
-	WeekStart string            `json:"weekStart"`
-	Drivers   []DriverPayDriver `json:"drivers"`
+	SetupRequired []InvestorTruckSetup `json:"setupRequired,omitempty"`
+	Issues        []string             `json:"issues,omitempty"`
+	Revision      string               `json:"revision"`
+	WeekStart     string               `json:"weekStart"`
+	Drivers       []DriverPayDriver    `json:"drivers"`
+}
+
+type InvestorTruckSetup struct {
+	TruckID   string `json:"truckId"`
+	TruckUnit string `json:"truckUnit"`
+	OwnerID   string `json:"ownerId"`
+	OwnerName string `json:"ownerName"`
 }
 
 // One repeatable-read transaction provides a consistent snapshot of placement,

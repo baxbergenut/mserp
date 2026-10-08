@@ -255,7 +255,7 @@ function DriversContent() {
       <ManagementHeader
         icon={Users}
         title="Drivers"
-        description="Manage driver profiles, compensation, equipment, and dispatcher assignments."
+
         count={total}
         actionLabel="Add driver"
         onAction={openCreate}

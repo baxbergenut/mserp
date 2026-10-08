@@ -1,4 +1,5 @@
 import { runUpdatersE2E } from "./updaters-e2e.mjs";
+import { runProfilesE2E } from "./profiles-e2e.mjs";
 // Requires a disposable local _test database, psql, Go, and a /api frontend build.
 // Uses a temporary schema, a real API process, and real browser authentication.
 import { chromium, expect } from '@playwright/test';
@@ -80,7 +81,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--assignment-week-only')) {
+  if (process.argv.includes('--profiles-only')) {
+    await runProfilesE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--assignment-week-only')) {
     await runAssignmentWeekE2E({ page, base, sql, schema });
     console.log('Assignment week E2E passed: future Monday selection and historical assignment boundaries.');
   } else {

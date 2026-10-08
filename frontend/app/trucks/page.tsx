@@ -193,7 +193,7 @@ export default function TrucksPage() {
       <ManagementHeader
         icon={TruckIcon}
         title="Trucks"
-        description="Track equipment details, compliance dates, maintenance, and driver assignments."
+
         count={total}
         actionLabel="Add truck"
         onAction={openCreate}

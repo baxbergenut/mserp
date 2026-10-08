@@ -30,7 +30,6 @@ function OverlayPortal({ children }: { children: ReactNode }) {
 export function ManagementHeader({
   icon: Icon,
   title,
-  description,
   count,
   actionLabel,
   onAction,
@@ -39,7 +38,6 @@ export function ManagementHeader({
 }: {
   icon: LucideIcon;
   title: string;
-  description: string;
   count: number;
   actionLabel?: string;
   onAction?: () => void;
@@ -55,7 +53,7 @@ export function ManagementHeader({
     {actionLabel}
   </button> : null;
   return (
-    
+
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
       <PageHeader><div>
         <div className="flex items-center gap-3">
@@ -65,11 +63,11 @@ export function ManagementHeader({
             {count}
           </span>
         </div>
-        <p className="mt-1.5 text-[13px] text-zinc-500">{description}</p>
+
       </div></PageHeader>
       {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{secondaryAction}{action}</div> : action}
     </div>
-    
+
   );
 }
 
@@ -116,7 +114,7 @@ export function Modal({
 }) {
   return (
     <OverlayPortal>
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm animate-fade-in">
+      <div className="mserp-ui fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm animate-fade-in">
         <div
           className="flex min-h-full items-start justify-center p-4 sm:items-center sm:p-8"
           role="dialog"
@@ -399,7 +397,7 @@ export function ConfirmDialog({
 }) {
   return (
     <OverlayPortal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
+      <div className="mserp-ui fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
         <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-[#111113] p-5 shadow-2xl animate-scale-in">
           <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
           <p className="mt-2 text-[13px] leading-5 text-zinc-500">{message}</p>

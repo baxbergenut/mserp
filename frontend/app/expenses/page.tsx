@@ -231,7 +231,7 @@ export default function ExpensesPage() {
       <ManagementHeader
         icon={WalletCards}
         title="Expenses & Charges"
-        description="Record and review the costs and charges assigned to your categories."
+
         count={total}
         actionLabel={createCategoryIds.length ? "Add entry" : undefined}
         onAction={createCategoryIds.length ? openCreate : undefined}

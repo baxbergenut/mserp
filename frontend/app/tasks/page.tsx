@@ -71,7 +71,7 @@ export default function TasksPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       <ManagementHeader icon={ListChecks} title="Tasks" count={(data?.total ?? 0) + setupTotal + customTotal}
-        description="Manage team tasks, set up new drivers and review accounts that need your attention."
+
         actionLabel="Add task" onAction={() => setCreatingTask(true)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }}
@@ -165,4 +165,3 @@ function RelayTaskCard({ task, drivers, disabled, onDecision }: {
     </section>
   );
 }
-

@@ -937,6 +937,7 @@ export interface DriverPayDriver {
   edits: DriverPayEdits;
 }
 export interface DriverPayWeek {
+  setupRequired?: { truckId: string; truckUnit: string; ownerId: string; ownerName: string }[];
  issues?: string[];
  revision: string;
   weekStart: string;
@@ -944,7 +945,7 @@ export interface DriverPayWeek {
 }
 export interface AssignmentHistoryEntry {
   id: string;
-  kind: "truck" | "dispatcher";
+  kind: "truck" | "dispatcher" | "driver";
   relatedId: string | null;
   name: string;
   assignedAt: string;
@@ -966,6 +967,17 @@ export interface Investor {
   trucks: Array<{ id: string; unitNumber: string }>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProfileNote {
+  id: string;
+  body: string;
+  actorName: string;
+  createdAt: string;
+}
+export interface InvestorStatementWeek {
+  weekStart: string;
+  trucks: DriverPayDriver[];
 }
 export interface InvestorInput {
   fullName: string;

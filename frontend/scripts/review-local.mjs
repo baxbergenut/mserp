@@ -7,6 +7,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seedProfileFixture } from './profile-fixture.mjs';
 
 const frontend = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const backend = resolve(frontend, '../backend');
@@ -57,6 +58,7 @@ try {
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-09-28',125.25 FROM expenses;
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-10-05',100 FROM expenses;
   `);
+  seedProfileFixture(sql, schema);
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);

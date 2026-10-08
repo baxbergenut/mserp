@@ -89,6 +89,26 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		}
 		writeJSON(w, 200, v)
 	})
+	r.Get("/investor-pay/history", func(w http.ResponseWriter, r *http.Request) {
+		owner := r.URL.Query().Get("investorId")
+		if !isUUID(owner) {
+			writeAPIError(w, 400, "Invalid investor")
+			return
+		}
+		page, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		// Each page calculates complete weeks; keep the work bounded.
+		page.PageSize = min(page.PageSize, 10)
+		v, err := pay.InvestorHistory(r.Context(), owner, page)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, v)
+	})
 	r.Put("/investor-pay", func(w http.ResponseWriter, r *http.Request) {
 		var v repository.DriverPayEdits
 		if !decode(w, r, &v) {

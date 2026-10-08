@@ -16,7 +16,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
     INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${ownTruck}','${owner}','2026-01-01');
   `);
   let directory = await (await page.request.get(`${base}/api/investors?page=1&pageSize=100`)).json();
-  expect(directory.items.some(i => i.id === investor)).toBe(false);
+  expect(directory.items.some(i => i.id === investor)).toBe(true);
   expect((await (await page.request.get(`${base}/api/investors`)).json()).some(i => i.id === investor)).toBe(true);
   sql(`SET search_path TO ${schema},public;
     INSERT INTO trucks(id,unit_number,owner_id) VALUES('${extraTruck}','PAY-EXTRA','${investor}');
@@ -51,7 +51,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByRole('button', { name: 'PAY-EXTRA, Truck admin', exact: true })).toContainText('100.00');
   await page.goto(`${base}/accounting/investor-pay?weekStart=2026-09-28`);
   await expect(page.getByRole('heading', { name: 'Investor pay', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Payroll Hector', exact: true }).click();
+  await page.getByRole('button', { name: 'Payroll Hector PAY-EXTRA', exact: true }).click();
   await expect(page.getByRole('link', { name: 'PAY-EXTRA-LOAD', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'PAY-OWN-LOAD', exact: true })).toHaveCount(0);
   await expect(page.getByText('Driver earnings · Payroll Employee', { exact: true })).toBeVisible();
@@ -73,5 +73,5 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('button', { name: 'Payroll Hector', exact: true }).click();
   await expect(page.getByRole('link', { name: 'PAY-OWN-LOAD', exact: true })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Weekly driver pay' })).toContainText('1,760.00');
-  console.log('Investor payroll E2E passed: owner-only directory exclusion, additional-truck inclusion, truck charges, shared load table, CPM earnings deduction, autosave, finalize/reopen, separate owner-operator pay.');
+  console.log('Investor payroll E2E passed: single-truck owner discovery, additional-truck inclusion, truck charges, shared load table, CPM earnings deduction, autosave, finalize/reopen, separate owner-operator pay.');
 }

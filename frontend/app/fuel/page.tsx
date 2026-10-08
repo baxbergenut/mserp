@@ -198,10 +198,7 @@ export default function FuelPage() {
               </span>
             )}
           </div>
-          <p className="mt-1 text-[13px] text-zinc-600">
-            Fuel performance, pricing, and Relay purchase data.
-            {" "}<Link href="/tasks" className="text-blue-400 hover:underline">Review unassigned Relay accounts</Link>
-          </p>
+
         </div></PageHeader>
         <button
           type="button"

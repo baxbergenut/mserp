@@ -27,18 +27,24 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	handler := fleetHandler{logger: logger, repo: repo}
 
 	r.Get("/investors", handler.listInvestors)
+	r.Get("/investors/{id}", handler.getInvestor)
 	r.Post("/investors", handler.saveInvestor)
 	r.Put("/investors/{id}", handler.saveInvestor)
 	r.Get("/drivers", handler.listDrivers)
 	r.Get("/drivers/setup-defaults", handler.getDriverSetupDefaults)
 	r.Get("/drivers/{id}", handler.getDriver)
 	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
+	r.Get("/drivers/{id}/notes", handler.profileNotes)
+	r.Post("/drivers/{id}/notes", handler.profileNotes)
 	r.Get("/drivers/{id}/location", handler.getDriverTruckLocation)
 	r.Post("/drivers", handler.createDriver)
 	r.Put("/drivers/{id}", handler.updateDriver)
 	r.Delete("/drivers/{id}", handler.deleteDriver)
 	r.Get("/trucks", handler.listTrucks)
 	r.Get("/trucks/{id}", handler.getTruck)
+	r.Get("/trucks/{id}/assignments", handler.getTruckAssignments)
+	r.Get("/trucks/{id}/notes", handler.profileNotes)
+	r.Post("/trucks/{id}/notes", handler.profileNotes)
 	r.Get("/trucks/{id}/location", handler.getTruckLocation)
 	r.Post("/trucks", handler.createTruck)
 	r.Put("/trucks/{id}", handler.updateTruck)
@@ -48,6 +54,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Put("/updaters/{id}", handler.saveUpdater)
 	r.Delete("/updaters/{id}", handler.deleteUpdater)
 	r.Get("/dispatchers", handler.listDispatchers)
+	r.Get("/dispatchers/{id}", handler.getDispatcher)
 	r.Post("/dispatchers", handler.createDispatcher)
 	r.Put("/dispatchers/{id}", handler.updateDispatcher)
 	r.Delete("/dispatchers/{id}", handler.deleteDispatcher)
@@ -583,7 +590,7 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 		writeAPIError(w, 409, err.Error())
 		return
 	}
-	if errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) {
+	if errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrProfileNoteConflict) {
 		writeAPIError(w, http.StatusConflict, err.Error())
 		return
 	}

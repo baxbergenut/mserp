@@ -15,13 +15,11 @@ import {
   Receipt,
   Fuel,
   Landmark,
-  LogOut,
   WalletCards,
   CalendarRange,
   ListChecks,
   Settings,
 } from "lucide-react";
-import { logout } from "@/app/lib/api";
 import { usePermissions, pagePermission } from "@/app/lib/access";
 
 const NAV_ITEMS = [
@@ -47,24 +45,13 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-export function Sidebar({ username }: { username: string }) {
+export function Sidebar() {
   const permissions = usePermissions();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(
     pathname.startsWith("/accounting"),
   );
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await logout();
-    } finally {
-      window.location.assign("/login");
-    }
-  }
-
   return (
     <aside
       className={`
@@ -186,23 +173,6 @@ export function Sidebar({ username }: { username: string }) {
           );
         })}
       </nav>
-
-      {/* ── Collapse toggle ── */}
-      <div className="border-t border-zinc-800/40 p-2">
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-zinc-500 transition-colors hover:bg-zinc-800/40 hover:text-zinc-200 disabled:opacity-50 ${collapsed ? "justify-center px-0" : ""}`}
-          title={collapsed ? `Sign out ${username}` : undefined}
-        >
-          <LogOut className="h-[18px] w-[18px] shrink-0" />
-          {!collapsed && (
-            <span className="min-w-0 truncate">
-              {loggingOut ? "Signing out…" : `Sign out ${username}`}
-            </span>
-          )}
-        </button>
-      </div>
 
       <div className="border-t border-zinc-800/40 p-2">
         <button

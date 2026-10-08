@@ -54,7 +54,7 @@ export function TopBar({ username }: { username: string }) {
         { name: "Trucks", request: () => fetchTrucksPage(page).then(r => r.items.map(t => ({ label: `Truck ${t.unitNumber}`, detail: t.driverName ?? t.status, href: `/trucks/detail?id=${encodeURIComponent(t.id)}` }))) },
         { name: "Loads", request: () => fetchLoadsPage(page).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
         { name: "Expenses & Charges", request: () => fetchExpensesPage(page).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
-        { name: "Investors", request: () => fetchInvestorsPage(page).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.trucks.length} trucks`, href: i.driverId ? `/drivers/detail?id=${encodeURIComponent(i.driverId)}` : `/investors?search=${encodeURIComponent(i.fullName)}` }))) },
+        { name: "Investors", request: () => fetchInvestorsPage(page).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.trucks.length} trucks`, href: `/investors/detail?id=${encodeURIComponent(i.id)}` }))) },
       ];
       const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses & Charges": "expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
@@ -76,7 +76,7 @@ export function TopBar({ username }: { username: string }) {
         {term.length < 2 ? <p className="p-3 text-sm text-zinc-500">Type at least two characters to search records.</p> : !groups ? <p role="status" className="p-3 text-sm text-zinc-500">Searching…</p> : <>
           {groups.map(group => <div key={group.name}>{(group.results.length > 0 || group.failed) && <h2 className="px-3 pb-1 pt-3 text-xs font-medium text-zinc-500">{group.name}</h2>}{group.failed && <p className="px-3 py-2 text-xs text-amber-400">Could not search {group.name.toLowerCase()}. Try closing and reopening search.</p>}{group.results.map((result, index) => <IntentLink key={`${result.href}:${index}`} href={result.href} onClick={close} className={itemClass}><span className="block text-zinc-200">{result.label}</span><span className="block text-xs text-zinc-500">{result.detail}</span></IntentLink>)}</div>)}
           {groups.every(g => !g.results.length && !g.failed) && <p className="p-3 text-sm text-zinc-500">No records found for “{term}”.</p>}
-          <p className="px-3 pt-3 text-xs text-zinc-600">Up to five matches per category. Loads, expenses and charges, and independent investors open in their searchable lists.</p>
+          <p className="px-3 pt-3 text-xs text-zinc-600">Up to five matches per category. Loads and expenses open in their searchable lists.</p>
         </>}
       </div>
     </section>}

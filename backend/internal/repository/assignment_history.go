@@ -16,6 +16,31 @@ type AssignmentHistoryEntry struct {
 	Source       string     `json:"source"`
 }
 
+func (r *FleetRepository) TruckAssignmentHistory(ctx context.Context, truckID string) ([]AssignmentHistoryEntry, error) {
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks WHERE id=$1)`, truckID).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
+	rows, err := r.pool.Query(ctx, `SELECT a.id,'driver',a.driver_id,d.full_name,a.assigned_at,a.unassigned_at,true,a.source
+ FROM truck_driver_assignments a JOIN drivers d ON d.id=a.driver_id WHERE a.truck_id=$1 ORDER BY a.assigned_at DESC,a.id`, truckID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []AssignmentHistoryEntry{}
+	for rows.Next() {
+		var e AssignmentHistoryEntry
+		if err = rows.Scan(&e.ID, &e.Kind, &e.RelatedID, &e.Name, &e.AssignedAt, &e.UnassignedAt, &e.StartKnown, &e.Source); err != nil {
+			return nil, err
+		}
+		result = append(result, e)
+	}
+	return result, rows.Err()
+}
+
 func (r *FleetRepository) DriverAssignmentHistory(ctx context.Context, driverID string) ([]AssignmentHistoryEntry, error) {
 	var exists bool
 	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM drivers WHERE id=$1)`, driverID).Scan(&exists); err != nil {

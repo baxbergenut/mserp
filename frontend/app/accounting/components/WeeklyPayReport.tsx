@@ -420,9 +420,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
             {isDriver ? <UserRound className="h-5 w-5 text-blue-400" /> : <Headset className="h-5 w-5 text-violet-400" />}
             <h1 className="text-lg font-semibold text-zinc-100">{isDriver ? "Driver pay" : "Dispatcher pay"}</h1>
           </div>
-          <p className="mt-1.5 text-[12px] text-zinc-600">
-            {isDriver ? "Weekly driver settlements and company contribution." : "Weekly dispatcher commission from managed load gross."}
-          </p>
+
         </div></PageHeader>
 
         {dashboard && dashboard.availableWeeks.length > 0 && (

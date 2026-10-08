@@ -56,8 +56,8 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   return (
     <PermissionsContext.Provider value={session.user.permissions}>
     <ExpenseCategoryAccessContext.Provider value={session.user.expenseCategoryAccess ?? []}>
-    <div className="flex h-full">
-      <Sidebar username={session.user.username} />
+    <div className="mserp-ui flex h-full">
+      <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PageHeaderProvider key={`${pathname}?${query}`}>
         <TopBar key={pathname + query} username={session.user.username} />

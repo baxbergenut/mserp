@@ -41,7 +41,9 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('link', { name: 'Board Cpm', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/drivers/detail\\?id=${driver}`));
   await expect(panel.getByRole('img', { name: 'Reported heading 90 degrees' })).toBeVisible();
-  await expect(panel.getByRole('link', { name: 'Truck ELD-17' })).toHaveAttribute('href', `/trucks/detail?id=${truck}`);
+  await expect(panel.getByText('Unit ELD-17', { exact: true })).toHaveClass(/text-zinc-400/);
+  await expect(panel.getByRole('link', { name: /ELD-17/ })).toHaveCount(0);
+  await expect(page.locator('main header').getByRole('link', { name: 'ELD-17', exact: true })).toHaveAttribute('href', `/trucks/detail?id=${truck}`);
   await page.screenshot({ path: join(temp, 'driver-details-location.png'), fullPage: true, animations: 'disabled' });
   // Reads resolve the current assignment, not a saved driver/truck association.
   sql(`SET search_path TO ${schema},public; UPDATE truck_driver_assignments SET unassigned_at=now() WHERE truck_id='${truck}' AND unassigned_at IS NULL;`);

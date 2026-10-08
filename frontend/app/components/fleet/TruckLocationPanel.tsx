@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { MapPin } from "lucide-react";
 import { fetchDriverTruckLocation, fetchTruckLocation } from "@/app/lib/api";
 import type { FleetLocation } from "@/app/lib/types";
@@ -32,8 +31,7 @@ export function TruckLocationPanel({ truckId, driverId }: { truckId: string; dri
   }, [truckId, driverId]);
   return <section aria-label="Latest truck location" className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/20">
     <div className="p-4">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><MapPin className="h-4 w-4 text-zinc-500" />Latest location</h2>
-      {driverId && data?.truckId && <Link href={`/trucks/detail?id=${data.truckId}`} className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300">Truck {data.truckUnit}</Link>}
+      <div className="flex items-center justify-between gap-2"><h2 className="flex items-center gap-2"><MapPin className="text-zinc-400" />Latest location</h2>{data?.truckId && <span className="text-xs text-zinc-400">Unit {data.truckUnit}</span>}</div>
       {data?.location && <div className="mt-2 text-xs"><LocationCell name={`Truck ${data.truckUnit}`} location={data.location} /></div>}
       {!data && !error && <p className="mt-3 text-xs text-zinc-500">Loading location…</p>}
       {data && !data.location && <p className="mt-3 text-xs text-zinc-500">{data.truckId ? "No location available." : "No assigned truck."}</p>}

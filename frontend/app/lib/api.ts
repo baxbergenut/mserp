@@ -1,4 +1,12 @@
 import type { Updater, UpdaterInput } from "./types";
+import type { ProfileNote, InvestorStatementWeek } from "./types";
+
+export const fetchProfileNotes = (kind: "drivers" | "trucks", id: string) => apiRequest<ProfileNote[]>(`/${kind}/${id}/notes`);
+export const addProfileNote = (kind: "drivers" | "trucks", id: string, note: { id: string; body: string }) => apiRequest<ProfileNote>(`/${kind}/${id}/notes`, { method: "POST", body: JSON.stringify(note) });
+export const fetchTruckAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/trucks/${id}/assignments`);
+export const fetchInvestor = (id: string) => apiRequest<Investor>(`/investors/${id}`);
+export const fetchDispatcher = (id: string) => apiRequest<Dispatcher>(`/dispatchers/${id}`);
+export const fetchInvestorHistory = (investorId: string, page: number) => paginatedRequest<PaginatedResponse<InvestorStatementWeek>>(withQuery("/investor-pay/history", { investorId, page, pageSize: 10 }));
 import type { DriverPayHistoryRow, SettlementEvent } from "./types";
 import { withPhone } from "./phone";
 import type {

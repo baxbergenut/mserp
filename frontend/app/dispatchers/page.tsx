@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { UpdaterPanel } from "./UpdaterPanel";
 import { fetchUpdaters } from "../lib/api";
 import { formatPhone } from "../lib/phone";
@@ -138,7 +139,7 @@ export default function DispatchersPage() {
       <ManagementHeader
         icon={Headset}
         title="Dispatchers and updaters"
-        description="Manage dispatchers, updater shifts, extensions, and assignments."
+
         count={total}
         actionLabel="Add dispatcher"
         onAction={() => void openCreate()}
@@ -162,7 +163,7 @@ export default function DispatchersPage() {
             </tr></thead>
             <tbody>{dispatchers.map((dispatcher) => (
               <tr key={dispatcher.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
-                <td className="px-4 py-3 font-medium text-zinc-200">{dispatcher.fullName}{dispatcher.extension == null ? "" : ` (${dispatcher.extension})`}</td>
+                <td className="px-4 py-3 font-medium text-zinc-200"><Link href={`/dispatchers/detail?id=${dispatcher.id}`}>{dispatcher.fullName}</Link>{dispatcher.extension == null ? "" : ` (${dispatcher.extension})`}</td>
                 <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(dispatcher.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-600">{dispatcher.email ?? "No email"}</div></td>
                 {[dispatcher.mainUpdaterId, dispatcher.afterHoursUpdaterId].map((id, index) => { const updater = updaters.find(u => u.id === id); return <td key={index} className="px-4 py-3 text-zinc-400">{updater ? `${updater.fullName}${updater.extension == null ? "" : ` (${updater.extension})`}` : "—"}</td>; })}
                 <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">{dispatcher.payPercentage === null ? "—" : `${dispatcher.payPercentage.toFixed(2)}%`}</td>

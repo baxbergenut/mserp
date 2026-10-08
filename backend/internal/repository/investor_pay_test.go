@@ -239,6 +239,26 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if frozen.Drivers[0].Loads[0].DriverFee != "2500.00" {
 				t.Fatal("finalized history changed")
 			}
+			history, historyErr := pr.InvestorHistory(ctx, investor, Pagination{Page: 1, PageSize: 100})
+			if historyErr != nil {
+				t.Fatal(historyErr)
+			}
+			foundHistory := false
+			for _, h := range history.Items {
+				if h.WeekStart == "2026-09-28" {
+					for _, d := range h.Trucks {
+						if d.ID == truck {
+							foundHistory = true
+							if d.Settlement == nil || !d.Settlement.Finalized || d.Loads[0].DriverFee != "2500.00" {
+								t.Fatal("profile history must use frozen investor report")
+							}
+						}
+					}
+				}
+			}
+			if !foundHistory {
+				t.Fatal("finalized statement missing from investor history")
+			}
 			if _, e = pr.SettleInvestor(ctx, week, truck, frozen.Revision, actor, "Correction", true); e != nil {
 				t.Fatal(e)
 			}

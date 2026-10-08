@@ -491,6 +491,28 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	if err != nil {
 		return result, err
 	}
+	// Configuration gaps are informational current-fleet rows, never zero-value
+	// statements or inferred historical ownership/rates.
+	setup, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,i.id::text,coalesce(d.full_name,i.full_name)
+	FROM trucks t JOIN investors i ON i.id=t.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
+	WHERE `+investorTruckEligibility+` AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
+	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
+	for setup.Next() {
+		var v InvestorTruckSetup
+		if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName); err != nil {
+			setup.Close()
+			return result, err
+		}
+		result.SetupRequired = append(result.SetupRequired, v)
+	}
+	err = setup.Err()
+	setup.Close()
+	if err != nil {
+		return result, err
+	}
 	result.Revision = payrollRevision(result)
 	return result, nil
 }

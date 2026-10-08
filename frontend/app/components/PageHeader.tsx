@@ -13,7 +13,7 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 
 export function PageHeaderSlot() {
   const register = useContext(RegisterHeaderTarget);
-  return <div ref={register} data-page-header className="min-w-0 basis-full empty:hidden lg:flex-1 lg:basis-0 [&>div]:min-w-0 [&_h1]:text-base [&_h1]:break-words [&_p]:text-xs [&_p]:break-words" />;
+  return <div ref={register} data-page-header className="min-w-0 basis-full empty:hidden lg:flex-1 lg:basis-0" />;
 }
 
 // Keep each page's handlers and live counts in its own component, while rendering

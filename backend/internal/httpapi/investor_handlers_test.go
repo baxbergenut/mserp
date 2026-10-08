@@ -26,11 +26,11 @@ func TestInvestorDirectory(t *testing.T) {
 		{ID: "investor", DriverID: &id, Trucks: []repository.InvestorTruck{{ID: "a"}, {ID: "b"}}},
 	}
 	visible := investorDirectory(values, false)
-	if len(visible) != 2 || visible[0].ID != "independent" || visible[1].ID != "investor" {
+	if len(visible) != 3 || visible[0].ID != "independent" || visible[1].ID != "owner" || visible[2].ID != "investor" {
 		t.Fatalf("directory: %+v", visible)
 	}
-	if len(investorDirectory(values, true)) != 3 {
-		t.Fatal("company toggle must not reveal owner-only drivers")
+	if len(investorDirectory(values, true)) != 4 {
+		t.Fatal("company toggle must retain all owners")
 	}
 	if len(values) != 4 {
 		t.Fatal("owner lookups must retain all identities")

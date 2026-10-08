@@ -143,7 +143,7 @@ export default function TollsPage() {
       <ManagementHeader
         icon={Receipt}
         title="Tolls"
-        description="Toll spending, agency trends, and PrePass transaction data."
+
         count={total}
         actionLabel={isSyncing ? "Syncing…" : "Sync tolls"}
         onAction={() => void handleSync()}
