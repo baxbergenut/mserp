@@ -161,6 +161,15 @@ func main() {
 		server.RegisterOnShutdown(draining.Shutdown)
 	}
 
+	escrowTasksDone := make(chan struct{})
+	go func() {
+		defer close(escrowTasksDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "escrow-release-tasks", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 30*time.Second)
+			defer cancel()
+			return customTaskRepo.GenerateEscrowTasks(bounded)
+		}})
+	}()
 	schedulerDone := make(chan struct{})
 	if cfg.ScheduledSyncsEnabled {
 		go func() {
@@ -249,6 +258,10 @@ func main() {
 		logger.Error("shutdown server", "error", shutdownErr)
 	}
 
+	select {
+	case <-escrowTasksDone:
+	case <-shutdownCtx.Done():
+	}
 	select {
 	case <-schedulerDone:
 	case <-shutdownCtx.Done():

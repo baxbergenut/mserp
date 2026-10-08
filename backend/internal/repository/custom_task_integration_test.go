@@ -60,7 +60,7 @@ func TestCustomTaskDatabase(t *testing.T) {
 				// This legacy fixture contains only custom-task tables. The complete
 				// 066 migration is exercised by TestTaskAssignmentsDatabase.
 				if _, err = admin.Exec(ctx, `ALTER TABLE custom_tasks ADD COLUMN completed_by uuid REFERENCES app_users(id) ON DELETE SET NULL;
-				ALTER TABLE custom_tasks ADD COLUMN completed_by_name text NOT NULL DEFAULT ''; ALTER TABLE custom_tasks ADD COLUMN in_process boolean NOT NULL DEFAULT false`); err != nil {
+				ALTER TABLE custom_tasks ADD COLUMN completed_by_name text NOT NULL DEFAULT ''; ALTER TABLE custom_tasks ADD COLUMN in_process boolean NOT NULL DEFAULT false; ALTER TABLE system_task_assignments ADD COLUMN assignee_ids uuid[] NOT NULL DEFAULT '{}'`); err != nil {
 					t.Fatal(err)
 				}
 			}

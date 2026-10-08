@@ -22,6 +22,8 @@ func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
 }
 
 type Driver struct {
+	Status             string     `json:"status"`
+	TerminationDate    *time.Time `json:"terminationDate"`
 	DriverHome         string     `json:"driverHome"`
 	HomeVersion        int        `json:"homeVersion"`
 	ID                 string     `json:"id"`
@@ -56,6 +58,8 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	Status           string
+	TerminationDate  *time.Time
 	AssignmentWeek   string
 	DriverHome       *string
 	HomeVersion      int
@@ -265,6 +269,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 
 // Shared by manual entry and atomic completion of a FleetScope intake.
 func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
+	if input.Status != "" {
+		input.Active = input.Status != "terminated"
+	}
 	if !input.Active {
 		input.TruckID, input.DispatcherID = nil, nil
 	}
@@ -280,14 +287,14 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			phone, email, license_number, license_state, license_expires, hire_date,
 			address, city, state, postal_code, emergency_contact, dispatcher_id,
-			active, notes, cdl_file_id, driver_home
+			active, notes, cdl_file_id, driver_home, status, termination_date
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce($21,'')
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce($21,''), coalesce(nullif($22,''),'active'), $23
 		) RETURNING id`,
 		displayName, normalizeName(displayName), input.IsOwnerOperator, input.PayType, input.PayRate,
 		input.Phone, input.Email, input.LicenseNumber, input.LicenseState, input.LicenseExpires, input.HireDate,
 		input.Address, input.City, input.State, input.PostalCode, input.EmergencyContact, input.DispatcherID,
-		input.Active, input.Notes, input.CDLFileID, input.DriverHome,
+		input.Active, input.Notes, input.CDLFileID, input.DriverHome, input.Status, input.TerminationDate,
 	).Scan(&id)
 	if err != nil {
 		return "", err
@@ -311,6 +318,9 @@ func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, acto
 }
 
 func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input DriverInput) (Driver, error) {
+	if input.Status != "" {
+		input.Active = input.Status != "terminated"
+	}
 	if !input.Active {
 		input.TruckID, input.DispatcherID = nil, nil
 	}
@@ -355,13 +365,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 			license_number = $9, license_state = $10, license_expires = $11,
 			hire_date = $12, address = $13, city = $14, state = $15,
 			postal_code = $16, emergency_contact = $17, dispatcher_id = $18,
-			active = $19, notes = $20, cdl_file_id = $21, driver_home = coalesce($22,driver_home), updated_at = now()
+			active = $19, notes = $20, cdl_file_id = $21, driver_home = coalesce($22,driver_home), updated_at = now(),
+			status = coalesce(nullif($23,''),status), termination_date = coalesce($24,termination_date)
 		WHERE id = $1`,
 		id, displayName, normalizeName(displayName), input.IsOwnerOperator,
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
-		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.DriverHome,
+		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.DriverHome, input.Status, input.TerminationDate,
 	)
 	if err != nil {
 		return Driver{}, err
@@ -415,7 +426,7 @@ SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
 	d.dispatcher_id, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
-	d.created_at, d.updated_at, d.driver_home, d.driver_home_version
+	d.created_at, d.updated_at, d.driver_home, d.driver_home_version, d.status, d.termination_date
 FROM drivers d
 LEFT JOIN dispatchers dp ON dp.id = d.dispatcher_id
 LEFT JOIN truck_driver_assignments a ON a.driver_id = d.id AND a.unassigned_at IS NULL
@@ -439,7 +450,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.TruckID, &value.TruckUnit, &value.Active, &value.Notes,
 		&value.CDLFileID, &value.CDLFileName, &value.CDLFileContentType,
 		&value.CDLFileSizeBytes,
-		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion,
+		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion, &value.Status, &value.TerminationDate,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	value.FullName = formatPersonName(value.FullName)

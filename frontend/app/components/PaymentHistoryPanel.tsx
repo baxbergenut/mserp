@@ -11,7 +11,8 @@ import type { EscrowRelease } from "@/app/lib/types";
 
 const money = (value: string) => decimalDisplay(hundredths(value), true);
 
-export function PaymentHistoryPanel({ title, paid, remaining, previouslyPaid = "0", payments, driverId, escrow = false, releases = [], held, released, onEditRelease, onClose }: {
+export function PaymentHistoryPanel({ title, paid, remaining, previouslyPaid = "0", payments, driverId, escrow = false, releases = [], held, released, onEditRelease, onEditOpening, onClose }: {
+  onEditOpening?: () => void;
   releases?: EscrowRelease[]; held?: string; released?: string; onEditRelease?: (release: EscrowRelease, anchor: { left: number; bottom: number }) => void;
   title: string; paid: string; remaining: string; previouslyPaid?: string;
   payments: { weekStart: string; amount: string }[];
@@ -36,6 +37,7 @@ export function PaymentHistoryPanel({ title, paid, remaining, previouslyPaid = "
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {escrow && <p className="mb-4 text-xs text-zinc-500">Total collected {money(paid)} · Total released {money(released ?? "0")}</p>}
         {releases.length > 0 && <section className="mb-5"><h3 className="mb-2 text-xs text-zinc-500">Releases</h3>{releases.map(release => <div key={release.id} className="flex items-center gap-3 border-b border-zinc-800/60 py-3 text-sm"><div className="flex-1"><span className="text-xs text-zinc-400">Week of {release.weekStart}</span>{release.cancelled && <span className="ml-2 text-xs text-zinc-500">Cancelled</span>}</div><span className={`font-mono ${release.cancelled ? "text-zinc-600 line-through" : "text-emerald-400"}`}>{money(release.amount)}</span>{release.editable && onEditRelease && <button className="text-xs text-blue-400" aria-label={`Edit release for ${release.weekStart}`} onClick={event => onEditRelease(release, event.currentTarget.getBoundingClientRect())}>Edit</button>}</div>)}</section>}
+        {escrow && onEditOpening && <button type="button" className="ui-button mb-3" onClick={onEditOpening}>Edit previously paid</button>}
         {!rows.length && hundredths(previouslyPaid) === BigInt(0) ? <p className="text-sm text-zinc-500">No saved payments yet.</p> : <table className="w-full text-left text-sm"><thead><tr className="border-b border-zinc-800 text-xs text-zinc-500"><th className="py-3 font-medium">Week / payment</th><th className="py-3 text-right font-medium">Amount</th></tr></thead><tbody>
           {rows.map(row => <tr key={row.weekStart} className="border-b border-zinc-800/60"><td className="py-3">{escrow && row.weekStart < "2026-09-28" ? "Previously paid" : canReadPay ? <IntentLink className="text-blue-400" href={`/accounting/driver-pay?weekStart=${row.weekStart}${driverId ? `&driverId=${driverId}` : ""}`}>Week of {row.weekStart}</IntentLink> : `Week of ${row.weekStart}`}</td><td className="py-3 text-right font-mono">{money(row.amount)}</td></tr>)}
           {hundredths(previouslyPaid) > BigInt(0) && <tr className="border-b border-zinc-800/60"><td className="py-3">Previously paid</td><td className="py-3 text-right font-mono">{money(previouslyPaid)}</td></tr>}

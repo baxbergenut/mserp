@@ -18,7 +18,7 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   await page.goto(`${base}/drivers`);
   await page.getByPlaceholder('Search drivers…').fill('Offboarding Driver');
   await page.getByRole('row').filter({ hasText: 'Offboarding Driver' }).getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByLabel(/^Active driver/).uncheck();
+  await page.getByLabel('Driver status', { exact: true }).selectOption('terminated');
   await expect(page.getByLabel(/^Dispatcher/)).toHaveValue('');
   await expect(page.getByLabel(/^Truck/)).toBeDisabled();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -63,7 +63,7 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   await expect(task).toBeVisible({ timeout: 25000 }); // The open task list discovers webhook arrivals.
   await task.getByRole('button', { name: 'Offboard Offboarding Driver', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('current truck and dispatcher assignments disconnected');
-  expect(await getDriver()).toMatchObject({ active: false, truckId: null, dispatcherId: null, payRate: 0.75 });
+  expect(await getDriver()).toMatchObject({ active: false, status: 'terminated', terminationDate: '2026-01-01T00:00:00Z', truckId: null, dispatcherId: null, payRate: 0.75 });
   expect(await getTruck()).toMatchObject({ active: true, driverId: null, status: 'available' });
   await page.getByRole('checkbox', { name: 'Equipment and documents collected' }).check();
   await page.getByRole('checkbox', { name: 'Fuel/toll cards and external access closed' }).check();
@@ -74,5 +74,6 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   await page.getByLabel('Task status').selectOption('all');
   await expect(task).toHaveCount(1);
   await expect(task).toContainText('Completed');
+  await expect(page.getByRole('button', { name: 'Release escrow: Offboarding Driver', exact: true })).toBeVisible({ timeout: 75000 });
   console.log('Offboarding E2E passed: driver/truck inactive forms, signed hire/termination, idle task arrival, completion and retry deduplication.');
 }

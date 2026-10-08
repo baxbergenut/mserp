@@ -273,7 +273,10 @@ export type TruckStatus =
   | "maintenance"
   | "out_of_service";
 
+export type DriverStatus = "active" | "vacation" | "home" | "terminated";
 export interface Driver {
+  status?: DriverStatus;
+  terminationDate?: string | null;
   driverHome: string;
   homeVersion: number;
   id: string;
@@ -309,6 +312,8 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  status?: DriverStatus;
+  terminationDate?: string;
   assignmentWeek?: string;
   driverHome?: string;
   homeVersion?: number;
@@ -867,7 +872,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review"; assigneeId: string | null; version: number }
+export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -1056,7 +1061,7 @@ export interface Escrow {
   openingPaid: string;
   paidAmount: string;
   remainingAmount: string;
-  status: "paid" | "partial" | "unpaid";
+  status: "paid" | "partial" | "unpaid" | "released" | "partially_released" | "not_released";
   version: number;
   payments: { weekStart: string; amount: string }[];
 }
@@ -1070,3 +1075,6 @@ export type CompactBoardLoads = Omit<BoardLoads, "current" | "week" | "next" | "
   current: number | null; week: number[]; next: number[]; earlier: number[]; hidden: number[]; unavailable: number[];
 };
 export type CompactDriverBoard = Omit<DriverBoard, "loads"> & { plans: BoardLoad[]; loads: Record<string, CompactBoardLoads> };
+
+export interface EscrowTaskDetail { driverId: string; terminationDate: string; dueDate: string; escrows: Escrow[] }
+export interface EscrowTaskDecision { decision: "released" | "partially_released" | "kept"; reason: string; versions: Record<string, number> }

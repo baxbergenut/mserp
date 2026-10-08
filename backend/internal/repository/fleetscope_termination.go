@@ -79,17 +79,17 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 			if _, err = tx.Exec(ctx, `SELECT set_config('mserp.assignment_source','fleetscope_termination',true)`); err != nil {
 				return IntakeResult{}, err
 			}
-			if _, err = tx.Exec(ctx, `UPDATE drivers SET active=false,dispatcher_id=NULL,updated_at=now() WHERE id=$1`, *driverID); err != nil {
+			if _, err = tx.Exec(ctx, `UPDATE drivers SET active=false,status='terminated',termination_date=$2::date,dispatcher_id=NULL,updated_at=now() WHERE id=$1`, *driverID, event.TerminationDate); err != nil {
 				return IntakeResult{}, err
 			}
 			if err = setDriverTruck(ctx, tx, *driverID, nil); err != nil {
 				return IntakeResult{}, err
 			}
-			notes += "Driver marked inactive; current truck and dispatcher assignments disconnected.\nMSERP driver ID: " + *driverID + "\n"
+			notes += "Driver marked terminated; current truck and dispatcher assignments disconnected.\nMSERP driver ID: " + *driverID + "\n"
 		} else if foundIntake && completedAt == nil {
-			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing MSERP record before marking it inactive.\n"
+			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing MSERP record before marking it terminated.\n"
 		} else {
-			notes += "ACTION REQUIRED: No saved MSERP driver link exists (or the linked driver was deleted). Verify the driver's identity in Drivers, mark the correct record inactive, and review charges. No driver was automatically changed.\n"
+			notes += "ACTION REQUIRED: No saved MSERP driver link exists (or the linked driver was deleted). Verify the driver's identity in Drivers, mark the correct record terminated, and review charges. No driver was automatically changed.\n"
 		}
 		if _, err = tx.Exec(ctx, `UPDATE fleetscope_driver_intake SET terminated_at=$3 WHERE company_id=$1 AND fleetscope_driver_id=$2`, event.CompanyID, event.Driver.ID, event.OccurredAt); err != nil {
 			return IntakeResult{}, err
