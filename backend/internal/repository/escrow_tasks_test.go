@@ -36,6 +36,10 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	notifications, err := os.ReadFile("../../sql/070_escrow_review_notifications.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("escrow_tasks_%d", time.Now().UnixNano())
@@ -58,6 +62,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 				exec(before)
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy inactive','legacy inactive','cpm',0.75,false)`)
 				exec(string(migration))
+				exec(string(notifications))
 				var converted bool
 				if err = admin.QueryRow(ctx, `SELECT status='terminated' AND termination_date=(now() AT TIME ZONE 'America/New_York')::date-30 FROM drivers WHERE full_name='Legacy inactive'`).Scan(&converted); err != nil || !converted {
 					t.Fatal("inactive conversion", err)
@@ -132,6 +137,20 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 					t.Fatal("detail privacy", err)
 				}
 			}
+			exec("LISTEN mserp_tasks")
+			run("UPDATE drivers SET termination_date=termination_date+1 WHERE id=$1", driver)
+			notificationCtx, stopNotification := context.WithTimeout(ctx, 2*time.Second)
+			_, noticeErr := admin.WaitForNotification(notificationCtx)
+			stopNotification()
+			if noticeErr != nil {
+				t.Fatal("review date correction did not notify task feeds", noticeErr)
+			}
+			hidden, err := tasks.Board(WithTaskViewer(ctx, second, false), Pagination{}, "Termination review", "open", true)
+			if err != nil || hidden.Total != 0 {
+				t.Fatal("corrected future review stayed visible", hidden, err)
+			}
+			run("UPDATE drivers SET termination_date=termination_date-1 WHERE id=$1", driver)
+			exec("UNLISTEN mserp_tasks")
 			viewer := WithTaskViewer(ctx, second, false)
 			if _, err = tasks.SetCompleted(viewer, task, true); err == nil {
 				t.Fatal("generic completion bypass")
