@@ -143,7 +143,7 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
 export const fetchDriverBoard = (weekStart: string) =>
-  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, compact: 1 })).then(expandBoard);
+  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>

@@ -119,6 +119,18 @@ func run() error {
 		_, _ = z.Write(body)
 		_ = z.Close()
 		out := map[string]any{"mode": *mode, "sample": i + 1, "ms": float64(elapsed.Microseconds()) / 1000, "db_calls": t.calls.Load(), "bytes": len(body), "gzip_bytes": compressed.Len(), "sha256": fmt.Sprintf("%x", sha256.Sum256(body)), "jit": *jit}
+		if board, ok := value.(repository.DriverBoard); ok {
+			compact, err := json.Marshal(repository.CompactBoard(board))
+			if err != nil {
+				return err
+			}
+			var packed bytes.Buffer
+			writer := gzip.NewWriter(&packed)
+			_, _ = writer.Write(compact)
+			_ = writer.Close()
+			out["compact_bytes"] = len(compact)
+			out["compact_gzip_bytes"] = packed.Len()
+		}
 		if e = json.NewEncoder(os.Stdout).Encode(out); e != nil {
 			return e
 		}

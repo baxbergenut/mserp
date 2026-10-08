@@ -1486,7 +1486,8 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   status and bytes, never SQL arguments or report contents. Streaming remains supported.
 - Status Board GET accepts compact=1, using a shared plan dictionary and integer
   references. Different snapshots with the same plan ID remain separate. The frontend
-  expands it to the normal domain contract; older API responses remain supported.
+  can expand it to the normal domain contract. The frontend uses the legacy transport
+  by default: production measurement showed the dictionary increased gzip bytes.
 - Browser GETs share in-flight work only, with independent abortable consumers and
   cloned results. Mutations clear reuse, logout aborts reads. Payroll/history/search
   cleanup cancels obsolete requests; unsaved drafts retain existing protections.

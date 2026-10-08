@@ -1,0 +1,16 @@
+{"bytes":142242,"db_calls":984,"gzip_bytes":20587,"jit":"on","mode":"driver","ms":1573.985,"sample":1,"sha256":"223176c1a882d25dec2da538ef49f658c9cd27c0ac65a8bdca09a9b5736b8b72"}
+{"bytes":142242,"db_calls":984,"gzip_bytes":20587,"jit":"on","mode":"driver","ms":1389.457,"sample":2,"sha256":"223176c1a882d25dec2da538ef49f658c9cd27c0ac65a8bdca09a9b5736b8b72"}
+{"bytes":10580,"db_calls":342,"gzip_bytes":2471,"jit":"on","mode":"investor","ms":542.975,"sample":1,"sha256":"f3b22c1948efddb9e86706887e70015781128a635edfd78cb11b60aeea2322e3"}
+{"bytes":10580,"db_calls":342,"gzip_bytes":2471,"jit":"on","mode":"investor","ms":458.169,"sample":2,"sha256":"f3b22c1948efddb9e86706887e70015781128a635edfd78cb11b60aeea2322e3"}
+{"bytes":13747,"db_calls":6512,"gzip_bytes":2762,"jit":"on","mode":"driver-history","ms":9678.596,"sample":1,"sha256":"8d393c19c89cd88947818e24d4eb8d8fae69c92a275060187596d7ff42b9493d"}
+{"bytes":13747,"db_calls":6512,"gzip_bytes":2762,"jit":"on","mode":"driver-history","ms":9673.545,"sample":2,"sha256":"8d393c19c89cd88947818e24d4eb8d8fae69c92a275060187596d7ff42b9493d"}
+{"bytes":21432,"db_calls":2528,"gzip_bytes":2901,"jit":"on","mode":"investor-history","ms":4616.647,"sample":1,"sha256":"748a14c3be9004711ca54a885cf9103181b4f54c4348e35993c72d79dd7b2b52"}
+{"bytes":21432,"db_calls":2528,"gzip_bytes":2901,"jit":"on","mode":"investor-history","ms":4211.918,"sample":2,"sha256":"748a14c3be9004711ca54a885cf9103181b4f54c4348e35993c72d79dd7b2b52"}
+{"bytes":8191,"db_calls":3,"gzip_bytes":2587,"jit":"on","mode":"fuel","ms":972.145,"sample":1,"sha256":"3d85c1fc76a4184c60343246802c7f15c451ac3f4774a95a781aa105d5847355"}
+{"bytes":8191,"db_calls":3,"gzip_bytes":2587,"jit":"on","mode":"fuel","ms":876.318,"sample":2,"sha256":"3d85c1fc76a4184c60343246802c7f15c451ac3f4774a95a781aa105d5847355"}
+{"bytes":32197,"db_calls":4,"gzip_bytes":9012,"jit":"on","mode":"financial","ms":1121.617,"sample":1,"sha256":"dde6b792c12107fbcc1b1da325ed8339893d7d26e73396423de3bc221436ee0c"}
+{"bytes":32197,"db_calls":4,"gzip_bytes":9012,"jit":"on","mode":"financial","ms":869.792,"sample":2,"sha256":"dde6b792c12107fbcc1b1da325ed8339893d7d26e73396423de3bc221436ee0c"}
+{"bytes":901349,"db_calls":7,"gzip_bytes":161324,"jit":"on","mode":"board","ms":173.869,"sample":1,"sha256":"7ce77f2701c5572b08c1d428ead596f518766366351e4a7fee7e40ef5c4bd860"}
+{"bytes":901349,"db_calls":7,"gzip_bytes":161324,"jit":"on","mode":"board","ms":144.508,"sample":2,"sha256":"7ce77f2701c5572b08c1d428ead596f518766366351e4a7fee7e40ef5c4bd860"}
+{"bytes":80874,"db_calls":5,"gzip_bytes":12988,"jit":"on","mode":"gross","ms":69.039,"sample":1,"sha256":"6c659d0234a21fb2334f6aece042d49f70c471a5e18023e8e094f13a7bd405ef"}
+{"bytes":80874,"db_calls":5,"gzip_bytes":12988,"jit":"on","mode":"gross","ms":56.193,"sample":2,"sha256":"6c659d0234a21fb2334f6aece042d49f70c471a5e18023e8e094f13a7bd405ef"}
