@@ -12,6 +12,7 @@ import type { CustomTask, TaskStatus, PaginatedResponse, TaskUser } from "../lib
 import { ConfirmDialog, controlClass, ErrorBanner, ManagementHeader, ManagementSearch, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
 import { useTaskUpdates } from "../components/TaskUpdatesProvider";
 import { TaskForm } from "./TaskForm";
+import { EscrowTaskReview } from "./EscrowTaskReview";
 import { RelayReview } from "./RelayReview";
 
 type TaskPage = PaginatedResponse<CustomTask>;
@@ -48,6 +49,7 @@ export default function TasksPage() {
   const [editing, setEditing] = useState<CustomTask | null>(null);
   const [deleting, setDeleting] = useState<CustomTask | null>(null);
   const [details, setDetails] = useState<CustomTask | null>(null);
+  const [escrowTask, setEscrowTask] = useState<CustomTask | null>(null);
   const [relay, setRelay] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -100,7 +102,7 @@ export default function TasksPage() {
     </>}
     {task.systemTaskKind && <LockKeyhole aria-label="Automatic status" className="h-4 w-4 text-zinc-500" />}
   </div>;
-  const title = (task: CustomTask) => <button type="button" title={taskMetadata(task)} className="min-w-0 break-words text-left font-medium text-zinc-100 hover:text-accent" onClick={() => { setError(""); setDetails(task); }}>{task.title}</button>;
+  const title = (task: CustomTask) => <button type="button" title={taskMetadata(task)} className="min-w-0 break-words text-left font-medium text-zinc-100 hover:text-accent" onClick={() => { setError(""); if (task.systemTaskKind === "escrow_release" && !task.completedAt) setEscrowTask(task); else setDetails(task); }}>{task.title}</button>;
   const pagination = (result: TaskPage, change: (page: number) => void) => result.total > 0 && <TablePagination page={result.page} pageSize={result.pageSize} totalItems={result.total} totalPages={result.totalPages} onPageChange={change} onPageSizeChange={size => { setPageSize(size); setPage(1); setOpenPage(1); setProcessPage(1); setCompletedPage(1); }} />;
   return <div className="animate-fade-in space-y-4">
     <ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canWrite ? "Add task" : undefined} onAction={() => setCreating(true)} />
@@ -146,6 +148,7 @@ export default function TasksPage() {
     {(creating || editing) && <TaskForm key={editing?.id ?? "new"} task={editing} saving={saving} users={users} onClose={() => { setCreating(false); setEditing(null); }} onSave={input => mutate(() => editing ? updateCustomTask(editing.id, input) : createCustomTask(input), editing ? "Task updated." : "Task created.")} />}
     {deleting && <ConfirmDialog title="Delete task" message={`Delete “${deleting.title}”? This cannot be undone.`} isDeleting={saving} onCancel={() => setDeleting(null)} onConfirm={() => { void mutate(() => deleteCustomTask(deleting.id), "Task deleted.").catch(() => {}); }} />}
     {details && <TaskDetails task={details} saving={saving} canWrite={canWrite} canSetup={permissions.includes("fleet.write")} onClose={() => setDetails(null)} onRelay={() => { setRelay(details.id); setDetails(null); }} onConfirm={checklist => mutate(() => confirmOffboarding(details.id, checklist), "Offboarding completed.")} />}
+    {escrowTask && <EscrowTaskReview task={escrowTask} onClose={() => setEscrowTask(null)} onCompleted={() => { setEscrowTask(null); refresh(); }} />}
     {relay && <RelayReview id={relay} onClose={() => setRelay(null)} onChanged={refresh} />}
   </div>;
 }

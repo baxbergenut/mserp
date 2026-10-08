@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `068_reporting_performance.sql`:
+  `069_driver_status_escrow_tasks.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -1499,3 +1499,38 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   sanitized timings/counts/sizes/hashes. It never writes financial data.
 - Run node scripts/test-read-requests.mjs for cancellation/deduplication and compact
   board transport regression coverage, in addition to the normal validation suite.
+
+
+## Driver status and escrow termination reviews (migration 069)
+
+- Drivers expose `status` (`active`, `vacation`, `home`, `terminated`) and an optional
+  `terminationDate`. Only terminated maps to active=false. A compatibility trigger
+  synchronizes legacy active writes; nonterminated named statuses retain fleet links.
+  Termination keeps the existing charge pause/assignment release workflow. FleetScope
+  records its source termination date. Legacy inactive records become terminated;
+  known source dates survive, otherwise migration day minus 30 days is the explicitly
+  approved transition date. Each termination has a durable review identity.
+- Escrow `group=active|terminated` tabs have independent collection/release statuses.
+  Active includes Vacation and Home. API status codes are paid/partial/unpaid and
+  released/partially_released/not_released. Release status compares actual released
+  funds and held balances, so an unfunded zero balance is not automatically released.
+- An internal worker runs at startup and every minute, independently of external
+  sync settings, to materialize escrow reviews on termination date + 30 New York
+  calendar days. Downtime catches up idempotently; system task notifications update
+  open browsers. No task is shown before its due date.
+- Settings > System tasks supports multiple escrow assignees via assigneeIds.
+  assigneeId remains the compatibility primary; all assignees share a single task.
+  Active assignees and Administrators can see it, with normal Tasks/Escrow permissions.
+  GET /tasks/escrow/{id} returns review balances; POST /tasks/escrow/{id}/complete
+  requires a released/partially_released/kept decision, reason, and every escrow
+  version. Driver/escrow locks validate actual releases and retain actor/balance
+  snapshots. Generic task edits cannot complete system reviews.
+- PUT /escrows/{id}/opening edits Previously paid during the transition with
+  escrow.write, current version and correction reason. Existing funding/collection
+  guards remain authoritative; each change has an audit event. Saved payroll
+  payments and finalized snapshots are not replaced by opening corrections.
+- TestEscrowTerminationWorkflowDatabase uses disposable local
+  MSERP_DRIVER_PAY_TEST_DATABASE_URL, fresh and migrated schemas, as mserp_app.
+  `node scripts/test-investors-e2e.mjs --escrow-only` exercises real worker/SSE,
+  multi-assignee privacy, opening corrections and full/partial/kept decisions.
+  MSERP_E2E_API_PORT and MSERP_E2E_WEB_PORT optionally isolate this browser runner.

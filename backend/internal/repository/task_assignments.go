@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -31,7 +32,7 @@ func taskViewerArgs(ctx context.Context) (bool, string) {
 func customTaskVisibility(adminParam, userParam int) string {
 	return fmt.Sprintf(` AND ($%d::boolean OR
       (system_task_kind IS NULL AND (assigned_to IS NULL OR assigned_to=NULLIF($%d,'')::uuid OR assigned_by=NULLIF($%d,'')::uuid)) OR
-      (system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM system_task_assignments a JOIN app_users u ON u.id=a.assignee_id
+      (system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM system_task_assignments a JOIN app_users u ON (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids))
          WHERE a.kind=system_task_kind AND u.active AND u.id=NULLIF($%d,'')::uuid)))`, adminParam, userParam, userParam, userParam)
 }
 
@@ -44,20 +45,20 @@ func systemTaskVisible(ctx context.Context, q chargeQuery, kind string, lock boo
 	if lock {
 		suffix = " FOR SHARE OF a"
 	}
-	var assignee *string
-	var active bool
-	err := q.QueryRow(ctx, `SELECT a.assignee_id::text,coalesce(u.active,false) FROM system_task_assignments a
-      LEFT JOIN app_users u ON u.id=a.assignee_id WHERE a.kind=$1`+suffix, kind).Scan(&assignee, &active)
+	var visible bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_users u WHERE u.active AND u.id=NULLIF($2,'')::uuid
+ AND (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids))) FROM system_task_assignments a WHERE a.kind=$1`+suffix, kind, userID).Scan(&visible)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil && active && assignee != nil && *assignee == userID, err
+	return err == nil && visible, err
 }
 
 type SystemTaskAssignment struct {
-	Kind       string  `json:"kind"`
-	AssigneeID *string `json:"assigneeId"`
-	Version    int     `json:"version"`
+	AssigneeIDs []string `json:"assigneeIds"`
+	Kind        string   `json:"kind"`
+	AssigneeID  *string  `json:"assigneeId"`
+	Version     int      `json:"version"`
 }
 type TaskUser struct {
 	ID   string `json:"id"`
@@ -65,7 +66,7 @@ type TaskUser struct {
 }
 
 func (r *AuthRepository) SystemTaskAssignments(ctx context.Context) ([]SystemTaskAssignment, error) {
-	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version FROM system_task_assignments ORDER BY kind`)
+	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version,assignee_ids::text[] FROM system_task_assignments ORDER BY kind`)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func (r *AuthRepository) SystemTaskAssignments(ctx context.Context) ([]SystemTas
 	result := []SystemTaskAssignment{}
 	for rows.Next() {
 		var item SystemTaskAssignment
-		if err = rows.Scan(&item.Kind, &item.AssigneeID, &item.Version); err != nil {
+		if err = rows.Scan(&item.Kind, &item.AssigneeID, &item.Version, &item.AssigneeIDs); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -90,19 +91,31 @@ func (r *AuthRepository) SaveSystemTaskAssignment(ctx context.Context, actor str
 	var before SystemTaskAssignment
 	var id string
 	before.Kind = input.Kind
-	if err = tx.QueryRow(ctx, `SELECT id::text,assignee_id::text,version FROM system_task_assignments WHERE kind=$1 FOR UPDATE`, input.Kind).Scan(&id, &before.AssigneeID, &before.Version); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT id::text,assignee_id::text,version,assignee_ids::text[] FROM system_task_assignments WHERE kind=$1 FOR UPDATE`, input.Kind).Scan(&id, &before.AssigneeID, &before.Version, &before.AssigneeIDs); err != nil {
 		return mapNotFound(err)
 	}
 	if before.Version != input.Version {
 		return ErrAccessConflict
 	}
-	if input.AssigneeID != nil {
+	if input.AssigneeIDs == nil {
+		input.AssigneeIDs = []string{}
+		if input.AssigneeID != nil {
+			input.AssigneeIDs = append(input.AssigneeIDs, *input.AssigneeID)
+		}
+	}
+	slices.Sort(input.AssigneeIDs)
+	input.AssigneeIDs = slices.Compact(input.AssigneeIDs)
+	input.AssigneeID = nil
+	if len(input.AssigneeIDs) > 0 {
+		input.AssigneeID = &input.AssigneeIDs[0]
+	}
+	for _, assignee := range input.AssigneeIDs {
 		var id string
-		if err = tx.QueryRow(ctx, `SELECT id::text FROM app_users WHERE id=$1 AND active FOR SHARE`, *input.AssigneeID).Scan(&id); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT id::text FROM app_users WHERE id=$1 AND active FOR SHARE`, assignee).Scan(&id); err != nil {
 			return ErrAccessConflict
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE system_task_assignments SET assignee_id=$2,version=version+1,updated_at=now(),updated_by=$3 WHERE kind=$1`, input.Kind, input.AssigneeID, actor); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE system_task_assignments SET assignee_id=$2,version=version+1,updated_at=now(),updated_by=$3,assignee_ids=$4::uuid[] WHERE kind=$1`, input.Kind, input.AssigneeID, actor, input.AssigneeIDs); err != nil {
 		return err
 	}
 	input.Version++

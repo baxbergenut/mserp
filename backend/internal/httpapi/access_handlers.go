@@ -60,9 +60,19 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 			return
 		}
 		input.Kind = chi.URLParam(r, "kind")
-		if (input.Kind != "driver_onboarding" && input.Kind != "driver_offboarding" && input.Kind != "relay_review") || input.Version < 1 || (input.AssigneeID != nil && !isUUID(*input.AssigneeID)) {
+		if (input.Kind != "driver_onboarding" && input.Kind != "driver_offboarding" && input.Kind != "relay_review" && input.Kind != "escrow_release") || input.Version < 1 || (input.AssigneeID != nil && !isUUID(*input.AssigneeID)) {
 			writeAPIError(w, 400, "Provide a valid system task, assignee and version")
 			return
+		}
+		if len(input.AssigneeIDs) > 100 {
+			writeAPIError(w, 400, "Too many assignees")
+			return
+		}
+		for _, id := range input.AssigneeIDs {
+			if !isUUID(id) {
+				writeAPIError(w, 400, "Invalid assignee")
+				return
+			}
 		}
 		session, _ := authSessionFromContext(r.Context())
 		if err := repo.SaveSystemTaskAssignment(r.Context(), session.User.ID, input); err != nil {

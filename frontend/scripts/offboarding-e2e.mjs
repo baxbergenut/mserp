@@ -18,7 +18,7 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   await page.goto(`${base}/drivers`);
   await page.getByPlaceholder('Search drivers…').fill('Offboarding Driver');
   await page.getByRole('row').filter({ hasText: 'Offboarding Driver' }).getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByLabel(/^Active driver/).uncheck();
+  await page.getByLabel('Driver status', { exact: true }).selectOption('terminated');
   await expect(page.getByLabel(/^Dispatcher/)).toHaveValue('');
   await expect(page.getByLabel(/^Truck/)).toBeDisabled();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();

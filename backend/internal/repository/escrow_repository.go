@@ -36,8 +36,8 @@ type Escrow struct {
 }
 type EscrowQuery struct {
 	Pagination
-	Search, DriverID, Status string
-	IncludeInactive          bool
+	Search, DriverID, Status, Group string
+	IncludeInactive                 bool
 }
 
 type EscrowSummary struct {
@@ -60,7 +60,8 @@ const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver
  coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
  e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0) remaining_amount,
- CASE WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0)<=0 THEN 'paid'
+ CASE WHEN NOT coalesce(d.active,false) THEN CASE WHEN coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
+ WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0)<=0 THEN 'paid'
  WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
@@ -72,19 +73,19 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 		return EscrowPage{}, err
 	}
 	defer tx.Rollback(ctx)
-	const filter = ` WHERE ($1='' OR driver_name ILIKE '%'||$1||'%') AND ($2='' OR driver_id::text=$2) AND ($3='' OR status=$3) AND ($4 OR active)`
+	const filter = ` WHERE ($1='' OR driver_name ILIKE '%'||$1||'%') AND ($2='' OR driver_id::text=$2) AND ($3='' OR status=$3) AND ($4 OR active) AND ($5='' OR ($5='active' AND active) OR ($5='terminated' AND NOT active))`
 	var total int
 	var summary EscrowSummary
 	if err = tx.QueryRow(ctx, `WITH balances AS (`+escrowBalancesSQL+`), filtered AS (SELECT * FROM balances`+filter+`),
- drivers AS (SELECT coalesce(driver_id,id) id,sum(held_amount) paid,sum(remaining_amount) remaining FROM filtered WHERE active GROUP BY coalesce(driver_id,id))
+ drivers AS (SELECT coalesce(driver_id,id) id,sum(held_amount) paid,sum(remaining_amount) remaining,sum(released_amount) released,bool_and(active) active FROM filtered WHERE active OR $5='terminated' GROUP BY coalesce(driver_id,id))
  SELECT count(*),coalesce(sum(held_amount),0)::text,coalesce(sum(released_amount),0)::text,coalesce(sum(amount),0)::text,coalesce(sum(paid_amount),0)::text,coalesce(sum(remaining_amount),0)::text,
- (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE remaining<=0),
- (SELECT count(*) FROM drivers WHERE remaining>0 AND paid>0),(SELECT count(*) FROM drivers WHERE remaining>0 AND paid=0)
- FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive).Scan(&total, &summary.Held, &summary.Released, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
+ (SELECT count(*) FROM drivers),(SELECT count(*) FROM drivers WHERE (active AND remaining<=0) OR (NOT active AND released>0 AND paid=0)),
+ (SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid>0) OR (NOT active AND remaining>0 AND paid>0)),(SELECT count(*) FROM drivers WHERE (active AND remaining>0 AND paid=0) OR (NOT active AND (remaining<=0 OR (paid=0 AND released=0))))
+ FROM filtered`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group).Scan(&total, &summary.Held, &summary.Released, &summary.Target, &summary.Paid, &summary.Remaining, &summary.Drivers, &summary.PaidDrivers, &summary.PartialDrivers, &summary.UnpaidDrivers); err != nil {
 		return EscrowPage{}, err
 	}
 	page := q.Pagination.Normalize(total)
-	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $5 OFFSET $6`, q.Search, q.DriverID, q.Status, q.IncludeInactive, page.PageSize, page.Offset())
+	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $6 OFFSET $7`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group, page.PageSize, page.Offset())
 	if err != nil {
 		return EscrowPage{}, err
 	}

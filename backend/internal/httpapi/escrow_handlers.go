@@ -25,6 +25,9 @@ func registerEscrowRoutes(r chi.Router, logger *slog.Logger, repo *repository.Es
 	r.Put("/escrows/settings", h.saveDriverEscrowSetting)
 	r.Post("/escrows/{id}/releases", h.saveRelease)
 	r.Put("/escrows/{id}/releases/{releaseID}", h.saveRelease)
+	r.Put("/escrows/{id}/opening", h.saveOpening)
+	r.Get("/tasks/escrow/{id}", h.taskDetail)
+	r.Post("/tasks/escrow/{id}/complete", h.completeTask)
 }
 func (h escrowHandler) writeError(w http.ResponseWriter, err error) {
 	var invalid *repository.ChargeValidationError
@@ -37,7 +40,7 @@ func (h escrowHandler) writeError(w http.ResponseWriter, err error) {
 		writeAPIError(w, 409, err.Error())
 		return
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, repository.ErrNotFound) {
 		writeAPIError(w, 404, "Escrow record not found")
 		return
 	}
@@ -75,11 +78,16 @@ func (h escrowHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	if status != "" && status != "paid" && status != "partial" && status != "unpaid" {
+	if status != "" && status != "paid" && status != "partial" && status != "unpaid" && status != "released" && status != "partially_released" && status != "not_released" {
 		writeAPIError(w, http.StatusBadRequest, "Unknown escrow status")
 		return
 	}
-	result, err := h.repo.List(r.Context(), repository.EscrowQuery{Pagination: page, Search: strings.TrimSpace(r.URL.Query().Get("search")), DriverID: r.URL.Query().Get("driverId"), Status: status, IncludeInactive: r.URL.Query().Get("includeInactive") == "true"})
+	group := r.URL.Query().Get("group")
+	if group != "" && group != "active" && group != "terminated" {
+		writeAPIError(w, 400, "Unknown escrow group")
+		return
+	}
+	result, err := h.repo.List(r.Context(), repository.EscrowQuery{Group: group, Pagination: page, Search: strings.TrimSpace(r.URL.Query().Get("search")), DriverID: r.URL.Query().Get("driverId"), Status: status, IncludeInactive: r.URL.Query().Get("includeInactive") == "true"})
 	if err != nil {
 		h.writeError(w, err)
 		return

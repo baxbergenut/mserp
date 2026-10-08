@@ -22,7 +22,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await page.getByLabel('Escrow payment status').selectOption('partial');
   const row = page.getByRole('row').filter({ hasText: driver.fullName });
   await expect(row).toContainText('$2,549.75');
-  await expect(row).toContainText('Partially funded');
+  await expect(row).toContainText('Partially collected');
   await page.screenshot({ path: join(temp, 'escrow-partial.png'), fullPage: true });
   await page.getByLabel('Escrow payment status').selectOption('unpaid');
   await expect(row).toHaveCount(0);
@@ -36,7 +36,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await expect.poll(async () => (await read()).status).toBe('paid');
   await page.goto(`${base}/accounting/escrow`);
   await page.getByLabel('Escrow payment status').selectOption('paid');
-  await expect(row).toContainText('Fully funded');
+  await expect(row).toContainText('Fully collected');
   const rowBefore = await row.boundingBox();
   const history = row.getByRole('button', { name: 'Payment history', exact: true });
   await history.click();
@@ -49,7 +49,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await expect(history).toBeFocused();
   await page.goto(`${base}/drivers/detail?id=${driver.id}`);
   await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
-  await expect(page.getByRole('table', { name: 'Driver escrow balances' })).toContainText('Fully funded');
+  await expect(page.getByRole('table', { name: 'Driver escrow balances' })).toContainText('Fully collected');
   await page.screenshot({ path: join(temp, 'driver-profile-escrow.png'), fullPage: true });
   await page.goto(`${base}/accounting/escrow`);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -133,6 +133,6 @@ async function verifyReleases(page, base, temp, driver) {
   await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
   const table = page.getByRole('table', { name: 'Driver escrow balances' });
   await expect(table.getByRole('columnheader')).toHaveText(['Driver', 'Required', 'Balance', 'Still owed', 'Status', 'Actions']);
-  await expect(table).toContainText('Fully funded');
+  await expect(table).toContainText('Fully collected');
   await page.screenshot({ path: join(temp, 'escrow-replenished.png'), fullPage: true });
 }

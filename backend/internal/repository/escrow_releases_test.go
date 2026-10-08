@@ -58,7 +58,7 @@ func verifyEscrowReleases(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		t.Fatalf("duplicate/stale release accepted: %v", err)
 	}
 	b := balance()
-	if b.HeldAmount != "2399.75" || b.ReleasedAmount != "100.25" || b.PaidAmount != "2500.00" || b.RemainingAmount != "100.25" || b.Status != "partial" {
+	if b.HeldAmount != "2399.75" || b.ReleasedAmount != "100.25" || b.PaidAmount != "2500.00" || b.RemainingAmount != "100.25" || b.Status != "partially_released" {
 		t.Fatalf("release did not reopen the balance: %+v", b)
 	}
 	assertCredit := func(w time.Time, want string) {

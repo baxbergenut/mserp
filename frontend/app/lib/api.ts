@@ -479,6 +479,10 @@ export const createUpdater = (value: UpdaterInput) => apiRequest<Updater>("/upda
 export const updateUpdater = (id: string, value: UpdaterInput) => apiRequest<Updater>(`/updaters/${id}`, { method: "PUT", body: JSON.stringify(value) });
 export const deleteUpdater = (id: string) => apiRequest<void>(`/updaters/${id}`, { method: "DELETE" });
 
-export const fetchEscrows = (query: PageQuery & { driverId?: string; status?: string; includeInactive?: boolean }) => apiRequest<EscrowPage>(withQuery("/escrows", query));
+export const fetchEscrows = (query: PageQuery & { driverId?: string; status?: string; group?: string; includeInactive?: boolean }) => apiRequest<EscrowPage>(withQuery("/escrows", query));
 
 export const saveEscrowRelease = (escrowId: string, input: EscrowReleaseInput) => apiRequest<{ saved: boolean }>(`/escrows/${escrowId}/releases${input.version ? `/${input.id}` : ""}`, { method: input.version ? "PUT" : "POST", body: JSON.stringify(input) });
+
+export const fetchEscrowTask = (id: string) => apiRequest<import("./types").EscrowTaskDetail>(`/tasks/escrow/${id}`);
+export const completeEscrowTask = (id: string, input: import("./types").EscrowTaskDecision) => apiRequest<void>(`/tasks/escrow/${id}/complete`, { method: "POST", body: JSON.stringify(input) });
+export const saveEscrowOpening = (id: string, input: { openingPaid: string; version: number; reason: string }) => apiRequest<void>(`/escrows/${id}/opening`, { method: "PUT", body: JSON.stringify(input) });

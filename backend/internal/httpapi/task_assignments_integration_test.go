@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -62,10 +63,6 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			expenseAccessMigration, e := os.ReadFile("../../sql/056_expense_category_access.sql")
-			if e != nil {
-				t.Fatal(e)
-			}
 			normalized := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
 				before, _, ok := strings.Cut(normalized, strings.ReplaceAll(string(migration), "\r\n", "\n"))
@@ -77,22 +74,19 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
     INSERT INTO fleetscope_driver_terminations(company_id,fleetscope_driver_id,driver_name,termination_date,occurred_at,task_id)
     VALUES(gen_random_uuid(),gen_random_uuid(),'Legacy','2026-10-01',now(),'05400000-0000-0000-0000-000000000001')`)
 				exec(string(migration))
-				exec(string(expenseAccessMigration))
-				themeMigration, e := os.ReadFile("../../sql/065_user_color_theme.sql")
+				paths, e := filepath.Glob("../../sql/[0-9][0-9][0-9]_*.sql")
 				if e != nil {
 					t.Fatal(e)
 				}
-				exec(string(themeMigration))
-				boardMigration, e := os.ReadFile("../../sql/066_unified_tasks.sql")
-				if e != nil {
-					t.Fatal(e)
+				for _, path := range paths {
+					if filepath.Base(path)[:3] > "054" {
+						body, e := os.ReadFile(path)
+						if e != nil {
+							t.Fatal(e)
+						}
+						exec(string(body))
+					}
 				}
-				exec(string(boardMigration))
-				processMigration, e := os.ReadFile("../../sql/067_task_in_process.sql")
-				if e != nil {
-					t.Fatal(e)
-				}
-				exec(string(processMigration))
 				var kind string
 				if e = admin.QueryRow(ctx, `SELECT system_task_kind FROM custom_tasks WHERE title='Legacy offboarding'`).Scan(&kind); e != nil || kind != "driver_offboarding" {
 					t.Fatal("offboarding backfill", kind, e)

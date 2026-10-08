@@ -109,6 +109,8 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	Status           string  `json:"status"`
+	TerminationDate  string  `json:"terminationDate"`
 	AssignmentWeek   string  `json:"assignmentWeek"`
 	DriverHome       *string `json:"driverHome"`
 	HomeVersion      int     `json:"homeVersion"`
@@ -137,6 +139,20 @@ type driverRequest struct {
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
+	if request.Status != "" && request.Status != "active" && request.Status != "vacation" && request.Status != "home" && request.Status != "terminated" {
+		return repository.DriverInput{}, errors.New("invalid driver status")
+	}
+	if request.Status != "" {
+		request.Active = request.Status != "terminated"
+	}
+	terminationDate, dateErr := parseOptionalDate(request.TerminationDate, "termination date")
+	if dateErr != nil {
+		return repository.DriverInput{}, dateErr
+	}
+	location, _ := time.LoadLocation("America/New_York")
+	if terminationDate != nil && terminationDate.Format("2006-01-02") > time.Now().In(location).Format("2006-01-02") {
+		return repository.DriverInput{}, errors.New("termination date cannot be in the future")
+	}
 	if request.DriverHome != nil {
 		home := strings.TrimSpace(*request.DriverHome)
 		if len([]rune(home)) > 300 || strings.ContainsRune(home, 0) || request.HomeVersion < 0 || request.HomeVersion > 2147483646 {
@@ -183,6 +199,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("escrow amount must be greater than zero with at most two decimal places")
 	}
 	return repository.DriverInput{
+		Status: request.Status, TerminationDate: terminationDate,
 		AssignmentWeek: request.AssignmentWeek,
 		DriverHome:     request.DriverHome, HomeVersion: request.HomeVersion,
 		ChargePauseWeek: request.ChargePauseWeek,
