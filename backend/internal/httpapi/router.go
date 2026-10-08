@@ -16,6 +16,14 @@ import (
 	"mserp/internal/repository"
 )
 
+// Long-lived streams stop when HTTP shutdown begins; ordinary requests drain.
+type shutdownRouter struct {
+	*chi.Mux
+	shutdown func()
+}
+
+func (r *shutdownRouter) Shutdown() { r.shutdown() }
+
 func NewRouter(
 	logger *slog.Logger,
 	job *jobs.SyncLoadsJob,
@@ -147,7 +155,8 @@ func NewRouter(
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerTaskBoardRoutes(protected, logger, customTaskRepo)
-	protected.Get("/tasks/events", newTaskEvents(pool, logger).serve(auth))
+	events := newTaskEvents(pool, logger)
+	protected.Get("/tasks/events", events.serve(auth))
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool, fiveELDJob != nil))
 	payRepo := repository.NewDriverPayRepository(pool)
@@ -162,5 +171,5 @@ func NewRouter(
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
-	return r
+	return &shutdownRouter{Mux: r, shutdown: events.shutdown}
 }

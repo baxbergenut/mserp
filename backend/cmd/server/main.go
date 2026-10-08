@@ -157,6 +157,10 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	if draining, ok := router.(interface{ Shutdown() }); ok {
+		server.RegisterOnShutdown(draining.Shutdown)
+	}
+
 	escrowTasksDone := make(chan struct{})
 	go func() {
 		defer close(escrowTasksDone)
