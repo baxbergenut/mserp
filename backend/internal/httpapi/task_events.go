@@ -23,19 +23,39 @@ type taskEvents struct {
 	cancel  context.CancelFunc
 	config  *pgx.ConnConfig
 	logger  *slog.Logger
+	stopped chan struct{}
 }
 
 func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
-	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger}
+	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{})}
 	if pool != nil {
 		h.config = pool.Config().ConnConfig.Copy()
 	}
 	return h
 }
+func (h *taskEvents) shutdown() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	select {
+	case <-h.stopped:
+		return
+	default:
+		close(h.stopped)
+	}
+	if h.cancel != nil {
+		h.cancel()
+	}
+}
+
 func (h *taskEvents) subscribe() (chan struct{}, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ch := make(chan struct{}, 1)
+	select {
+	case <-h.stopped:
+		return ch, func() {}
+	default:
+	}
 	h.clients[ch] = struct{}{}
 	if h.cancel == nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -142,6 +162,8 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			changed := false
 			select {
 			case <-r.Context().Done():
+				return
+			case <-h.stopped:
 				return
 			case <-lifetime.C:
 				return

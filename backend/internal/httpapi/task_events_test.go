@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -80,4 +82,41 @@ func TestTaskEventsDatabase(t *testing.T) {
 	}
 	receive(a)
 	receive(b)
+}
+
+// An active event stream must not consume the HTTP server's shutdown deadline.
+func TestTaskEventsDrainOnServerShutdown(t *testing.T) {
+	h := newTaskEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// No database notifications are needed to exercise the open HTTP stream.
+	h.cancel = func() {}
+	server := httptest.NewUnstartedServer(h.serve(nil))
+	server.Config.RegisterOnShutdown(h.shutdown)
+	server.Start()
+	defer server.Close()
+	request, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "test"})
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatal("stream did not open")
+	}
+	drained := make(chan struct{})
+	go func() { _, _ = io.Copy(io.Discard, response.Body); close(drained) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := server.Config.Shutdown(ctx); err != nil {
+		t.Fatalf("event stream blocked shutdown: %v", err)
+	}
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		t.Fatal("stream did not close")
+	}
+	h.shutdown() // Safe when shutdown hooks are invoked more than once.
 }

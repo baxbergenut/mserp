@@ -1484,6 +1484,8 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 - MSERP pool connections use jit=off. HTTP Server-Timing and structured performance
   logs include route templates, duration, query count/time, pool acquisition time,
   status and bytes, never SQL arguments or report contents. Streaming remains supported.
+  The router shutdown hook closes task-event streams before the server drains ordinary
+  requests; keep it registered with http.Server.RegisterOnShutdown.
 - Status Board GET accepts compact=1, using a shared plan dictionary and integer
   references. Different snapshots with the same plan ID remain separate. The frontend
   can expand it to the normal domain contract. The frontend uses the legacy transport
