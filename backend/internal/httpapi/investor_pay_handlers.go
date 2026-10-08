@@ -82,7 +82,12 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		v, err := pay.InvestorPay(r.Context(), week)
+		target := r.URL.Query().Get("truckId")
+		if target != "" && !isUUID(target) {
+			writeAPIError(w, 400, "Invalid truck")
+			return
+		}
+		v, err := pay.InvestorPay(r.Context(), week, target)
 		if err != nil {
 			fail(w, err)
 			return

@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { join } from 'node:path';
 import { verifyEscrow } from './escrow-e2e.mjs';
 
-export async function verifyExpenseSettings(page, base, temp) {
+export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   expect((await page.request.post(`${base}/api/expense-settings`, { data: { kind: 'category', name: 'No CSRF', active: true } })).status()).toBe(403);
   await page.goto(`${base}/expenses`);
   await page.getByRole('link', { name: 'Expenses & Charges settings', exact: true }).click();
@@ -29,6 +29,9 @@ export async function verifyExpenseSettings(page, base, temp) {
   const drivers = await (await page.request.get(`${base}/api/drivers?page=1&pageSize=100`)).json();
   const escrowDriver = drivers.items.find(driver => driver.fullName === 'Escrow Test Driver');
   expect(escrowDriver).toBeTruthy();
+  // The fixture exercises historical escrow weeks; new records otherwise join
+  // the roster in the current week independently of their hire date.
+  sql(`SET search_path TO ${schema},public; UPDATE drivers SET roster_start_week='2026-09-28' WHERE id='${escrowDriver.id}';`);
   const escrowExpenses = await (await page.request.get(`${base}/api/expenses?page=1&pageSize=100&chargeDriverId=${escrowDriver.id}`)).json();
   expect(escrowExpenses.items).toEqual([]);
   const driverRow = page.getByRole('row').filter({ has: page.getByText('Escrow Test Driver', { exact: true }) });

@@ -440,7 +440,7 @@ export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: st
 export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/escrows/settings");
 export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 
-export const fetchInvestorPay = (weekStart: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart }));
+export const fetchInvestorPay = (weekStart: string, truckId?: string) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId }));
 export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });
 export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason }) });
 export const fetchTruckCharges = () => apiRequest<import("./types").TruckChargeData>("/truck-charges");

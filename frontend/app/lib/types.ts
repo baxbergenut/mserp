@@ -917,6 +917,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  truckInactive?: boolean;
   operatingDrivers?: { id: string; name: string }[];
   investorId?: string;
   profileDriverId?: string;

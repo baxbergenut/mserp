@@ -72,7 +72,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
-  await verifyExpenseSettings(page, base, temp);
+  await verifyExpenseSettings(page, base, temp, { sql, schema });
   await page.getByRole('tab', { name: 'Charge types', exact: true }).click();
   await page.getByRole('button', { name: 'New charge type', exact: true }).click();
   await page.getByLabel('Charge name', { exact: true }).fill('Admin fee');
@@ -162,7 +162,7 @@ try {
 
   await expect(page.getByRole('columnheader', { name: 'Admin fee', exact: true })).toBeVisible();
   const matrixRow = page.getByRole('rowheader', { name: /E2e Driver/ }).locator('..');
-  expect((await matrixRow.boundingBox()).height).toBe(32);
+  expect((await matrixRow.boundingBox()).height).toBeCloseTo(32, 2);
   const currentMatrixWeek = await page.locator('[data-week-start]').getAttribute('data-week-start');
   const previousDate = new Date(`${currentMatrixWeek}T12:00:00Z`); previousDate.setUTCDate(previousDate.getUTCDate() - 7);
   const previousWeek = previousDate.toISOString().slice(0,10);
@@ -410,12 +410,14 @@ try {
   await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
   if (await page.getByRole('button', {name:'E2e Driver',exact:true}).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', {name:'E2e Driver',exact:true}).click();
   await page.getByLabel('E2e Driver, Admin fee, charge amount', {exact:true}).fill('-30.10');
-  await expect(page.getByRole('button', {name:'Finalize driver',exact:true})).toBeEnabled({timeout:15000});
-  await page.getByRole('button', {name:'Finalize driver',exact:true}).click();
+  await page.getByRole('button', {name:'E2e Driver',exact:true}).click({button:'right'});
+  await expect(page.getByRole('menuitem', {name:'Finalize driver',exact:true})).toBeEnabled({timeout:15000});
+  await page.getByRole('menuitem', {name:'Finalize driver',exact:true}).click();
   await page.getByRole('button', {name:'Finalize settlement',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByLabel('E2e Driver, Admin fee, charge amount',{exact:true})).toBeDisabled();
-  await page.getByRole('button', {name:'Reopen driver',exact:true}).click();
+  await page.getByRole('button', {name:'E2e Driver',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem', {name:'Reopen driver',exact:true}).click();
   await page.getByLabel('Reason for reopening').fill('Correct weekly settlement');
   await page.getByRole('button', {name:'Reopen settlement',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);

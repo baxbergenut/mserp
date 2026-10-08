@@ -60,3 +60,23 @@ requires a reason and preserves the existing audit/payment rules. Profile
 summaries read those same reports and link to the matching week/truck in Investor
 Pay. Reading a profile or statement never creates payments. Finalization is not
 a disbursement status; bank/payment tracking would be a separate feature.
+
+## Identity, activity and review
+
+Driver activity and investor activity are independent. An inactive driver may
+remain an active investor; ownership alone does not create personal driving pay.
+Existing weekly work and saved personal statements remain historical records.
+The Investor Pay driver column shows hired operators; the investor's own identity
+is already in the Investor column. Actual owner-driven loads remain in details.
+
+Loads retain their stable indexed source record IDs, and migration 064 adds a
+stored, indexed truck ID. Unit labels remain source snapshots. Import resolves
+unique current/prior labels and retains established IDs across truck renames and
+unchanged source refreshes. Reused ambiguous labels stay unresolved; no report
+may guess a new identity. Only a missing unit permits dated-assignment fallback.
+Warnings are grouped on affected truck statements; unrelated fleet loads do not
+block every investor. Finalization still rejects unresolved affected statements.
+
+The regular Investor Pay list and whole-week actions contain active trucks only.
+Profile history and explicit statement links preserve access to inactive trucks'
+saved and historical statements, including their frozen finalized amounts.

@@ -130,3 +130,12 @@ column-wide selection, and a schedule/history control. Truck charges show only
 active eligible investor trucks. Investor, truck and driver names link to their
 profiles. Week selection, search and filters share one horizontally scrollable
 row. Omit general workflow explanations; preserve errors and move-charge warnings.
+
+## Weekly statement expansion
+
+Driver Pay and Investor Pay use the same solid zinc-950 background for an expanded
+statement and its summary header, including load headers, sticky cells, charges
+and totals. Collapsed summaries use the lighter zinc-900 background. Keep error/focus highlights. Finalize/Reopen belongs in the summary
+header's context menu (right click or Shift+F10), with the existing confirmation
+and permissions; do not add an action/status row above the expanded load table.
+Global search labels driver and investor activity separately.

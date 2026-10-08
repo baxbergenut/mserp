@@ -73,32 +73,46 @@ func truckRecurringCharges(data TruckChargeData, types []ChargeType, truck, week
 	return result
 }
 
-// Source unit is authoritative for matched loads. Unmatched plans require a
-// unique assignment on the board date. Never use today's driver assignment.
-func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]string, error) {
-	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),coalesce(m.truck_id::text,'')
- FROM `+grossBoardEntriesSQL+` e `+grossBoardResolvedLoad+`
- LEFT JOIN LATERAL (SELECT (array_agg(DISTINCT t.id))[1] truck_id FROM trucks t WHERE
- (l.id IS NOT NULL AND upper(btrim(t.unit_number))=upper(btrim(l.truck_unit))) OR
- (l.id IS NULL AND EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=e.driver_id
+type truckPayLoadMatch struct {
+	TruckID    string
+	Candidates []string
+}
+
+// Imported source loads retain an indexed truck ID across renames. Only blank
+// source units and unmatched plans fall back to the unique dated assignment.
+// Unresolved source labels supply candidates for scoped review, never a guess.
+func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]truckPayLoadMatch, error) {
+	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
+ coalesce(l.truck_id::text,''),(l.id IS NULL OR btrim(coalesce(l.truck_unit,''))=''),
+ ARRAY(SELECT DISTINCT a.truck_id::text FROM truck_driver_assignments a WHERE a.driver_id=e.driver_id
  AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=e.service_date
- AND (a.unassigned_at IS NULL OR e.service_date<(a.unassigned_at AT TIME ZONE 'America/New_York')::date))) HAVING count(DISTINCT t.id)=1) m ON true
+ AND (a.unassigned_at IS NULL OR e.service_date<(a.unassigned_at AT TIME ZONE 'America/New_York')::date)),
+ ARRAY(SELECT a.truck_id::text FROM truck_unit_aliases a WHERE l.truck_id IS NULL AND a.unit_key=upper(btrim(l.truck_unit)))
+ FROM `+grossBoardEntriesSQL+` e `+grossBoardResolvedLoad+`
  WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'' AND e.service_date>=$1::date AND e.service_date<$1::date+7`, week)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := map[string]string{}
+	result := map[string]truckPayLoadMatch{}
 	for rows.Next() {
-		var driver, date, number, truck string
+		var driver, date, number string
+		var assigned, aliases []string
+		var value truckPayLoadMatch
+		var fallback bool
 		var slot int
-		if err = rows.Scan(&driver, &date, &slot, &number, &truck); err != nil {
+		if err = rows.Scan(&driver, &date, &slot, &number, &value.TruckID, &fallback, &assigned, &aliases); err != nil {
 			return nil, err
 		}
-		result[driver+":"+payCommentKey(date, slot, number)] = truck
+		value.Candidates = append(assigned, aliases...)
+		if value.TruckID == "" && fallback && len(assigned) == 1 {
+			value.TruckID = assigned[0]
+		}
+		result[driver+":"+payCommentKey(date, slot, number)] = value
 	}
 	return result, rows.Err()
 }
+
 func payCommentKey(date string, slot int, number string) string { // same stable identity as Driver Pay
 	return date + ":" + strconv.Itoa(slot) + ":" + strings.ToLower(strings.TrimSpace(number))
 }
@@ -136,13 +150,15 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 			currentLoads[d.ID+":"+l.CommentKey] = true
 		}
 	}
+	missingFrozen := map[string][]string{}
 	for id, d := range frozenDrivers {
 		for _, l := range d.Loads {
 			if !currentLoads[id+":"+l.CommentKey] {
-				investor.Issues = append(investor.Issues, "A load in "+d.FullName+"'s finalized paycheck is absent from Gross Board; reconcile the source before finalizing Investor Pay")
+				missingFrozen[id] = append(missingFrozen[id], l.LoadNumber)
 			}
 		}
 	}
+	unresolved := map[string][]DriverPayLoad{}
 	for id, term := range terms {
 		g := &truckPayGroup{term: term, drivers: map[string]bool{}}
 		err = tx.QueryRow(ctx, `SELECT t.unit_number,coalesce(d.full_name,i.full_name),coalesce(i.driver_id::text,'') FROM trucks t JOIN investors i ON i.id=$2 LEFT JOIN drivers d ON d.id=i.driver_id WHERE t.id=$1`, id, term.OwnerID).Scan(&g.card.TruckUnit, &g.card.FullName, &g.ownerDriver)
@@ -174,10 +190,10 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	// uses one investor statement and deducts hired labor only.
 	for _, d := range source.Drivers {
 		for _, l := range d.Loads {
-			if loadMap[d.ID+":"+l.CommentKey] == "" {
-				investor.Issues = append(investor.Issues, "Cannot attribute load "+l.LoadNumber+" ("+d.FullName+") to a unique historical truck. Correct its source truck or assignment before finalizing Investor Pay.")
+			if loadMap[d.ID+":"+l.CommentKey].TruckID == "" {
+				unresolved[d.ID] = append(unresolved[d.ID], l)
 			}
-			g := groups[loadMap[d.ID+":"+l.CommentKey]]
+			g := groups[loadMap[d.ID+":"+l.CommentKey].TruckID]
 			if g == nil {
 				continue
 			}
@@ -250,6 +266,29 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 			g.card.DispatcherID = ""
 		}
 		g.card.DispatcherName = strings.Join(dispatcherNames, ", ")
+		for _, d := range source.Drivers {
+			numbers := []string{}
+			for _, l := range unresolved[d.ID] {
+				relevant := g.drivers[d.ID]
+				for _, candidate := range loadMap[d.ID+":"+l.CommentKey].Candidates {
+					if candidate == id {
+						relevant = true
+					}
+				}
+				if relevant {
+					numbers = append(numbers, l.LoadNumber)
+				}
+			}
+			if len(numbers) > 0 {
+				g.card.Issues = append(g.card.Issues, "Review truck assignment for "+d.FullName+": "+strings.Join(numbers, ", ")+".")
+			}
+		}
+		for _, person := range g.card.OperatingDrivers {
+			if numbers := missingFrozen[person.ID]; len(numbers) > 0 {
+				g.card.Issues = append(g.card.Issues, "Loads in "+person.Name+"'s finalized paycheck are missing from Gross Board: "+strings.Join(numbers, ", ")+".")
+			}
+		}
+
 		g.ownerOnly = len(g.drivers) == 1 && g.drivers[g.ownerDriver]
 		if len(g.drivers) == 0 && g.ownerDriver != "" {
 			// No-load weeks belong to the owner-operator only with a unique, full-week
@@ -342,7 +381,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		d := &source.Drivers[i]
 		kept := []DriverPayLoad{}
 		for _, l := range d.Loads {
-			g := groups[loadMap[d.ID+":"+l.CommentKey]]
+			g := groups[loadMap[d.ID+":"+l.CommentKey].TruckID]
 			if g != nil && d.ID == g.ownerDriver && !g.ownerOnly {
 				continue
 			}
@@ -473,7 +512,7 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 	d.Edits.ExpenseDeductions = expenses
 	return nil
 }
-func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time) (DriverPayWeek, error) {
+func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, targetTruck ...string) (DriverPayWeek, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return DriverPayWeek{}, err
@@ -483,8 +522,24 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time) (
 	if err != nil {
 		return result, err
 	}
-	return result, tx.Commit(ctx)
+	target := ""
+	if len(targetTruck) > 0 {
+		target = targetTruck[0]
+	}
+	return investorPayView(result, target), tx.Commit(ctx)
 }
+
+func investorPayView(report DriverPayWeek, target string) DriverPayWeek {
+	visible := []DriverPayDriver{}
+	for _, d := range report.Drivers {
+		if !d.TruckInactive || d.ID == target {
+			visible = append(visible, d)
+		}
+	}
+	report.Drivers = visible
+	return report
+}
+
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
 	source, err := readDriverPaySourceWeek(ctx, tx, week, "")
 	if err != nil {
@@ -532,7 +587,7 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
     LEFT JOIN truck_driver_assignments assignment ON assignment.truck_id=t.id AND assignment.unassigned_at IS NULL
     LEFT JOIN drivers operator ON operator.id=assignment.driver_id
     LEFT JOIN dispatchers dispatcher ON dispatcher.id=operator.dispatcher_id
-	WHERE `+investorTruckEligibility+` AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
+	WHERE t.active AND `+investorTruckEligibility+` AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
 	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
 	if err != nil {
 		return result, err
@@ -549,6 +604,27 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	setup.Close()
 	if err != nil {
 		return result, err
+	}
+	activeRows, err := tx.Query(ctx, `SELECT id::text FROM trucks WHERE active`)
+	if err != nil {
+		return result, err
+	}
+	active := map[string]bool{}
+	for activeRows.Next() {
+		var id string
+		if err = activeRows.Scan(&id); err != nil {
+			activeRows.Close()
+			return result, err
+		}
+		active[id] = true
+	}
+	err = activeRows.Err()
+	activeRows.Close()
+	if err != nil {
+		return result, err
+	}
+	for i := range result.Drivers {
+		result.Drivers[i].TruckInactive = !active[result.Drivers[i].ID]
 	}
 	result.Revision = payrollRevision(result)
 	return result, nil

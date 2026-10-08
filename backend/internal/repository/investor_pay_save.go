@@ -117,7 +117,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	}
 	count := 0
 	for _, d := range report.Drivers {
-		if truck != "" && d.ID != truck {
+		if (truck != "" && d.ID != truck) || (truck == "" && d.TruckInactive) {
 			continue
 		}
 		closed := d.Settlement != nil && d.Settlement.Finalized
@@ -182,5 +182,5 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if err != nil {
 		return empty, err
 	}
-	return result, tx.Commit(ctx)
+	return investorPayView(result, truck), tx.Commit(ctx)
 }

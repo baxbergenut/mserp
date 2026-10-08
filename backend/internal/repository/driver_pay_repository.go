@@ -68,6 +68,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	TruckInactive    bool               `json:"truckInactive,omitempty"`
 	OperatingDrivers []PayPerson        `json:"operatingDrivers,omitempty"`
 	InvestorID       string             `json:"investorId,omitempty"`
 	ProfileDriverID  string             `json:"profileDriverId,omitempty"`

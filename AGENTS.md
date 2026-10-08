@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `063_profile_notes.sql`:
+  `064_load_truck_identity.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -532,6 +532,20 @@ assignment lookup lists.
   for newly created categories. New categories are otherwise unassigned. Creator
   identity is server-recorded for new entries; pre-056 entries have no invented
   creator. Expense settings management is independent of category access.
+
+- Migration 064 binds imported loads to indexed `loads.truck_id` foreign keys.
+  `loads.id` is already the indexed upstream record identity; the business load
+  number is not unique. `truck_unit_aliases` records current and prior unit names.
+  Import/refresh resolves only unique labels, preserves an existing ID when the
+  source label is unchanged, and re-resolves changed labels. Truck renames do not
+  alter existing load links; label reuse never transfers linked loads. Unresolved
+  labels stay NULL; blank source units may use a unique dated assignment when
+  calculating a statement. Report reads do not match every truck name per load.
+  Driver and investor active flags are independent; global search labels both
+  roles explicitly. Investor Pay hides inactive trucks by default and excludes
+  them from whole-week actions; explicit `truckId` links and profile history
+  retain their statements. Revisions cover the full report for both views.
+  Attribution warnings belong to affected truck cards, not unrelated investors.
 
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
   and DriverCard.tsx with Driver Pay, using the same compact expandable rows.

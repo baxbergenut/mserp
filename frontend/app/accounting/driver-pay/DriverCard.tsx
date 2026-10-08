@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, memo, useState } from "react";
+import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
@@ -9,6 +9,7 @@ import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/
 import { carryBreakdown, costAmount, costRows, driverTotals } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
 import { ExpenseRows } from "./ExpenseRows";
+import { StatementMenu } from "./StatementMenu";
 import { CommentButton } from "./CommentButton";
 
 export const payButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -42,10 +43,12 @@ type Props = {
 
 export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay }: Props) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const totals = driverTotals(driver, edits);
   const investor = !!driver.investorId;
   const statementName = driver.fullName;
-  const operatingDrivers = driver.operatingDrivers ?? (driver.autoCharges ?? []).filter(c => c.source.startsWith("driver:")).map(c => ({ id: c.source.slice(7), name: c.name.replace(/^Driver earnings · /, "") }));
+  const operatingDrivers = (driver.operatingDrivers ?? (driver.autoCharges ?? []).filter(c => c.source.startsWith("driver:")).map(c => ({ id: c.source.slice(7), name: c.name.replace(/^Driver earnings · /, "") }))).filter(person => person.id !== driver.profileDriverId);
   const profileHref = investor ? `/investors/detail?id=${driver.investorId}` : `/drivers/detail?id=${driver.id}`;
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
@@ -95,7 +98,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   </td>;
 
   return <>
-    <tr className={`h-9 cursor-pointer text-xs text-zinc-300 hover:bg-zinc-800/30 ${open ? "bg-zinc-800/30" : "bg-card"}`} onClick={() => onToggle(driver.id)}>
+    <tr className={`h-9 cursor-pointer text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`} onClick={() => onToggle(driver.id)} onContextMenu={event => { if (onSettlement) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (onSettlement && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left + 12, y: rect.bottom }); } }}>
       <th scope="row" className="border-b border-zinc-800 px-3 py-0 text-left font-medium">
         <div className="flex h-9 w-full items-center gap-2 text-left text-zinc-100">
           <button type="button" aria-label={investor ? `${statementName} ${driver.truckUnit}` : statementName} aria-expanded={open} aria-controls={`driver-${driver.id}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500">
@@ -113,18 +116,17 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
       <td className="border-b border-zinc-800 px-3 text-right font-mono">{driver.loads.length}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
     </tr>
-    {open && <tr><td colSpan={7} className="border-b border-zinc-700 p-0">
+    {open && <tr><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
-        {onSettlement && <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2"><span className="text-xs text-zinc-500">{driver.settlement?.finalized ? `Finalized by ${driver.settlement.finalizedBy}` : driver.settlement ? "Reopened for corrections" : "Draft settlement"}</span><button type="button" disabled={settlementDisabled} className={payButtonClass} onClick={() => onSettlement(!!driver.settlement?.finalized)}>{driver.settlement?.finalized ? `Reopen ${investor ? "truck" : "driver"}` : `Finalize ${investor ? "truck" : "driver"}`}</button></div>}
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
-          <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 bg-zinc-950/30 text-left text-xs">
+          <table className="w-full min-w-[1504px] table-fixed border-separate border-spacing-0 text-left text-xs">
             <colgroup>{displayColumns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>
-            <thead className="bg-zinc-900 text-[10px] text-zinc-400"><tr>{displayColumns.map(([label], index) => <th key={label}
+            <thead className="bg-zinc-950 text-[10px] text-zinc-400"><tr>{displayColumns.map(([label], index) => <th key={label}
               title={label === "Driver gross" ? "Gross Board driver gross used for percentage pay" : undefined}
-              className={`${cell} font-medium ${index === 0 ? "sticky left-0 z-10 bg-zinc-900" : ""} ${index >= 5 && index !== 11 ? "text-right" : ""}`}>
+              className={`${cell} !bg-zinc-950 font-medium ${index === 0 ? "sticky left-0 z-10 bg-zinc-950" : ""} ${index >= 5 && index !== 11 ? "text-right" : ""}`}>
               {label === "Comments" ? <span className="sr-only">Comments</span> : label}
             </th>)}</tr></thead>
             <tbody>{weekdays.map((day, dayIndex) => {
@@ -149,7 +151,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
               </tr>) : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-zinc-600`}>No load</td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
             })}</tbody>
             <tbody>
-              <tr className="bg-blue-500/5 font-mono text-zinc-200"><th colSpan={5} className={`${cell} text-left font-sans font-medium`}>Weekly totals{incomplete ? " · provisional" : ""}</th>
+              <tr className="font-mono text-zinc-200"><th colSpan={5} className={`${cell} text-left font-sans font-medium`}>Weekly totals{incomplete ? " · provisional" : ""}</th>
                 {[totals.original, totals.gross, totals.totalMiles, totals.loadedMiles, totals.deadheadMiles, totals.fee].map((value, index) => <Fragment key={index}><td className={numeric}>{index === 5 && allFeesMissing ? "—" : decimalDisplay(value, index < 2 || index === 5)}</td></Fragment>)}<td className={`${cell} font-sans text-[10px] text-zinc-500`}>Net adjustments</td><td className={numeric}>{decimalDisplay(netAdjustments, true)}</td><td className={`${cell} !px-1 text-center`}><CommentButton label={`${driver.fullName}, weekly comment`} value={edits.notes} disabled={disabled} onClick={() => setComment({ key: null, label: "Weekly comment", value: edits.notes })} /></td>
               </tr>
             </tbody>
@@ -159,6 +161,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
       </div>
     </td></tr>}
 
+    {menu && onSettlement && <StatementMenu x={menu.x} y={menu.y} label={`${driver.settlement?.finalized ? "Reopen" : "Finalize"} ${investor ? "truck" : "driver"}`} disabled={settlementDisabled} onClose={closeMenu} onSelect={() => onSettlement(!!driver.settlement?.finalized)} />}
     {comment && <Modal title={comment.value.trim() ? "Edit comment" : "Add comment"} description={`${driver.fullName} · ${comment.label}`} isSaving={false} submitLabel="Save comment" onClose={() => setComment(null)} onSubmit={event => {
       event.preventDefault();
       edit(current => comment.key === null ? { ...current, notes: comment.value } : { ...current, comments: { ...current.comments, [comment.key]: comment.value } });
