@@ -216,6 +216,40 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		}
 	}
 	for id, g := range groups {
+		driverIDs := make([]string, 0, len(g.drivers))
+		for driverID := range g.drivers {
+			driverIDs = append(driverIDs, driverID)
+		}
+		people, e := tx.Query(ctx, `SELECT d.id::text,d.full_name,coalesce(p.id::text,''),coalesce(p.full_name,'Unassigned') FROM drivers d LEFT JOIN dispatchers p ON p.id=d.dispatcher_id
+        WHERE d.id=ANY($2::uuid[]) OR (cardinality($2::uuid[])=0 AND EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.driver_id=d.id AND a.truck_id=$1 AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<$3::date+7 AND (a.unassigned_at IS NULL OR (a.unassigned_at AT TIME ZONE 'America/New_York')::date>$3::date))) ORDER BY d.full_name,d.id`, id, driverIDs, source.WeekStart)
+		if e != nil {
+			return source, investor, e
+		}
+		dispatcherNames := []string{}
+		dispatcherIDs := map[string]bool{}
+		for people.Next() {
+			var person PayPerson
+			var dispatcherID, dispatcherName string
+			if e = people.Scan(&person.ID, &person.Name, &dispatcherID, &dispatcherName); e != nil {
+				people.Close()
+				return source, investor, e
+			}
+			g.card.OperatingDrivers = append(g.card.OperatingDrivers, person)
+			if !dispatcherIDs[dispatcherID] {
+				dispatcherIDs[dispatcherID] = true
+				dispatcherNames = append(dispatcherNames, dispatcherName)
+			}
+			g.card.DispatcherID = dispatcherID
+		}
+		e = people.Err()
+		people.Close()
+		if e != nil {
+			return source, investor, e
+		}
+		if len(dispatcherIDs) != 1 {
+			g.card.DispatcherID = ""
+		}
+		g.card.DispatcherName = strings.Join(dispatcherNames, ", ")
 		g.ownerOnly = len(g.drivers) == 1 && g.drivers[g.ownerDriver]
 		if len(g.drivers) == 0 && g.ownerDriver != "" {
 			// No-load weeks belong to the owner-operator only with a unique, full-week
@@ -493,8 +527,11 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	}
 	// Configuration gaps are informational current-fleet rows, never zero-value
 	// statements or inferred historical ownership/rates.
-	setup, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,i.id::text,coalesce(d.full_name,i.full_name)
+	setup, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,i.id::text,coalesce(d.full_name,i.full_name),coalesce(operator.id::text,''),coalesce(operator.full_name,''),coalesce(dispatcher.id::text,''),coalesce(dispatcher.full_name,'')
 	FROM trucks t JOIN investors i ON i.id=t.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
+    LEFT JOIN truck_driver_assignments assignment ON assignment.truck_id=t.id AND assignment.unassigned_at IS NULL
+    LEFT JOIN drivers operator ON operator.id=assignment.driver_id
+    LEFT JOIN dispatchers dispatcher ON dispatcher.id=operator.dispatcher_id
 	WHERE `+investorTruckEligibility+` AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
 	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
 	if err != nil {
@@ -502,7 +539,7 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	}
 	for setup.Next() {
 		var v InvestorTruckSetup
-		if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName); err != nil {
+		if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName, &v.DriverID, &v.DriverName, &v.DispatcherID, &v.DispatcherName); err != nil {
 			setup.Close()
 			return result, err
 		}

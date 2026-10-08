@@ -48,7 +48,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/accounting/driver-charges?tab=trucks`);
   await expect(page.getByRole('tab', { name: 'Truck charges', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('row').filter({ hasText: 'PAY-EXTRA' })).toContainText('Payroll Employee');
-  await expect(page.getByRole('button', { name: 'PAY-EXTRA, Truck admin', exact: true })).toContainText('100.00');
+  await expect(page.getByRole('checkbox', { name: 'PAY-EXTRA, Truck admin', exact: true })).toBeChecked();
   await page.goto(`${base}/accounting/investor-pay?weekStart=2026-09-28`);
   await expect(page.getByRole('heading', { name: 'Investor pay', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Payroll Hector PAY-EXTRA', exact: true }).click();

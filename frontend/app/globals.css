@@ -3,7 +3,6 @@
 :root {
   --ui-font-size: 13px;
   --ui-label-size: 12px;
-  --ui-row-height: 32px;
   --ui-control-height: 32px;
   --ui-icon-size: 16px;
   --ui-radius: 8px;
@@ -47,8 +46,6 @@
 .mserp-ui :where(button, a, input, select, textarea):focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .mserp-ui :where(button:disabled) { cursor: not-allowed; opacity: .5; }
 .mserp-ui :where(table) { font-size: var(--ui-font-size); line-height: 20px; }
-.mserp-ui :where(thead tr, tbody tr) { height: var(--ui-row-height); }
-.mserp-ui :where(th, td):not([colspan]):not([rowspan]) { height: var(--ui-row-height); padding: 0 8px; }
 .mserp-ui :where(thead th) { font-size: var(--ui-label-size); font-weight: 500; color: #a1a1aa; background-color: #18181b; }
 .mserp-ui :where(tbody td, tbody th) { border-bottom: 1px solid #27272a; }
 .mserp-ui :where(tbody tr:last-child > td, tbody tr:last-child > th) { border-bottom-width: 0; }

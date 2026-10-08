@@ -917,6 +917,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  operatingDrivers?: { id: string; name: string }[];
   investorId?: string;
   profileDriverId?: string;
   truckId?: string;
@@ -937,7 +938,7 @@ export interface DriverPayDriver {
   edits: DriverPayEdits;
 }
 export interface DriverPayWeek {
-  setupRequired?: { truckId: string; truckUnit: string; ownerId: string; ownerName: string }[];
+  setupRequired?: { truckId: string; truckUnit: string; ownerId: string; ownerName: string; driverId?: string; driverName?: string; dispatcherId?: string; dispatcherName?: string }[];
  issues?: string[];
  revision: string;
   weekStart: string;

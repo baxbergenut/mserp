@@ -11,7 +11,7 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
     tileReferrers.push((await route.request().allHeaders()).referer);
     await route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG1sAAAAASUVORK5CYII=', 'base64') });
   });
-  await page.getByRole('button', { name: 'Board Cpm · Loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
   await expect(page.getByRole('dialog').getByLabel('Truck location map')).toHaveCount(0);
   await expect(page.getByRole('dialog').getByRole('region', { name: 'Truck location', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close loads', exact: true }).click();

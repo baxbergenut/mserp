@@ -35,6 +35,7 @@ export function ManagementHeader({
   onAction,
   actionIcon: ActionIcon = Plus,
   secondaryAction,
+  leadingAction,
 }: {
   icon: LucideIcon;
   title: string;
@@ -43,6 +44,7 @@ export function ManagementHeader({
   onAction?: () => void;
   actionIcon?: LucideIcon;
   secondaryAction?: ReactNode;
+  leadingAction?: ReactNode;
 }) {
   const action = actionLabel && onAction ? <button
     type="button"
@@ -54,7 +56,8 @@ export function ManagementHeader({
   </button> : null;
   return (
 
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
+    <div className={`flex gap-4 ${leadingAction ? "items-center justify-between" : "flex-col sm:flex-row sm:items-center sm:justify-end"}`}>
+      {leadingAction && <div className="mr-auto">{leadingAction}</div>}
       <PageHeader><div>
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-zinc-500" />

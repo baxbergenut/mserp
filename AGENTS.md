@@ -93,7 +93,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
   shell and sidebar; `frontend/app/login/` owns the login page.
   `components/PageNavigation.tsx` places the shared Back link on its own row
-  above page content on every page; never float it alongside cards or tables.
+  above page content. Recurring Charges uses the shared Back link on its
+  New charge type action row.
 - `frontend/app/page.tsx`: redirects `/` to `/gross-board`.
 - `frontend/app/dashboard/`: redirects legacy Dashboard links to Gross Board.
   The old load-derived dashboard is removed pending a Gross Board-based replacement.
@@ -534,7 +535,9 @@ assignment lookup lists.
 
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
   and DriverCard.tsx with Driver Pay, using the same compact expandable rows.
-  Each row is one truck statement named with investor and truck unit. Reports retain
+  Each row is one truck statement with separate investor/unit columns, followed
+  by operating drivers, dispatcher and tariff. Names are frozen in new reports;
+  older snapshots use their recorded driver-earnings names. Reports retain
   full load details, and deduct hired driver earnings in the charges column.
   Earnings use percentage/CPM tariffs before personal deductions; finalized
   driver load fees take precedence over later tariff changes. Truck shares use

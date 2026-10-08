@@ -2,7 +2,7 @@
 
 import { useViewState } from "@/app/lib/viewMemory";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { History, LoaderCircle } from "lucide-react";
 import type { ChargeCell, ChargeData, ChargeSchedule, ChargeType, Driver } from "@/app/lib/types";
@@ -13,8 +13,8 @@ import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
 const money = (s: string) => decimalDisplay(hundredths(s), true);
 
-export default function RecurringMatrix({ data, drivers, search, driverFilter, typeFilter, archived, onArchivedChange, busy, pending, onSave, onSaveAll, showHistory }: {
-  data: ChargeData; drivers: Driver[]; search: string; driverFilter: string; typeFilter: string; busy: boolean;
+export default function RecurringMatrix({ filters, data, drivers, search, driverFilter, typeFilter, archived, onArchivedChange, busy, pending, onSave, onSaveAll, showHistory }: {
+  filters: ReactNode; data: ChargeData; drivers: Driver[]; search: string; driverFilter: string; typeFilter: string; busy: boolean;
   archived: boolean; onArchivedChange: (archived: boolean) => void;
   pending: Record<string, ChargeCell>; onSave: (input: ChargeCell, driverName: string, typeName: string) => void;
   onSaveAll: (targets: { input: ChargeCell; driverName: string }[], typeName: string) => void;
@@ -41,12 +41,11 @@ export default function RecurringMatrix({ data, drivers, search, driverFilter, t
     onSave(inputFor(driver, type, included, amount), driver.fullName, type.name);
   }
   return <div className="space-y-3">
-    <div className="flex flex-wrap items-end gap-4">
+    <div className="overflow-x-auto"><div className="flex min-w-max items-center gap-3">
       <EffectiveWeekPicker week={week} currentWeek={data.currentWeek} disabled={busy} onChange={setWeek} />
-      <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input type="checkbox" checked={archived} onChange={e => onArchivedChange(e.target.checked)} />Show archived charge types</label>
-      <span className="py-2 text-xs text-zinc-500">{visible.length} drivers</span>
-    </div>
-    <p className="text-xs text-zinc-500">Check a fee to include a driver. Changes save immediately from the selected week; unchecking pauses it. Later scheduled changes remain in place. Each charge type controls which weeks qualify.</p>
+      {filters}
+      <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => onArchivedChange(e.target.checked)} />Archived types</label>
+    </div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a Monday between 2000 and 2100.</p>}
     <div data-scroll-key="driver-recurring-charges" data-scroll-initial-x="start" className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-left text-xs text-zinc-300">

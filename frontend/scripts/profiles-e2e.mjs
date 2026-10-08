@@ -44,8 +44,10 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await checkStatementAlignment();
   await statement.getByRole('link', { name: 'Draft →', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Morgan Hayes 102', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Morgan Hayes 102', exact: true })).toHaveAttribute('href', `/investors/detail?id=${f.investor}`);
+  await expect(page.getByRole('link', { name: 'Morgan Hayes', exact: true })).toHaveAttribute('href', `/investors/detail?id=${f.investor}`);
   await expect(page.getByRole('table', { name: 'Weekly investor pay', exact: true }).locator(':scope > tbody > tr > th')).toHaveCount(1);
+  await expect(page.getByRole('table', { name: 'Weekly investor pay', exact: true }).locator(':scope > thead th')).toHaveText(['Investor', 'Truck', 'Driver', 'Dispatcher', 'Tariff', 'Loads', 'Total payable']);
+  await expect(page.getByRole('link', { name: 'Jamie Carter', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Finalize truck', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'REVIEW-102', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'REVIEW-101', exact: true })).toHaveCount(0);
@@ -59,8 +61,8 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/accounting/investor-pay?weekStart=2026-09-28`);
   await page.getByRole('button', { name: 'Show all trucks', exact: true }).click();
   const payTable = page.getByRole('table', { name: 'Weekly investor pay', exact: true });
-  const setupRow = payTable.getByRole('row').filter({ has: page.getByRole('link', { name: 'River Fleet Partners 103', exact: true }) });
-  await expect(setupRow.getByRole('cell').nth(2)).toHaveText('Setup required');
+  const setupRow = payTable.getByRole('row').filter({ has: page.getByRole('link', { name: 'River Fleet Partners', exact: true }) });
+  await expect(setupRow.getByRole('cell').nth(3)).toHaveText('Setup required');
   await expect(setupRow.getByRole('cell').last()).toHaveText('—');
   await expect(setupRow.getByRole('link', { name: 'Setup required' })).toHaveAttribute('href', '/accounting/driver-charges?tab=trucks');
   await expect(page.getByRole('heading', { name: 'Current trucks needing settlement terms' })).toHaveCount(0);
@@ -86,7 +88,7 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByRole('heading', { name: 'Dana Mitchell', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Jamie Carter', exact: true })).toBeVisible();
   const headerHeight = await page.locator('thead tr').first().evaluate(el => el.getBoundingClientRect().height);
-  expect(headerHeight).toBe(32);
+  expect(headerHeight).toBe(36);
   await page.goto(`${base}/drivers/detail?id=${f.owner}`);
   await page.getByRole('tab', { name: 'Overview', exact: true }).click();
   await expect(page.getByText('A dated driver note.', { exact: true })).toBeVisible();

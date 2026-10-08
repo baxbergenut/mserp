@@ -2,7 +2,8 @@
 import { chromium, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const week = '2026-10-05';
 const driver = { id: 'driver', fullName: 'Test Driver', active: true, driverType: 'Company', phone: '' };
@@ -14,6 +15,9 @@ const fourthDriver = { ...driver, id: 'fourth', fullName: 'Fourth Driver' };
 const inactiveDriver = { ...driver, id: 'inactive', fullName: 'Inactive Driver', active: false };
 const pausedSchedule = { ...schedule, id: 'paused', driverId: secondDriver.id, driverName: secondDriver.fullName, version: 3, phases: [{ weekStart: week, amount: '25.00', paused: true }] };
 const writes = [];
+let trucks = [];
+const truckCharges = { terms: [], phases: [], eligibleTruckIds: [] };
+const truckWrites = [];
 let failThirdDriver = true;
 let handoffFourthDriver = false;
 const archivedType = { ...type, id: 'archived', name: 'Archived fee', archived: true };
@@ -39,6 +43,14 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(4);
+    if (route.request().method() === 'PUT' && path === '/truck-charges/recurring') {
+      const input = route.request().postDataJSON();
+      truckWrites.push(input);
+      const existing = truckCharges.phases.find(p => p.truckId === input.truckId && p.typeId === input.typeId && p.weekStart === input.weekStart);
+      expect(input.version).toBe(existing?.version ?? 0);
+      truckCharges.phases = [...truckCharges.phases.filter(p => p !== existing), { ...input, version: input.version + 1 }];
+      await route.fulfill({ status: 204 }); return;
+    }
     if (route.request().method() === 'PUT' && path === '/driver-charges/recurring') {
       const input = route.request().postDataJSON();
       writes.push(input);
@@ -60,7 +72,7 @@ try {
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
       '/driver-charges': url.searchParams.has('driverId') ? { ...data, schedules: data.schedules.filter(s => s.driverId === url.searchParams.get('driverId')) } : data,
-      '/drivers': [driver, secondDriver, thirdDriver, fourthDriver, inactiveDriver], '/truck-charges': { terms: [], phases: [], eligibleTruckIds: [] }, '/trucks': [], '/investors': [],
+      '/drivers': [driver, secondDriver, thirdDriver, fourthDriver, inactiveDriver], '/truck-charges': truckCharges, '/trucks': trucks, '/investors': [{ id: 'owner', fullName: 'Truck Owner', active: true }],
     };
     await route.fulfill({ json: path === '/trucks' && url.searchParams.has('page') ? { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } : fixtures[path] ?? [] });
   });
@@ -211,6 +223,48 @@ try {
   await page.getByRole('button', { name: 'Delete type', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Other fee 0', exact: true })).toHaveCount(0);
+  trucks = [
+    { id: 'truck-a', unitNumber: '201', ownerId: 'owner', ownerName: 'Truck Owner', driverId: driver.id, driverName: driver.fullName, active: true },
+    { id: 'truck-b', unitNumber: '202', ownerId: 'owner', ownerName: 'Truck Owner', active: true },
+    { id: 'inactive-truck', unitNumber: 'INACTIVE', ownerId: 'owner', ownerName: 'Truck Owner', active: false },
+    { id: 'company-truck', unitNumber: 'COMPANY', ownerId: 'company', ownerName: 'Company', active: true, isCompanyOwned: true },
+  ];
+  type.amounts = ['50.00', '75.00'];
+  truckCharges.eligibleTruckIds = trucks.map(t => t.id);
+  truckCharges.terms = trucks.map(t => ({ truckId: t.id, ownerId: t.ownerId, weekStart: week, sharePercent: '88', version: 1 }));
+  await page.goto(`${base}/accounting/driver-charges?tab=trucks`);
+  await expect(page.getByRole('link', { name: 'INACTIVE', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'COMPANY', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Truck Owner', exact: true }).first()).toHaveAttribute('href', '/investors/detail?id=owner');
+  await expect(page.getByRole('link', { name: '201', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-a');
+  await expect(page.getByRole('link', { name: driver.fullName, exact: true })).toHaveAttribute('href', '/drivers/detail?id=driver');
+  const truckCheck = page.getByRole('checkbox', { name: '201, Admin fee', exact: true });
+  await truckCheck.click();
+  await expect(truckCheck).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await page.getByLabel('201, Admin fee amount', { exact: true }).selectOption('75.00');
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  expect(truckWrites.at(-1).amount).toBe('75.00');
+  const trucksAll = page.getByRole('checkbox', { name: 'Admin fee: select all trucks', exact: true });
+  await trucksAll.click();
+  await expect(truckCheck).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await trucksAll.click();
+  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await page.reload();
+  await expect(truckCheck).toBeChecked();
+  await expect(page.getByLabel('201, Admin fee amount', { exact: true })).toHaveValue('75.00');
+  const backBox = await page.getByRole('link', { name: 'Back to previous page' }).boundingBox();
+  const newBox = await page.getByRole('button', { name: 'New charge type', exact: true }).boundingBox();
+  expect(Math.abs(backBox.y - newBox.y)).toBeLessThan(5);
+  await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 0; });
+  await page.screenshot({ path: join(tmpdir(), 'mserp-truck-charges-review.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('tab', { name: 'Driver charges', exact: true }).click();
+  const weekBox = await page.getByRole('group', { name: 'Effective week', exact: true }).boundingBox();
+  const filterBox = await page.getByPlaceholder('Search drivers…').boundingBox();
+  expect(Math.abs(weekBox.y + weekBox.height / 2 - filterBox.y - filterBox.height / 2)).toBeLessThan(3);
+  await page.screenshot({ path: join(tmpdir(), 'mserp-driver-charges-review.png'), fullPage: true, animations: 'disabled' });
   expect(errors).toEqual([]);
   console.log('Charge views checks passed: select-all add/remove, filtered assignment, existing amounts, partial failures/retry, type deletion/cancellation, initial selections, independent matrix scrolls, filters, week navigation and tab return.');
 } finally {

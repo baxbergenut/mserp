@@ -18,7 +18,7 @@ primitives. Extend these before introducing another styling pattern.
 | Page title | 16px, 24px line height, weight 600 |
 | Card and section title | 13px, 20px line height, weight 600 |
 | Metric value | 20px, 28px line height, weight 600 |
-| Ordinary table row / column header | 32px minimum; 8px horizontal cell padding |
+| Table row / column header | Preserve each table’s established height and padding; no global size override |
 | Buttons, selects, single-line inputs | 32px minimum, 8px corner radius |
 | Touch buttons and tabs | 40px minimum on coarse pointers |
 | Icons | Lucide, 16px; page identity icon 20px |
@@ -33,7 +33,7 @@ primitives. Extend these before introducing another styling pattern.
 | Primary action | Blue `#2563eb`; hover `#3b82f6` |
 | Keyboard focus | Visible 2px light-blue outline |
 
-The minimum row height is not a clipping rule. Wrapped content, expanded
+Table heights are content minimums, not clipping rules. Wrapped content, expanded
 statements, multi-row headers, and row-spanning financial cells may grow.
 Preserve the 32px accounting entry geometry and sticky offsets. A map or notes
 card is content-sized; do not stretch every card to the height of the longest.
@@ -47,7 +47,8 @@ Do not recolor statuses merely to make every cell identical.
   subtitle or introductory paragraph below a page title.
 - Keep filters and actions in the main content toolbar; retain global search,
   quick-create and account actions on the right of the top bar.
-- Keep the shared Back link on its own row above content.
+- Keep the shared Back link above content. Recurring Charges places Back and
+  New charge type on the same action row.
 - Use the full available width. Overflow belongs to the individual table,
   not the document. Stack profile columns on narrower screens.
 - Sign out exists only in the top-bar account menu. The sidebar retains its
@@ -98,8 +99,8 @@ Do not repeat truck ownership in another driver overview card.
   net adjustments, net payable and a Draft/Finalized link. Links select the exact
   truck and week in Investor Pay and open its details, overriding stale filters.
 - Investor Pay uses the same compact table and expandable statement layout as
-  Driver Pay. Each truck gets its own row, named with investor and unit (for
-  example, Morgan Hayes 102). There is no extra investor grouping or summary tier.
+  Driver Pay. Each truck gets its own row. Show investor name and truck unit
+  in separate columns, followed by driver, dispatcher and tariff. There is no extra investor grouping or summary tier.
 - Profile statement summaries use fixed columns; monetary headings and values
   align right, while week, truck and statement links align left.
 - Trucks lacking dated terms appear in the same table, with Setup required in
@@ -121,3 +122,11 @@ header/icon/control sizes, summary links, permissions and loading/error states.
 `node scripts/test-investors-e2e.mjs --profiles-only` runs `profiles-e2e.mjs` and covers profile
 notes, assignment switching, details links and statement navigation against an
 isolated real API/database. Existing charge/task browser suites cover shared UI.
+
+## Recurring charges
+
+Driver and truck matrices share inline inclusion checkboxes, amount selectors,
+column-wide selection, and a schedule/history control. Truck charges show only
+active eligible investor trucks. Investor, truck and driver names link to their
+profiles. Week selection, search and filters share one horizontally scrollable
+row. Omit general workflow explanations; preserve errors and move-charge warnings.
