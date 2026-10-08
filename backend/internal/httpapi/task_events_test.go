@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -36,6 +38,27 @@ func TestTaskEventsDatabase(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	// LISTEN/NOTIFY is database-wide, not schema-scoped. Other repository
+	// packages exercise task triggers concurrently in the shared test database.
+	// Give this rollback/reconnect assertion its own database and listener.
+	admin, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	database := fmt.Sprintf("mserp_task_events_%d_test", time.Now().UnixNano())
+	identifier := pgx.Identifier{database}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := admin.Exec(cleanup, "DROP DATABASE "+identifier+" WITH (FORCE)"); err != nil {
+			t.Errorf("clean up event test database: %v", err)
+		}
+	}()
+	cfg.ConnConfig.Database = database
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
