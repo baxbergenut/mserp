@@ -76,6 +76,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   There is no upstream roster endpoint. Initialize via `-import-weighmytruck-roster`
   from the private website CSV; unmatched identities require explicit linking.
   Pending/uncertain changes cannot replay until verified; removal uses saved email.
+  The page lists only added drivers, attention rows first, with warnings after
+  names. Add driver selects an active unadded driver; success notices clear after
+  five seconds. No Membership column/filter or routine Verify action is shown.
+  Uncertain additions remain visible as notices; administrative recovery retains
+  the versioned verification API.
   `weighmytruck.read/write` protect routes. Server config is WEIGHMYTRUCK_CLIENT_ID,
   WEIGHMYTRUCK_CLIENT_SECRET, WEIGHMYTRUCK_TOKEN_URL, WEIGHMYTRUCK_SCOPE,
   WEIGHMYTRUCK_API_URL and WEIGHMYTRUCK_COMPANY_NAME. No browser vendor calls.

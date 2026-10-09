@@ -212,6 +212,11 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			execute(`UPDATE weighmytruck_memberships SET updated_at=now()-interval '3 minutes' WHERE driver_id=$1`, ids[1])
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
+				// The add picker must exclude non-active drivers even when unadded.
+				execute(`INSERT INTO drivers(full_name,normalized_name,email,phone,pay_type,pay_rate,status,termination_date)
+ VALUES('Home Driver','home driver','home@example.com','5551230081','cpm',0,'home',NULL),
+ ('Vacation Driver','vacation driver','vacation@example.com','5551230082','cpm',0,'vacation',NULL),
+ ('Former Driver','former driver','former@example.com','5551230083','cpm',0,'terminated',current_date)`)
 				server := httptest.NewServer(router)
 				defer server.Close()
 				cmd := exec.Command("node", "../../../frontend/scripts/test-weighmytruck-e2e.mjs")

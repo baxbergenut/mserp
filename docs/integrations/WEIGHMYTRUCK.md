@@ -54,8 +54,14 @@ to a list API, it can replace manual roster reconciliation.
 Migration 073 adds a local
 membership table, actor-stamped event log and initial-import receipt. Refresh
 reads MSERP's database; it does not claim to synchronize the vendor roster.
-Manage subsequent membership changes through MSERP. If someone changes the
-website directly, use Verify to explicitly record the observed membership.
+Manage subsequent membership changes through MSERP. The page shows only added
+drivers, with attention rows sorted first and warning icons after driver names.
+Add driver opens a picker of active drivers not already added; removal stays on
+each row. Success notices disappear after five seconds. There is no Membership
+column, membership filter or routine Verify action. Pending/uncertain additions
+remain visible as error notices without appearing as confirmed added drivers.
+Administrative recovery for external changes or uncertain operations retains
+the versioned verification API; normal users do not need a website-login workflow.
 
 The October 9 website export contains 25 accounts. Its CSV is stored privately
 under ignored `backend/.weighmytruck/` locally and `/etc/mserp/` in production;
@@ -103,6 +109,7 @@ failure classification and absence of mutation retries.
 Build frontend with `NEXT_PUBLIC_API_URL=/api`, install Playwright Chromium, then
 set `MSERP_WMT_BROWSER_TEST=1` for the same Go test. It launches the browser against
 the real Go routes/database and a synthetic upstream OAuth/provider server.
-The browser test covers Add/Remove, double-clicks, persistence, filters, warnings,
-verification, narrow layout and absence of external browser requests. It never
+The browser test covers the added-only roster, active-driver picker, Add/Remove,
+double-clicks, timed notices, persistence, search, attention ordering, narrow
+layout and absence of external browser requests. It never
 changes real fleet membership.
