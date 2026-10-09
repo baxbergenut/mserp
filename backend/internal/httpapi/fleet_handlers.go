@@ -39,6 +39,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Get("/drivers/{id}/location", handler.getDriverTruckLocation)
 	r.Post("/drivers", handler.createDriver)
 	r.Put("/drivers/{id}", handler.updateDriver)
+	r.Patch("/drivers/{id}/status", handler.changeDriverStatus)
 	r.Delete("/drivers/{id}", handler.deleteDriver)
 	r.Get("/trucks", handler.listTrucks)
 	r.Get("/trucks/{id}", handler.getTruck)

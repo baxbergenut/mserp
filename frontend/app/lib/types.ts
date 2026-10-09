@@ -274,6 +274,13 @@ export type TruckStatus =
   | "out_of_service";
 
 export type DriverStatus = "active" | "vacation" | "home" | "terminated";
+export interface DriverStatusChange {
+  status: DriverStatus;
+  terminationDate: string;
+  assignmentWeek: string;
+  chargePauseWeek: string;
+  updatedAt: string;
+}
 export interface Driver {
   status?: DriverStatus;
   terminationDate?: string | null;
@@ -910,6 +917,9 @@ export interface DriverPayEdits {
   version: number;
 }
 export interface DriverPayLoad {
+  boardVersion?: number;
+  systemOriginalRate?: string;
+  systemMiles?: string;
   sourceDriverId?: string;
   driverFee?: string;
   date: string;
@@ -950,7 +960,38 @@ export interface DriverPayDriver {
   loads: DriverPayLoad[];
   edits: DriverPayEdits;
 }
+export interface PaySourceAcceptance {
+  driverId: string;
+  date: string;
+  slot: number;
+  version: number;
+  loadRecordId: number;
+  originalRate: string;
+  miles: string;
+}
+export interface PayPageQuery {
+  page: number;
+  pageSize: number;
+  search: string;
+  dispatcherId: string;
+  statementId: string;
+}
+export interface PayPageInfo {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  dispatchers: { id: string; name: string }[];
+  rowIds?: string[];
+  finalized: number;
+  statements: number;
+  loads: number;
+  review: number;
+  fee: string;
+  payable: string;
+}
 export interface DriverPayWeek {
+  pagination?: PayPageInfo;
   setupRequired?: { truckId: string; truckUnit: string; ownerId: string; ownerName: string; driverId?: string; driverName?: string; dispatcherId?: string; dispatcherName?: string }[];
  issues?: string[];
  revision: string;
@@ -1076,5 +1117,6 @@ export type CompactBoardLoads = Omit<BoardLoads, "current" | "week" | "next" | "
 };
 export type CompactDriverBoard = Omit<DriverBoard, "loads"> & { plans: BoardLoad[]; loads: Record<string, CompactBoardLoads> };
 
-export interface EscrowTaskDetail { driverId: string; terminationDate: string; dueDate: string; escrows: Escrow[] }
+export interface EscrowTaskDetail {
+ decision: EscrowTaskDecision["decision"]; driverId: string; terminationDate: string; dueDate: string; escrows: Escrow[] }
 export interface EscrowTaskDecision { decision: "released" | "partially_released" | "kept"; reason: string; versions: Record<string, number> }

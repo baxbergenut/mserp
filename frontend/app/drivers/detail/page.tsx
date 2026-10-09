@@ -15,6 +15,7 @@ import { ErrorBanner } from "@/app/components/management/ManagementUI";
 import { RelatedExpenses } from "@/app/components/expenses/RelatedExpenses";
 import { DriverChargeSummary } from "./DriverChargeSummary";
 import { AssignmentHistory } from "./AssignmentHistory";
+import { DriverStatusDialog } from "../DriverStatusDialog";
 import { DriverEditor } from "./DriverEditor";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { OwnershipPanel } from "@/app/components/fleet/OwnershipPanel";
@@ -36,6 +37,7 @@ export default function DriverDetailPage() {
   const [truck, setTruck] = useState<Truck | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useViewState<typeof tabs[number]>("page:tab", "Overview");
+  const [changingStatus, setChangingStatus] = useState(false);
   const [editing, setEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function DriverDetailPage() {
     {!driver && !error && <p className="py-12 text-center text-zinc-500">Loading driver…</p>}
     {driver && <>
       <header className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6"><div className="flex min-w-0 gap-4"><div className="min-w-0 break-words"><PageHeader><div><div className="flex flex-wrap items-center gap-3"><UserRound className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">{driver.fullName}</h1><span className={`rounded-full px-2 py-0.5 text-xs ${driver.active ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-400"}`}>{(driver.status ?? (driver.active ? "active" : "terminated")).replace(/^./, c => c.toUpperCase())}</span></div></div></PageHeader><div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400"><span className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{formatPhone(driver.phone) || "No phone"}</span><span className="flex items-center gap-1.5"><Mail className="h-3 w-3" />{driver.email || "No email"}</span></div></div></div>{permissions.includes("fleet.write") && <button className="ui-button ui-button-primary" onClick={() => setEditing(true)}><Pencil />Edit driver</button>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6"><div className="flex min-w-0 gap-4"><div className="min-w-0 break-words"><PageHeader><div><div className="flex flex-wrap items-center gap-3"><UserRound className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">{driver.fullName}</h1><span className={`rounded-full px-2 py-0.5 text-xs ${driver.active ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-400"}`}>{(driver.status ?? (driver.active ? "active" : "terminated")).replace(/^./, c => c.toUpperCase())}</span></div></div></PageHeader><div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400"><span className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{formatPhone(driver.phone) || "No phone"}</span><span className="flex items-center gap-1.5"><Mail className="h-3 w-3" />{driver.email || "No email"}</span></div></div></div>{permissions.includes("fleet.write") && <div className="flex gap-2"><button className="ui-button" onClick={() => setChangingStatus(true)}>Change status</button><button className="ui-button ui-button-primary" onClick={() => setEditing(true)}><Pencil />Edit driver</button></div>}</div>
         <dl className="grid grid-cols-1 gap-px sm:grid-cols-2 border-t border-zinc-800 bg-zinc-800 md:grid-cols-4">{[["Compensation", rate], ["Current truck", driver.truckUnit || "Unassigned"], ["Dispatcher", driver.dispatcherName || "Unassigned"], ["Truck owner", currentTruck?.ownerName || "No truck assigned"]].map(([label, value]) => <div key={label} className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{label === "Current truck" && driver.truckId ? <Link href={`/trucks/detail?id=${driver.truckId}`}>{value}</Link> : label === "Dispatcher" && driver.dispatcherId ? <Link href={`/dispatchers/detail?id=${driver.dispatcherId}`}>{value}</Link> : label === "Truck owner" && currentTruck?.ownerId ? <Link href={`/investors/detail?id=${currentTruck.ownerId}`}>{value}</Link> : value}</dd></div>)}</dl>
       </header>
       <nav className="flex flex-wrap gap-1 border-b border-zinc-800" aria-label="Driver sections">{visibleTabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`border-b-2 px-3 py-3 text-xs font-medium ${tab === name ? "border-blue-500 text-blue-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{name}</button>)}</nav>
@@ -81,6 +83,7 @@ export default function DriverDetailPage() {
       {expenseCategoryAccess.length > 0 && tab === "Company & other expenses" && <><RelatedExpenses driverId={driver.id} scope="non_personal" /></>}
       {tab === "Ownership" && investor && <OwnershipPanel key={investor.id} investor={investor} />}
       {tab === "Assignments" && <AssignmentHistory key={driver.updatedAt} driverId={driver.id} />}
+      {changingStatus && <DriverStatusDialog driver={driver} onClose={() => setChangingStatus(false)} onSaved={value => { setDriver(value); setChangingStatus(false); }} />}
       {editing && <DriverEditor driver={driver} onClose={() => setEditing(false)} onSaved={value => { setDriver(value); setEditing(false); }} />}
     </>}
   </div>;

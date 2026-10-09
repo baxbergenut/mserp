@@ -3,13 +3,14 @@
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
-import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
+import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { carryBreakdown, costAmount, costRows, driverTotals } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
 import { ExpenseRows } from "./ExpenseRows";
 import { StatementMenu } from "./StatementMenu";
+import { PaySourceCell } from "./PaySourceCell";
 import { CommentButton } from "./CommentButton";
 
 export const payButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -28,6 +29,8 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 type Props = {
+  onAcceptSource?: (load: DriverPayLoad) => Promise<void>;
+  sourceActionDisabled?: boolean;
   returnToPay?: boolean;
  onSettlement?: (reopen: boolean) => void;
  settlementDisabled?: boolean;
@@ -41,7 +44,7 @@ type Props = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay }: Props) {
+export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled }: Props) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -139,9 +142,9 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
                 <td className={`${cell} text-zinc-400`}>{load.pickupDate || "—"}</td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>
-                <td className={`${numeric} text-zinc-300`}>{amount(load.originalRate, true)}</td>
+                <PaySourceCell load={load} field="originalRate" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
                 <td className={`${numeric} text-zinc-300`}>{amount(load.driverGross, true)}</td>
-                <td className={`${numeric} text-zinc-400`}>{amount(load.totalMiles)}</td>
+                <PaySourceCell load={load} field="totalMiles" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
                 <td className={`${numeric} text-zinc-400`}>{amount(load.loadedMiles)}</td>
                 <td className={`${numeric} text-zinc-400`}>{amount(load.deadheadMiles)}</td>
                 <td className={`${numeric} font-medium text-zinc-200`}>{amount(load.fee, true)}</td>

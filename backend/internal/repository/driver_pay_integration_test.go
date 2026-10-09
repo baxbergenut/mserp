@@ -177,8 +177,8 @@ func TestDriverPayDatabase(t *testing.T) {
 			if loads[0].PickupDate != "2026-09-28" || loads[0].PickupLocation != "First, OH" || loads[0].DeliveryLocation != "Last, PA" || loads[0].Fee != "635.51" || loads[0].LoadedMiles != "725.78" {
 				t.Fatalf("source mapping: %+v", loads[0])
 			}
-			if loads[2].Fee != "" || loads[2].TotalMiles != "" || loads[2].OriginalRate != "" || len(loads[2].Issues) == 0 {
-				t.Fatalf("unmatched data fabricated: %+v", loads[2])
+			if loads[2].Fee != "749.25" || loads[2].TotalMiles != "999.00" || loads[2].OriginalRate != "900.00" || len(loads[2].Issues) == 0 {
+				t.Fatalf("manual values lost or unmatched plan not flagged: %+v", loads[2])
 			}
 			if loads[3].LoadRecordID != nil {
 				t.Fatal("ambiguous load matched automatically")
@@ -315,6 +315,38 @@ func TestDriverPayDatabase(t *testing.T) {
 			// overrides may carry forward from the previous driver's week.
 			if next.Drivers[0].FuelTotal != "999.00" || next.Drivers[0].TollTotal != "0" || next.Drivers[0].Edits.FuelOverride != nil || next.Drivers[0].Edits.TollOverride != nil {
 				t.Fatal("next week costs or overrides leaked")
+			}
+			// Payroll acceptance updates the shared board entry, including extra
+			// slots, without changing dispatcher-decided driver gross.
+			report, err = pay.Get(ctx, monday)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, load := range report.Drivers[0].Loads {
+				if load.LoadRecordID == nil {
+					continue
+				}
+				input := PaySourceAcceptance{DriverID: driver, Date: load.Date, Slot: load.Slot, Version: load.BoardVersion, LoadRecordID: *load.LoadRecordID, OriginalRate: load.SystemOriginalRate, Miles: load.SystemMiles}
+				stale := input
+				stale.OriginalRate = "0.01"
+				if err = pay.AcceptPaySource(ctx, stale); !errors.Is(err, ErrDriverPayConflict) {
+					t.Fatal("stale source acceptance", err)
+				}
+				if err = pay.AcceptPaySource(ctx, input); err != nil {
+					t.Fatal("payroll acceptance", err)
+				}
+				if err = pay.AcceptPaySource(ctx, input); !errors.Is(err, ErrDriverPayConflict) {
+					t.Fatal("stale board acceptance", err)
+				}
+				current, readErr := pay.Get(ctx, monday)
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				for _, after := range current.Drivers[0].Loads {
+					if after.Date == load.Date && after.Slot == load.Slot && (after.OriginalRate != load.SystemOriginalRate || after.TotalMiles != load.SystemMiles || after.DriverGross != load.DriverGross) {
+						t.Fatal("acceptance changed driver gross or lost values", after)
+					}
+				}
 			}
 		})
 	}

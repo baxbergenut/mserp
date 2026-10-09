@@ -26,16 +26,16 @@ export function TopBar({ username }: { username: string }) {
   const [error, setError] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
+
   const term = query.trim();
-  const close = () => { setMenu(null); if (menu === "search") trigger.current?.focus(); };
+  const close = () => { setMenu(null); if (menu === "search") input.current?.blur(); };
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault(); setMenu("search");
+        event.preventDefault(); setMenu("search"); input.current?.focus();
       }
-      if (event.key === "Escape") { setMenu(null); trigger.current?.focus(); }
+      if (event.key === "Escape") { setMenu(null); }
     };
     const outside = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setMenu(null);
@@ -70,9 +70,12 @@ export function TopBar({ username }: { username: string }) {
     <header className="flex min-h-16 flex-wrap items-center gap-2 px-2 py-3 sm:gap-3 sm:px-6 xl:px-8" aria-label="Global navigation">
       <PageHeaderSlot />
       <div className="relative min-w-0 flex-1 lg:max-w-md">
-        <button ref={trigger} onClick={() => setMenu(menu === "search" ? null : "search")} aria-expanded={menu === "search"} aria-controls="global-search" className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-600"><Search className="h-4 w-4 shrink-0" /><span className="truncate">Search MSERP…</span><kbd className="ml-auto hidden whitespace-nowrap text-[11px] sm:block">Ctrl / ⌘ K</kbd></button>
+        <div className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 focus-within:border-blue-500">
+          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input ref={input} aria-label="Search records" role="combobox" aria-autocomplete="list" aria-expanded={menu === "search"} aria-controls="global-search" value={query} onFocus={() => setMenu("search")} onChange={event => { setQuery(event.target.value); setMenu("search"); }} placeholder="Search MSERP…" className="h-8 min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none" onKeyDown={event => { if (event.key === "ArrowDown") { event.preventDefault(); root.current?.querySelector<HTMLAnchorElement>("#global-search a")?.focus(); } }} />
+          {query ? <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); input.current?.focus(); }} className="text-zinc-400"><X className="h-4 w-4" /></button> : <kbd className="hidden whitespace-nowrap text-[11px] text-zinc-500 sm:block">Ctrl / ⌘ K</kbd>}
+        </div>
         {menu === "search" && <section id="global-search" aria-label="Global search" className="absolute left-0 top-full mt-2 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl">
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3"><Search className="h-4 w-4 text-zinc-500" /><input ref={input} aria-label="Search records" value={query} onChange={e => setQuery(e.target.value)} placeholder="Driver, truck, load, expense, charge or investor…" className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none" onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); root.current?.querySelector<HTMLAnchorElement>("#global-search a")?.focus(); } }} /><button aria-label="Close search" onClick={close} className="p-1 text-zinc-400"><X className="h-4 w-4" /></button></div>
       <div className="max-h-[65dvh] overflow-auto p-3" aria-live="polite">
         {term.length < 2 ? <p className="p-3 text-sm text-zinc-500">Type at least two characters to search records.</p> : !groups ? <p role="status" className="p-3 text-sm text-zinc-500">Searching…</p> : <>
           {groups.map(group => <div key={group.name}>{(group.results.length > 0 || group.failed) && <h2 className="px-3 pb-1 pt-3 text-xs font-medium text-zinc-500">{group.name}</h2>}{group.failed && <p className="px-3 py-2 text-xs text-amber-400">Could not search {group.name.toLowerCase()}. Try closing and reopening search.</p>}{group.results.map((result, index) => <IntentLink key={`${result.href}:${index}`} href={result.href} onClick={close} className={itemClass}><span className="block text-zinc-200">{result.label}</span><span className="block text-xs text-zinc-500">{result.detail}</span></IntentLink>)}</div>)}

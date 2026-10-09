@@ -40,6 +40,9 @@ import {
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
+import { usePermissions } from "../lib/access";
+import { StatementMenu } from "../accounting/driver-pay/StatementMenu";
+import { DriverStatusDialog } from "./DriverStatusDialog";
 import { DriverForm, driverToInput, emptyDriverInput } from "./DriverForm";
 
 
@@ -48,6 +51,10 @@ export default function DriversPage() {
 }
 
 function DriversContent() {
+  const permissions = usePermissions();
+  const [statusDriver, setStatusDriver] = useState<Driver | null>(null);
+  const [statusMenu, setStatusMenu] = useState<{ driver: Driver; x: number; y: number } | null>(null);
+  const closeStatusMenu = useCallback(() => setStatusMenu(null), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const setupID = searchParams.get("setup");
@@ -303,7 +310,7 @@ function DriversContent() {
             </thead>
             <tbody>
               {drivers.map((driver) => (
-                <tr key={driver.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
+                <tr key={driver.id} tabIndex={!driver.intakeId && permissions.includes("fleet.write") ? 0 : undefined} onContextMenu={event => { if (!driver.intakeId && permissions.includes("fleet.write")) { event.preventDefault(); setStatusMenu({ driver, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (!driver.intakeId && permissions.includes("fleet.write") && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatusMenu({ driver, x: rect.left + 12, y: rect.bottom }); } }} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="font-medium text-zinc-200 hover:text-blue-400">{driver.fullName}</button> : <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>}{driver.intakeId && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">New</span>}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{formatPhone(driver.phone) || driver.email || "No contact info"}</div>
@@ -349,6 +356,8 @@ function DriversContent() {
         />
       )}
 
+      {statusMenu && <StatementMenu {...statusMenu} label="Change driver status" onClose={closeStatusMenu} onSelect={() => setStatusDriver(statusMenu.driver)} />}
+      {statusDriver && <DriverStatusDialog driver={statusDriver} onClose={() => setStatusDriver(null)} onSaved={() => { setStatusDriver(null); void loadData(); }} />}
       {editing !== undefined && (
         <Modal
           title={intake ? `Set up ${intake.driver.fullName}` : editing ? `Edit ${editing.fullName}` : "Add driver"}

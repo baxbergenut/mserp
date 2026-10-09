@@ -23,6 +23,7 @@ func (r *CustomTaskRepository) GenerateEscrowTasks(ctx context.Context) error {
 }
 
 type EscrowTaskDetail struct {
+	Decision        string   `json:"decision"`
 	DriverID        string   `json:"driverId"`
 	TerminationDate string   `json:"terminationDate"`
 	DueDate         string   `json:"dueDate"`
@@ -63,18 +64,34 @@ func (r *EscrowRepository) TaskDetail(ctx context.Context, id string) (EscrowTas
 			}
 		}
 	}
+	var held, released string
+	err = r.pool.QueryRow(ctx, `WITH b AS (`+escrowBalancesSQL+`) SELECT coalesce(sum(held_amount),0)::text,
+ coalesce((SELECT sum(r.amount) FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=nullif($1,'')::uuid AND NOT r.cancelled AND (r.created_at AT TIME ZONE 'America/New_York')::date >= $2::date),0)::text FROM b WHERE driver_id=nullif($1,'')::uuid`, result.DriverID, result.TerminationDate).Scan(&held, &released)
+	if err != nil {
+		return result, err
+	}
+	h, _ := chargeCents(held)
+	v, _ := chargeCents(released)
+	result.Decision = escrowReviewDecision(h, v)
 	return result, nil
+}
+
+func escrowReviewDecision(held, released int64) string {
+	if released <= 0 {
+		return "kept"
+	}
+	if held > 0 {
+		return "partially_released"
+	}
+	return "released"
 }
 
 // Completion never moves money. It validates actual releases under the same
 // driver/escrow locks as financial writes and records the reviewed balances.
 func (r *EscrowRepository) CompleteTask(ctx context.Context, id, actor string, input EscrowTaskDecision) error {
 	input.Reason = strings.TrimSpace(input.Reason)
-	if input.Reason == "" || len([]rune(input.Reason)) > 5000 || strings.ContainsRune(input.Reason, 0) {
-		return chargeInvalid("Provide a reason (1–5000 characters)")
-	}
-	if input.Decision != "released" && input.Decision != "partially_released" && input.Decision != "kept" {
-		return chargeInvalid("Choose a release outcome")
+	if len([]rune(input.Reason)) > 5000 || strings.ContainsRune(input.Reason, 0) {
+		return chargeInvalid("Reason must contain at most 5,000 characters without null characters")
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -153,14 +170,9 @@ func (r *EscrowRepository) CompleteTask(ctx context.Context, id, actor string, i
 	if err != nil {
 		return err
 	}
-	if input.Decision == "released" && (releasedCents <= 0 || heldCents != 0) {
-		return chargeInvalid("Fully release the escrow balance before completing as released")
-	}
-	if input.Decision == "partially_released" && (releasedCents <= 0 || heldCents <= 0) {
-		return chargeInvalid("Record a partial escrow release before completing as partially released")
-	}
-	if input.Decision == "kept" && releasedCents > 0 {
-		return chargeInvalid("A release is recorded; choose the matching release outcome")
+	input.Decision = escrowReviewDecision(heldCents, releasedCents)
+	if input.Decision != "released" && input.Reason == "" {
+		return chargeInvalid("Provide a reason for escrow that is partially released or retained")
 	}
 	if _, err = tx.Exec(ctx, `UPDATE escrow_release_reviews SET decision=$2,reason=$3,balance_snapshot=$4::jsonb,completed_by=$5,completed_at=now() WHERE id=$1`, id, input.Decision, input.Reason, json.RawMessage(snapshot), actor); err != nil {
 		return err

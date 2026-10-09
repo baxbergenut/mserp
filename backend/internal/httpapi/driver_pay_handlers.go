@@ -186,16 +186,25 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeJSON(w, 200, result)
 		})
 	}
+	registerPaySourceAcceptance(r, "/driver-pay", repo, fail)
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
+		query, queryErr := payPageQuery(r)
+		if queryErr != nil {
+			writeAPIError(w, 400, queryErr.Error())
+			return
+		}
 		result, err := repo.Get(r.Context(), week)
 		if err != nil {
 			fail(w, err)
 			return
+		}
+		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+			result = repository.PaginatePay(result, query)
 		}
 		writeJSON(w, 200, result)
 	})

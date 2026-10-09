@@ -94,7 +94,7 @@ export function DriverForm({
   showEscrow?: boolean;
 }) {
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
-    onChange({ ...value, [key]: next, ...(["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
+    onChange({ ...value, [key]: next, ...(!showEscrow && ["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
 
   return (
     <div className="space-y-6">
@@ -194,9 +194,11 @@ export function DriverForm({
             <option value="owner">Owner-operator</option>
           </select>
         </Field>
-        <Field label="Hire date">
+        <Field label={showEscrow ? "Driver started working" : "Hire date"} hint={showEscrow ? "Truck, dispatcher and roster assignments start in this date’s Monday–Sunday week. Escrow starts on this date." : undefined}>
           <input
             type="date"
+            aria-label={showEscrow ? "Driver started working" : "Hire date"}
+            required={showEscrow}
             value={value.hireDate}
             onChange={(event) => set("hireDate", event.target.value)}
             className={controlClass}
@@ -269,7 +271,7 @@ export function DriverForm({
       </FormSection>
 
       <FormSection title="Assignments">
-        <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
+        {!showEscrow && <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />}
         <Field label="Dispatcher">
           <select
             value={value.dispatcherId ?? ""}

@@ -36,6 +36,10 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	outcomeMigration, err := os.ReadFile("../../sql/071_escrow_review_inferred_outcome.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	notifications, err := os.ReadFile("../../sql/070_escrow_review_notifications.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -63,6 +67,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy inactive','legacy inactive','cpm',0.75,false)`)
 				exec(string(migration))
 				exec(string(notifications))
+				exec(string(outcomeMigration))
 				var converted bool
 				if err = admin.QueryRow(ctx, `SELECT status='terminated' AND termination_date=(now() AT TIME ZONE 'America/New_York')::date-30 FROM drivers WHERE full_name='Legacy inactive'`).Scan(&converted); err != nil || !converted {
 					t.Fatal("inactive conversion", err)
@@ -167,9 +172,9 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 				}
 				return result
 			}
-			input := EscrowTaskDecision{Decision: "released", Reason: "Test verified", Versions: versions()}
+			input := EscrowTaskDecision{Decision: "released", Versions: versions()}
 			if err = repo.CompleteTask(viewer, task, second, input); err == nil {
-				t.Fatal("unreleased completion allowed")
+				t.Fatal("unreleased completion without a reason allowed")
 			}
 			release := EscrowReleaseInput{ID: scalar(`SELECT gen_random_uuid()::text`), WeekStart: ChargeCurrentWeek(), Amount: "500.00", EscrowVersion: input.Versions[escrow]}
 			if err = repo.SaveRelease(viewer, escrow, release, second); err != nil {

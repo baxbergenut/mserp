@@ -12,7 +12,7 @@ import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { MetricCard } from "@/app/components/MetricCard";
-import { controlClass } from "@/app/components/management/ManagementUI";
+import { ManagementSearch, controlClass } from "@/app/components/management/ManagementUI";
 import { parseBoardLoadTarget } from "./loadLink";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
@@ -33,14 +33,15 @@ export default function GrossBoardPage() {
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
   const [week, setWeek] = useState(() => loadTarget?.week ?? currentChargeWeek());
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", loadTarget ? "all" : undefined);
+  const [search, setSearch] = useViewState("page:search", "", loadTarget ? "" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
   useEffect(() => {
     const target = parseBoardLoadTarget(searchParams.toString());
     if (!target) return;
-    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher("all"); }, 0);
+    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher("all"); setSearch(""); }, 0);
     return () => clearTimeout(timer);
-  }, [setDispatcher, setWeek, searchParams]);
+  }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
   const [loading, setLoading] = useState(true);
@@ -121,7 +122,7 @@ export default function GrossBoardPage() {
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
-  const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => dispatcher === "all" || driver.dispatcherId === dispatcher), [board, dispatcher]);
+  const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => (dispatcher === "all" || driver.dispatcherId === dispatcher) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [board, dispatcher, search]);
   const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName])).entries()), [board]);
   const shownEntries = useMemo(() => {
     const ids = new Set(drivers.map((driver) => driver.id));
@@ -221,7 +222,7 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (!dirty || saving || error || invalid || loading) return;
-    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 5000);
+    const timer = setTimeout(() => { void save(); }, 0);
     return () => clearTimeout(timer);
   }, [dirty, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
@@ -262,6 +263,7 @@ export default function GrossBoardPage() {
         </div>
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
+        <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers…" /></div>
         <label className="ml-auto flex items-center gap-2 text-xs text-zinc-400">Dispatcher
           <select aria-label="Dispatcher" className={`${controlClass} !w-48`} value={dispatcher} onChange={(event) => setDispatcher(event.target.value)} disabled={saving}>
             <option value="all">All dispatchers</option>

@@ -8,6 +8,7 @@ import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
 import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
 import { runEscrowTasksE2E } from './escrow-tasks-e2e.mjs';
+import { runPayrollWorkflowsE2E } from './payroll-workflows-e2e.mjs';
 import { runOffboardingE2E } from './offboarding-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
@@ -91,7 +92,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--escrow-only')) {
+  if (process.argv.includes('--payroll-workflows-only')) {
+    await runPayrollWorkflowsE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--escrow-only')) {
     await runEscrowTasksE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--profiles-only')) {
     await runProfilesE2E({ page, base, sql, schema, temp });
@@ -165,6 +168,7 @@ try {
   await runInvestorPayE2E({ page, base, sql, schema, temp });
   await runDriverBoardE2E({ page, base, sql, schema, temp });
   await runAssignmentWeekE2E({ page, base, sql, schema });
+  await runPayrollWorkflowsE2E({ page, base, sql, schema, temp });
   await page.goto(`${base}/investors`);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();

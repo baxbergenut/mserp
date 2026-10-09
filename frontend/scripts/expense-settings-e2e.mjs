@@ -23,7 +23,7 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   await page.getByLabel('Full name', { exact: true }).fill('Escrow Test Driver');
   await page.getByRole('spinbutton', { name: /^Rate per mile/ }).fill('0.75');
   await setupEscrow.fill('2650');
-  await page.getByLabel('Hire date', { exact: true }).fill('2026-09-28');
+  await page.getByLabel('Driver started working', { exact: true }).fill('2026-09-28');
   await page.getByRole('button', { name: 'Create driver', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const drivers = await (await page.request.get(`${base}/api/drivers?page=1&pageSize=100`)).json();

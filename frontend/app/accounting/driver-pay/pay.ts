@@ -1,4 +1,4 @@
-import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
+import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayWeek } from "@/app/lib/types";
 import { decimalDisplay, hundredths, validDecimal } from "@/app/gross-board/board";
 
 export function carryBreakdown(current: bigint, carried: bigint): string | undefined {
@@ -25,6 +25,22 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? [])].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   return { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
+}
+
+// Keep the all-filtered-rows summary current when one visible statement saves.
+// Other pages' amounts remain included, and in-flight drafts stay in changes.
+export function applyPaySave(report: DriverPayWeek, saved: DriverPayEdits): DriverPayWeek {
+  let delta = BigInt(0);
+  const drivers = report.drivers.map(driver => {
+    if (driver.id !== saved.driverId) return driver;
+    delta += driverTotals(driver, saved).payable - driverTotals(driver, driver.edits).payable;
+    return { ...driver, edits: saved };
+  });
+  if (!report.pagination) return { ...report, drivers };
+  const value = hundredths(report.pagination.payable) + delta;
+  const magnitude = value < BigInt(0) ? -value : value;
+  const payable = `${value < BigInt(0) ? "-" : ""}${magnitude / BigInt(100)}.${String(magnitude % BigInt(100)).padStart(2, "0")}`;
+  return { ...report, drivers, pagination: { ...report.pagination, payable } };
 }
 
 export const costRows = [{ key: "fuel", label: "Fuel" }, { key: "toll", label: "Toll" }] as const;

@@ -269,6 +269,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 
 // Shared by manual entry and atomic completion of a FleetScope intake.
 func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
+	if input.HireDate != nil {
+		input.AssignmentWeek = input.HireDate.AddDate(0, 0, -(int(input.HireDate.Weekday())+6)%7).Format(time.DateOnly)
+	}
 	if input.Status != "" {
 		input.Active = input.Status != "terminated"
 	}
@@ -311,7 +314,7 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, actor string) error {
 	_, err := tx.Exec(ctx, `
         INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,created_by)
-        SELECT d.id,d.full_name,greatest(coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),DATE '2026-09-28'),
+        SELECT d.id,d.full_name,coalesce(d.hire_date,(now() AT TIME ZONE 'America/New_York')::date),
                coalesce(nullif($2,'')::numeric,s.default_amount),nullif($3,'')::uuid
         FROM drivers d CROSS JOIN driver_escrow_settings s WHERE d.id=$1`, driverID, amount, actor)
 	return err

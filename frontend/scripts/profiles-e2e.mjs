@@ -76,10 +76,9 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   const historicalPay = await (await page.request.get(`${base}/api/investor-pay?weekStart=2026-09-28&truckId=${f.extraTruck}`)).json();
   expect(historicalPay.drivers.find(d => d.id === f.extraTruck).settlement.finalized).toBe(true);
   expect(historicalPay.revision).toBe(hiddenPay.revision);
-  await page.getByRole('button', { name: /Search MSERP/ }).click();
-  await page.getByRole('textbox', { name: 'Search records' }).fill('Morgan Hayes');
+  await page.getByRole('combobox', { name: 'Search records' }).fill('Morgan Hayes');
   const search = page.getByRole('region', { name: 'Global search' });
-  await expect(search.getByRole('link', { name: /Inactive driver/ })).toHaveAttribute('href', `/drivers/detail?id=${f.owner}`);
+  await expect(search.getByRole('link', { name: /Terminated driver/ })).toHaveAttribute('href', `/drivers/detail?id=${f.owner}`);
   await expect(search.getByRole('link', { name: /Active investor/ })).toHaveAttribute('href', `/investors/detail?id=${f.investor}`);
   await page.keyboard.press('Escape');
   await page.goto(`${base}/investors/detail?id=${f.investor}`);

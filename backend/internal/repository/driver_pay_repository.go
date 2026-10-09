@@ -47,23 +47,26 @@ type DriverPayEdits struct {
 	GeneratedCharges  []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
-	SourceDriverID   string   `json:"sourceDriverId,omitempty"`
-	DriverFee        string   `json:"driverFee,omitempty"`
-	Date             string   `json:"date"`
-	Slot             int      `json:"slot"`
-	LoadNumber       string   `json:"loadNumber"`
-	LoadRecordID     *int     `json:"loadRecordId"`
-	CommentKey       string   `json:"commentKey"`
-	PickupDate       string   `json:"pickupDate"`
-	PickupLocation   string   `json:"pickupLocation"`
-	DeliveryLocation string   `json:"deliveryLocation"`
-	OriginalRate     string   `json:"originalRate"`
-	DriverGross      string   `json:"driverGross"`
-	TotalMiles       string   `json:"totalMiles"`
-	LoadedMiles      string   `json:"loadedMiles"`
-	DeadheadMiles    string   `json:"deadheadMiles"`
-	Fee              string   `json:"fee"`
-	Issues           []string `json:"issues"`
+	BoardVersion       int      `json:"boardVersion"`
+	SystemOriginalRate string   `json:"systemOriginalRate"`
+	SystemMiles        string   `json:"systemMiles"`
+	SourceDriverID     string   `json:"sourceDriverId,omitempty"`
+	DriverFee          string   `json:"driverFee,omitempty"`
+	Date               string   `json:"date"`
+	Slot               int      `json:"slot"`
+	LoadNumber         string   `json:"loadNumber"`
+	LoadRecordID       *int     `json:"loadRecordId"`
+	CommentKey         string   `json:"commentKey"`
+	PickupDate         string   `json:"pickupDate"`
+	PickupLocation     string   `json:"pickupLocation"`
+	DeliveryLocation   string   `json:"deliveryLocation"`
+	OriginalRate       string   `json:"originalRate"`
+	DriverGross        string   `json:"driverGross"`
+	TotalMiles         string   `json:"totalMiles"`
+	LoadedMiles        string   `json:"loadedMiles"`
+	DeadheadMiles      string   `json:"deadheadMiles"`
+	Fee                string   `json:"fee"`
+	Issues             []string `json:"issues"`
 }
 type PayPerson struct {
 	ID   string `json:"id"`
@@ -93,6 +96,7 @@ type DriverPayDriver struct {
 	Edits            DriverPayEdits     `json:"edits"`
 }
 type DriverPayWeek struct {
+	Pagination    *PayPageInfo         `json:"pagination,omitempty"`
 	SetupRequired []InvestorTruckSetup `json:"setupRequired,omitempty"`
 	Issues        []string             `json:"issues,omitempty"`
 	Revision      string               `json:"revision"`
@@ -161,7 +165,8 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
- coalesce(l.total_pay::text,''),coalesce(e.driver_rate::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
+ coalesce(coalesce(e.entered_original_rate,l.total_pay,e.original_rate)::text,''),coalesce(e.driver_rate::text,''),
+ coalesce(coalesce(e.entered_miles,l.total_miles,e.miles)::text,''),coalesce(e.version,0),coalesce(l.total_pay::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text
  FROM drivers d LEFT JOIN `+grossBoardEntriesSQL+` e ON d.id=e.driver_id
@@ -193,7 +198,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var l DriverPayLoad
 		var raw, comments, adjustments []byte
 		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.IsOwnerOperator,
-			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &raw,
+			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal); err != nil {
 			return result, err
@@ -223,7 +228,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		}
 		l.Fee = driverPayFee(d.PayType, d.PayRate, basis)
 		if l.Fee == "" {
-			l.Issues = append(l.Issues, "Pay needs a valid tariff and "+map[bool]string{true: "system mileage", false: "Gross Board driver gross"}[d.PayType == "cpm"])
+			l.Issues = append(l.Issues, "Pay needs a valid tariff and "+map[bool]string{true: "Gross Board mileage", false: "Gross Board driver gross"}[d.PayType == "cpm"])
 		}
 		i, ok := index[d.ID]
 		if !ok {

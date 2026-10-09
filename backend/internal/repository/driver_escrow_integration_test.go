@@ -59,6 +59,10 @@ func TestDriverEscrowDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	outcomeMigration, err := os.ReadFile("../../sql/071_escrow_review_inferred_outcome.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	notifications, err := os.ReadFile("../../sql/070_escrow_review_notifications.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +88,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				if !strings.Contains(source, replenishmentBody) {
 					t.Fatal("replenishment migration must match the fresh schema")
 				}
+				source = strings.Replace(source, strings.ReplaceAll(string(outcomeMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(notifications), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(statusMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, replenishmentBody, "", 1)
@@ -109,6 +114,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 				exec(string(replenishment))
 				exec(string(statusMigration))
 				exec(string(notifications))
+				exec(string(outcomeMigration))
 			}
 			for _, table := range []string{"driver_escrow_settings", "driver_escrows", "driver_escrow_payments"} {
 				var owner string

@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `070_escrow_review_notifications.sql`:
+  `071_escrow_review_inferred_outcome.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -402,7 +402,7 @@ assignment lookup lists.
   `drivers.driver_home` is a separate optional home-base field (not the mailing
   address), shared by profiles and the board. Database-triggered home versions
   prevent stale profile/board overwrites; older clients omitting home preserve it.
-  Five-second autosave writes changed rows atomically with optimistic versions;
+  Five-second Status Board autosave writes changed rows atomically with optimistic versions;
   clearing retains versions, navigation flushes, conflicts retain local drafts,
   and visible idle boards refresh every 30 seconds/on focus. Drafts are never
   persisted in view memory. Tests use disposable local
@@ -854,14 +854,14 @@ assignment lookup lists.
   atomic version-checked batch; stale saves return 409. Cleared days retain
   their version to prevent lost updates. The grid keeps one row per driver: multi-load days show slash-separated
   references and summed amounts, with a hover breakdown and staged modal editor.
-  Autosave waits for a five-second pause
-  in editing; week navigation flushes pending changes immediately. Memoized day
+  Autosave starts immediately for valid edits, serializes requests and sends
+  queued typing after the current request finishes; week navigation flushes pending changes. Memoized day
   cells and a stable edit callback keep typing from re-rendering the whole grid.
 
 - Driver Pay follows Gross Board placement, including unmatched plans, all load
   statuses, and inactive drivers with entries. Driver sections start collapsed.
   Percentage fees use Gross Board driver gross times the current driver profile
-  percentage; CPM fees use system total miles times the profile tariff. Exact
+  percentage; CPM fees use Gross Board entered/fallback miles times the profile tariff. Exact
   decimals round each fee to cents, and totals sum visible rounded fees. Missing
   source details stay blank; unmatched/incomplete rows and provisional totals
   are marked for review. Percentage-pay drivers have permanent Fuel and Toll rows
@@ -894,8 +894,8 @@ assignment lookup lists.
   editor applies valid edits and awaits Gross Board autosave before Back to
   Driver Pay returns to the accountant's prior view.
   Notes, load comments, and named additions/reimbursements/deductions belong to
-  a driver/week in `driver_pay_weeks`, with version checks and autosave after a
-  750ms editing pause. Navigation flushes immediately; in-flight edits stay queued.
+  a driver/week in `driver_pay_weeks`, with version checks and immediate autosave
+  for valid edits. Navigation flushes immediately; in-flight edits stay queued.
   Comments are keyed by date, slot, and normalized load number so replacing a
   load does not reuse its old comment. DataTruck stop ordering selects the first
   pickup and final delivery; trip `mile`/`empty_mile` supply loaded/deadhead miles.
@@ -1528,7 +1528,9 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   assigneeId remains the compatibility primary; all assignees share a single task.
   Active assignees and Administrators can see it, with normal Tasks/Escrow permissions.
   GET /tasks/escrow/{id} returns review balances; POST /tasks/escrow/{id}/complete
-  requires a released/partially_released/kept decision, reason, and every escrow
+  derives released/partially_released/kept from actual releases and held funds;
+  caller decisions are compatibility inputs only. A reason is required only for
+  partial releases or retained funds (migration 071), along with every escrow
   version. Driver/escrow locks validate actual releases and retain actor/balance
   snapshots. Generic task edits cannot complete system reviews.
 - PUT /escrows/{id}/opening edits Previously paid during the transition with
@@ -1543,3 +1545,31 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 
 Migration 070 also publishes task invalidations when a termination review date is
 corrected, so an open Tasks page removes reviews whose due date moves forward.
+
+## Working start dates and paginated payroll
+
+- New-driver setup asks when the driver started working. Creation derives the
+  assignment/roster Monday from hireDate; truck and dispatcher assignments share
+  that week, and escrow starts on the actual selected date. Existing profile
+  assignment edits keep the explicit Assignment starts week control.
+- PATCH /drivers/{id}/status accepts status, updatedAt, assignmentWeek and, for
+  termination, terminationDate/chargePauseWeek. It updates status only under the
+  managed driver locks, rejects stale profiles, and retains the existing charge
+  pause, assignment release and escrow-review workflow. Directory context menus
+  and profile Change status share DriverStatusDialog.
+- GET /driver-pay and /investor-pay accept page/pageSize, search, dispatcherId
+  (including __unassigned), and statementId. Paging runs after complete financial
+  routing/carry/frozen overlays and uses the snapshot cache; only the selected
+  rows are transferred/rendered. pagination includes totals across all matching
+  rows, complete dispatcher choices and week-wide finalized counts. Legacy reads
+  remain complete reports. Whole-week actions fetch/review the full report and
+  ignore filters/pages. Unsaved edits retain navigation protections.
+- Both payroll statements show entered/fallback original gross and miles, with
+  DataTruck comparison values and red mismatches. POST /driver-pay/accept-system
+  and /investor-pay/accept-system require payroll.write and a driver/date/slot,
+  board version, source record ID and reviewed source gross/miles. They update
+  only Gross Board original gross/miles, reject stale board/source values and
+  finalized related settlements, and preserve driver gross and plan identity.
+- node scripts/test-investors-e2e.mjs --payroll-workflows-only covers corrections,
+  pagination/search, working start dates, quick status changes, global/Gross Board
+  search, all seven themes and narrow layouts against an isolated API/database.

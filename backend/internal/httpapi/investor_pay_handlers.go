@@ -76,6 +76,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		}
 		w.WriteHeader(204)
 	})
+	registerPaySourceAcceptance(r, "/investor-pay", pay, fail)
 	r.Get("/investor-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
@@ -87,10 +88,18 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 400, "Invalid truck")
 			return
 		}
+		query, queryErr := payPageQuery(r)
+		if queryErr != nil {
+			writeAPIError(w, 400, queryErr.Error())
+			return
+		}
 		v, err := pay.InvestorPay(r.Context(), week, target)
 		if err != nil {
 			fail(w, err)
 			return
+		}
+		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+			v = repository.PaginatePay(v, query)
 		}
 		writeJSON(w, 200, v)
 	})

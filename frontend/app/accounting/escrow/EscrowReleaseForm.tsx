@@ -36,7 +36,7 @@ export function EscrowReleaseForm({ escrow, release, anchor, onClose, onSaved }:
   }
   return createPortal(<dialog ref={dialog} aria-label={release ? "Edit escrow release" : "Release escrow"}
     onCancel={event => { event.preventDefault(); if (!saving) onClose(); }}
-    className="fixed m-0 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-zinc-200 shadow-2xl backdrop:bg-black/30"
+    className="mserp-ui fixed m-0 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-zinc-200 shadow-2xl backdrop:bg-black/30"
     style={{ left: Math.max(12, Math.min(anchor.left, window.innerWidth - 332)), top: Math.max(12, Math.min(anchor.bottom + 8, window.innerHeight - 400)) }}>
     <div className="mb-3 flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">{release ? "Edit release" : "Release escrow"}</h2><p className="mt-1 truncate text-xs text-zinc-500">{escrow.driverName}</p></div><button type="button" aria-label="Close release" disabled={saving} onClick={onClose} className="p-1 text-zinc-500 hover:text-zinc-200"><X className="h-4 w-4" /></button></div>
     <p className="mb-3 text-xs text-zinc-400">Available <span className="float-right font-mono text-zinc-200">{decimalDisplay(available, true)}</span></p>

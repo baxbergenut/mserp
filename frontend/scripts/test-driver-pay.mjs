@@ -5,7 +5,7 @@ import ts from "typescript";
 const compile = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString("base64")}`;
 const board = compile(readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8"));
 const pay = readFileSync(new URL("../app/accounting/driver-pay/pay.ts", import.meta.url), "utf8").replace('"@/app/gross-board/board"', JSON.stringify(board));
-const { costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } = await import(compile(pay));
+const { applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } = await import(compile(pay));
 const edits = { driverId: "driver", weekStart: "2026-09-28", version: 0, notes: "", comments: {}, adjustments: [
   { id: "a", kind: "reimbursement", amount: "0.10" }, { id: "b", kind: "addition", amount: "0.20" }, { id: "c", kind: "deduction", amount: "10.25" },
 ] };
@@ -21,6 +21,12 @@ assert.deepEqual(reconcilePaySave({ driver: edits }, edits, saved), {});
 const later = { ...edits, notes: "Typed during save" };
 assert.deepEqual(reconcilePaySave({ driver: later }, edits, saved).driver, { ...later, version: 1 });
 console.log("Driver pay checks passed: exact adjustment totals, missing fees, and autosave reconciliation.");
+const pageReport = { drivers: [{ id: 'driver', loads: [load], edits }], pagination: { payable: '5000.00' } };
+const changed = { ...edits, adjustments: [...edits.adjustments, { id: 'new', kind: 'deduction', name: 'Fee', amount: '50.01' }] };
+const savedPage = applyPaySave(pageReport, changed);
+assert.equal(savedPage.pagination.payable, '4949.99');
+assert.equal(applyPaySave(savedPage, changed).pagination.payable, '4949.99');
+assert.equal(pageReport.pagination.payable, '5000.00');
 const inlineEdits = { ...edits, adjustments: [{ id: "a", kind: "deduction", name: "Parking", amount: "25.50" }] };
 assert.equal(validAdjustments(inlineEdits), true);
 assert.equal(driverTotals({ loads: [load] }, inlineEdits).payable, BigInt(61001));

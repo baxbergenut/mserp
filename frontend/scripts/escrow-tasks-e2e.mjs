@@ -62,14 +62,15 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  }
  const blocked=await page.request.patch(`${base}/api/tasks/custom/${taskFor('full').id}`,{headers,data:{completed:true}});expect([400,404,409]).toContain(blocked.status());
  await fullTask.click();
- await page.getByLabel('Reason',{exact:true}).fill('Verified full return');
- await page.getByRole('button',{name:'Complete escrow review',exact:true}).click();
- await expect(page.getByText('Fully release the escrow balance before completing as released', {exact:true})).toBeVisible();
+ await expect(page.getByLabel('Reason',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Outcome',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Refresh balances',exact:true})).toHaveCount(0);
  await page.getByRole('dialog').getByRole('button',{name:'Release',exact:true}).click();
  await page.getByLabel('Release amount',{exact:true}).fill('2500');
  await page.getByRole('dialog',{name:'Release escrow',exact:true}).getByRole('button',{name:'Release',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Release escrow',exact:true})).toHaveCount(0);
  await expect(page.getByRole('dialog')).toContainText('Released $2,500.00');
+ await expect(page.getByLabel('Reason',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Complete escrow review',exact:true}).click();
  await expect(fullTask).toHaveCount(0);
  await page.getByRole('button',{name:'Release escrow: Escrow partial',exact:true}).click();
@@ -77,13 +78,11 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  await page.getByLabel('Release amount',{exact:true}).fill('500');
  await page.getByRole('dialog',{name:'Release escrow',exact:true}).getByRole('button',{name:'Release',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Release escrow',exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Outcome',{exact:true})).toBeVisible({timeout:10000}).catch(async error=>{ console.log('Escrow review state:',await page.locator('body').innerText()); await page.screenshot({path:join(temp,'escrow-review-failure.png'),fullPage:true}); throw error; });
- await page.getByRole('combobox',{name:'Outcome',exact:true}).selectOption('partially_released');
+ await expect(page.getByLabel('Reason',{exact:true})).toBeVisible();
  await page.getByLabel('Reason',{exact:true}).fill('Retain balance for documented repair');
  await page.getByRole('button',{name:'Complete escrow review',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'Release escrow: Escrow kept',exact:true}).click();
- await page.getByLabel('Outcome',{exact:true}).selectOption('kept');
  await page.getByLabel('Reason',{exact:true}).fill('Keep funds for documented final charges');
  await page.getByRole('button',{name:'Complete escrow review',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
