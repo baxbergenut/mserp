@@ -69,6 +69,12 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 			return nil, chargeInvalid("Provide a name and valid amount; installments must be negative or zero")
 		}
 		input.Amount = chargeMoney(n)
+		if !input.Reset {
+			scheduled, _ := chargeCents(current.ScheduledAmount)
+			if err = validatePaySourceAmount(current.Name, input.Amount, scheduled); err != nil {
+				return nil, err
+			}
+		}
 		if input.WaiveRemainder && (s.Kind != "recurring" || s.Direction != "charge" || n > 0) {
 			return nil, chargeInvalid("Only recurring deductions can use a reduced charge for this week")
 		}

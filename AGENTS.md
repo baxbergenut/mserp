@@ -1585,7 +1585,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Finalization and reopening keep their explicit audited workflows. Arrow keys
   navigate editable and read-only payroll cells, and Ctrl+C copies the selected
   cell. One click selects the cell without highlighting text; typing replaces its
-  value, while F2 or double-click edits existing text with a caret.
+  value, while F2 or double-click edits existing text with a caret. Sourced amount
+  cells keep an uncommitted typing draft until Enter or blur, then display the
+  source sign and two decimals. Escape/Ctrl+Z cancels that draft. Recurring,
+  installment, Fuel/Toll and expense deductions retain their source direction;
+  payroll/API writes reject amounts above the authoritative available amount
+  (including carry). Source credits retain their credit direction. Manual
+  adjustments remain separate; existing manual deductions require an explicit
+  plus sign to become reimbursements.
   Charges and load rows share 32px geometry and explicit borders through totals.
 - node scripts/test-investors-e2e.mjs --payroll-workflows-only covers corrections,
   pagination/search, working start dates, quick status changes, global/Gross Board

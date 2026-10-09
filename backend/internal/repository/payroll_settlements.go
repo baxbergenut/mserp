@@ -183,6 +183,10 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			}
 			confirmed := []string{}
 			for _, row := range d.Edits.GeneratedCharges {
+				scheduled, _ := chargeCents(row.ScheduledAmount)
+				if err = validatePaySourceAmount(row.Name, row.Amount, scheduled); err != nil {
+					return empty, err
+				}
 				if row.ConfirmedAt != nil {
 					continue
 				}

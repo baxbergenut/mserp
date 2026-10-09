@@ -44,6 +44,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if len(edits.GeneratedCharges) > 0 {
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
 	}
+	if err = validateInvestorCostEdits(*card, edits); err != nil {
+		return edits, err
+	}
 	if err = saveInvestorExpenses(ctx, tx, *card, actor, edits.ExpenseDeductions); err != nil {
 		return edits, err
 	}
@@ -130,6 +133,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 				return empty, err
 			}
 		} else {
+			if err = validateInvestorCostEdits(d, d.Edits); err != nil {
+				return empty, err
+			}
 			if len(d.Issues) > 0 {
 				return empty, chargeInvalid("Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
 			}
@@ -183,4 +189,25 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		return empty, err
 	}
 	return investorPayView(result, truck), tx.Commit(ctx)
+}
+
+func validateInvestorCostEdits(card DriverPayDriver, edits DriverPayEdits) error {
+	for _, row := range []struct {
+		name, source string
+		amount       *string
+	}{
+		{"Fuel", card.FuelTotal, edits.FuelOverride}, {"Toll", card.TollTotal, edits.TollOverride},
+	} {
+		if row.amount == nil {
+			continue
+		}
+		due, err := chargeCents(row.source)
+		if err != nil {
+			return err
+		}
+		if err = validatePaySourceAmount(row.name, *row.amount, -due); err != nil {
+			return err
+		}
+	}
+	return nil
 }

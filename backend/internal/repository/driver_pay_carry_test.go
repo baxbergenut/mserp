@@ -69,6 +69,13 @@ func testPayrollRemainders(t *testing.T, pool *pgxpool.Pool, actor string) {
 	if d.Edits.Costs.FuelDue != "1089.30" || d.Edits.Costs.TollDue != "12.25" {
 		t.Fatalf("sources %+v", d.Edits.Costs)
 	}
+	for _, amount := range []string{"1.00", "-1089.31"} {
+		invalid := d.Edits
+		invalid.FuelOverride = &amount
+		if _, err := pay.Save(ctx, invalid, actor); err == nil {
+			t.Fatalf("unsafe Fuel amount %s accepted", amount)
+		}
+	}
 	// Simulate a saved partial deduction from the previous release.
 	if _, err := pool.Exec(ctx, "INSERT INTO driver_pay_weeks(driver_id,week_start,fuel_override,toll_override) VALUES($1,$2::date,-50,-5)", driver, w1); err != nil {
 		t.Fatal(err)

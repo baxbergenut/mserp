@@ -248,6 +248,13 @@ func TestInvestorPayDatabase(t *testing.T) {
 				}
 			}
 			card.Edits.ExpenseDeductions[0].Apply = true
+			for _, amount := range []string{"1.00", "-999999.00"} {
+				invalid := card.Edits
+				invalid.FuelOverride = &amount
+				if _, e = pr.SaveInvestorPay(ctx, invalid, actor); e == nil {
+					t.Fatalf("unsafe investor Fuel amount %s accepted", amount)
+				}
+			}
 			saved, e := pr.SaveInvestorPay(ctx, card.Edits, actor)
 			if e != nil {
 				t.Fatal(e)

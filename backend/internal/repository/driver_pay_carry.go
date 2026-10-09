@@ -48,6 +48,16 @@ func payrollCostAmount(override *string, due int64, cpm bool) int64 {
 	return -due
 }
 
+// Source-backed payroll rows can reduce or defer collection, never reverse its
+// direction or collect more than the authoritative amount currently available.
+func validatePaySourceAmount(name, amount string, source int64) error {
+	n, err := chargeCents(amount)
+	if err != nil || n < min(0, source) || n > max(0, source) {
+		return chargeInvalid("%s must stay between zero and %s, including carry; use a separate adjustment for a bonus or reimbursement", name, chargeMoney(source))
+	}
+	return nil
+}
+
 func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error) {
 	memo := payrollReadMemo(ctx, tx)
 	if memo != nil && memo.costsLoaded {
@@ -219,6 +229,16 @@ func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits
 	// and editable after a tariff change, without assigning new CPM fuel costs.
 	fuelCPM := d.PayType == "cpm" && state.FuelCarry == "0.00"
 	tollCPM := d.PayType == "cpm" && state.TollCarry == "0.00"
+	if edits.FuelOverride != nil && !fuelCPM {
+		if err := validatePaySourceAmount("Fuel", *edits.FuelOverride, -fd); err != nil {
+			return err
+		}
+	}
+	if edits.TollOverride != nil && !tollCPM {
+		if err := validatePaySourceAmount("Toll", *edits.TollOverride, -td); err != nil {
+			return err
+		}
+	}
 	r := payCostRecord{d.ID, edits.WeekStart, chargeMoney(f), chargeMoney(t), chargeMoney(payrollCostAmount(edits.FuelOverride, fd, fuelCPM)), chargeMoney(payrollCostAmount(edits.TollOverride, td, tollCPM))}
 	records, err := readPayCostRecords(ctx, tx)
 	if err != nil {

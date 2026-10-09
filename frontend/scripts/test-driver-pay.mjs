@@ -5,7 +5,7 @@ import ts from "typescript";
 const compile = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString("base64")}`;
 const board = compile(readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8"));
 const pay = readFileSync(new URL("../app/accounting/driver-pay/pay.ts", import.meta.url), "utf8").replace('"@/app/gross-board/board"', JSON.stringify(board));
-const { applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } = await import(compile(pay));
+const { applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments, sourceAmountInput, validSourceAmount } = await import(compile(pay));
 const edits = { driverId: "driver", weekStart: "2026-09-28", version: 0, notes: "", comments: {}, adjustments: [
   { id: "a", kind: "reimbursement", amount: "0.10" }, { id: "b", kind: "addition", amount: "0.20" }, { id: "c", kind: "deduction", amount: "10.25" },
 ] };
@@ -126,3 +126,16 @@ assert.equal(undone.notes, 'before'); assert.equal(undone.version, 9); assert.eq
 assert.equal(undone.generatedCharges[0].amount, '-40'); assert.equal(undone.generatedCharges[0].version, 8); assert.equal(undone.generatedCharges[0].scheduleVersion, 4); assert.equal(undone.generatedCharges[0].reset, true);
 assert.equal(undone.expenseDeductions[0].amount, '20'); assert.equal(undone.expenseDeductions[0].version, 7); assert.equal(undone.expenseDeductions[0].available, '80'); assert.equal(undone.expenseDeductions[0].apply, true);
 console.log('Payroll undo preserves current concurrency and payment metadata.');
+
+assert.equal(sourceAmountInput('250', '-400'), '-250');
+assert.equal(sourceAmountInput('+250', '-400'), '-250');
+assert.equal(sourceAmountInput('-2.50', '3.25'), '2.50');
+for (const value of ['0', '-250', '-400']) assert.equal(validSourceAmount(value, '-400'), true);
+for (const value of ['250', '-400.01', '-']) assert.equal(validSourceAmount(value, '-400'), false);
+assert.equal(validSourceAmount('3.25', '3.25'), true);
+assert.equal(validSourceAmount('-3.25', '3.25'), false);
+assert.equal(validSourceAmount('3.26', '3.25'), false);
+assert.equal(validSourceAmount('-0.01', '0'), false);
+assert.equal(validAdjustments({ ...auto, fuelOverride: '-100.11' }, owner), false);
+assert.equal(validAdjustments({ ...auto, fuelOverride: '10' }, owner), false);
+console.log('Source-backed charges keep their direction and cannot exceed the source due.');

@@ -214,6 +214,14 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal("recurring label was editable")
 			}
 			edits := report.Drivers[0].Edits
+			for _, amount := range []string{"50.00", "-50.01"} {
+				invalid := edits
+				invalid.GeneratedCharges = append([]ChargeOccurrence(nil), edits.GeneratedCharges...)
+				invalid.GeneratedCharges[0].Amount = amount
+				if _, err = pay.Save(ctx, invalid, actor); err == nil {
+					t.Fatalf("unsafe recurring charge %s accepted", amount)
+				}
+			}
 			edits.GeneratedCharges[0].Amount = "0"
 			saved, err := pay.Save(ctx, edits, actor)
 			if err != nil {

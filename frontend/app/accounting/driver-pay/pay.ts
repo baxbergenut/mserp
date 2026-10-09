@@ -1,6 +1,36 @@
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayWeek } from "@/app/lib/types";
 import { decimalDisplay, hundredths, validDecimal } from "@/app/gross-board/board";
 
+export function centsAmount(cents: bigint) {
+  const magnitude = cents < BigInt(0) ? -cents : cents;
+  return `${cents < BigInt(0) ? "-" : ""}${magnitude / BigInt(100)}.${String(magnitude % BigInt(100)).padStart(2, "0")}`;
+}
+
+// A sourced row keeps its accounting direction, even when typing replaces its sign.
+export function sourceAmountInput(value: string, source: string) {
+  if (!value) return value;
+  const magnitude = value.replace(/^[+-]/, "");
+  return `${hundredths(source) <= BigInt(0) ? "-" : ""}${magnitude}`;
+}
+
+export function validSourceAmount(value: string, source: string) {
+  if (!value.trim() || !validDecimal(value)) return false;
+  const amount = hundredths(value), limit = hundredths(source);
+  return limit < BigInt(0) ? amount >= limit && amount <= BigInt(0) : amount >= BigInt(0) && amount <= limit;
+}
+
+export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
+  for (const row of edits.generatedCharges ?? []) {
+    if (!validSourceAmount(row.amount, row.scheduledAmount)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.scheduledAmount), true)}. Its charge or credit direction is fixed.`;
+  }
+  for (const { key, label } of costRows) {
+    const value = edits[`${key}Override`];
+    const due = edits.costs?.[`${key}Due`] ?? driver?.[`${key}Total`];
+    if (value != null && due != null && !validSourceAmount(value, centsAmount(-hundredths(due)))) return `${label}: keep the source direction and enter no more than ${decimalDisplay(hundredths(due), true)} due, including carry.`;
+  }
+  return undefined;
+}
+
 export function carryBreakdown(current: bigint, carried: bigint): string | undefined {
   if (carried <= BigInt(0)) return undefined;
   const money = (value: bigint) => decimalDisplay(value, true).replace(/\.00$/, "");
@@ -80,8 +110,8 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   return result;
 }
 
-export function validAdjustments(edits: DriverPayEdits) {
-  return (edits.expenseDeductions ?? []).every(row => row.amount.trim() && validDecimal(row.amount) && hundredths(row.amount) >= BigInt(0) && hundredths(row.amount) <= hundredths(row.available)) && (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
+export function validAdjustments(edits: DriverPayEdits, driver?: DriverPayDriver) {
+  return !paySourceError(edits, driver) && (edits.expenseDeductions ?? []).every(row => row.amount.trim() && validDecimal(row.amount) && hundredths(row.amount) >= BigInt(0) && hundredths(row.amount) <= hundredths(row.available)) && (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
     const value = edits[`${key}Override`];
     return value == null || (value.trim() !== "" && validDecimal(value));
   }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));
