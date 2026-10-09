@@ -34,8 +34,10 @@ try {
   page.on('request', r => { if (!r.url().startsWith(base)) external.push(r.url()); });
   await page.goto(`${base}/weighmytruck`);
   await expect(page.getByRole('heading', { name: 'WeighMyTruck', exact: true })).toBeVisible();
-  await expect(page.getByText('Terminated driver still has, or may have, WeighMyTruck access.')).toBeVisible();
-  await expect(page.getByText('Not linked to an MSERP driver.')).toBeVisible();
+  await expect(page.getByText('Terminated driver still has, or may have, WeighMyTruck access.')).toHaveCount(0);
+  await expect(page.getByText('Not linked to an MSERP driver.')).toHaveCount(0);
+  await expect(page.getByTitle('Terminated driver still has, or may have, WeighMyTruck access.', { exact: true })).toBeVisible();
+  await expect(page.getByTitle('Not linked to an MSERP driver.', { exact: true })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Membership', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Verify', exact: true })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Membership filter' })).toHaveCount(0);

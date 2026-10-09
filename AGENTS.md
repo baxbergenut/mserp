@@ -77,7 +77,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   from the private website CSV; unmatched identities require explicit linking.
   Pending/uncertain changes cannot replay until verified; removal uses saved email.
   The page lists only added drivers, attention rows first, with warnings after
-  names. Add driver selects an active unadded driver; success notices clear after
+  names. Rows use compact status labels with warning details on icon hover.
+  Add driver selects an active unadded driver; success notices clear after
   five seconds. No Membership column/filter or routine Verify action is shown.
   Uncertain additions remain visible as notices; administrative recovery retains
   the versioned verification API.

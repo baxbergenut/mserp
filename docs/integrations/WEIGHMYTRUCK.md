@@ -56,6 +56,7 @@ membership table, actor-stamped event log and initial-import receipt. Refresh
 reads MSERP's database; it does not claim to synchronize the vendor roster.
 Manage subsequent membership changes through MSERP. The page shows only added
 drivers, with attention rows sorted first and warning icons after driver names.
+Rows show compact status labels; warning details appear on icon hover.
 Add driver opens a picker of active drivers not already added; removal stays on
 each row. Success notices disappear after five seconds. There is no Membership
 column, membership filter or routine Verify action. Pending/uncertain additions
