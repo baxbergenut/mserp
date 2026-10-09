@@ -62,7 +62,31 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await gross.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Accept system values', exact: true }).click();
   await expect(gross).toHaveCount(0);
-  expect(await entry()).toMatchObject({ originalRate: '1200.00', miles: '100.00', driverRate: '900.00' });
+  expect(await entry()).toMatchObject({ originalRate: '1200.00', miles: '90.00', driverRate: '900.00' });
+  await expect(page.getByRole('status').filter({ hasText: 'System values accepted' })).toBeVisible();
+  await page.keyboard.press('Control+z');
+  await expect(gross).toHaveText('$1,000.00');
+  expect(await entry()).toMatchObject({ originalRate: '1000.00', miles: '90.00', driverRate: '900.00' });
+  await gross.click({ button: 'right' });
+  await expect(page.getByRole('menu')).toContainText('$1,000.00 → $1,200.00');
+  await page.getByRole('menuitem', { name: 'Accept system values', exact: true }).click();
+  await expect(gross).toHaveCount(0);
+  await page.getByRole('cell', {name:/^Miles differs from DataTruck/}).click({button:'right'});
+  await expect(page.getByRole('menu')).toHaveText('Accept system values90.00 → 100.00');
+  await page.getByRole('menuitem', {name:'Accept system values',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'System values accepted'})).toBeVisible();
+  expect(await entry()).toMatchObject({originalRate:'1200.00',miles:'100.00'});
+  await page.keyboard.press('Control+z');
+  await expect(page.getByRole('cell', {name:/^Miles differs from DataTruck/})).toHaveText('90.00');
+  expect(await entry()).toMatchObject({originalRate:'1200.00',miles:'90.00'});
+  await page.keyboard.press('Control+z');
+  await expect(gross).toHaveText('$1,000.00');
+  expect(await entry()).toMatchObject({originalRate:'1000.00',miles:'90.00'});
+  for (const cell of [gross,page.getByRole('cell',{name:/^Miles differs from DataTruck/})]) {
+    await cell.click({button:'right'});
+    await page.getByRole('menuitem',{name:'Accept system values',exact:true}).click();
+    await expect(cell).toHaveCount(0);
+  }
   await page.getByLabel('Workflow Operator, adjustment 1, name', { exact: true }).fill('Workflow deduction');
   const driverSave = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/driver-pay', { timeout: 650 });
   await page.getByLabel('Workflow Operator, adjustment 1, amount', { exact: true }).fill('-10.01');
@@ -79,7 +103,31 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await gross.focus(); await page.keyboard.press('Shift+F10');
   await page.getByRole('menuitem', { name: 'Accept system values', exact: true }).click();
   await expect(gross).toHaveCount(0);
-  expect(await entry()).toMatchObject({ originalRate: '1200.00', miles: '100.00', driverRate: '900.00' });
+  expect(await entry()).toMatchObject({ originalRate: '1200.00', miles: '90.00', driverRate: '900.00' });
+  await expect(page.getByRole('status').filter({ hasText: 'System values accepted' })).toBeVisible();
+  await page.keyboard.press('Control+z');
+  await expect(gross).toHaveText('$1,000.00');
+  expect(await entry()).toMatchObject({ originalRate: '1000.00', miles: '90.00', driverRate: '900.00' });
+  await gross.click({ button: 'right' });
+  await expect(page.getByRole('menu')).toContainText('$1,000.00 → $1,200.00');
+  await page.getByRole('menuitem', { name: 'Accept system values', exact: true }).click();
+  await expect(gross).toHaveCount(0);
+  await page.getByRole('cell', {name:/^Miles differs from DataTruck/}).click({button:'right'});
+  await expect(page.getByRole('menu')).toHaveText('Accept system values90.00 → 100.00');
+  await page.getByRole('menuitem', {name:'Accept system values',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'System values accepted'})).toBeVisible();
+  expect(await entry()).toMatchObject({originalRate:'1200.00',miles:'100.00'});
+  await page.keyboard.press('Control+z');
+  await expect(page.getByRole('cell', {name:/^Miles differs from DataTruck/})).toHaveText('90.00');
+  expect(await entry()).toMatchObject({originalRate:'1200.00',miles:'90.00'});
+  await page.keyboard.press('Control+z');
+  await expect(gross).toHaveText('$1,000.00');
+  expect(await entry()).toMatchObject({originalRate:'1000.00',miles:'90.00'});
+  for (const cell of [gross,page.getByRole('cell',{name:/^Miles differs from DataTruck/})]) {
+    await cell.click({button:'right'});
+    await page.getByRole('menuitem',{name:'Accept system values',exact:true}).click();
+    await expect(cell).toHaveCount(0);
+  }
   await page.getByLabel('Workflow Owner, adjustment 1, name', { exact: true }).fill('Workflow owner deduction');
   const investorSave = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/investor-pay', { timeout: 650 });
   await page.getByLabel('Workflow Owner, adjustment 1, amount', { exact: true }).fill('-0.01');

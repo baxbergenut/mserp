@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `071_escrow_review_inferred_outcome.sql`:
+  `072_payroll_source_undo.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend
@@ -102,7 +102,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   from Gross Board, system load details, profile tariffs, comments and adjustments.
   Driver summaries form a connected compact table; comments use hover previews and
   modal editing. Weekly adjustment name/amount columns follow the driver fee, independent of
-  load rows, and scroll after seven 32px entries. Names and signed amounts edit
+  load rows, and scroll only when entries exceed the visible load rows. Names and signed amounts edit
   inline in blank table rows; clearing both removes an entry. Partially filled
   adjustments block autosave/navigation until completed or cleared.
   `backend/internal/repository/driver_pay_repository.go` and
@@ -1282,6 +1282,7 @@ npm run lint
 node scripts/test-gross-board.mjs
 node scripts/test-driver-board.mjs
 node scripts/test-driver-pay.mjs
+node scripts/test-payroll-grid.mjs
 node scripts/test-phone.mjs
 npm run build
 # E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
@@ -1567,9 +1568,25 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Both payroll statements show entered/fallback original gross and miles, with
   DataTruck comparison values and red mismatches. POST /driver-pay/accept-system
   and /investor-pay/accept-system require payroll.write and a driver/date/slot,
-  board version, source record ID and reviewed source gross/miles. They update
-  only Gross Board original gross/miles, reject stale board/source values and
+  board version, source record ID and reviewed source value. The optional `field`
+  selects `originalRate` or `totalMiles`; omitted fields retain legacy both-value
+  acceptance. Menus show only the selected value's before/after numbers. They update
+  only the selected Gross Board input, reject stale board/source values and
   finalized related settlements, and preserve driver gross and plan identity.
+  Migration 072 records actor-owned source acceptance receipts. With
+  `undoReceipt=1`, acceptance returns `undoId`; POST to the same payroll resource's
+  `/undo-system` with `id` restores exact prior inputs only once, while the board
+  version is unchanged and related settlements remain open. Consecutive receipts
+  by the same actor can be undone in reverse order without bypassing intervening
+  board changes. Legacy acceptance
+  responses remain 204. Ctrl+Z/Cmd+Z uses an in-memory page-session stack for
+  payroll edits and source acceptance; saves retain current concurrency versions,
+  and undo waits for in-flight saves. Reload/filter/week changes clear the stack.
+  Finalization and reopening keep their explicit audited workflows. Arrow keys
+  navigate editable and read-only payroll cells, and Ctrl+C copies the selected
+  cell. One click selects the cell without highlighting text; typing replaces its
+  value, while F2 or double-click edits existing text with a caret.
+  Charges and load rows share 32px geometry and explicit borders through totals.
 - node scripts/test-investors-e2e.mjs --payroll-workflows-only covers corrections,
   pagination/search, working start dates, quick status changes, global/Gross Board
   search, all seven themes and narrow layouts against an isolated API/database.

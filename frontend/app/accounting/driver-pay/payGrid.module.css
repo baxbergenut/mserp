@@ -1,0 +1,26 @@
+/* Preserve a shared 32px baseline through the nested charges table. */
+.grid td, .grid th {
+  height: 32px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+.grid td { white-space: nowrap; }
+.grid td:focus, .grid th:focus {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -2px;
+  background-color: var(--accent-dim);
+}
+.grid input { height: 31px; }
+.grid input:disabled { pointer-events: none; }
+.grid :global(.pay-adjustment-span) { border-bottom: 0; }
+.grid [data-pay-totals] > * { border-top: 1px solid var(--border-color); }
+.grid [data-payroll-scroll$=":adjustments"] td:first-child > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grid [data-payroll-scroll$=":adjustments"] td:first-child > div > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

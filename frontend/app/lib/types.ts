@@ -960,7 +960,9 @@ export interface DriverPayDriver {
   loads: DriverPayLoad[];
   edits: DriverPayEdits;
 }
+export interface PaySourceReceipt { undoId: string }
 export interface PaySourceAcceptance {
+  field?: "originalRate" | "totalMiles";
   driverId: string;
   date: string;
   slot: number;

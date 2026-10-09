@@ -8,7 +8,7 @@ import { StatementMenu } from "./StatementMenu";
 
 export function PaySourceCell({ load, field, className, disabled, onAccept }: {
   load: DriverPayLoad; field: "originalRate" | "totalMiles"; className: string; disabled: boolean;
-  onAccept?: (load: DriverPayLoad) => Promise<void>;
+  onAccept?: (load: DriverPayLoad, field: "originalRate" | "totalMiles") => Promise<void>;
 }) {
   const permissions = usePermissions();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -24,6 +24,6 @@ export function PaySourceCell({ load, field, className, disabled, onAccept }: {
     onContextMenu={event => { if (canAccept) { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); } }}
     onKeyDown={event => { if (canAccept && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left, y: rect.bottom }); } }}>
     {value ? decimalDisplay(hundredths(value), money) : "—"}
-    {menu && <StatementMenu {...menu} label="Accept system values" disabled={disabled} onClose={close} onSelect={() => { void onAccept?.(load); }} />}
+    {menu && <StatementMenu {...menu} label="Accept system values" detail={<span className="whitespace-nowrap font-mono">{value ? decimalDisplay(hundredths(value), money) : "—"} → {source ? decimalDisplay(hundredths(source), money) : "—"}</span>} disabled={disabled} onClose={close} onSelect={() => { void onAccept?.(load, field); }} />}
   </td>;
 }

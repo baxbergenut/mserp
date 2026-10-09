@@ -116,3 +116,13 @@ console.log('Remainder checks passed: automatic carry, zero deferral, tariff cha
 
 assert.equal(driverTotals({ ...owner, autoCharges: [{ name: "Escrow release", amount: "100.25", source: "escrow-release:release" }] }, auto).payable, driverTotals(owner, auto).payable + 10025n);
 console.log("Escrow releases add the exact fixed credit to payroll totals.");
+
+const { restorePayEdit } = await import(compile(readFileSync(new URL('../app/accounting/driver-pay/payUndo.ts', import.meta.url), 'utf8')));
+const undoBefore = { ...auto, notes: 'before', generatedCharges: [{ scheduleId: 'fee', amount: '-40', name: 'Fee', overridden: false, version: 1 }], expenseDeductions: [{ expenseId: 'expense', amount: '20', version: 1 }] };
+const undoAfter = { ...undoBefore, notes: 'after', generatedCharges: [{ ...undoBefore.generatedCharges[0], amount: '-10', overridden: true }], expenseDeductions: [{ ...undoBefore.expenseDeductions[0], amount: '5' }] };
+const undoCurrent = { ...undoAfter, version: 9, costs: { revision: 'latest' }, generatedCharges: [{ ...undoAfter.generatedCharges[0], version: 8, scheduleVersion: 4 }], expenseDeductions: [{ ...undoAfter.expenseDeductions[0], version: 7, available: '80' }] };
+const undone = restorePayEdit(undoCurrent, undoBefore, undoAfter);
+assert.equal(undone.notes, 'before'); assert.equal(undone.version, 9); assert.equal(undone.costs.revision, 'latest');
+assert.equal(undone.generatedCharges[0].amount, '-40'); assert.equal(undone.generatedCharges[0].version, 8); assert.equal(undone.generatedCharges[0].scheduleVersion, 4); assert.equal(undone.generatedCharges[0].reset, true);
+assert.equal(undone.expenseDeductions[0].amount, '20'); assert.equal(undone.expenseDeductions[0].version, 7); assert.equal(undone.expenseDeductions[0].available, '80'); assert.equal(undone.expenseDeductions[0].apply, true);
+console.log('Payroll undo preserves current concurrency and payment metadata.');

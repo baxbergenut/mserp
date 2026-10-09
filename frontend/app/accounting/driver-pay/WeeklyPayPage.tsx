@@ -9,7 +9,7 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound, UsersRound } from "lucide-react";
-import { fetchDriverPay, fetchInvestorPay, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, acceptPaySystemValues } from "@/app/lib/api";
+import { fetchDriverPay, fetchInvestorPay, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, acceptPaySystemValues, undoPaySystemValues } from "@/app/lib/api";
 import type { DriverPayEdits, DriverPayLoad, DriverPayWeek } from "@/app/lib/types";
 import { currentChargeWeek } from "../driver-charges/charges";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -20,6 +20,10 @@ import { DriverCard, payButtonClass } from "./DriverCard";
 import { SettlementDialog } from "./SettlementDialog";
 import { useDebouncedValue } from "@/app/lib/useDebouncedValue";
 import { applyPaySave, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments } from "./pay";
+import { restorePayEdit } from "./payUndo";
+import { isPayReplacementInput } from "./payGrid";
+
+type PayUndoAction = { kind: "edit"; id: string; before: DriverPayEdits; after: DriverPayEdits; group: number } | { kind: "source"; id: string };
 
 export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const permissions = usePermissions();
@@ -64,8 +68,20 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const savedRef = useRef<Record<string, DriverPayEdits>>({});
   const savingRef = useRef(false);
+  const changesRef = useRef(changes);
+  const undoStack = useRef<PayUndoAction[]>([]);
+  const editGroup = useRef(0);
+  const pendingUndo = useRef(false);
+  const undoLatest = useRef<() => Promise<void>>(async () => {});
   const dirty = Object.keys(changes).length > 0;
   const invalid = Object.values(changes).some(edits => !validAdjustments(edits));
+  useLayoutEffect(() => { changesRef.current = changes; }, [changes]);
+  useLayoutEffect(() => { undoStack.current = []; pendingUndo.current = false; }, [queryKey]);
+  useEffect(() => {
+    const focus = () => { editGroup.current += 1; };
+    document.addEventListener("focusin", focus);
+    return () => document.removeEventListener("focusin", focus);
+  }, []);
 
   useLayoutEffect(() => { savedRef.current = Object.fromEntries((report?.drivers ?? []).map(d => [d.id, d.edits])); }, [report]);
   useEffect(() => {
@@ -82,7 +98,16 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [week, fetchPay, queryKey, dirty, saving, refreshing]);
   const edit = useCallback((id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => {
-    setChanges(current => ({ ...current, [id]: update(current[id] ?? savedRef.current[id]) })); setMessage("");
+    const before = changesRef.current[id] ?? savedRef.current[id];
+    const after = update(before);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    const last = undoStack.current.at(-1);
+    const typing = document.activeElement instanceof HTMLInputElement;
+    if (typing && last?.kind === "edit" && last.id === id && last.group === editGroup.current) last.after = after;
+    else undoStack.current.push({ kind: "edit", id, before, after, group: editGroup.current });
+    if (undoStack.current.length > 100) undoStack.current.shift();
+    changesRef.current = { ...changesRef.current, [id]: after };
+    setChanges(changesRef.current); setMessage("");
   }, []);
   const toggle = useCallback((id: string) => setOpened(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }), [setOpened]);
 
@@ -104,6 +129,56 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     const timer = setTimeout(() => { void save(); }, 0);
     return () => clearTimeout(timer);
   }, [dirty, invalid, saving, loading, refreshing, error, save, pendingWeek, pendingLink]);
+  useLayoutEffect(() => {
+    undoLatest.current = async () => {
+      if (loading || refreshing || pendingWeek || pendingLink || !permissions.includes("payroll.write")) return;
+      if (savingRef.current) { pendingUndo.current = true; return; }
+      const action = undoStack.current.at(-1);
+      if (!action) return;
+      if (action.kind === "source") {
+        if (dirty) return;
+        setRefreshing(true); setError("");
+        try {
+          await undoPaySystemValues(investor, action.id);
+          undoStack.current.pop();
+          const updated = await fetchPay(week);
+          // A source refresh may also reveal another accountant's payroll save.
+          undoStack.current = undoStack.current.filter(item => item.kind !== "edit" || updated.drivers.find(row => row.id === item.id)?.edits.version === savedRef.current[item.id]?.version);
+          setReport(updated); setMessage("Change undone");
+        }
+        catch (err) { setError(err instanceof Error ? err.message : "Unable to undo this change"); }
+        finally { setRefreshing(false); }
+        return;
+      }
+      const driver = report?.drivers.find(row => row.id === action.id);
+      if (!driver || driver.settlement?.finalized) return;
+      const current = changesRef.current[action.id] ?? savedRef.current[action.id];
+      const restored = restorePayEdit(current, action.before, action.after);
+      const next = { ...changesRef.current, [action.id]: restored };
+      if (JSON.stringify(normalizedPayEdits(restored)) === JSON.stringify(normalizedPayEdits(savedRef.current[action.id]))) delete next[action.id];
+      undoStack.current.pop(); editGroup.current += 1;
+      changesRef.current = next; setChanges(next); setError(""); setMessage("Change undone");
+    };
+  });
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.repeat || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement;
+      const editableText = target.closest('input:not([readonly]):not(:disabled),textarea,[contenteditable="true"]');
+        const replacing = isPayReplacementInput(target);
+        if (target.closest('[role="dialog"]') || (editableText && !replacing && (dirty || !target.closest('[data-payroll-scroll]')))) return;
+      if (!undoStack.current.length) return;
+        if (replacing) target.closest<HTMLElement>("td")?.focus();
+      event.preventDefault(); void undoLatest.current();
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [dirty]);
+  useEffect(() => {
+    if (saving || !pendingUndo.current) return;
+    pendingUndo.current = false;
+    void undoLatest.current();
+  }, [saving]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     const leave = (event: MouseEvent) => {
@@ -128,6 +203,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }, [pendingWeek, pendingLink, dirty, saving, loading, refreshing, error, setOpened, setWeek, setPage, router]);
   async function reload(refreshSources = false) {
     if (dirty && !window.confirm("Discard unsaved payroll edits and reload this week?")) return;
+    undoStack.current = []; pendingUndo.current = false;
     setChanges({}); setError(""); setMessage(""); setPendingWeek(null); setPendingLink(null);
     if (refreshSources) setRefreshing(true); else setLoading(true);
     try { loadedQuery.current = queryKey; setReport(await (refreshSources ? refreshDriverPayLoads(week).then(() => fetchPay(week)) : fetchPay(week))); setMessage(refreshSources ? "Load details refreshed" : "Reloaded"); }
@@ -145,12 +221,15 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to prepare settlement"); }
     finally { setRefreshing(false); }
   }
-  async function acceptSource(load: DriverPayLoad, sourceDriverId: string) {
+  async function acceptSource(load: DriverPayLoad, sourceDriverId: string, field: "originalRate" | "totalMiles") {
     if (dirty || saving || loading || refreshing || !load.loadRecordId || !load.boardVersion) return;
     setRefreshing(true); setError("");
     try {
-      await acceptPaySystemValues(investor, { driverId: load.sourceDriverId ?? sourceDriverId, date: load.date, slot: load.slot, version: load.boardVersion, loadRecordId: load.loadRecordId, originalRate: load.systemOriginalRate ?? "", miles: load.systemMiles ?? "" });
-      setReport(await fetchPay(week)); setMessage("System values accepted");
+      const receipt = await acceptPaySystemValues(investor, { field, driverId: load.sourceDriverId ?? sourceDriverId, date: load.date, slot: load.slot, version: load.boardVersion, loadRecordId: load.loadRecordId, originalRate: field === "originalRate" ? load.systemOriginalRate ?? "" : "", miles: field === "totalMiles" ? load.systemMiles ?? "" : "" });
+      undoStack.current.push({ kind: "source", id: receipt.undoId });
+      const updated = await fetchPay(week);
+      undoStack.current = undoStack.current.filter(item => item.kind !== "edit" || updated.drivers.find(row => row.id === item.id)?.edits.version === savedRef.current[item.id]?.version);
+      setReport(updated); setMessage("System values accepted");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to accept system values"); }
     finally { setRefreshing(false); }
   }
@@ -186,7 +265,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid ? "Complete or remove unfinished adjustments; enter zero or reset Fuel/Toll before leaving this week." : "Saving edits before leaving this week…"}{error && " Resolve the save error to continue."}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
 
-    {loading ? <WeeklyTableSkeleton /> : report && rows.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? investor ? "No trucks match these filters." : "No drivers match these filters." : "No loads or adjustments for this week."}</div> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{rows.map(row => row.kind === "statement" ? <DriverCard key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, row.driver.id)} onReload={() => reload()} sourceActionDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} onAcceptSource={load => acceptSource(load, row.driver.id)} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
+    {loading ? <WeeklyTableSkeleton /> : report && rows.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">{search || dispatcher !== "all" ? investor ? "No trucks match these filters." : "No drivers match these filters." : "No loads or adjustments for this week."}</div> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{rows.map(row => row.kind === "statement" ? <DriverCard key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, row.driver.id)} onReload={() => reload()} sourceActionDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} onAcceptSource={(load, field) => acceptSource(load, row.driver.id, field)} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
     {report?.pagination && !loading && <fieldset disabled={busy || dirty || saving} className="min-w-0"><TablePagination page={report.pagination.page} pageSize={pageSize} totalItems={report.pagination.total} totalPages={report.pagination.totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} /></fieldset>}
     {settlement && settlementReport && <SettlementDialog investor={investor} report={settlementReport} {...settlement} onClose={() => setSettlement(null)} onSaved={() => { setSettlement(null); setSettlementReport(null); loadedQuery.current = ""; void reload(); }} />}
   </div>;

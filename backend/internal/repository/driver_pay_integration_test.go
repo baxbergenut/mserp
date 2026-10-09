@@ -60,6 +60,14 @@ func TestDriverPayDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			undoMigration, readErr := os.ReadFile("../../sql/072_payroll_source_undo.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(undoMigration), "\r\n", "\n"), "", 1)
+				sql += "\n" + string(undoMigration)
+			}
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(remainders), "\r\n", "\n"), "", 1)
 			}
@@ -332,8 +340,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				if err = pay.AcceptPaySource(ctx, stale); !errors.Is(err, ErrDriverPayConflict) {
 					t.Fatal("stale source acceptance", err)
 				}
-				if err = pay.AcceptPaySource(ctx, input); err != nil {
-					t.Fatal("payroll acceptance", err)
+				receipt, acceptErr := pay.AcceptPaySourceWithUndo(ctx, input, "test-actor")
+				if acceptErr != nil {
+					t.Fatal("payroll acceptance", acceptErr)
 				}
 				if err = pay.AcceptPaySource(ctx, input); !errors.Is(err, ErrDriverPayConflict) {
 					t.Fatal("stale board acceptance", err)
@@ -347,6 +356,42 @@ func TestDriverPayDatabase(t *testing.T) {
 						t.Fatal("acceptance changed driver gross or lost values", after)
 					}
 				}
+				if err = pay.UndoPaySource(ctx, receipt, "other-actor"); !errors.Is(err, ErrDriverPayConflict) {
+					t.Fatal("another actor could undo", err)
+				}
+				if err = pay.UndoPaySource(ctx, receipt, "test-actor"); err != nil {
+					t.Fatal("source undo", err)
+				}
+				if err = pay.UndoPaySource(ctx, receipt, "test-actor"); !errors.Is(err, ErrDriverPayConflict) {
+					t.Fatal("receipt reused", err)
+				}
+				restored, err := pay.Get(ctx, monday)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, after := range restored.Drivers[0].Loads {
+					if after.Date == load.Date && after.Slot == load.Slot {
+						if after.OriginalRate != load.OriginalRate || after.TotalMiles != load.TotalMiles || after.DriverGross != load.DriverGross {
+							t.Fatal("undo did not restore", after)
+						}
+						input.Version = after.BoardVersion
+					}
+				}
+				receipt, err = pay.AcceptPaySourceWithUndo(ctx, input, "test-actor")
+				if err != nil {
+					t.Fatal(err)
+				}
+				table := "gross_board_entries"
+				if input.Slot > 0 {
+					table = "gross_board_extra_entries"
+				}
+				if _, err = admin.Exec(ctx, "UPDATE "+table+" SET version=version+1 WHERE driver_id=$1 AND service_date=$2::date", driver, input.Date); err != nil {
+					t.Fatal(err)
+				}
+				if err = pay.UndoPaySource(ctx, receipt, "test-actor"); !errors.Is(err, ErrDriverPayConflict) {
+					t.Fatal("undo overwrote later edit", err)
+				}
+
 			}
 		})
 	}
