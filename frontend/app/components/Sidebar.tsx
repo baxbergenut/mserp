@@ -19,6 +19,7 @@ import {
   CalendarRange,
   ListChecks,
   Settings,
+  Scale,
 } from "lucide-react";
 import { usePermissions, pagePermission } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },
+  { href: "/weighmytruck", label: "WeighMyTruck", icon: Scale },
   { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers and updaters", icon: Headset },

@@ -10,6 +10,8 @@ type Permission struct {
 // Permission keys are a code-owned contract. Administrators compose roles from
 // this catalog; inventing a database key must never grant new API capabilities.
 var Permissions = []Permission{
+	{"weighmytruck.read", "View WeighMyTruck membership and driver contact details"},
+	{"weighmytruck.write", "Add, remove, link and verify WeighMyTruck drivers"},
 	{"driver_board.read", "View Status Board, history, contact details and weekly totals"}, {"driver_board.write", "Edit Status Board and driver home, and undo history changes"},
 	{"fleet.read", "View drivers, trucks, dispatchers, investors and documents"},
 	{"fleet.write", "Manage fleet, ownership, intake and documents"},

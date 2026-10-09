@@ -10,6 +10,7 @@ export const useExpenseCategoryAccess = () => useContext(ExpenseCategoryAccessCo
 
 export function pagePermission(path: string): string {
   if (path === "/settings") return "";
+  if (path === "/weighmytruck") return "weighmytruck.read";
   if (path.startsWith("/settings/")) return "access.manage";
   if (path.startsWith("/expenses/settings")) return "expense_settings.manage";
   if (path.startsWith("/accounting/escrow")) return "escrow.read";
@@ -21,5 +22,5 @@ export function pagePermission(path: string): string {
 }
 
 export function firstAllowedPage(permissions: string[]): string {
-  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => !pagePermission(p) || permissions.includes(pagePermission(p))) ?? "/access-denied";
+  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => !pagePermission(p) || permissions.includes(pagePermission(p))) ?? "/access-denied";
 }

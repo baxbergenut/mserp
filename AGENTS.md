@@ -69,6 +69,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/relay/`: Relay Payments fuel transaction client.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
+- `backend/internal/weighmytruck/`, repository/httpapi `weighmytruck_*` files and
+  `frontend/app/weighmytruck/`: server-only OAuth driver enrollment/removal,
+  versioned local membership tracking and terminated-driver warnings. Migration
+  073; saved vendor documentation and setup are in `docs/integrations/WEIGHMYTRUCK.md`.
+  There is no upstream roster endpoint. Initialize via `-import-weighmytruck-roster`
+  from the private website CSV; unmatched identities require explicit linking.
+  Pending/uncertain changes cannot replay until verified; removal uses saved email.
+  `weighmytruck.read/write` protect routes. Server config is WEIGHMYTRUCK_CLIENT_ID,
+  WEIGHMYTRUCK_CLIENT_SECRET, WEIGHMYTRUCK_TOKEN_URL, WEIGHMYTRUCK_SCOPE,
+  WEIGHMYTRUCK_API_URL and WEIGHMYTRUCK_COMPANY_NAME. No browser vendor calls.
+  `MSERP_WMT_TEST_DATABASE_URL` runs fresh/migrated tests as mserp_app;
+  `MSERP_WMT_BROWSER_TEST=1` adds real API/database browser checks after a /api build.
 - `backend/internal/jobs/sync_loads.go`: synchronous load sync for new upstream
   record IDs, five-minute operational refresh, and morning 21-day reconciliation.
   `backend/internal/repository/load_sync_repository.go` owns operational candidate
@@ -85,7 +97,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `072_payroll_source_undo.sql`:
+  `073_weighmytruck.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend

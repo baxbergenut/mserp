@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"mserp/internal/fleetscope"
+	"mserp/internal/weighmytruck"
 )
 
 type Config struct {
+	WeighMyTruck                 weighmytruck.Options
 	FleetScope                   fleetscope.Options
 	BindAddress                  string
 	Port                         string
@@ -188,6 +190,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
+		WeighMyTruck: weighmytruck.Options{
+			ClientID:     strings.TrimSpace(os.Getenv("WEIGHMYTRUCK_CLIENT_ID")),
+			ClientSecret: strings.TrimSpace(os.Getenv("WEIGHMYTRUCK_CLIENT_SECRET")),
+			TokenURL:     envOrDefault("WEIGHMYTRUCK_TOKEN_URL", "https://login.microsoftonline.com/0c42b1f7-92b4-4df0-915d-4bebceb95491/oauth2/v2.0/token"),
+			Scope:        envOrDefault("WEIGHMYTRUCK_SCOPE", "api://6b61f2df-5ec0-4dea-bfb8-b9589ec9942d/.default"),
+			APIURL:       envOrDefault("WEIGHMYTRUCK_API_URL", "https://app.weighmytruck.com/fleetsettlement"),
+			CompanyName:  envOrDefault("WEIGHMYTRUCK_COMPANY_NAME", "MS Express Inc."),
+		},
 		FleetScope:                   fleetscope.Options{CompanyID: strings.TrimSpace(os.Getenv("FLEETSCOPE_COMPANY_ID")), Secret: strings.TrimSpace(os.Getenv("FLEETSCOPE_WEBHOOK_SECRET"))},
 		BindAddress:                  envOrDefault("BIND_ADDRESS", "127.0.0.1"),
 		Port:                         envOrDefault("PORT", "8080"),
@@ -225,6 +235,9 @@ func Load() (Config, error) {
 		FiveELDSyncInterval:          fiveELDSyncInterval,
 	}
 
+	if err := cfg.WeighMyTruck.Validate(); err != nil {
+		return Config{}, err
+	}
 	if err := cfg.FleetScope.Validate(); err != nil {
 		return Config{}, err
 	}

@@ -1122,3 +1122,10 @@ export type CompactDriverBoard = Omit<DriverBoard, "loads"> & { plans: BoardLoad
 export interface EscrowTaskDetail {
  decision: EscrowTaskDecision["decision"]; driverId: string; terminationDate: string; dueDate: string; escrows: Escrow[] }
 export interface EscrowTaskDecision { decision: "released" | "partially_released" | "kept"; reason: string; versions: Record<string, number> }
+export type WeighMyTruckEntry = {
+  id: string; driverId: string; name: string; email: string; phone: string;
+  driverCode: string; driverStatus: string; enrolled: boolean;
+  state: "confirmed" | "pending" | "review"; version: number;
+  warning: string; addBlockReason: string; canVerify: boolean; updatedAt: string | null;
+};
+export type WeighMyTruckList = { items: WeighMyTruckEntry[]; configured: boolean; initialized: boolean };

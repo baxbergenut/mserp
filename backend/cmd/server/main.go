@@ -27,9 +27,11 @@ import (
 	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
+	"mserp/internal/weighmytruck"
 )
 
 func main() {
+	wmtImport := flag.String("import-weighmytruck-roster", "", "initialize WeighMyTruck tracker from website CSV and exit without external calls")
 	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
 	backfillTollLocations := flag.Bool("backfill-toll-locations", false, "refresh current-year PrePass location metadata and exit")
 	flag.Parse()
@@ -51,6 +53,21 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	if *wmtImport != "" {
+		file, err := os.Open(*wmtImport)
+		if err != nil {
+			logger.Error("open WeighMyTruck roster", "error", err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		result, err := repository.NewWeighMyTruckRepository(pool, nil).ImportWeighMyTruck(ctx, file)
+		if err != nil {
+			logger.Error("import WeighMyTruck roster", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("WeighMyTruck roster imported", "total", result.Total, "linked", result.Linked, "unlinked", result.Unlinked, "alreadyImported", result.AlreadyImported)
+		return
+	}
 
 	client := datatruck.NewClient(cfg.DataTruckAPIKey, cfg.DataTruckCompanyName)
 	loadRepo := repository.NewLoadRepository(pool)
@@ -132,6 +149,7 @@ func main() {
 		cabCardExtractor,
 		expenseExtractor,
 		fiveELDJob,
+		weighmytruck.NewClient(cfg.WeighMyTruck),
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,
 			SessionTTL:   cfg.AuthSessionTTL,

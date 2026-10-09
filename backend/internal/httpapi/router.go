@@ -43,6 +43,7 @@ func NewRouter(
 	documentExtractor groq.DocumentExtractor,
 	expenseExtractor gemini.ExpenseExtractor,
 	fiveELDJob *jobs.SyncFiveELDJob,
+	wmtClient repository.WMTProvider,
 	authOptions AuthOptions,
 	fleetScopeOptions ...fleetscope.Options,
 ) http.Handler {
@@ -152,6 +153,7 @@ func NewRouter(
 	})
 
 	registerFleetRoutes(protected, logger, fleetRepo)
+	registerWeighMyTruckRoutes(protected, logger, repository.NewWeighMyTruckRepository(pool, wmtClient))
 	registerDriverIntakeRoutes(protected, logger, fleetRepo)
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerTaskBoardRoutes(protected, logger, customTaskRepo)

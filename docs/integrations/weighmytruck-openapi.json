@@ -1,0 +1,441 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "FleetSettlementApi",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "/fleetsettlement"
+    }
+  ],
+  "paths": {
+    "/DriverManager/RemoveDriver": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Removes driver from fleet",
+        "description": "Sample request: \r\n\r\n    POST\r\n    {\r\n        \"driverEmail\": \"example@email.com\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/DriverManager/UpdateDriver": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Update a driver's account profile information",
+        "description": "Sample request: \r\n\r\n    POST\r\n    {\r\n        \"driverEmail\": \"example@email.com\",\r\n        \"companyName\": \"Example Company\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExistingDriver"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExistingDriver"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExistingDriver"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/DriverManager/AddDriverToFleet": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Adds driver to fleet using fleet's current payment method. Creates a driver account if one does not already exist.",
+        "description": "Sample request: \r\n\r\n    POST \r\n    {\r\n        \"firstName\": \"First\",\r\n        \"lastName\": \"Last\",\r\n        \"driverEmail\": \"example@email.com\",\r\n        \"phone\": \"1234567890\",\r\n        \"companyName\": \"Test Company\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewDriver"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewDriver"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewDriver"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API or you are trying to use a payment method that does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/DriverManager/UpdatePassword": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Updates driver password. New password will be emailed to driver",
+        "description": "Password must contain at least 8 characters, at least one capital letter, at least one lowercase letter, and at least one number\r\n\r\nSample request:\r\n\r\n    POST\r\n    {\r\n        \"driverEmail\": \"example@email.com\",\r\n        \"password\": \"Password123\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInfo"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInfo"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInfo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/DriverManager/UpdateUniqueId": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Update fleet unique id for a driver",
+        "description": "Sample request: \r\n\r\n    POST\r\n    {\r\n        \"driverEmail\": \"example@email.com\",\r\n        \"uniqueId\": \"123\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetUniqueId"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetUniqueId"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/FleetUniqueId"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/DriverManager/RemoveUniqueId": {
+      "post": {
+        "tags": [
+          "DriverManager"
+        ],
+        "summary": "Remove fleet unique id for a driver",
+        "description": "Sample request: \r\n\r\n    POST\r\n    {\r\n        \"driverEmail\": \"example@email.com\"\r\n    }",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Reason for bad request in response content"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/Settlement/GetSettlement": {
+      "post": {
+        "tags": [
+          "Settlement"
+        ],
+        "summary": "Get ticket files for a specified date within the last 30 days",
+        "description": "Format types:\r\n\r\n    1 = PDF\r\n    2 = TIF\r\n    3 = CSV\r\n\r\nSample request:\r\n\r\n    POST\r\n    {\r\n        \"types\": [1, 3],\r\n        \"date\": \"2024-04-01\",\r\n        \"startTime\": \"16:30\"\r\n    }\r\n\r\nReturn object format: \r\n\r\n    {\r\n        \"pdfs\": byte[],\r\n        \"tifs\": byte[],\r\n        \"csv\": byte[]\r\n    }\r\n    \r\nFields in CSV:\r\nDate,\r\nApproximate time,\r\nGross weight,\r\nSteer weight,\r\nDrive weight,\r\nTrailer weight,\r\nAxle 4,\r\nAxle 5,\r\nAxle 6,\r\nAxle 7,\r\nTicket number,\r\nOriginal ticket number,\r\nFee,\r\nReserved,\r\nWeighmaster,\r\nWeighmaster license,\r\nCompany name,\r\nTractor number,\r\nTrailer number,\r\nTractor license,\r\nTrailer license,\r\nCommodity,\r\nCustom field 1,\r\nCustom field 2,\r\nSite number,\r\nTruck stop name,\r\nAddress,\r\nCity,\r\nState",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns the requested files"
+          },
+          "401": {
+            "description": "Your fleet does not have permission to access this API"
+          }
+        }
+      }
+    },
+    "/Sites": {
+      "get": {
+        "tags": [
+          "Sites"
+        ],
+        "summary": "Get a list of all CAT Scale sites",
+        "description": "Return object format: \r\n\r\n    {\r\n        \"SiteNum\": decimal,\r\n        \"State\": string,\r\n        \"City\": string,\r\n        \"TruckStopName\": string,\r\n        \"InterstateAddr\": string,\r\n        \"Zip\": string,\r\n        \"Phone\": string,\r\n        \"Fax\": string,\r\n        \"ManagerName\": string,\r\n        \"Latitude\": decimal?,\r\n        \"Longitude\": decimal?\r\n    }",
+        "responses": {
+          "200": {
+            "description": "Returns JSON array of all CAT Scale sites"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ExistingDriver": {
+        "required": [
+          "driverEmail"
+        ],
+        "type": "object",
+        "properties": {
+          "driverEmail": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "companyName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FleetUniqueId": {
+        "required": [
+          "driverEmail",
+          "uniqueId"
+        ],
+        "type": "object",
+        "properties": {
+          "driverEmail": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "uniqueId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginInfo": {
+        "required": [
+          "driverEmail",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "driverEmail": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "password": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewDriver": {
+        "required": [
+          "companyName",
+          "driverEmail",
+          "firstName",
+          "lastName",
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "lastName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "driverEmail": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "phone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "uniqueId": {
+            "type": "string",
+            "nullable": true
+          },
+          "companyName": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SettlementRequest": {
+        "type": "object",
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "includeDriverCode": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string",
+            "nullable": true
+          },
+          "endTime": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
