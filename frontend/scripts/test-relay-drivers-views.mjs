@@ -24,7 +24,8 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost'); const path = url.pathname;
     const send = (body, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
     if (path.startsWith('/api/')) {
-      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write'])] }, csrfToken: 'fixture' });
+      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write', 'tolls.read', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
+      if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
       if (path === '/api/fuel-dashboard') return send({ error: 'Overview is outside this local driver fixture.' }, 503);
       if (path === '/api/fuel-transactions') return send({ items: [], total: 0, totalPages: 1, page: 1, pageSize: 25, options: { drivers: [], states: [] }, summary: { spend: 0, saved: 0, gallons: 0 } });
       if (path === '/api/relay-drivers' && req.method === 'GET') return send({ ...data, canLink: !readOnly });
@@ -64,6 +65,12 @@ else {
     const rows = page.locator('tbody tr');
     await expect(rows.first()).toContainText('Terminated Driver');
     await expect(rows.first().getByLabel('Terminated driver is still in Relay.')).toBeVisible();
+    const sidebar = page.locator('aside');
+    await expect(sidebar.getByLabel('1 terminated drivers still in Relay', { exact: true })).toHaveText('1');
+    await expect(sidebar.getByLabel('2 terminated drivers with confirmed or unresolved WeighMyTruck access', { exact: true })).toHaveText('2');
+    const tollBadge = sidebar.getByLabel('125 toll transactions without a linked truck, posted since 2026-09-01', { exact: true });
+    await expect(tollBadge).toHaveText('99+');
+    await expect(tollBadge).toHaveAttribute('title', /2026-09-01/);
     await page.getByLabel('Driver status', { exact: true }).selectOption('no_policy');
     await expect(rows).toHaveCount(1); await expect(rows.first()).toContainText('ELD Driver');
     await page.getByRole('button', { name: 'Link driver', exact: true }).click();
@@ -99,12 +106,19 @@ else {
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.screenshot({ path: join(tmpdir(), 'mserp-relay-desktop.png'), fullPage: true });
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+    await expect(tollBadge).toBeVisible();
+    await expect(tollBadge).toHaveClass(/absolute/);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: join(tmpdir(), 'mserp-relay-narrow.png'), fullPage: true });
     await page.reload(); await expect(page.getByRole('columnheader', { name: 'Relay Driver ID' })).toBeVisible();
+    await page.getByLabel('Actions for Terminated Driver').selectOption('remove');
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove driver', exact: true }).click();
+    await expect(sidebar.getByLabel('1 terminated drivers still in Relay', { exact: true })).toHaveCount(0);
     readOnly = true; await page.reload();
+    await expect(sidebar.getByRole('link', { name: /WeighMyTruck/ })).toHaveCount(0);
+    await expect(sidebar.getByRole('link', { name: /Tolls/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add driver', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Actions for Active Driver')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Refresh Relay', exact: true })).toBeVisible();

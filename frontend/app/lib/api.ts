@@ -112,6 +112,7 @@ let csrfToken = "";
 export const fetchTasks = (query: PageQuery & { status: TaskStatus | "all" }) =>
   paginatedRequest<PaginatedResponse<CustomTask>>(withQuery("/tasks", query));
 export const fetchTaskCount = () => apiRequest<{ count: number }>("/tasks/count");
+export const fetchSidebarCounts = (signal?: AbortSignal) => apiRequest<import("./types").SidebarCounts>("/sidebar-counts", { signal });
 export function subscribeTaskEvents(onChange: () => void, onUnauthorized: () => void) {
   const events = new EventSource(`${API_BASE}/tasks/events`, { withCredentials: true });
   events.addEventListener("changed", onChange);
@@ -223,7 +224,12 @@ function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     return reads.read(path, signal => performRequest<T>(path, { ...init, signal }), init?.signal);
   }
   reads.clear();
-  return performRequest<T>(path, init).finally(() => reads.clear());
+  return performRequest<T>(path, init).finally(() => {
+    reads.clear();
+    if (typeof window !== "undefined" && /^\/(relay-drivers|weighmytruck|drivers|trucks|tasks\/relay-identities|jobs\/sync-tolls)(\/|$)/.test(path)) {
+      window.dispatchEvent(new Event("mserp:sidebar-counts-changed"));
+    }
+  });
 }
 async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 	const method = (init?.method ?? "GET").toUpperCase();

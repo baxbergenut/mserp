@@ -1153,3 +1153,4 @@ export interface RelayDriverChange {
   requestId: string; action: RelayDriverAction; relayDriverId?: string; driverId?: string; revision?: string; policyId?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string; driverPin?: string; truckNumber?: string;
 }
+export interface SidebarCounts { fuel: number; weighMyTruck: number; tolls: number; tollsFrom: string }

@@ -196,6 +196,19 @@ func TestRelayDriverDatabase(t *testing.T) {
 				t.Fatal("link did not backfill historical purchase")
 			}
 			exec(`UPDATE drivers SET status='terminated',active=false WHERE id=$1`, driverID)
+			checkRelayCount := func(want int) {
+				t.Helper()
+				got, err := repo.TerminatedRelayCount(ctx)
+				if err != nil || got != want {
+					t.Fatalf("Relay count=%d want=%d err=%v", got, want, err)
+				}
+			}
+			checkRelayCount(1)
+			staging := NewFuelRepository(pool)
+			staging.ConfigureRelayDrivers(fake, "staging")
+			if n, err := staging.TerminatedRelayCount(ctx); err != nil || n != 0 {
+				t.Fatal("count crossed environment boundary", err)
+			}
 			list, e = repo.RelayDrivers(ctx)
 			if e != nil || list.Items[0].Status != "terminated" || !strings.Contains(list.Items[0].Warning, "Terminated") {
 				t.Fatalf("termination warning: %+v %v", list, e)
@@ -210,6 +223,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 			if fake.assignments["dr_one"].Enabled || fake.assignments["dr_one"].Limits[0].Usage != "15" {
 				t.Fatal("disable reset usage")
 			}
+			checkRelayCount(1) // Disabling fuel access is not removing the account.
 			if e = repo.ChangeRelayDriver(ctx, input, actor); e != nil || fake.calls != calls {
 				t.Fatal("receipt replay called Relay")
 			}
@@ -269,6 +283,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 			if id(`SELECT driver_id::text FROM relay_driver_links WHERE relay_driver_id='dr_one'`) != ""+driverID {
 				t.Fatal("removal deleted identity history")
 			}
+			checkRelayCount(0) // Historical links survive removal but no longer count.
 			if id(`SELECT driver_id::text FROM fuel_transactions WHERE relay_transaction_id='fixture-purchase'`) != driverID {
 				t.Fatal("removal changed historical purchase")
 			}
@@ -300,6 +315,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 			if strings.Contains(string(encoded), "7890") {
 				t.Fatal("new PIN leaked")
 			}
+			testSidebarCounts(t, ctx, pool, driverID, second)
 		})
 	}
 }

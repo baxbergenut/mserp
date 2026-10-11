@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { usePermissions, pagePermission } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
+import { useSidebarCounts } from "./useSidebarCounts";
 
 const NAV_ITEMS = [
   { href: "/driver-board", label: "Status Board", icon: Truck },
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const { count } = useTaskUpdates();
+  const alerts = useSidebarCounts();
   const permissions = usePermissions();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -86,6 +88,11 @@ export function Sidebar() {
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));
           const Icon = item.icon;
+          const badge = item.href === "/tasks" ? { count, label: `${count} open tasks` }
+            : item.href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
+            : item.href === "/weighmytruck" ? { count: alerts.weighMyTruck, label: `${alerts.weighMyTruck} terminated drivers with confirmed or unresolved WeighMyTruck access` }
+            : item.href === "/tolls" ? { count: alerts.tolls, label: `${alerts.tolls} toll transactions without a linked truck, posted since ${alerts.tollsFrom}` }
+            : undefined;
 
           if ("children" in item) {
             if (collapsed) {
@@ -173,8 +180,8 @@ export function Sidebar() {
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
-              {item.href === "/tasks" && count > 0 && <span aria-label={`${count} open tasks`}
-                className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{count > 99 ? "99+" : count}</span>}
+              {badge && badge.count > 0 && <span aria-label={badge.label} title={badge.label}
+                className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{badge.count > 99 ? "99+" : badge.count}</span>}
             </Link>
           );
         })}

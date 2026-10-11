@@ -132,6 +132,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
   shell and sidebar; `frontend/app/login/` owns the login page.
+  `GET /sidebar-counts` returns permission-scoped red badge counts for terminated
+  Relay accounts in the cached roster, terminated WeighMyTruck memberships with
+  confirmed/unresolved access, and unlinked tolls posted since the first day of
+  the previous New York calendar month. Counts use local data only and refresh
+  after relevant mutations, navigation, focus and every 30 visible seconds.
+  Zero counts are hidden; collapsed badges retain their exact accessible counts.
   `components/PageNavigation.tsx` places the shared Back link on its own row
   above page content. Recurring Charges uses the shared Back link on its
   New charge type action row.

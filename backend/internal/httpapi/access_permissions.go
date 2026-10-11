@@ -10,6 +10,9 @@ import (
 // mapped. This middleware also covers child routers and direct API requests.
 func routePermission(method, path string) string {
 	path = strings.TrimSuffix(path, "/")
+	if path == "/sidebar-counts" && (method == http.MethodGet || method == http.MethodHead) {
+		return "authenticated" // The handler scopes each count to its own read permission.
+	}
 	if path == "/auth/session" || path == "/auth/logout" || path == "/auth/password" || path == "/auth/theme" {
 		return "authenticated"
 	}
