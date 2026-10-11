@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-type Options struct{ ClientID, ClientSecret, TokenURL, Scope, APIURL, CompanyName string }
+type Options struct{ ClientID, ClientSecret, TokenURL, Scope, APIURL, CompanyName, SyncStartDate string }
 
 func (o Options) Enabled() bool { return o.ClientID != "" && o.ClientSecret != "" }
 func (o Options) Validate() error {
@@ -23,6 +23,11 @@ func (o Options) Validate() error {
 	}
 	if !o.Enabled() || o.Scope == "" || o.CompanyName == "" {
 		return errors.New("WeighMyTruck requires client ID, client secret, scope and company name")
+	}
+	if o.SyncStartDate != "" {
+		if _, err := time.Parse(time.DateOnly, o.SyncStartDate); err != nil {
+			return errors.New("WEIGHMYTRUCK_SYNC_START_DATE must be YYYY-MM-DD")
+		}
 	}
 	for _, raw := range []string{o.APIURL, o.TokenURL} {
 		u, err := url.Parse(raw)
@@ -61,7 +66,8 @@ type Client struct {
 func NewClient(o Options) *Client {
 	return &Client{options: o, http: &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
-func (c *Client) Configured() bool { return c != nil && c.options.Enabled() }
+func (c *Client) SettlementStart() string { return c.options.SyncStartDate }
+func (c *Client) Configured() bool        { return c != nil && c.options.Enabled() }
 func (c *Client) bearer(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

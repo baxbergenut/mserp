@@ -143,6 +143,10 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	if err != nil {
 		return source, investor, err
 	}
+	_, scaleCharges, err := wmtPayrollCharges(ctx, tx, source.WeekStart)
+	if err != nil {
+		return source, investor, err
+	}
 	groups := map[string]*truckPayGroup{}
 	frozenDrivers, err := frozenDriverPay(ctx, tx, source.WeekStart)
 	if err != nil {
@@ -277,7 +281,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 			g.ownerOnly = inputs.metadata[id].ownerFullWeek
 		}
 		_, savedInvestor := inputs.edits[id]
-		if savedInvestor {
+		if savedInvestor || len(scaleCharges[id]) > 0 {
 			g.ownerOnly = false
 		}
 		if !g.ownerOnly && g.drivers[g.ownerDriver] {
@@ -285,7 +289,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 				g.card.Issues = append(g.card.Issues, "Owner driving earnings already appear in a finalized Driver Pay statement; reopen and reconcile before settling this truck")
 			}
 		}
-		g.card.AutoCharges = truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
+		g.card.AutoCharges = append(truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0), scaleCharges[id]...)
 		seenLoads := map[int]bool{}
 		for _, l := range g.card.Loads {
 			if l.LoadRecordID != nil {

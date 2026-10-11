@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -88,7 +89,7 @@ func fleetScopeWebhook(logger *slog.Logger, store fleetScopeStore, options fleet
 	}
 }
 
-func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository) {
+func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository, wmt ...*repository.WeighMyTruckRepository) {
 	handler := fleetHandler{logger: logger, repo: repo}
 	r.Get("/driver-directory", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -140,6 +141,7 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			Driver            *driverRequest `json:"driver"`
 			LinkDriverID      string         `json:"linkDriverId"`
 			SeparateConfirmed bool           `json:"separateConfirmed"`
+			AddWeighMyTruck   bool           `json:"addWeighMyTruck"`
 		}
 		if err := decodeJSON(r, &request); err != nil {
 			writeAPIError(w, http.StatusBadRequest, "invalid completion request")
@@ -152,6 +154,14 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 		session, ok := r.Context().Value(authContextKey{}).(repository.AuthSession)
 		if !ok {
 			writeAPIError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if request.AddWeighMyTruck && !slices.Contains(session.User.Permissions, "weighmytruck.write") {
+			writeAPIError(w, 403, "WeighMyTruck write permission is required")
+			return
+		}
+		if request.AddWeighMyTruck && (len(wmt) == 0 || !wmt[0].Configured()) {
+			writeAPIError(w, 400, "WeighMyTruck is not configured")
 			return
 		}
 		var input *repository.DriverInput
@@ -171,7 +181,12 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			writeAPIError(w, http.StatusBadRequest, "invalid driver id")
 			return
 		}
-		value, err := repo.CompleteDriverIntake(r.Context(), id, session.User.ID, request.LinkDriverID, input, request.SeparateConfirmed)
+		value, err := repo.CompleteDriverIntake(r.Context(), id, session.User.ID, request.LinkDriverID, input, request.SeparateConfirmed, request.AddWeighMyTruck)
+		var wmtInvalid *repository.WMTValidationError
+		if errors.As(err, &wmtInvalid) {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
 		if errors.Is(err, repository.ErrIntakeCompleted) || errors.Is(err, repository.ErrIntakeMatch) || errors.Is(err, repository.ErrIntakeTerminated) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return

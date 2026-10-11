@@ -1,11 +1,11 @@
-# WeighMyTruck driver management
+# WeighMyTruck drivers and scale transactions
 
 The full vendor OpenAPI 3.0.1 document is saved as
 [`weighmytruck-openapi.json`](weighmytruck-openapi.json), downloaded on October 9,
 2026 from the authenticated Swagger page:
 https://app.weighmytruck.com/fleetsettlement/swagger/index.html.
-The document includes Settlement and Sites for future use; MSERP currently calls
-only AddDriverToFleet and RemoveDriver.
+MSERP calls AddDriverToFleet, RemoveDriver and GetSettlement. Sites remains
+available for future use.
 
 ## Authentication and wire format
 
@@ -23,6 +23,7 @@ WEIGHMYTRUCK_TOKEN_URL=https://login.microsoftonline.com/0c42b1f7-92b4-4df0-915d
 WEIGHMYTRUCK_SCOPE=api://6b61f2df-5ec0-4dea-bfb8-b9589ec9942d/.default
 WEIGHMYTRUCK_API_URL=https://app.weighmytruck.com/fleetsettlement
 WEIGHMYTRUCK_COMPANY_NAME=MS Express Inc.
+WEIGHMYTRUCK_SYNC_START_DATE=2026-10-05
 ```
 
 Local secrets belong in ignored `backend/.env.local`; production uses
@@ -63,6 +64,57 @@ column, membership filter or routine Verify action. Pending/uncertain additions
 remain visible as error notices without appearing as confirmed added drivers.
 Administrative recovery for external changes or uncertain operations retains
 the versioned verification API; normal users do not need a website-login workflow.
+
+## Scale transactions and statements (migration 074)
+
+Drivers and Transactions are separate tabs. The server requests daily CSVs from
+`POST /Settlement/GetSettlement` with `types: [3]`, `includeDriverCode: true`,
+and the full day. The response's `csv` field is base64. The saved header names
+are validated and fees parsed as exact decimal cents; credits keep their sign.
+Site number plus ticket number is the import identity. Repeated imports upsert
+source values without duplicating deductions. Reweighs remain separate tickets.
+
+The first sync starts October 5, 2026 (the requested current week). Daily sync
+uses `SCHEDULED_FUEL_SYNC_TIME` and the scheduler timezone, alongside fuel but
+independent of its success. Each run rechecks available days from the configured
+start through today, capped at the vendor's last 30 days, to find late tickets
+and corrections. Days saved before a failed request remain committed. Manual
+Sync and `-sync-weighmytruck-once` use the same code and database lock. A gap
+older than the vendor window needs an operator/vendor reconciliation.
+
+Truck matching uses unique stored unit aliases. Driver matching uses a unique
+saved WMT driver code; when the code is blank, a unique truck assignment on the
+ticket's New York date supplies the driver. Ambiguous or conflicting evidence
+is flagged, never guessed. Link/Edit link explicitly corrects both IDs with an
+optimistic version and audit event. A changed vendor identity requires review;
+a changed ticket date stops that day's import for source reconciliation.
+
+Each added driver's **Charge to** setting is Company (default), Driver, or
+Truck investor. Only one payer receives each ticket. Settings are effective from
+a selected Monday; no initial charge preferences are inferred. Investor is
+offered for another non-company investor's truck, and historical truck terms
+and ownership determine the actual statement owner. Missing/conflicting owner
+evidence is flagged and not charged. Driver charges apply to CPM and percentage
+drivers alike, including weeks without loads.
+
+Driver and Investor Pay show individual read-only CAT Scale rows in the ticket
+week. They participate in the existing totals, history and frozen statement
+snapshots. Finalized statements never change during sync. Late/corrected tickets
+that differ from a frozen report show a warning; reopen the affected statement
+to reconcile it. Payer/link corrections reject finalized affected statements.
+Transactions do not create Expenses & Charges entries.
+
+Reads/sync use `weighmytruck.read/write`; payer changes additionally require
+`payroll.write`, and manual transaction linking also requires `fleet.read`.
+Financial writes share the existing payroll finalization lock.
+
+FleetScope setup includes an optional Add to WeighMyTruck checkbox. Validated
+enrollment intent commits atomically with setup, then a server worker processes
+it at startup/every minute. The same worker removes confirmed enrolled drivers
+after termination from any managed path. Unknown provider outcomes remain in
+review and are never blindly replayed; definite removal failures retry after
+15 minutes. Queued/failed enrollment is visible on the Drivers tab. No browser
+request uses vendor credentials or depends on the user's VPN.
 
 The October 9 website export contains 25 accounts. Its CSV is stored privately
 under ignored `backend/.weighmytruck/` locally and `/etc/mserp/` in production;

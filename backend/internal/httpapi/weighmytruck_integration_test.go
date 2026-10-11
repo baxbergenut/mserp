@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -66,8 +67,13 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				execute(string(m))
+				m, e = os.ReadFile("../../sql/074_weighmytruck_settlements.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				execute(string(m))
 			}
-			execute(`GRANT SELECT,UPDATE ON drivers TO mserp_app`)
+			execute(`GRANT SELECT,UPDATE ON drivers TO mserp_app; GRANT SELECT ON trucks,truck_driver_assignments TO mserp_app`)
 			pc := cfg.Copy()
 			pc.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			pc.ConnConfig.RuntimeParams["role"] = "mserp_app"
@@ -90,6 +96,20 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 					w.Write([]byte(`{"access_token":"fixture-token","expires_in":3600}`))
 					return
 				}
+				if strings.HasSuffix(r.URL.Path, "GetSettlement") {
+					if r.Header.Get("Authorization") != "Bearer fixture-token" {
+						t.Error("missing settlement bearer")
+					}
+					var input struct{ Date string }
+					json.NewDecoder(r.Body).Decode(&input)
+					if input.Date == repository.ChargeCurrentWeek() {
+						csv := "Date,Ticket Number,Fee,Tractor Number,Site Number,Driver Code\n" + input.Date + ",999,15.25,074,1,007\n"
+						json.NewEncoder(w).Encode(map[string]any{"csv": base64.StdEncoding.EncodeToString([]byte(csv))})
+					} else {
+						w.Write([]byte(`{"csv":null}`))
+					}
+					return
+				}
 				calls.Add(1)
 				if r.Header.Get("Authorization") != "Bearer fixture-token" {
 					t.Error("missing bearer")
@@ -102,7 +122,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 				w.WriteHeader(int(response.Load()))
 			}))
 			defer provider.Close()
-			repo := repository.NewWeighMyTruckRepository(pool, weighmytruck.NewClient(weighmytruck.Options{ClientID: "id", ClientSecret: "secret", TokenURL: provider.URL + "/token", APIURL: provider.URL, Scope: "scope", CompanyName: "Fixture"}))
+			repo := repository.NewWeighMyTruckRepository(pool, weighmytruck.NewClient(weighmytruck.Options{ClientID: "id", ClientSecret: "secret", TokenURL: provider.URL + "/token", APIURL: provider.URL, Scope: "scope", CompanyName: "Fixture", SyncStartDate: repository.ChargeCurrentWeek()}))
 			csv := "First Name,Last Name,Email,Phone,Driver Code\nAdded,Driver,driver0@example.com,5551230000,007\nTerminated,Driver,driver2@example.com,5551230002,\nUnmatched,Driver,unmatched@example.com,5551230099,\n"
 			imported, err := repo.ImportWeighMyTruck(ctx, strings.NewReader(csv))
 			if err != nil || imported.Total != 3 || imported.Linked != 2 || imported.Unlinked != 1 {
@@ -127,6 +147,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			})
 			router.Use(auth.requireCSRF, requirePermission)
 			registerWeighMyTruckRoutes(router, logger, repo)
+			registerDriverPayRoutes(router, logger, repository.NewDriverPayRepository(pool), nil)
 			router.Get("/auth/session", auth.session)
 			request := func(method, path, body, csrf string, status int) {
 				t.Helper()
@@ -212,6 +233,13 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			execute(`UPDATE weighmytruck_memberships SET updated_at=now()-interval '3 minutes' WHERE driver_id=$1`, ids[1])
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
+				permissions = append(permissions, "payroll.read", "payroll.write")
+				execute(`GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
+				execute(`INSERT INTO trucks(id,unit_number) VALUES('07400000-0000-0000-0000-000000000001','074')`)
+				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000001',$1,($2::date::timestamp AT TIME ZONE 'America/New_York'))`, ids[0], repository.ChargeCurrentWeek())
+				if _, err := repo.SyncSettlements(ctx); err != nil {
+					t.Fatal(err)
+				}
 				// The add picker must exclude non-active drivers even when unadded.
 				execute(`INSERT INTO drivers(full_name,normalized_name,email,phone,pay_type,pay_rate,status,termination_date)
  VALUES('Home Driver','home driver','home@example.com','5551230081','cpm',0,'home',NULL),

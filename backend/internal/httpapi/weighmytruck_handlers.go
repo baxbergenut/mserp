@@ -4,6 +4,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +39,73 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			return
 		}
 		writeJSON(w, 200, result)
+	})
+	r.Get("/weighmytruck/transactions", func(w http.ResponseWriter, r *http.Request) {
+		page, e := parsePagination(r)
+		if e != nil {
+			writeAPIError(w, 400, e.Error())
+			return
+		}
+		from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
+		a, e1 := time.Parse(time.DateOnly, from)
+		b, e2 := time.Parse(time.DateOnly, to)
+		if e1 != nil || e2 != nil || a.After(b) || b.Sub(a) > 366*24*time.Hour {
+			writeAPIError(w, 400, "Choose a valid date range of up to one year")
+			return
+		}
+		result, e := repo.Transactions(r.Context(), from, to, strings.TrimSpace(r.URL.Query().Get("search")), page)
+		if e != nil {
+			writeError(w, e)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Post("/weighmytruck/sync", func(w http.ResponseWriter, r *http.Request) {
+		n, e := repo.SyncSettlements(r.Context())
+		if e != nil {
+			logger.Error("WeighMyTruck settlement sync failed", "error", e)
+			writeAPIError(w, 502, "Settlement sync failed; saved days are retained. Try again or check server configuration.")
+			return
+		}
+		writeJSON(w, 200, map[string]int{"tickets": n})
+	})
+	r.Put("/weighmytruck/billing", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := authSessionFromContext(r.Context())
+		if !slices.Contains(session.User.Permissions, "payroll.write") {
+			writeAPIError(w, 403, "Payroll write permission is required to change the payer")
+			return
+		}
+		var in repository.WMTBilling
+		if decodeJSON(r, &in) != nil || !isUUID(in.DriverID) {
+			writeAPIError(w, 400, "Invalid charge setting")
+			return
+		}
+		if e := repo.SaveBilling(r.Context(), in, session.User.ID); e != nil {
+			writeError(w, e)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"saved": true})
+	})
+	r.Put("/weighmytruck/transactions/{id}/link", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := authSessionFromContext(r.Context())
+		if !slices.Contains(session.User.Permissions, "payroll.write") || !slices.Contains(session.User.Permissions, "fleet.read") {
+			writeAPIError(w, 403, "Payroll write and fleet read permissions are required")
+			return
+		}
+		var in struct {
+			DriverID string `json:"driverId"`
+			TruckID  string `json:"truckId"`
+			Version  int    `json:"version"`
+		}
+		if decodeJSON(r, &in) != nil || !isUUID(in.DriverID) || !isUUID(in.TruckID) || !isUUID(chi.URLParam(r, "id")) || in.Version < 1 {
+			writeAPIError(w, 400, "Invalid transaction link")
+			return
+		}
+		if e := repo.LinkTransaction(r.Context(), chi.URLParam(r, "id"), in.DriverID, in.TruckID, in.Version, session.User.ID); e != nil {
+			writeError(w, e)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"saved": true})
 	})
 	r.Post("/weighmytruck/change", func(w http.ResponseWriter, r *http.Request) {
 		var in repository.WMTChange

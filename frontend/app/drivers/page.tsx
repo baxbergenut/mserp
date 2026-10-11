@@ -76,6 +76,7 @@ function DriversContent() {
   const [pendingDelete, setPendingDelete] = useState<Driver | null>(null);
   const [form, setForm] = useState<DriverInput>(emptyDriverInput);
   const [cdlFileName, setCDLFileName] = useState<string | null>(null);
+  const [addWeighMyTruck, setAddWeighMyTruck] = useState(false);
   const [intake, setIntake] = useState<DriverIntake | null>(null);
   const [existingDrivers, setExistingDrivers] = useState<Driver[]>([]);
   const [linkDriverID, setLinkDriverID] = useState("");
@@ -165,7 +166,7 @@ function DriversContent() {
     }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
     setIntake(hire);
     setLinkDriverID("");
-    setSeparateConfirmed(false);
+    setSeparateConfirmed(false); setAddWeighMyTruck(false);
     setCDLFileName(null);
     setEditing(null);
     setError("");
@@ -226,7 +227,7 @@ function DriversContent() {
     setError("");
     try {
       if (intake) {
-        await completeDriverIntake(intake.id, linkDriverID ? { linkDriverId: linkDriverID } : { driver: form, separateConfirmed });
+        await completeDriverIntake(intake.id, { ...(linkDriverID ? { linkDriverId: linkDriverID } : { driver: form, separateConfirmed }), addWeighMyTruck });
         setIntake(null);
         if (setupID) router.replace("/drivers", { scroll: false });
       } else if (editing) await updateDriver(editing.id, form);
@@ -376,6 +377,7 @@ function DriversContent() {
             <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${formatPhone(candidate.phone) || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>
             <label className="mt-3 flex items-center gap-2"><input type="checkbox" required checked={separateConfirmed} onChange={(event) => setSeparateConfirmed(event.target.checked)} />I reviewed the matches. This is a different person.</label>
           </div>}
+          {intake && permissions.includes("weighmytruck.write") && <label className="mb-4 flex items-center gap-2 text-[13px]"><input type="checkbox" checked={addWeighMyTruck} onChange={e => setAddWeighMyTruck(e.target.checked)} />Add driver to WeighMyTruck</label>}
           {!linkDriverID && <DriverForm
             value={form}
             onChange={setForm}

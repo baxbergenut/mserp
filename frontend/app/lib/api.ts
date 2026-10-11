@@ -303,7 +303,7 @@ export const fetchDriverIntakeById = (id: string) => apiRequest<DriverIntake>(`/
 export const fetchDriverIntake = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<DriverIntake>>(withQuery("/driver-intake", query));
 export const completeDriverIntake = (id: string, input:
-  { driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) =>
+  ({ driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) & { addWeighMyTruck?: boolean }) =>
   apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify("driver" in input ? { ...input, driver: withPhone(input.driver) } : input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriverAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/drivers/${id}/assignments`);
@@ -500,3 +500,8 @@ export const verifyWeighMyTruck = (entry: import("./types").WeighMyTruckEntry, e
 export const linkWeighMyTruck = (entry: import("./types").WeighMyTruckEntry, driverId: string) => apiRequest<void>(`/weighmytruck/${entry.id}/link`, {
   method: "POST", body: JSON.stringify({ version: entry.version, driverId }),
 });
+
+export const fetchWMTTransactions = (query: PageQuery & { from: string; to: string }, signal?: AbortSignal) => apiRequest<import("./types").WMTTransactions>(withQuery("/weighmytruck/transactions", query), { signal });
+export const syncWMTTransactions = () => apiRequest<{ tickets: number }>("/weighmytruck/sync", { method: "POST" });
+export const saveWMTBilling = (input: import("./types").WMTBilling) => apiRequest<void>("/weighmytruck/billing", { method: "PUT", body: JSON.stringify(input) });
+export const linkWMTTransaction = (entry: import("./types").WMTTransaction, driverId: string, truckId: string) => apiRequest<void>(`/weighmytruck/transactions/${entry.id}/link`, { method: "PUT", body: JSON.stringify({ driverId, truckId, version: entry.version }) });

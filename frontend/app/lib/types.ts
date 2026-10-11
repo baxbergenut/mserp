@@ -1125,7 +1125,12 @@ export interface EscrowTaskDecision { decision: "released" | "partially_released
 export type WeighMyTruckEntry = {
   id: string; driverId: string; name: string; email: string; phone: string;
   driverCode: string; driverStatus: string; enrolled: boolean;
+  investorEligible: boolean; payer: WMTPayer;
   state: "confirmed" | "pending" | "review"; version: number;
   warning: string; addBlockReason: string; canVerify: boolean; updatedAt: string | null;
 };
-export type WeighMyTruckList = { items: WeighMyTruckEntry[]; configured: boolean; initialized: boolean };
+export type WMTPayer = "company" | "driver" | "investor";
+export type WMTBilling = { driverId: string; weekStart: string; payer: WMTPayer; version: number };
+export type WeighMyTruckList = { items: WeighMyTruckEntry[]; configured: boolean; initialized: boolean; billing: WMTBilling[]; requests: { driverId: string; name: string; state: string; error: string }[] };
+export type WMTTransaction = { id: string; date: string; time: string; ticket: string; originalTicket: string; amount: string; truckUnit: string; driverCode: string; driverId: string; driverName: string; truckId: string; location: string; city: string; state: string; payer: WMTPayer; investorName: string; warning: string; version: number };
+export type WMTTransactions = PaginatedResponse<WMTTransaction> & { totalAmount: string; lastSync: string | null };

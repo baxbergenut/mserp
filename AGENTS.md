@@ -87,6 +87,21 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   WEIGHMYTRUCK_API_URL and WEIGHMYTRUCK_COMPANY_NAME. No browser vendor calls.
   `MSERP_WMT_TEST_DATABASE_URL` runs fresh/migrated tests as mserp_app;
   `MSERP_WMT_BROWSER_TEST=1` adds real API/database browser checks after a /api build.
+  Migration 074 adds scale transactions, effective-Monday Company/Driver/Truck
+  investor billing (one payer), audited links and durable onboarding enrollment.
+  Drivers/Transactions tabs use server-only CSV settlement sync, scheduled at
+  the fuel sync time; `WEIGHMYTRUCK_SYNC_START_DATE=2026-10-05` limits initial
+  history to the requested week. The vendor permits only the last 30 days;
+  rechecking that window catches corrections without duplicate tickets.
+  Exact driver codes or unique dated truck assignments resolve drivers, and
+  stored unit aliases resolve trucks. Ambiguity is flagged for manual linking.
+  Driver and Investor Pay include read-only CAT Scale autoCharges in the ticket
+  week. Finalized snapshots stay frozen; differing source tickets show warnings.
+  Billing/link writes require payroll.write and use the financial lock.
+  No Expenses & Charges rows are created. FleetScope setup can queue enrollment;
+  a startup/minute worker removes terminated enrolled drivers and processes adds.
+  Uncertain provider mutations retain the existing review/no-replay boundary.
+  `-sync-weighmytruck-once` runs only settlement import for operator recovery.
 - `backend/internal/jobs/sync_loads.go`: synchronous load sync for new upstream
   record IDs, five-minute operational refresh, and morning 21-day reconciliation.
   `backend/internal/repository/load_sync_repository.go` owns operational candidate

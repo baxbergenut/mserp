@@ -31,26 +31,34 @@ func NewWeighMyTruckRepository(pool *pgxpool.Pool, p WMTProvider) *WeighMyTruckR
 	return &WeighMyTruckRepository{pool: pool, provider: p}
 }
 
+func (r *WeighMyTruckRepository) Configured() bool {
+	return r.provider != nil && r.provider.Configured()
+}
+
 type WMTEntry struct {
-	ID             string     `json:"id"`
-	DriverID       string     `json:"driverId"`
-	Name           string     `json:"name"`
-	Email          string     `json:"email"`
-	Phone          string     `json:"phone"`
-	DriverCode     string     `json:"driverCode"`
-	DriverStatus   string     `json:"driverStatus"`
-	Enrolled       bool       `json:"enrolled"`
-	State          string     `json:"state"`
-	Version        int        `json:"version"`
-	Warning        string     `json:"warning"`
-	AddBlockReason string     `json:"addBlockReason"`
-	CanVerify      bool       `json:"canVerify"`
-	UpdatedAt      *time.Time `json:"updatedAt"`
+	InvestorEligible bool       `json:"investorEligible"`
+	Payer            string     `json:"payer"`
+	ID               string     `json:"id"`
+	DriverID         string     `json:"driverId"`
+	Name             string     `json:"name"`
+	Email            string     `json:"email"`
+	Phone            string     `json:"phone"`
+	DriverCode       string     `json:"driverCode"`
+	DriverStatus     string     `json:"driverStatus"`
+	Enrolled         bool       `json:"enrolled"`
+	State            string     `json:"state"`
+	Version          int        `json:"version"`
+	Warning          string     `json:"warning"`
+	AddBlockReason   string     `json:"addBlockReason"`
+	CanVerify        bool       `json:"canVerify"`
+	UpdatedAt        *time.Time `json:"updatedAt"`
 }
 type WMTList struct {
-	Items       []WMTEntry `json:"items"`
-	Configured  bool       `json:"configured"`
-	Initialized bool       `json:"initialized"`
+	Billing     []WMTBilling `json:"billing"`
+	Requests    []WMTRequest `json:"requests"`
+	Items       []WMTEntry   `json:"items"`
+	Configured  bool         `json:"configured"`
+	Initialized bool         `json:"initialized"`
 }
 type WMTChange struct {
 	DriverID     string `json:"driverId"`
@@ -90,7 +98,9 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
  COALESCE(d.full_name,m.first_name||' '||m.last_name),COALESCE(m.email,d.email,''),COALESCE(m.phone,d.phone,''),COALESCE(m.driver_code,''),
  COALESCE(d.status,'unlinked'),COALESCE(m.enrolled,false),COALESCE(m.state,'confirmed'),COALESCE(m.version,0),COALESCE(m.last_error,''),m.updated_at,
  COALESCE(d.email,''),COALESCE(d.phone,''),
- COALESCE(m.state='review' OR (m.state='pending' AND m.updated_at<now()-interval '2 minutes'),false)
+ COALESCE(m.state='review' OR (m.state='pending' AND m.updated_at<now()-interval '2 minutes'),false),
+ EXISTS(SELECT 1 FROM truck_driver_assignments a JOIN trucks t ON t.id=a.truck_id JOIN investors i ON i.id=t.owner_id WHERE a.driver_id=d.id AND a.unassigned_at IS NULL AND NOT i.is_company AND i.driver_id IS DISTINCT FROM d.id),
+ coalesce((SELECT payer FROM weighmytruck_billing b WHERE b.driver_id=d.id AND b.week_start<=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date ORDER BY week_start DESC LIMIT 1),'company')
  FROM drivers d FULL JOIN weighmytruck_memberships m ON m.driver_id=d.id
  ORDER BY COALESCE(m.enrolled,false) DESC,lower(COALESCE(d.full_name,m.first_name||' '||m.last_name))`)
 	if err != nil {
@@ -100,7 +110,7 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
 	for rows.Next() {
 		var e WMTEntry
 		var currentEmail, currentPhone, lastError string
-		if err := rows.Scan(&e.ID, &e.DriverID, &e.Name, &e.Email, &e.Phone, &e.DriverCode, &e.DriverStatus, &e.Enrolled, &e.State, &e.Version, &lastError, &e.UpdatedAt, &currentEmail, &currentPhone, &e.CanVerify); err != nil {
+		if err := rows.Scan(&e.ID, &e.DriverID, &e.Name, &e.Email, &e.Phone, &e.DriverCode, &e.DriverStatus, &e.Enrolled, &e.State, &e.Version, &lastError, &e.UpdatedAt, &currentEmail, &currentPhone, &e.CanVerify, &e.InvestorEligible, &e.Payer); err != nil {
 			return result, err
 		}
 		if e.DriverStatus == "terminated" && (e.Enrolled || e.State != "confirmed") {
@@ -128,7 +138,42 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
 		}
 		result.Items = append(result.Items, e)
 	}
-	return result, rows.Err()
+	if err = rows.Err(); err != nil {
+		return result, err
+	}
+	rows.Close()
+	billing, err := r.pool.Query(ctx, `SELECT driver_id::text,week_start::text,payer,version FROM weighmytruck_billing ORDER BY week_start`)
+	if err != nil {
+		return result, err
+	}
+	result.Billing = []WMTBilling{}
+	for billing.Next() {
+		var b WMTBilling
+		if err = billing.Scan(&b.DriverID, &b.WeekStart, &b.Payer, &b.Version); err != nil {
+			billing.Close()
+			return result, err
+		}
+		result.Billing = append(result.Billing, b)
+	}
+	err = billing.Err()
+	billing.Close()
+	if err != nil {
+		return result, err
+	}
+	pending, err := r.pool.Query(ctx, `SELECT q.driver_id::text,d.full_name,q.state,q.last_error FROM weighmytruck_requests q JOIN drivers d ON d.id=q.driver_id WHERE q.state<>'done'`)
+	if err != nil {
+		return result, err
+	}
+	defer pending.Close()
+	result.Requests = []WMTRequest{}
+	for pending.Next() {
+		var q WMTRequest
+		if err = pending.Scan(&q.DriverID, &q.Name, &q.State, &q.Error); err != nil {
+			return result, err
+		}
+		result.Requests = append(result.Requests, q)
+	}
+	return result, pending.Err()
 }
 
 // Reserve durably before calling the provider. A lost reply or process crash
@@ -269,6 +314,9 @@ func (r *WeighMyTruckRepository) Change(ctx context.Context, in WMTChange, actor
 	}
 	if err = tx.Commit(finishCtx); err != nil {
 		return err
+	}
+	if callErr == nil && in.Add {
+		_ = r.RetryEnrollment(finishCtx, in.DriverID)
 	}
 	return callErr
 }

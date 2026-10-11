@@ -32,6 +32,7 @@ import (
 
 func main() {
 	wmtImport := flag.String("import-weighmytruck-roster", "", "initialize WeighMyTruck tracker from website CSV and exit without external calls")
+	syncWMTOnly := flag.Bool("sync-weighmytruck-once", false, "sync scale transactions and exit")
 	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
 	backfillTollLocations := flag.Bool("backfill-toll-locations", false, "refresh current-year PrePass location metadata and exit")
 	flag.Parse()
@@ -81,6 +82,17 @@ func main() {
 			logger.Error("one-time load sync failed", "error", err)
 			os.Exit(1)
 		}
+		return
+	}
+	wmtClient := weighmytruck.NewClient(cfg.WeighMyTruck)
+	wmtRepo := repository.NewWeighMyTruckRepository(pool, wmtClient)
+	if *syncWMTOnly {
+		n, e := wmtRepo.SyncSettlements(ctx)
+		if e != nil {
+			logger.Error("scale sync failed", "error", e)
+			os.Exit(1)
+		}
+		logger.Info("scale sync complete", "tickets", n)
 		return
 	}
 	fleetRepo := repository.NewFleetRepository(pool)
@@ -149,7 +161,7 @@ func main() {
 		cabCardExtractor,
 		expenseExtractor,
 		fiveELDJob,
-		weighmytruck.NewClient(cfg.WeighMyTruck),
+		wmtClient,
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,
 			SessionTTL:   cfg.AuthSessionTTL,
@@ -179,6 +191,11 @@ func main() {
 		server.RegisterOnShutdown(draining.Shutdown)
 	}
 
+	wmtAutomationDone := make(chan struct{})
+	go func() {
+		defer close(wmtAutomationDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "weighmytruck-membership", Interval: time.Minute, Run: wmtRepo.ProcessAutomation})
+	}()
 	escrowTasksDone := make(chan struct{})
 	go func() {
 		defer close(escrowTasksDone)
@@ -197,6 +214,13 @@ func main() {
 			go func() {
 				defer workers.Done()
 				jobs.RunDailyScheduler(ctx, logger, cfg.ScheduledSyncsLocation,
+					jobs.DailyJob{Name: "weighmytruck", Hour: cfg.ScheduledFuelSyncTime.Hour, Minute: cfg.ScheduledFuelSyncTime.Minute, Run: func(ctx context.Context) error {
+						if !wmtClient.Configured() {
+							return nil
+						}
+						_, e := wmtRepo.SyncSettlements(ctx)
+						return e
+					}},
 					jobs.DailyJob{
 						Name:   "loads",
 						Hour:   cfg.ScheduledLoadsSyncTime.Hour,
@@ -276,6 +300,10 @@ func main() {
 		logger.Error("shutdown server", "error", shutdownErr)
 	}
 
+	select {
+	case <-wmtAutomationDone:
+	case <-shutdownCtx.Done():
+	}
 	select {
 	case <-escrowTasksDone:
 	case <-shutdownCtx.Done():

@@ -293,7 +293,7 @@ func intakeCandidates(ctx context.Context, db intakeQuerier, d fleetscope.Driver
 	return result, rows.Err()
 }
 
-func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, linkDriverID string, input *DriverInput, separateConfirmed bool) (Driver, error) {
+func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, linkDriverID string, input *DriverInput, separateConfirmed bool, addWeighMyTruck ...bool) (Driver, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Driver{}, err
@@ -356,6 +356,11 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 		}
 		linkDriverID, err = createDriverTx(ctx, tx, *input)
 		if err != nil {
+			return Driver{}, err
+		}
+	}
+	if len(addWeighMyTruck) > 0 && addWeighMyTruck[0] {
+		if err = queueWMTEnrollment(ctx, tx, linkDriverID, userID); err != nil {
 			return Driver{}, err
 		}
 	}
