@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   List,
   RefreshCw,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -30,6 +31,7 @@ import {
   TableShell,
 } from "../components/management/ManagementUI";
 import { FuelOverview } from "./FuelOverview";
+import { RelayDriversTab } from "./RelayDriversTab";
 import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
 
 const filterClass =
@@ -95,7 +97,7 @@ function productSummary(transaction: FuelTransaction) {
 }
 
 export default function FuelPage() {
-  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions">("page:activeTab", "overview");
+  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "drivers">("page:activeTab", "overview");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [transactions, setTransactions] = useState<FuelTransaction[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
@@ -200,7 +202,7 @@ export default function FuelPage() {
           </div>
 
         </div></PageHeader>
-        <button
+        {activeTab !== "drivers" && <button
           type="button"
           onClick={() => void handleSync()}
           disabled={isSyncing}
@@ -208,7 +210,7 @@ export default function FuelPage() {
         >
           <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
           {isSyncing ? "Syncing missing days…" : "Sync fuel"}
-        </button>
+        </button>}
       </div>
 
       {message && (
@@ -237,11 +239,11 @@ export default function FuelPage() {
         </div>
       )}
 
-      <div className="flex w-fit rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5">
+      <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
             activeTab === "overview"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
               : "text-zinc-500 hover:text-zinc-300"
@@ -252,7 +254,7 @@ export default function FuelPage() {
         <button
           type="button"
           onClick={() => setActiveTab("transactions")}
-          className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
             activeTab === "transactions"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
               : "text-zinc-500 hover:text-zinc-300"
@@ -260,11 +262,12 @@ export default function FuelPage() {
         >
           <List className="h-3.5 w-3.5" /> Transactions
         </button>
+        <button type="button" onClick={() => setActiveTab("drivers")} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === "drivers" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}><Users className="h-3.5 w-3.5" />Drivers</button>
       </div>
 
       {activeTab === "overview" ? (
         <FuelOverview refreshKey={dashboardRefreshKey} />
-      ) : (
+      ) : activeTab === "drivers" ? <RelayDriversTab /> : (
         <>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

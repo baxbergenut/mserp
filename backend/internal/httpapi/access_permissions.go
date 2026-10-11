@@ -42,6 +42,14 @@ func routePermission(method, path string) string {
 		return "payroll.read"
 	}
 	switch resource {
+	case "relay-drivers":
+		if read || path == "/relay-drivers/refresh" {
+			return "fuel.read"
+		}
+		if strings.HasSuffix(path, "/link") {
+			return "tasks.write"
+		}
+		return "fuel.drivers.write"
 	case "weighmytruck":
 		return pair("weighmytruck")
 	case "drivers", "trucks", "dispatchers", "updaters", "investors", "driver-directory", "driver-intake", "files", "irp-files", "cdl-files":

@@ -106,6 +106,7 @@ func main() {
 	customTaskRepo := repository.NewCustomTaskRepository(pool)
 	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
+	fuelRepo.ConfigureRelayDrivers(relayClient, cfg.RelayEnvironment)
 	fuelJob := jobs.NewSyncFuelJob(
 		relayClient,
 		fuelRepo,

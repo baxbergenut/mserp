@@ -1134,3 +1134,22 @@ export type WMTBilling = { driverId: string; weekStart: string; payer: WMTPayer;
 export type WeighMyTruckList = { items: WeighMyTruckEntry[]; configured: boolean; initialized: boolean; billing: WMTBilling[]; requests: { driverId: string; name: string; state: string; error: string }[] };
 export type WMTTransaction = { id: string; date: string; time: string; ticket: string; originalTicket: string; amount: string; truckUnit: string; driverCode: string; driverId: string; driverName: string; truckId: string; location: string; city: string; state: string; payer: WMTPayer; investorName: string; warning: string; version: number };
 export type WMTTransactions = PaginatedResponse<WMTTransaction> & { totalAmount: string; lastSync: string | null };
+export interface RelayPolicyLimit { type: string; mode: string; amount: string; unit: string; frequency: string; usage?: string; remaining?: string }
+export interface RelayDriverPolicy { id: string; name: string; eld_enabled: boolean; authorization_prompts: { name: string; validation_mode: string }[]; limits: RelayPolicyLimit[] }
+export interface RelayPolicyAssignment { id: string; policy_id: string; policy_name: string; enabled: boolean; limits: RelayPolicyLimit[] }
+export interface RelayRosterEntry {
+  driver: { id: string; first_name: string; last_name: string; phone: string; email: string; integration_id: string; updated_at: string; data_fields?: { field_name: string; field_value: string }[] };
+  assignment: RelayPolicyAssignment | null; revision: string; identityId: string; driverId: string; driverName: string;
+  status: string; warning: string; pending: boolean; suggestions: RelayIdentityTask["suggestions"];
+}
+export interface RelayDriverChoice { id: string; name: string; status: string; phone: string; email: string; truck: string }
+export interface RelayDriverOperation { id: string; action: string; relayDriverId: string; driverId: string; createdAt: string }
+export interface RelayDriverList {
+  items: RelayRosterEntry[]; policies: RelayDriverPolicy[]; configured: boolean; refreshedAt: string | null; environment: string;
+  canLink: boolean; drivers: RelayDriverChoice[]; operations: RelayDriverOperation[];
+}
+export type RelayDriverAction = "add" | "edit" | "remove" | "enable" | "disable" | "assign" | "unassign";
+export interface RelayDriverChange {
+  requestId: string; action: RelayDriverAction; relayDriverId?: string; driverId?: string; revision?: string; policyId?: string;
+  firstName?: string; lastName?: string; phone?: string; email?: string; driverPin?: string; truckNumber?: string;
+}

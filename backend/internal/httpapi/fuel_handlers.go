@@ -19,6 +19,7 @@ func registerFuelRoutes(
 	repo *repository.FuelRepository,
 ) {
 	registerRelayIdentityRoutes(r, logger, repo)
+	registerRelayDriverRoutes(r, logger, repo)
 	r.Get("/fuel-dashboard", func(w http.ResponseWriter, r *http.Request) {
 		dateFrom, err := parseOptionalDate(r.URL.Query().Get("dateFrom"), "dateFrom")
 		if err != nil {

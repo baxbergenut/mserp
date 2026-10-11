@@ -66,7 +66,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
   A shared priority request gate paces all attempts at 15/minute; discovery
   takes priority over queued refreshes and 429 cooldowns apply to every caller.
-- `backend/internal/relay/`: Relay Payments fuel transaction client.
+- `backend/internal/relay/`: Relay Payments fuel transactions and driver/policy client.
+  Fuel's third tab, Drivers, uses `repository/relay_drivers.go` and
+  `httpapi/relay_driver_handlers.go`; migration 075 stores roster snapshots and
+  durable operation receipts. See `docs/integrations/RELAY_DRIVERS.md`.
+  Driver/policy calls use `/api/integrations`; transactions use `/api`.
+  Assignment GET/PUT/DELETE paths use driver IDs (verified against staging).
+  `MSERP_RELAY_LIVE_STAGING_API_KEY` explicitly opts into the staging lifecycle
+  test, which creates and removes a synthetic driver; ordinary tests skip it.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
 - `backend/internal/weighmytruck/`, repository/httpapi `weighmytruck_*` files and
@@ -118,7 +125,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
 - `backend/sql/002_add_tolls.sql` through
-  `073_weighmytruck.sql`:
+  `075_relay_drivers.sql`:
   manual incremental migrations for older databases.
 
 ### Frontend

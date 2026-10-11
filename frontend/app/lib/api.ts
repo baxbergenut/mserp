@@ -505,3 +505,9 @@ export const fetchWMTTransactions = (query: PageQuery & { from: string; to: stri
 export const syncWMTTransactions = () => apiRequest<{ tickets: number }>("/weighmytruck/sync", { method: "POST" });
 export const saveWMTBilling = (input: import("./types").WMTBilling) => apiRequest<void>("/weighmytruck/billing", { method: "PUT", body: JSON.stringify(input) });
 export const linkWMTTransaction = (entry: import("./types").WMTTransaction, driverId: string, truckId: string) => apiRequest<void>(`/weighmytruck/transactions/${entry.id}/link`, { method: "PUT", body: JSON.stringify({ driverId, truckId, version: entry.version }) });
+import type { RelayDriverList, RelayDriverChange } from "./types";
+export const fetchRelayDrivers = (signal?: AbortSignal) => apiRequest<RelayDriverList>("/relay-drivers", { signal });
+export const refreshRelayDrivers = () => apiRequest<void>("/relay-drivers/refresh", { method: "POST" });
+export const changeRelayDriver = (input: RelayDriverChange) => apiRequest<void>("/relay-drivers/change", { method: "POST", body: JSON.stringify(input) });
+export const linkRelayRosterDriver = (relayId: string, driverId: string) => apiRequest<{ transactionsLinked: number }>(`/relay-drivers/${encodeURIComponent(relayId)}/link`, { method: "POST", body: JSON.stringify({ driverId }) });
+export const verifyRelayDriverOperation = (id: string) => apiRequest<void>(`/relay-drivers/operations/${id}/verify`, { method: "POST", body: JSON.stringify({ reviewed: true }) });
