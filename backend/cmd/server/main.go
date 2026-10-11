@@ -193,6 +193,13 @@ func main() {
 	}
 
 	wmtAutomationDone := make(chan struct{})
+	relayAutomationDone := make(chan struct{})
+	go func() {
+		defer close(relayAutomationDone)
+		if cfg.RelayAPIKey != "" {
+			jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "relay-offboarding", Interval: time.Minute, Run: fuelRepo.ProcessRelayOffboarding})
+		}
+	}()
 	go func() {
 		defer close(wmtAutomationDone)
 		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "weighmytruck-membership", Interval: time.Minute, Run: wmtRepo.ProcessAutomation})
@@ -301,6 +308,10 @@ func main() {
 		logger.Error("shutdown server", "error", shutdownErr)
 	}
 
+	select {
+	case <-relayAutomationDone:
+	case <-shutdownCtx.Done():
+	}
 	select {
 	case <-wmtAutomationDone:
 	case <-shutdownCtx.Done():

@@ -226,7 +226,7 @@ function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   reads.clear();
   return performRequest<T>(path, init).finally(() => {
     reads.clear();
-    if (typeof window !== "undefined" && /^\/(relay-drivers|weighmytruck|drivers|trucks|tasks\/relay-identities|jobs\/sync-tolls)(\/|$)/.test(path)) {
+    if (typeof window !== "undefined" && /^\/(relay-drivers|weighmytruck|tolls|drivers|trucks|tasks\/relay-identities|jobs\/sync-tolls)(\/|$)/.test(path)) {
       window.dispatchEvent(new Event("mserp:sidebar-counts-changed"));
     }
   });
@@ -517,3 +517,11 @@ export const refreshRelayDrivers = () => apiRequest<void>("/relay-drivers/refres
 export const changeRelayDriver = (input: RelayDriverChange) => apiRequest<void>("/relay-drivers/change", { method: "POST", body: JSON.stringify(input) });
 export const linkRelayRosterDriver = (relayId: string, driverId: string) => apiRequest<{ transactionsLinked: number }>(`/relay-drivers/${encodeURIComponent(relayId)}/link`, { method: "POST", body: JSON.stringify({ driverId }) });
 export const verifyRelayDriverOperation = (id: string) => apiRequest<void>(`/relay-drivers/operations/${id}/verify`, { method: "POST", body: JSON.stringify({ reviewed: true }) });
+
+import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckPreview } from "./types";
+export const fetchPrePassTruckLinks = (from: string, signal?: AbortSignal) => apiRequest<PrePassTruckLinks>(withQuery("/tolls/truck-links", { from }), { signal });
+export const previewPrePassTruckLink = (input: PrePassTruckLinkInput) => apiRequest<PrePassTruckPreview>("/tolls/truck-links/preview", { method: "POST", body: JSON.stringify(input) });
+export const savePrePassTruckLink = (input: PrePassTruckLinkInput) => apiRequest<{ saved: boolean }>("/tolls/truck-links", { method: "POST", body: JSON.stringify(input) });
+export const undoPrePassTruckLink = (id: string, version: number) => apiRequest<{ saved: boolean }>(`/tolls/truck-links/${id}/undo`, { method: "POST", body: JSON.stringify({ version }) });
+import type { RelayBulkResponse } from "./types";
+export const changeRelayDrivers = (changes: RelayDriverChange[]) => apiRequest<RelayBulkResponse>("/relay-drivers/bulk", { method: "POST", body: JSON.stringify({ changes }) });

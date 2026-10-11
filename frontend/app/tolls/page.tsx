@@ -12,6 +12,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { TruckLinksTab } from "./TruckLinksTab";
 import { TollOverview } from "./TollOverview";
 import { fetchTollsPage, syncTolls } from "../lib/api";
 import type { Toll } from "../lib/types";
@@ -54,7 +55,7 @@ function routeLabel(toll: Toll) {
 }
 
 export default function TollsPage() {
-  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions">("page:activeTab", "overview");
+  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "trucks">("page:activeTab", "overview");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [tolls, setTolls] = useState<Toll[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
@@ -177,16 +178,16 @@ export default function TollsPage() {
       )}
 
       <div className="flex w-fit rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
-        {(["overview", "transactions"] as const).map((tab) => (
+        {(["overview", "transactions", "trucks"] as const).map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={activeTab === tab}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === tab ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
             {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
-            {tab === "overview" ? "Overview" : "Transactions"}
+            {tab === "overview" ? "Overview" : tab === "trucks" ? "Truck linking" : "Transactions"}
           </button>
         ))}
       </div>
 
-      {activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
+      {activeTab === "trucks" ? <TruckLinksTab /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
         <>
       {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

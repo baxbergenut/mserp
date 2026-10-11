@@ -74,6 +74,21 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Assignment GET/PUT/DELETE paths use driver IDs (verified against staging).
   `MSERP_RELAY_LIVE_STAGING_API_KEY` explicitly opts into the staging lifecycle
   test, which creates and removes a synthetic driver; ordinary tests skip it.
+- Relay termination offboarding uses migration 076 and
+  `repository/relay_offboarding.go`: immediate startup plus minute interval,
+  confirmed links only, disable assigned policies on termination and remove on
+  termination date + 10 New York calendar days (including existing overdue).
+  Rehires cancel later actions; uncertain receipts require portal review.
+  `POST /relay-drivers/bulk` shares revision/receipt guards with single actions,
+  processes at most 100 independently and refreshes once. See
+  `docs/integrations/RELAY_DRIVERS.md`.
+- PrePass truck mappings use migration 077, `repository/toll_truck_links.go`,
+  `httpapi/toll_truck_link_handlers.go`, and Tolls > Truck linking. Group by tag
+  with exact-unit fallback; never guess equivalent names or strip leading zeros.
+  Date-bounded reviewed mappings resolve unlinked tolls and future imports;
+  preserve existing links. Preview/save/undo use `tolls.link`; listing uses
+  `tolls.read`. Finalized driver/investor statements block manual corrections.
+  See `docs/integrations/PREPASS_TRUCK_LINKS.md` for dates, audit and validation.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
 - `backend/internal/weighmytruck/`, repository/httpapi `weighmytruck_*` files and

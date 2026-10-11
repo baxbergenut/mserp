@@ -54,7 +54,7 @@ a warning because their employment status cannot yet be established.
 Migration 075 is required before deploying the API. It adds
 `relay_driver_rosters` and `relay_driver_operations` to both incremental/fresh
 schemas. A database advisory lock serializes refreshes and mutations per Relay
-environment across API instances. External writes first commit a receipt and
+environment across API instances. External writes first commit a receipt; uncertain requests
 are never automatically retried. Fresh driver/assignment reads reject stale
 revisions; usage counters are deliberately excluded. Relay has no documented
 conditional-write primitive, so a concurrent portal edit after this check
@@ -102,3 +102,37 @@ permissions, validation, error redaction and mutation redirect/retry behavior.
 isolated fixtures, including desktop/narrow layout, linking, add, read-only
 controls and ELD/non-ELD assignment forms. Append `--serve` for manual inspection
 at localhost port 55477. It never calls Relay.
+
+## Automatic termination offboarding and bulk actions
+
+Migration 076 adds the source and termination date to durable operation receipts.
+When Relay is configured, the server starts an offboarding pass immediately and
+repeats it every minute, independently of scheduled transaction imports. It uses
+current `drivers.status`, `termination_date`, and an explicit environment-scoped
+Relay link. A terminated driver's assigned policy is disabled; the Relay account
+is removed on termination date + 10 calendar days in America/New_York. Drivers
+already overdue are removed on the first successful pass; no new grace period is
+introduced. Accounts with no policy are still removed when due. Unlinked Relay
+accounts remain visible for manual review and are never automatically removed.
+
+The worker refreshes stale rosters (five minutes), reads current upstream policy
+state, and shares the manual-operation environment lock. System receipts retain
+the local driver and termination date, with `source=termination` and no human
+actor. A committed pending receipt precedes each remote action. Employment/link
+rows are rechecked and locked through the action so concurrent rehires cannot
+race removal. Rehires cancel later actions but do not automatically restore fuel
+access. Uncertain requests block all further actions until portal verification;
+definitive failures back off for 15 minutes. Successful removal preserves local
+profiles, identity links and transaction history.
+
+The Drivers tab supports page selection and selections across pages. Bulk
+assign/enable/disable/unassign/remove uses `POST /relay-drivers/bulk`, at most 100
+distinct drivers and a separate request UUID/revision per driver. Actions are
+independent, with per-driver results and one final roster refresh. Successful
+rows leave the selection; failed rows can be reviewed individually. Non ELD bulk
+assignment uses each driver's existing PIN/truck values, never a shared PIN.
+The same `fuel.drivers.write` permission applies.
+
+The fresh/migrated database suite also covers day-10 removal, existing overdue
+accounts, no-policy removal, rehire protection, uncertain automation, bulk partial
+failure and idempotent retries. Browser fixtures cover bulk selection/results.

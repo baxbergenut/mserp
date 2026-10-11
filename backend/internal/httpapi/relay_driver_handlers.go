@@ -107,6 +107,31 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 		}
 		writeJSON(w, 200, map[string]bool{"refreshed": true})
 	})
+	router.Post("/relay-drivers/bulk", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Changes []repository.RelayDriverChange `json:"changes"`
+		}
+		if decodeJSON(r, &in) != nil || len(in.Changes) == 0 || len(in.Changes) > 100 {
+			writeAPIError(w, 400, "Select between 1 and 100 drivers.")
+			return
+		}
+		seen := map[string]bool{}
+		for i := range in.Changes {
+			v := &in.Changes[i]
+			if !validateRelayChange(v) || !slices.Contains([]string{"enable", "disable", "remove", "unassign", "assign"}, v.Action) || v.Action != in.Changes[0].Action || seen[v.RelayDriverID] {
+				writeAPIError(w, 400, "Provide one action and distinct drivers with current revisions.")
+				return
+			}
+			seen[v.RelayDriverID] = true
+		}
+		session, _ := authSessionFromContext(r.Context())
+		out, err := repo.ChangeRelayDrivers(r.Context(), in.Changes, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	})
 	router.Post("/relay-drivers/change", func(w http.ResponseWriter, r *http.Request) {
 		var in repository.RelayDriverChange
 		if decodeJSON(r, &in) != nil || !validateRelayChange(&in) {

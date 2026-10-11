@@ -102,6 +102,7 @@ export function Modal({
   children,
   isSaving,
   submitLabel,
+  submitDisabled = false,
   onClose,
   onSubmit,
   wide = false,
@@ -111,6 +112,7 @@ export function Modal({
   children: ReactNode;
   isSaving: boolean;
   submitLabel: string;
+  submitDisabled?: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   wide?: boolean;
@@ -160,7 +162,7 @@ export function Modal({
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || submitDisabled}
                 className="inline-flex min-w-24 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
               >
                 {isSaving && <LoaderCircle className="h-4 w-4 animate-spin" />}

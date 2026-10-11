@@ -1,5 +1,6 @@
 "use client";
 
+import { RelayBulkActions } from "./RelayBulkActions";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ExternalLink, Plus, RefreshCw } from "lucide-react";
@@ -35,6 +36,7 @@ export function RelayDriversTab() {
   const [pageSize, setPageSize] = useViewState("relay:pageSize", 25);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [selected,setSelected] = useState<string[]>([]);
   const [reviewed, setReviewed] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -115,9 +117,11 @@ export function RelayDriversTab() {
       <select aria-label="Driver status" className={compactSelectClass} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>{[["", "All drivers"], ["attention", "Needs attention"], ["terminated", "Terminated in Relay"], ["unlinked", "Unlinked"], ["no_policy", "No policy"], ["enabled", "Policy enabled"], ["disabled", "Policy disabled"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       <select aria-label="Policy filter" className={compactSelectClass} value={policy} onChange={e => { setPolicy(e.target.value); setPage(1); }}><option value="">All policies</option>{data?.policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
     </div>
+    {canWrite && data && <RelayBulkActions data={data} entries={items.filter(e=>selected.includes(e.driver.id) && !e.pending)} onBusy={value=>{saving.current=value;setBusy(value);if(value)generation.current++}} onClear={()=>setSelected([])} onComplete={async ids=>{setSelected(current=>current.filter(id=>!ids.includes(id)));await load()}} />}
     <TableShell>{loading ? <LoadingTable columns={6} /> : !shown.length ? <EmptyState message={data?.refreshedAt ? "No Relay drivers match this view." : "Relay roster has not been loaded."} /> : <table className="w-full min-w-[920px] text-left text-[13px]">
-      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Driver", "Phone", "Policy", "Policy status", "Relay Driver ID", "Actions"].map(label => <th key={label} className="h-8 px-3 font-medium">{label}</th>)}</tr></thead>
+      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{canWrite && <th className="px-3"><input type="checkbox" aria-label="Select drivers on this page" disabled={busy} checked={shown.some(e=>!e.pending) && shown.filter(e=>!e.pending).every(e=>selected.includes(e.driver.id))} onChange={event=>setSelected(current=>event.target.checked?Array.from(new Set([...current,...shown.filter(e=>!e.pending).map(e=>e.driver.id)])):current.filter(id=>!shown.some(e=>e.driver.id===id)))} /></th>}{["Driver", "Phone", "Policy", "Policy status", "Relay Driver ID", "Actions"].map(label => <th key={label} className="h-8 px-3 font-medium">{label}</th>)}</tr></thead>
       <tbody className="divide-y divide-zinc-800/60">{shown.map(e => <tr key={e.driver.id} className={e.warning ? "bg-amber-500/5" : "hover:bg-zinc-800/20"}>
+        {canWrite && <td className="px-3"><input type="checkbox" aria-label={`Select ${nameOf(e)}`} disabled={busy || e.pending} checked={selected.includes(e.driver.id)} onChange={event=>setSelected(current=>event.target.checked?[...current,e.driver.id]:current.filter(id=>id!==e.driver.id))} /></td>}
         <td className="px-3 py-1.5"><div className="flex items-center gap-2">{e.driverId && canProfile ? <Link href={`/drivers/detail?id=${e.driverId}`} className="text-zinc-200 hover:text-accent">{nameOf(e)}</Link> : <span>{nameOf(e)}</span>}{e.warning && <span title={e.warning}><AlertTriangle aria-label={e.warning} className="h-4 w-4 text-amber-400" /></span>}{e.status !== "active" && <span className={e.status === "terminated" ? "text-red-400" : "text-zinc-500"}>{e.status === "unlinked" ? "Unlinked" : e.status}</span>}</div>{e.driverName && e.driverName.toLowerCase() !== nameOf(e).toLowerCase() && <div className="text-[12px] text-zinc-500">{e.driverName}</div>}</td>
         <td className="whitespace-nowrap px-3 py-1.5 text-zinc-400">{formatPhone(e.driver.phone) || "—"}</td>
         <td className="px-3 py-1.5">{e.assignment?.policy_name || "—"}</td>

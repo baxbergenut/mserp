@@ -349,6 +349,11 @@ func (r *FuelRepository) ChangeRelayDriver(ctx context.Context, in RelayDriverCh
 		return err
 	}
 	defer done()
+	return r.changeRelayDriverLocked(ctx, conn, in, actor, "", "", true)
+}
+
+func (r *FuelRepository) changeRelayDriverLocked(ctx context.Context, conn *pgxpool.Conn, in RelayDriverChange, actor, autoDriver, terminationDate string, refresh bool) error {
+	var err error
 	target := in.RelayDriverID
 	if in.Action == "add" {
 		target = "driver:" + in.DriverID
@@ -416,6 +421,21 @@ func (r *FuelRepository) ChangeRelayDriver(ctx context.Context, in RelayDriverCh
 			return ErrRelayDriverConflict
 		}
 	}
+	if autoDriver != "" {
+		var eligible bool
+		err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM drivers d JOIN relay_driver_links l ON l.driver_id=d.id
+ WHERE d.id=$1 AND d.status='terminated' AND d.termination_date=$2::date AND l.relay_environment=$3 AND l.relay_driver_id=$4
+ AND ($5='disable' OR d.termination_date+10<=(now() AT TIME ZONE 'America/New_York')::date))`, autoDriver, terminationDate, r.relayEnvironment, d.ID, in.Action).Scan(&eligible)
+		if err != nil {
+			return err
+		}
+		if !eligible {
+			return ErrRelayDriverConflict
+		}
+		if in.Action == "disable" && (a == nil || !a.Enabled) {
+			return nil
+		}
+	}
 	if in.Action == "assign" {
 		policies, e := r.relayDrivers.Policies(ctx)
 		if e != nil {
@@ -468,7 +488,11 @@ func (r *FuelRepository) ChangeRelayDriver(ctx context.Context, in RelayDriverCh
 			}
 		}
 	}
-	_, err = conn.Exec(ctx, `INSERT INTO relay_driver_operations(id,environment,target,action,relay_driver_id,driver_id,policy_id,actor_id) VALUES($1,$2,$3,$4,$5,NULLIF($6,'')::uuid,$7,$8)`, in.RequestID, r.relayEnvironment, target, in.Action, in.RelayDriverID, in.DriverID, in.PolicyID, actor)
+	source, receiptDriver := "manual", in.DriverID
+	if autoDriver != "" {
+		source, receiptDriver = "termination", autoDriver
+	}
+	_, err = conn.Exec(ctx, `INSERT INTO relay_driver_operations(id,environment,target,action,relay_driver_id,driver_id,policy_id,actor_id,source,termination_date) VALUES($1,$2,$3,$4,$5,NULLIF($6,'')::uuid,$7,NULLIF($8,'')::uuid,$9,NULLIF($10,'')::date)`, in.RequestID, r.relayEnvironment, target, in.Action, in.RelayDriverID, receiptDriver, in.PolicyID, actor, source, terminationDate)
 	if err != nil {
 		return err
 	}
@@ -476,6 +500,31 @@ func (r *FuelRepository) ChangeRelayDriver(ctx context.Context, in RelayDriverCh
 	// if we lose the response or cannot durably record it.
 	operationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
+	// Persist the receipt first, then lock the local employment/link state for the
+	// remote action. A concurrent rehire either wins this check or waits until the
+	// action finishes; it cannot race an already-approved automatic removal.
+	var terminationTx pgx.Tx
+	if autoDriver != "" {
+		terminationTx, err = conn.Begin(operationCtx)
+		if err != nil {
+			return err
+		}
+		defer terminationTx.Rollback(context.WithoutCancel(ctx))
+		var lockedID string
+		err = terminationTx.QueryRow(operationCtx, `SELECT d.id::text FROM drivers d JOIN relay_driver_links l ON l.driver_id=d.id
+ WHERE d.id=$1 AND d.status='terminated' AND d.termination_date=$2::date AND l.relay_environment=$3 AND l.relay_driver_id=$4
+ AND ($5='disable' OR d.termination_date+10<=(now() AT TIME ZONE 'America/New_York')::date) FOR SHARE OF d,l`, autoDriver, terminationDate, r.relayEnvironment, d.ID, in.Action).Scan(&lockedID)
+		if err != nil {
+			_ = terminationTx.Rollback(operationCtx)
+			if errors.Is(err, pgx.ErrNoRows) {
+				_, err = conn.Exec(operationCtx, `UPDATE relay_driver_operations SET state='failed',resolved_at=now() WHERE id=$1`, in.RequestID)
+				if err == nil {
+					return ErrRelayDriverConflict
+				}
+			}
+			return err
+		}
+	}
 	switch in.Action {
 	case "add":
 		d, err = r.relayDrivers.CreateDriver(operationCtx, relay.DriverInput{FirstName: in.FirstName, LastName: in.LastName, Phone: in.Phone, Email: in.Email, DataFields: fields})
@@ -508,14 +557,26 @@ func (r *FuelRepository) ChangeRelayDriver(ctx context.Context, in RelayDriverCh
 			if saveErr != nil {
 				return saveErr
 			}
+			if terminationTx != nil {
+				if saveErr = terminationTx.Commit(operationCtx); saveErr != nil {
+					return saveErr
+				}
+			}
 		}
 		return err
 	}
 	if _, err = conn.Exec(operationCtx, `UPDATE relay_driver_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID); err != nil {
 		return err
 	}
-	if _, err = r.refreshRelayDrivers(operationCtx, conn); err != nil {
-		return &RelayDriverValidation{"Relay confirmed the change, but the roster could not refresh. Refresh to see its current state."}
+	if terminationTx != nil {
+		if err = terminationTx.Commit(operationCtx); err != nil {
+			return err
+		}
+	}
+	if refresh {
+		if _, err = r.refreshRelayDrivers(operationCtx, conn); err != nil {
+			return &RelayDriverValidation{"Relay confirmed the change, but the roster could not refresh. Refresh to see its current state."}
+		}
 	}
 	return nil
 }
@@ -580,4 +641,38 @@ func (r *FuelRepository) LinkRelayRosterDriver(ctx context.Context, relayID, dri
 		return 0, mapNotFound(err)
 	}
 	return r.ReviewRelayIdentity(ctx, identity, driverID, "link", actor)
+}
+
+type RelayBulkResult struct {
+	RelayDriverID string `json:"relayDriverId"`
+	Error         string `json:"error,omitempty"`
+}
+type RelayBulkResponse struct {
+	Results []RelayBulkResult `json:"results"`
+	Warning string            `json:"warning,omitempty"`
+}
+
+func (r *FuelRepository) ChangeRelayDrivers(ctx context.Context, changes []RelayDriverChange, actor string) (RelayBulkResponse, error) {
+	out := RelayBulkResponse{Results: []RelayBulkResult{}}
+	conn, done, err := r.relayDriverLock(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer done()
+	for _, in := range changes {
+		result := RelayBulkResult{RelayDriverID: in.RelayDriverID}
+		if err = r.changeRelayDriverLocked(ctx, conn, in, actor, "", "", false); err != nil {
+			var invalid *RelayDriverValidation
+			if errors.As(err, &invalid) || errors.Is(err, ErrRelayDriverConflict) {
+				result.Error = err.Error()
+			} else {
+				result.Error = "Relay could not confirm this change. Refresh and review any unconfirmed request before retrying."
+			}
+		}
+		out.Results = append(out.Results, result)
+	}
+	if _, err = r.refreshRelayDrivers(ctx, conn); err != nil {
+		out.Warning = "Changes were processed, but the roster refresh failed. Refresh Relay to see the latest state."
+	}
+	return out, nil
 }

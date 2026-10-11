@@ -70,6 +70,9 @@ func routePermission(method, path string) string {
 			return "fuel.read"
 		}
 	case "tolls", "toll-dashboard":
+		if !read && strings.HasPrefix(path, "/tolls/truck-links") {
+			return "tolls.link"
+		}
 		if read {
 			return "tolls.read"
 		}

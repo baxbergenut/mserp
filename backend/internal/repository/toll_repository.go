@@ -231,14 +231,26 @@ func (r *TollRepository) CompletedDays(
 }
 
 func (r *TollRepository) ReconcileTruckAssignments(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE tolls
-		SET truck_id = matched.truck_id
-		FROM (SELECT unit_key,(array_agg(truck_id))[1] truck_id
-			FROM truck_unit_aliases GROUP BY unit_key HAVING count(*)=1) matched
-		WHERE tolls.truck_id IS NULL
-			AND matched.unit_key = upper(btrim(tolls.equipment_unit))`)
-	return err
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(730077)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE tolls SET truck_id=NULL WHERE truck_id IS NULL AND EXISTS(
+ SELECT 1 FROM prepass_truck_mappings m WHERE m.active AND m.environment=coalesce(tolls.prepass_environment,'production')
+ AND m.identity_key=prepass_truck_key(tolls.prepass_tag_id,tolls.equipment_unit)
+ AND tolls.exit_date>=m.effective_from AND (m.effective_to IS NULL OR tolls.exit_date<=m.effective_to))`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE tolls SET truck_id=matched.truck_id FROM
+ (SELECT unit_key,(array_agg(truck_id))[1] truck_id FROM truck_unit_aliases GROUP BY unit_key HAVING count(*)=1) matched
+ WHERE tolls.truck_id IS NULL AND matched.unit_key=upper(btrim(tolls.equipment_unit))`); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *TollRepository) UpsertDay(
@@ -254,6 +266,9 @@ func (r *TollRepository) UpsertDay(
 		return TollSyncDayResult{}, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(730077)`); err != nil {
+		return TollSyncDayResult{}, err
+	}
 
 	truckIDs := make(map[string]string)
 	truckRows, err := tx.Query(ctx, `SELECT unit_key,(array_agg(truck_id))[1] FROM truck_unit_aliases GROUP BY unit_key HAVING count(*)=1`)
@@ -285,15 +300,19 @@ func (r *TollRepository) UpsertDay(
 			)
 		}
 		truckID := optionalTruckID(truckIDs[strings.ToUpper(strings.TrimSpace(value.EquipmentUnit))])
-		if truckID == nil {
-			result.Unmatched++
-		}
 		if err := upsertPrePassToll(ctx, tx, environment, truckID, value); err != nil {
 			return TollSyncDayResult{}, fmt.Errorf(
 				"upsert PrePass toll %d: %w",
 				transaction.TollID,
 				err,
 			)
+		}
+		var unlinked bool
+		if err = tx.QueryRow(ctx, `SELECT truck_id IS NULL FROM tolls WHERE prepass_environment=$1 AND prepass_toll_id=$2`, environment, transaction.TollID).Scan(&unlinked); err != nil {
+			return TollSyncDayResult{}, err
+		}
+		if unlinked {
+			result.Unmatched++
 		}
 		result.Saved++
 		if _, err := tx.Exec(ctx, updateTollLocationSQL, tollLocationArgs(environment, transaction, syncedAt)...); err != nil {
@@ -508,7 +527,7 @@ func upsertPrePassToll(
 			$19, $20, $21
 		)
 		ON CONFLICT (prepass_environment, prepass_toll_id) DO UPDATE SET
-			truck_id = COALESCE(EXCLUDED.truck_id, tolls.truck_id),
+			truck_id = COALESCE(tolls.truck_id, EXCLUDED.truck_id),
 			posting_date = EXCLUDED.posting_date,
 			invoice_date = EXCLUDED.invoice_date,
 			customer_id = EXCLUDED.customer_id,

@@ -17,6 +17,8 @@ const data = { configured: true, canLink: true, environment: 'production', refre
   drivers: [localDriver('terminated', 'Terminated Driver', 'terminated'), localDriver('active', 'Active Driver'), localDriver('eld', 'ELD Driver'), localDriver('new', 'New Driver')],
   operations: [], items: [entry('dr_terminated', 'Terminated Driver', 'terminated', 'terminated', { ...assignment }), entry('dr_active', 'Active Driver', 'active', 'active', { ...assignment }), entry('dr_eld', 'ELD Driver', '', 'unlinked', null)] };
 data.items[2].suggestions = [{ driverId: 'eld', name: 'ELD Driver', active: true, reasons: ['Same phone'] }];
+const tollLinks={dateFrom:'2026-09-01',groups:[{environment:'production',identityKey:'tag:777780673',units:['01','UNASSIGNED DF28HU'],devices:['00413749983','DF28HU'],count:41,amount:'123.45',firstExit:'2026-09-01',lastExit:'2026-10-05'}],trucks:[{id:'truck-01',unit:'01.',vin:'4V4NC9EG4NN297330',plate:'DF28HU'},{id:'truck-001',unit:'001',vin:'3AKJHHDR3MSMN8492',plate:'C329FH'}],mappings:[]};
+const originalGroup=structuredClone(tollLinks.groups[0]);
 const writes = [];
 let readOnly = false;
 const server = createServer(async (req, res) => {
@@ -24,13 +26,22 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost'); const path = url.pathname;
     const send = (body, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
     if (path.startsWith('/api/')) {
-      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write', 'tolls.read', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
+      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write', 'tolls.read', 'tolls.link', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
+      if(path==='/api/tolls/truck-links'&&req.method==='GET')return send(tollLinks);
+      if(path==='/api/tolls')return send({items:[],total:0,totalPages:1,page:1,pageSize:25,options:{units:[],agencies:[]},summary:{amount:0,truckCount:0}});
+      if(path==='/api/toll-dashboard')return send({error:'Outside fixture'},503);
       if (path === '/api/fuel-dashboard') return send({ error: 'Overview is outside this local driver fixture.' }, 503);
       if (path === '/api/fuel-transactions') return send({ items: [], total: 0, totalPages: 1, page: 1, pageSize: 25, options: { drivers: [], states: [] }, summary: { spend: 0, saved: 0, gallons: 0 } });
       if (path === '/api/relay-drivers' && req.method === 'GET') return send({ ...data, canLink: !readOnly });
       if (path === '/api/relay-drivers/refresh') { data.refreshedAt = new Date().toISOString(); return send({ refreshed: true }); }
       let body = ''; for await (const chunk of req) body += chunk; const input = body ? JSON.parse(body) : {};
+      if(path==='/api/relay-drivers/bulk'){
+       writes.push(input);const results=input.changes.map(change=>{const e=data.items.find(e=>e.driver.id===change.relayDriverId);if(!e.assignment)return {relayDriverId:e.driver.id,error:'This driver has no policy assignment.'};e.assignment.enabled=false;return {relayDriverId:e.driver.id}});return send({results});
+      }
+      if(path==='/api/tolls/truck-links/preview'){writes.push(input);return send({count:41,amount:'123.45',units:originalGroup.units,revision:'b'.repeat(64),closed:false})}
+      if(path==='/api/tolls/truck-links'&&req.method==='POST'){writes.push(input);tollLinks.groups=[];tollLinks.mappings=[{...input,unit:'01.',count:41,version:1}];return send({saved:true})}
+      if(path.startsWith('/api/tolls/truck-links/')&&path.endsWith('/undo')){writes.push(input);tollLinks.groups=[structuredClone(originalGroup)];tollLinks.mappings=[];return send({saved:true})}
       if (path.endsWith('/link')) { const e = data.items.find(e => e.driver.id === path.split('/')[3]); const d = data.drivers.find(d => d.id === input.driverId); Object.assign(e, { driverId: d.id, driverName: d.name, status: d.status, warning: '' }); writes.push(input); return send({ transactionsLinked: 2 }); }
       if (path === '/api/relay-drivers/change') {
         writes.push(input); const e = data.items.find(e => e.driver.id === input.relayDriverId);
@@ -104,6 +115,17 @@ else {
     await expect(page.getByRole('dialog')).toContainText('resets usage counters');
     await expect(page.getByRole('dialog').getByLabel('Driver Pin', { exact: false })).toHaveCount(0);
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('checkbox',{name:'Select Active Driver',exact:true}).check();
+    await page.getByRole('checkbox',{name:'Select New Driver',exact:true}).check();
+    await page.getByLabel('Action for selected Relay drivers').selectOption('disable');
+    await expect(page.getByRole('dialog')).toContainText('2 drivers');
+    await page.getByRole('dialog').getByRole('button',{name:'Disable policy',exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('1 completed · 1 need review');
+    await expect(page.getByRole('dialog')).toContainText('New Driver: This driver has no policy assignment.');
+    if(writes.at(-1).changes.length!==2 || new Set(writes.at(-1).changes.map(v=>v.requestId)).size!==2)throw new Error('Bulk receipts missing');
+    await page.getByRole('dialog').getByRole('button',{name:'Done',exact:true}).click();
+    await expect(page.getByText('1 selected',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Clear selection',exact:true}).click();
     await page.screenshot({ path: join(tmpdir(), 'mserp-relay-desktop.png'), fullPage: true });
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
     await expect(tollBadge).toBeVisible();
@@ -122,7 +144,33 @@ else {
     await expect(page.getByRole('button', { name: 'Add driver', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Actions for Active Driver')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Refresh Relay', exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox',{name:'Select drivers on this page'})).toHaveCount(0);
+    readOnly=false;
+    await page.setViewportSize({width:1440,height:1000});
+    await page.goto(base+'/tolls');
+    await page.getByRole('button',{name:'Truck linking',exact:true}).click();
+    await expect(page.getByRole('cell',{name:'Tag 777780673',exact:true})).toBeVisible();
+    await expect(page.getByLabel('Unlinked tolls posted since')).toHaveValue('2026-09-01');
+    await page.getByRole('button',{name:'Link truck',exact:true}).click();
+    await page.getByLabel('MSERP truck',{exact:false}).selectOption('truck-01');
+    await expect(page.getByRole('dialog')).toContainText('4V4NC9EG4NN297330');
+    await page.getByRole('dialog').getByRole('button',{name:'Preview matching tolls',exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('41 tolls');
+    await page.getByLabel('Travel dates from').fill('2026-09-02');
+    await expect(page.getByRole('dialog').getByRole('button',{name:'Preview matching tolls',exact:true})).toBeVisible();
+    await page.getByRole('dialog').getByRole('button',{name:'Preview matching tolls',exact:true}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'Save mapping',exact:true}).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'Saved truck mappings'})).toBeVisible();
+    if(writes.at(-1).revision!=='b'.repeat(64)||writes.at(-1).truckId!=='truck-01'||writes.at(-1).from!=='2026-09-02')throw new Error('Reviewed mapping not sent');
+    await page.getByRole('button',{name:'Undo mapping',exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('including later imports');
+    await page.getByRole('dialog').getByRole('button',{name:'Undo mapping',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toBeVisible();
+    await page.screenshot({path:join(tmpdir(),'mserp-prepass-trucks.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Relay driver UI checks passed: linking, policy fields, usage warning, termination flags, add, read-only permissions, tab memory and narrow layout.');
+    console.log('Relay and PrePass UI checks passed: driver linking/policies, bulk partial results, permissions, mapping preview/save/undo, tab memory and narrow layouts.');
   } finally { await browser.close(); server.close(); }
 }

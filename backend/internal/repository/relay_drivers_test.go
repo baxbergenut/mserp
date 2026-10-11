@@ -131,11 +131,13 @@ func TestRelayDriverDatabase(t *testing.T) {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before)
-				migration, e := os.ReadFile("../../sql/075_relay_drivers.sql")
-				if e != nil {
-					t.Fatal(e)
+				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql"} {
+					migration, e := os.ReadFile("../../sql/" + file)
+					if e != nil {
+						t.Fatal(e)
+					}
+					exec(string(migration))
 				}
-				exec(string(migration))
 			} else {
 				exec(string(source))
 			}
@@ -316,6 +318,8 @@ func TestRelayDriverDatabase(t *testing.T) {
 				t.Fatal("new PIN leaked")
 			}
 			testSidebarCounts(t, ctx, pool, driverID, second)
+			testRelayOffboarding(t, ctx, pool, actor)
+			testPrePassTruckLinks(t, ctx, pool, actor)
 		})
 	}
 }

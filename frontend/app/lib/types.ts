@@ -1154,3 +1154,10 @@ export interface RelayDriverChange {
   firstName?: string; lastName?: string; phone?: string; email?: string; driverPin?: string; truckNumber?: string;
 }
 export interface SidebarCounts { fuel: number; weighMyTruck: number; tolls: number; tollsFrom: string }
+export interface PrePassTruckGroup { environment: string; identityKey: string; units: string[]; devices: string[]; count: number; amount: string; firstExit: string; lastExit: string }
+export interface PrePassTruckChoice { id: string; unit: string; vin: string; plate: string }
+export interface PrePassTruckMapping { id: string; environment: string; identityKey: string; truckId: string; unit: string; from: string; to: string; version: number; count: number }
+export interface PrePassTruckLinks { dateFrom: string; groups: PrePassTruckGroup[]; trucks: PrePassTruckChoice[]; mappings: PrePassTruckMapping[] }
+export interface PrePassTruckLinkInput { id: string; environment: string; identityKey: string; truckId: string; from: string; to: string; revision: string }
+export interface PrePassTruckPreview { count: number; amount: string; units: string[]; revision: string; closed: boolean }
+export interface RelayBulkResponse { results: { relayDriverId: string; error?: string }[]; warning?: string }
