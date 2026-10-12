@@ -32,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/loads", label: "Loads", icon: Package },
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
+  { href: "/weighmytruck", label: "Scale", icon: Scale },
   { href: "/expenses", label: "Expenses & Charges", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses & Charges settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
@@ -42,7 +43,6 @@ const NAV_ITEMS = [
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },
-  { href: "/weighmytruck", label: "WeighMyTruck", icon: Scale },
   { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers and updaters", icon: Headset },
