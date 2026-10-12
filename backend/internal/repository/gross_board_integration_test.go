@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,8 +22,8 @@ func TestGrossBoardDatabase(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal("invalid test database configuration")
+	if err != nil || !strings.Contains(config.ConnConfig.Database, "_test") || (config.ConnConfig.Host != "127.0.0.1" && config.ConnConfig.Host != "localhost") {
+		t.Fatal("use a disposable local _test database")
 	}
 	config.MaxConns = 1
 	pool, err := pgxpool.NewWithConfig(ctx, config)
@@ -32,6 +35,15 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app')").Scan(&appRoleExists); err != nil {
 		t.Fatal(err)
 	}
+	functionSchema := pgx.Identifier{fmt.Sprintf("gross_board_functions_%d", time.Now().UnixNano())}.Sanitize()
+	owner := ""
+	if appRoleExists {
+		owner = " AUTHORIZATION mserp_app"
+	}
+	if _, err = pool.Exec(ctx, "CREATE SCHEMA "+functionSchema+owner); err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Exec(context.Background(), "DROP SCHEMA "+functionSchema+" CASCADE")
 	if appRoleExists {
 		if _, err = pool.Exec(ctx, "SET ROLE mserp_app"); err != nil {
 			t.Fatal(err)
@@ -50,6 +62,25 @@ func TestGrossBoardDatabase(t *testing.T) {
  INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);
  ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date;`)
 	if err != nil {
+		t.Fatal(err)
+	}
+	teamMigration, err := os.ReadFile("../../sql/078_driver_teams.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, teamFunction, teamFunctionFound := strings.Cut(string(teamMigration), "CREATE FUNCTION payroll_driver_at")
+	if !teamFunctionFound {
+		t.Fatal("team recipient function missing")
+	}
+	teamFunction, _, teamFunctionFound = strings.Cut(teamFunction, "-- Serialize configuration")
+	if !teamFunctionFound {
+		t.Fatal("team recipient function boundary missing")
+	}
+	// PostgreSQL never resolves unqualified functions in pg_temp. Use an isolated
+	// function schema, with temporary tables shadowing all application data.
+	if _, err = pool.Exec(ctx, `CREATE TEMP TABLE driver_teams(main_driver_id uuid,team_driver_id uuid,start_week date,end_week date);
+ SET search_path TO `+functionSchema+`,pg_temp,public;
+ CREATE FUNCTION `+functionSchema+`.payroll_driver_at`+teamFunction); err != nil {
 		t.Fatal(err)
 	}
 	migration, err := os.ReadFile("../../sql/027_add_gross_board_review_values.sql")
