@@ -1,0 +1,1978 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Fleet Management API",
+    "description": "Manage vehicles enrolled in bypass and/or tolling services. Add, update or delete vehicles. Assign or request transponders.<br/> *Note: Do not use this API to update tractors enrolled in Toll Violation Prevention Program (VPP) or for trailer plates.*",
+    "version": "v2"
+  },
+  "servers": [
+    {
+      "url": "https://api.prepass.com/fleetmanagement/v2"
+    }
+  ],
+  "paths": {
+    "/vehicles": {
+      "get": {
+        "tags": [
+          "Vehicle"
+        ],
+        "summary": "vehicles",
+        "description": "Query for one vehicle by VIN or Vehicle Number, or for multiple vehicles by PrePass Account Number or Cost Center.",
+        "operationId": "vehicles",
+        "parameters": [
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "query",
+            "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle. ",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "vehicleNumber",
+            "in": "query",
+            "description": "Customer-assigned vehicle number (maxlength = 8). ",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetVehiclesResponse"
+                },
+                "example": [
+                  {
+                    "accountNumber": "123123",
+                    "costCenter": "0202001",
+                    "vin": "1XKADP9X8DJ364740",
+                    "vehicleNumber": "4000",
+                    "tempPlate": false,
+                    "licensePlateNumber": "ABC175",
+                    "licensePlateState": "AZ",
+                    "declaredWeight": 60000,
+                    "irpNumber": "1234567890",
+                    "irpState": "AZ",
+                    "iftaNumber": "1783222",
+                    "iftaState": "AZ",
+                    "transponderNumber": "777111222",
+                    "vrn": "791",
+                    "hazmatHauler": false,
+                    "vehicleImage": "FREIGHTLINER WHITE 123123",
+                    "leasedVehicle": false,
+                    "leasingCompany": "",
+                    "leaseExpirationDate": ""
+                  },
+                  {
+                    "accountNumber": "123123",
+                    "costCenter": "0202001",
+                    "vin": "1XKADP9X8DJ364741",
+                    "vehicleNumber": "4001",
+                    "tempPlate": false,
+                    "licensePlateNumber": "NXT499",
+                    "licensePlateState": "AZ",
+                    "declaredWeight": 80000,
+                    "irpNumber": "1234567890",
+                    "irpState": "AZ",
+                    "iftaNumber": "1783222",
+                    "iftaState": "AZ",
+                    "transponderNumber": "777111333",
+                    "vrn": "791",
+                    "hazmatHauler": false,
+                    "vehicleImage": "",
+                    "leasedVehicle": false,
+                    "leasingCompany": "",
+                    "leaseExpirationDate": ""
+                  }
+                ]
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/vehicle": {
+      "delete": {
+        "tags": [
+          "Vehicle"
+        ],
+        "summary": "vehicle",
+        "description": "Remove a vehicle",
+        "operationId": "vehicle",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "query",
+            "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle",
+            "required": true,
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Vehicle"
+        ],
+        "summary": "vehicle",
+        "description": "Add a vehicle",
+        "operationId": "postvehicle",
+        "parameters": [
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddVehicleRequest"
+              },
+              "example": {
+                "vin": "1XKADP9X8DJ364740",
+                "vehicleNumber": "87654321",
+                "licensePlate": {
+                  "temporary": false,
+                  "number": "ABC175",
+                  "state": "AZ"
+                },
+                "declaredWeight": 60000,
+                "irp": {
+                  "accountNumber": "1234567890",
+                  "state": "AZ"
+                },
+                "ifta": {
+                  "accountNumber": "1783222",
+                  "state": "AZ"
+                },
+                "vehicleColor": "RED",
+                "transponderNumber": "777111222",
+                "vrn": "791",
+                "hazmatHauler": false,
+                "leasedVehicle": {
+                  "company": "Trucking Company Inc",
+                  "expiration": "2027-06-18"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Vehicle"
+        ],
+        "summary": "vehicle",
+        "description": "Update vehicle information ",
+        "operationId": "667af7b1186b14b62da27966",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "query",
+            "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle.  Note: This value cannot be changed.  ",
+            "required": true,
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).  Edit vehicle attributes by passing the current Cost Center.  Assign a VIN to another Cost Center by passing that Cost Center.  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.  Edit vehicle attributes by passing the current Account Number.  Assign a VIN to another Account Number by passing that Account Number.  Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVehicleRequest"
+              },
+              "example": {
+                "vehicleNumber": "87654321",
+                "licensePlate": {
+                  "temporary": false,
+                  "number": "ABC175",
+                  "state": "AZ"
+                },
+                "declaredWeight": 60000,
+                "irp": {
+                  "accountNumber": "1234567890",
+                  "state": "AZ"
+                },
+                "ifta": {
+                  "accountNumber": "1783222",
+                  "state": "AZ"
+                },
+                "vehicleColor": "RED",
+                "transponderNumber": "777111222",
+                "vrn": "791",
+                "hazmatHauler": false,
+                "leasedVehicle": {
+                  "company": "Trucking Company Inc",
+                  "expiration": "2027-06-18"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "tags": [
+          "Transponder",
+          "Misc"
+        ],
+        "summary": "equipment-order",
+        "description": "Order transponders for specified vehicles.  PrePass assigns transponders to vehicles during fulfillment.  UPS Ground is the default shipping method.  If you require expedited shipping, please call PrePass at 800-773-7277.",
+        "operationId": "equipment-order",
+        "parameters": [
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentOrderRequest"
+              },
+              "example": {
+                "vehicles": [
+                  "1XKADP9X8DJ364740",
+                  "1XKADP9X8DJ364741"
+                ],
+                "vrn": "791",
+                "shippingInstructions": "",
+                "shippingContactName": "James Smith",
+                "shippingContactEmail": "jsmith0000@noemail.com",
+                "shippingStreet1": "123 Main Street",
+                "shippingStreet2": "",
+                "shippingCity": "Phoenix",
+                "shippingState": "AZ",
+                "shippingPostalCode": "85004"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/transponder": {
+      "get": {
+        "tags": [
+          "Transponder"
+        ],
+        "summary": "transponder",
+        "description": "Query for a transponder by transponder number",
+        "operationId": "transponder",
+        "parameters": [
+          {
+            "name": "transponderNumber",
+            "in": "query",
+            "description": "Identification number of transponder",
+            "required": true,
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTransponderResponse"
+                },
+                "example": {
+                  "accountNumber": "123123",
+                  "vin": "1XKADP9X8DJ364740",
+                  "vehicleNumber": "4000",
+                  "vrn": "791",
+                  "transponderNumber": "777111222",
+                  "costCenter": "123"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Not found"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/transponders": {
+      "get": {
+        "tags": [
+          "Transponder"
+        ],
+        "summary": "transponders",
+        "description": "Query for transponders by PrePass Account Number or Cost Center",
+        "operationId": "transponders",
+        "parameters": [
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTranspondersResponse"
+                },
+                "example": [
+                  {
+                    "accountNumber": "123123",
+                    "vin": "1XKADP9X8DJ364740",
+                    "vehicleNumber": "4000",
+                    "vrn": "791",
+                    "transponderNumber": "777111222",
+                    "costCenter": "123"
+                  },
+                  {
+                    "accountNumber": "123123",
+                    "vin": "1XKADP9X8DJ364741",
+                    "vehicleNumber": "4001",
+                    "vrn": "",
+                    "transponderNumber": "777111333",
+                    "costCenter": "123"
+                  },
+                  {
+                    "accountNumber": "123123",
+                    "vin": "",
+                    "vehicleNumber": "",
+                    "vrn": "",
+                    "transponderNumber": "777111444",
+                    "costCenter": "123"
+                  }
+                ]
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/transponders/lost": {
+      "post": {
+        "tags": [
+          "Transponder",
+          "Vehicle"
+        ],
+        "summary": "transponders lost",
+        "description": "Notify PrePass of a lost or stolen transponder",
+        "operationId": "transponders-lost",
+        "parameters": [
+          {
+            "name": "costCenter",
+            "in": "query",
+            "description": "Customer-defined organization ID or code (e.g. location number or expense center).   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "in": "query",
+            "description": "PrePass Account Number.   Note: Either an Account Number or a Cost Center is required.",
+            "schema": {
+              "type": "String"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LostOrStolenTransponderRequest"
+              },
+              "example": {
+                "transponders": [
+                  "777111222",
+                  "777111333"
+                ],
+                "reportedBy": "James Smith"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Bad request with error message"
+          },
+          "403": {
+            "description": "User is forbidden"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Misc"
+        ],
+        "summary": "health",
+        "description": "Check that the app services supporting fleet management are healthy, degraded or unavailable",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Success with Healthy or Degraded status"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/accounts": {
+      "get": {
+        "tags": [
+          "Misc"
+        ],
+        "summary": "accounts",
+        "description": "Retrieve the accounts related to the calling user's claims.\n>**This `/accounts` endpoint is deprecated and will be retired soon. Please update your integrations to the [latest version here](/api-details#api=prepassapim-account-api-v1).**",
+        "operationId": "accounts",
+        "responses": {
+          "200": {
+            "description": "Retrieve accounts associated to the calling user's account claims",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAccountsResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "message": "Accounts retrieved successfully.",
+                  "accounts": [
+                    {
+                      "accountNumber": 111111
+                    },
+                    {
+                      "accountNumber": 222222
+                    },
+                    {
+                      "accountNumber": 333333
+                    }
+                  ],
+                  "disclaimer": "The account access listed is based on the latest information on file. If you believe this information is incorrect please call PrePass at 800-773-7277."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "User is forbidden from making changes to this account"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LostOrStolenTransponderRequest": {
+        "required": [
+          "transponders",
+          "reportedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "transponders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of lost or stolen transponder number(s)"
+          },
+          "reportedBy": {
+            "type": "string",
+            "description": "Name of the person reporting lost or stolen transponders"
+          }
+        }
+      },
+      "EquipmentOrderRequest": {
+        "required": [
+          "vehicles",
+          "shippingContactName",
+          "shippingContactEmail",
+          "shippingStreet1",
+          "shippingCity",
+          "shippingState",
+          "shippingPostalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of VINs that need a new transponder.  All VINs must be assigned to the account number or cost center in the request. VINs that have an existing device will be excluded."
+          },
+          "vrn": {
+            "type": "string",
+            "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information. The VRN applies to all vehicles sent in the request. Note: Required for PrePass Plus or tolling only vehicles."
+          },
+          "shippingInstructions": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Instructions for shipping"
+          },
+          "shippingContactName": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Name of person receiving the shipment"
+          },
+          "shippingContactEmail": {
+            "maxLength": 100,
+            "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
+            "type": "string",
+            "description": "Contact person’s email"
+          },
+          "shippingStreet1": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Shipping address line 1"
+          },
+          "shippingStreet2": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Shipping address line 2"
+          },
+          "shippingCity": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "Shipping address city"
+          },
+          "shippingState": {
+            "maxLength": 2,
+            "enum": [
+              "AL",
+              "AK",
+              "AZ",
+              "AR",
+              "CA",
+              "CO",
+              "CT",
+              "DE",
+              "FL",
+              "GA",
+              "HI",
+              "ID",
+              "IL",
+              "IN",
+              "IA",
+              "KS",
+              "KY",
+              "LA",
+              "ME",
+              "MD",
+              "MA",
+              "MI",
+              "MN",
+              "MS",
+              "MO",
+              "MT",
+              "NE",
+              "NV",
+              "NH",
+              "NJ",
+              "NM",
+              "NY",
+              "NC",
+              "ND",
+              "OH",
+              "OK",
+              "OR",
+              "PA",
+              "RI",
+              "SC",
+              "SD",
+              "TN",
+              "TX",
+              "UT",
+              "VT",
+              "VA",
+              "WA",
+              "WV",
+              "WI",
+              "WY",
+              "AB",
+              "BC",
+              "MB",
+              "NB",
+              "NL",
+              "NS",
+              "NT",
+              "ON",
+              "PE",
+              "QC",
+              "SK",
+              "YT",
+              "AG",
+              "BS",
+              "CH",
+              "CI",
+              "CL",
+              "CM",
+              "CU",
+              "DF",
+              "DU",
+              "GE",
+              "GJ",
+              "HD",
+              "JA",
+              "MC",
+              "MR",
+              "MX",
+              "NA",
+              "NU",
+              "OA",
+              "PU",
+              "QE",
+              "QI",
+              "SI",
+              "SL",
+              "SO",
+              "TB",
+              "TL",
+              "TM",
+              "VE",
+              "YU",
+              "BN",
+              "TA"
+            ],
+            "type": "string",
+            "description": "Shipping address 2-letter state or province code"
+          },
+          "shippingPostalCode": {
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9 ]{1,20}",
+            "type": "string",
+            "description": "Shipping address zip or postal code"
+          }
+        },
+        "description": "List of VINs the order applies to"
+      },
+      "GetVehiclesResponse": {
+        "type": "array",
+        "items": {
+          "required": [
+            "accountNumber",
+            "vin",
+            "vehicleNumber",
+            "tempPlate",
+            "licensePlateNumber",
+            "licensePlateState",
+            "declaredWeight",
+            "irpNumber",
+            "irpState",
+            "iftaNumber",
+            "iftaState",
+            "hazmatHauler"
+          ],
+          "type": "object",
+          "properties": {
+            "accountNumber": {
+              "type": "string",
+              "description": "The vehicle’s assigned PrePass Account Number"
+            },
+            "costCenter": {
+              "type": "string",
+              "description": "The vehicle’s assigned customer-defined organization ID or code (e.g. location number or expense center), if applicable"
+            },
+            "vin": {
+              "type": "string",
+              "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle"
+            },
+            "vehicleNumber": {
+              "type": "string",
+              "description": "Customer-assigned vehicle number (maxlength = 8)"
+            },
+            "tempPlate": {
+              "type": "boolean",
+              "description": "Indicates whether the license plate number is temporary"
+            },
+            "licensePlateNumber": {
+              "type": "string",
+              "description": "Alphanumeric identifier displayed on a vehicle’s license plate"
+            },
+            "licensePlateState": {
+              "type": "string",
+              "description": "2-letter code of the state or province that issued the license plate"
+            },
+            "declaredWeight": {
+              "type": "integer",
+              "description": "Weight of the vehicle between 0 and 600,000 lbs"
+            },
+            "irpNumber": {
+              "type": "string",
+              "description": "International Registration Plan (IRP) number assigned to the vehicle"
+            },
+            "irpState": {
+              "type": "string",
+              "description": "2-letter code of the state or province that issued the cab card (IRP number)"
+            },
+            "iftaNumber": {
+              "type": "string",
+              "description": "International Fuel Tax Agreement (IFTA) number assigned to the vehicle"
+            },
+            "iftaState": {
+              "type": "string",
+              "description": "2-letter code of the state or province that issued the IFTA number"
+            },
+            "transponderNumber": {
+              "type": "string",
+              "description": "Transponder number assigned to the vehicle"
+            },
+            "vrn": {
+              "type": "string",
+              "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information."
+            },
+            "hazmatHauler": {
+              "type": "boolean",
+              "description": "Indicates whether the vehicle transports hazardous material"
+            },
+            "vehicleImage": {
+              "type": "string",
+              "description": "The vehicle’s make, color, and PrePass account number"
+            },
+            "leasedVehicle": {
+              "type": "boolean",
+              "description": "Indicates whether the vehicle is leased"
+            },
+            "leasingCompany": {
+              "type": "string",
+              "description": "Leasing company name"
+            },
+            "leaseExpirationDate": {
+              "type": "string",
+              "description": "Expiration date of the lease",
+              "format": "date"
+            }
+          }
+        },
+        "example": [
+          {
+            "accountNumber": "123123",
+            "costCenter": "0202001",
+            "vin": "1XKADP9X8DJ364740",
+            "vehicleNumber": "4000",
+            "tempPlate": false,
+            "licensePlateNumber": "ABC175",
+            "licensePlateState": "AZ",
+            "declaredWeight": 60000,
+            "irpNumber": "1234567890",
+            "irpState": "AZ",
+            "iftaNumber": "1783222",
+            "iftaState": "AZ",
+            "transponderNumber": "777111222",
+            "vrn": "791",
+            "hazmatHauler": false,
+            "vehicleImage": "FREIGHTLINER WHITE 123123",
+            "leasedVehicle": false,
+            "leasingCompany": "",
+            "leaseExpirationDate": ""
+          },
+          {
+            "accountNumber": "123123",
+            "costCenter": "0202001",
+            "vin": "1XKADP9X8DJ364741",
+            "vehicleNumber": "4001",
+            "tempPlate": false,
+            "licensePlateNumber": "NXT499",
+            "licensePlateState": "AZ",
+            "declaredWeight": 80000,
+            "irpNumber": "1234567890",
+            "irpState": "AZ",
+            "iftaNumber": "1783222",
+            "iftaState": "AZ",
+            "transponderNumber": "777111333",
+            "vrn": "791",
+            "hazmatHauler": false,
+            "vehicleImage": "",
+            "leasedVehicle": false,
+            "leasingCompany": "",
+            "leaseExpirationDate": ""
+          }
+        ]
+      },
+      "AddVehicleRequest": {
+        "required": [
+          "vin",
+          "vehicleNumber",
+          "declaredWeight",
+          "licensePlate",
+          "irp",
+          "ifta"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "maxLength": 19,
+            "minLength": 16,
+            "pattern": "^[a-zA-Z0-9]{16,19}$",
+            "type": "string",
+            "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle"
+          },
+          "vehicleNumber": {
+            "maxLength": 8,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9-]{1,8}$",
+            "type": "string",
+            "description": "Customer-assigned vehicle number (maxlength = 8)"
+          },
+          "licensePlate": {
+            "required": [
+              "state"
+            ],
+            "type": "object",
+            "properties": {
+              "temporary": {
+                "type": "boolean",
+                "description": "Indicates whether the license plate number is temporary."
+              },
+              "number": {
+                "maxLength": 9,
+                "minLength": 5,
+                "pattern": "^[A-Z0-9-]{5,9}$",
+                "type": "string",
+                "description": "Alphanumeric identifier displayed on a vehicle’s license plate.  Required for permanent plates."
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the license plate."
+              }
+            }
+          },
+          "declaredWeight": {
+            "type": "integer",
+            "description": "Weight of the vehicle between 0 and 600,000 lbs"
+          },
+          "irp": {
+            "required": [
+              "accountNumber",
+              "state"
+            ],
+            "type": "object",
+            "properties": {
+              "accountNumber": {
+                "maxLength": 10,
+                "minLength": 1,
+                "pattern": "^[a-zA-Z0-9]{1,10}$",
+                "type": "string",
+                "description": "International Registration Plan (IRP) number assigned to the vehicle"
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the cab card (IRP number)"
+              }
+            }
+          },
+          "ifta": {
+            "required": [
+              "accountNumber",
+              "state"
+            ],
+            "type": "object",
+            "properties": {
+              "accountNumber": {
+                "maxLength": 10,
+                "minLength": 1,
+                "pattern": "^[0-9]{1,16}[a-zA-Z]{0,2}$",
+                "type": "string",
+                "description": "International Fuel Tax Agreement (IFTA) number assigned to the vehicle"
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the IFTA number"
+              }
+            }
+          },
+          "vehicleColor": {
+            "enum": [
+              "BLACK",
+              "BLUE",
+              "BROWN",
+              "GOLD",
+              "GRAY",
+              "GREEN",
+              "MAROON",
+              "ORANGE",
+              "PURPLE",
+              "RED",
+              "SILVER",
+              "TAN",
+              "YELLOW",
+              "WHITE"
+            ],
+            "type": "string",
+            "description": "Color of the vehicle"
+          },
+          "transponderNumber": {
+            "maxLength": 12,
+            "minLength": 9,
+            "pattern": "^[0-9]{9,12}$",
+            "type": "string",
+            "description": "Transponder number assigned to the vehicle"
+          },
+          "vrn": {
+            "type": "string",
+            "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information."
+          },
+          "hazmatHauler": {
+            "type": "boolean",
+            "description": "Indicates whether the vehicle transports hazardous material"
+          },
+          "leasedVehicle": {
+            "type": "object",
+            "properties": {
+              "company": {
+                "enum": [
+                  "Penske",
+                  "Ryder",
+                  "Budget",
+                  "Other",
+                  "Idealease",
+                  "Enterprise",
+                  "United",
+                  "Paclease",
+                  "NationaLease",
+                  "TEC",
+                  "Velocity"
+                ],
+                "type": "string",
+                "description": "Leasing company name.  Note: Both company and expiration required if Leased Vehicle object passed."
+              },
+              "expiration": {
+                "type": "string",
+                "description": "Expiration date of the lease.  Note:  Both company and expiration required if Leased Vehicle object passed.",
+                "format": "date"
+              }
+            },
+            "description": "Leased vehicle information"
+          }
+        }
+      },
+      "UpdateVehicleRequest": {
+        "type": "object",
+        "properties": {
+          "vehicleNumber": {
+            "maxLength": 8,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9-]{1,8}$",
+            "type": "string",
+            "description": "Customer-assigned vehicle number (maxlength = 8)"
+          },
+          "licensePlate": {
+            "type": "object",
+            "properties": {
+              "temporary": {
+                "type": "boolean",
+                "description": "Indicates whether the license plate number is temporary"
+              },
+              "number": {
+                "maxLength": 9,
+                "minLength": 5,
+                "pattern": "^[A-Z0-9-]{5,9}$",
+                "type": "string",
+                "description": "Alphanumeric identifier displayed on a vehicle’s license plate"
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the license plate"
+              }
+            }
+          },
+          "declaredWeight": {
+            "type": "integer",
+            "description": "Weight of the vehicle between 0 and 600,000 lbs"
+          },
+          "irp": {
+            "type": "object",
+            "properties": {
+              "accountNumber": {
+                "maxLength": 10,
+                "minLength": 1,
+                "pattern": "^[a-zA-Z0-9]{1,10}$",
+                "type": "string",
+                "description": "International Registration Plan (IRP) number assigned to the vehicle. Note: Both account number and state required if IRP object passed."
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the cab card (IRP number).  Note:  Both account number and state required if IRP object passed."
+              }
+            }
+          },
+          "ifta": {
+            "type": "object",
+            "properties": {
+              "accountNumber": {
+                "maxLength": 10,
+                "minLength": 1,
+                "pattern": "^[0-9]{1,16}[a-zA-Z]{0,2}$",
+                "type": "string",
+                "description": "International Fuel Tax Agreement (IFTA) number assigned to the vehicle.  Note:  Both account number and state required if IFTA object passed."
+              },
+              "state": {
+                "maxLength": 2,
+                "pattern": "^([A-Z]){2}$",
+                "enum": [
+                  "AL",
+                  "AK",
+                  "AZ",
+                  "AR",
+                  "CA",
+                  "CO",
+                  "CT",
+                  "DE",
+                  "FL",
+                  "GA",
+                  "HI",
+                  "ID",
+                  "IL",
+                  "IN",
+                  "IA",
+                  "KS",
+                  "KY",
+                  "LA",
+                  "ME",
+                  "MD",
+                  "MA",
+                  "MI",
+                  "MN",
+                  "MS",
+                  "MO",
+                  "MT",
+                  "NE",
+                  "NV",
+                  "NH",
+                  "NJ",
+                  "NM",
+                  "NY",
+                  "NC",
+                  "ND",
+                  "OH",
+                  "OK",
+                  "OR",
+                  "PA",
+                  "RI",
+                  "SC",
+                  "SD",
+                  "TN",
+                  "TX",
+                  "UT",
+                  "VT",
+                  "VA",
+                  "WA",
+                  "WV",
+                  "WI",
+                  "WY",
+                  "AB",
+                  "BC",
+                  "MB",
+                  "NB",
+                  "NL",
+                  "NS",
+                  "NT",
+                  "ON",
+                  "PE",
+                  "QC",
+                  "SK",
+                  "YT",
+                  "AG",
+                  "BS",
+                  "CH",
+                  "CI",
+                  "CL",
+                  "CM",
+                  "CU",
+                  "DF",
+                  "DU",
+                  "GE",
+                  "GJ",
+                  "HD",
+                  "JA",
+                  "MC",
+                  "MR",
+                  "MX",
+                  "NA",
+                  "NU",
+                  "OA",
+                  "PU",
+                  "QE",
+                  "QI",
+                  "SI",
+                  "SL",
+                  "SO",
+                  "TB",
+                  "TL",
+                  "TM",
+                  "VE",
+                  "YU",
+                  "BN",
+                  "TA"
+                ],
+                "type": "string",
+                "description": "2-letter code of the state or province that issued the IFTA number.  Note:  Both account number and state required if IFTA object passed. "
+              }
+            }
+          },
+          "vehicleColor": {
+            "enum": [
+              "BLACK",
+              "BLUE",
+              "BROWN",
+              "GOLD",
+              "GRAY",
+              "GREEN",
+              "MAROON",
+              "ORANGE",
+              "PURPLE",
+              "RED",
+              "SILVER",
+              "TAN",
+              "YELLOW",
+              "WHITE"
+            ],
+            "type": "string",
+            "description": "Color of the vehicle"
+          },
+          "transponderNumber": {
+            "maxLength": 12,
+            "minLength": 9,
+            "pattern": "^[0-9]{9,12}$",
+            "type": "string",
+            "description": "Transponder number assigned to the vehicle"
+          },
+          "vrn": {
+            "type": "string",
+            "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information."
+          },
+          "hazmatHauler": {
+            "type": "boolean",
+            "description": "Indicates whether the vehicle transports hazardous material."
+          },
+          "leasedVehicle": {
+            "type": "object",
+            "properties": {
+              "company": {
+                "enum": [
+                  "Penske",
+                  "Ryder",
+                  "Budget",
+                  "Other",
+                  "Idealease",
+                  "Enterprise",
+                  "United",
+                  "Paclease",
+                  "NationaLease",
+                  "TEC",
+                  "Velocity"
+                ],
+                "type": "string",
+                "description": "Leasing company name.  Note:  Both company and expiration required if Leased Vehicle object passed."
+              },
+              "expiration": {
+                "type": "string",
+                "description": "Expiration date of the lease.  Note:  Both company and expiration required if Leased Vehicle object passed.",
+                "format": "date"
+              }
+            },
+            "description": "Leased vehicle information"
+          }
+        }
+      },
+      "GetAccountsResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "required": [
+                "accountNumber"
+              ],
+              "type": "object",
+              "properties": {
+                "accountNumber": {
+                  "type": "integer",
+                  "description": "List of PrePass Account Numbers tied to credentials"
+                }
+              }
+            }
+          },
+          "disclaimer": {
+            "type": "string",
+            "description": "Relevant disclaimer information"
+          }
+        }
+      },
+      "GetTransponderResponse": {
+        "required": [
+          "accountNumber",
+          "transponderNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "accountNumber": {
+            "type": "string",
+            "description": "PrePass Account Number"
+          },
+          "vin": {
+            "type": "string",
+            "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle"
+          },
+          "vehicleNumber": {
+            "type": "string",
+            "description": "Customer-assigned vehicle number"
+          },
+          "vrn": {
+            "type": "string",
+            "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information."
+          },
+          "transponderNumber": {
+            "type": "string",
+            "description": "Identification number of transponder"
+          },
+          "costCenter": {
+            "type": "string",
+            "description": "Customer-defined organization ID or code"
+          }
+        }
+      },
+      "GetTranspondersResponse": {
+        "type": "array",
+        "items": {
+          "required": [
+            "accountNumber",
+            "transponderNumber"
+          ],
+          "type": "object",
+          "properties": {
+            "accountNumber": {
+              "type": "string",
+              "description": "PrePass Account Number"
+            },
+            "vin": {
+              "type": "string",
+              "description": "Vehicle Identification Number - unique alphanumeric code assigned to vehicle"
+            },
+            "vehicleNumber": {
+              "type": "string",
+              "description": "Customer-assigned vehicle number"
+            },
+            "vrn": {
+              "type": "string",
+              "description": "Vehicle Reference Number (VRN). Reference [VRN Chart](https://enrollment.prepass.com/static/Vehicle-Reference-Chart.pdf) for more information."
+            },
+            "transponderNumber": {
+              "type": "string",
+              "description": "Identification number of transponder"
+            },
+            "costCenter": {
+              "type": "string",
+              "description": "Customer-defined organization ID or code"
+            }
+          }
+        }
+      }
+    }
+  }
+}

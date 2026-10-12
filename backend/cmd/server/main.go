@@ -119,6 +119,7 @@ func main() {
 		cfg.PrePassClientID,
 		cfg.PrePassClientSecret,
 	)
+	tollRepo.ConfigurePrePassFleet(prePassClient, cfg.PrePassEnvironment)
 	if *backfillTollLocations {
 		backfillCtx, cancel := context.WithTimeout(ctx, 45*time.Minute)
 		defer cancel()

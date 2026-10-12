@@ -91,6 +91,25 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   See `docs/integrations/PREPASS_TRUCK_LINKS.md` for dates, audit and validation.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
+- Tolls > PrePass uses Fleet Management v2 for truck/transponder rosters, reviewed
+  VIN links, add/edit/remove trucks and assignment of available same-account
+  transponders. Migration 082 adds environment-scoped snapshots, links and durable
+  receipts; `repository/prepass_fleet.go` and `httpapi/prepass_fleet_handlers.go`
+  own persistence and routes. Reads/refresh use `tolls.read`, local links use
+  `tolls.link`, vendor changes/recovery use `tolls.fleet.write`. Existing credentials
+  are reused server-side. Cached reads never call the vendor. Writes refresh first,
+  check revisions and availability, then commit a receipt before the network call.
+  Unconfirmed writes block further changes until explicit portal review. VPP,
+  trailer plates, device transfers/replacements and ordering are outside this tab.
+  Fleet links do not change dated toll mappings, aliases or financial records.
+  Add selects an existing truck and summarizes saved VIN/unit/plate values;
+  only missing or unsupported fields are prompted. Weight/IRP/IFTA are not stored
+  in truck profiles and remain required inputs. Other details expand for edits.
+  A missing local VIN may be supplied for enrollment only, without changing the
+  profile or taking another local truck's VIN. Existing VINs must match. Selection
+  keeps its original timestamp through refreshes; switching trucks resets drafts.
+  See `docs/integrations/PREPASS_FLEET.md`; tests use disposable
+  `MSERP_PREPASS_TEST_DATABASE_URL` and `frontend/scripts/test-prepass-views.mjs`.
 - `backend/internal/weighmytruck/`, repository/httpapi `weighmytruck_*` files and
   `frontend/app/weighmytruck/`: server-only OAuth driver enrollment/removal,
   versioned local membership tracking and terminated-driver warnings. Migration
@@ -397,6 +416,9 @@ browser bundle.
 - Dispatchers: `GET/POST /dispatchers`, `PUT/DELETE /dispatchers/{id}`.
 - Updaters: `GET/POST /updaters`, `PUT/DELETE /updaters/{id}` (fleet permissions).
 - Tolls: `GET /tolls`, `GET /toll-dashboard`, `POST /jobs/sync-tolls`
+- PrePass management: `GET /prepass-fleet`, `POST /prepass-fleet/refresh`,
+  `POST /prepass-fleet/change`, `POST /prepass-fleet/link`, and
+  `POST /prepass-fleet/operations/{id}/verify` (explicit reviewed result).
 - Expenses & Charges: `GET/POST /expenses`, `PUT/DELETE /expenses/{id}`. Roles
   receive independent View/Add/Edit/Delete access per configurable category;
   every list, summary, related-record view and write is category-scoped.
@@ -1320,6 +1342,7 @@ node scripts/test-driver-charges-e2e.mjs --truck-recurring-only
 node scripts/test-charge-views.mjs
 node scripts/test-task-board-views.mjs
 node scripts/test-theme-views.mjs
+node scripts/test-prepass-views.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build

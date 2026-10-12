@@ -26,6 +26,7 @@ func registerTollRoutes(
 ) {
 	handler := tollHandler{logger: logger, repo: repo, job: job}
 	handler.registerTruckLinks(r)
+	registerPrePassFleetRoutes(r, logger, repo)
 	r.Get("/tolls", handler.listTolls)
 	r.Get("/toll-dashboard", handler.tollDashboard)
 	r.Post("/jobs/sync-tolls", handler.syncTolls)

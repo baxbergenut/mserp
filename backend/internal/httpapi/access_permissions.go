@@ -48,6 +48,14 @@ func routePermission(method, path string) string {
 		return "payroll.write"
 	}
 	switch resource {
+	case "prepass-fleet":
+		if read || path == "/prepass-fleet/refresh" {
+			return "tolls.read"
+		}
+		if path == "/prepass-fleet/link" {
+			return "tolls.link"
+		}
+		return "tolls.fleet.write"
 	case "relay-drivers":
 		if read || path == "/relay-drivers/refresh" {
 			return "fuel.read"

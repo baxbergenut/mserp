@@ -483,6 +483,44 @@ export interface DriverIntake {
   candidates: Pick<Driver, "id" | "fullName" | "phone" | "email">[];
 }
 
+export interface PrePassVehicleInput {
+  vehicleNumber: string;
+  licensePlate: { temporary: boolean; number: string; state: string };
+  declaredWeight: number;
+  irp: { accountNumber: string; state: string };
+  ifta: { accountNumber: string; state: string };
+  vrn: string;
+  hazmatHauler: boolean;
+}
+export interface PrePassVehicle {
+  accountNumber: string; costCenter: string; vin: string; vehicleNumber: string;
+  tempPlate: boolean; licensePlateNumber: string; licensePlateState: string;
+  declaredWeight: number; irpNumber: string; irpState: string; iftaNumber: string; iftaState: string;
+  transponderNumber: string; vrn: string; hazmatHauler: boolean;
+  vehicleImage: string; leasedVehicle: boolean; leasingCompany: string; leaseExpirationDate: string;
+}
+export interface PrePassTransponder {
+  accountNumber: string; costCenter: string; vin: string; vehicleNumber: string; transponderNumber: string; vrn: string;
+}
+export interface PrePassFleetEntry {
+  vehicle: PrePassVehicle; truckId: string; truckUnit: string; revision: string; warning: string; suggestions: string[];
+}
+export interface PrePassFleetTruck {
+  id: string; unit: string; vin: string; plate: string; plateState: string; active: boolean; updatedAt: string;
+}
+export interface PrePassFleetOperation {
+  id: string; accountNumber: string; vin: string; action: string; state: "pending" | "confirmed" | "failed" | "verified"; actor: string; createdAt: string;
+}
+export interface PrePassFleetList {
+  configured: boolean; environment: string; refreshedAt: string | null; accounts: string[];
+  vehicles: PrePassFleetEntry[]; transponders: PrePassTransponder[]; trucks: PrePassFleetTruck[]; operations: PrePassFleetOperation[];
+}
+export interface PrePassFleetChange {
+  requestId: string; action: "add" | "edit" | "remove" | "assign" | "link";
+  accountNumber: string; vin: string; revision?: string; truckId?: string; truckUpdatedAt?: string;
+  vehicle?: PrePassVehicleInput; transponderNumber?: string; fleetServiceConfirmed?: boolean;
+}
+
 export interface Truck {
   ownerId: string;
   ownerName: string;

@@ -16,7 +16,9 @@ import (
 )
 
 type TollRepository struct {
-	pool *pgxpool.Pool
+	pool               *pgxpool.Pool
+	prepassFleet       PrePassFleetProvider
+	prepassEnvironment string
 }
 
 func NewTollRepository(pool *pgxpool.Pool) *TollRepository {
