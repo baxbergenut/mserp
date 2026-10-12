@@ -69,6 +69,9 @@ func TestInvestorPayDatabase(t *testing.T) {
 			identityInit := strings.Replace(identitySQL, "BEGIN;\n", "", 1)
 			identityInit = strings.TrimSpace(strings.TrimSuffix(identityInit, "COMMIT;\n"))
 			sql := strings.ReplaceAll(string(init), "\r\n", "\n")
+			if mode == "migration" {
+				sql = withoutTruckRecurringMigration(t, sql)
+			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
 				sql = strings.Replace(sql, m, "", 1)
@@ -102,6 +105,9 @@ func TestInvestorPayDatabase(t *testing.T) {
 				if _, err = admin.Exec(ctx, `DELETE FROM loads WHERE id=990; DELETE FROM trucks WHERE unit_number='RENAMED-LEGACY'`); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if mode == "migration" {
+				applyTruckRecurringMigration(t, ctx, admin)
 			}
 			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,gross_board_extra_entries,driver_pay_weeks,app_users,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
@@ -143,21 +149,13 @@ func TestInvestorPayDatabase(t *testing.T) {
 			cr := NewDriverChargeRepository(pool)
 			pr := NewDriverPayRepository(pool)
 			term := TruckTerm{TruckID: truck, OwnerID: investor, WeekStart: "2026-01-05", SharePercent: "88"}
-			if e = cr.SaveTruckTerm(ctx, term, actor); e == nil {
-				t.Fatal("single-truck driver owner must use Driver charges")
-			}
 			ownTruck := mustID(`INSERT INTO trucks(unit_number,owner_id) VALUES('OWNER-TRUCK',$1) RETURNING id`, investor)
 			if _, e = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01')`, ownTruck, owner); e != nil {
 				t.Fatal(e)
 			}
-			ownTerm := term
-			ownTerm.TruckID = ownTruck
-			if e = cr.SaveTruckTerm(ctx, ownTerm, actor); e == nil {
-				t.Fatal("self-operated truck must use Driver charges")
-			}
 			management, e := cr.TruckCharges(ctx)
-			if e != nil || len(management.EligibleTruckIDs) != 1 || management.EligibleTruckIDs[0] != truck {
-				t.Fatalf("investor management eligibility: %+v %v", management, e)
+			if e != nil || len(management.EligibleTruckIDs) != 2 {
+				t.Fatalf("non-company management eligibility: %+v %v", management, e)
 			}
 			if _, e = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-01-02' WHERE truck_id=$1`, ownTruck); e != nil {
 				t.Fatal(e)
@@ -322,7 +320,6 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pool.Exec(ctx, `UPDATE expense_payments SET investor_truck_id=NULL WHERE expense_id=$1`, expense); e == nil {
 				t.Fatal("payment destination changed")
 			}
-			checkInvestorChargeHandoff(t, ctx, pool, actor)
 			// Owner-only work in another week uses Driver Pay once, with the 88% tariff.
 			if _, e = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) SELECT $1,service_date+7,load_number,load_record_id,driver_rate FROM gross_board_entries WHERE driver_id=$2`, owner, driver); e != nil {
 				t.Fatal(e)
@@ -374,33 +371,8 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatal("owner earnings counted twice in mixed week")
 				}
 			}
-			if e = cr.SaveCell(ctx, ChargeCell{DriverID: driver, TypeID: typ.ID, WeekStart: "2026-10-05", Included: true, Amount: "100.00", TypeVersion: typ.Version}, actor); e != nil {
-				t.Fatal(e)
-			}
-			assignments, e := cr.List(ctx, driver)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if len(assignments.Schedules) != 1 {
-				t.Fatal("missing driver fee")
-			}
-			move := TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-10-05", Amount: "100.00", Included: true, TypeVersion: typ.Version, MoveScheduleID: assignments.Schedules[0].ID, MoveScheduleVersion: assignments.Schedules[0].Version}
-			if e = cr.SaveTruckCharge(ctx, move, actor); e != nil {
-				t.Fatal(e)
-			}
-			moved, e := pr.Get(ctx, ownerWeek)
-			if e != nil {
-				t.Fatal(e)
-			}
-			for _, d := range moved.Drivers {
-				// Other handoff fixtures may still have legitimate charges before
-				// their current-week reassignment. Check the driver just moved.
-				if d.ID == driver && len(d.Edits.GeneratedCharges) > 0 {
-					t.Fatal("moved fee still charged to driver")
-				}
-			}
-			if e = cr.SaveTruckCharge(ctx, move, actor); e != ErrChargeConflict {
-				t.Fatalf("stale move accepted: %v", e)
+			if e = cr.SaveCell(ctx, ChargeCell{DriverID: driver}, actor); e == nil {
+				t.Fatal("driver recurring fee accepted")
 			}
 			emptyWeek, e := pr.InvestorPay(ctx, ownerWeek.AddDate(0, 0, 7))
 			if e != nil {

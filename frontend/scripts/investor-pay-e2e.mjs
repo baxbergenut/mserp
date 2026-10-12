@@ -37,9 +37,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   }
   const truckConfig = await (await page.request.get(`${base}/api/truck-charges`)).json();
   expect(truckConfig.eligibleTruckIds).toContain(extraTruck);
-  expect(truckConfig.eligibleTruckIds).not.toContain(ownTruck);
-  const rejected = await page.request.put(`${base}/api/truck-charges/terms`, { headers, data: { truckId: ownTruck, ownerId: investor, weekStart: '2026-01-05', sharePercent: '88', version: 0 } });
-  expect(rejected.status()).toBe(400);
+  expect(truckConfig.eligibleTruckIds).toContain(ownTruck);
   const created = await page.request.post(`${base}/api/driver-charges/types`, { headers, data: { id: '', name: 'Truck admin', direction: 'charge', amount: '100.00', amounts: ['100.00'], eligibility: 'calendar', archived: false, version: 0 } });
   expect(created.ok(), await created.text()).toBe(true);
   const type = await created.json();
@@ -48,6 +46,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/accounting/driver-charges?tab=trucks`);
   await expect(page.getByRole('tab', { name: 'Truck charges', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('row').filter({ hasText: 'PAY-EXTRA' })).toContainText('Payroll Employee');
+  await expect(page.getByRole('row').filter({ hasText: 'PAY-OWN' })).toContainText('Driver tariff');
   await expect(page.getByRole('checkbox', { name: 'PAY-EXTRA, Truck admin', exact: true })).toBeChecked();
   await page.goto(`${base}/accounting/investor-pay?weekStart=2026-09-28`);
   await expect(page.getByRole('heading', { name: 'Investor pay', exact: true })).toBeVisible();

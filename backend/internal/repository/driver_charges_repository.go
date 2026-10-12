@@ -260,6 +260,9 @@ func validateChargeCreate(c *ChargeCreate) error {
 	return nil
 }
 func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, actor string) ([]string, error) {
+	if c.Kind == "recurring" {
+		return nil, chargeInvalid("Recurring charges are managed on trucks")
+	}
 	if err := validateChargeCreate(&c); err != nil {
 		return nil, err
 	}
@@ -545,6 +548,9 @@ func (r *DriverChargeRepository) Preview(ctx context.Context, id string) ([]Char
 }
 
 func (r *DriverChargeRepository) Draft(ctx context.Context, c ChargeCreate) ([]ChargeOccurrence, error) {
+	if c.Kind == "recurring" {
+		return nil, chargeInvalid("Recurring charges are managed on trucks")
+	}
 	if err := validateChargeCreate(&c); err != nil {
 		return nil, err
 	}

@@ -26,7 +26,6 @@ function startWeek(date: string) {
 export const emptyDriverInput: DriverInput = {
   fullName: "",
   escrowAmount: "2500.00",
-  isOwnerOperator: false,
   payType: "cpm",
   payRate: 0,
   phone: "",
@@ -57,7 +56,6 @@ export function driverToInput(driver: Driver): DriverInput {
     assignmentWeek: driver.teamRole === "team" && driver.teamStartWeek && driver.teamStartWeek > currentChargeWeek() ? driver.teamStartWeek : undefined,
     fullName: driver.fullName,
     escrowAmount: "",
-    isOwnerOperator: driver.isOwnerOperator,
     payType: driver.payType,
     payRate: driver.payRate,
     phone: driver.phone ?? "",
@@ -136,18 +134,6 @@ export function DriverForm({
             className={controlClass}
             placeholder="e.g. Marcus Reed"
           />
-        </Field>
-        <Field label="Driver type">
-          <select
-            value={value.isOwnerOperator ? "owner" : "company"}
-            onChange={(event) =>
-              set("isOwnerOperator", event.target.value === "owner")
-            }
-            className={controlClass}
-          >
-            <option value="company">Company driver</option>
-            <option value="owner">Owner-operator</option>
-          </select>
         </Field>
         <Field label="Phone">
           <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />

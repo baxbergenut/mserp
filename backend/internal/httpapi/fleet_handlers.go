@@ -242,8 +242,8 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		AssignmentWeek:  request.AssignmentWeek,
 		ChargePauseWeek: request.ChargePauseWeek,
 		EscrowAmount:    request.EscrowAmount,
-		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,
-		PayType: request.PayType, PayRate: request.PayRate,
+		FullName:        request.FullName, // Ownership is derived from the assigned truck.
+		PayType:         request.PayType, PayRate: request.PayRate,
 		Phone: optionalString(normalizedPhone), Email: optionalString(request.Email),
 		LicenseNumber: optionalString(request.LicenseNumber), LicenseState: optionalString(request.LicenseState),
 		LicenseExpires: licenseExpires, HireDate: hireDate, Address: optionalString(request.Address),
@@ -255,6 +255,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	OwnerDriverID       *string `json:"ownerDriverId"`
 	AssignmentWeek      string  `json:"assignmentWeek"`
 	OwnerID             *string `json:"ownerId"`
 	UnitNumber          string  `json:"unitNumber"`
@@ -278,6 +279,12 @@ type truckRequest struct {
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
+	if err := validateOptionalUUID(request.OwnerDriverID, "owner driver id"); err != nil {
+		return repository.TruckInput{}, err
+	}
+	if request.OwnerDriverID != nil && request.OwnerID != nil {
+		return repository.TruckInput{}, errors.New("choose one truck owner")
+	}
 	if err := validateOptionalUUID(request.OwnerID, "owner id"); err != nil {
 		return repository.TruckInput{}, err
 	}
@@ -320,7 +327,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 	}
 	return repository.TruckInput{
 		AssignmentWeek: request.AssignmentWeek,
-		OwnerID:        request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
+		OwnerDriverID:  request.OwnerDriverID, OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
 		Make: optionalString(request.Make), Model: optionalString(request.Model),
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,

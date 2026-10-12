@@ -131,7 +131,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before)
-				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql", "078_driver_teams.sql", "079_driver_service_setup.sql"} {
+				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql", "078_driver_teams.sql", "079_driver_service_setup.sql", "080_driver_address_consolidation.sql", "081_truck_recurring_charges.sql"} {
 					migration, e := os.ReadFile("../../sql/" + file)
 					if e != nil {
 						t.Fatal(e)

@@ -266,6 +266,7 @@ export interface ChartDataPoint {
   value: number;
 }
 
+export type EmploymentType = "company" | "owner_operator" | "investor_driver" | "unassigned";
 export type PayType = "cpm" | "gross_percentage";
 export type TruckStatus =
   | "available"
@@ -282,6 +283,7 @@ export interface DriverStatusChange {
   updatedAt: string;
 }
 export interface Driver {
+  employmentType: EmploymentType;
   teamVersion?: number;
   teamTruckId?: string;
   teamTruckUnit?: string;
@@ -337,7 +339,6 @@ export interface DriverInput {
   chargePauseWeek?: string;
   escrowAmount: string;
   fullName: string;
-  isOwnerOperator: boolean;
   payType: PayType;
   payRate: number;
   /** Optional phone: ten ASCII digits, or an empty string. */
@@ -513,6 +514,7 @@ export interface Truck {
 }
 
 export interface TruckInput {
+  ownerDriverId?: string | null;
   assignmentWeek?: string;
   ownerId: string | null;
   unitNumber: string;
@@ -932,6 +934,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  employmentType?: EmploymentType;
   teamNotice?: string;
   teamDrivers?: { id: string; name: string }[];
   truckInactive?: boolean;

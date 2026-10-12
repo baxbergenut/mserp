@@ -109,7 +109,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,d.is_owner_operator,
+	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,

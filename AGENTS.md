@@ -167,9 +167,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   adjustments block autosave/navigation until completed or cleared.
   `backend/internal/repository/driver_pay_repository.go` and
   `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
-- `frontend/app/accounting/driver-charges/`: reusable charge types, effective-dated
-  an active-driver recurring fee matrix and installment plans, schedules and audit
-  history. Driver profiles link to this centralized management view.
+- `frontend/app/accounting/driver-charges/`: truck-based recurring fees for every
+  non-company truck, driver installment plans, and shared charge types. The Truck
+  charges tab defaults open; per-charge counts and Included/Excluded truck filters
+  show membership for the selected effective week. There is no driver recurring tab.
 - `frontend/app/accounting/escrow/`: standalone escrow directory, payment status
   filters, collection history and the new-driver default; shared table in Driver
   details. `escrow_repository.go` and `escrow_handlers.go` own its API.
@@ -362,7 +363,7 @@ browser bundle.
   `escrow.read`/`escrow.write` permissions; collection writes use payroll permissions.
   `POST /escrows/{id}/releases` and `PUT /escrows/{id}/releases/{releaseID}`
   create/edit/cancel a versioned release using escrow.write.
-- Driver charges: `GET /driver-charges` (optional driverId),
+- Installment plans and charge catalog: `GET /driver-charges` (optional driverId),
   `POST /driver-charges/types`, `DELETE /driver-charges/types/{id}` (version),
   `POST /driver-charges/schedules`,
   `POST /driver-charges/schedules/preview`, `POST /driver-charges/bulk`,
@@ -634,24 +635,15 @@ assignment lookup lists.
   audit records, and expense payment destinations. Configure each truck's owner,
   share, and effective Monday in Charges > Truck charges. Historical owner terms
   are explicit accounting agreements, not inferred ownership history. Known
-  conflicting ownership periods require review. Driver charges/installments and
-  shared charge types remain on the same Charges page. Truck fees follow trucks
-  and type eligibility. Explicitly moving a driver fee atomically pauses its
-  driver assignment; personal fees never move automatically. Saved overrides
-  and finalized weeks block conflicting moves. Later truck phases remain intact.
-  Migration 043 automatically hands recurring deductions to investor trucks on
-  assignment and recurring-charge writes, and backfills current assignments.
-  The effective Monday follows the stored assignment and any later known owner
-  start. Driver fees stay paused after departure until explicitly resumed.
-  Existing truck fee selections win; gaps inherit driver phases without stacking.
-  Unconfirmed driver occurrences from the handoff week are removed with full
-  audit details; earlier weeks, reimbursements and personal installments remain.
-  Finalized/confirmed collections block handoff until reopened. Rates are never
-  inferred, and transferred fees still need explicit truck settlement terms.
-  Truck charge management and writes exclude single-truck driver owners and
-  trucks currently operated by their owner; their fees use Driver charges.
-  GET /truck-charges supplies backend-filtered eligibleTruckIds. Historical
-  accounting reads retain saved terms independently of management eligibility.
+  conflicting ownership periods require review. Migration 081 removes driver
+  recurring schedules and the specifically requested type named "charge", retaining
+  installment ledgers, deletion audit snapshots and finalized payroll reports.
+  All non-company trucks, including owner-operated and inactive trucks, appear in
+  truck charge management. No automatic driver-to-truck handoff remains. Fees can
+  be selected without investor terms; owner-operated trucks without terms route
+  fees to Driver Pay using existing driver tariffs. Other trucks still need explicit
+  terms for Investor Pay. Never infer investor percentages. GET /truck-charges
+  supplies eligibleTruckIds; write validation enforces the same company exclusion.
   Owner-only weeks stay in Driver Pay using the owner's tariff without a second
   driver-wage deduction. Mixed owner/hired-driver weeks use one investor truck
   statement and charge hired labor only. Once an investor truck-week is saved,
@@ -704,75 +696,29 @@ assignment lookup lists.
   during reads. Gross Board indexes entries once by driver/day per revision.
   Production Nginx compresses JavaScript, CSS, route payloads and JSON responses.
 
-- Driver charges use migration 033: charge types, schedules, effective Monday
-  phases, weekly occurrences and append-only audit events. They are independent
-  of freeform driver_pay_weeks.adjustments JSON, Expenses, investors, dispatcher
-  commission and estimated profit. Weekly generated rows affect Driver Pay net
-  payable, including charge-only weeks. Recurring labels are read-only in Driver
-  Pay (also enforced by the API); amounts, skips and resets remain editable.
-  Charge creation lives on Driver charges; Driver Pay retains legacy installment
-  reopening and source links only. Weekly amount edits autosave normally; payroll
-  finalization confirms collection. Type defaults never update assignments.
-  Bulk changes are current/future only and replace subsequent planned phases;
-  saved overrides/confirmations must be explicitly corrected first.
-  Recurring assignments use an active-driver matrix with charge types as columns.
-  Each active fee column has an all/visible-drivers checkbox. A checked or mixed
-  column clears its selected drivers on one click; an empty column enables all
-  visible active drivers, retaining existing amounts. Investor handoffs cannot
-  trap a mixed column in repeated add attempts. Bounded saves preserve later phases
-  and version checks; a combined notice reports any partial failures.
-  Driver and truck matrices use the payroll-style previous/next week range and
-  This week controls. Valid effective weeks remain remembered. Driver matrices
-  open at the left edge so the first fee column remains visible;
-  driver and truck matrices have distinct named scroll identities.
-  Other tables retain their normal horizontal scroll restoration.
-  Driver charge type filters use the visible catalog; remembered missing or hidden archived
-  types fall back to all visible types so initial entry cannot hide every fee.
-  Driver charges lists and driver pickers show active drivers only; stored
-  schedules and historical payroll for inactive drivers remain retained.
-  Each type defines 1–50 exact amount options and calendar/loads/no_loads
-  eligibility (migration 034); drivers select an amount with a dropdown. Type
-  eligibility changes apply from the current New York Monday through dated
-  rules; prior weeks retain their rules and weekly overrides stay explicit.
-  Existing amount selections survive option edits. PUT /driver-charges/recurring
-  version-checks a cell, pauses unchecked assignments, and preserves later phases.
-  Matrix saves lock only the affected driver row and refresh that driver’s
-  schedules; concurrent responses merge by driver identity. Page-wide actions
-  await pending row saves. Save/error notices use a viewport-fixed portal so
-  feedback never moves the table. The matrix has compact 32px rows and accepts any valid Monday, including past
-  weeks. Backdated assignments fill gaps up to the next assignment; dated type
-  rules apply, with the earliest type rule used before the type existed. Migration
-  035 permits no-load eligibility in these recurring historical periods. Changes
-  affect only the selected phase interval and reject conflicting weekly overrides.
-  Installments retain their own calendar/load eligibility.
-  Nonempty unmatched plans qualify; day statuses do not. Read-only projections
-  account for all elapsed eligible weeks regardless of browsing order. Writes
-  snapshot prior projected occurrences; explicit weekly edits, zero skips and
-  confirmed rows survive source changes. Installment overrides reserve principal
-  before future allocation; unpaid installments add to the following week's
-  deduction, capped by unallocated principal. Confirming selected
-  deductions is explicit and idempotent, records the session user, and locks
-  those rows. Reopening requires a reason and reverses only collection status.
-  Viewing/autosave never confirms generated installments; finalizing payroll does.
-  Driver rows serialize charge writes;
-  schedule, type and occurrence versions reject stale edits. Money is integer cents
-  in calculations and numeric/decimal strings at persistence/API boundaries.
-  Driver deactivation requires chargePauseWeek when charges exist and pauses
-  them atomically; reactivation does not resume them. Charge history prevents
-  permanent driver deletion. Existing releases cannot display these new charges
-  after rollback but cannot erase them through the legacy adjustment contract.
-  Tests use disposable MSERP_DRIVER_CHARGES_TEST_DATABASE_URL (_test database),
-  fresh and migrated schemas as mserp_app, and test-driver-charges-e2e.mjs.
-  Migration 055 permits deletion of unused charge types with version checks and
-  retained audit snapshots. Any driver schedule or truck phase prevents deletion;
-  use Archive for those types to preserve financial history.
+- Recurring fees are truck assignments (migration 081); legacy driver recurring
+  writes are rejected by the API/repository and database constraint. Migration
+  033's driver schedules now hold installment plans only. Viewing/autosave never
+  confirms installments; payroll finalization does. Existing installment principal,
+  amounts, explicit overrides, pause/reopen and audit rules remain in effect.
+  Truck phases are effective Mondays, use exact amount options and calendar/loads/
+  no_loads eligibility, and retain later phases. Optimistic versions and the shared
+  financial lock protect saves; finalized driver or investor statements block
+  changes. Charge type deletion normally requires no truck assignments; Archive
+  retains used types. The one-time removal of "charge" is explicit migration data
+  cleanup, not a reusable destructive deletion endpoint.
+  TestDriverChargesDatabase and TestTruckRecurringDatabase use the disposable
+  MSERP_DRIVER_CHARGES_TEST_DATABASE_URL as mserp_app for fresh/migrated schemas.
+  test-driver-charges-e2e.mjs --truck-recurring-only checks direct driver ownership,
+  classification, truck charges and payroll with the real API; test-charge-views.mjs
+  checks the compact matrix, inclusion filters, navigation and narrow layouts.
 
 - Investors own trucks independently of operating-driver assignments. A driver may
   have one investor profile, sharing live name/contact details; independent owners
   have their own details. MS Express Inc. is the fixed company owner. Migration 032
   initializes current owner-operator-assigned trucks to driver-linked investors and
   all remaining trucks to the company. This is a one-time backfill; reassignment or
-  changing driver pay classification never transfers ownership. New trucks default
+  automatic driver classification never transfers ownership. New trucks default
   to the company unless an explicit active owner is selected. Omitted ownerId on
   updates preserves ownership for older clients. The legacy is_company_owned flag
   follows owner_id. Owners can be deactivated, not deleted; linked identity cannot
@@ -1101,13 +1047,16 @@ assignment lookup lists.
   CI runs these checks against a disposable PostgreSQL service.
 - Expense responsibility is distinct from the operating driver. Migration 037
   stores owner_id and charge_driver_id: Driver bills the linked driver; Truck
-  Owner bills the explicitly selected investor. Configured truck terms route
+  Owner bills the selected truck's owner. Configured truck terms route
   expenses to Investor Pay or owner-only Driver Pay; unconfigured driver-linked
   owners retain their existing Driver Pay behavior. Independent investors never bill the operating
   driver. Current driver/truck selections fill their counterpart and default to
-  Company for company drivers or the actual truck owner for owner-operators.
-  Historical dates require explicit owner selection rather than guessing from
-  current ownership. Ownership changes never transfer an existing expense debt.
+  Company for company trucks or Truck Owner for privately owned trucks, regardless
+  of the operating driver's pay type. When the linked driver owns that truck,
+  default to Driver and omit the duplicate Truck Owner choice. There is no
+  unrelated investor picker. Dates do not clear the selected owner; editing an
+  existing entry preserves its saved responsibility until explicitly changed.
+  Ownership changes never transfer an existing expense debt.
   Historical Truck Owner expenses are settled without inferring a past owner.
   Personal charges use charge_driver_id; other linked expenses remain separate.
 - Driver-covered expenses (coveredBy = Driver) require a linked driver and a
@@ -1232,6 +1181,15 @@ assignment lookup lists.
   fleet matches populate foreign keys while raw extracted names and units remain
   available when unmatched. Gemini capacity responses use a compatible Flash
   fallback.
+  Add entry has no company field (new entries use MS Express), field hints or AI
+  frame. The AI textarea accepts dropped files and pasted images; Browse sits
+  beside Analyze. Manual and AI batch forms share responsibility controls.
+  Paid by is a dropdown of active MSERP usernames from expenses options.paidBy,
+  defaulting to the signed-in user for manual and extracted new entries. Existing
+  payer text is preserved on edits; expense-setting payer suggestions no longer
+  populate this dropdown.
+  `node scripts/test-expense-views.mjs` checks ownership, payer defaults, AI file
+  drops, single/batch submissions and narrow layouts against fixture APIs.
 - Files are stored as `BYTEA` in PostgreSQL with metadata and SHA-256. IRP/CDL
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored
@@ -1356,6 +1314,8 @@ node scripts/test-investors-e2e.mjs
 node scripts/test-investors-e2e.mjs --profiles-only
 # Same isolated database safety requirement, using MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
 node scripts/test-driver-charges-e2e.mjs
+# Focused automatic ownership, truck fees, and payroll browser checks
+node scripts/test-driver-charges-e2e.mjs --truck-recurring-only
 # Browser view regressions use isolated API fixtures, with no database needed.
 node scripts/test-charge-views.mjs
 node scripts/test-task-board-views.mjs
@@ -1715,3 +1675,22 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   migrated address/atomic truck setup. `test-driver-services-views.mjs` covers the
   wizard with fixtures; `test-investors-e2e.mjs --driver-setup-only`, `--teams-only`
   and `--board-only` cover the real API/database and affected board behavior.
+
+## Automatic driver classification and direct ownership (migration 081)
+
+- Driver employmentType is read-only: company, owner_operator, investor_driver,
+  or unassigned. The UI labels investor_driver "Investor truck driver". It derives
+  from the assigned truck and its owner; team members use the main driver's truck.
+  Ownership/assignment changes take effect on the next read. No form selects type,
+  and legacy isOwnerOperator input is ignored. Driver Board's compact pay/type codes
+  remain separate. Payroll reads derive dated relationships; frozen reports remain
+  unchanged. The legacy database boolean is no longer authoritative.
+- TruckInput.ownerDriverId selects an existing driver directly as owner, mutually
+  exclusive with ownerId. Creation/update creates or reuses the driver's investor
+  identity atomically with the truck, including rollback on failure. The unique
+  investor driver_id prevents duplicate owner identities. Driver and investor
+  statements remain separate. A failed truck save must not leave a new investor.
+- Recurring Charges contains Truck charges, Installment plans, Charge types.
+  Inclusion is attached to trucks, never to the current driver. Counts open an
+  Included trucks filter for the chosen charge; searching and selected week still
+  apply. Show all non-company trucks, including inactive/unassigned/owner-operated.

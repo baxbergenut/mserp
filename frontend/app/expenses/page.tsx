@@ -11,6 +11,7 @@ import {
   createExpenses,
   deleteExpense,
   fetchExpensesPage,
+  fetchAuthSession,
   fetchDrivers,
   fetchInvestors,
   fetchTrucks,
@@ -36,6 +37,7 @@ import {
   expenseToInput,
 } from "./ExpenseForm";
 import { ExpenseAIImport, ExpenseBatchEditor } from "./ExpenseAIImport";
+import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
 import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
 const filterClass =
@@ -114,7 +116,7 @@ export default function ExpensesPage() {
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
   const [batchForms, setBatchForms] = useState<ExpenseInput[]>([]);
-  const [aiMessage, setAIMessage] = useState("");
+  const [currentUser, setCurrentUser] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -123,9 +125,10 @@ export default function ExpensesPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetchExpensesPage({
+      const [response, session] = await Promise.all([fetchExpensesPage({
         page, pageSize, search: debouncedSearch, categoryId: category, company, dateFrom, dateTo,
-      });
+      }), fetchAuthSession()]);
+      setCurrentUser(session.user.username);
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -168,9 +171,8 @@ export default function ExpensesPage() {
   const hasFilters = Boolean(search || category || company || dateFrom || dateTo);
 
   function openCreate() {
-    setForm({ ...emptyExpenseInput, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Date().toISOString().slice(0, 10) });
+    setForm({ ...emptyExpenseInput, paidBy: currentUser, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) });
     setBatchForms([]);
-    setAIMessage("");
     setError("");
     setEditing(null);
   }
@@ -180,7 +182,6 @@ export default function ExpensesPage() {
   function openEdit(expense: Expense) {
     setForm(expenseToInput(expense));
     setBatchForms([]);
-    setAIMessage("");
     setEditing(expense);
   }
 
@@ -363,7 +364,6 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
-          description={editing?.sourceSheet ? `Imported from ${editing.sourceSheet}, row ${editing.sourceRow}.` : batchForms.length > 0 ? "Review every AI suggestion before creating these entries." : "Enter an expense or charge manually, or use AI to fill the details."}
           isSaving={isSaving}
           submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} entries` : "Create entry"}
           wide={batchForms.length > 0}
@@ -377,25 +377,24 @@ export default function ExpensesPage() {
                 onError={setError}
                 onExtracted={(drafts) => {
                   setError("");
+                  drafts = drafts.map(draft => {
+                    const value = { ...draft, company: emptyExpenseInput.company, paidBy: currentUser };
+                    return value.truckId && !value.driverId && !value.driverName ? expenseAssignment(value, "truck", value.truckId, drivers, trucks, owners)
+                      : value.driverId && !value.truckId && !value.unitNumber ? expenseAssignment(value, "driver", value.driverId, drivers, trucks, owners)
+                      : defaultExpenseResponsibility(value, trucks, owners);
+                  });
                   if (drafts.length === 1) {
                     setForm(drafts[0]);
                     setBatchForms([]);
-                    setAIMessage("AI found one transaction and filled the form below.");
                   } else {
                     setBatchForms(drafts);
-                    setAIMessage(`AI found ${drafts.length} transactions. Review and edit them in the table below.`);
                   }
                 }}
               />
-              {aiMessage && (
-                <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[12px] text-emerald-300">
-                  <Check className="h-4 w-4 shrink-0" /> {aiMessage}
-                </div>
-              )}
             </div>
           )}
           {batchForms.length > 0 && !editing ? (
-            <ExpenseBatchEditor settings={options.settings} allowedCategoryIds={createCategoryIds} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
+            <ExpenseBatchEditor settings={options.settings} users={options.paidBy} allowedCategoryIds={createCategoryIds} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
           ) : (
             <ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
           )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { employmentTypeLabel } from "@/app/lib/driverType";
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react";
@@ -116,7 +117,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
         </div>
       </th>
       <td className="border-b border-zinc-800 px-3">{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} onClick={event => event.stopPropagation()} className="font-mono underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
-      <td className="border-b border-zinc-800 px-3">{investor ? operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—" : driver.isOwnerOperator ? "Owner operator" : "Company driver"}</td>
+      <td className="border-b border-zinc-800 px-3">{investor ? operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—" : employmentTypeLabel(driver.employmentType ?? (driver.isOwnerOperator ? "owner_operator" : "company"))}</td>
       {!investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName || "—"}</td>
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}

@@ -269,7 +269,7 @@ func routeTeamPay(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
 		teamIndex, hasTeam := index[p.TeamDriverID]
 		if !exists && hasTeam {
 			var d DriverPayDriver
-			err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,d.is_owner_operator,
+			err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,(driver_employment_type(d.id,$1::date+6)='owner_operator'),
  coalesce(t.id::text,''),coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
  FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2`, report.WeekStart, p.MainDriverID).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName)
 			if err != nil {

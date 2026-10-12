@@ -54,7 +54,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				if !strings.Contains(source, body) {
 					t.Fatal("init must contain the exact team migration")
 				}
-				source = strings.Replace(source, body, "", 1)
+				source = withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1))
 			}
 			if _, err = admin.Exec(ctx, source); err != nil {
 				t.Fatal(err)
@@ -63,6 +63,9 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				if _, err = admin.Exec(ctx, string(migration)); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if mode == "migration" {
+				applyTruckRecurringMigration(t, ctx, admin)
 			}
 			for _, table := range []string{"driver_teams", "driver_team_events"} {
 				var owner string
@@ -98,9 +101,11 @@ func withoutDriverTeams(t *testing.T, source string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	source = withoutTruckRecurringMigration(t, source)
 	return strings.Replace(source, strings.ReplaceAll(string(body), "\r\n", "\n"), "", 1)
 }
 func applyDriverTeams(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	defer applyTruckRecurringMigration(t, ctx, conn)
 	t.Helper()
 	body, err := os.ReadFile("../../sql/078_driver_teams.sql")
 	if err != nil {
@@ -173,7 +178,9 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	if _, err = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES($1,'2026-09-28','DUPLICATE')`, team.ID); err == nil {
 		t.Fatal("team load accepted")
 	}
-	truck := id(`INSERT INTO trucks(unit_number) VALUES('TEAM-01') RETURNING id`)
+	owner := id(`INSERT INTO investors(full_name,driver_id) VALUES('Main owner',$1) RETURNING id`, main.ID)
+	truck := id(`INSERT INTO trucks(unit_number,owner_id) VALUES('TEAM-01',$1) RETURNING id`, owner)
+	exec(`UPDATE truck_ownership_history SET start_known=false WHERE truck_id=$1`, truck)
 	if _, err = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-09-28 04:00+00')`, truck, team.ID); err == nil {
 		t.Fatal("team truck accepted")
 	}

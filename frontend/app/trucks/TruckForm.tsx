@@ -205,12 +205,13 @@ export function TruckForm({
           />
         </Field>
         <Field label="Owner">
-          <select required value={value.ownerId ?? ""}
-            onChange={(event) => onChange({ ...value, ownerId: event.target.value, isCompanyOwned: investors.find((i) => i.id === event.target.value)?.isCompany ?? false })}
+          <select required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
+            onChange={(event) => { const owner = event.target.value; onChange({ ...value, ownerDriverId: owner.startsWith("driver:") ? owner.slice(7) : null, ownerId: owner.startsWith("driver:") ? null : owner, isCompanyOwned: investors.find(i => i.id === owner)?.isCompany ?? false }); }}
             className={controlClass}>
-            {investors.filter((i) => i.active || i.id === value.ownerId).map((i) => (
+            {investors.filter((i) => (i.active || i.id === value.ownerId) && (!i.driverId || !drivers.some(d => d.id === i.driverId) || i.id === value.ownerId)).map((i) => (
               <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
             ))}
+            <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
           </select>
         </Field>
       </FormSection>

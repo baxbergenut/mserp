@@ -131,11 +131,15 @@ isolated real API/database. Existing charge/task browser suites cover shared UI.
 
 ## Recurring charges
 
-Driver and truck matrices share inline inclusion checkboxes, amount selectors,
-column-wide selection, and a schedule/history control. Truck charges show only
-active eligible investor trucks. Investor, truck and driver names link to their
-profiles. Week selection, search and filters share one horizontally scrollable
-row. Omit general workflow explanations; preserve errors and move-charge warnings.
+The truck matrix uses inline inclusion checkboxes, amount selectors, column-wide
+selection and schedule/history. Show every non-company truck, including inactive
+and owner-operated trucks. Each charge header has a compact truck count that opens
+its Included trucks filter; the toolbar also offers Included/Excluded/All trucks.
+Investor, truck and current driver names link to profiles. Week, search and filters
+share one horizontally scrollable row. No driver recurring-charge tab is shown;
+personal installment plans remain separate. Driver type is read-only and derived
+from ownership. Truck owner selection includes drivers directly, without requiring
+users to create an investor first.
 
 ## Weekly statement expansion
 

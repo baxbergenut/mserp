@@ -104,11 +104,8 @@ func (r *DriverChargeRepository) TruckCharges(ctx context.Context) (TruckChargeD
 	return d, rows.Err()
 }
 
-// Ownership records also represent owner-operators. Only additional trucks
-// operated separately from their driver-owner qualify for investor management.
-const investorTruckEligibility = `NOT i.is_company AND (i.driver_id IS NULL OR
- ((SELECT count(*) FROM trucks owned WHERE owned.owner_id=i.id)>=2 AND NOT EXISTS
- (SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=i.driver_id AND a.unassigned_at IS NULL)))`
+// All non-company trucks have truck-based recurring fees.
+const investorTruckEligibility = `NOT i.is_company`
 
 func requireInvestorTruck(ctx context.Context, tx pgx.Tx, truck string) error {
 	var eligible bool
@@ -116,7 +113,7 @@ func requireInvestorTruck(ctx context.Context, tx pgx.Tx, truck string) error {
 		return err
 	}
 	if !eligible {
-		return chargeInvalid("Owner-operator charges belong in Driver charges; choose an additional investor truck")
+		return chargeInvalid("Recurring charges apply only to non-company trucks")
 	}
 	return nil
 }
@@ -142,7 +139,8 @@ func protectTruckPeriod(ctx context.Context, tx pgx.Tx, truck, week, kind, typeI
  AND w.week_start < coalesce((SELECT min(week_start) FROM truck_settlement_terms WHERE truck_id=$1 AND week_start>$2::date AND $3='terms'),
  (SELECT min(week_start) FROM truck_charge_phases WHERE truck_id=$1 AND type_id=nullif($4,'')::uuid AND week_start>$2::date AND $3='charge'),'2101-01-01'::date))
  OR EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND s.week_start >= $2::date AND
- EXISTS(SELECT 1 FROM truck_settlement_terms t JOIN investors i ON i.id=t.owner_id WHERE t.truck_id=$1 AND i.driver_id=s.driver_id))`, truck, week, kind, typeID).Scan(&closed)
+ (EXISTS(SELECT 1 FROM truck_settlement_terms t JOIN investors i ON i.id=t.owner_id WHERE t.truck_id=$1 AND i.driver_id=s.driver_id)
+ OR EXISTS(SELECT 1 FROM truck_ownership_history h JOIN investors i ON i.id=h.owner_id WHERE h.truck_id=$1 AND i.driver_id=s.driver_id)))`, truck, week, kind, typeID).Scan(&closed)
 	if err != nil {
 		return err
 	}
@@ -226,13 +224,6 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 	if err = requireInvestorTruck(ctx, tx, v.TruckID); err != nil {
 		return err
 	}
-	var hasTerms bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_settlement_terms WHERE truck_id=$1 AND week_start<=$2::date)`, v.TruckID, v.WeekStart).Scan(&hasTerms); err != nil {
-		return err
-	}
-	if !hasTerms {
-		return chargeInvalid("Set the truck's dated owner and settlement terms before assigning truck fees")
-	}
 	var options []string
 	var version int
 	var archived bool
@@ -246,59 +237,7 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 		return chargeInvalid("Choose an available amount from an active charge type")
 	}
 	if v.MoveScheduleID != "" {
-		if !v.Included {
-			return chargeInvalid("Include the truck fee before moving a driver assignment")
-		}
-		var driver, kind, typeID string
-		var sv int
-		if err = tx.QueryRow(ctx, `SELECT driver_id::text,kind,coalesce(type_id::text,''),version FROM driver_charge_schedules WHERE id=$1 FOR UPDATE`, v.MoveScheduleID).Scan(&driver, &kind, &typeID, &sv); err != nil {
-			return err
-		}
-		if kind != "recurring" || typeID != v.TypeID || sv != v.MoveScheduleVersion {
-			return ErrChargeConflict
-		}
-		var closed bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements WHERE driver_id=$1 AND week_start>=$2::date AND finalized)`, driver, v.WeekStart).Scan(&closed); err != nil {
-			return err
-		}
-		if closed {
-			return chargeInvalid("Reopen affected driver settlements before moving their fee to a truck")
-		}
-		data, loads, e := chargeData(ctx, tx, driver)
-		if e != nil {
-			return e
-		}
-		pausedAmount := v.Amount
-		for i := range data.Schedules {
-			s := &data.Schedules[i]
-			if s.ID != v.MoveScheduleID {
-				continue
-			}
-			pausedAmount = phaseAt(*s, v.WeekStart).Amount
-			for _, o := range s.Occurrences {
-				if o.WeekStart >= v.WeekStart && (o.Overridden || o.ConfirmedAt != nil) {
-					return chargeInvalid("Correct saved driver charge weeks before moving this fee")
-				}
-			}
-			if err = freezeChargesBefore(ctx, tx, s, v.WeekStart, loads[driver]); err != nil {
-				return err
-			}
-		}
-		if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_phases WHERE schedule_id=$1 AND week_start>=$2::date`, v.MoveScheduleID, v.WeekStart); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO driver_charge_phases(schedule_id,week_start,amount,paused) VALUES($1,$2::date,$3::numeric,true)`, v.MoveScheduleID, v.WeekStart, pausedAmount); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1 WHERE id=$1`, v.MoveScheduleID); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_occurrences WHERE schedule_id=$1 AND week_start>=$2::date AND NOT overridden AND confirmed_at IS NULL`, v.MoveScheduleID, v.WeekStart); err != nil {
-			return err
-		}
-		if err = chargeAudit(ctx, tx, v.MoveScheduleID, v.TypeID, actor, "moved_to_truck", v); err != nil {
-			return err
-		}
+		return chargeInvalid("Driver recurring charges have been removed; select the truck fee directly")
 	}
 	if v.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO truck_charge_phases(truck_id,type_id,week_start,amount,included,updated_by) VALUES($1,$2,$3::date,$4::numeric,$5,nullif($6,'')::uuid) ON CONFLICT DO NOTHING RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included, actor).Scan(&version)

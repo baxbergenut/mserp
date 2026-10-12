@@ -89,6 +89,7 @@ type DriverPayDriver struct {
 	TruckUnit        string             `json:"truckUnit"`
 	DispatcherID     string             `json:"dispatcherId"`
 	DispatcherName   string             `json:"dispatcherName"`
+	EmploymentType   string             `json:"employmentType,omitempty"`
 	IsOwnerOperator  bool               `json:"isOwnerOperator"`
 	PayType          string             `json:"payType"`
 	PayRate          string             `json:"payRate"`
@@ -167,7 +168,7 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.id::text,''),coalesce(t.unit_number,''),
- coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'),d.pay_type,d.pay_rate::text,d.is_owner_operator,
+ coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'),d.pay_type,d.pay_rate::text,driver_employment_type(d.id,$1::date+6),(driver_employment_type(d.id,$1::date+6)='owner_operator'),
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
  coalesce(coalesce(e.entered_original_rate,l.total_pay,e.original_rate)::text,''),coalesce(e.driver_rate::text,''),
@@ -191,7 +192,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  OR EXISTS (SELECT 1 FROM driver_escrows x WHERE x.driver_id=d.id AND x.start_date<$1::date+7
  AND (escrow_collection_available(x.id,$1::date)>0
  OR EXISTS (SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date)))
- OR (d.is_owner_operator AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
+ OR ((driver_employment_type(d.id,$1::date+6)='owner_operator') AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID)
 	if err != nil {
 		return result, err
@@ -202,7 +203,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var d DriverPayDriver
 		var l DriverPayLoad
 		var raw, comments, adjustments []byte
-		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.IsOwnerOperator,
+		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.EmploymentType, &d.IsOwnerOperator,
 			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal); err != nil {

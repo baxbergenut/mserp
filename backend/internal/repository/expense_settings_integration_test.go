@@ -171,9 +171,13 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			method := save("", ExpenseSetting{Kind: "payment_method", Name: "Card 1456", Active: true})
 			method.Active = false
 			save(method.ID, method)
+			exec(`INSERT INTO app_users(username,password_hash,active) VALUES('Expense entry user','$2test',true),('Inactive expense user','$2test',false)`)
 			page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{VisibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}, AccessibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if len(page.Options.PaidBy) != 1 || page.Options.PaidBy[0] != "Expense entry user" {
+				t.Fatalf("payers must be active MSERP users: %v", page.Options.PaidBy)
 			}
 			for _, v := range page.Options.PaymentTypes {
 				if v == "Card 1456" {

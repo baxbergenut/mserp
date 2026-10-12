@@ -214,7 +214,9 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 		}
 	}
 	options.PaymentTypes = []string{}
-	options.PaidBy = []string{}
+	if err := r.pool.QueryRow(ctx, `SELECT COALESCE(array_agg(username ORDER BY lower(username)), '{}') FROM app_users WHERE active`).Scan(&options.PaidBy); err != nil {
+		return ExpensePage{}, err
+	}
 	// Keep the legacy field; defaults now come from category-linked settings.
 	options.ExpenseTypes = []string{}
 	for _, item := range options.Settings {
@@ -224,8 +226,6 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 		switch item.Kind {
 		case "payment_method":
 			options.PaymentTypes = append(options.PaymentTypes, item.Name)
-		case "payer":
-			options.PaidBy = append(options.PaidBy, item.Name)
 		}
 	}
 	return ExpensePage{

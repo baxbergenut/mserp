@@ -1,5 +1,6 @@
 "use client";
 
+import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { expenseAssignment } from "./assignments";
 import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
 
@@ -77,22 +78,8 @@ export function ExpenseForm({
   return (
     <div className="space-y-6">
       <FormSection title="Expense">
-        <Field label="Company">
-          <input
-            required
-            autoFocus
-            list="expense-companies"
-            value={value.company}
-            onChange={(event) => set("company", event.target.value)}
-            className={controlClass}
-            placeholder="MS Express"
-          />
-          <datalist id="expense-companies">
-            {options.companies.map((option) => <option key={option} value={option} />)}
-          </datalist>
-        </Field>
         <Field label="Category">
-          <select aria-label="Category"
+          <select autoFocus aria-label="Category"
             required
             value={value.categoryId}
             onChange={(event) => onChange(changeExpenseCategory(value, event.target.value, options.settings))}
@@ -103,7 +90,7 @@ export function ExpenseForm({
             {activeExpenseCategories(options.settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Name" hint="Choose a default for this category or enter a custom name.">
+        <Field label="Name">
           <input aria-label="Name"
             required
             pattern=".*\S.*"
@@ -122,11 +109,11 @@ export function ExpenseForm({
             required
             type="date"
             value={value.expenseDate}
-            onChange={(event) => onChange({ ...value, expenseDate: event.target.value, ownerId: value.coveredBy === "Truck Owner" ? null : value.ownerId })}
+            onChange={(event) => set("expenseDate", event.target.value)}
             className={controlClass}
           />
         </Field>
-        <Field label="Amount" hint="Enter dollars and cents without a currency symbol.">
+        <Field label="Amount">
           <input aria-label="Amount"
             required
             type="number"
@@ -195,18 +182,7 @@ export function ExpenseForm({
           )}
         </Field>
         <Field label="Who will cover" wide>
-          <select aria-label="Who will cover" value={value.coveredBy} onChange={event => onChange({ ...value, coveredBy: event.target.value, ownerId: event.target.value === "Truck Owner" ? value.ownerId ?? trucks.find(t => t.id === value.truckId)?.ownerId ?? null : null })} className={controlClass}>
-            {Array.from(new Set(["Company", "Driver", "Truck Owner", ...options.coveredBy, value.coveredBy])).filter(Boolean).map(option => <option key={option}>{option}</option>)}
-          </select>
-          {value.coveredBy === "Driver" && <p className="text-xs text-zinc-500">Deduct from the linked driver&apos;s pay. Unpaid amounts carry forward.</p>}
-          {value.coveredBy === "Truck Owner" && <div className="mt-2 space-y-1">
-            <select aria-label="Responsible truck owner" required value={value.ownerId ?? ""} onChange={event => onChange({...value, ownerId:event.target.value || null})} className={controlClass}>
-              <option value="">Select the responsible owner</option>
-              {owners.filter(o => !o.isCompany && (o.active || o.id === value.ownerId)).map(o => <option key={o.id} value={o.id}>{o.fullName}{o.driverId ? " · Driver" : " · Investor"}</option>)}
-            </select>
-            <p className="text-xs text-zinc-500">{owners.find(o => o.id === value.ownerId)?.driverId ? "Deduct from this owner's Driver Pay, regardless of who operates the truck." : "Investor responsibility. This will not be deducted from the operating driver's pay."}</p>
-            <p className="text-xs text-amber-300">Confirm the owner responsible on the expense date. For historical expenses, select the owner explicitly.</p>
-          </div>}
+          <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={onChange} className={controlClass} />
         </Field>
         <Field label="Payment method">
           <input
@@ -221,12 +197,14 @@ export function ExpenseForm({
             {options.paymentTypes.map((option) => <option key={option} value={option} />)}
           </datalist>
         </Field>
+        <Field label="Paid by">
+          <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />
+        </Field>
         <Field label="Reference number" wide>
           <input
             value={value.referenceNumber}
             onChange={(event) => set("referenceNumber", event.target.value)}
             className={controlClass}
-            placeholder="Invoice, receipt, or transaction reference"
           />
         </Field>
         <Field label="Description" wide>
@@ -235,35 +213,20 @@ export function ExpenseForm({
             value={value.description}
             onChange={(event) => set("description", event.target.value)}
             className={controlClass}
-            placeholder="What was this expense for?"
           />
         </Field>
       </FormSection>
 
-      <FormSection title="Responsibility and verification">
-        <Field label="Paid by">
-          <input
-            list="expense-paid-by"
-            value={value.paidBy}
-            onChange={(event) => set("paidBy", event.target.value)}
-            className={controlClass}
-            placeholder="Name"
-          />
-          <datalist id="expense-paid-by">
-            {options.paidBy.map((option) => <option key={option} value={option} />)}
-          </datalist>
-        </Field>
+      <FormSection title="Verification">
         <Toggle
           checked={value.managerVerified}
           onChange={(checked) => set("managerVerified", checked)}
           label="Manager verified"
-          description="The manager has reviewed this expense."
         />
         <Toggle
           checked={value.accountingVerified}
           onChange={(checked) => set("accountingVerified", checked)}
           label="Accounting verified"
-          description="Accounting has reviewed this expense."
         />
       </FormSection>
     </div>

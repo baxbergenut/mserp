@@ -228,26 +228,26 @@ func (r *DashboardRepository) loadFinancialTotals(
 				SELECT SUM(pf.spend)
 				FROM period_fuel pf
 				LEFT JOIN drivers d ON d.id = pf.driver_id
-				WHERE NOT COALESCE(d.is_owner_operator AND d.pay_type = 'gross_percentage', false)
+				WHERE NOT COALESCE((driver_employment_type(d.id)='owner_operator') AND d.pay_type = 'gross_percentage', false)
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pt.amount)
 				FROM period_tolls pt
 				LEFT JOIN drivers d ON d.id = pt.driver_id
-				WHERE NOT COALESCE(d.is_owner_operator AND d.pay_type = 'gross_percentage', false)
+				WHERE NOT COALESCE((driver_employment_type(d.id)='owner_operator') AND d.pay_type = 'gross_percentage', false)
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pf.spend)
 				FROM period_fuel pf
 				JOIN drivers d ON d.id = pf.driver_id
-				WHERE d.is_owner_operator
+				WHERE (driver_employment_type(d.id)='owner_operator')
 				  AND d.pay_type = 'gross_percentage'
 			), 0)::float8,
 			COALESCE((
 				SELECT SUM(pt.amount)
 				FROM period_tolls pt
 				JOIN drivers d ON d.id = pt.driver_id
-				WHERE d.is_owner_operator
+				WHERE (driver_employment_type(d.id)='owner_operator')
 				  AND d.pay_type = 'gross_percentage'
 			), 0)::float8,
 			COALESCE((SELECT SUM(total_miles) FROM period_loads), 0)::float8,
@@ -302,7 +302,7 @@ func (r *DashboardRepository) loadDriverFinancials(
 			UNION
 			SELECT driver_id FROM toll_by_driver
 		)
-		SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate::float8,
+		SELECT d.id, d.full_name, (driver_employment_type(d.id)='owner_operator'), d.pay_type, d.pay_rate::float8,
 			COALESCE(l.gross, 0)::float8,
 			CASE
 				WHEN d.pay_type = 'cpm' THEN COALESCE(l.miles, 0) * d.pay_rate

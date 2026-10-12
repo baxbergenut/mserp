@@ -176,7 +176,7 @@ func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) 
 			continue
 		}
 		var d DriverPayDriver
-		if err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,d.is_owner_operator,
+		if err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,(driver_employment_type(d.id,$1::date+6)='owner_operator'),
  coalesce(t.id::text,''),coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
  FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2 AND d.active`, report.WeekStart, r.Driver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -304,7 +304,7 @@ func currentDriverPayCosts(ctx context.Context, tx pgx.Tx, edits DriverPayEdits)
 	}
 	// Notes can be added before a driver has loads or costs.
 	var d DriverPayDriver
-	err = tx.QueryRow(ctx, `SELECT id::text,pay_type,pay_rate::text,is_owner_operator FROM drivers WHERE id=$1`, edits.DriverID).Scan(&d.ID, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
+	err = tx.QueryRow(ctx, `SELECT id::text,pay_type,pay_rate::text,(driver_employment_type(id,$2::date+6)='owner_operator') FROM drivers WHERE id=$1`, edits.DriverID, edits.WeekStart).Scan(&d.ID, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
 	if err != nil {
 		return d, err
 	}

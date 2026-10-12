@@ -32,18 +32,7 @@ func testChargeTypeDeletion(t *testing.T, pool *pgxpool.Pool, actor, driver stri
 	if err = repo.DeleteType(ctx, typ.ID, typ.Version, actor); !errors.Is(err, ErrNotFound) {
 		t.Fatal("missing deletion", err)
 	}
-	used, err := repo.SaveType(ctx, ChargeType{Name: "Protected deletion type", Direction: "charge", Amount: "30"}, actor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = repo.Create(ctx, ChargeCreate{Kind: "recurring", DriverIDs: []string{driver}, TypeID: used.ID, Amount: "30", StartWeek: ChargeCurrentWeek(), Eligibility: "calendar"}, actor)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var invalid *ChargeValidationError
-	if err = repo.DeleteType(ctx, used.ID, used.Version, actor); !errors.As(err, &invalid) {
-		t.Fatal("used driver type deleted", err)
-	}
 	truckType, err := repo.SaveType(ctx, ChargeType{Name: "Protected truck deletion type", Direction: "charge", Amount: "35"}, actor)
 	if err != nil {
 		t.Fatal(err)

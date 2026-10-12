@@ -1,4 +1,5 @@
 "use client";
+import { employmentTypeLabel } from "../lib/driverType";
 
 import { formatPhone } from "../lib/phone";
 
@@ -160,7 +161,7 @@ function DriversContent() {
     void loadLookups();
     const source = hire.driver;
     setForm({ ...emptyDriverInput, newTruck: { ...emptyTruckInput }, escrowAmount: "", fullName: source.fullName,
-      isOwnerOperator: source.driverType === "owner_operator", hireDate: source.hireDate,
+      hireDate: source.hireDate,
       phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
       city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",
       licenseNumber: source.licenseNumber ?? "", licenseState: source.licenseState ?? "",
@@ -287,7 +288,7 @@ function DriversContent() {
                     <div className="mt-0.5 text-[11px] text-zinc-600">{formatPhone(driver.phone) || driver.email || "No contact info"}</div>
                     {driver.teamRole && <Link href={`/drivers/detail?id=${driver.teamPartnerId}`} className="text-[11px] text-blue-400">{driver.teamRole === "main" ? "Main" : "Team"} · {driver.teamPartnerName}</Link>}
                   </td>
-                  <td className="px-4 py-3 text-zinc-400">{driver.isOwnerOperator ? "Owner-operator" : "Company"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{employmentTypeLabel(driver.employmentType)}</td>
                   <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">
                     {driver.teamRole === "team" ? <span className="font-sans text-zinc-500">Main driver’s statement</span> : driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate.toFixed(4)}/mi` : `${driver.payRate.toFixed(2)}% gross`}
                   </td>

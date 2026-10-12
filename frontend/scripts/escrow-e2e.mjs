@@ -16,6 +16,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   const deduction = await openPay('2026-09-28');
   await expect(deduction).toHaveValue('-2650.00');
   await deduction.fill('-100.25');
+  await deduction.press('Tab');
   await expect.poll(async () => (await read()).paidAmount).toBe('100.25');
   await page.goto(`${base}/accounting/escrow`);
   await page.getByPlaceholder('Search drivers…').fill(driver.fullName);
@@ -33,6 +34,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   // A new draft must be created to collect an unchanged suggested amount.
   await next.fill('-2549.74');
   await next.fill('-2549.75');
+  await next.press('Tab');
   await expect.poll(async () => (await read()).status).toBe('paid');
   await page.goto(`${base}/accounting/escrow`);
   await page.getByLabel('Escrow payment status').selectOption('paid');
@@ -122,6 +124,7 @@ async function verifyReleases(page, base, temp, driver) {
     await expect(deduction).toHaveValue(expected);
     await deduction.fill('-0.01');
     await deduction.fill(amount);
+    await deduction.press('Tab');
   };
   await repay(nextWeek, '-25.00', '-10.00');
   await expect.poll(async () => (await read()).remainingAmount).toBe('15.00');

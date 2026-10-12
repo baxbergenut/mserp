@@ -75,7 +75,9 @@ func TestRelayIdentityDatabase(t *testing.T) {
  VALUES('00000000-0000-0000-0000-000000000001','James Lee Burligh','james lee burligh',true,'gross_percentage',90,'+14703344443','james@example.com'),
  ('00000000-0000-0000-0000-000000000002','Other Person','other person',false,'cpm',0,'+14703344443','shared@example.com');
  INSERT INTO app_users(id,username,password_hash) VALUES('00000000-0000-0000-0000-000000000003','reviewer','$2test');
- INSERT INTO trucks(unit_number) VALUES('001');`)
+ INSERT INTO investors(full_name,driver_id) VALUES('James owner','00000000-0000-0000-0000-000000000001');
+ INSERT INTO trucks(unit_number,owner_id) SELECT '001',id FROM investors WHERE driver_id='00000000-0000-0000-0000-000000000001';
+ INSERT INTO truck_driver_assignments(truck_id,driver_id) SELECT id,'00000000-0000-0000-0000-000000000001' FROM trucks WHERE unit_number='001';`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +192,7 @@ func TestRelayIdentityDatabase(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM drivers),(SELECT count(*) FROM trucks),(SELECT count(*) FROM truck_driver_assignments)").Scan(&drivers, &trucks, &assignments); err != nil {
 		t.Fatal(err)
 	}
-	if drivers != 2 || trucks != 1 || assignments != 0 {
+	if drivers != 2 || trucks != 1 || assignments != 1 {
 		t.Fatalf("unexpected fleet creation: %d %d %d", drivers, trucks, assignments)
 	}
 	var loadedID *string
@@ -216,7 +218,7 @@ func TestRelayIdentityDatabase(t *testing.T) {
 		if err = pool.QueryRow(ctx, `SELECT full_name,dispatcher_id,(SELECT count(*) FROM truck_driver_assignments)+(SELECT count(*) FROM dispatchers) FROM drivers WHERE id=$1`, driverA).Scan(&fleetName, &dispatcher, &count); err != nil {
 			t.Fatal(err)
 		}
-		if fleetName != "James Lee Burligh" || dispatcher != nil || count != 0 {
+		if fleetName != "James Lee Burligh" || dispatcher != nil || count != 1 {
 			t.Fatalf("source changed managed fleet: %s %v %d", fleetName, dispatcher, count)
 		}
 	}

@@ -117,7 +117,7 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   const draft = { company: 'MS Express', category: 'E2E Trips', categoryId: saved.categoryId, expenseType: 'E2E Hotel', expenseDate: '2026-09-28', amount: '12.50', paymentType: '', truckId: null, driverId: null, unitNumber: '', driverName: '', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: '', confidence: 1, evidence: [] };
   await page.route('**/api/expenses/extract', route => route.fulfill({ json: { expenses: [draft, { ...draft, category: 'Penalties', categoryId: penaltyCategory.id, expenseType: 'Parking violation' }] } }));
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
-  await page.getByPlaceholder('Paste one or more transactions, receipt text, invoice details…').fill('Two test receipts');
+  await page.getByLabel('Expense details for AI').fill('Two test receipts');
   await page.getByRole('button', { name: /Analyze/ }).click();
   await expect(page.getByLabel('Transaction 1 category', { exact: true }).locator('option:checked')).toHaveText('E2E Trips');
   expect(await page.locator('#transaction-0-names option').evaluateAll(options => options.map(option => option.value))).toEqual(['E2E Hotel']);

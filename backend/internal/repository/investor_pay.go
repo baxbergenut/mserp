@@ -123,6 +123,9 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 	if err != nil {
 		return source, investor, err
 	}
+	if err = routeOwnerTruckFees(ctx, tx, &source, config); err != nil {
+		return source, investor, err
+	}
 	terms := applicableTruckTerms(config, source.WeekStart)
 	if len(terms) == 0 {
 		return source, investor, nil
@@ -404,7 +407,7 @@ func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (Driver
 		}
 		if !found && (len(g.card.AutoCharges) > 0 || g.card.FuelTotal != "0.00" || g.card.TollTotal != "0.00" || len(g.card.Edits.ExpenseDeductions) > 0) {
 			var d DriverPayDriver
-			err = tx.QueryRow(ctx, `SELECT id::text,full_name,pay_type,pay_rate::text,is_owner_operator FROM drivers WHERE id=$1`, g.ownerDriver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
+			err = tx.QueryRow(ctx, `SELECT id::text,full_name,pay_type,pay_rate::text,(driver_employment_type(id,$2::date+6)='owner_operator') FROM drivers WHERE id=$1`, g.ownerDriver, source.WeekStart).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
 			if err != nil {
 				return source, investor, err
 			}
@@ -564,7 +567,7 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
     LEFT JOIN truck_driver_assignments assignment ON assignment.truck_id=t.id AND assignment.unassigned_at IS NULL
     LEFT JOIN drivers operator ON operator.id=assignment.driver_id
     LEFT JOIN dispatchers dispatcher ON dispatcher.id=operator.dispatcher_id
-	WHERE t.active AND `+investorTruckEligibility+` AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
+	WHERE t.active AND `+investorTruckEligibility+` AND NOT coalesce(assignment.driver_id=i.driver_id,false) AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
 	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
 	if err != nil {
 		return result, err
