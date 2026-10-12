@@ -137,12 +137,17 @@ func TestPrePassFleetDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(migration))
+				migration, e = os.ReadFile("../../sql/083_prepass_fleet_toll_links.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(migration))
 			} else {
 				exec(string(init))
 			}
 			// Existing fleet tables need read/row-lock privileges; new tables must already
 			// be owned by the application role via the migration, not a blanket grant.
-			exec(`GRANT SELECT,UPDATE ON trucks TO mserp_app; GRANT SELECT ON app_users TO mserp_app`)
+			exec(`GRANT SELECT,UPDATE ON trucks TO mserp_app; GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; GRANT INSERT,UPDATE ON tolls,prepass_toll_sync_days TO mserp_app`)
 			pc := cfg.Copy()
 			pc.MaxConns = 2
 			pc.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
@@ -208,6 +213,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 				t.Fatal("roster inferred a link or lost suggestions")
 			}
 			link := request("link")
+			link.TollFrom = "2026-10-01"
 			link.TruckID = truck
 			link.TruckUpdatedAt = choice(truck).UpdatedAt.Format(time.RFC3339Nano)
 			staleTruck := link
@@ -215,6 +221,9 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if !errors.Is(repo.ChangePrePassFleet(ctx, staleTruck, actor), ErrPrePassFleetConflict) || fake.calls != 0 {
 				t.Fatal("changed local truck selection accepted")
 			}
+			preview, err := repo.PreviewPrePassFleetLink(ctx, link)
+			must(err)
+			link.TollRevision = preview.Revision
 			must(repo.ChangePrePassFleet(ctx, link, actor))
 			must(repo.ChangePrePassFleet(ctx, link, actor))
 			if list().Vehicles[0].TruckID != truck || fake.calls != 0 {
@@ -251,6 +260,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if fake.calls != 2 {
 				t.Fatal("assignment replayed")
 			}
+			testFleetTollLinking(t, ctx, admin, repo, fake, actor, truck, newTruck)
 			checked := list().RefreshedAt
 			fake.readFailure = true
 			if repo.RefreshPrePassFleet(ctx) == nil {
@@ -332,6 +342,18 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if id(`SELECT truck_id::text FROM prepass_fleet_links WHERE vin=$1`, missing.VIN) != missingVINTruck {
 				t.Fatal("missing-VIN enrollment was not linked")
 			}
+			// Enrollment with a supplied missing VIN retains its reviewed identity
+			// for the subsequent dated toll link without modifying the profile.
+			missingLink := PrePassFleetChange{RequestID: reqID(), Action: "link", AccountNumber: "123", VIN: missing.VIN, TruckID: missingVINTruck, TruckUpdatedAt: choice(missingVINTruck).UpdatedAt.Format(time.RFC3339Nano), TollFrom: "2026-10-12"}
+			for _, e := range list().Vehicles {
+				if e.Vehicle.VIN == missing.VIN {
+					missingLink.Revision = e.Revision
+				}
+			}
+			mp, me := repo.PreviewPrePassFleetLink(ctx, missingLink)
+			must(me)
+			missingLink.TollRevision = mp.Revision
+			must(repo.ChangePrePassFleet(ctx, missingLink, actor))
 			edit = request("edit")
 			edit.VIN = newVIN
 			edit.Vehicle.VehicleNumber = "006"

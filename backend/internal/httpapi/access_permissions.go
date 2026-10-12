@@ -52,7 +52,7 @@ func routePermission(method, path string) string {
 		if read || path == "/prepass-fleet/refresh" {
 			return "tolls.read"
 		}
-		if path == "/prepass-fleet/link" {
+		if path == "/prepass-fleet/link" || path == "/prepass-fleet/link/preview" {
 			return "tolls.link"
 		}
 		return "tolls.fleet.write"

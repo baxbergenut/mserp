@@ -3,6 +3,7 @@ import type { PrePassFleetChange, PrePassFleetList } from "./types";
 export const fetchPrePassFleet = (signal?: AbortSignal) => apiRequest<PrePassFleetList>("/prepass-fleet", { signal });
 export const refreshPrePassFleet = () => apiRequest<void>("/prepass-fleet/refresh", { method: "POST" });
 export const changePrePassFleet = (input: PrePassFleetChange) => apiRequest<void>(input.action === "link" ? "/prepass-fleet/link" : "/prepass-fleet/change", { method: "POST", body: JSON.stringify(input) });
+export const previewPrePassFleetLink = (input: PrePassFleetChange) => apiRequest<import("./types").PrePassTruckPreview>("/prepass-fleet/link/preview", { method: "POST", body: JSON.stringify(input) });
 export const verifyPrePassFleetOperation = (id: string) => apiRequest<void>(`/prepass-fleet/operations/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify({ reviewed: true }) });
 import type { DriverTeam, DriverTeamInput, DriverTeamTruck } from "./types";
 export const fetchDriverTeamTrucks = (weekStart: string, signal?: AbortSignal) => apiRequest<DriverTeamTruck[]>(`/drivers/team-trucks?${new URLSearchParams({ weekStart })}`, { signal });

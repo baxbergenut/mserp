@@ -504,6 +504,7 @@ export interface PrePassTransponder {
 }
 export interface PrePassFleetEntry {
   vehicle: PrePassVehicle; truckId: string; truckUnit: string; revision: string; warning: string; suggestions: string[];
+  tollsLinked: boolean; tollFrom: string;
 }
 export interface PrePassFleetTruck {
   id: string; unit: string; vin: string; plate: string; plateState: string; active: boolean; updatedAt: string;
@@ -519,6 +520,7 @@ export interface PrePassFleetChange {
   requestId: string; action: "add" | "edit" | "remove" | "assign" | "link";
   accountNumber: string; vin: string; revision?: string; truckId?: string; truckUpdatedAt?: string;
   vehicle?: PrePassVehicleInput; transponderNumber?: string; fleetServiceConfirmed?: boolean;
+  tollFrom?: string; tollRevision?: string;
 }
 
 export interface Truck {

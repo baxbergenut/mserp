@@ -12,7 +12,6 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { TruckLinksTab } from "./TruckLinksTab";
 import { PrePassFleetTab } from "./PrePassFleetTab";
 import { TollOverview } from "./TollOverview";
 import { fetchTollsPage, syncTolls } from "../lib/api";
@@ -179,16 +178,16 @@ export default function TollsPage() {
       )}
 
       <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
-        {(["overview", "transactions", "prepass", "trucks"] as const).map((tab) => (
-          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={activeTab === tab}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === tab ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
+        {(["overview", "transactions", "prepass"] as const).map((tab) => (
+          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={(activeTab === tab || tab === "prepass" && activeTab === "trucks")}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${(activeTab === tab || tab === "prepass" && activeTab === "trucks") ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
             {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
-            {tab === "overview" ? "Overview" : tab === "trucks" ? "Truck linking" : tab === "prepass" ? "PrePass" : "Transactions"}
+            {tab === "overview" ? "Overview" : tab === "prepass" ? "PrePass" : "Transactions"}
           </button>
         ))}
       </div>
 
-      {activeTab === "prepass" ? <PrePassFleetTab /> : activeTab === "trucks" ? <TruckLinksTab /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
+      {(activeTab === "prepass" || activeTab === "trucks") ? <PrePassFleetTab showAttention={activeTab === "trucks"} /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
         <>
       {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

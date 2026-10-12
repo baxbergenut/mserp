@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"mserp/internal/prepass"
@@ -23,6 +24,9 @@ func validatePrePassFleetChange(in *repository.PrePassFleetChange, link bool) bo
 	}
 	if link {
 		if in.Action != "link" {
+			return false
+		}
+		if _, err := time.Parse(time.DateOnly, in.TollFrom); err != nil {
 			return false
 		}
 	} else if !slices.Contains([]string{"add", "edit", "remove", "assign"}, in.Action) || !in.FleetServiceConfirmed {
@@ -83,6 +87,24 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 		}
 		writeJSON(w, 200, map[string]bool{"refreshed": true})
 	})
+	router.Post("/prepass-fleet/link/preview", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := authSessionFromContext(r.Context())
+		if !slices.Contains(session.User.Permissions, "tolls.read") {
+			writeAPIError(w, 403, "Tolls read permission is required")
+			return
+		}
+		var in repository.PrePassFleetChange
+		if decodeJSON(r, &in) != nil || !validatePrePassFleetChange(&in, true) {
+			writeAPIError(w, 400, "Select a truck and toll linking start date.")
+			return
+		}
+		out, err := repo.PreviewPrePassFleetLink(r.Context(), in)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	})
 	change := func(link bool) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			session, _ := authSessionFromContext(r.Context())
@@ -93,6 +115,10 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 			var in repository.PrePassFleetChange
 			if decodeJSON(r, &in) != nil || !validatePrePassFleetChange(&in, link) {
 				writeAPIError(w, 400, "Provide a valid PrePass action, account, VIN and current revision.")
+				return
+			}
+			if link && !prepassRevision.MatchString(in.TollRevision) {
+				writeAPIError(w, 400, "Preview the toll link before saving.")
 				return
 			}
 			if err := repo.ChangePrePassFleet(r.Context(), in, session.User.ID); err != nil {

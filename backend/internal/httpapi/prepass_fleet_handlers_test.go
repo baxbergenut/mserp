@@ -10,7 +10,7 @@ import (
 func TestPrePassFleetPermissions(t *testing.T) {
 	for _, c := range []struct{ method, path, want string }{
 		{"GET", "/prepass-fleet", "tolls.read"}, {"POST", "/prepass-fleet/refresh", "tolls.read"},
-		{"POST", "/prepass-fleet/link", "tolls.link"}, {"POST", "/prepass-fleet/change", "tolls.fleet.write"},
+		{"POST", "/prepass-fleet/link/preview", "tolls.link"}, {"POST", "/prepass-fleet/link", "tolls.link"}, {"POST", "/prepass-fleet/change", "tolls.fleet.write"},
 		{"POST", "/prepass-fleet/operations/id/verify", "tolls.fleet.write"},
 	} {
 		if got := routePermission(c.method, c.path); got != c.want {
@@ -39,5 +39,20 @@ func TestPrePassFleetRequestBoundary(t *testing.T) {
 	in.Action = "remove"
 	if validatePrePassFleetChange(&in, false) {
 		t.Fatal("remove accepted device change")
+	}
+}
+
+func TestPrePassFleetLinkRequiresStartDate(t *testing.T) {
+	in := repository.PrePassFleetChange{RequestID: "00000000-0000-4000-8000-000000000001", Action: "link", AccountNumber: "123", VIN: "1XKADP9X8DJ364740", Revision: strings.Repeat("a", 64), TruckID: "00000000-0000-4000-8000-000000000002", TruckUpdatedAt: "2026-10-12T12:00:00Z"}
+	if validatePrePassFleetChange(&in, true) {
+		t.Fatal("undated fleet link accepted")
+	}
+	in.TollFrom = "2026-02-30"
+	if validatePrePassFleetChange(&in, true) {
+		t.Fatal("invalid calendar date accepted")
+	}
+	in.TollFrom = "2026-10-12"
+	if !validatePrePassFleetChange(&in, true) {
+		t.Fatal("valid dated link rejected")
 	}
 }

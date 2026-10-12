@@ -28,6 +28,7 @@ const server = createServer(async (req, res) => {
     if (path.startsWith('/api/')) {
       if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write', 'tolls.read', 'tolls.link', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
+      if(path==='/api/prepass-fleet')return send({configured:true,accounts:[],vehicles:[],transponders:[],trucks:[],operations:[]});
       if(path==='/api/tolls/truck-links'&&req.method==='GET')return send(tollLinks);
       if(path==='/api/tolls')return send({items:[],total:0,totalPages:1,page:1,pageSize:25,options:{units:[],agencies:[]},summary:{amount:0,truckCount:0}});
       if(path==='/api/toll-dashboard')return send({error:'Outside fixture'},503);
@@ -148,11 +149,12 @@ else {
     readOnly=false;
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(base+'/tolls');
-    await page.getByRole('button',{name:'Truck linking',exact:true}).click();
+    await page.getByRole('button',{name:'PrePass',exact:true}).click();
+    await page.getByRole('button',{name:'Needs attention',exact:true}).click();
     await expect(page.getByRole('cell',{name:'Tag 777780673',exact:true})).toBeVisible();
     await expect(page.getByLabel('Unlinked tolls posted since')).toHaveValue('2026-09-01');
     await page.getByRole('button',{name:'Link truck',exact:true}).click();
-    await page.getByLabel('MSERP truck',{exact:false}).selectOption('truck-01');
+    await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-01');
     await expect(page.getByRole('dialog')).toContainText('4V4NC9EG4NN297330');
     await page.getByRole('dialog').getByRole('button',{name:'Preview matching tolls',exact:true}).click();
     await expect(page.getByRole('dialog')).toContainText('41 tolls');

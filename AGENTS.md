@@ -83,7 +83,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   processes at most 100 independently and refreshes once. See
   `docs/integrations/RELAY_DRIVERS.md`.
 - PrePass truck mappings use migration 077, `repository/toll_truck_links.go`,
-  `httpapi/toll_truck_link_handlers.go`, and Tolls > Truck linking. Group by tag
+  `httpapi/toll_truck_link_handlers.go`, and Tolls > PrePass > Needs attention. Group by tag
   with exact-unit fallback; never guess equivalent names or strip leading zeros.
   Date-bounded reviewed mappings resolve unlinked tolls and future imports;
   preserve existing links. Preview/save/undo use `tolls.link`; listing uses
@@ -101,7 +101,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   check revisions and availability, then commit a receipt before the network call.
   Unconfirmed writes block further changes until explicit portal review. VPP,
   trailer plates, device transfers/replacements and ordering are outside this tab.
-  Fleet links do not change dated toll mappings, aliases or financial records.
+  Migration 083 and repository/prepass_fleet_tolls.go make fleet linking atomic
+  with dated toll mappings: require start date and preview; tag (transaction
+  ppDeviceId = fleet transponderNumber) first, exact unit fallback, account/env
+  scoped. Never equate transaction deviceNumber with that tag. Only NULL truck
+  transactions are backfilled; existing links stay unchanged. Finalized reports,
+  stale previews and conflicting mappings block writes. Relinking closes old
+  fleet rules from the chosen date without unlinking their historical tolls.
+  Previously linked/add results and changed provider identities without current
+  rules show Link tolls. No start dates are inferred. Truck numbers link to profiles;
+  one Truck column replaces separate local/provider columns. Account UI is hidden.
+  Historical unlinked toll review and saved mappings live under Needs attention.
   Add selects an existing truck and summarizes saved VIN/unit/plate values;
   only missing or unsupported fields are prompted. Weight/IRP/IFTA are not stored
   in truck profiles and remain required inputs. Other details expand for edits.

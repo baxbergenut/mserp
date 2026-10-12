@@ -9,7 +9,7 @@ import { chromium, expect } from '@playwright/test';
 const vin = '1XKADP9X8DJ364740', newVin = '1XKADP9X8DJ364741';
 const stamp = '2026-10-12T12:00:00Z';
 const baseVehicle = { accountNumber: '123', costCenter: '', vin, vehicleNumber: '003', tempPlate: false, licensePlateNumber: 'ABC123', licensePlateState: 'OH', declaredWeight: 80000, irpNumber: '12345', irpState: 'OH', iftaNumber: '67890', iftaState: 'OH', transponderNumber: '', vrn: '791', hazmatHauler: false, vehicleImage: '', leasedVehicle: false, leasingCompany: '', leaseExpirationDate: '' };
-const makeEntry = v => ({ vehicle: v, truckId: '', truckUnit: '', revision: 'a'.repeat(64), warning: 'Not linked to an MSERP truck', suggestions: ['truck-1'] });
+const makeEntry = v => ({ vehicle: v, truckId: '', truckUnit: '', tollsLinked: false, tollFrom: '', revision: 'a'.repeat(64), warning: 'Not linked to an MSERP truck', suggestions: ['truck-1'] });
 const data = { configured: true, environment: 'production', refreshedAt: null, accounts: [], vehicles: [], transponders: [], operations: [], trucks: [
   { id: 'truck-1', unit: '003', vin, plate: 'ABC123', plateState: 'OH', active: true, updatedAt: stamp },
   { id: 'truck-2', unit: '004', vin: newVin, plate: 'DEF456', plateState: 'OH', active: true, updatedAt: stamp },
@@ -27,6 +27,7 @@ const server = createServer(async (req, res) => {
       if (p === '/api/tasks/count') return send({ count: 0 });
       if (p === '/api/toll-dashboard') return send({ totals: { spend: 0, transactionCount: 0, truckCount: 0 }, monthly: [], weekly: [], trucks: [], states: [], agencies: [] });
       if (p === '/api/tolls') return send({ items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, summary: { amount: 0, trucks: 0 }, options: { units: [], agencies: [] } });
+      if (p === '/api/tolls/truck-links') return send({ dateFrom: '2026-09-01', groups: [], trucks: [], mappings: [] });
       if (p === '/api/prepass-fleet' && req.method === 'GET') return send(data);
       let raw = ''; for await (const c of req) raw += c;
       const input = raw ? JSON.parse(raw) : {};
@@ -40,11 +41,12 @@ const server = createServer(async (req, res) => {
           { accountNumber: '123', transponderNumber: '777111333', vin: 'ANOTHERVIN00000000', vehicleNumber: '099', vrn: '', costCenter: '' },
         ]; return send({ refreshed: true });
       }
+      if (p === '/api/prepass-fleet/link/preview') return send({ count: 0, amount: '0.00', units: [], closed: false, revision: 'b'.repeat(64) });
       if (p.endsWith('/verify')) { data.operations[0].state = 'verified'; return send({ verified: true }); }
       if (p === '/api/prepass-fleet/change' || p === '/api/prepass-fleet/link') {
         if (reject) { reject = false; return send({ error: 'PrePass changed. Refresh and review before trying again.' }, 409); }
         let e = data.vehicles.find(e => e.vehicle.vin === input.vin);
-        if (input.action === 'link') { e.truckId = input.truckId; e.truckUnit = data.trucks.find(t => t.id === input.truckId).unit; e.warning = ''; }
+        if (input.action === 'link') { e.tollsLinked = true; e.tollFrom = input.tollFrom; e.truckId = input.truckId; e.truckUnit = data.trucks.find(t => t.id === input.truckId).unit; e.warning = ''; }
         if (input.action === 'add') { e = makeEntry({ ...baseVehicle, vin: input.vin }); e.truckId = input.truckId; e.truckUnit = data.trucks.find(t => t.id === input.truckId).unit; e.warning = ''; data.vehicles.push(e); }
         if (input.action === 'add' || input.action === 'edit') { e.vehicle.vehicleNumber = input.vehicle.vehicleNumber; e.vehicle.licensePlateNumber = input.vehicle.licensePlate.number; }
         if (input.action === 'assign') { e.vehicle.transponderNumber = input.transponderNumber; const d = data.transponders.find(d => d.transponderNumber === input.transponderNumber); d.vin = e.vehicle.vin; d.vehicleNumber = e.vehicle.vehicleNumber; }
@@ -73,9 +75,21 @@ try {
   await expect(region.getByRole('cell', { name: vin, exact: true })).toBeVisible();
   await region.getByRole('button', { name: 'Link', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel(/^MSERP truck/).selectOption('truck-1');
-  await dialog.getByRole('button', { name: 'Link MSERP truck', exact: true }).click();
+  await dialog.getByLabel(/^Truck/).selectOption('truck-1');
+  await expect(dialog.getByRole('button', { name: 'Preview link', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Toll linking start date').fill('2026-10-01');
+  await dialog.getByRole('button', { name: 'Preview link', exact: true }).click();
+  await expect(dialog).toContainText('0 unlinked tolls');
+  await dialog.getByLabel('Toll linking start date').fill('2026-10-02');
+  await expect(dialog.getByRole('button', { name: 'Preview link', exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Preview link', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Link truck and tolls', exact: true }).click();
   await expect(dialog).toHaveCount(0); assert.equal(writes.at(-1).path, '/api/prepass-fleet/link');
+  assert.equal(writes.at(-1).input.tollFrom, '2026-10-02');
+  assert.equal(writes.at(-1).input.tollRevision, 'b'.repeat(64));
+  await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
+  for (const name of ['Account', 'MSERP truck', 'PrePass unit']) await expect(region.getByRole('columnheader', { name, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Truck linking', exact: true })).toHaveCount(0);
   await region.getByRole('button', { name: 'Assign', exact: true }).click();
   const available = dialog.getByLabel('Available transponder');
   await expect(available.locator('option')).toHaveCount(2);
@@ -94,10 +108,10 @@ try {
   await expect(dialog.getByLabel(/^VIN/)).toHaveCount(0);
   await expect(dialog.getByLabel('Declared weight (lb)')).toHaveCount(0);
   await expect(dialog.getByLabel('PrePass account', { exact: true })).toHaveCount(0);
-  await dialog.getByLabel(/^MSERP truck/).selectOption('truck-4');
+  await dialog.getByLabel(/^Truck/).selectOption('truck-4');
   await expect(dialog).toContainText('The saved VIN is invalid');
   await expect(dialog.getByRole('button', { name: 'Add truck', exact: true })).toBeDisabled();
-  await dialog.getByLabel(/^MSERP truck/).selectOption('truck-3');
+  await dialog.getByLabel(/^Truck/).selectOption('truck-3');
   await expect(dialog.getByLabel(/^VIN/)).toBeVisible();
   await expect(dialog.getByLabel(/^PrePass unit number/)).toBeVisible();
   await expect(dialog.getByLabel('Plate number', { exact: true })).toBeVisible();
@@ -105,7 +119,7 @@ try {
   await dialog.getByLabel(/^VIN/).fill('1XKADP9X8DJ364742');
   await dialog.getByLabel('IRP account number').fill('11111');
   await dialog.getByLabel('This truck is not enrolled').check();
-  await dialog.getByLabel(/^MSERP truck/).selectOption('truck-2');
+  await dialog.getByLabel(/^Truck/).selectOption('truck-2');
   await expect(dialog.getByLabel(/^VIN/)).toHaveCount(0);
   await expect(dialog.getByLabel(/^PrePass unit number/)).not.toBeVisible();
   await expect(dialog.getByLabel('Plate number', { exact: true })).not.toBeVisible();
@@ -138,7 +152,7 @@ try {
   await dialog.getByRole('button', { name: 'Remove from PrePass', exact: true }).click(); await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.action, 'remove');
   await region.getByRole('button', { name: 'Add truck', exact: true }).click();
-  await dialog.getByLabel(/^MSERP truck/).selectOption('truck-3');
+  await dialog.getByLabel(/^Truck/).selectOption('truck-3');
   await dialog.getByLabel(/^VIN/).fill('1XKADP9X8DJ364742');
   await dialog.getByLabel(/^PrePass unit number/).fill('005');
   await dialog.getByLabel('Plate number', { exact: true }).fill('NEW005');
@@ -162,6 +176,7 @@ try {
   assert.equal(writes.at(-1).path, '/api/prepass-fleet/operations/operation-1/verify');
   await region.getByRole('button', { name: 'Transponders', exact: true }).click();
   await expect(region.getByRole('cell', { name: '777111222', exact: true })).toBeVisible();
+  await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await region.getByRole('cell', { name: '777111222', exact: true }).scrollIntoViewIfNeeded();
@@ -172,5 +187,7 @@ try {
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toHaveCount(0);
   await region.getByRole('button', { name: 'Trucks', exact: true }).click();
   for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await region.getByRole('button', { name: 'Needs attention', exact: true }).click();
+  await expect(region).toContainText('All tolls in this date range are linked to trucks.');
   assert.deepEqual(errors, []); console.log('PrePass browser workflows passed; screenshots saved in OS temp directory.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

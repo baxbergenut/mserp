@@ -1,6 +1,6 @@
 # PrePass truck linking
 
-Tolls > Truck linking groups unlinked tolls by PrePass PPDeviceID (tag), falling
+Tolls > PrePass > Needs attention groups unlinked tolls by PrePass PPDeviceID (tag), falling
 back to the exact normalized vehicle unit only when a tag is missing. Leading
 zeros, punctuation and spaces remain meaningful. A missing tag and missing unit
 cannot be mapped; investigate that identity in PrePass. No mapping is inferred
@@ -13,6 +13,11 @@ instead use the toll's exit (travel) date, with an inclusive start/end and optio
 open end. This supports tags moved between trucks. The preview covers all unlinked
 tolls in those travel dates, regardless of the list's posting cutoff. It displays
 count, amount and source unit names before a mapping can be saved.
+
+Fleet roster linking now shares these rules through migration 083; see
+[PrePass fleet management](PREPASS_FLEET.md) for the combined dated link flow.
+Legacy group mappings remain available for historical identities absent from the
+current roster. Their tag-first matching semantics are unchanged.
 
 Migration 077 adds `prepass_truck_mappings`, its link/undo audit events, and a
 mapping ID on tolls. GET `/tolls/truck-links?from=YYYY-MM-DD` requires `tolls.read`.

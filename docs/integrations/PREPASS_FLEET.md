@@ -1,14 +1,19 @@
 # PrePass fleet management
 
 Tolls > PrePass manages the PrePass truck roster and available transponders.
-Trucks and Transponders have separate searchable views with account filters.
+Trucks and Transponders have separate searchable views. The single account is
+selected internally; no account columns, filters or selection controls are shown.
+A single Truck column links to the local profile when reviewed. Unlinked vehicles
+are flagged. Needs attention contains unlinked toll groups and saved mappings.
 Refresh PrePass loads both rosters for every active authorized account. Ordinary
 page reads use the last complete snapshot; failed refreshes retain it.
 
 ## Supported actions
 
 - Link an existing PrePass vehicle to an MSERP truck by explicitly reviewing the
-  exact VIN. Unit names are not guessed or normalized; leading zeros are retained.
+  exact VIN and selecting a toll linking start date. Preview then save creates
+  the roster link and dated toll rules atomically. Unit names are not guessed;
+  leading zeros and punctuation are retained.
 - Add an active MSERP truck to PrePass and record its reviewed link. Select the
   truck once: its saved VIN, unit and plate details appear in a compact summary.
   Only missing or unsupported unit/plate fields appear as inputs. Weight and
@@ -36,9 +41,30 @@ Trailer plates, device replacement/transfer/unassignment, lost/stolen reporting,
 device orders, account transfers and automatic truck offboarding are outside
 this first version. No unsupported activation/deactivation state is invented.
 
-Fleet links are separate from Tolls > Truck linking. They do not rewrite dated
-toll mappings, truck aliases, imported transactions or finalized statements.
-Inactive local trucks and VIN/plate mismatches appear as attention warnings.
+Migration 083 connects fleet links to dated toll mappings. Linking requires an
+inclusive travel start date and previews all eligible unlinked tolls from that
+date, regardless of posting date. Zero existing tolls is valid for future imports.
+The reviewed current fleet transponderNumber maps to transaction ppDeviceId/tag;
+exact vehicleNumber is a fallback when no reviewed tag rule matches. Rules are
+account/environment scoped. Existing linked transactions are always preserved.
+The operation refuses stale previews, conflicting reviewed mappings, duplicate
+provider unit/tag identities and changes affecting finalized statements. Relinking
+closes only this fleet vehicle's previous rules at the chosen start date, without
+unlinking any of their existing transactions. Events record retired rules and the
+exact backfilled transaction IDs; the durable receipt records the selected date.
+
+Previously linked or newly added vehicles without dated rules show Link tolls.
+Provider unit/tag changes also flag missing current rules for dated review. No
+start date is invented by a roster refresh, Add, Edit or Assign. Fleet linking
+never changes truck aliases. Inactive local trucks and VIN/plate mismatches remain
+attention warnings. Historical identities absent from the current provider roster
+can still be handled under PrePass > Needs attention.
+
+Transaction fields include ppDeviceId (PrePass main device ID), deviceNumber
+(transponder/sticker number), vehicleNumber and plateNumber/plateState, but no
+VIN. deviceNumber is distinct from ppDeviceId and must not be equated with the
+fleet transponderNumber. Read-only production samples confirmed fleet transponder
+numbers match transaction ppDeviceId; deviceNumber values did not match.
 
 ## API, permissions and configuration
 
@@ -46,7 +72,8 @@ Inactive local trucks and VIN/plate mismatches appear as attention warnings.
 | --- | --- | --- |
 | `GET /prepass-fleet` | Cached rosters, limited local truck choices, links and latest 50 operations | `tolls.read` |
 | `POST /prepass-fleet/refresh` | Refresh complete provider rosters | `tolls.read` |
-| `POST /prepass-fleet/link` | Review the local truck link | `tolls.link` + `tolls.read` |
+| `POST /prepass-fleet/link/preview` | Preview dated unlinked tolls | `tolls.link` + `tolls.read` |
+| `POST /prepass-fleet/link` | Save reviewed roster and dated toll links | `tolls.link` + `tolls.read` |
 | `POST /prepass-fleet/change` | Add/edit/remove/assign | `tolls.fleet.write` + `tolls.read` |
 | `POST /prepass-fleet/operations/{id}/verify` | Record explicit portal review of an uncertain result | `tolls.fleet.write` |
 
@@ -54,7 +81,8 @@ The code-owned Administrator role receives the new permission. Existing custom
 roles need it explicitly enabled in Settings; no migration expands their access.
 Truck profile navigation additionally requires `fleet.read`.
 
-Migration `082_prepass_fleet.sql` must precede the new API. Fresh installations
+Migrations `082_prepass_fleet.sql` and `083_prepass_fleet_toll_links.sql` must
+precede the new API. Fresh installations
 include the same tables in `init.sql`. Reuse the existing server-only
 `PREPASS_ENVIRONMENT` and selected production/nonproduction client ID/secret.
 No credentials reach the browser. Rosters, links and receipts are scoped by
@@ -66,8 +94,8 @@ Refresh and write operations acquire a PostgreSQL advisory lock per environment,
 including across multiple API processes. Mutations re-read the complete provider
 roster and compare the displayed vehicle/link revision. Local add/link selection
 also requires the truck's current timestamp and matching VIN when present.
-Only Add may supply an absent VIN; existing-vehicle linking still requires an
-exact VIN match. Add holds a shared
+Only Add may supply an absent VIN; linking requires an exact VIN match or the
+same already-reviewed fleet link when the local VIN is still missing. Add holds a shared
 truck lock through the provider operation so its local identity cannot change.
 
 Each request has a UUID and a durable, actor-bound payload receipt committed
@@ -119,8 +147,10 @@ npm run build
 node scripts/test-prepass-views.mjs
 ```
 
-Database tests exercise fresh and migration-082 schemas as `mserp_app`, reviewed
+Database tests exercise fresh and incrementally migrated schemas as `mserp_app`, reviewed
 links, stale revisions, duplicate submissions, availability races, environment
 isolation, failed refresh retention, uncertain recovery and local data retention
-after provider removal. Browser checks cover both rosters, all supported actions,
+after provider removal. Dated-link tests cover tag precedence, exact-unit fallback,
+account/date isolation, unchanged existing links, stale previews, finalized
+statements, relinking, future imports and audit. Browser checks cover both rosters, all supported actions,
 permissions, draft retention, recovery and desktop/mobile layouts.

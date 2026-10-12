@@ -242,9 +242,7 @@ func (r *TollRepository) ReconcileTruckAssignments(ctx context.Context) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE tolls SET truck_id=NULL WHERE truck_id IS NULL AND EXISTS(
- SELECT 1 FROM prepass_truck_mappings m WHERE m.active AND m.environment=coalesce(tolls.prepass_environment,'production')
- AND m.identity_key=prepass_truck_key(tolls.prepass_tag_id,tolls.equipment_unit)
- AND tolls.exit_date>=m.effective_from AND (m.effective_to IS NULL OR tolls.exit_date<=m.effective_to))`); err != nil {
+ SELECT 1 FROM resolve_prepass_truck_mapping(coalesce(tolls.prepass_environment,'production'),tolls.customer_id,tolls.prepass_tag_id,tolls.equipment_unit,tolls.exit_date))`); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE tolls SET truck_id=matched.truck_id FROM

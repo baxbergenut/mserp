@@ -51,6 +51,8 @@ type PrePassFleetEntry struct {
 	Revision    string          `json:"revision"`
 	Warning     string          `json:"warning"`
 	Suggestions []string        `json:"suggestions"`
+	TollsLinked bool            `json:"tollsLinked"`
+	TollFrom    string          `json:"tollFrom"`
 }
 type PrePassFleetOperation struct {
 	ID            string    `json:"id"`
@@ -82,6 +84,8 @@ type PrePassFleetChange struct {
 	Vehicle               prepass.VehicleInput `json:"vehicle"`
 	TransponderNumber     string               `json:"transponderNumber"`
 	FleetServiceConfirmed bool                 `json:"fleetServiceConfirmed"`
+	TollFrom              string               `json:"tollFrom"`
+	TollRevision          string               `json:"tollRevision"`
 }
 
 func fleetHash(v any) string {
@@ -172,6 +176,17 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		}
 		if e.TruckID == "" {
 			e.Warning = "Not linked to an MSERP truck"
+		}
+		keys := fleetTollKeys(v)
+		if e.TruckID != "" && len(keys) > 0 {
+			var count int
+			if err = r.pool.QueryRow(ctx, `SELECT count(DISTINCT identity_key),coalesce(min(effective_from)::text,'') FROM prepass_truck_mappings WHERE active AND effective_to IS NULL AND environment=$1 AND account_number=$2 AND fleet_vin=$3 AND truck_id=$4 AND identity_key=ANY($5::text[])`, r.prepassEnvironment, v.AccountNumber, v.VIN, e.TruckID, keys).Scan(&count, &e.TollFrom); err != nil {
+				return out, err
+			}
+			e.TollsLinked = count == len(keys)
+			if !e.TollsLinked && e.Warning == "" {
+				e.Warning = "Toll linking needs a start date"
+			}
 		}
 		out.Vehicles = append(out.Vehicles, e)
 	}
@@ -301,6 +316,11 @@ func findPrePassVehicle(s prepass.FleetSnapshot, a, v string) (prepass.Vehicle, 
 }
 
 func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleetChange, actor string) error {
+	if in.Action == "link" {
+		if err := validateFleetTollLink(in); err != nil {
+			return err
+		}
+	}
 	if !slices.Contains([]string{"add", "edit", "remove", "assign", "link"}, in.Action) {
 		return prepassInvalid("Select a supported PrePass action")
 	}
@@ -352,6 +372,11 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return err
 	}
 	before, exists := findPrePassVehicle(snap, in.AccountNumber, in.VIN)
+	if in.Action == "link" {
+		if err := validateFleetIdentity(snap, before); err != nil {
+			return err
+		}
+	}
 	if in.Action == "add" {
 		for _, v := range snap.Vehicles {
 			if v.VIN == in.VIN {
@@ -381,6 +406,11 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return err
 	}
 	defer tx.Rollback(context.WithoutCancel(ctx))
+	if in.Action == "link" {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940); SELECT pg_advisory_xact_lock(730077)`); err != nil {
+			return err
+		}
+	}
 	if in.Action == "add" || in.Action == "link" {
 		if err = r.checkPrePassTruck(ctx, tx, in); err != nil {
 			return err
@@ -395,6 +425,9 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return err
 	}
 	if in.Action == "link" {
+		if err = r.writeFleetTollLink(ctx, tx, in, before, actor); err != nil {
+			return err
+		}
 		if err = r.writePrePassLink(ctx, tx, in, actor); err != nil {
 			return err
 		}
@@ -496,6 +529,11 @@ func (r *TollRepository) checkPrePassTruck(ctx context.Context, tx pgx.Tx, in Pr
 		return ErrPrePassFleetConflict
 	}
 	missingVIN := strings.TrimSpace(vin) == "" && in.Action == "add"
+	if strings.TrimSpace(vin) == "" && in.Action == "link" {
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prepass_fleet_links WHERE environment=$1 AND account_number=$2 AND vin=$3 AND truck_id=$4)`, r.prepassEnvironment, in.AccountNumber, in.VIN, in.TruckID).Scan(&missingVIN); err != nil {
+			return err
+		}
+	}
 	if !missingVIN && strings.ToUpper(strings.TrimSpace(vin)) != in.VIN {
 		return prepassInvalid("The selected MSERP truck must have the same VIN. Correct its profile first.")
 	}
