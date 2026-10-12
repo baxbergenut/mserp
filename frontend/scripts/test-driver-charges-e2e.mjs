@@ -509,7 +509,7 @@ try {
   let releasePayRead;
   const payReadGate = new Promise(resolve => { releasePayRead = resolve; });
   await page.route('**/api/driver-pay?weekStart=2026-05-04', async route => { await payReadGate; await route.continue(); });
-  await page.getByRole('button',{name:'← Back to Driver Pay',exact:true}).click();
+  await page.getByRole('button',{name:'Apply and return to Driver Pay',exact:true}).click();
   await expect(page.getByRole('status',{name:'Loading driver pay',exact:true})).toBeVisible();
   await page.screenshot({path:join(temp,'driver-pay-skeleton.png'),fullPage:true,animations:'disabled'});
   releasePayRead();
@@ -536,13 +536,13 @@ try {
   await page.goto(targetUrl);
   await expect(page.getByText(/is no longer in this driver/)).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  // The same Back behavior preserves ordinary list views across the app.
+  // Browser Back/Forward preserves ordinary list views across the app.
   await page.goto(`${base}/expenses`);
   await page.getByPlaceholder('Search expenses and charges…').fill('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.getByRole('link',{name:'Drivers',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Drivers',exact:true})).toBeVisible();
-  await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
+  await page.goBack();
   await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.reload();
@@ -556,10 +556,10 @@ try {
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
   await page.getByRole('link',{name:'Expenses & Charges',exact:true}).click();
   await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
-  await page.getByRole('link',{name:'Back to previous page',exact:true}).click();
+  await page.goBack();
   await expect(page.getByPlaceholder('Search drivers…')).toHaveValue('Navigation list');
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
-  await page.goBack();
+  await page.goForward();
   await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
   // Cancelled loads are selectable statuses and survive a real API save/reload.
   await page.goto(`${base}/gross-board?driverId=${driverId}&date=2026-05-04&slot=0&loadNumber=NAV-SINGLE`);

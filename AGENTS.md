@@ -153,9 +153,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   the previous New York calendar month. Counts use local data only and refresh
   after relevant mutations, navigation, focus and every 30 visible seconds.
   Zero counts are hidden; collapsed badges retain their exact accessible counts.
-  `components/PageNavigation.tsx` places the shared Back link on its own row
-  above page content. Recurring Charges uses the shared Back link on its
-  New charge type action row.
+  `components/PageNavigation.tsx` restores view and scroll state for browser/mouse
+  Back and Forward navigation. Pages have no in-app Back links.
 - `frontend/app/page.tsx`: redirects `/` to `/gross-board`.
 - `frontend/app/dashboard/`: redirects legacy Dashboard links to Gross Board.
   The old load-derived dashboard is removed pending a Gross Board-based replacement.
@@ -686,12 +685,11 @@ assignment lookup lists.
 - Navigation preserves view state throughout the app. Gross Board always opens
   at the current New York week on ordinary visits/reloads; explicit payroll load
   links still select their historical week. Other weekly pages retain their week.
-  PageNavigation supplies a
-  shared Back link and restores main/nested scroll positions after data loads;
+  PageNavigation restores main/nested scroll positions after data loads;
   viewMemory.useViewState retains filters, sorting, weeks, pagination, tabs and
   expanded rows in session storage, scoped by authenticated user, page and detail
   record. RememberedDetails handles native expandable sections. Ordinary visits
-  append to the navigation trail; explicit Back and browser Back unwind it.
+  append to the navigation trail; browser Back/Forward restore visited views.
   State survives reloads within that browser tab; records are fetched afresh.
   Never persist fetched records, credentials, form drafts or pending financial
   edits through this hook. New page view controls should use useViewState.
@@ -952,8 +950,8 @@ assignment lookup lists.
   Daily loads opens only when the user chooses to edit a multi-load day. The load number
   guards against replaced/deleted slots, which display an explicit missing-entry
   notice. Pending payroll edits save before normal link navigation. The daily
-  editor applies valid edits and awaits Gross Board autosave before Back to
-  Driver Pay returns to the accountant's prior view.
+  editor's Apply and return to Driver Pay action applies valid edits and awaits
+  Gross Board autosave before returning to the accountant's prior view.
   Notes, load comments, and named additions/reimbursements/deductions belong to
   a driver/week in `driver_pay_weeks`, with version checks and immediate autosave
   for valid edits. Navigation flushes immediately; in-flight edits stay queued.

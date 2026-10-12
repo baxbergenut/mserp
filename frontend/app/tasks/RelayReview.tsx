@@ -41,7 +41,7 @@ export function RelayReview({ id, onClose, onChanged }: { id: string; onClose: (
     {task && !decision && <RelayTaskCard task={task} drivers={drivers} disabled={saving} onDecision={(driver, action) => setDecision({ driver, action })} />}
     {decision && <div className="space-y-3 text-sm text-zinc-300">
       <p>{decision.action === "link" ? `Link this account to ${decision.driver.name}? Existing unassigned purchases and future purchases will use this driver. This can change driver settlements.` : `Dismiss the suggestion for ${decision.driver.name}?`}</p>
-      <button type="button" className="ui-button" disabled={saving} onClick={() => setDecision(null)}>Back</button>
+      <button type="button" className="ui-button" disabled={saving} onClick={() => setDecision(null)}>Change decision</button>
     </div>}
   </Modal>;
 }

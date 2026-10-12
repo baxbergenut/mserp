@@ -53,8 +53,8 @@ Do not recolor statuses merely to make every cell identical.
   subtitle or introductory paragraph below a page title.
 - Keep filters and actions in the main content toolbar; retain global search,
   quick-create and account actions on the right of the top bar.
-- Keep the shared Back link above content. Recurring Charges places Back and
-  New charge type on the same action row.
+- Use browser/mouse Back and Forward for page navigation; do not add in-app Back
+  links. Modal actions that edit decisions or apply changes keep explicit labels.
 - Use the full available width. Overflow belongs to the individual table,
   not the document. Stack profile columns on narrower screens.
 - Sign out exists only in the top-bar account menu. The sidebar retains its
