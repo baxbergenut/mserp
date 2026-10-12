@@ -58,6 +58,8 @@ func routePermission(method, path string) string {
 		return "fuel.drivers.write"
 	case "weighmytruck":
 		return pair("weighmytruck")
+	case "driver-services":
+		return "fleet.read" // Additional service write permission is checked by the handler.
 	case "drivers", "trucks", "dispatchers", "updaters", "investors", "driver-directory", "driver-intake", "files", "irp-files", "cdl-files":
 		return pair("fleet")
 	case "loads":

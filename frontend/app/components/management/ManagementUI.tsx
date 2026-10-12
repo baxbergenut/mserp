@@ -100,6 +100,7 @@ export function Modal({
   isSaving,
   submitLabel,
   submitDisabled = false,
+  cancelLabel = "Cancel",
   onClose,
   onSubmit,
   wide = false,
@@ -110,6 +111,7 @@ export function Modal({
   isSaving: boolean;
   submitLabel: string;
   submitDisabled?: boolean;
+  cancelLabel?: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   wide?: boolean;
@@ -155,7 +157,7 @@ export function Modal({
                 disabled={isSaving}
                 className="rounded-lg border border-zinc-800 px-3.5 py-2 text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800/60 hover:text-zinc-200 disabled:opacity-50"
               >
-                Cancel
+                {cancelLabel}
               </button>
               <button
                 type="submit"

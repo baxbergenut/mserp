@@ -138,10 +138,11 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			return
 		}
 		var request struct {
-			Driver            *driverRequest `json:"driver"`
-			LinkDriverID      string         `json:"linkDriverId"`
-			SeparateConfirmed bool           `json:"separateConfirmed"`
-			AddWeighMyTruck   bool           `json:"addWeighMyTruck"`
+			Services          []repository.DriverServiceIntent `json:"services"`
+			Driver            *driverRequest                   `json:"driver"`
+			LinkDriverID      string                           `json:"linkDriverId"`
+			SeparateConfirmed bool                             `json:"separateConfirmed"`
+			AddWeighMyTruck   bool                             `json:"addWeighMyTruck"`
 		}
 		if err := decodeJSON(r, &request); err != nil {
 			writeAPIError(w, http.StatusBadRequest, "invalid completion request")
@@ -179,6 +180,10 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			input = &value
 		} else if !isUUID(request.LinkDriverID) {
 			writeAPIError(w, http.StatusBadRequest, "invalid driver id")
+			return
+		}
+		r, allowed := serviceIntentContext(w, r, request.Services)
+		if !allowed {
 			return
 		}
 		value, err := repo.CompleteDriverIntake(r.Context(), id, session.User.ID, request.LinkDriverID, input, request.SeparateConfirmed, request.AddWeighMyTruck)

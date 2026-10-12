@@ -112,33 +112,34 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
-	Status           string  `json:"status"`
-	TerminationDate  string  `json:"terminationDate"`
-	AssignmentWeek   string  `json:"assignmentWeek"`
-	DriverHome       *string `json:"driverHome"`
-	HomeVersion      int     `json:"homeVersion"`
-	ChargePauseWeek  string  `json:"chargePauseWeek"`
-	EscrowAmount     string  `json:"escrowAmount"`
-	FullName         string  `json:"fullName"`
-	IsOwnerOperator  bool    `json:"isOwnerOperator"`
-	PayType          string  `json:"payType"`
-	PayRate          float64 `json:"payRate"`
-	Phone            string  `json:"phone"`
-	Email            string  `json:"email"`
-	LicenseNumber    string  `json:"licenseNumber"`
-	LicenseState     string  `json:"licenseState"`
-	LicenseExpires   string  `json:"licenseExpires"`
-	HireDate         string  `json:"hireDate"`
-	Address          string  `json:"address"`
-	City             string  `json:"city"`
-	State            string  `json:"state"`
-	PostalCode       string  `json:"postalCode"`
-	EmergencyContact string  `json:"emergencyContact"`
-	DispatcherID     *string `json:"dispatcherId"`
-	TruckID          *string `json:"truckId"`
-	Active           bool    `json:"active"`
-	Notes            string  `json:"notes"`
-	CDLFileID        *string `json:"cdlFileId"`
+	Services         []repository.DriverServiceIntent `json:"services"`
+	Status           string                           `json:"status"`
+	TerminationDate  string                           `json:"terminationDate"`
+	AssignmentWeek   string                           `json:"assignmentWeek"`
+	DriverHome       *string                          `json:"driverHome"`
+	HomeVersion      int                              `json:"homeVersion"`
+	ChargePauseWeek  string                           `json:"chargePauseWeek"`
+	EscrowAmount     string                           `json:"escrowAmount"`
+	FullName         string                           `json:"fullName"`
+	IsOwnerOperator  bool                             `json:"isOwnerOperator"`
+	PayType          string                           `json:"payType"`
+	PayRate          float64                          `json:"payRate"`
+	Phone            string                           `json:"phone"`
+	Email            string                           `json:"email"`
+	LicenseNumber    string                           `json:"licenseNumber"`
+	LicenseState     string                           `json:"licenseState"`
+	LicenseExpires   string                           `json:"licenseExpires"`
+	HireDate         string                           `json:"hireDate"`
+	Address          string                           `json:"address"`
+	City             string                           `json:"city"`
+	State            string                           `json:"state"`
+	PostalCode       string                           `json:"postalCode"`
+	EmergencyContact string                           `json:"emergencyContact"`
+	DispatcherID     *string                          `json:"dispatcherId"`
+	TruckID          *string                          `json:"truckId"`
+	Active           bool                             `json:"active"`
+	Notes            string                           `json:"notes"`
+	CDLFileID        *string                          `json:"cdlFileId"`
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
@@ -396,6 +397,10 @@ func (handler fleetHandler) createDriver(w http.ResponseWriter, r *http.Request)
 	}
 	session, _ := authSessionFromContext(r.Context())
 	input.ChargeActor = session.User.ID
+	r, allowed := serviceIntentContext(w, r, request.Services)
+	if !allowed {
+		return
+	}
 	value, err := handler.repo.CreateDriver(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)

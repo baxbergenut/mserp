@@ -5,7 +5,7 @@ import { fetchSystemTaskAssignments, saveSystemTaskAssignment } from "@/app/lib/
 import type { ManagedUser, SystemTaskAssignment } from "@/app/lib/types";
 import { controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";
 
-const labels = { driver_onboarding: "Driver onboarding", driver_offboarding: "Driver offboarding", relay_review: "Relay account review", escrow_release: "Escrow release (30 days after termination)" };
+const labels = { relay_setup: "Relay driver setup", weighmytruck_setup: "WeighMyTruck driver setup", driver_onboarding: "Driver onboarding", driver_offboarding: "Driver offboarding", relay_review: "Relay account review", escrow_release: "Escrow release (30 days after termination)" };
 const button = "rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
 
 export function SystemTasks({ users }: { users: ManagedUser[] }) {

@@ -359,6 +359,9 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 			return Driver{}, err
 		}
 	}
+	if err = queueDriverServices(ctx, tx, linkDriverID); err != nil {
+		return Driver{}, err
+	}
 	if len(addWeighMyTruck) > 0 && addWeighMyTruck[0] {
 		if err = queueWMTEnrollment(ctx, tx, linkDriverID, userID); err != nil {
 			return Driver{}, err

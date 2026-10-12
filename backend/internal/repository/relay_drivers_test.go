@@ -131,7 +131,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before)
-				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql"} {
+				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql", "078_driver_teams.sql", "079_driver_service_setup.sql"} {
 					migration, e := os.ReadFile("../../sql/" + file)
 					if e != nil {
 						t.Fatal(e)
@@ -320,6 +320,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 			testSidebarCounts(t, ctx, pool, driverID, second)
 			testRelayOffboarding(t, ctx, pool, actor)
 			testPrePassTruckLinks(t, ctx, pool, actor)
+			testDriverServices(t, ctx, pool, actor)
 		})
 	}
 }

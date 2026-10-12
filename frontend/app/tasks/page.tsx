@@ -147,14 +147,14 @@ export default function TasksPage() {
     </div>}
     {(creating || editing) && <TaskForm key={editing?.id ?? "new"} task={editing} saving={saving} users={users} onClose={() => { setCreating(false); setEditing(null); }} onSave={input => mutate(() => editing ? updateCustomTask(editing.id, input) : createCustomTask(input), editing ? "Task updated." : "Task created.")} />}
     {deleting && <ConfirmDialog title="Delete task" message={`Delete “${deleting.title}”? This cannot be undone.`} isDeleting={saving} onCancel={() => setDeleting(null)} onConfirm={() => { void mutate(() => deleteCustomTask(deleting.id), "Task deleted.").catch(() => {}); }} />}
-    {details && <TaskDetails task={details} saving={saving} canWrite={canWrite} canSetup={permissions.includes("fleet.write")} onClose={() => setDetails(null)} onRelay={() => { setRelay(details.id); setDetails(null); }} onConfirm={checklist => mutate(() => confirmOffboarding(details.id, checklist), "Offboarding completed.")} />}
+    {details && <TaskDetails task={details} saving={saving} canWrite={canWrite} canSetup={permissions.includes("fleet.write")} canViewDriver={permissions.includes("fleet.read")} onClose={() => setDetails(null)} onRelay={() => { setRelay(details.id); setDetails(null); }} onConfirm={checklist => mutate(() => confirmOffboarding(details.id, checklist), "Offboarding completed.")} />}
     {escrowTask && <EscrowTaskReview task={escrowTask} onClose={() => setEscrowTask(null)} onCompleted={() => { setEscrowTask(null); refresh(); }} />}
     {relay && <RelayReview id={relay} onClose={() => setRelay(null)} onChanged={refresh} />}
   </div>;
 }
 
-function TaskDetails({ task, saving, canWrite, canSetup, onClose, onRelay, onConfirm }: {
-  task: CustomTask; saving: boolean; canWrite: boolean; canSetup: boolean; onClose: () => void; onRelay: () => void;
+function TaskDetails({ task, saving, canWrite, canSetup, canViewDriver, onClose, onRelay, onConfirm }: {
+  task: CustomTask; saving: boolean; canWrite: boolean; canSetup: boolean; canViewDriver: boolean; onClose: () => void; onRelay: () => void;
   onConfirm: (checklist: { equipment: boolean; access: boolean; settlement: boolean }) => Promise<void>;
 }) {
   const [checklist, setChecklist] = useState({ equipment: false, access: false, settlement: false });
@@ -168,6 +168,7 @@ function TaskDetails({ task, saving, canWrite, canSetup, onClose, onRelay, onCon
     {error && <ErrorBanner message={error} />}
     <div className="grid gap-1 text-xs text-zinc-400"><p>Assigned by {task.systemTaskKind ? "System" : task.assignerName || "Unknown"}</p><p>Assigned to {task.assigneeName || "Unassigned"}</p>{task.completedAt && <p>Completed by {task.completedByName || "Unknown"} · {dateTime(task.completedAt)} NY</p>}</div>
     {task.notes && <p className="whitespace-pre-wrap break-words">{task.notes}</p>}{task.outcome && <p>{task.outcome}</p>}
+    {task.serviceDriverId && canViewDriver && <Link className="ui-button ui-button-primary" href={`/drivers/detail?id=${task.serviceDriverId}&services=1`}>Review service setup</Link>}
     {!task.completedAt && task.systemTaskKind === "driver_onboarding" && canSetup && <Link className="ui-button ui-button-primary" href={`/drivers?setup=${task.id}`}>Set up driver</Link>}
     {!task.completedAt && task.systemTaskKind === "relay_review" && canWrite && <button type="button" className="ui-button ui-button-primary" onClick={onRelay}>Review account</button>}
     {offboarding && <div className="space-y-3">{([["equipment", "Equipment and documents collected"], ["access", "Fuel/toll cards and external access closed"], ["settlement", "Driver status, charges and final settlement reviewed"]] as const).map(([key, label]) => <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={checklist[key]} disabled={saving} onChange={event => setChecklist(value => ({ ...value, [key]: event.target.checked }))} />{label}</label>)}</div>}

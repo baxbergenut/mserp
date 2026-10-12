@@ -72,6 +72,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 				if err = admin.QueryRow(ctx, `SELECT status='terminated' AND termination_date=(now() AT TIME ZONE 'America/New_York')::date-30 FROM drivers WHERE full_name='Legacy inactive'`).Scan(&converted); err != nil || !converted {
 					t.Fatal("inactive conversion", err)
 				}
+				applyLaterTestMigrations(t, ctx, admin, "071")
 			} else {
 				exec(string(source))
 			}

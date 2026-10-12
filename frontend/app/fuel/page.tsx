@@ -98,6 +98,7 @@ function productSummary(transaction: FuelTransaction) {
 
 export default function FuelPage() {
   const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "drivers">("page:activeTab", "overview");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "drivers") setActiveTab("drivers"); }, [setActiveTab]);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [transactions, setTransactions] = useState<FuelTransaction[]>([]);
   const [search, setSearch] = useViewState("page:search", "");

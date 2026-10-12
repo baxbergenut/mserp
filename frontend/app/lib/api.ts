@@ -312,7 +312,7 @@ export const fetchDriverIntakeById = (id: string) => apiRequest<DriverIntake>(`/
 export const fetchDriverIntake = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<DriverIntake>>(withQuery("/driver-intake", query));
 export const completeDriverIntake = (id: string, input:
-  ({ driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) & { addWeighMyTruck?: boolean }) =>
+  ({ driver: DriverInput; separateConfirmed: boolean } | { linkDriverId: string }) & { addWeighMyTruck?: boolean; services?: import("./types").DriverServiceIntent[] }) =>
   apiRequest<Driver>(`/driver-intake/${id}/complete`, { method: "POST", body: JSON.stringify("driver" in input ? { ...input, driver: withPhone(input.driver) } : input) });
 export const fetchDriver = (id: string) => apiRequest<Driver>(`/drivers/${id}`);
 export const fetchDriverAssignments = (id: string) => apiRequest<AssignmentHistoryEntry[]>(`/drivers/${id}/assignments`);
@@ -528,3 +528,6 @@ export const savePrePassTruckLink = (input: PrePassTruckLinkInput) => apiRequest
 export const undoPrePassTruckLink = (id: string, version: number) => apiRequest<{ saved: boolean }>(`/tolls/truck-links/${id}/undo`, { method: "POST", body: JSON.stringify({ version }) });
 import type { RelayBulkResponse } from "./types";
 export const changeRelayDrivers = (changes: RelayDriverChange[]) => apiRequest<RelayBulkResponse>("/relay-drivers/bulk", { method: "POST", body: JSON.stringify({ changes }) });
+
+export const fetchDriverServices = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DriverServiceSetup>(`/driver-services/${id}`, { signal });
+export const requestDriverService = (id: string, input: import("./types").DriverServiceIntent) => apiRequest<void>(`/driver-services/${id}`, { method: "POST", body: JSON.stringify(input) });

@@ -81,6 +81,11 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public;DROP SCHEMA `+quoted+` CASCADE`) }()
 			source := strings.ReplaceAll(string(initSQL), "\r\n", "\n")
 			if mode == "migration" {
+				beforeServices, _, ok := strings.Cut(source, "-- Driver service setup (migration 079).")
+				if !ok {
+					t.Fatal("driver service migration boundary")
+				}
+				source = beforeServices
 				source = withoutDriverTeams(t, source)
 			}
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
@@ -129,6 +134,7 @@ func TestDriverEscrowDatabase(t *testing.T) {
 
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
+				applyLaterTestMigrations(t, ctx, admin, "078")
 			}
 			cfg, parseErr := pgxpool.ParseConfig(dsn)
 			if parseErr != nil {

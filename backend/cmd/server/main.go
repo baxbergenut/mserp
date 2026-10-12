@@ -192,6 +192,11 @@ func main() {
 		server.RegisterOnShutdown(draining.Shutdown)
 	}
 
+	serviceAutomationDone := make(chan struct{})
+	go func() {
+		defer close(serviceAutomationDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "driver-service-setup", Interval: 5 * time.Second, Run: repository.NewDriverServiceRepository(pool, fuelRepo, wmtRepo).Process})
+	}()
 	wmtAutomationDone := make(chan struct{})
 	relayAutomationDone := make(chan struct{})
 	go func() {
@@ -310,6 +315,10 @@ func main() {
 
 	select {
 	case <-relayAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-serviceAutomationDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

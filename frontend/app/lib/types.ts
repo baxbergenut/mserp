@@ -322,6 +322,7 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  services?: DriverServiceIntent[];
   status?: DriverStatus;
   terminationDate?: string;
   assignmentWeek?: string;
@@ -858,6 +859,7 @@ export interface GrossBoardLoad {
 export type TaskStatus = "open" | "in_process" | "completed";
 
 export interface CustomTask {
+  serviceDriverId?: string;
   status: TaskStatus;
   id: string;
   title: string;
@@ -882,7 +884,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release"; assigneeId: string | null; assigneeIds?: string[]; version: number }
+export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -1182,3 +1184,14 @@ export interface PrePassTruckLinks { dateFrom: string; groups: PrePassTruckGroup
 export interface PrePassTruckLinkInput { id: string; environment: string; identityKey: string; truckId: string; from: string; to: string; revision: string }
 export interface PrePassTruckPreview { count: number; amount: string; units: string[]; revision: string; closed: boolean }
 export interface RelayBulkResponse { results: { relayDriverId: string; error?: string }[]; warning?: string }
+
+export type DriverService = "relay" | "weighmytruck";
+export interface DriverServiceIntent { service: DriverService; action: "add" | "defer"; followUpOn?: string; version?: number }
+export interface DriverServiceState {
+  service: DriverService; state: string; requestState: string; version: number; message: string; followUpOn: string; configured: boolean;
+  relay?: RelayRosterEntry; membership?: WeighMyTruckEntry; candidates: RelayRosterEntry[]; operations: RelayDriverOperation[];
+}
+export interface DriverServiceSetup {
+  driverId: string; name: string; driverStatus: string; tomorrow: string; items: DriverServiceState[];
+  policies: RelayDriverPolicy[]; canLinkRelay: boolean; environment: string; checkedAt: string;
+}

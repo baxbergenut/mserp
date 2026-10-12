@@ -1672,3 +1672,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   termination requires an explicit team end-week review. See `docs/DRIVER_TEAMS.md`.
 - `TestDriverTeamsDatabase` uses the existing disposable driver-pay test database.
   `node scripts/test-investors-e2e.mjs --teams-only` validates the real API/browser.
+
+## Driver service setup (migration 079)
+
+- Manual Add driver and FleetScope onboarding share `drivers/DriverServices.tsx`: draft Add after saving / Remind me later choices, then durable result cards. Driver Overview and system tasks resume the same setup.
+- `repository/driver_services.go`, `httpapi/driver_service_handlers.go` and migration 079 persist service intent atomically with driver creation/completion. A startup/five-second worker processes queued requests only; failures never undo the driver. Existing vendor receipts prevent uncertain replay. Relay account added and policy enabled are separate statuses; PINs are never queued/stored.
+- GET/POST `/driver-services/{id}` require fleet.read; writes additionally require the selected service’s write permission. New `relay_setup` / `weighmytruck_setup` task kinds inherit onboarding assignees and support versioned follow-up dates, automatic completion and durable history. See `docs/integrations/DRIVER_SERVICE_SETUP.md`.
+- `TestRelayDriverDatabase` covers fresh/migrated service workflow; `node scripts/test-driver-services-views.mjs` covers both modals and task resumption with fixture APIs.

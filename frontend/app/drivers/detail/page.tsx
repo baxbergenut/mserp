@@ -17,6 +17,7 @@ import { DriverChargeSummary } from "./DriverChargeSummary";
 import { AssignmentHistory } from "./AssignmentHistory";
 import { DriverStatusDialog } from "../DriverStatusDialog";
 import { DriverEditor } from "./DriverEditor";
+import { DriverServiceCards } from "../DriverServices";
 import { DriverTeamPanel } from "./DriverTeamPanel";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { OwnershipPanel } from "@/app/components/fleet/OwnershipPanel";
@@ -41,6 +42,7 @@ export default function DriverDetailPage() {
   const [changingStatus, setChangingStatus] = useState(false);
   const [editing, setEditing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => { if (new URLSearchParams(window.location.search).has("services")) setTab("Overview"); }, [setTab]);
   useEffect(() => {
     if (!canReadEscrow && tab === "Escrow") setTab("Overview");
     if (!expenseTabsVisible && (tab === "Personal charges" || tab === "Company & other expenses")) setTab("Overview");
@@ -76,6 +78,7 @@ export default function DriverDetailPage() {
         <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Contact & personal details</h2><dl className="grid grid-cols-1 gap-5 text-xs sm:grid-cols-2">{[["Driver home", driver.driverHome], ["Phone", formatPhone(driver.phone)], ["Email", driver.email], ["Address", [driver.address, driver.city, driver.state, driver.postalCode].filter(Boolean).join(", ")], ["Emergency contact", driver.emergencyContact], ["Hire date", showDate(driver.hireDate)], ["Last updated", showDate(driver.updatedAt)]].map(([label, value]) => <div key={label}><dt className="text-zinc-500">{label}</dt><dd className="mt-1 break-words text-zinc-300">{value || "Not recorded"}</dd></div>)}</dl></section>
           <section className="rounded-xl border border-zinc-800 p-5"><div className="mb-4 flex items-center gap-2"><FileBadge className="h-4 w-4 text-zinc-500" /><h2 className="text-sm font-semibold text-zinc-100">License & documents</h2></div><dl className="grid grid-cols-1 gap-5 text-xs sm:grid-cols-2">{[["License number", driver.licenseNumber], ["License state", driver.licenseState], ["Expires", showDate(driver.licenseExpires)]].map(([label,value]) => <div key={label}><dt className="text-zinc-500">{label}</dt><dd className="mt-1 text-zinc-300">{value || "Not recorded"}</dd></div>)}</dl>{driver.cdlFileId && <a className="mt-5 inline-block text-xs text-blue-400" href={fileDownloadUrl(driver.cdlFileId)} target="_blank" rel="noreferrer">Open CDL · {driver.cdlFileName}</a>}</section></div>
         <DriverTeamPanel driver={driver} onSaved={() => setAttempt(v => v + 1)} />
+        <DriverServiceCards key={`services-${driver.id}`} driverId={driver.id} />
         <DriverChargeSummary driverId={driver.id} />
         <ProfileNotes key={driver.id} kind="drivers" id={driver.id} legacy={driver.notes} />
       </div><aside className="min-w-0"><TruckLocationPanel key={`${driver.id}:${driver.updatedAt}`} driverId={driver.id} /></aside></div>}

@@ -42,6 +42,8 @@ import {
 } from "../components/management/ManagementUI";
 import { usePermissions } from "../lib/access";
 import { StatementMenu } from "../accounting/driver-pay/StatementMenu";
+import { DriverServiceCards, DriverServiceChoices } from "./DriverServices";
+import type { DriverServiceIntent } from "../lib/types";
 import { DriverStatusDialog } from "./DriverStatusDialog";
 import { DriverForm, driverToInput, emptyDriverInput } from "./DriverForm";
 
@@ -76,7 +78,9 @@ function DriversContent() {
   const [pendingDelete, setPendingDelete] = useState<Driver | null>(null);
   const [form, setForm] = useState<DriverInput>(emptyDriverInput);
   const [cdlFileName, setCDLFileName] = useState<string | null>(null);
-  const [addWeighMyTruck, setAddWeighMyTruck] = useState(false);
+  const [serviceChoices, setServiceChoices] = useState<DriverServiceIntent[]>([]);
+  const [savedDriver, setSavedDriver] = useState<Driver | null>(null);
+  const saveLatch = useRef(false);
   const [intake, setIntake] = useState<DriverIntake | null>(null);
   const [existingDrivers, setExistingDrivers] = useState<Driver[]>([]);
   const [linkDriverID, setLinkDriverID] = useState("");
@@ -127,6 +131,7 @@ function DriversContent() {
   }, [loadData]);
 
   const openCreate = () => {
+    setServiceChoices([]); setSavedDriver(null);
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
@@ -142,6 +147,7 @@ function DriversContent() {
   useQuickCreate(openCreate);
 
   const openEdit = (driver: Driver) => {
+    setServiceChoices([]);
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
@@ -166,7 +172,7 @@ function DriversContent() {
     }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
     setIntake(hire);
     setLinkDriverID("");
-    setSeparateConfirmed(false); setAddWeighMyTruck(false);
+    setSeparateConfirmed(false); setServiceChoices([]); setSavedDriver(null);
     setCDLFileName(null);
     setEditing(null);
     setError("");
@@ -223,21 +229,24 @@ function DriversContent() {
   };
 
   const save = async () => {
+    if (saveLatch.current) return;
+    saveLatch.current = true;
     setIsSaving(true);
     setError("");
     try {
       if (intake) {
-        await completeDriverIntake(intake.id, { ...(linkDriverID ? { linkDriverId: linkDriverID } : { driver: form, separateConfirmed }), addWeighMyTruck });
+        const saved = await completeDriverIntake(intake.id, { ...(linkDriverID ? { linkDriverId: linkDriverID } : { driver: form, separateConfirmed }), services: serviceChoices });
+        setSavedDriver(saved);
         setIntake(null);
         if (setupID) router.replace("/drivers", { scroll: false });
       } else if (editing) await updateDriver(editing.id, form);
-      else await createDriver(form);
+      else setSavedDriver(await createDriver({ ...form, services: serviceChoices }));
       setEditing(undefined);
       await loadData();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to save driver");
     } finally {
-      setIsSaving(false);
+      setIsSaving(false); saveLatch.current = false;
     }
   };
 
@@ -370,7 +379,7 @@ function DriversContent() {
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-          {intake && <div className="mb-5"><Field label="Already in MSERP?"><select className={controlClass} value={linkDriverID} onChange={(event) => setLinkDriverID(event.target.value)}>
+          {intake && <div className="mb-5"><Field label="Already in MSERP?"><select className={controlClass} value={linkDriverID} onChange={(event) => { setLinkDriverID(event.target.value); setServiceChoices([]); }}>
             <option value="">Set up as a new driver</option>
             {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {formatPhone(driver.phone) || driver.email || "No contact details"}{driver.active ? "" : " (terminated)"}</option>)}
           </select></Field>{linkDriverID && <p className="mt-3 text-sm text-zinc-400">Confirm this is the same person as {intake.driver.fullName}. Linking keeps the existing profile, pay rates and assignments.</p>}</div>}
@@ -378,7 +387,6 @@ function DriversContent() {
             <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${formatPhone(candidate.phone) || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>
             <label className="mt-3 flex items-center gap-2"><input type="checkbox" required checked={separateConfirmed} onChange={(event) => setSeparateConfirmed(event.target.checked)} />I reviewed the matches. This is a different person.</label>
           </div>}
-          {intake && permissions.includes("weighmytruck.write") && <label className="mb-4 flex items-center gap-2 text-[13px]"><input type="checkbox" checked={addWeighMyTruck} onChange={e => setAddWeighMyTruck(e.target.checked)} />Add driver to WeighMyTruck</label>}
           {!linkDriverID && <DriverForm
             value={form}
             onChange={setForm}
@@ -390,8 +398,11 @@ function DriversContent() {
             onRemoveCDL={removeCDL}
             showEscrow={editing === null}
           />}
+          {editing === null && <DriverServiceChoices key={linkDriverID || "new"} value={serviceChoices} onChange={setServiceChoices} driverId={linkDriverID || undefined} disabled={isSaving} />}
         </Modal>
       )}
+
+      {savedDriver && <Modal isSaving={false} title={`${savedDriver.fullName} saved`} description="Driver setup is saved. Service results update here as they arrive." submitLabel="Done" cancelLabel="Close" onClose={() => setSavedDriver(null)} onSubmit={event => { event.preventDefault(); setSavedDriver(null); }}><DriverServiceCards driverId={savedDriver.id} /><Link className="mt-4 inline-block text-xs text-blue-400" href={`/drivers/detail?id=${savedDriver.id}&services=1`}>Open driver profile</Link></Modal>}
 
       {pendingDelete && (
         <ConfirmDialog

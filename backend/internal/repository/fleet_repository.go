@@ -264,6 +264,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 	if err != nil {
 		return Driver{}, err
 	}
+	if err = queueDriverServices(ctx, tx, id); err != nil {
+		return Driver{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return Driver{}, err
 	}
