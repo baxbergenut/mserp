@@ -1,5 +1,6 @@
 import { expandBoard } from "./compactBoard";
-import type { DriverTeam, DriverTeamInput } from "./types";
+import type { DriverTeam, DriverTeamInput, DriverTeamTruck } from "./types";
+export const fetchDriverTeamTrucks = (weekStart: string, signal?: AbortSignal) => apiRequest<DriverTeamTruck[]>(`/drivers/team-trucks?${new URLSearchParams({ weekStart })}`, { signal });
 export const fetchDriverTeam = (id: string) => apiRequest<DriverTeam>(`/drivers/${id}/team`);
 export const saveDriverTeam = (id: string, input: DriverTeamInput) => apiRequest<DriverTeam>(`/drivers/${id}/team`, { method: "PUT", body: JSON.stringify(input) });
 import { ReadRequests } from "./readRequests";

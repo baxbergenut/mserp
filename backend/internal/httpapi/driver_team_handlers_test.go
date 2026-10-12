@@ -9,3 +9,19 @@ func TestDriverTeamPermissions(t *testing.T) {
 		}
 	}
 }
+
+func TestTeamDriverRequestHasNoCompensation(t *testing.T) {
+	team := true
+	request := driverRequest{FullName: "New Secondary", IsTeamDriver: &team, PayType: "", PayRate: -1, EscrowAmount: "bad", Active: true}
+	input, err := request.validate()
+	if err != nil || input.PayRate != 0 || input.PayType != "cpm" || input.EscrowAmount != "" {
+		t.Fatalf("team compensation must be ignored: %+v %v", input, err)
+	}
+	request.IsTeamDriver = nil
+	if _, err = request.validate(); err == nil {
+		t.Fatal("solo pay validation was skipped")
+	}
+	if got := routePermission("GET", "/drivers/team-trucks"); got != "fleet.read" {
+		t.Fatal("team truck permission", got)
+	}
+}

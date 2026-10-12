@@ -22,6 +22,10 @@ func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
 }
 
 type Driver struct {
+	TeamVersion        int        `json:"teamVersion"`
+	TeamTruckID        *string    `json:"teamTruckId,omitempty"`
+	TeamTruckUnit      *string    `json:"teamTruckUnit,omitempty"`
+	TeamStartWeek      *string    `json:"teamStartWeek,omitempty"`
 	TeamRole           string     `json:"teamRole,omitempty"`
 	TeamPartnerID      *string    `json:"teamPartnerId,omitempty"`
 	TeamPartnerName    *string    `json:"teamPartnerName,omitempty"`
@@ -61,6 +65,10 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	IsTeamDriver     *bool
+	TeamVersion      *int
+	TeamMainDriverID *string
+	TeamMainVersion  *int
 	Status           string
 	TerminationDate  *time.Time
 	AssignmentWeek   string
@@ -256,6 +264,11 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if input.IsTeamDriver != nil && *input.IsTeamDriver {
+		if err = lockDriverTeamSetup(ctx, tx); err != nil {
+			return Driver{}, err
+		}
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Driver{}, err
 	}
@@ -280,6 +293,18 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 	}
 	if input.Status != "" {
 		input.Active = input.Status != "terminated"
+	}
+	var teamTruck *string
+	if input.IsTeamDriver != nil && *input.IsTeamDriver {
+		input.AssignmentWeek = driverStartWeek(input)
+		if err := lockDriverTeamSetup(ctx, tx); err != nil {
+			return "", err
+		}
+		teamTruck = input.TruckID
+		if err := applyDriverTeamSetup(ctx, tx, "", &input); err != nil {
+			return "", err
+		}
+		input.EscrowAmount = "0"
 	}
 	if !input.Active {
 		input.TruckID, input.DispatcherID = nil, nil
@@ -314,6 +339,12 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 	if err = createDriverEscrowTx(ctx, tx, id, input.EscrowAmount, input.ChargeActor); err != nil {
 		return "", err
 	}
+	if teamTruck != nil {
+		input.TruckID = teamTruck
+		if err = applyDriverTeamSetup(ctx, tx, id, &input); err != nil {
+			return "", err
+		}
+	}
 	return id, nil
 }
 
@@ -338,6 +369,11 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if input.IsTeamDriver != nil {
+		if err = lockDriverTeamSetup(ctx, tx); err != nil {
+			return Driver{}, err
+		}
+	}
 	if err = setBoardActor(ctx, tx, input.ChargeActor, "profile"); err != nil {
 		return Driver{}, err
 	}
@@ -365,6 +401,9 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, input.ChargeActor); err != nil {
 			return Driver{}, err
 		}
+	}
+	if err = applyDriverTeamSetup(ctx, tx, id, &input); err != nil {
+		return Driver{}, err
 	}
 	displayName := formatPersonName(input.FullName)
 	command, err := tx.Exec(ctx, `
@@ -433,21 +472,28 @@ SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate,
 	coalesce(NOT i.is_company,false), coalesce(i.driver_id=d.id,false),
 	d.phone, d.email, d.license_number, d.license_state, d.license_expires,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
-	d.dispatcher_id, dp.full_name, a.truck_id, t.unit_number,
+	CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
 	d.created_at, d.updated_at, d.driver_home, d.driver_home_version, d.status, d.termination_date,
-	coalesce(team.role,''),team.partner_id,team.partner_name
+	coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week
 FROM drivers d
-LEFT JOIN dispatchers dp ON dp.id = d.dispatcher_id
-LEFT JOIN truck_driver_assignments a ON a.driver_id = d.id AND a.unassigned_at IS NULL
-LEFT JOIN trucks t ON t.id = a.truck_id
-LEFT JOIN investors i ON i.id = t.owner_id
-LEFT JOIN files f ON f.id = d.cdl_file_id
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
- p.id::text partner_id,p.full_name partner_name FROM driver_teams dt
+ p.id::text partner_id,p.full_name partner_name,m.dispatcher_id main_dispatcher_id,dt.start_week::text start_week,
+ CASE WHEN dt.team_driver_id=d.id THEN shared.truck_id::text END truck_id,
+ CASE WHEN dt.team_driver_id=d.id THEN vehicle.unit_number END truck_unit
+ FROM driver_teams dt JOIN drivers m ON m.id=dt.main_driver_id
  JOIN drivers p ON p.id=CASE WHEN dt.main_driver_id=d.id THEN dt.team_driver_id ELSE dt.main_driver_id END
- WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=(now() AT TIME ZONE 'America/New_York')::date
- AND (dt.end_week IS NULL OR (now() AT TIME ZONE 'America/New_York')::date<dt.end_week)) team ON true`
+ LEFT JOIN truck_driver_assignments shared ON shared.driver_id=m.id AND shared.unassigned_at IS NULL
+ LEFT JOIN trucks vehicle ON vehicle.id=shared.truck_id
+ WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id)
+ AND dt.start_week<coalesce(dt.end_week,'infinity'::date)
+ AND (dt.end_week IS NULL OR (now() AT TIME ZONE 'America/New_York')::date<dt.end_week)
+ ORDER BY (dt.start_week<=(now() AT TIME ZONE 'America/New_York')::date) DESC,dt.start_week,dt.id LIMIT 1) team ON true
+LEFT JOIN dispatchers dp ON dp.id=CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END
+LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
+LEFT JOIN trucks t ON t.id=a.truck_id
+LEFT JOIN investors i ON i.id=t.owner_id
+LEFT JOIN files f ON f.id=d.cdl_file_id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -467,6 +513,8 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.CDLFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion, &value.Status, &value.TerminationDate,
 		&value.TeamRole, &value.TeamPartnerID, &value.TeamPartnerName,
+		&value.TeamVersion, &value.TeamTruckID, &value.TeamTruckUnit,
+		&value.TeamStartWeek,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	value.FullName = formatPersonName(value.FullName)

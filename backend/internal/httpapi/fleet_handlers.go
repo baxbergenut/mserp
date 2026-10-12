@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Put("/investors/{id}", handler.saveInvestor)
 	r.Get("/drivers", handler.listDrivers)
 	r.Get("/drivers/setup-defaults", handler.getDriverSetupDefaults)
+	r.Get("/drivers/team-trucks", handler.driverTeamTrucks)
 	r.Get("/drivers/{id}", handler.getDriver)
 	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
 	r.Get("/drivers/{id}/team", handler.driverTeam)
@@ -113,6 +115,10 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 
 type driverRequest struct {
 	Services         []repository.DriverServiceIntent `json:"services"`
+	IsTeamDriver     *bool                            `json:"isTeamDriver"`
+	TeamVersion      *int                             `json:"teamVersion"`
+	TeamMainDriverID *string                          `json:"teamMainDriverId"`
+	TeamMainVersion  *int                             `json:"teamMainVersion"`
 	Status           string                           `json:"status"`
 	TerminationDate  string                           `json:"terminationDate"`
 	AssignmentWeek   string                           `json:"assignmentWeek"`
@@ -143,6 +149,17 @@ type driverRequest struct {
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
+	if request.IsTeamDriver != nil && *request.IsTeamDriver {
+		request.PayType = "cpm"
+		request.PayRate = 0
+		request.EscrowAmount = ""
+	}
+	if (request.TeamVersion != nil && *request.TeamVersion < 0) || (request.TeamMainVersion != nil && *request.TeamMainVersion < 0) {
+		return repository.DriverInput{}, errors.New("invalid team version")
+	}
+	if err := validateOptionalUUID(request.TeamMainDriverID, "main driver id"); err != nil {
+		return repository.DriverInput{}, err
+	}
 	if request.Status != "" && request.Status != "active" && request.Status != "vacation" && request.Status != "home" && request.Status != "terminated" {
 		return repository.DriverInput{}, errors.New("invalid driver status")
 	}
@@ -203,6 +220,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("escrow amount must be greater than zero with at most two decimal places")
 	}
 	return repository.DriverInput{
+		IsTeamDriver: request.IsTeamDriver, TeamVersion: request.TeamVersion, TeamMainDriverID: request.TeamMainDriverID, TeamMainVersion: request.TeamMainVersion,
 		Status: request.Status, TerminationDate: terminationDate,
 		AssignmentWeek: request.AssignmentWeek,
 		DriverHome:     request.DriverHome, HomeVersion: request.HomeVersion,
@@ -396,6 +414,10 @@ func (handler fleetHandler) createDriver(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
+	if input.IsTeamDriver != nil && *input.IsTeamDriver && !slices.Contains(session.User.Permissions, "payroll.write") {
+		writeAPIError(w, 403, "Payroll write permission is required to set up a team driver")
+		return
+	}
 	input.ChargeActor = session.User.ID
 	r, allowed := serviceIntentContext(w, r, request.Services)
 	if !allowed {
@@ -425,6 +447,28 @@ func (handler fleetHandler) updateDriver(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
+	if input.IsTeamDriver != nil && !slices.Contains(session.User.Permissions, "payroll.write") {
+		current, readErr := handler.repo.GetDriver(r.Context(), id)
+		if readErr != nil {
+			handler.writeError(w, readErr)
+			return
+		}
+		sameTruck := (input.TruckID == nil && current.TeamTruckID == nil) || (input.TruckID != nil && current.TeamTruckID != nil && *input.TruckID == *current.TeamTruckID)
+		sameWeek := input.AssignmentWeek == "" || (current.TeamStartWeek != nil && input.AssignmentWeek == *current.TeamStartWeek)
+		if input.TeamVersion != nil && *input.TeamVersion != current.TeamVersion {
+			handler.writeError(w, repository.ErrDriverTeamConflict)
+			return
+		}
+		if !*input.IsTeamDriver || current.TeamRole != "team" || !sameTruck || !sameWeek {
+			writeAPIError(w, 403, "Payroll write permission is required to change driver teams")
+			return
+		}
+		// Fleet editors may still change contact/documents on an existing member.
+		// Preserve the team relationship and its primary truck assignment.
+		input.IsTeamDriver = nil
+		input.TruckID = nil
+		input.DispatcherID = current.DispatcherID
+	}
 	input.ChargeActor = session.User.ID
 	value, err := handler.repo.UpdateDriver(r.Context(), id, input)
 	if err != nil {

@@ -331,7 +331,7 @@ function DriversContent() {
                     {driver.teamRole === "team" ? <span className="font-sans text-zinc-500">Main driver’s statement</span> : driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate.toFixed(4)}/mi` : `${driver.payRate.toFixed(2)}% gross`}
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{driver.dispatcherName ?? "—"}</td>
-                  <td className="px-4 py-3 font-mono text-zinc-300">{driver.truckUnit ?? "—"}</td>
+                  <td className="px-4 py-3 font-mono text-zinc-300">{driver.truckUnit ?? driver.teamTruckUnit ?? "—"}</td>
                   <td className="px-4 py-3">
                     {driver.cdlFileId ? (
                       <a
@@ -372,7 +372,7 @@ function DriversContent() {
       {editing !== undefined && (
         <Modal
           title={intake ? `Set up ${intake.driver.fullName}` : editing ? `Edit ${editing.fullName}` : "Add driver"}
-          description={intake ? "Review the FleetScope details, enter a positive pay rate, and choose assignments. Complete setup to make this driver available for accounting." : "Assignment changes are reflected on both the driver and truck records."}
+          description={intake ? form.isTeamDriver ? "Review the FleetScope details and select the main driver’s truck." : "Review the FleetScope details, enter a positive pay rate, and choose assignments. Complete setup to make this driver available for accounting." : "Assignment changes are reflected on both the driver and truck records."}
           isSaving={isSaving || isUploadingCDL}
           submitLabel={intake ? (linkDriverID ? "Confirm link" : "Complete setup") : editing ? "Save changes" : "Create driver"}
           onClose={() => { setEditing(undefined); setIntake(null); if (setupID) router.replace("/drivers", { scroll: false }); }}
@@ -389,7 +389,7 @@ function DriversContent() {
           </div>}
           {!linkDriverID && <DriverForm
             value={form}
-            onChange={setForm}
+            onChange={next => { if (!!next.isTeamDriver !== !!form.isTeamDriver) setError(""); setForm(next); }}
             dispatchers={dispatchers}
             trucks={trucks}
             cdlFileName={cdlFileName}
@@ -397,6 +397,7 @@ function DriversContent() {
             onUploadCDL={uploadCDL}
             onRemoveCDL={removeCDL}
             showEscrow={editing === null}
+            editingDriverId={editing?.id}
           />}
           {editing === null && <DriverServiceChoices key={linkDriverID || "new"} value={serviceChoices} onChange={setServiceChoices} driverId={linkDriverID || undefined} disabled={isSaving} />}
         </Modal>

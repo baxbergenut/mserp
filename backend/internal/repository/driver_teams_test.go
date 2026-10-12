@@ -85,6 +85,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 			}
 			defer pool.Close()
 			verifyDriverTeams(t, ctx, pool)
+			verifyTeamDriverSetup(t, ctx, pool)
 		})
 	}
 }

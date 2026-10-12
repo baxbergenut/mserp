@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+func (handler fleetHandler) driverTeamTrucks(w http.ResponseWriter, r *http.Request) {
+	week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+	if err != nil {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
+	value, err := handler.repo.DriverTeamTrucks(r.Context(), week.Format("2006-01-02"))
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, 200, value)
+}
+
 func (handler fleetHandler) driverTeam(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {

@@ -1659,8 +1659,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Driver teams (migration 078)
 
-- Configure one main driver and one team member in Driver Overview > Driver team,
-  with an effective Monday and optimistic version. GET/PUT `/drivers/{id}/team`
+- Configure team membership from the secondary driver's Add/Edit or FleetScope
+  setup form: Solo driver / Team driver toggle and a truck selection. Team mode
+  hides compensation and dispatcher fields, inherits the main driver's dispatcher,
+  and creates zero compensation/escrow for a new team member. Driver team cards
+  appear only on main profiles with a teammate. Changes use an effective Monday
+  and optimistic versions. GET `/drivers/team-trucks?weekStart=...` supplies dated,
+  unambiguous main-driver truck choices. GET/PUT `/drivers/{id}/team`
   use fleet.read/payroll.write. Dispatch, tariff, escrow and recurring charges
   belong to the main driver; weekly Driver Pay has one statement showing both names.
   Team members cannot have recurring phases or independent loads/truck assignments

@@ -1,10 +1,21 @@
 # Driver teams
 
-Configure a team in the main driver's profile under Overview > Driver team.
-Select one existing active team driver and an effective Monday. Select Solo driver
-to end a team, or choose a replacement partner. A save replaces later planned team
-changes for that main driver. Team history and an actor-stamped before/after audit
-remain in the database. Changes use optimistic versions and the payroll lock.
+Configure a team from the secondary driver's Add/Edit form or FleetScope setup
+modal. Solo driver is on the left of the toggle; Team driver is on the right.
+Team mode asks for the truck, inherits its main driver's dispatcher, and hides pay
+and escrow inputs. New team members have zero personal compensation and escrow.
+Identity, contact, license, documents, start date and status inputs remain available.
+Choose an effective Monday when editing assignments; creation uses the hire week's
+Monday. Selecting a different team's truck moves the secondary driver, and selecting
+Solo driver ends their membership. All changes commit with the profile and retain
+actor-stamped history, optimistic versions, financial locks and settlement guards.
+The Driver team card appears only on a main profile with a teammate and links to
+that secondary profile. Set up and edit teams from the secondary side.
+
+GET `/drivers/team-trucks?weekStart=...` returns active trucks with one unambiguous
+dated main driver. Occupied teams cannot acquire another member. Stale selections
+are rejected; the main driver retains the primary truck assignment. Driver details
+show the member's shared truck and follow the main driver's current dispatcher.
 
 One driver can belong to only one two-person team in a week. A main driver cannot
 also be a team member. Each person keeps their profile, documents, status, Relay

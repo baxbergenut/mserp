@@ -2,12 +2,14 @@
 
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
 
-import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
+import { currentChargeWeek, validChargeWeek } from "@/app/accounting/driver-charges/charges";
+import { useEffect, useState } from "react";
+import { usePermissions } from "../lib/access";
 import { ExternalLink, FileBadge, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import { PhoneInput } from "../components/management/PhoneInput";
 
-import type { Dispatcher, Driver, DriverInput, Truck } from "../lib/types";
-import { fileDownloadUrl } from "../lib/api";
+import type { Dispatcher, Driver, DriverInput, DriverTeamTruck, Truck } from "../lib/types";
+import { fileDownloadUrl, fetchDriverTeamTrucks } from "../lib/api";
 import {
   controlClass,
   Field,
@@ -44,6 +46,10 @@ export const emptyDriverInput: DriverInput = {
 
 export function driverToInput(driver: Driver): DriverInput {
   return {
+    isTeamDriver: driver.teamRole === "team" ? true : undefined,
+    teamVersion: driver.teamVersion,
+    teamMainDriverId: driver.teamRole === "team" ? driver.teamPartnerId : undefined,
+    assignmentWeek: driver.teamRole === "team" && driver.teamStartWeek && driver.teamStartWeek > currentChargeWeek() ? driver.teamStartWeek : undefined,
     fullName: driver.fullName,
     driverHome: driver.driverHome ?? "",
     homeVersion: driver.homeVersion ?? 0,
@@ -63,7 +69,7 @@ export function driverToInput(driver: Driver): DriverInput {
     postalCode: driver.postalCode ?? "",
     emergencyContact: driver.emergencyContact ?? "",
     dispatcherId: driver.dispatcherId,
-    truckId: driver.truckId,
+    truckId: driver.teamRole === "team" ? driver.teamTruckId ?? null : driver.truckId,
     active: driver.active,
     status: driver.status ?? (driver.active ? "active" : "terminated"),
     terminationDate: driver.terminationDate?.slice(0,10) ?? "",
@@ -82,6 +88,7 @@ export function DriverForm({
   onUploadCDL,
   onRemoveCDL,
   showEscrow = false,
+  editingDriverId,
 }: {
   value: DriverInput;
   dispatchers: Dispatcher[];
@@ -92,9 +99,27 @@ export function DriverForm({
   onUploadCDL: (file: File) => Promise<void>;
   onRemoveCDL: () => void;
   showEscrow?: boolean;
+  editingDriverId?: string;
 }) {
+  const permissions = usePermissions();
+  const isTeam = !!value.isTeamDriver;
+  const [choices, setChoices] = useState<{ week: string; rows: DriverTeamTruck[]; error: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  let teamWeek = value.assignmentWeek || currentChargeWeek();
+  if (showEscrow && value.hireDate) {
+    const date = new Date(`${value.hireDate}T00:00:00Z`);
+    if (Number.isFinite(date.getTime())) { date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7); teamWeek = date.toISOString().slice(0, 10); }
+  }
+  useEffect(() => {
+    if (!isTeam || !validChargeWeek(teamWeek)) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    fetchDriverTeamTrucks(teamWeek, controller.signal).then(rows => { if (!cancelled) setChoices({ week: teamWeek, rows, error: "" }); }).catch(e => { if (!cancelled) setChoices({ week: teamWeek, rows: [], error: e.message }); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [isTeam, teamWeek, attempt]);
+  const teamChoices = choices?.week === teamWeek ? choices.rows.filter(row => row.mainDriverId !== editingDriverId && (!row.teamDriverId || row.teamDriverId === editingDriverId)) : [];
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
-    onChange({ ...value, [key]: next, ...(!showEscrow && ["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
+    onChange({ ...value, [key]: next, ...(isTeam && showEscrow && key === "hireDate" ? { truckId: null, teamMainDriverId: undefined, teamMainVersion: undefined } : {}), ...(!showEscrow && ["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
 
   return (
     <div className="space-y-6">
@@ -171,7 +196,29 @@ export function DriverForm({
         </div>
       </FormSection>
 
-      <FormSection title="Driver profile">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-zinc-800/50 pb-2">
+          <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">Driver profile</h3>
+          <div className="flex items-center gap-2 whitespace-nowrap text-[12px]">
+            <span className={isTeam ? "text-zinc-500" : "font-medium text-zinc-200"}>Solo driver</span>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Team driver"
+              aria-checked={isTeam}
+              disabled={!permissions.includes("payroll.write")}
+              title={!permissions.includes("payroll.write") ? "Payroll write permission is required to change teams" : undefined}
+              onClick={() => onChange({ ...value, isTeamDriver: !isTeam, truckId: null, dispatcherId: null, teamMainDriverId: undefined, teamMainVersion: undefined, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) })}
+              className="relative h-8 w-9 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50"
+            >
+              <span className={`absolute inset-x-0 top-1.5 h-5 rounded-full transition-colors ${isTeam ? "bg-blue-600" : "bg-zinc-700"}`}>
+                <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${isTeam ? "translate-x-4" : ""}`} />
+              </span>
+            </button>
+            <span className={isTeam ? "font-medium text-blue-400" : "text-zinc-500"}>Team driver</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Full name" wide>
           <input
             required
@@ -194,7 +241,7 @@ export function DriverForm({
             <option value="owner">Owner-operator</option>
           </select>
         </Field>
-        <Field label={showEscrow ? "Driver started working" : "Hire date"} hint={showEscrow ? "Truck, dispatcher and roster assignments start in this date’s Monday–Sunday week. Escrow starts on this date." : undefined}>
+        <Field label={showEscrow ? "Driver started working" : "Hire date"} hint={showEscrow ? isTeam ? "Team membership starts in this date’s Monday–Sunday week." : "Truck, dispatcher and roster assignments start in this date’s Monday–Sunday week. Escrow starts on this date." : undefined}>
           <input
             type="date"
             aria-label={showEscrow ? "Driver started working" : "Hire date"}
@@ -224,9 +271,10 @@ export function DriverForm({
             placeholder="Name and phone number"
           />
         </Field>
-      </FormSection>
+        </div>
+      </section>
 
-      <FormSection title="Compensation">
+      {!isTeam && <FormSection title="Compensation">
         <Field label="Pay basis">
           <select
             value={value.payType}
@@ -268,11 +316,11 @@ export function DriverForm({
             className={controlClass}
           />
         </Field>}
-      </FormSection>
+      </FormSection>}
 
       <FormSection title="Assignments">
-        {!showEscrow && <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />}
-        <Field label="Dispatcher">
+        {!showEscrow && <AssignmentWeekField value={value.assignmentWeek} onChange={week => onChange({ ...value, assignmentWeek: week, ...(isTeam ? { truckId: null, teamMainDriverId: undefined, teamMainVersion: undefined } : {}) })} />}
+        {!isTeam && <Field label="Dispatcher">
           <select
             value={value.dispatcherId ?? ""}
             disabled={!value.active}
@@ -291,18 +339,18 @@ export function DriverForm({
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="Truck">
+        </Field>}
+        <Field label="Truck" hint={isTeam && choices?.week === teamWeek && !choices.error && teamChoices.length === 0 ? "No available trucks with a main driver in this week." : undefined}>
           <select
+            aria-label="Truck"
+            required={isTeam && value.active}
             value={value.truckId ?? ""}
-            disabled={!value.active}
-            onChange={(event) =>
-              set("truckId", event.target.value || null)
-            }
+            disabled={!value.active || (isTeam && !permissions.includes("payroll.write"))}
+            onChange={(event) => { const selected = teamChoices.find(row => row.truckId === event.target.value); if (isTeam) onChange({ ...value, truckId: event.target.value || null, teamMainDriverId: selected?.mainDriverId, teamMainVersion: selected?.mainVersion, dispatcherId: selected?.dispatcherId ?? null, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) }); else set("truckId", event.target.value || null); }}
             className={controlClass}
           >
-            <option value="">Unassigned</option>
-            {trucks.filter((truck) => truck.active || truck.id === value.truckId).map((truck) => (
+            <option value="">{isTeam ? choices?.week === teamWeek ? "Select truck" : "Loading trucks…" : "Unassigned"}</option>
+            {isTeam ? teamChoices.map(row => <option key={row.truckId} value={row.truckId}>{row.unitNumber} — {row.mainDriverName}</option>) : trucks.filter((truck) => truck.active || truck.id === value.truckId).map((truck) => (
               <option key={truck.id} value={truck.id}>
                 {truck.unitNumber}
                 {truck.driverName ? ` — currently ${truck.driverName}` : ""}
@@ -310,6 +358,7 @@ export function DriverForm({
             ))}
           </select>
         </Field>
+        {isTeam && choices?.week === teamWeek && choices.error && <p role="alert" className="text-xs text-red-400">{choices.error} <button type="button" className="text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry trucks</button></p>}
       </FormSection>
 
       <FormSection title="License and address">

@@ -52,7 +52,7 @@ func (r *FleetRepository) DriverTruckLocation(ctx context.Context, id string) (F
 	return scanFleetLocation(r.pool.QueryRow(ctx, `SELECT coalesce(t.id::text,''),coalesce(t.unit_number,''),
  el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
  FROM drivers d
- LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
+ LEFT JOIN truck_driver_assignments a ON a.driver_id=payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date) AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id `+fiveELDLocationJoinSQL+` WHERE d.id=$1`, id))
 }
 

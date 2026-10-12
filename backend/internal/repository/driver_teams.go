@@ -62,6 +62,19 @@ func (r *FleetRepository) GetDriverTeam(ctx context.Context, driver string) (Dri
 }
 
 func (r *FleetRepository) SetDriverTeam(ctx context.Context, main string, input DriverTeamInput, actor string) (DriverTeam, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return DriverTeam{}, err
+	}
+	defer tx.Rollback(ctx)
+	value, err := setDriverTeamTx(ctx, tx, main, input, actor)
+	if err != nil {
+		return value, err
+	}
+	return value, tx.Commit(ctx)
+}
+
+func setDriverTeamTx(ctx context.Context, tx pgx.Tx, main string, input DriverTeamInput, actor string) (DriverTeam, error) {
 	empty := DriverTeam{}
 	if _, err := chargeWeek(input.WeekStart); err != nil {
 		return empty, err
@@ -69,14 +82,9 @@ func (r *FleetRepository) SetDriverTeam(ctx context.Context, main string, input 
 	if main == input.TeamDriverID {
 		return empty, chargeInvalid("Choose a different team driver")
 	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return empty, err
-	}
-	defer tx.Rollback(ctx)
 	// Exclusive transaction lock prevents concurrent payroll/fleet changes while
 	// membership checks and the effective history update commit together.
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
 		return empty, err
 	}
 	before, err := readDriverTeams(ctx, tx, main)
@@ -229,7 +237,7 @@ func (r *FleetRepository) SetDriverTeam(ctx context.Context, main string, input 
 	if _, err = tx.Exec(ctx, `INSERT INTO driver_team_events(driver_id,actor_id,effective_week,before_value,after_value) VALUES($1,nullif($2,'')::uuid,$3::date,$4,$5)`, main, actor, input.WeekStart, b, a); err != nil {
 		return empty, err
 	}
-	return after, tx.Commit(ctx)
+	return after, nil
 }
 
 func teamPeriodFor(periods []DriverTeamPeriod, driver, week string) *DriverTeamPeriod {

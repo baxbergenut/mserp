@@ -138,10 +138,10 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			return
 		}
 		var request struct {
-			Services          []repository.DriverServiceIntent `json:"services"`
 			Driver            *driverRequest                   `json:"driver"`
 			LinkDriverID      string                           `json:"linkDriverId"`
 			SeparateConfirmed bool                             `json:"separateConfirmed"`
+			Services          []repository.DriverServiceIntent `json:"services"`
 			AddWeighMyTruck   bool                             `json:"addWeighMyTruck"`
 		}
 		if err := decodeJSON(r, &request); err != nil {
@@ -172,8 +172,12 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 				writeAPIError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			if value.PayRate <= 0 {
+			if (value.IsTeamDriver == nil || !*value.IsTeamDriver) && value.PayRate <= 0 {
 				writeAPIError(w, http.StatusBadRequest, "set a positive pay rate before completing setup")
+				return
+			}
+			if value.IsTeamDriver != nil && *value.IsTeamDriver && !slices.Contains(session.User.Permissions, "payroll.write") {
+				writeAPIError(w, 403, "Payroll write permission is required to set up a team driver")
 				return
 			}
 			value.ChargeActor = session.User.ID

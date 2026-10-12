@@ -299,6 +299,11 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if input != nil && input.IsTeamDriver != nil && *input.IsTeamDriver {
+		if err = lockDriverTeamSetup(ctx, tx); err != nil {
+			return Driver{}, err
+		}
+	}
 	visible, err := systemTaskVisible(ctx, tx, "driver_onboarding", true)
 	if err != nil {
 		return Driver{}, err
