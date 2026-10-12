@@ -1,3 +1,4 @@
+import { runDriverSetupE2E } from "./driver-setup-e2e.mjs";
 import { runUpdatersE2E } from "./updaters-e2e.mjs";
 import { runDriverTeamsE2E } from "./driver-teams-e2e.mjs";
 import { runProfilesE2E } from "./profiles-e2e.mjs";
@@ -93,7 +94,11 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--teams-only')) {
+  if (process.argv.includes('--driver-setup-only')) {
+    await runDriverSetupE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--board-only')) {
+    await runDriverBoardE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--teams-only')) {
     await runDriverTeamsE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--payroll-workflows-only')) {
     await runPayrollWorkflowsE2E({ page, base, sql, schema, temp });

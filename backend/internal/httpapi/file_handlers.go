@@ -36,11 +36,6 @@ type irpUploadResponse struct {
 	Fields groq.CabCardFields            `json:"fields"`
 }
 
-type cdlUploadResponse struct {
-	File   repository.StoredFileMetadata `json:"file"`
-	Fields groq.CDLFields                `json:"fields"`
-}
-
 type uploadedDocument struct {
 	fileName    string
 	contentType string
@@ -56,7 +51,6 @@ func registerFileRoutes(
 ) {
 	handler := fileHandler{logger: logger, repo: repo, extractor: extractor}
 	r.Post("/irp-files", handler.uploadIRPFile)
-	r.Post("/cdl-files", handler.uploadCDLFile)
 	r.Get("/files/{id}", handler.downloadFile)
 }
 
@@ -75,23 +69,6 @@ func (handler fileHandler) uploadIRPFile(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusCreated, irpUploadResponse{File: storedFile, Fields: fields})
-}
-
-func (handler fileHandler) uploadCDLFile(w http.ResponseWriter, r *http.Request) {
-	upload, ok := handler.readDocumentUpload(w, r, "CDL")
-	if !ok {
-		return
-	}
-	fields, err := handler.extractor.ExtractCDL(r.Context(), upload.images)
-	if err != nil {
-		handler.writeExtractionError(w, "CDL", err)
-		return
-	}
-	storedFile, ok := handler.storeDocument(w, r, "CDL", upload)
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusCreated, cdlUploadResponse{File: storedFile, Fields: fields})
 }
 
 func (handler fileHandler) readDocumentUpload(

@@ -15,8 +15,7 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Board updater',crypt('test-only-password',gen_salt('bf'))) RETURNING id`).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
-	home := "Atlanta, GA"
-	input := DriverInput{FullName: "Audit Driver", PayType: "cpm", PayRate: 0.65, Active: true, DriverHome: &home, ChargeActor: actor}
+	input := DriverInput{FullName: "Audit Driver", PayType: "cpm", PayRate: 0.65, Active: true, ChargeActor: actor}
 	driver, err := fleet.CreateDriver(ctx, input)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +31,7 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if len(history().Items) != 0 {
 		t.Fatal("invented initial history")
 	}
-	e := DriverBoardEntry{DriverID: driver.ID, DriverHome: "Dayton, OH", CurrentLoad: "Load A", Status: "ENROUTE"}
+	e := DriverBoardEntry{DriverID: driver.ID, CurrentLoad: "Load A", Status: "ENROUTE"}
 	save := func() {
 		t.Helper()
 		rows, err := repo.Save(ctx, []DriverBoardEntry{e}, actor)
@@ -43,7 +42,7 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	}
 	save()
 	h := history()
-	if len(h.Items) != 1 || len(h.Items[0].After) != 3 || h.Items[0].Before["driverHome"] != home || h.Items[0].ActorID != actor || h.Items[0].ActorName != "Board updater" || h.Items[0].Source != "board" {
+	if len(h.Items) != 1 || len(h.Items[0].After) != 2 || h.Items[0].ActorID != actor || h.Items[0].ActorName != "Board updater" || h.Items[0].Source != "board" {
 		t.Fatalf("grouped audit: %+v", h)
 	}
 	first := h.Items[0].ID
@@ -51,37 +50,27 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if len(history().Items) != 1 {
 		t.Fatal("no-op created history")
 	}
-	if _, err = repo.Undo(ctx, first, driver.ID, e.Version-1, e.HomeVersion, actor); !errors.Is(err, ErrDriverBoardConflict) {
+	if _, err = repo.Undo(ctx, first, driver.ID, e.Version-1, actor); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("stale undo accepted", err)
 	}
 	e.Notes = "Keep this later note"
 	save()
-	e, err = repo.Undo(ctx, first, driver.ID, e.Version, e.HomeVersion, actor)
-	if err != nil || e.DriverHome != home || e.CurrentLoad != "" || e.Status != "" || e.Notes != "Keep this later note" {
+	e, err = repo.Undo(ctx, first, driver.ID, e.Version, actor)
+	if err != nil || e.CurrentLoad != "" || e.Status != "" || e.Notes != "Keep this later note" {
 		t.Fatal("undo must preserve unrelated newer fields", e, err)
 	}
 	h = history()
 	if h.Items[0].UndoOf == nil || *h.Items[0].UndoOf != first || h.Items[0].Source != "undo" {
 		t.Fatal("undo audit missing", h)
 	}
-	if _, err = repo.Undo(ctx, first, driver.ID, e.Version, e.HomeVersion, actor); !errors.Is(err, ErrDriverBoardConflict) {
+	if _, err = repo.Undo(ctx, first, driver.ID, e.Version, actor); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("repeat undo accepted", err)
 	}
-	// Profile-only edits must be attributed and independently reversible.
-	input.HomeVersion = e.HomeVersion
-	profileHome := "Boston, MA"
-	input.DriverHome = &profileHome
-	profile, err := fleet.UpdateDriver(ctx, driver.ID, input)
-	if err != nil {
+	// Profile address changes cannot be overwritten by board autosaves or undo.
+	city := "Boston"
+	input.City = &city
+	if _, err = fleet.UpdateDriver(ctx, driver.ID, input); err != nil {
 		t.Fatal(err)
-	}
-	h = history()
-	if h.Items[0].Source != "profile" || len(h.Items[0].After) != 1 || h.Items[0].ActorID != actor {
-		t.Fatal("profile audit", h)
-	}
-	e, err = repo.Undo(ctx, h.Items[0].ID, driver.ID, e.Version, profile.HomeVersion, actor)
-	if err != nil || e.DriverHome != home {
-		t.Fatal("profile undo", e, err)
 	}
 	// Returning to the original value does not make an older event safe to undo.
 	e.ETA = "Friday"
@@ -91,7 +80,7 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	save()
 	e.ETA = "Friday"
 	save()
-	if _, err = repo.Undo(ctx, etaID, driver.ID, e.Version, e.HomeVersion, actor); !errors.Is(err, ErrDriverBoardConflict) {
+	if _, err = repo.Undo(ctx, etaID, driver.ID, e.Version, actor); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("ABA undo accepted", err)
 	}
 	count := len(history().Items)

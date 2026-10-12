@@ -191,7 +191,7 @@ export function useDriverBoard(pauseRefresh = false) {
         if (!action) return;
         const result = { ...changesRef.current };
         const base = savedRef.current[action.id];
-        if (action.before) result[action.id] = { ...action.before, version: base.version, homeVersion: base.homeVersion, undoId: base.undoId };
+        if (action.before) result[action.id] = { ...action.before, version: base.version, undoId: base.undoId };
         else delete result[action.id];
         if (JSON.stringify(result[action.id]) === JSON.stringify(base)) delete result[action.id];
         changesRef.current = result; setChanges(result); activity.current += 1;

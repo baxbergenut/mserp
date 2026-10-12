@@ -25,8 +25,8 @@ func TestDriverBoardValidation(t *testing.T) {
 	}
 	for _, mutate := range []func(*repository.DriverBoardEntry){
 		func(e *repository.DriverBoardEntry) { e.Status = "unknown" }, func(e *repository.DriverBoardEntry) { e.Version = -1 },
-		func(e *repository.DriverBoardEntry) { e.HomeVersion = -1 }, func(e *repository.DriverBoardEntry) { e.DriverID = "invalid" },
-		func(e *repository.DriverBoardEntry) { e.DriverHome = strings.Repeat("a", 301) }, func(e *repository.DriverBoardEntry) { e.Notes = "nul\x00" },
+		func(e *repository.DriverBoardEntry) { e.DriverID = "invalid" },
+		func(e *repository.DriverBoardEntry) { e.Notes = strings.Repeat("a", 5001) }, func(e *repository.DriverBoardEntry) { e.Notes = "nul\x00" },
 	} {
 		entry := good
 		mutate(&entry)

@@ -33,13 +33,13 @@ func (request *driverBoardRequest) validate() error {
 			return errors.New("a driver can appear only once")
 		}
 		seen[e.DriverID] = true
-		if e.Version < 0 || e.Version > 2147483646 || e.HomeVersion < 0 || e.HomeVersion > 2147483646 {
+		if e.Version < 0 || e.Version > 2147483646 {
 			return errors.New("invalid version")
 		}
 		for _, field := range []struct {
 			value *string
 			max   int
-		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}, {&e.DriverHome, 300}} {
+		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}} {
 			*field.value = strings.TrimSpace(*field.value)
 			if len([]rune(*field.value)) > field.max || strings.ContainsRune(*field.value, 0) {
 				return errors.New("a board field exceeds its character limit or contains invalid text")
@@ -99,7 +99,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		a.DriverID = chi.URLParam(r, "driverId")
 		from, err := parseFrom(a.FromDate)
-		if !isUUID(a.DriverID) || err != nil || a.Version < 0 || a.HomeVersion < 0 || len(a.Revision) != 64 || len(a.Order) > 1000 {
+		if !isUUID(a.DriverID) || err != nil || a.Version < 0 || len(a.Revision) != 64 || len(a.Order) > 1000 {
 			writeAPIError(w, 400, "invalid load action")
 			return
 		}
@@ -182,21 +182,20 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		var input struct {
-			Personal    bool   `json:"personal"`
-			DriverID    string `json:"driverId"`
-			Version     int    `json:"version"`
-			HomeVersion int    `json:"homeVersion"`
+			Personal bool   `json:"personal"`
+			DriverID string `json:"driverId"`
+			Version  int    `json:"version"`
 		}
 		if err = decodeJSON(r, &input); err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		if !isUUID(input.DriverID) || input.Version < 0 || input.HomeVersion < 0 {
+		if !isUUID(input.DriverID) || input.Version < 0 {
 			writeAPIError(w, 400, "invalid driver or version")
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		saved, err := repo.Undo(r.Context(), id, input.DriverID, input.Version, input.HomeVersion, session.User.ID, input.Personal)
+		saved, err := repo.Undo(r.Context(), id, input.DriverID, input.Version, session.User.ID, input.Personal)
 		if err != nil {
 			fail(w, err)
 			return

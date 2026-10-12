@@ -97,7 +97,7 @@ func testOperationalLoadSync(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if storedStatus != e.Status || storedETA != e.ETA || storedNotes != e.Notes || storedVersion != e.Version {
 		t.Fatal("read changed operational fields")
 	}
-	manual, err := board.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, Revision: late.Revision, FromDate: late.FromDate, Action: "manual"}, "")
+	manual, err := board.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, Revision: late.Revision, FromDate: late.FromDate, Action: "manual"}, "")
 	if err != nil || manual.Entry.Destination != "Atlanta, GA" || manual.Loads.DestinationSource {
 		t.Fatal("manual override lost projected source", err)
 	}
@@ -121,7 +121,7 @@ func testOperationalLoadSync(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if !late.DestinationSource {
 		t.Fatal("explicit reselection did not restore source")
 	}
-	advanced, err := board.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, Revision: late.Revision, FromDate: late.FromDate, Action: "advance"}, "")
+	advanced, err := board.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, Revision: late.Revision, FromDate: late.FromDate, Action: "advance"}, "")
 	if err != nil || advanced.Loads.SourceDestination != "Dallas, TX" || advanced.Entry.Status != "ENROUTE" {
 		t.Fatalf("one-click pickup failed: %+v %v", advanced, err)
 	}

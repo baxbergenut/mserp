@@ -70,7 +70,7 @@ export function reconcileDriverBoard(current: Record<string, DriverBoardEntry>, 
   for (const entry of committed) {
     const draft = current[entry.driverId];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[entry.driverId])) delete remaining[entry.driverId];
-    else remaining[entry.driverId] = { ...draft, version: entry.version, homeVersion: entry.homeVersion };
+    else remaining[entry.driverId] = { ...draft, version: entry.version };
   }
   return remaining;
 }

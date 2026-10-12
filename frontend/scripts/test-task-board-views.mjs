@@ -11,7 +11,7 @@ const users = [{ id: 'user', name: 'Test user' }, { id: 'teammate', name: 'Teamm
 const assignments = ['driver_onboarding', 'driver_offboarding', 'relay_review'].map(kind => ({ kind, assigneeId: null, version: 1 }));
 const driverId = '05400000-0000-0000-0000-000000000001';
 const driver = { id: driverId, fullName: 'Board Driver', driverType: '%-O', truckUnit: '123', phone: '', dispatcherId: 'dispatcher', dispatcherName: 'Test Dispatcher', location: null };
-const entry = { driverId, currentLoad: '', trailerNumber: '', status: '', destination: '', eta: '', notes: '', homeTime: '', driverHome: '', version: 0, homeVersion: 0 };
+const entry = { driverId, currentLoad: '', trailerNumber: '', status: '', destination: '', eta: '', notes: '', homeTime: '', version: 0 };
 const driverBoard = { weekStart: week, drivers: [driver], entries: [entry], grossEntries: [], loads: {}, eld: { configured: false } };
 const grossRequests = [];
 let tasks = [];

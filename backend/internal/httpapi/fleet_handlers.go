@@ -114,38 +114,38 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
-	Services         []repository.DriverServiceIntent `json:"services"`
-	IsTeamDriver     *bool                            `json:"isTeamDriver"`
-	TeamVersion      *int                             `json:"teamVersion"`
-	TeamMainDriverID *string                          `json:"teamMainDriverId"`
-	TeamMainVersion  *int                             `json:"teamMainVersion"`
-	Status           string                           `json:"status"`
-	TerminationDate  string                           `json:"terminationDate"`
-	AssignmentWeek   string                           `json:"assignmentWeek"`
-	DriverHome       *string                          `json:"driverHome"`
-	HomeVersion      int                              `json:"homeVersion"`
-	ChargePauseWeek  string                           `json:"chargePauseWeek"`
-	EscrowAmount     string                           `json:"escrowAmount"`
-	FullName         string                           `json:"fullName"`
-	IsOwnerOperator  bool                             `json:"isOwnerOperator"`
-	PayType          string                           `json:"payType"`
-	PayRate          float64                          `json:"payRate"`
-	Phone            string                           `json:"phone"`
-	Email            string                           `json:"email"`
-	LicenseNumber    string                           `json:"licenseNumber"`
-	LicenseState     string                           `json:"licenseState"`
-	LicenseExpires   string                           `json:"licenseExpires"`
-	HireDate         string                           `json:"hireDate"`
-	Address          string                           `json:"address"`
-	City             string                           `json:"city"`
-	State            string                           `json:"state"`
-	PostalCode       string                           `json:"postalCode"`
-	EmergencyContact string                           `json:"emergencyContact"`
-	DispatcherID     *string                          `json:"dispatcherId"`
-	TruckID          *string                          `json:"truckId"`
-	Active           bool                             `json:"active"`
-	Notes            string                           `json:"notes"`
-	CDLFileID        *string                          `json:"cdlFileId"`
+	NewTruck              *truckRequest                    `json:"newTruck"`
+	NewTruckOwnedByDriver bool                             `json:"newTruckOwnedByDriver"`
+	Services              []repository.DriverServiceIntent `json:"services"`
+	IsTeamDriver          *bool                            `json:"isTeamDriver"`
+	TeamVersion           *int                             `json:"teamVersion"`
+	TeamMainDriverID      *string                          `json:"teamMainDriverId"`
+	TeamMainVersion       *int                             `json:"teamMainVersion"`
+	Status                string                           `json:"status"`
+	TerminationDate       string                           `json:"terminationDate"`
+	AssignmentWeek        string                           `json:"assignmentWeek"`
+	ChargePauseWeek       string                           `json:"chargePauseWeek"`
+	EscrowAmount          string                           `json:"escrowAmount"`
+	FullName              string                           `json:"fullName"`
+	IsOwnerOperator       bool                             `json:"isOwnerOperator"`
+	PayType               string                           `json:"payType"`
+	PayRate               float64                          `json:"payRate"`
+	Phone                 string                           `json:"phone"`
+	Email                 string                           `json:"email"`
+	LicenseNumber         string                           `json:"licenseNumber"`
+	LicenseState          string                           `json:"licenseState"`
+	LicenseExpires        string                           `json:"licenseExpires"`
+	HireDate              string                           `json:"hireDate"`
+	Address               string                           `json:"address"`
+	City                  string                           `json:"city"`
+	State                 string                           `json:"state"`
+	PostalCode            string                           `json:"postalCode"`
+	EmergencyContact      string                           `json:"emergencyContact"`
+	DispatcherID          *string                          `json:"dispatcherId"`
+	TruckID               *string                          `json:"truckId"`
+	Active                bool                             `json:"active"`
+	Notes                 string                           `json:"notes"`
+	CDLFileID             *string                          `json:"cdlFileId"`
 }
 
 func (request driverRequest) validate() (repository.DriverInput, error) {
@@ -173,13 +173,6 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	location, _ := time.LoadLocation("America/New_York")
 	if terminationDate != nil && terminationDate.Format("2006-01-02") > time.Now().In(location).Format("2006-01-02") {
 		return repository.DriverInput{}, errors.New("termination date cannot be in the future")
-	}
-	if request.DriverHome != nil {
-		home := strings.TrimSpace(*request.DriverHome)
-		if len([]rune(home)) > 300 || strings.ContainsRune(home, 0) || request.HomeVersion < 0 || request.HomeVersion > 2147483646 {
-			return repository.DriverInput{}, errors.New("invalid driver home or home version")
-		}
-		request.DriverHome = &home
 	}
 	request.FullName = strings.TrimSpace(request.FullName)
 	if request.FullName == "" {
@@ -219,11 +212,34 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	if request.EscrowAmount != "" && !validDriverEscrowAmount(request.EscrowAmount) {
 		return repository.DriverInput{}, errors.New("escrow amount must be greater than zero with at most two decimal places")
 	}
+	var newTruck *repository.TruckInput
+	if request.NewTruck != nil {
+		if request.TruckID != nil || !request.Active || (request.IsTeamDriver != nil && *request.IsTeamDriver) {
+			return repository.DriverInput{}, errors.New("new trucks require an active solo driver without an existing truck selection")
+		}
+		if request.NewTruck.DriverID != nil {
+			return repository.DriverInput{}, errors.New("the new truck is assigned to this driver automatically")
+		}
+		truckRequest := *request.NewTruck
+		truckRequest.Active = true
+		truckRequest.Status = "available"
+		truckRequest.AssignmentWeek = ""
+		if request.NewTruckOwnedByDriver {
+			truckRequest.OwnerID = nil
+		}
+		truck, err := truckRequest.validate()
+		if err != nil {
+			return repository.DriverInput{}, err
+		}
+		newTruck = &truck
+	} else if request.NewTruckOwnedByDriver {
+		return repository.DriverInput{}, errors.New("driver ownership requires a new truck")
+	}
 	return repository.DriverInput{
+		NewTruck: newTruck, NewTruckOwnedByDriver: request.NewTruckOwnedByDriver,
 		IsTeamDriver: request.IsTeamDriver, TeamVersion: request.TeamVersion, TeamMainDriverID: request.TeamMainDriverID, TeamMainVersion: request.TeamMainVersion,
 		Status: request.Status, TerminationDate: terminationDate,
-		AssignmentWeek: request.AssignmentWeek,
-		DriverHome:     request.DriverHome, HomeVersion: request.HomeVersion,
+		AssignmentWeek:  request.AssignmentWeek,
 		ChargePauseWeek: request.ChargePauseWeek,
 		EscrowAmount:    request.EscrowAmount,
 		FullName:        request.FullName, IsOwnerOperator: request.IsOwnerOperator,

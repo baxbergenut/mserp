@@ -177,12 +177,16 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await page.goto(`${base}/drivers`);
   await page.getByRole('button', { name: 'Add driver', exact: true }).click();
   await page.getByLabel('Full name', { exact: true }).fill('Workflow Started');
-  await page.getByLabel('Driver started working', { exact: true }).fill('2026-09-30');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
   await page.getByLabel('Rate per mile ($)', { exact: false }).fill('0.75');
   await page.getByLabel(/^Dispatcher/).selectOption(dispatcher);
   await page.getByLabel(/^Truck/).selectOption(spare);
   await expect(page.getByLabel('Assignment starts week (Monday)', { exact: true })).toHaveCount(0);
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.getByLabel('Driver started working',{exact:true}).fill('2026-09-30');
   await page.getByRole('button', { name: 'Create driver', exact: true }).click();
+  await page.getByRole('button',{name:'Done',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const started = (await read('/drivers?search=Workflow%20Started&page=1&pageSize=25')).items[0];
   expect(started.hireDate.slice(0, 10)).toBe('2026-09-30');

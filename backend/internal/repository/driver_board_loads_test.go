@@ -66,7 +66,6 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		v = view()
 		a.DriverID = d.ID
 		a.Version = e.Version
-		a.HomeVersion = e.HomeVersion
 		a.FromDate = v.FromDate
 		a.Revision = v.Revision
 		r, err := repo.ChangeLoads(ctx, a, "")
@@ -82,7 +81,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatalf("explicit selection damaged fields: %+v", r)
 	}
 	r = action(BoardLoadAction{Action: "source", StopKey: r.Loads.Current.Stops[1].Key})
-	stale := BoardLoadAction{DriverID: d.ID, Version: e.Version - 1, HomeVersion: e.HomeVersion, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
+	stale := BoardLoadAction{DriverID: d.ID, Version: e.Version - 1, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
 	if _, err = repo.ChangeLoads(ctx, stale, ""); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("repeated click accepted", err)
 	}
@@ -91,7 +90,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("duplicate numbers conflated")
 	}
 	h, _ = repo.History(ctx, []string{d.ID}, 0)
-	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, e.HomeVersion, "")
+	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, "")
 	if err != nil {
 		t.Fatal("order undo", err)
 	}
@@ -106,7 +105,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	// Source revision prevents acting on plans edited after the drawer was opened.
 	v = view()
 	exec(`UPDATE gross_board_entries SET load_number='PLAN-C' WHERE driver_id=$1 AND service_date='2026-10-06'`, d.ID)
-	if _, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, FromDate: v.FromDate, Revision: v.Revision, Action: "clear"}, ""); !errors.Is(err, ErrBoardLoadSelection) {
+	if _, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "clear"}, ""); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("stale source revision accepted", err)
 	}
 	r = action(BoardLoadAction{Action: "manual"})
@@ -134,7 +133,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("manual current text retained linked identity")
 	}
 	h, _ = repo.History(ctx, []string{d.ID}, 0)
-	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, e.HomeVersion, "")
+	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, "")
 	if err != nil || view().Current == nil {
 		t.Fatal("selection undo", err)
 	}
@@ -191,7 +190,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		order = append(order, p.PlanID)
 	}
 	r = action(BoardLoadAction{Action: "order", Order: order})
-	beforeMidnight := BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
+	beforeMidnight := BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
 	repo.now = func() time.Time { return time.Date(2026, 10, 7, 4, 0, 0, 0, time.UTC) }
 	if _, err := repo.ChangeLoads(ctx, beforeMidnight, ""); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("pre-midnight action accepted", err)
@@ -296,7 +295,7 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, e.HomeVersion, "")
+	e, err = repo.Undo(ctx, h.Items[0].ID, d.ID, e.Version, "")
 	if err != nil || !view().DestinationSource || view().SourceDestination != "Atlanta, Georgia, 30303" {
 		t.Fatal("clear undo did not restore source", err)
 	}
@@ -310,7 +309,7 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	e.CurrentLoad = "AUTO-A"
 	save()
 	v = view()
-	cleared, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, Revision: v.Revision, FromDate: v.FromDate, Action: "clear"}, "")
+	cleared, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, Revision: v.Revision, FromDate: v.FromDate, Action: "clear"}, "")
 	if err != nil || cleared.Entry.Destination != "" || cleared.Loads.Current != nil {
 		t.Fatal("drawer clear retained location", err)
 	}

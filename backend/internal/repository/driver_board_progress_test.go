@@ -50,7 +50,6 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 		v := view()
 		action.DriverID = d.ID
 		action.Version = e.Version
-		action.HomeVersion = e.HomeVersion
 		action.FromDate = v.FromDate
 		action.Revision = v.Revision
 		result, err := repo.ChangeLoads(ctx, action, actor)
@@ -63,7 +62,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	undo := func(id int64) {
 		t.Helper()
 		var err error
-		e, err = repo.Undo(ctx, id, d.ID, e.Version, e.HomeVersion, actor, true)
+		e, err = repo.Undo(ctx, id, d.ID, e.Version, actor, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,10 +89,10 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	if e.CurrentLoad != "PROGRESS-B" || e.Status != "DISPATCHED" || delivered.Loads.SourceDestination != "Boston, MA" || e.Notes != "Keep notes" || e.ETA != "" {
 		t.Fatal("delivery/promotion", delivered)
 	}
-	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: staleEntry.Version, HomeVersion: staleEntry.HomeVersion, FromDate: staleView.FromDate, Revision: staleView.Revision, Action: "advance"}, actor); !errors.Is(err, ErrDriverBoardConflict) {
+	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: staleEntry.Version, FromDate: staleView.FromDate, Revision: staleView.Revision, Action: "advance"}, actor); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("duplicate advance accepted", err)
 	}
-	if _, err := repo.Undo(ctx, e.UndoID, d.ID, e.Version, e.HomeVersion, "progress-user-two", true); !errors.Is(err, ErrNotFound) {
+	if _, err := repo.Undo(ctx, e.UndoID, d.ID, e.Version, "progress-user-two", true); !errors.Is(err, ErrNotFound) {
 		t.Fatal("personal undo accepted another actor", err)
 	}
 	undo(delivered.Entry.UndoID)
@@ -141,7 +140,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	}
 	e = rows[0]
 	v := view()
-	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, HomeVersion: e.HomeVersion, FromDate: v.FromDate, Revision: v.Revision, Action: "advance"}, actor); !errors.Is(err, ErrBoardLoadSelection) {
+	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "advance"}, actor); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("manual exception advanced", err)
 	}
 	e.Notes = "my action"
@@ -157,7 +156,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 		t.Fatal(err)
 	}
 	e = rows[0]
-	if _, err := repo.Undo(ctx, mine, d.ID, e.Version, e.HomeVersion, actor, true); !errors.Is(err, ErrDriverBoardConflict) {
+	if _, err := repo.Undo(ctx, mine, d.ID, e.Version, actor, true); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("personal undo overwrote newer user edit", err)
 	}
 	var count int

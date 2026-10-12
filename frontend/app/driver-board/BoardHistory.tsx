@@ -7,7 +7,7 @@ import { fetchDriverBoardHistory } from "@/app/lib/api";
 import type { DriverBoardEvent, BoardLoad } from "@/app/lib/types";
 import { formatETA } from "./board";
 
-const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Driver home", loadPlan: "Load selection and queue" };
+const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", status: "Status", destination: "Destination", eta: "ETA", notes: "Notes", homeTime: "Home time", driverHome: "Former home entry", loadPlan: "Load selection and queue" };
 function historyValue(field: string, value: string) {
   if (field === "eta") return formatETA(value, true);
   if (field !== "loadPlan") return value || "Empty";
@@ -98,7 +98,7 @@ export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClo
         {!loading && !events.length && !error && <p className="py-8 text-center text-sm text-zinc-400">No saved changes for these drivers yet.</p>}
         {events.map(event => <article key={event.id} className="rounded-lg border border-zinc-800 p-3">
           <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-zinc-200">{event.driverName}</h3><p className="mt-1 text-xs text-zinc-400">{event.actorName} · {event.source === "profile" ? "Driver profile" : event.source === "undo" ? "Undo" : event.source === "board" ? "Status Board" : "System update"}</p><time className="text-[11px] text-zinc-500" dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" })}</time></div>
-            {canUndo && <button className={buttonClass} disabled={busy || waiting || loading} onClick={() => setConfirm(event)} aria-label={`Undo change ${event.id}`}><Undo2 className="h-3.5 w-3.5" /></button>}
+            {canUndo && !("driverHome" in event.after) && <button className={buttonClass} disabled={busy || waiting || loading} onClick={() => setConfirm(event)} aria-label={`Undo change ${event.id}`}><Undo2 className="h-3.5 w-3.5" /></button>}
           </div>
           <dl className="mt-3 space-y-3">{Object.entries(event.after).map(([field, value]) => <div key={field}><dt className="text-xs font-medium text-zinc-400">{labels[field] ?? field}</dt><dd className="mt-1 grid grid-cols-[1fr_auto_1fr] gap-2 text-xs"><span className="whitespace-pre-wrap break-words text-zinc-500">{historyValue(field, event.before[field])}</span><span aria-label="changed to" className="text-zinc-600">→</span><span className="whitespace-pre-wrap break-words text-zinc-200">{historyValue(field, value)}</span></dd></div>)}</dl>
           {event.undoOf && <p className="mt-2 text-[11px] text-zinc-500">Reverses change #{event.undoOf}</p>}

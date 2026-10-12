@@ -34,7 +34,6 @@ import type {
   GrossBoardLoad,
   Dispatcher,
   DispatcherInput,
-  CDLFileUploadResult,
   Driver,
   AssignmentHistoryEntry,
   DriverInput,
@@ -158,9 +157,9 @@ export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
 // Includes all weekly match candidates separately from the today-forward queue.
 export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
-  apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, homeVersion: entry.homeVersion, revision: view.revision, fromDate: view.fromDate }) });
+  apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>
-  apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, homeVersion: entry.homeVersion, personal }) });
+  apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, personal }) });
 export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>
   apiRequest<GrossBoardBalanceLine[]>(withQuery("/gross-board/balance", { driverId, weekStart }));
 export const searchGrossBoardLoads = (search: string) =>
@@ -332,17 +331,7 @@ export const updateDriver = (id: string, input: DriverInput) =>
 export const deleteDriver = (id: string) =>
   apiRequest<void>(`/drivers/${id}`, { method: "DELETE" });
 
-export const uploadCDLFile = (file: File, renderedPages: Blob[] = []) => {
-  const form = new FormData();
-  form.append("file", file);
-  renderedPages.forEach((page, index) => {
-    form.append("page", page, `page-${index + 1}.jpg`);
-  });
-  return apiRequest<CDLFileUploadResult>("/cdl-files", {
-    method: "POST",
-    body: form,
-  });
-};
+
 
 export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
 export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);

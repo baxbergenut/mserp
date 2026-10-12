@@ -58,7 +58,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/httpapi/gross_board_handlers.go` and
   `backend/internal/repository/gross_board_repository.go`: weekly dispatch plans,
   exact load matching, suggestions, and versioned atomic autosaves.
-- `backend/internal/httpapi/file_handlers.go`: IRP/cab-card and CDL uploads,
+- `backend/internal/httpapi/file_handlers.go`: IRP/cab-card uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`
   also owns assignment transactions; `naming.go` owns canonical person and truck
@@ -132,7 +132,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
   sync in API-compatible date windows.
 - `backend/internal/groq/`: vision extraction client and normalization for truck
-  cab cards and driver CDLs.
+  cab cards. CDL upload/extraction is no longer exposed by the API.
 - `backend/internal/gemini/`: structured expense extraction from user-provided
   text, PDFs, text files, and receipt images.
 - `backend/internal/db/pool.go`: pgx pool configuration.
@@ -342,10 +342,10 @@ browser bundle.
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
 - Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
   plus `GET /driver-board/history?driverIds=...&before=...` (50-event cursor pages)
-  and `POST /driver-board/history/{id}/undo` (driverId, version, homeVersion).
+  and `POST /driver-board/history/{id}/undo` (driverId, version).
   `GET/POST /driver-board/loads/{driverId}` reads/changes operational load selection,
   order and destination source; GET accepts an optional `from` date, POST requires
-  board/home versions and the displayed plan revision.
+  board versions and the displayed plan revision.
   with changed entries only. Dedicated `driver_board.read`/`driver_board.write`
   permissions include board contact/home reads and home updates respectively.
   `POST /jobs/sync-eld` performs an authorized targeted Five ELD refresh and
@@ -422,7 +422,7 @@ browser bundle.
   `POST /tasks/offboarding/{id}/confirm` with equipment/access/settlement checks.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
-- Documents: `POST /irp-files`, `POST /cdl-files`, `GET /files/{id}`
+- Documents: `POST /irp-files`, `GET /files/{id}`
 
 Backend JSON is intentionally not uniform: loads retain exported Go field names
 such as `LoadID`, while fleet/toll/file responses use lower camel case JSON tags.
@@ -459,21 +459,21 @@ assignment lookup lists.
   percentage owner operators, M for CPM company/own-truck drivers, %-O/M-O for
   percentage/CPM hired drivers on other investors' trucks, % for company
   percentage drivers. No ownership or pay settings change from this view.
-  `drivers.driver_home` is a separate optional home-base field (not the mailing
-  address), shared by profiles and the board. Database-triggered home versions
-  prevent stale profile/board overwrites; older clients omitting home preserve it.
+  Driver addresses use the profile's street/city/state/postal fields. The former
+  home field is absent from the UI and API; migration 080 consolidates its data.
   Five-second Status Board autosave writes changed rows atomically with optimistic versions;
   clearing retains versions, navigation flushes, conflicts retain local drafts,
   and visible idle boards refresh every 30 seconds/on focus. Drafts are never
   persisted in view memory. Tests use disposable local
   MSERP_DRIVER_BOARD_TEST_DATABASE_URL as mserp_app for fresh/migrated schemas;
   the investor E2E runner includes driver-board-e2e.mjs.
-  Migration 046 records board and profile-home differences transactionally,
+  Migration 046 records board differences (and legacy profile-home edits) transactionally,
   grouped by driver/transaction, with authenticated actor and name snapshots.
   No-op saves add no history; existing data has no invented past events. Events
   survive driver/account deletion and cannot be rewritten after their transaction.
+  Historical events containing home edits remain readable but cannot be undone.
   History reads use driver_board.read; undo uses driver_board.write and creates
-  an audited correction. It locks the driver, checks board/home versions and
+  an audited correction. It locks the driver, checks board versions and
   rejects any later change to affected fields, including changes back to the same
   value. Unrelated later fields remain intact. The history side panel opens per
   driver or for the shown view. All drivers, My view and named dispatcher-group
@@ -506,7 +506,7 @@ assignment lookup lists.
   source destination switches to the first located stop of the opposite type,
   with a muted PU/DEL indicator. This uses versioned load-source actions/history
   without changing status or ETA; specific multi-stop choices remain in Loads. Text edits detach current identity or destination source safely.
-  Queue mutations lock the driver, check board/home versions plus source revision,
+  Queue mutations lock the driver, check board versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted
   for people in the UI. Next loads follows ETA to preserve priority column widths.
@@ -1684,3 +1684,28 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - `repository/driver_services.go`, `httpapi/driver_service_handlers.go` and migration 079 persist service intent atomically with driver creation/completion. A startup/five-second worker processes queued requests only; failures never undo the driver. Existing vendor receipts prevent uncertain replay. Relay account added and policy enabled are separate statuses; PINs are never queued/stored.
 - GET/POST `/driver-services/{id}` require fleet.read; writes additionally require the selected service’s write permission. New `relay_setup` / `weighmytruck_setup` task kinds inherit onboarding assignees and support versioned follow-up dates, automatic completion and durable history. See `docs/integrations/DRIVER_SERVICE_SETUP.md`.
 - `TestRelayDriverDatabase` covers fresh/migrated service workflow; `node scripts/test-driver-services-views.mjs` covers both modals and task resumption with fixture APIs.
+
+## Guided driver setup (migration 080)
+
+- Manual Add and FleetScope setup use `drivers/DriverSetup.tsx`: information,
+  assignments (pay and escrow), optional new-truck details, services, and finalize
+  (start date/status). New truck is the solo default; existing/unassigned and team
+  selections skip that step. Team trucks still require a dated main-driver link.
+- `DriverInput.newTruck` and `newTruckOwnedByDriver` are creation-only. Both entry
+  points create the driver, optional owner/truck, assignment, escrow and service
+  requests in one transaction. Explicit driver ownership creates a linked investor;
+  otherwise the selected existing owner applies. Truck assignments use the hire
+  date's Monday. Existing driver intake links do not change profiles/assignments.
+- Service card titles link to their management pages. Reminders are offered only
+  during setup and its saved-results modal, not on Driver Overview.
+- CDL upload UI, browser request and POST route are removed. Manual CDL fields and
+  existing document downloads remain. No stored documents are deleted.
+- Migration 080 fills empty city/state from recognized legacy home entries without
+  changing populated addresses. Ambiguous/conflicting values become system profile
+  notes. Original home columns remain solely as migration evidence/rollback data;
+  application reads/writes and home-version API fields are removed. Old history is
+  retained and cannot restore the retired field.
+- `TestDriverSetupDatabase` uses the disposable Relay test database for fresh and
+  migrated address/atomic truck setup. `test-driver-services-views.mjs` covers the
+  wizard with fixtures; `test-investors-e2e.mjs --driver-setup-only`, `--teams-only`
+  and `--board-only` cover the real API/database and affected board behavior.

@@ -31,8 +31,6 @@ type Driver struct {
 	TeamPartnerName    *string    `json:"teamPartnerName,omitempty"`
 	Status             string     `json:"status"`
 	TerminationDate    *time.Time `json:"terminationDate"`
-	DriverHome         string     `json:"driverHome"`
-	HomeVersion        int        `json:"homeVersion"`
 	ID                 string     `json:"id"`
 	FullName           string     `json:"fullName"`
 	DriverType         string     `json:"driverType"`
@@ -65,38 +63,38 @@ type Driver struct {
 }
 
 type DriverInput struct {
-	IsTeamDriver     *bool
-	TeamVersion      *int
-	TeamMainDriverID *string
-	TeamMainVersion  *int
-	Status           string
-	TerminationDate  *time.Time
-	AssignmentWeek   string
-	DriverHome       *string
-	HomeVersion      int
-	ChargePauseWeek  string
-	ChargeActor      string
-	EscrowAmount     string
-	FullName         string
-	IsOwnerOperator  bool
-	PayType          string
-	PayRate          float64
-	Phone            *string
-	Email            *string
-	LicenseNumber    *string
-	LicenseState     *string
-	LicenseExpires   *time.Time
-	HireDate         *time.Time
-	Address          *string
-	City             *string
-	State            *string
-	PostalCode       *string
-	EmergencyContact *string
-	DispatcherID     *string
-	TruckID          *string
-	Active           bool
-	Notes            *string
-	CDLFileID        *string
+	NewTruck              *TruckInput
+	NewTruckOwnedByDriver bool
+	IsTeamDriver          *bool
+	TeamVersion           *int
+	TeamMainDriverID      *string
+	TeamMainVersion       *int
+	Status                string
+	TerminationDate       *time.Time
+	AssignmentWeek        string
+	ChargePauseWeek       string
+	ChargeActor           string
+	EscrowAmount          string
+	FullName              string
+	IsOwnerOperator       bool
+	PayType               string
+	PayRate               float64
+	Phone                 *string
+	Email                 *string
+	LicenseNumber         *string
+	LicenseState          *string
+	LicenseExpires        *time.Time
+	HireDate              *time.Time
+	Address               *string
+	City                  *string
+	State                 *string
+	PostalCode            *string
+	EmergencyContact      *string
+	DispatcherID          *string
+	TruckID               *string
+	Active                bool
+	Notes                 *string
+	CDLFileID             *string
 }
 
 type DriverSetupDefaults struct {
@@ -321,17 +319,39 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			phone, email, license_number, license_state, license_expires, hire_date,
 			address, city, state, postal_code, emergency_contact, dispatcher_id,
-			active, notes, cdl_file_id, driver_home, status, termination_date
+			active, notes, cdl_file_id, status, termination_date
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce($21,''), coalesce(nullif($22,''),'active'), $23
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce(nullif($21,''),'active'), $22
 		) RETURNING id`,
 		displayName, normalizeName(displayName), input.IsOwnerOperator, input.PayType, input.PayRate,
 		input.Phone, input.Email, input.LicenseNumber, input.LicenseState, input.LicenseExpires, input.HireDate,
 		input.Address, input.City, input.State, input.PostalCode, input.EmergencyContact, input.DispatcherID,
-		input.Active, input.Notes, input.CDLFileID, input.DriverHome, input.Status, input.TerminationDate,
+		input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate,
 	).Scan(&id)
 	if err != nil {
 		return "", err
+	}
+	if input.NewTruck != nil {
+		if !input.Active || input.TruckID != nil || teamTruck != nil || (input.IsTeamDriver != nil && *input.IsTeamDriver) {
+			return "", chargeInvalid("New trucks require an active solo driver without an existing truck selection")
+		}
+		truck := *input.NewTruck
+		truck.DriverID = nil
+		truck.Active = true
+		truck.Status = "available"
+		if input.NewTruckOwnedByDriver {
+			var owner string
+			if err = tx.QueryRow(ctx, `INSERT INTO investors(full_name,driver_id,email,phone) SELECT full_name,id,email,phone FROM drivers WHERE id=$1 RETURNING id`, id).Scan(&owner); err != nil {
+				return "", err
+			}
+			truck.OwnerID = &owner
+			truck.IsCompanyOwned = false
+		}
+		truckID, createErr := createTruckTx(ctx, tx, truck)
+		if createErr != nil {
+			return "", createErr
+		}
+		input.TruckID = &truckID
 	}
 	if err = setDriverTruck(ctx, tx, id, input.TruckID); err != nil {
 		return "", err
@@ -358,6 +378,9 @@ func createDriverEscrowTx(ctx context.Context, tx pgx.Tx, driverID, amount, acto
 }
 
 func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input DriverInput) (Driver, error) {
+	if input.NewTruck != nil || input.NewTruckOwnedByDriver {
+		return Driver{}, chargeInvalid("New trucks can only be created during driver setup")
+	}
 	if input.Status != "" {
 		input.Active = input.Status != "terminated"
 	}
@@ -388,15 +411,6 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if err = tx.QueryRow(ctx, "SELECT active FROM drivers WHERE id=$1", id).Scan(&wasActive); err != nil {
 		return Driver{}, err
 	}
-	if input.DriverHome != nil {
-		var version int
-		if err = tx.QueryRow(ctx, "SELECT driver_home_version FROM drivers WHERE id=$1", id).Scan(&version); err != nil {
-			return Driver{}, err
-		}
-		if version != input.HomeVersion {
-			return Driver{}, ErrDriverBoardConflict
-		}
-	}
 	if wasActive && !input.Active {
 		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, input.ChargeActor); err != nil {
 			return Driver{}, err
@@ -413,14 +427,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 			license_number = $9, license_state = $10, license_expires = $11,
 			hire_date = $12, address = $13, city = $14, state = $15,
 			postal_code = $16, emergency_contact = $17, dispatcher_id = $18,
-			active = $19, notes = $20, cdl_file_id = $21, driver_home = coalesce($22,driver_home), updated_at = now(),
-			status = coalesce(nullif($23,''),status), termination_date = coalesce($24,termination_date)
+			active = $19, notes = $20, cdl_file_id = $21, updated_at = now(),
+			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date)
 		WHERE id = $1`,
 		id, displayName, normalizeName(displayName), input.IsOwnerOperator,
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
-		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.DriverHome, input.Status, input.TerminationDate,
+		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate,
 	)
 	if err != nil {
 		return Driver{}, err
@@ -474,7 +488,7 @@ SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
 	CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
-	d.created_at, d.updated_at, d.driver_home, d.driver_home_version, d.status, d.termination_date,
+	d.created_at, d.updated_at, d.status, d.termination_date,
 	coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week
 FROM drivers d
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
@@ -511,7 +525,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.TruckID, &value.TruckUnit, &value.Active, &value.Notes,
 		&value.CDLFileID, &value.CDLFileName, &value.CDLFileContentType,
 		&value.CDLFileSizeBytes,
-		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion, &value.Status, &value.TerminationDate,
+		&value.CreatedAt, &value.UpdatedAt, &value.Status, &value.TerminationDate,
 		&value.TeamRole, &value.TeamPartnerID, &value.TeamPartnerName,
 		&value.TeamVersion, &value.TeamTruckID, &value.TeamTruckUnit,
 		&value.TeamStartWeek,
@@ -601,18 +615,29 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 		return Truck{}, err
 	}
 
+	id, err := createTruckTx(ctx, tx, input)
+	if err != nil {
+		return Truck{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Truck{}, err
+	}
+	return r.GetTruck(ctx, id)
+}
+
+func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, error) {
 	if input.OwnerID != nil {
 		var active bool
-		if err = tx.QueryRow(ctx, `SELECT active FROM investors WHERE id=$1 FOR SHARE`, *input.OwnerID).Scan(&active); err != nil {
-			return Truck{}, mapNotFound(err)
+		if err := tx.QueryRow(ctx, `SELECT active FROM investors WHERE id=$1 FOR SHARE`, *input.OwnerID).Scan(&active); err != nil {
+			return "", mapNotFound(err)
 		}
 		if !active {
-			return Truck{}, ErrInactiveOwner
+			return "", ErrInactiveOwner
 		}
 	}
 	var id string
 	unitNumber := normalizeTruckUnit(input.UnitNumber)
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		INSERT INTO trucks (
 			unit_number, vin, year, make, model, license_plate, license_state,
 			is_company_owned, status, mileage, registration_expires,
@@ -627,15 +652,12 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 		input.IRPFileID, input.OwnerID,
 	).Scan(&id)
 	if err != nil {
-		return Truck{}, err
+		return "", err
 	}
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
-		return Truck{}, err
+		return "", err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return Truck{}, err
-	}
-	return r.GetTruck(ctx, id)
+	return id, nil
 }
 
 func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input TruckInput) (Truck, error) {

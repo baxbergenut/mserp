@@ -104,6 +104,7 @@ export function Modal({
   onClose,
   onSubmit,
   wide = false,
+  footerStart,
 }: {
   title: string;
   description?: string;
@@ -115,6 +116,7 @@ export function Modal({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   wide?: boolean;
+  footerStart?: ReactNode;
 }) {
   return (
     <OverlayPortal>
@@ -151,6 +153,7 @@ export function Modal({
             </div>
             <div className="min-h-0 overflow-y-auto px-5 py-5">{children}</div>
             <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-800/70 px-5 py-3.5">
+              {footerStart && <div className="mr-auto">{footerStart}</div>}
               <button
                 type="button"
                 onClick={onClose}
@@ -178,15 +181,17 @@ export function Modal({
 export function FormSection({
   title,
   children,
+  hideTitle = false,
 }: {
   title: string;
   children: ReactNode;
+  hideTitle?: boolean;
 }) {
   return (
     <section className="space-y-3">
-      <h3 className="border-b border-zinc-800/50 pb-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+      {!hideTitle && <h3 className="border-b border-zinc-800/50 pb-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
         {title}
-      </h3>
+      </h3>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
     </section>
   );

@@ -20,7 +20,7 @@ function tomorrowNY() {
 function ServiceTitle({ service, state }: { service: DriverService; state: string }) {
   const Icon = service === "relay" ? Fuel : Scale;
   const StatusIcon = state === "added" ? CheckCircle2 : ["queued", "running"].includes(state) ? Loader2 : ["review", "unconfirmed", "needs_setup"].includes(state) ? AlertCircle : Clock3;
-  return <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-200"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${state === "added" ? "text-emerald-400" : ["review", "unconfirmed", "needs_setup"].includes(state) ? "text-amber-300" : "text-zinc-400"}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
+  return <div className="flex flex-wrap items-center justify-between gap-2"><h3><Link href={service === "relay" ? "/fuel?tab=drivers" : "/weighmytruck"} target="_blank" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</Link></h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${state === "added" ? "text-emerald-400" : ["review", "unconfirmed", "needs_setup"].includes(state) ? "text-amber-300" : "text-zinc-400"}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
 }
 
 // Draft selections never call a mutation endpoint. Membership checks are read-only.
@@ -38,8 +38,7 @@ export function DriverServiceChoices({ value, onChange, driverId, disabled }: { 
   if (!shown.length) return null;
   const current = existing?.driverId === driverId ? existing : null;
   const choose = (service: DriverService, action?: "add" | "defer", followUpOn = current?.tomorrow || tomorrowNY()) => onChange([...value.filter(v => v.service !== service), ...(action ? [{ service, action, followUpOn }] : [])]);
-  return <section aria-label="Driver services" className="mt-6 space-y-3 border-t border-zinc-800 pt-5">
-    <div><h2 className="text-sm font-semibold text-zinc-200">Driver services</h2><p className="mt-1 text-xs text-zinc-500">Selected services start after you save. A service issue won’t block driver setup.</p></div>
+  return <section aria-label="Driver services" className="space-y-3">
     {error && <ErrorBanner message="Could not check existing service accounts. You can save the driver and review services afterward." />}
     <div className="grid gap-3 sm:grid-cols-2">{shown.map(service => {
       const intent = value.find(v => v.service === service);
@@ -48,7 +47,6 @@ export function DriverServiceChoices({ value, onChange, driverId, disabled }: { 
       return <fieldset key={service} disabled={disabled || Boolean(driverId && !current)} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
         <ServiceTitle service={service} state={already ? membership.state : intent ? intent.action === "add" ? "Add after saving" : "Remind after saving" : driverId && !current ? "Checking…" : "not_requested"} />
         {already ? <p className="text-xs leading-5 text-zinc-400">{membership.message || "An existing request is in progress."} Review this after saving.</p> : <>
-          <p className="text-xs leading-5 text-zinc-400">{service === "relay" ? "Create or review the Relay account, then assign its fuel policy. Existing ELD accounts require a confirmed link." : "Enroll using the driver’s name, email and phone."}</p>
           <div className="flex flex-wrap gap-2"><button type="button" className={button} aria-pressed={intent?.action === "add"} onClick={() => choose(service, "add")}>Add after saving</button><button type="button" className={button} aria-pressed={intent?.action === "defer"} onClick={() => choose(service, "defer")}>Remind me later</button>{intent && <button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => choose(service)}>Undo</button>}</div>
           {intent?.action === "defer" && <Field label={`${names[service]} follow-up date`}><input required type="date" className={controlClass} value={intent.followUpOn} onChange={e => choose(service, "defer", e.target.value)} /></Field>}
         </>}
@@ -57,12 +55,12 @@ export function DriverServiceChoices({ value, onChange, driverId, disabled }: { 
   </section>;
 }
 
-export function DriverServiceCards({ driverId }: { driverId: string }) {
+export function DriverServiceCards({ driverId, allowReminders = false }: { driverId: string; allowReminders?: boolean }) {
   const permissions = usePermissions();
   const visible = permissions.some(p => ["fuel.read", "fuel.drivers.write", "weighmytruck.read", "weighmytruck.write"].includes(p));
-  return visible ? <SavedDriverServices key={driverId} driverId={driverId} /> : null;
+  return visible ? <SavedDriverServices key={driverId} driverId={driverId} allowReminders={allowReminders} /> : null;
 }
-function SavedDriverServices({ driverId }: { driverId: string }) {
+function SavedDriverServices({ driverId, allowReminders }: { driverId: string; allowReminders: boolean }) {
   const [data, setData] = useState<DriverServiceSetup | null>(null);
   const [error, setError] = useState("");
   const pollingFast = !data || data.items.some(item => ["queued", "running"].includes(item.requestState));
@@ -83,13 +81,13 @@ function SavedDriverServices({ driverId }: { driverId: string }) {
     return () => { mounted.current = false; requestSequence.current++; window.clearTimeout(initial); window.clearInterval(interval); window.removeEventListener("focus", check); };
   }, [refresh, pollingFast]);
   return <section id="services" aria-label="Driver services" className="space-y-3 rounded-xl border border-zinc-800 p-5">
-    <div><h2 className="text-sm font-semibold text-zinc-200">Driver services</h2><p className="mt-1 text-xs leading-5 text-zinc-500">You can close this view while setup continues. Unfinished requests stay in Tasks; reminders appear on their follow-up date.</p></div>
+    <h2 className="text-sm font-semibold text-zinc-200">Driver services</h2>
     {error && <ErrorBanner message={error} />}
     {!data && <p className="text-xs text-zinc-400">Checking service status…</p>}
-    <div className="grid gap-3 sm:grid-cols-2">{data?.items.map(item => <ServiceCard key={item.service} item={item} data={data} refresh={refresh} />)}</div>
+    <div className="grid gap-3 sm:grid-cols-2">{data?.items.map(item => <ServiceCard key={item.service} item={item} data={data} refresh={refresh} allowReminders={allowReminders} />)}</div>
   </section>;
 }
-function ServiceCard({ item, data, refresh }: { item: DriverServiceState; data: DriverServiceSetup; refresh: () => Promise<void> }) {
+function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServiceState; data: DriverServiceSetup; refresh: () => Promise<void>; allowReminders: boolean }) {
   const permissions = usePermissions();
   const writable = permissions.includes(writePermission[item.service]) && data.driverStatus !== "terminated";
   const [busy, setBusy] = useState(false);
@@ -108,7 +106,6 @@ function ServiceCard({ item, data, refresh }: { item: DriverServiceState; data: 
   const working = ["queued", "running"].includes(item.state);
   const policy = data.policies.find(p => p.id === policyId);
   const nonELD = policy?.name.trim().toLowerCase() === "non eld policy";
-  const portal = data.environment === "staging" ? "https://staging.relaypayments.com/sender/drivers" : "https://app.relaypayments.com/sender/drivers";
   async function act(fn: () => Promise<unknown>) {
     if (latch.current) return;
     latch.current = true; setBusy(true); setError("");
@@ -121,10 +118,10 @@ function ServiceCard({ item, data, refresh }: { item: DriverServiceState; data: 
     <ServiceTitle service={item.service} state={item.state} />
     {item.message && <p className="text-xs leading-5 text-zinc-400">{item.message}</p>}
     {item.requestState === "deferred" && item.state !== "added" && <p className="text-xs text-zinc-400">Follow up {item.followUpOn}. Enrollment will wait for you.</p>}
-    {!item.configured && <p className="text-xs text-amber-300">Service connection is not configured. You can set a reminder.</p>}
+    {!item.configured && <p className="text-xs text-amber-300">Service connection is not configured.</p>}
     {error && <ErrorBanner message={error} />}
     {item.relay && <p className="break-all text-xs text-zinc-500">Relay ID: {item.relay.driver.id}{item.relay.assignment && <span className="block">{item.relay.assignment.policy_name} · {item.relay.assignment.enabled ? "Enabled" : "Disabled"}</span>}</p>}
-    {["review", "unconfirmed"].includes(item.state) && <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Account with another carrier?</summary><p className="mt-1">If the driver is still registered with a previous carrier, request release and set a reminder to return here afterward. This service response does not confirm which carrier holds the account.</p></details>}
+    {["review", "unconfirmed"].includes(item.state) && <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Account with another carrier?</summary><p className="mt-1">Ask the previous carrier to release the account, then retry. This response does not identify the carrier.</p></details>}
     <fieldset disabled={busy || working} className="space-y-3">
       {writable && !item.relay && !["added", "unconfirmed"].includes(item.state) && <button type="button" className={`${button} ui-button-primary`} disabled={!item.configured || item.candidates.length > 0} onClick={() => void queue("add")}>{item.state === "review" ? "Retry enrollment" : `Add to ${names[item.service]}`}</button>}
       {item.service === "relay" && !item.relay && item.candidates.length > 0 && <div className="space-y-2">
@@ -145,12 +142,11 @@ function ServiceCard({ item, data, refresh }: { item: DriverServiceState; data: 
         {item.service === "weighmytruck" && item.membership && <button type="button" className={button} disabled={!verified || !membershipResult || !item.membership.canVerify} onClick={() => void act(() => verifyWeighMyTruck(item.membership!, membershipResult === "added", "Membership checked on the provider website during driver setup."))}>Record verified result</button>}
         {item.service === "relay" && item.operations.map(op => <button key={op.id} type="button" className={button} disabled={!verified || Date.parse(data.checkedAt) - Date.parse(op.createdAt) < 120000} onClick={() => void act(() => verifyRelayDriverOperation(op.id))}>Record review of {op.action}</button>)}
       </div>}
-      {writable && item.state !== "added" && <div className="space-y-2"><button type="button" className={button} onClick={() => setReminder(!reminder)}>Remind me later</button>{reminder && <><Field label={`${names[item.service]} follow-up date`}><input type="date" className={controlClass} value={date} onChange={e => setDate(e.target.value)} /></Field><button type="button" disabled={!date} className={button} onClick={() => void queue("defer")}>Save reminder</button><p className="text-xs text-zinc-500">Updates the same system task, without retrying enrollment.</p></>}</div>}
+      {allowReminders && writable && item.state !== "added" && <div className="space-y-2"><button type="button" className={button} onClick={() => setReminder(!reminder)}>Remind me later</button>{reminder && <><Field label={`${names[item.service]} follow-up date`}><input type="date" className={controlClass} value={date} onChange={e => setDate(e.target.value)} /></Field><button type="button" disabled={!date} className={button} onClick={() => void queue("defer")}>Save reminder</button></>}</div>}
     </fieldset>
     {busy && <p role="status" className="text-xs text-zinc-400">Saving service setup…</p>}
     <div className="flex flex-wrap gap-3 text-xs text-blue-400">
-      {item.service === "relay" && permissions.includes("fuel.read") && <><button type="button" disabled={busy || working} onClick={() => void act(refreshRelayDrivers)}>Refresh Relay accounts</button><a href={portal} target="_blank" rel="noreferrer">Open Relay</a></>}
-      <Link href={item.service === "relay" ? "/fuel?tab=drivers" : "/weighmytruck"}>Manage {names[item.service]}</Link>
+      {item.service === "relay" && permissions.includes("fuel.read") && <button type="button" disabled={busy || working} onClick={() => void act(refreshRelayDrivers)}>Refresh Relay accounts</button>}
     </div>
   </article>;
 }

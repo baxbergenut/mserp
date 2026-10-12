@@ -123,8 +123,8 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
 			testBoardProgress(t, ctx, pool, repo, fleet)
 			testOperationalLoadSync(t, ctx, pool, repo, fleet)
-			home := "Louisville, KY"
-			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, DriverHome: &home}
+			city := "Louisville"
+			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, City: &city}
 			driver, err := fleet.CreateDriver(ctx, input)
 			if err != nil {
 				t.Fatal(err)
@@ -202,43 +202,25 @@ func TestDriverBoardDatabase(t *testing.T) {
 					draft = e
 				}
 			}
-			if draft.DriverHome != home || draft.Version != 0 {
-				t.Fatal("profile home not loaded")
+			if draft.Version != 0 {
+				t.Fatal("unexpected initial board version")
 			}
 			draft.CurrentLoad = "Manual dispatch"
 			draft.Status = "ENROUTE"
-			draft.DriverHome = "Memphis, TN"
 			draft.Notes = "Gate 2"
 			saved, err := repo.Save(ctx, []DriverBoardEntry{draft})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if saved[0].Version != 1 || saved[0].HomeVersion != 1 {
+			if saved[0].Version != 1 {
 				t.Fatalf("tokens: %+v", saved)
 			}
 			if _, err = repo.Save(ctx, []DriverBoardEntry{draft}); !errors.Is(err, ErrDriverBoardConflict) {
 				t.Fatal("stale initial write accepted", err)
 			}
 			profile, err := fleet.GetDriver(ctx, driver.ID)
-			if err != nil || profile.DriverHome != "Memphis, TN" {
-				t.Fatal("board home not synced", err)
-			}
-			if _, err = fleet.UpdateDriver(ctx, driver.ID, input); !errors.Is(err, ErrDriverBoardConflict) {
-				t.Fatal("stale profile overwrote home", err)
-			}
-			input.DriverHome = nil
-			profile, err = fleet.UpdateDriver(ctx, driver.ID, input)
-			if err != nil || profile.DriverHome != "Memphis, TN" {
-				t.Fatal("legacy profile update erased home", err)
-			}
-			input.DriverHome = &home
-			input.HomeVersion = profile.HomeVersion
-			profile, err = fleet.UpdateDriver(ctx, driver.ID, input)
-			if err != nil || profile.HomeVersion != 2 {
-				t.Fatal("profile home update", err)
-			}
-			if _, err = repo.Save(ctx, saved); !errors.Is(err, ErrDriverBoardConflict) {
-				t.Fatal("profile/board conflict not enforced", err)
+			if err != nil || profile.City == nil || *profile.City != city {
+				t.Fatal("board changed profile address", err)
 			}
 			// A conflict anywhere in a batch must roll back the other row too.
 			if _, err = repo.Save(ctx, []DriverBoardEntry{{DriverID: other.ID, Notes: "must roll back"}, draft}); !errors.Is(err, ErrDriverBoardConflict) {
@@ -259,13 +241,11 @@ func TestDriverBoardDatabase(t *testing.T) {
 				t.Fatal("weekly loads carried forward")
 			}
 			for _, e := range next.Entries {
-				if e.DriverID == driver.ID && (e.Notes != "Gate 2" || e.DriverHome != home) {
+				if e.DriverID == driver.ID && (e.Notes != "Gate 2") {
 					t.Fatal("live fields did not carry forward")
 				}
 			}
 			cleared := saved[0]
-			cleared.HomeVersion = profile.HomeVersion
-			cleared.DriverHome = home
 			cleared.CurrentLoad = ""
 			cleared.Notes = ""
 			cleared.Status = ""

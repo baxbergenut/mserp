@@ -291,8 +291,6 @@ export interface Driver {
   teamPartnerName?: string;
   status?: DriverStatus;
   terminationDate?: string | null;
-  driverHome: string;
-  homeVersion: number;
   id: string;
   fullName: string;
   driverType: "O" | "M" | "%-O" | "M-O" | "%";
@@ -326,6 +324,8 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  newTruck?: TruckInput;
+  newTruckOwnedByDriver?: boolean;
   services?: DriverServiceIntent[];
   isTeamDriver?: boolean;
   teamVersion?: number;
@@ -334,8 +334,6 @@ export interface DriverInput {
   status?: DriverStatus;
   terminationDate?: string;
   assignmentWeek?: string;
-  driverHome?: string;
-  homeVersion?: number;
   chargePauseWeek?: string;
   escrowAmount: string;
   fullName: string;
@@ -377,8 +375,6 @@ export interface DriverBoardEntry {
   eta: string;
   notes: string;
   homeTime: string;
-  driverHome: string;
-  homeVersion: number;
   version: number;
 }
 
@@ -562,22 +558,6 @@ export interface CabCardFields {
 export interface IRPFileUploadResult {
   file: StoredFileMetadata;
   fields: CabCardFields;
-}
-
-export interface CDLFields {
-  fullName: string;
-  licenseNumber: string;
-  licenseState: string;
-  licenseExpires: string;
-  address: string;
-  city: string;
-  state: string;
-  postalCode: string;
-}
-
-export interface CDLFileUploadResult {
-  file: StoredFileMetadata;
-  fields: CDLFields;
 }
 
 export interface Updater {

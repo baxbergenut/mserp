@@ -26,7 +26,7 @@ import { ETAEditor } from "./ETAEditor";
 const columns = [
   ["Current load", 95], ["Driver", 125], ["Driver type", 76], ["Truck", 50], ["Trailer", 60],
   ["Original gross", 90], ["Driver gross", 90], ["Phone", 115], ["Status", 95],
-  ["Latest location", 110], ["Destination", 119], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120], ["Driver home", 140],
+  ["Latest location", 110], ["Destination", 119], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -36,7 +36,7 @@ const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b bord
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
-  entry: DriverBoardEntry; field: "currentLoad" | "trailerNumber" | "destination" | "notes" | "homeTime" | "driverHome";
+  entry: DriverBoardEntry; field: "currentLoad" | "trailerNumber" | "destination" | "notes" | "homeTime";
   label: string; limit: number; disabled: boolean;
   edit: (id: string, field: keyof DriverBoardEntry, value: string) => void;
 }) {
@@ -181,7 +181,6 @@ export default function DriverBoardPage() {
                 <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={loads?.current?.warning || next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "homeTime", "Home time", 500)}</td>
-                <td className={cellClass}>{textCell(entry, d.fullName, "driverHome", "Driver home", 300)}</td>
               </tr>
             </Fragment>;
           })}
@@ -189,7 +188,7 @@ export default function DriverBoardPage() {
         </tbody>
       </table>
     </div>
-    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save after 5 seconds. Driver home also updates the driver profile. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
+    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save after 5 seconds. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
     {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {history && <BoardHistory driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={state.undo} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}

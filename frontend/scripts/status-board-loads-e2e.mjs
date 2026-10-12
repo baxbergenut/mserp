@@ -124,7 +124,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   const board = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
   const entry = board.entries.find(e => e.driverId === id);
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_extra_entries SET load_number='NEXT-B-EDIT' WHERE driver_id='${id}' AND service_date='${nextWeek}' AND slot=1;`);
-  expect((await page.request.post(`${base}/api/driver-board/loads/${id}`, { headers, data: { action: 'clear', version: entry.version, homeVersion: entry.homeVersion, fromDate: stale.fromDate, revision: stale.revision } })).status()).toBe(409);
+  expect((await page.request.post(`${base}/api/driver-board/loads/${id}`, { headers, data: { action: 'clear', version: entry.version, fromDate: stale.fromDate, revision: stale.revision } })).status()).toBe(409);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   console.log('Status Board loads E2E passed: explicit selection, multi-stop source, appointments separate from ETA, cross-week queue, reorder/undo, manual override, persistence, source removal and stale-source conflict.');
 }

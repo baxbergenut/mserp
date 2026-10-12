@@ -116,15 +116,14 @@ type BoardLoads struct {
 	CustomOrder       bool        `json:"customOrder"`
 }
 type BoardLoadAction struct {
-	DriverID    string   `json:"driverId"`
-	Version     int      `json:"version"`
-	HomeVersion int      `json:"homeVersion"`
-	FromDate    string   `json:"fromDate"`
-	Revision    string   `json:"revision"`
-	Action      string   `json:"action"`
-	PlanID      string   `json:"planId"`
-	Order       []string `json:"order"`
-	StopKey     string   `json:"stopKey"`
+	DriverID string   `json:"driverId"`
+	Version  int      `json:"version"`
+	FromDate string   `json:"fromDate"`
+	Revision string   `json:"revision"`
+	Action   string   `json:"action"`
+	PlanID   string   `json:"planId"`
+	Order    []string `json:"order"`
+	StopKey  string   `json:"stopKey"`
 }
 type BoardLoadResult struct {
 	Entry DriverBoardEntry `json:"entry"`
@@ -438,8 +437,8 @@ func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (Boa
 }
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
 	var e DriverBoardEntry
-	err := tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0)
- FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, id).Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version)
+	err := tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0)
+ FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, id).Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version)
 	return e, err
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
@@ -459,7 +458,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err != nil {
 		return result, err
 	}
-	if !active || e.Version != a.Version || e.HomeVersion != a.HomeVersion {
+	if !active || e.Version != a.Version {
 		return result, ErrDriverBoardConflict
 	}
 	a.FromDate = r.loadStartDate(a.FromDate)

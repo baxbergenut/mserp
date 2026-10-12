@@ -51,6 +51,11 @@ func TestProfileNotesDatabase(t *testing.T) {
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
+				var ok bool
+				source, _, ok = strings.Cut(source, "-- Driver address consolidation (migration 080).")
+				if !ok {
+					t.Fatal("address migration boundary")
+				}
 				source = strings.Replace(source, m, "", 1)
 				if strings.Contains(source, "CREATE TABLE profile_notes") {
 					t.Fatal("failed to isolate notes migration")
@@ -72,6 +77,7 @@ func TestProfileNotesDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				exec(m)
+				applyLaterTestMigrations(t, ctx, admin, "079")
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,trucks,app_users,truck_driver_assignments TO mserp_app`)
 			app := cfg.Copy()

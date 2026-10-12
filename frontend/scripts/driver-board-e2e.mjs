@@ -10,9 +10,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   const week = date.toISOString().slice(0, 10);
   sql(`SET search_path TO ${schema},public;
     INSERT INTO dispatchers(id,full_name,normalized_name) VALUES('e4500000-0000-0000-0000-000000000001','Board Dispatcher','board dispatcher');
-    INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,phone,dispatcher_id,driver_home) VALUES
-    ('e4500000-0000-0000-0000-000000000002','Board Cpm','board cpm','cpm',0.65,'4703344443','e4500000-0000-0000-0000-000000000001','Louisville, KY'),
-    ('e4500000-0000-0000-0000-000000000003','Board Percent','board percent','gross_percentage',25,NULL,'e4500000-0000-0000-0000-000000000001','');
+    INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,phone,dispatcher_id,city,state) VALUES
+    ('e4500000-0000-0000-0000-000000000002','Board Cpm','board cpm','cpm',0.65,'4703344443','e4500000-0000-0000-0000-000000000001','Louisville','KY'),
+    ('e4500000-0000-0000-0000-000000000003','Board Percent','board percent','gross_percentage',25,NULL,'e4500000-0000-0000-0000-000000000001','','');
     INSERT INTO trucks(id,unit_number,vin,status) VALUES
     ('e4500000-0000-0000-0000-000000000004','ELD-17','1M8GDM9AXKP042788','assigned'),
     ('e4500000-0000-0000-0000-000000000005','ELD-18','1M8GDM9AXKP042789','assigned');
@@ -153,7 +153,6 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('ETA')).toHaveAttribute('title', `${week} · Time not set`);
-  await expect(field('Driver home')).toHaveValue('Louisville, KY');
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');
@@ -164,14 +163,13 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await field('Notes').fill('Call before arrival');
   await field('Home time').fill('Home next Friday');
-  await field('Driver home').fill('Memphis, TN');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Notes')).toHaveValue('Call before arrival');
-  await expect(field('Driver home')).toHaveValue('Memphis, TN');
   await expect(field('ETA')).toHaveAttribute('title', `${week} · 5:00pm · New York time`);
   let profile = await (await page.request.get(`${base}/api/drivers/${id}`)).json();
-  expect(profile.driverHome).toBe('Memphis, TN');
+  expect(profile.city).toBe('Louisville');
+  expect(profile).not.toHaveProperty('driverHome');
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
   await page.screenshot({ path: join(temp, 'driver-board-desktop.png'), fullPage: true, animations: 'disabled' });
   // Flush before internal navigation, without waiting five seconds.
@@ -182,12 +180,12 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/drivers`);
   const row = page.getByRole('row').filter({ hasText: 'Board Cpm' });
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
-  await expect(page.getByLabel('Driver home', { exact: true })).toHaveValue('Memphis, TN');
-  await page.getByLabel('Driver home', { exact: true }).fill('Dayton, OH');
+  await expect(page.getByLabel('City', { exact: true })).toHaveValue('Louisville');
+  await page.getByLabel('City', { exact: true }).fill('Dayton');
+  await page.getByLabel('State / province', { exact: true }).fill('OH');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.goto(`${base}/driver-board`);
-  await expect(field('Driver home')).toHaveValue('Dayton, OH');
   // Personal group selection changes rows/totals, survives reload and never writes board data.
   await page.getByRole('button', { name: 'My view', exact: true }).dblclick();
   await page.getByRole('checkbox', { name: 'Board Dispatcher', exact: true }).check();
@@ -205,27 +203,26 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   expect(await page.locator('tr[data-driver-id]').count()).toBeGreaterThan(2);
   await page.getByLabel('Saved board view').selectOption({ label: 'Weekend coverage' });
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(2);
-  // History includes authenticated actors, grouped board/home edits and profile edits.
+  // Board history remains reversible; address edits stay on the profile.
   const getHistory = async () => (await page.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).json();
   let history = await getHistory();
   const profileEvent = history.items[0];
-  expect(profileEvent.source).toBe('profile');
+  expect(profileEvent.source).toBe('board');
   expect(profileEvent.actorId).toBe(session.user.id);
-  expect(profileEvent.before.driverHome).toBe('Memphis, TN');
-  expect(history.items.some(e => e.after.currentLoad === 'LOAD 8841' && e.after.driverHome === 'Memphis, TN')).toBe(true);
+  expect(profileEvent.before.notes).toBe('Call before arrival');
+  expect(history.items.some(e => e.after.currentLoad === 'LOAD 8841')).toBe(true);
   await page.getByRole('button', { name: 'Board Cpm · History', exact: true }).click();
   let panel = page.getByRole('dialog', { name: 'Board Cpm · History', exact: true });
-  await expect(panel.getByText('Dayton, OH', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Saved before navigation', { exact: true })).toBeVisible();
   await page.screenshot({ path: join(temp, 'driver-board-history.png'), fullPage: true });
   await panel.getByRole('button', { name: `Undo change ${profileEvent.id}`, exact: true }).click();
   await panel.getByRole('button', { name: 'Undo change', exact: true }).click();
   await expect(panel.getByText(`Reverses change #${profileEvent.id}`, { exact: true })).toBeVisible();
   await panel.getByRole('button', { name: 'Close history', exact: true }).click();
-  await expect(field('Driver home')).toHaveValue('Memphis, TN');
-  expect((await (await page.request.get(`${base}/api/drivers/${id}`)).json()).driverHome).toBe('Memphis, TN');
+  expect((await (await page.request.get(`${base}/api/drivers/${id}`)).json()).city).toBe('Dayton');
   history = await getHistory();
   const latest = (await getBoard()).entries.find(e => e.driverId === id);
-  expect((await page.request.post(`${base}/api/driver-board/history/${profileEvent.id}/undo`, { headers, data: { driverId: id, version: latest.version, homeVersion: latest.homeVersion } })).status()).toBe(409);
+  expect((await page.request.post(`${base}/api/driver-board/history/${profileEvent.id}/undo`, { headers, data: { driverId: id, version: latest.version } })).status()).toBe(409);
   // Stale rows fail with 409 and preserve local text until explicitly reloaded.
   let remote = (await getBoard()).entries.find(e => e.driverId === id);
   const changed = await page.request.put(`${base}/api/driver-board`, { headers, data: { entries: [{ ...remote, notes: 'Other dispatcher edit' }] } });
@@ -251,11 +248,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   expect((await getBoard()).entries.find(e => e.driverId === id).notes).toBe('Newer typing preserved');
   await field('Notes').fill('');
-  await field('Driver home').fill('');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Notes')).toHaveValue('');
-  await expect(field('Driver home')).toHaveValue('');
   // Board-only viewers can read but cannot mutate board or fleet records.
   await runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers });
   const role = await page.request.post(`${base}/api/settings/roles`, { headers, data: { name: 'Board viewer', permissions: ['driver_board.read'] } });
@@ -287,20 +282,18 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     await expect(viewer.getByRole('button', { name: 'All drivers', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(viewer.getByLabel('Saved board view')).toHaveCount(0);
     expect((await viewer.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).status()).toBe(200);
-    expect((await viewer.request.post(`${base}/api/driver-board/history/${history.items[0].id}/undo`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { driverId: id, version: remote.version, homeVersion: remote.homeVersion } })).status()).toBe(403);
+    expect((await viewer.request.post(`${base}/api/driver-board/history/${history.items[0].id}/undo`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { driverId: id, version: remote.version } })).status()).toBe(403);
     await viewer.getByRole('button', { name: 'Board Cpm · History', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: /^Undo change/ })).toHaveCount(0);
     await viewer.getByRole('dialog').getByRole('button', { name: 'Loads', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: 'Set current', exact: true })).toHaveCount(0);
     const loads = await (await viewer.request.get(`${base}/api/driver-board/loads/${id}`)).json();
-    expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, homeVersion: remote.homeVersion, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
+    expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'driver-board-mobile.png'), fullPage: true, animations: 'disabled' });
-  await field('Driver home').scrollIntoViewIfNeeded();
-  await expect(field('Driver home')).toBeInViewport();
   await page.screenshot({ path: join(temp, 'driver-board-mobile-table.png'), fullPage: true, animations: 'disabled' });
   await field('ETA').click();
   await expect(popup).toBeInViewport({ ratio: 1 });
@@ -309,5 +302,5 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await runStatusBoardProgressE2E({ page, base, sql, schema, week });
-  console.log('Status Board E2E passed: totals, autosave, navigation flush, home/profile synchronization, history/undo, personal and named views, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
+  console.log('Status Board E2E passed: totals, autosave, navigation flush, profile address preservation, history/undo, personal and named views, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrDriverBoardConflict = errors.New("status board or driver home changed; reload to review the latest values before editing again")
+var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
 	UndoID       int64 `json:"undoId,omitempty"`
@@ -26,8 +26,6 @@ type DriverBoardEntry struct {
 	ETA                string `json:"eta"`
 	Notes              string `json:"notes"`
 	HomeTime           string `json:"homeTime"`
-	DriverHome         string `json:"driverHome"`
-	HomeVersion        int    `json:"homeVersion"`
 	Version            int    `json:"version"`
 }
 
@@ -116,7 +114,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
-	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0),
+	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),
 	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
@@ -142,7 +140,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var reportedAt *time.Time
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
-			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.DriverHome, &e.HomeVersion, &e.Version,
+			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
 			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading)
 		if err != nil {
 			rows.Close()
@@ -234,17 +232,15 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 	for index := range entries {
 		e := &entries[index]
 		e.UndoID = 0
-		var home string
-		var homeVersion int
 		var active bool
-		err = tx.QueryRow(ctx, `SELECT driver_home,driver_home_version,active FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&home, &homeVersion, &active)
+		err = tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&active)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrDriverBoardConflict
 		}
 		if err != nil {
 			return nil, err
 		}
-		if !active || homeVersion != e.HomeVersion {
+		if !active {
 			return nil, ErrDriverBoardConflict
 		}
 		old, readErr := boardEntry(ctx, tx, e.DriverID)
@@ -331,12 +327,6 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		}
 		if err != nil {
 			return nil, err
-		}
-		if home != e.DriverHome {
-			err = tx.QueryRow(ctx, `UPDATE drivers SET driver_home=$2,updated_at=now() WHERE id=$1 RETURNING driver_home_version`, e.DriverID, e.DriverHome).Scan(&e.HomeVersion)
-			if err != nil {
-				return nil, err
-			}
 		}
 		e.Version = version
 		if stateChanged {

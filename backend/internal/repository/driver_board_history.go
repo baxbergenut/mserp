@@ -67,7 +67,7 @@ func (r *DriverBoardRepository) History(ctx context.Context, ids []string, befor
 
 // Undo is a new audited correction. A later edit of any affected field prevents
 // reversing the older event, even if that field has since returned to its value.
-func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version, homeVersion int, actor string, personal ...bool) (DriverBoardEntry, error) {
+func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version int, actor string, personal ...bool) (DriverBoardEntry, error) {
 	var entry DriverBoardEntry
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -96,6 +96,10 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	if err != nil {
 		return entry, err
 	}
+	// The retired home field is immutable history; it cannot restore a second address.
+	if _, retired := after["driverHome"]; retired {
+		return entry, ErrDriverBoardConflict
+	}
 	keys := make([]string, 0, len(after))
 	for k := range after {
 		keys = append(keys, k)
@@ -111,12 +115,12 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	if changed {
 		return entry, ErrDriverBoardConflict
 	}
-	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),d.driver_home,d.driver_home_version,coalesce(b.version,0)
- FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.DriverHome, &entry.HomeVersion, &entry.Version)
+	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0)
+ FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.Version)
 	if err != nil {
 		return entry, err
 	}
-	if entry.Version != version || entry.HomeVersion != homeVersion {
+	if entry.Version != version {
 		return entry, ErrDriverBoardConflict
 	}
 	raw, _ := json.Marshal(entry)

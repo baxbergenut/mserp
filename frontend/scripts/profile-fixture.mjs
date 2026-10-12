@@ -13,9 +13,9 @@ export function seedProfileFixture(sql, schema) {
   const f = profileFixture;
   sql(`SET search_path TO ${schema},public;
     INSERT INTO dispatchers(id,full_name,normalized_name,phone,email,extension,pay_percentage) VALUES('${f.dispatcher}','Dana Mitchell','dana mitchell','2025550101','dana@example.test',201,2);
-    INSERT INTO drivers(id,full_name,normalized_name,is_owner_operator,pay_type,pay_rate,dispatcher_id,phone,email,driver_home,notes,hire_date) VALUES
-      ('${f.owner}','Morgan Hayes','morgan hayes',true,'gross_percentage',88,'${f.dispatcher}','2025550102','morgan@example.test','Dallas, TX','Legacy profile context retained without an invented date.','2026-09-28'),
-      ('${f.hired}','Jamie Carter','jamie carter',false,'cpm',0.5,'${f.dispatcher}','2025550103','jamie@example.test','Columbus, OH',NULL,'2026-09-28');
+    INSERT INTO drivers(id,full_name,normalized_name,is_owner_operator,pay_type,pay_rate,dispatcher_id,phone,email,city,state,notes,hire_date) VALUES
+      ('${f.owner}','Morgan Hayes','morgan hayes',true,'gross_percentage',88,'${f.dispatcher}','2025550102','morgan@example.test','Dallas','TX','Legacy profile context retained without an invented date.','2026-09-28'),
+      ('${f.hired}','Jamie Carter','jamie carter',false,'cpm',0.5,'${f.dispatcher}','2025550103','jamie@example.test','Columbus','OH',NULL,'2026-09-28');
     INSERT INTO investors(id,full_name,driver_id) VALUES('${f.investor}','Morgan Hayes','${f.owner}');
     INSERT INTO investors(id,full_name,email) VALUES('${f.independent}','River Fleet Partners','office@example.test');
     INSERT INTO trucks(id,unit_number,owner_id,year,make,model,vin) VALUES

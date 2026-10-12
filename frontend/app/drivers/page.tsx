@@ -20,15 +20,12 @@ import {
   fetchDriverSetupDefaults,
   fetchDrivers,
   fetchTrucks,
-  uploadCDLFile,
+  fetchInvestors,
   updateDriver,
 } from "../lib/api";
-import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Dispatcher, Driver, DriverInput, DriverIntake, DriverDirectoryEntry, Truck } from "../lib/types";
+import type { Dispatcher, Driver, DriverInput, DriverIntake, DriverDirectoryEntry, Investor, Truck } from "../lib/types";
 import {
-  controlClass,
-  Field,
   ConfirmDialog,
   EmptyState,
   ErrorBanner,
@@ -42,9 +39,11 @@ import {
 } from "../components/management/ManagementUI";
 import { usePermissions } from "../lib/access";
 import { StatementMenu } from "../accounting/driver-pay/StatementMenu";
-import { DriverServiceCards, DriverServiceChoices } from "./DriverServices";
+import { DriverServiceCards } from "./DriverServices";
 import type { DriverServiceIntent } from "../lib/types";
 import { DriverStatusDialog } from "./DriverStatusDialog";
+import { DriverSetup } from "./DriverSetup";
+import { emptyTruckInput } from "../trucks/TruckForm";
 import { DriverForm, driverToInput, emptyDriverInput } from "./DriverForm";
 
 
@@ -61,6 +60,8 @@ function DriversContent() {
   const searchParams = useSearchParams();
   const setupID = searchParams.get("setup");
   const [drivers, setDrivers] = useState<DriverDirectoryEntry[]>([]);
+  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(false);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [dispatchers, setDispatchers] = useState<Dispatcher[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
@@ -71,13 +72,11 @@ function DriversContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingCDL, setIsUploadingCDL] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Driver | null | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<Driver | null>(null);
   const [form, setForm] = useState<DriverInput>(emptyDriverInput);
-  const [cdlFileName, setCDLFileName] = useState<string | null>(null);
   const [serviceChoices, setServiceChoices] = useState<DriverServiceIntent[]>([]);
   const [savedDriver, setSavedDriver] = useState<Driver | null>(null);
   const saveLatch = useRef(false);
@@ -109,16 +108,18 @@ function DriversContent() {
   }, [setPage, debouncedSearch, page, pageSize, showInactiveDrivers]);
 
   const loadLookups = useCallback(async () => {
+    setLoadingLookups(true);
     try {
-      const [truckRows, dispatcherRows, driverRows] = await Promise.all([
-        fetchTrucks(), fetchDispatchers(), fetchDrivers(),
+      const [truckRows, dispatcherRows, driverRows, ownerRows] = await Promise.all([
+        fetchTrucks(), fetchDispatchers(), fetchDrivers(), fetchInvestors(),
       ]);
+      setInvestors(ownerRows);
       setTrucks(truckRows);
       setDispatchers(dispatcherRows);
       setExistingDrivers(driverRows);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to load assignment options");
-    }
+    } finally { setLoadingLookups(false); }
   }, []);
 
   useEffect(() => {
@@ -135,11 +136,10 @@ function DriversContent() {
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
-    setForm({ ...emptyDriverInput, escrowAmount: "" });
+    setForm({ ...emptyDriverInput, newTruck: { ...emptyTruckInput }, hireDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()), escrowAmount: "" });
     void fetchDriverSetupDefaults().then(defaults => {
       setForm(current => current.escrowAmount === "" ? { ...current, escrowAmount: defaults.escrowAmount } : current);
     }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
-    setCDLFileName(null);
     setEditing(null);
     setError("");
   };
@@ -152,7 +152,6 @@ function DriversContent() {
     setLinkDriverID("");
     void loadLookups();
     setForm(driverToInput(driver));
-    setCDLFileName(driver.cdlFileName);
     setEditing(driver);
     setError("");
   };
@@ -160,7 +159,7 @@ function DriversContent() {
   const openIntake = useCallback((hire: DriverIntake) => {
     void loadLookups();
     const source = hire.driver;
-    setForm({ ...emptyDriverInput, escrowAmount: "", fullName: source.fullName,
+    setForm({ ...emptyDriverInput, newTruck: { ...emptyTruckInput }, escrowAmount: "", fullName: source.fullName,
       isOwnerOperator: source.driverType === "owner_operator", hireDate: source.hireDate,
       phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
       city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",
@@ -173,7 +172,6 @@ function DriversContent() {
     setIntake(hire);
     setLinkDriverID("");
     setSeparateConfirmed(false); setServiceChoices([]); setSavedDriver(null);
-    setCDLFileName(null);
     setEditing(null);
     setError("");
   }, [loadLookups]);
@@ -189,43 +187,6 @@ function DriversContent() {
   const startSetup = async (id: string) => {
     try { openIntake(await fetchDriverIntakeById(id)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not open setup."); }
-  };
-
-  const uploadCDL = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      setError("CDL files must be 10 MB or smaller.");
-      return;
-    }
-
-    setIsUploadingCDL(true);
-    setError("");
-    try {
-      const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-      const pages = isPDF ? await renderPDFPages(file) : [];
-      const result = await uploadCDLFile(file, pages);
-      setCDLFileName(result.file.fileName);
-      setForm((current) => ({
-        ...current,
-        cdlFileId: result.file.id,
-        fullName: result.fields.fullName || current.fullName,
-        licenseNumber: result.fields.licenseNumber || current.licenseNumber,
-        licenseState: result.fields.licenseState || current.licenseState,
-        licenseExpires: result.fields.licenseExpires || current.licenseExpires,
-        address: result.fields.address || current.address,
-        city: result.fields.city || current.city,
-        state: result.fields.state || current.state,
-        postalCode: result.fields.postalCode || current.postalCode,
-      }));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to read CDL");
-    } finally {
-      setIsUploadingCDL(false);
-    }
-  };
-
-  const removeCDL = () => {
-    setCDLFileName(null);
-    setForm((current) => ({ ...current, cdlFileId: null }));
   };
 
   const save = async () => {
@@ -369,41 +330,13 @@ function DriversContent() {
 
       {statusMenu && <StatementMenu {...statusMenu} label="Change driver status" onClose={closeStatusMenu} onSelect={() => setStatusDriver(statusMenu.driver)} />}
       {statusDriver && <DriverStatusDialog driver={statusDriver} onClose={() => setStatusDriver(null)} onSaved={() => { setStatusDriver(null); void loadData(); }} />}
-      {editing !== undefined && (
-        <Modal
-          title={intake ? `Set up ${intake.driver.fullName}` : editing ? `Edit ${editing.fullName}` : "Add driver"}
-          description={intake ? form.isTeamDriver ? "Review the FleetScope details and select the main driver’s truck." : "Review the FleetScope details, enter a positive pay rate, and choose assignments. Complete setup to make this driver available for accounting." : "Assignment changes are reflected on both the driver and truck records."}
-          isSaving={isSaving || isUploadingCDL}
-          submitLabel={intake ? (linkDriverID ? "Confirm link" : "Complete setup") : editing ? "Save changes" : "Create driver"}
-          onClose={() => { setEditing(undefined); setIntake(null); if (setupID) router.replace("/drivers", { scroll: false }); }}
-          onSubmit={(event) => { event.preventDefault(); void save(); }}
-        >
-          {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-          {intake && <div className="mb-5"><Field label="Already in MSERP?"><select className={controlClass} value={linkDriverID} onChange={(event) => { setLinkDriverID(event.target.value); setServiceChoices([]); }}>
-            <option value="">Set up as a new driver</option>
-            {existingDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName} · {formatPhone(driver.phone) || driver.email || "No contact details"}{driver.active ? "" : " (terminated)"}</option>)}
-          </select></Field>{linkDriverID && <p className="mt-3 text-sm text-zinc-400">Confirm this is the same person as {intake.driver.fullName}. Linking keeps the existing profile, pay rates and assignments.</p>}</div>}
-          {intake && !linkDriverID && intake.candidates.length > 0 && <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
-            <p>Possible existing drivers: {intake.candidates.map((candidate) => `${candidate.fullName} (${formatPhone(candidate.phone) || candidate.email || "no contact details"})`).join(", ")}. If this is the same person, select the existing driver above.</p>
-            <label className="mt-3 flex items-center gap-2"><input type="checkbox" required checked={separateConfirmed} onChange={(event) => setSeparateConfirmed(event.target.checked)} />I reviewed the matches. This is a different person.</label>
-          </div>}
-          {!linkDriverID && <DriverForm
-            value={form}
-            onChange={next => { if (!!next.isTeamDriver !== !!form.isTeamDriver) setError(""); setForm(next); }}
-            dispatchers={dispatchers}
-            trucks={trucks}
-            cdlFileName={cdlFileName}
-            isUploadingCDL={isUploadingCDL}
-            onUploadCDL={uploadCDL}
-            onRemoveCDL={removeCDL}
-            showEscrow={editing === null}
-            editingDriverId={editing?.id}
-          />}
-          {editing === null && <DriverServiceChoices key={linkDriverID || "new"} value={serviceChoices} onChange={setServiceChoices} driverId={linkDriverID || undefined} disabled={isSaving} />}
-        </Modal>
-      )}
+      {editing === null && <DriverSetup value={form} onChange={next => { setError(""); setForm(next); }} intake={intake} drivers={existingDrivers} trucks={trucks} dispatchers={dispatchers} investors={investors} linkId={linkDriverID} onLink={id => { setLinkDriverID(id); setServiceChoices([]); }} separateConfirmed={separateConfirmed} onConfirmSeparate={setSeparateConfirmed} services={serviceChoices} onServices={setServiceChoices} saving={isSaving} loading={loadingLookups} error={error} onSave={save} onClose={() => { setEditing(undefined); setIntake(null); if (setupID) router.replace("/drivers", { scroll: false }); }} />}
+      {editing && <Modal title={`Edit ${editing.fullName}`} isSaving={isSaving} submitLabel="Save changes" onClose={() => setEditing(undefined)} onSubmit={event => { event.preventDefault(); void save(); }}>
+        {error && <ErrorBanner message={error} />}
+        <DriverForm value={form} onChange={setForm} dispatchers={dispatchers} trucks={trucks} editingDriverId={editing.id} />
+      </Modal>}
 
-      {savedDriver && <Modal isSaving={false} title={`${savedDriver.fullName} saved`} description="Driver setup is saved. Service results update here as they arrive." submitLabel="Done" cancelLabel="Close" onClose={() => setSavedDriver(null)} onSubmit={event => { event.preventDefault(); setSavedDriver(null); }}><DriverServiceCards driverId={savedDriver.id} /><Link className="mt-4 inline-block text-xs text-blue-400" href={`/drivers/detail?id=${savedDriver.id}&services=1`}>Open driver profile</Link></Modal>}
+      {savedDriver && <Modal isSaving={false} title={`${savedDriver.fullName} saved`} submitLabel="Done" cancelLabel="Close" onClose={() => setSavedDriver(null)} onSubmit={event => { event.preventDefault(); setSavedDriver(null); }}><DriverServiceCards driverId={savedDriver.id} allowReminders /><Link className="mt-4 inline-block text-xs text-blue-400" href={`/drivers/detail?id=${savedDriver.id}&services=1`}>Open driver profile</Link></Modal>}
 
       {pendingDelete && (
         <ConfirmDialog

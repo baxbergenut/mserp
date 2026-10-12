@@ -1,7 +1,8 @@
 # Driver service setup
 
 Migration 079 adds Relay and WeighMyTruck enrollment requests to manual driver
-creation and FleetScope completion. Both forms share draft service cards.
+creation and FleetScope completion. Both guided forms share draft service cards
+in their Driver services step.
 `Add after saving` and `Remind me later` make no vendor calls before the driver
 transaction commits. The create/completion request carries an optional `services`
 array of `{service: relay|weighmytruck, action: add|defer, followUpOn?: YYYY-MM-DD}`.
@@ -9,7 +10,9 @@ The existing `addWeighMyTruck` completion flag remains for older clients.
 
 Driver/contact validation is unchanged. Vendor configuration, missing enrollment
 prerequisites and vendor failures cannot roll back a committed driver setup.
-The results modal can be closed while work continues. Driver Overview contains
+The results modal can be closed while work continues. Reminder controls are
+available there and during setup; Driver Overview omits them. Card titles link
+to Fuel > Drivers and WeighMyTruck without separate management buttons. Driver Overview contains
 the same saved service cards; Tasks links to `/drivers/detail?id=…&services=1`.
 
 ## Requests and provider boundaries

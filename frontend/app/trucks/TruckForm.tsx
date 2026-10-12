@@ -68,15 +68,17 @@ export function TruckForm({
   isUploadingIRP,
   onUploadIRP,
   onRemoveIRP,
+  setup = false,
 }: {
   value: TruckInput;
   drivers: Driver[];
   investors: Investor[];
   onChange: (value: TruckInput) => void;
-  irpFileName: string | null;
-  isUploadingIRP: boolean;
-  onUploadIRP: (file: File) => Promise<void>;
-  onRemoveIRP: () => void;
+  irpFileName?: string | null;
+  isUploadingIRP?: boolean;
+  onUploadIRP?: (file: File) => Promise<void>;
+  onRemoveIRP?: () => void;
+  setup?: boolean;
 }) {
   const set = <K extends keyof TruckInput>(key: K, next: TruckInput[K]) =>
     onChange({ ...value, [key]: next, ...(["driverId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
@@ -84,7 +86,7 @@ export function TruckForm({
 
   return (
     <div className="space-y-6">
-      <FormSection title="IRP cab card">
+      {!setup && <FormSection title="IRP cab card">
         <div className="sm:col-span-2">
           <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/[0.04] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -141,7 +143,7 @@ export function TruckForm({
                     onChange={(event) => {
                       const file = event.currentTarget.files?.[0];
                       event.currentTarget.value = "";
-                      if (file) void onUploadIRP(file);
+                      if (file) void onUploadIRP?.(file);
                     }}
                   />
                 </label>
@@ -155,7 +157,7 @@ export function TruckForm({
             )}
           </div>
         </div>
-      </FormSection>
+      </FormSection>}
 
       <FormSection title="Truck profile">
         <Field label="Unit number">
@@ -202,7 +204,7 @@ export function TruckForm({
             placeholder="Cascadia"
           />
         </Field>
-        <Field label="Owner" hint="Ownership is separate from the operating driver. Add owners on the Investors page.">
+        <Field label="Owner">
           <select required value={value.ownerId ?? ""}
             onChange={(event) => onChange({ ...value, ownerId: event.target.value, isCompanyOwned: investors.find((i) => i.id === event.target.value)?.isCompany ?? false })}
             className={controlClass}>
@@ -248,7 +250,7 @@ export function TruckForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Operations and assignment">
+      {!setup && <FormSection title="Operations and assignment">
         <AssignmentWeekField value={value.assignmentWeek} onChange={week => set("assignmentWeek", week)} />
         <Field label="Assigned driver" hint="Selecting a driver releases any truck currently assigned to them.">
           <select
@@ -303,15 +305,15 @@ export function TruckForm({
             className={controlClass}
           />
         </Field>
-      </FormSection>
+      </FormSection>}
 
-      <FormSection title="Status and notes">
-        <Toggle
+      <FormSection title={setup ? "Notes" : "Status and notes"}>
+        {!setup && <Toggle
           checked={value.active}
           onChange={(checked) => onChange({ ...value, active: checked, ...(!checked ? { driverId: null, status: value.status === "assigned" ? "available" : value.status, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
           label="Active truck"
           description="Marking inactive disconnects the current driver. Historical records are retained."
-        />
+        />}
         <Field label="Internal notes" wide>
           <textarea
             rows={3}
