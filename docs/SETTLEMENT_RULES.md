@@ -61,6 +61,21 @@ summaries read those same reports and link to the matching week/truck in Investo
 Pay. Reading a profile or statement never creates payments. Finalization is not
 a disbursement status; bank/payment tracking would be a separate feature.
 
+## Expense collection window
+
+Driver Pay and Investor Pay include Expenses & Charges dated through the Wednesday
+after the selected week ends. For example, September 28–October 4 includes new
+expenses dated September 28–October 7; October 8 is outside that window. Older
+unpaid balances continue to carry forward. This extension does not change load,
+fuel, toll, CAT Scale, escrow or recurring-charge dates.
+
+Reading a statement does not collect money. Saving or finalizing a deduction
+reserves that amount across all weeks and settlement destinations. Fully paid
+expenses disappear from later unsaved statements; partial payments leave only
+the available remainder. Saved historical deductions and finalized snapshots
+retain their recorded amounts. Overlapping open statements can suggest the same
+unpaid expense, but a stale save must reload after another week collects it.
+
 ## Identity, activity and review
 
 Driver activity and investor activity are independent. An inactive driver may

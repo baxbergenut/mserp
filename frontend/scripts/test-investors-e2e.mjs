@@ -6,6 +6,7 @@ import { runProfilesE2E } from "./profiles-e2e.mjs";
 // Uses a temporary schema, a real API process, and real browser authentication.
 import { chromium, expect } from '@playwright/test';
 import { runInvestorPayE2E } from './investor-pay-e2e.mjs';
+import { runExpenseWindowE2E } from './expense-window-e2e.mjs';
 import { runPhoneE2E } from './phone-e2e.mjs';
 import { runAccessE2E } from './access-e2e.mjs';
 import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
@@ -94,7 +95,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--driver-setup-only')) {
+  if (process.argv.includes('--expense-window-only')) {
+    await runExpenseWindowE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--driver-setup-only')) {
     await runDriverSetupE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--board-only')) {
     await runDriverBoardE2E({ page, base, sql, schema, temp });

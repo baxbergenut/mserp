@@ -24,6 +24,7 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
  UNION SELECT week_start FROM driver_pay_weeks WHERE driver_id=$1
  UNION SELECT p.week_start FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE e.charge_driver_id=$1
  UNION SELECT date_trunc('week',expense_date)::date FROM expenses WHERE charge_driver_id=$1 AND NOT driver_settled
+ UNION SELECT date_trunc('week',expense_date-3)::date FROM expenses WHERE charge_driver_id=$1 AND NOT driver_settled
  UNION SELECT generate_series(start_week,least(coalesce(end_week,$2::date),$2::date),'7 days')::date FROM driver_charge_schedules WHERE driver_id=$1
  UNION SELECT p.week_start FROM driver_escrow_payments p JOIN driver_escrows e ON e.id=p.escrow_id WHERE e.driver_id=$1
  UNION SELECT date_trunc('week',start_date)::date FROM driver_escrows WHERE driver_id=$1

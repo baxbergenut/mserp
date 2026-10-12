@@ -118,7 +118,7 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
  FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$1::date
  LEFT JOIN LATERAL(SELECT sum(amount) FILTER(WHERE week_start<>$1::date) other,sum(amount) FILTER(WHERE week_start<$1::date) prior FROM expense_payments WHERE expense_id=e.id) p ON true
- WHERE lower(btrim(e.covered_by))='truck owner' AND NOT e.driver_settled AND e.amount>=0 AND e.expense_date<$1::date+7 AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week)
+ WHERE lower(btrim(e.covered_by))='truck owner' AND NOT e.driver_settled AND e.amount>=0 AND e.expense_date<$1::date+10 AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week)
 	if e != nil {
 		return v, e
 	}

@@ -1113,8 +1113,12 @@ assignment lookup lists.
 - Driver-covered expenses (coveredBy = Driver) require a linked driver and a
   nonnegative total. Penalties is an expense category. Migration 036 marks all
   pre-existing driver-covered expenses as settled with zero remaining balance.
-  New expenses suggest their full unpaid balance in Driver Pay from the expense
-  date's Monday, including weeks without loads. Normal payroll autosaves include
+  Driver Pay and Investor Pay include expenses through the following Wednesday
+  (expense_date < week_start + 10), including weeks without loads. Monday–Wednesday
+  expenses can therefore enter the preceding week's statement. Older unpaid
+  balances still carry forward; fuel, tolls, escrow and recurring charges retain
+  their existing weekly windows. Driver history includes the earlier eligible week.
+  Normal payroll autosaves include
   all displayed unsaved expense deductions; editing a deduction saves its new
   amount. Reading payroll alone does not collect payments. Zero explicitly defers a week.
   Subsequent weeks show the unpaid remainder; saved historical rows retain their
@@ -1128,6 +1132,8 @@ assignment lookup lists.
   restricted. Legacy settled totals/responsibility cannot be repurposed.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
+  `node scripts/test-investors-e2e.mjs --expense-window-only` verifies both payroll
+  UIs and autosave against the real API/database using the investor test database.
 
 - Escrow is a standalone Accounting feature at /accounting/escrow and a Driver
   detail tab, with Required, Balance, Still owed, funding status filters and history.

@@ -63,11 +63,12 @@ try {
     await expect(region).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     const geometry = await region.evaluate(el => ({ height: el.clientHeight, scroll: el.scrollHeight, rows: [...el.querySelectorAll('tr')].map(row => row.getBoundingClientRect().height) }));
-    expect(geometry.rows.every(height => height === 32), JSON.stringify(geometry)).toBe(true);
+    // Chromium can report subpixel float noise (32.00003px) at scaled displays.
+    expect(geometry.rows.every(height => Math.abs(height - 32) < 0.01), JSON.stringify(geometry)).toBe(true);
     expect(geometry.height).toBe(320);
     expect(geometry.scroll).toBe(geometry.height);
     const loads = page.getByRole('region', { name: 'Grid Test weekly loads' });
-    await expect.poll(() => loads.locator('table').first().evaluate(table => [...table.tBodies[0].rows].map(row => row.getBoundingClientRect().height))).toEqual(Array(10).fill(32));
+    await expect.poll(() => loads.locator('table').first().evaluate(table => [...table.tBodies[0].rows].map(row => Math.round(row.getBoundingClientRect().height * 100) / 100))).toEqual(Array(10).fill(32));
     expect(await loads.locator('[data-pay-totals] > th').evaluate(cell => getComputedStyle(cell).borderTopWidth)).toBe('1px');
     expect(await region.locator('tr:last-child > td').first().evaluate(cell => getComputedStyle(cell).borderBottomWidth)).toBe('1px');
     const fuel = page.getByLabel('Grid Test, Fuel, amount', { exact: true });

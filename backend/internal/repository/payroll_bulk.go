@@ -6,6 +6,8 @@ import (
 )
 
 func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
+	// Expenses are eligible through the following Wednesday (Thursday is
+	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
 	rows, err := tx.Query(ctx, `SELECT e.charge_driver_id::text,e.id, coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
  e.expense_date::text,e.amount::text,
  (e.amount-coalesce(p.other,0))::text,
@@ -18,7 +20,7 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
  LEFT JOIN LATERAL (SELECT sum(amount) FILTER (WHERE week_start<>$2::date) AS other,
  sum(amount) FILTER (WHERE week_start<$2::date) AS prior FROM expense_payments WHERE expense_id=e.id) p ON true
  WHERE e.charge_driver_id=ANY($1::uuid[]) AND w.investor_truck_id IS NULL AND NOT e.driver_settled
- AND e.expense_date<$2::date+7 AND e.amount>=0
+ AND e.expense_date<$2::date+10 AND e.amount>=0
  AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0))
  ORDER BY e.expense_date,e.id`, drivers, week)
 	if err != nil {
