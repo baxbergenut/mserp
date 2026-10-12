@@ -174,10 +174,10 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			for i := range deductions {
 				deductions[i].Apply = !deductions[i].Saved
 			}
-			if _, err = saveExpenseDeductions(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
+			if _, err = saveTeamExpenses(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
 				return empty, err
 			}
-			data, loads, e := chargeData(ctx, tx, d.ID)
+			data, loads, e := chargeData(ctx, tx, "")
 			if e != nil {
 				return empty, e
 			}
@@ -192,7 +192,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				}
 				for i := range data.Schedules {
 					if data.Schedules[i].ID == row.ScheduleID {
-						if err = freezeChargesBefore(ctx, tx, &data.Schedules[i], report.WeekStart, loads[d.ID]); err != nil {
+						if err = freezeChargesBefore(ctx, tx, &data.Schedules[i], report.WeekStart, loads[data.Schedules[i].DriverID]); err != nil {
 							return empty, err
 						}
 					}

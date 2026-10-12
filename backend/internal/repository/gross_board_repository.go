@@ -141,8 +141,8 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
- WHERE (d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
- AND e.service_date < $1::date+7)
+ WHERE payroll_driver_at(d.id,$1::date)=d.id AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
+ AND e.service_date < $1::date+7))
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
 		return board, err

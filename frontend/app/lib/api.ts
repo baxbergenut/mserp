@@ -1,4 +1,7 @@
 import { expandBoard } from "./compactBoard";
+import type { DriverTeam, DriverTeamInput } from "./types";
+export const fetchDriverTeam = (id: string) => apiRequest<DriverTeam>(`/drivers/${id}/team`);
+export const saveDriverTeam = (id: string, input: DriverTeamInput) => apiRequest<DriverTeam>(`/drivers/${id}/team`, { method: "PUT", body: JSON.stringify(input) });
 import { ReadRequests } from "./readRequests";
 import type { Updater, UpdaterInput } from "./types";
 import type { DriverStatusChange, PaySourceAcceptance, PayPageQuery } from "./types";

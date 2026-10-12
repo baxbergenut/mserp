@@ -282,6 +282,9 @@ export interface DriverStatusChange {
   updatedAt: string;
 }
 export interface Driver {
+  teamRole?: "main" | "team";
+  teamPartnerId?: string;
+  teamPartnerName?: string;
   status?: DriverStatus;
   terminationDate?: string | null;
   driverHome: string;
@@ -939,6 +942,8 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  teamNotice?: string;
+  teamDrivers?: { id: string; name: string }[];
   truckInactive?: boolean;
   operatingDrivers?: { id: string; name: string }[];
   investorId?: string;
@@ -1071,7 +1076,23 @@ export interface ChargeSchedule {
   eligibility: ChargeEligibility; total: string | null; version: number; phases: ChargePhase[]; occurrences: ChargeOccurrence[];
   confirmed: string; remaining: string; scheduled: string; completionWeek: string; status: string;
 }
-export interface ChargeData { types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string }
+export interface ChargeData { types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string; teamPeriods?: DriverTeamPeriod[] }
+
+export interface DriverTeamPeriod {
+  id: string;
+  mainDriverId: string;
+  mainDriverName: string;
+  teamDriverId: string;
+  teamDriverName: string;
+  mainActive: boolean;
+  teamActive: boolean;
+  mainTerminationDate?: string;
+  teamTerminationDate?: string;
+  startWeek: string;
+  endWeek: string | null;
+}
+export interface DriverTeam { version: number; periods: DriverTeamPeriod[] }
+export interface DriverTeamInput { teamDriverId: string; weekStart: string; version: number }
 export interface ChargeCreate {
   driverIds: string[]; typeId: string; kind: "recurring" | "installment"; name: string; amount: string; total: string;
   installments: number; startWeek: string; endWeek: string | null; eligibility: "calendar" | "loads";

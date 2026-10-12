@@ -189,13 +189,20 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err = lockChargeDrivers(ctx, tx, []string{c.DriverID}); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+		return err
+	}
+	members, err := teamPayMembers(ctx, tx, c.DriverID, c.WeekStart)
+	if err != nil {
+		return err
+	}
+	if err = lockChargeDrivers(ctx, tx, members); err != nil {
 		return err
 	}
 	if err = assertPayrollOpen(ctx, tx, c.DriverID, c.WeekStart); err != nil {
 		return err
 	}
-	data, loads, err := chargeData(ctx, tx, c.DriverID)
+	data, loads, err := chargeData(ctx, tx, "")
 	if err != nil {
 		return err
 	}
@@ -212,10 +219,16 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 				break
 			}
 		}
-		if s == nil || s.Kind != "installment" {
+		member := false
+		if s != nil {
+			for _, id := range members {
+				member = member || id == s.DriverID
+			}
+		}
+		if s == nil || !member || s.Kind != "installment" {
 			return chargeInvalid("Select this driver's installment deductions")
 		}
-		rows, err := projectCharges(*s, c.WeekStart, loads[c.DriverID], false)
+		rows, err := projectCharges(*s, c.WeekStart, loads[s.DriverID], false)
 		if err != nil {
 			return err
 		}
@@ -242,7 +255,7 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 		if amount >= 0 {
 			return chargeInvalid("Only a nonzero deduction can be confirmed")
 		}
-		if err = freezeChargesBefore(ctx, tx, s, c.WeekStart, loads[c.DriverID]); err != nil {
+		if err = freezeChargesBefore(ctx, tx, s, c.WeekStart, loads[s.DriverID]); err != nil {
 			return err
 		}
 		before := *current

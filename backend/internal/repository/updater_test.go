@@ -49,11 +49,11 @@ func TestUpdaterDatabase(t *testing.T) {
 			if mode == "fresh" {
 				exec(string(source))
 			} else {
-				before, _, ok := strings.Cut(string(source), string(migration))
+				before, after, ok := strings.Cut(string(source), string(migration))
 				if !ok {
 					t.Fatal("migration differs from init")
 				}
-				exec(before)
+				exec(before + after)
 				exec(string(migration))
 			}
 			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)

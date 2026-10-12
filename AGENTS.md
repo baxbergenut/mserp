@@ -1658,3 +1658,19 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - node scripts/test-investors-e2e.mjs --payroll-workflows-only covers corrections,
   pagination/search, working start dates, quick status changes, global/Gross Board
   search, all seven themes and narrow layouts against an isolated API/database.
+
+## Driver teams (migration 078)
+
+- Configure one main driver and one team member in Driver Overview > Driver team,
+  with an effective Monday and optimistic version. GET/PUT `/drivers/{id}/team`
+  use fleet.read/payroll.write. Dispatch, tariff, escrow and recurring charges
+  belong to the main driver; weekly Driver Pay has one statement showing both names.
+  Team members cannot have recurring phases or independent loads/truck assignments
+  during the team period. Prior solo history and individual identities remain.
+- `payroll_driver_at` routes confirmed production Relay diesel/DEF by merchant-local
+  purchase date, preserving source driver IDs and investor truck cost routing.
+  Existing personal expenses/installments use the main statement with separate
+  principal ledgers. Finalized statements and later saved cost weeks guard changes;
+  termination requires an explicit team end-week review. See `docs/DRIVER_TEAMS.md`.
+- `TestDriverTeamsDatabase` uses the existing disposable driver-pay test database.
+  `node scripts/test-investors-e2e.mjs --teams-only` validates the real API/browser.

@@ -127,7 +127,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN investors i ON i.id=t.owner_id
  LEFT JOIN driver_board b ON b.driver_id=d.id
  `+fiveELDLocationJoinSQL+`
- WHERE d.active
+ WHERE d.active AND payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)=d.id
  ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
 	if err != nil {
 		return result, err

@@ -44,6 +44,9 @@ func routePermission(method, path string) string {
 	if resource == "drivers" && (strings.HasSuffix(path, "/pay-history") || strings.HasSuffix(path, "/settlement-history")) {
 		return "payroll.read"
 	}
+	if resource == "drivers" && strings.HasSuffix(path, "/team") && !read {
+		return "payroll.write"
+	}
 	switch resource {
 	case "relay-drivers":
 		if read || path == "/relay-drivers/refresh" {

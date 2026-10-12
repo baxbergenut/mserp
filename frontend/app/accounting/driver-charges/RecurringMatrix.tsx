@@ -30,7 +30,7 @@ export default function RecurringMatrix({ filters, data, drivers, search, driver
     }
     return grouped;
   }, [data.schedules]);
-  const visible = drivers.filter(d => (!driverFilter || driverFilter === d.id) && d.fullName.toLowerCase().includes(search.toLowerCase()));
+  const visible = drivers.filter(d => !(data.teamPeriods ?? []).some(t => t.teamDriverId === d.id && t.startWeek <= week && (!t.endWeek || week < t.endWeek)) && (!driverFilter || driverFilter === d.id) && d.fullName.toLowerCase().includes(search.toLowerCase()));
   const types = data.types.filter(t => (!typeFilter || t.id === typeFilter) && (!t.archived || archived));
   const validWeek = validChargeWeek(week);
   function inputFor(driver: Driver, type: ChargeType, included: boolean, amount: string): ChargeCell {
@@ -47,6 +47,7 @@ export default function RecurringMatrix({ filters, data, drivers, search, driver
       <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => onArchivedChange(e.target.checked)} />Archived types</label>
     </div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a Monday between 2000 and 2100.</p>}
+    {(data.teamPeriods ?? []).filter(t => t.teamDriverId === driverFilter && t.startWeek <= week && (!t.endWeek || week < t.endWeek)).map(t => <p key={t.id} className="text-xs text-zinc-400">Recurring charges use <Link className="text-blue-400" href={`/accounting/driver-charges?driverId=${t.mainDriverId}`}>{t.mainDriverName}</Link>, the main driver for this week.</p>)}
     <div data-scroll-key="driver-recurring-charges" data-scroll-initial-x="start" className="overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full text-left text-xs text-zinc-300">
         <thead><tr className="bg-zinc-900"><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Driver</th>{types.map(type => {

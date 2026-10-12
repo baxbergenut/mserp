@@ -393,7 +393,9 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			for _, d := range moved.Drivers {
-				if len(d.Edits.GeneratedCharges) > 0 {
+				// Other handoff fixtures may still have legitimate charges before
+				// their current-week reassignment. Check the driver just moved.
+				if d.ID == driver && len(d.Edits.GeneratedCharges) > 0 {
 					t.Fatal("moved fee still charged to driver")
 				}
 			}

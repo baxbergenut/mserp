@@ -23,6 +23,11 @@ type chargeQuery interface {
 func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, map[string]map[string]bool, error) {
 	data := ChargeData{Types: []ChargeType{}, Schedules: []ChargeSchedule{}, CurrentWeek: ChargeCurrentWeek()}
 	loads := map[string]map[string]bool{}
+	teams, teamErr := readDriverTeams(ctx, q, "")
+	if teamErr != nil {
+		return data, loads, teamErr
+	}
+	data.TeamPeriods = teams.Periods
 	rows, err := q.Query(ctx, `SELECT id::text,name,direction,amount::text,archived,version,amounts::text[],eligibility FROM driver_charge_types ORDER BY name,id`)
 	if err != nil {
 		return data, loads, err
@@ -150,6 +155,9 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	}
 	err = rows.Err()
 	rows.Close()
+	if err == nil {
+		err = addTeamChargeLoads(ctx, q, loads)
+	}
 	return data, loads, err
 }
 func (r *DriverChargeRepository) List(ctx context.Context, driver string) (ChargeData, error) {

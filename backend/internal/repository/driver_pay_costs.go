@@ -8,14 +8,14 @@ package repository
 // tolls remain outside payroll. Aggregate before joining load slots so repeated
 // board entries cannot multiply costs.
 var driverPayCostsSQL = `WITH weekly_fuel AS (
- SELECT f.driver_id, SUM(i.total_amount_paid) AS total
+ SELECT payroll_driver_at(f.driver_id,f.purchased_on) AS driver_id, SUM(i.total_amount_paid) AS total
  FROM fuel_transactions f
  JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
  WHERE f.relay_environment='production' AND f.driver_id IS NOT NULL
  AND i.item_kind='fuel'
  AND f.purchased_on >= $1::date
  AND f.purchased_on < $1::date+7
- GROUP BY f.driver_id
+ GROUP BY payroll_driver_at(f.driver_id,f.purchased_on)
 ), weekly_tolls AS (
  SELECT assignment.driver_id, SUM(t.amount) AS total
  FROM tolls t

@@ -449,7 +449,7 @@ WITH load_events AS (
 			l.pickup_appointment_time
 		  ) IS NOT NULL
 ), fuel_events AS (
-	SELECT t.driver_id,
+	SELECT payroll_driver_at(t.driver_id,t.purchased_on) AS driver_id,
 		t.purchased_on AS purchased_on,
 		COALESCE(SUM(i.total_amount_paid), 0) AS spend
 	FROM fuel_transactions t

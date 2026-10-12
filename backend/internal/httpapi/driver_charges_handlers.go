@@ -26,6 +26,10 @@ func registerDriverChargeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			return
 		}
 		var pg *pgconn.PgError
+		if errors.As(err, &pg) && pg.Code == "23514" && pg.Message == "Configure recurring charges on the main driver, not the team driver" {
+			writeAPIError(w, 409, pg.Message)
+			return
+		}
 		if errors.As(err, &pg) && (pg.Code == "23503" || pg.Code == "23505" || pg.Code == "23514") {
 			writeAPIError(w, 409, "A related record changed or this charge conflicts with an existing record; reload and review")
 			return

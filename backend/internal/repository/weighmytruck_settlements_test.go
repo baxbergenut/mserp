@@ -69,6 +69,7 @@ func TestWMTSettlementDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				run(string(m))
+				applyLaterTestMigrations(t, ctx, admin, "074")
 			} else {
 				run(string(init))
 			}

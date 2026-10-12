@@ -80,6 +80,9 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			exec(`CREATE SCHEMA ` + quoted + `;SET search_path TO ` + quoted + `,public;GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app`)
 			defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public;DROP SCHEMA `+quoted+` CASCADE`) }()
 			source := strings.ReplaceAll(string(initSQL), "\r\n", "\n")
+			if mode == "migration" {
+				source = withoutDriverTeams(t, source)
+			}
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			standaloneBody := strings.ReplaceAll(string(standalone), "\r\n", "\n")
 			renameBody := strings.ReplaceAll(string(renameMigration), "\r\n", "\n")
@@ -124,6 +127,9 @@ func TestDriverEscrowDatabase(t *testing.T) {
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 
+			if mode == "migration" {
+				applyDriverTeams(t, ctx, admin)
+			}
 			cfg, parseErr := pgxpool.ParseConfig(dsn)
 			if parseErr != nil {
 				t.Fatal(parseErr)

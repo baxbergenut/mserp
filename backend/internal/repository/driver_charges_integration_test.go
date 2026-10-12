@@ -58,6 +58,9 @@ func TestDriverChargesDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
+			if mode == "migration" {
+				source = withoutDriverTeams(t, source)
+			}
 			deletion, err := os.ReadFile("../../sql/055_charge_type_deletion.sql")
 			if err != nil {
 				t.Fatal(err)
@@ -145,6 +148,9 @@ func TestDriverChargesDatabase(t *testing.T) {
 				if _, err := admin.Exec(ctx, string(remainders)); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if mode == "migration" {
+				applyDriverTeams(t, ctx, admin)
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

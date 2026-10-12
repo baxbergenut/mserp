@@ -315,10 +315,11 @@ function DriversContent() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="font-medium text-zinc-200 hover:text-blue-400">{driver.fullName}</button> : <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>}{driver.intakeId && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">New</span>}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{formatPhone(driver.phone) || driver.email || "No contact info"}</div>
+                    {driver.teamRole && <Link href={`/drivers/detail?id=${driver.teamPartnerId}`} className="text-[11px] text-blue-400">{driver.teamRole === "main" ? "Main" : "Team"} · {driver.teamPartnerName}</Link>}
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{driver.isOwnerOperator ? "Owner-operator" : "Company"}</td>
                   <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">
-                    {driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate.toFixed(4)}/mi` : `${driver.payRate.toFixed(2)}% gross`}
+                    {driver.teamRole === "team" ? <span className="font-sans text-zinc-500">Main driver’s statement</span> : driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate.toFixed(4)}/mi` : `${driver.payRate.toFixed(2)}% gross`}
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{driver.dispatcherName ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-zinc-300">{driver.truckUnit ?? "—"}</td>

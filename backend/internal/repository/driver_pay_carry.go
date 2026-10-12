@@ -114,6 +114,9 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 		if e != nil {
 			return nil, e
 		}
+		if e = routeTeamPay(ctx, tx, &report); e != nil {
+			return nil, e
+		}
 		report, e = overlayPayrollSettlements(ctx, tx, report, "")
 		if e != nil {
 			return nil, e

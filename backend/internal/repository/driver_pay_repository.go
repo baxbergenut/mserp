@@ -74,6 +74,8 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	TeamNotice       string             `json:"teamNotice,omitempty"`
+	TeamDrivers      []PayPerson        `json:"teamDrivers,omitempty"`
 	TruckInactive    bool               `json:"truckInactive,omitempty"`
 	OperatingDrivers []PayPerson        `json:"operatingDrivers,omitempty"`
 	InvestorID       string             `json:"investorId,omitempty"`
@@ -145,6 +147,9 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	if err != nil {
 		return result, err
 	}
+	if err = routeTeamPay(ctx, tx, &result); err != nil {
+		return result, err
+	}
 	if err = applyDriverPayCarry(ctx, tx, &result); err != nil {
 		return result, err
 	}
@@ -179,7 +184,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND ((d.active AND `+weeklyDriverStartedSQL+`) OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present OR EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7)) AND (EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7) OR escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
+ AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS(SELECT 1 FROM driver_teams dt WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR $1::date<dt.end_week)) OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present OR EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7)) AND (EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7) OR escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
  (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
  OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
  AND NOT x.driver_settled AND x.expense_date<$1::date+7)
@@ -364,7 +369,14 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	defer tx.Rollback(ctx)
-	if err = lockChargeDrivers(ctx, tx, []string{edits.DriverID}); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+		return edits, err
+	}
+	members, err := teamPayMembers(ctx, tx, edits.DriverID, edits.WeekStart)
+	if err != nil {
+		return edits, err
+	}
+	if err = lockChargeDrivers(ctx, tx, members); err != nil {
 		return edits, err
 	}
 	if err = assertPayrollOpen(ctx, tx, edits.DriverID, edits.WeekStart); err != nil {
@@ -382,7 +394,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	if edits.GeneratedCharges != nil {
-		edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
+		edits.GeneratedCharges, err = saveTeamCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
 		if err != nil {
 			return edits, err
 		}
@@ -397,7 +409,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 				return edits, chargeInvalid("This expense belongs to another settlement; reload payroll")
 			}
 		}
-		edits.ExpenseDeductions, err = saveExpenseDeductions(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
+		edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
 		if err != nil {
 			return edits, err
 		}

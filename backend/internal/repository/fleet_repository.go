@@ -22,6 +22,9 @@ func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
 }
 
 type Driver struct {
+	TeamRole           string     `json:"teamRole,omitempty"`
+	TeamPartnerID      *string    `json:"teamPartnerId,omitempty"`
+	TeamPartnerName    *string    `json:"teamPartnerName,omitempty"`
 	Status             string     `json:"status"`
 	TerminationDate    *time.Time `json:"terminationDate"`
 	DriverHome         string     `json:"driverHome"`
@@ -429,13 +432,19 @@ SELECT d.id, d.full_name, d.is_owner_operator, d.pay_type, d.pay_rate,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
 	d.dispatcher_id, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
-	d.created_at, d.updated_at, d.driver_home, d.driver_home_version, d.status, d.termination_date
+	d.created_at, d.updated_at, d.driver_home, d.driver_home_version, d.status, d.termination_date,
+	coalesce(team.role,''),team.partner_id,team.partner_name
 FROM drivers d
 LEFT JOIN dispatchers dp ON dp.id = d.dispatcher_id
 LEFT JOIN truck_driver_assignments a ON a.driver_id = d.id AND a.unassigned_at IS NULL
 LEFT JOIN trucks t ON t.id = a.truck_id
 LEFT JOIN investors i ON i.id = t.owner_id
-LEFT JOIN files f ON f.id = d.cdl_file_id`
+LEFT JOIN files f ON f.id = d.cdl_file_id
+LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
+ p.id::text partner_id,p.full_name partner_name FROM driver_teams dt
+ JOIN drivers p ON p.id=CASE WHEN dt.main_driver_id=d.id THEN dt.team_driver_id ELSE dt.main_driver_id END
+ WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=(now() AT TIME ZONE 'America/New_York')::date
+ AND (dt.end_week IS NULL OR (now() AT TIME ZONE 'America/New_York')::date<dt.end_week)) team ON true`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -454,6 +463,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.CDLFileID, &value.CDLFileName, &value.CDLFileContentType,
 		&value.CDLFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt, &value.DriverHome, &value.HomeVersion, &value.Status, &value.TerminationDate,
+		&value.TeamRole, &value.TeamPartnerID, &value.TeamPartnerName,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	value.FullName = formatPersonName(value.FullName)

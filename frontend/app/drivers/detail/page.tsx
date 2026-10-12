@@ -17,6 +17,7 @@ import { DriverChargeSummary } from "./DriverChargeSummary";
 import { AssignmentHistory } from "./AssignmentHistory";
 import { DriverStatusDialog } from "../DriverStatusDialog";
 import { DriverEditor } from "./DriverEditor";
+import { DriverTeamPanel } from "./DriverTeamPanel";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { OwnershipPanel } from "@/app/components/fleet/OwnershipPanel";
 import { PayHistory } from "./PayHistory";
@@ -61,7 +62,7 @@ export default function DriverDetailPage() {
     return () => { cancelled = true; };
   }, [driver]);
   const currentTruck = truck?.id === driver?.truckId ? truck : null;
-  const rate = driver ? driver.payType === "cpm" ? `$${driver.payRate.toFixed(2)} / mile` : `${driver.payRate}% of driver gross` : "";
+  const rate = driver ? driver.teamRole === "team" ? "Main driver’s statement" : driver.payType === "cpm" ? `$${driver.payRate.toFixed(2)} / mile` : `${driver.payRate}% of driver gross` : "";
   return <div className="space-y-5 animate-fade-in">
     {error && <><ErrorBanner message={error} /><button className="text-sm text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry driver</button></>}
     {!driver && !error && <p className="py-12 text-center text-zinc-500">Loading driver…</p>}
@@ -74,6 +75,7 @@ export default function DriverDetailPage() {
       {tab === "Overview" && <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]"><div className="min-w-0 space-y-5">
         <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Contact & personal details</h2><dl className="grid grid-cols-1 gap-5 text-xs sm:grid-cols-2">{[["Driver home", driver.driverHome], ["Phone", formatPhone(driver.phone)], ["Email", driver.email], ["Address", [driver.address, driver.city, driver.state, driver.postalCode].filter(Boolean).join(", ")], ["Emergency contact", driver.emergencyContact], ["Hire date", showDate(driver.hireDate)], ["Last updated", showDate(driver.updatedAt)]].map(([label, value]) => <div key={label}><dt className="text-zinc-500">{label}</dt><dd className="mt-1 break-words text-zinc-300">{value || "Not recorded"}</dd></div>)}</dl></section>
           <section className="rounded-xl border border-zinc-800 p-5"><div className="mb-4 flex items-center gap-2"><FileBadge className="h-4 w-4 text-zinc-500" /><h2 className="text-sm font-semibold text-zinc-100">License & documents</h2></div><dl className="grid grid-cols-1 gap-5 text-xs sm:grid-cols-2">{[["License number", driver.licenseNumber], ["License state", driver.licenseState], ["Expires", showDate(driver.licenseExpires)]].map(([label,value]) => <div key={label}><dt className="text-zinc-500">{label}</dt><dd className="mt-1 text-zinc-300">{value || "Not recorded"}</dd></div>)}</dl>{driver.cdlFileId && <a className="mt-5 inline-block text-xs text-blue-400" href={fileDownloadUrl(driver.cdlFileId)} target="_blank" rel="noreferrer">Open CDL · {driver.cdlFileName}</a>}</section></div>
+        <DriverTeamPanel driver={driver} onSaved={() => setAttempt(v => v + 1)} />
         <DriverChargeSummary driverId={driver.id} />
         <ProfileNotes key={driver.id} kind="drivers" id={driver.id} legacy={driver.notes} />
       </div><aside className="min-w-0"><TruckLocationPanel key={`${driver.id}:${driver.updatedAt}`} driverId={driver.id} /></aside></div>}

@@ -111,6 +111,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
           </button>
           <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{driver.settlement?.finalized && <span className="text-[10px] text-emerald-400">Finalized</span>}
+          {!investor && driver.teamDrivers?.map(person => <Link key={person.id} title={`Team driver: ${person.name}. This statement uses the main driver's tariff.`} href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()} className="truncate text-[10px] text-blue-400">+ {person.name}</Link>)}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
         </div>
       </th>
@@ -125,6 +126,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
     {open && <tr><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
+        {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>

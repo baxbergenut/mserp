@@ -57,6 +57,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		for _, person := range d.OperatingDrivers {
 			text += " " + person.Name
 		}
+		for _, person := range d.TeamDrivers {
+			text += " " + person.Name
+		}
 		if !matches(d.ID, d.DispatcherID, text) {
 			continue
 		}

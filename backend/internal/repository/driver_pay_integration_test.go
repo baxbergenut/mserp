@@ -56,6 +56,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			if mode == "migration" {
+				sql = withoutDriverTeams(t, sql)
+			}
 			remainders, err := os.ReadFile("../../sql/053_payroll_remainders.sql")
 			if err != nil {
 				t.Fatal(err)
@@ -143,6 +146,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				if _, err := admin.Exec(ctx, string(remainders)); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if mode == "migration" {
+				applyDriverTeams(t, ctx, admin)
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

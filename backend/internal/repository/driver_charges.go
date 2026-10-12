@@ -132,9 +132,10 @@ type ChargeEvent struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 type ChargeData struct {
-	Types       []ChargeType     `json:"types"`
-	Schedules   []ChargeSchedule `json:"schedules"`
-	CurrentWeek string           `json:"currentWeek"`
+	TeamPeriods []DriverTeamPeriod `json:"teamPeriods,omitempty"`
+	Types       []ChargeType       `json:"types"`
+	Schedules   []ChargeSchedule   `json:"schedules"`
+	CurrentWeek string             `json:"currentWeek"`
 }
 type ChargeCreate struct {
 	DriverIDs    []string `json:"driverIds"`

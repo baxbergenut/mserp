@@ -34,6 +34,8 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Get("/drivers/setup-defaults", handler.getDriverSetupDefaults)
 	r.Get("/drivers/{id}", handler.getDriver)
 	r.Get("/drivers/{id}/assignments", handler.getDriverAssignments)
+	r.Get("/drivers/{id}/team", handler.driverTeam)
+	r.Put("/drivers/{id}/team", handler.driverTeam)
 	r.Get("/drivers/{id}/notes", handler.profileNotes)
 	r.Post("/drivers/{id}/notes", handler.profileNotes)
 	r.Get("/drivers/{id}/location", handler.getDriverTruckLocation)
@@ -608,7 +610,7 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 		writeAPIError(w, 409, err.Error())
 		return
 	}
-	if errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrProfileNoteConflict) {
+	if errors.Is(err, repository.ErrDriverTeamConflict) || errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrProfileNoteConflict) {
 		writeAPIError(w, http.StatusConflict, err.Error())
 		return
 	}
@@ -624,6 +626,10 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
 		case "23514":
+			if strings.HasPrefix(postgresError.Message, "Assign the truck to the main driver") || strings.HasPrefix(postgresError.Message, "A driver can belong to only one") {
+				writeAPIError(w, http.StatusConflict, postgresError.Message)
+				return
+			}
 			if strings.HasPrefix(postgresError.Message, "The selected week precedes") || strings.HasPrefix(postgresError.Message, "Reopen finalized") {
 				writeAPIError(w, http.StatusConflict, postgresError.Message)
 				return
