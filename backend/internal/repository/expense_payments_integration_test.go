@@ -116,6 +116,11 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
+				bridge, readErr := os.ReadFile("../../sql/087_retire_expense_company.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(bridge))
 				for _, name := range []string{"084_gross_board_notes.sql", "085_expense_verification.sql", "086_driver_pay_layover.sql"} {
 					body, readErr := os.ReadFile("../../sql/" + name)
 					if readErr != nil {
@@ -142,7 +147,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if err = admin.QueryRow(ctx, `SELECT id::text FROM expense_settings WHERE kind='category' AND name='Penalties'`).Scan(&penaltyCategory); err != nil {
 				t.Fatal(err)
 			}
-			input := ExpenseInput{Company: "MS Express", CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &driver, Amount: "100.25", ExpenseType: payTestString("Parking violation"), Description: payTestString("Long explanation that must not appear in Driver Pay"), CoveredBy: payTestString("Driver")}
+			input := ExpenseInput{CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &driver, Amount: "100.25", ExpenseType: payTestString("Parking violation"), Description: payTestString("Long explanation that must not appear in Driver Pay"), CoveredBy: payTestString("Driver")}
 			e, err := expenses.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)

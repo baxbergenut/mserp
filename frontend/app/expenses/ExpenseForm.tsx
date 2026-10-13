@@ -12,7 +12,6 @@ import {
 } from "../components/management/ManagementUI";
 
 export const emptyExpenseInput: ExpenseInput = {
-  company: "MS Express",
   categoryId: "",
   expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
@@ -33,7 +32,6 @@ export const emptyExpenseInput: ExpenseInput = {
 export function expenseToInput(expense: Expense): ExpenseInput {
   return {
     ownerId: expense.ownerId,
-    company: expense.company,
     categoryId: expense.categoryId,
     expenseDate: expense.expenseDate ?? "",
     truckId: expense.truckId,

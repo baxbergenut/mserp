@@ -87,7 +87,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			expenses := NewExpenseRepository(pool)
 			create := func(offset int) Expense {
 				t.Helper()
-				e, err := expenses.CreateExpense(ctx, ExpenseInput{Company: "MS Express", CategoryID: category,
+				e, err := expenses.CreateExpense(ctx, ExpenseInput{CategoryID: category,
 					ExpenseType: payTestString(fmt.Sprintf("Window day %d", offset)), ExpenseDate: week.AddDate(0, 0, offset),
 					DriverID: &driver, OwnerID: owner, TruckID: truck, CoveredBy: &coveredBy, Amount: "100.25"})
 				if err != nil {

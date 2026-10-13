@@ -76,6 +76,11 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(verificationMigration))
+				bridge, readErr := os.ReadFile("../../sql/087_retire_expense_company.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(bridge))
 			} else {
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT 'MS Express',id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
@@ -139,7 +144,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			if !errors.As(err, &pg) || pg.Code != "23505" {
 				t.Fatalf("duplicate accepted: %v", err)
 			}
-			input := ExpenseInput{Company: "MS Express", CategoryID: cat.ID, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
+			input := ExpenseInput{CategoryID: cat.ID, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
 			expense, err := repo.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)

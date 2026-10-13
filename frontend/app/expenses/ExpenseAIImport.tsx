@@ -31,7 +31,6 @@ function isSupportedAttachment(file: File) {
 
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
-    company: "MS Express",
     categoryId: draft.categoryId,
     expenseDate: draft.expenseDate,
     truckId: draft.truckId,

@@ -410,7 +410,11 @@ export const fetchExpensesPage = (query: PageQuery & {
   responsibility?: "non_personal";
   chargeDriverId?: string;
   categoryId?: string;
-  company?: string;
+  paymentType?: string;
+  paidBy?: string;
+  coveredBy?: string;
+  unitNumber?: string;
+  driverName?: string;
   dateFrom?: string;
   dateTo?: string;
   truckId?: string;

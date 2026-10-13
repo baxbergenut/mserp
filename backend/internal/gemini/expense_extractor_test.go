@@ -85,7 +85,7 @@ func TestExpenseSchemaStaysWithinGeminiComplexityLimit(t *testing.T) {
 		t.Fatalf("expense schema is %d bytes; keep the Gemini wire schema compact", len(encoded))
 	}
 	value := string(encoded)
-	if strings.Contains(value, `"description"`) || strings.Contains(value, `"company"`) {
+	if strings.Contains(value, `"description"`) || strings.Contains(value, `"company"`) || strings.Contains(value, `"co"`) {
 		t.Fatalf("expense schema contains verbose wire fields: %s", value)
 	}
 	if !strings.Contains(value, `"items"`) || !strings.Contains(value, `"amt"`) {

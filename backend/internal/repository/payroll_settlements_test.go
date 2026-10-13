@@ -33,7 +33,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err := admin.QueryRow(ctx, `SELECT id::text FROM expense_settings WHERE kind='category' AND name='Penalties'`).Scan(&penaltyCategory); err != nil {
 		t.Fatal(err)
 	}
-	input := ExpenseInput{Company: "MS Express", CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &operator, OwnerID: &owner, Amount: "50.25", CoveredBy: payTestString("Truck Owner")}
+	input := ExpenseInput{CategoryID: penaltyCategory, ExpenseDate: week, DriverID: &operator, OwnerID: &owner, Amount: "50.25", CoveredBy: payTestString("Truck Owner")}
 	expense, err := expenses.CreateExpense(ctx, input)
 	if err != nil {
 		t.Fatal(err)

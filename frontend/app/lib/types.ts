@@ -716,7 +716,6 @@ export interface Expense {
   id: string;
   truckId: string | null;
   driverId: string | null;
-  company: string;
   category: ExpenseCategory;
   categoryId: string;
   createdByName: string | null;
@@ -758,7 +757,6 @@ export interface DriverEscrowSetting {
 
 export interface ExpenseInput {
  ownerId?: string | null;
-  company: string;
   categoryId: string;
   expenseDate: string;
   truckId: string | null;
@@ -780,7 +778,7 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
   options: {
     settings: ExpenseSetting[];
     categories: { id: string; name: string }[];
-    companies: string[];
+    filters: { drivers: string[]; trucks: string[]; paymentTypes: string[]; paidBy: string[]; coveredBy: string[] };
     paymentTypes: string[];
     expenseTypes: string[];
     paidBy: string[];

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"math/big"
@@ -46,23 +47,24 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
-	OwnerID            *string `json:"ownerId"`
-	Company            string  `json:"company"`
-	CategoryID         string  `json:"categoryId"`
-	ExpenseDate        string  `json:"expenseDate"`
-	TruckID            *string `json:"truckId"`
-	DriverID           *string `json:"driverId"`
-	UnitNumber         string  `json:"unitNumber"`
-	DriverName         string  `json:"driverName"`
-	Amount             string  `json:"amount"`
-	PaymentType        string  `json:"paymentType"`
-	ExpenseType        string  `json:"expenseType"`
-	ReferenceNumber    string  `json:"referenceNumber"`
-	Description        string  `json:"description"`
-	CoveredBy          string  `json:"coveredBy"`
-	PaidBy             string  `json:"paidBy"`
-	ManagerVerified    bool    `json:"managerVerified"`
-	AccountingVerified bool    `json:"accountingVerified"`
+	OwnerID *string `json:"ownerId"`
+
+	LegacyCompany      json.RawMessage `json:"company,omitempty"` // Ignored for clients opened before the field was retired.
+	CategoryID         string          `json:"categoryId"`
+	ExpenseDate        string          `json:"expenseDate"`
+	TruckID            *string         `json:"truckId"`
+	DriverID           *string         `json:"driverId"`
+	UnitNumber         string          `json:"unitNumber"`
+	DriverName         string          `json:"driverName"`
+	Amount             string          `json:"amount"`
+	PaymentType        string          `json:"paymentType"`
+	ExpenseType        string          `json:"expenseType"`
+	ReferenceNumber    string          `json:"referenceNumber"`
+	Description        string          `json:"description"`
+	CoveredBy          string          `json:"coveredBy"`
+	PaidBy             string          `json:"paidBy"`
+	ManagerVerified    bool            `json:"managerVerified"`
+	AccountingVerified bool            `json:"accountingVerified"`
 }
 
 type expenseBatchRequest struct {
@@ -70,7 +72,6 @@ type expenseBatchRequest struct {
 }
 
 type extractedExpense struct {
-	Company         string   `json:"company"`
 	Category        string   `json:"category"`
 	CategoryID      string   `json:"categoryId"`
 	ExpenseDate     string   `json:"expenseDate"`
@@ -94,13 +95,9 @@ type expenseExtractionResponse struct {
 }
 
 func (request expenseRequest) validate() (repository.ExpenseInput, error) {
-	request.Company = strings.TrimSpace(request.Company)
 	request.CategoryID = strings.TrimSpace(request.CategoryID)
 	request.Amount = strings.TrimSpace(request.Amount)
 	request.ExpenseType = strings.TrimSpace(request.ExpenseType)
-	if request.Company == "" {
-		return repository.ExpenseInput{}, errors.New("company is required")
-	}
 	if !isUUID(request.CategoryID) {
 		return repository.ExpenseInput{}, errors.New("select a valid category")
 	}
@@ -145,8 +142,8 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		}
 	}
 	return repository.ExpenseInput{
-		OwnerID: request.OwnerID,
-		Company: request.Company, CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
+		OwnerID:    request.OwnerID,
+		CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
 		TruckID: request.TruckID, DriverID: request.DriverID,
 		UnitNumber: optionalString(request.UnitNumber), DriverName: optionalString(request.DriverName),
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
@@ -220,11 +217,16 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		ChargeDriverID: chargeDriverID, Responsibility: responsibility,
 		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
 		CategoryID: categoryID, VisibleCategoryIDs: visible, AccessibleCategoryIDs: accessible,
-		Company:  strings.TrimSpace(r.URL.Query().Get("company")),
-		DateFrom: dateFrom,
-		DateTo:   dateTo,
-		TruckID:  truckID,
-		DriverID: driverID,
+
+		PaymentType: strings.TrimSpace(r.URL.Query().Get("paymentType")),
+		PaidBy:      strings.TrimSpace(r.URL.Query().Get("paidBy")),
+		CoveredBy:   strings.TrimSpace(r.URL.Query().Get("coveredBy")),
+		UnitNumber:  strings.TrimSpace(r.URL.Query().Get("unitNumber")),
+		DriverName:  strings.TrimSpace(r.URL.Query().Get("driverName")),
+		DateFrom:    dateFrom,
+		DateTo:      dateTo,
+		TruckID:     truckID,
+		DriverID:    driverID,
 	})
 	if err != nil {
 		handler.writeError(w, err)
@@ -423,7 +425,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		}
 		category := validExtractedCategory(item.Category, categories)
 		values = append(values, extractedExpense{
-			Company: validExtractedCompany(item.Company), Category: category, CategoryID: categoryNames[strings.ToLower(category)],
+			Category: category, CategoryID: categoryNames[strings.ToLower(category)],
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
@@ -454,14 +456,6 @@ func defaultExtractedValue(value *string, fallback string) string {
 		return cleaned
 	}
 	return fallback
-}
-
-func validExtractedCompany(value *string) string {
-	cleaned := cleanExtractedValue(value)
-	if cleaned == "Flinn Corp" {
-		return cleaned
-	}
-	return "MS Express"
 }
 
 func validExtractedCategory(value *string, categories []string) string {

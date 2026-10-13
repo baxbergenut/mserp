@@ -1266,7 +1266,15 @@ assignment lookup lists.
   fleet matches populate foreign keys while raw extracted names and units remain
   available when unmatched. Gemini capacity responses use a compatible Flash
   fallback.
-  Add entry has no company field (new entries use MS Express), field hints or AI
+  Expenses no longer read, require, or write a company field, including AI entry
+  and CSV imports. Migration 087 defaults the legacy column during the first
+  deployment; only after that compatible API is live may a subsequent migration
+  drop the column. Cached clients may still send company; it is ignored.
+  Column filters support unitNumber, driverName, paymentType, paidBy, and coveredBy.
+  options.filters lists historical values from visible categories, independently
+  of active filters; entry suggestions remain separate. Save/verification notices
+  reserve space beside the action buttons, and verification refreshes retain rows.
+  Add entry has no field hints or AI
   frame. The AI textarea accepts dropped files and pasted images; Browse sits
   beside Analyze. Manual and AI batch forms share responsibility controls.
   Paid by is a dropdown of active MSERP usernames from expenses options.paidBy,

@@ -66,10 +66,10 @@ try {
       await route.fulfill({ json: item }); return;
     }
     const q = new URL(route.request().url()).searchParams;
-    const filtered = entries.filter(e => (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
+    const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'fleet.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true }] }, csrfToken: 'fixture' },
-      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, companies: ['MS Express'], paymentTypes: [], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
+      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: [], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
     await route.fulfill({ json: fixtures[path] ?? {} });
@@ -105,7 +105,8 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-expense-modal.png'), fullPage: true });
   await page.getByRole('button', { name: 'Create entry', exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
-  expect(writes[0]).toMatchObject({ company: 'MS Express', coveredBy: 'Truck Owner', ownerId: 'investor', paidBy: 'Entry User' });
+  expect(writes[0]).not.toHaveProperty('company');
+  expect(writes[0]).toMatchObject({ coveredBy: 'Truck Owner', ownerId: 'investor', paidBy: 'Entry User' });
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
   drafts = [blankDraft, { ...blankDraft, truckId: 'own-truck', driverId: 'owner-driver' }];
   await page.getByLabel('Expense details for AI').fill('two transactions');
@@ -116,6 +117,7 @@ try {
   await page.getByLabel('Transaction 2 paid by').selectOption('Other User');
   await page.getByRole('button', { name: 'Create 2 entries', exact: true }).click();
   await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].expenses.every(item => !('company' in item))).toBe(true);
   expect(writes[1].expenses[0]).toMatchObject({ ownerId: 'investor', paidBy: 'Entry User' });
   expect(writes[1].expenses[1]).toMatchObject({ coveredBy: 'Driver', ownerId: null, paidBy: 'Other User' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -135,9 +137,15 @@ try {
   expect(Math.abs(add.y - search.y)).toBeLessThan(3);
   expect(add.y).toBeGreaterThan((await page.getByText('Filtered total', { exact: true }).boundingBox()).y);
   await expect(row.getByText('$12.50')).toHaveAttribute('title', 'Paid: $5.00\nRemaining: $7.50');
+  await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))));
+  const tableBefore = await page.locator('table').boundingBox();
   await row.getByRole('button', { name: 'Verify', exact: true }).click();
   await expect(row.getByRole('img', { name: 'Administrator: Entry User', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  const notice = page.getByRole('status').filter({ hasText: 'Verified. Press Ctrl+Z to undo.' });
+  await expect(notice).toBeVisible();
+  expect((await page.locator('table').boundingBox()).y).toBe(tableBefore.y);
+  expect(Math.abs((await notice.boundingBox()).y - (await page.getByRole('button', { name: 'Add entry', exact: true }).boundingBox()).y)).toBeLessThan(4);
   const accountantRow = page.getByRole('row', { name: 'Open Repair 1', exact: true });
   await expect(accountantRow.getByRole('img', { name: 'Accountant: Avery Accountant', exact: true })).toBeVisible();
   await accountantRow.getByRole('button', { name: 'Verify', exact: true }).click();
@@ -185,6 +193,17 @@ try {
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(4);
+  entries[3] = { ...entries[3], unitNumber: '102', driverName: 'Owner Driver', paymentType: 'Retired card', paidBy: 'Former Payer', coveredBy: 'Broker' };
+  await page.reload();
+  for (const [header, label, value] of [['Unit / driver','Expense truck','102'],['Unit / driver','Expense driver','Owner Driver'],['Payment','Expense payment type','Retired card'],['Payment','Expense paid by','Former Payer'],['Responsibility','Expense responsibility','Broker']]) {
+    await page.getByRole('button', { name: 'Filter ' + header, exact: true }).click();
+    await page.getByLabel(label, { exact: true }).selectOption(value);
+    await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(1);
+    await expect(page.getByRole('row', { name: 'Open Repair 3', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
+    await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(4);
+  }
   verificationRole = ''; await page.reload();
   await expect(page.getByRole('button', { name: 'Verify', exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });

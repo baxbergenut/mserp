@@ -48,7 +48,7 @@ const filterClass =
 const emptyOptions: ExpensePage["options"] = {
   settings: [],
   categories: [],
-  companies: [] as string[],
+  filters: { drivers: [], trucks: [], paymentTypes: [], paidBy: [], coveredBy: [] },
   paymentTypes: [] as string[],
   expenseTypes: [] as string[],
   paidBy: [] as string[],
@@ -95,6 +95,11 @@ export default function ExpensesPage() {
   const [search, setSearch] = useViewState("page:search", "");
   const [category, setCategory] = useViewState("page:categoryId", "");
 
+  const [unitNumber, setUnitNumber] = useViewState("page:unitNumber", "");
+  const [driverName, setDriverName] = useViewState("page:driverName", "");
+  const [paidBy, setPaidBy] = useViewState("page:paidBy", "");
+  const [paymentType, setPaymentType] = useViewState("page:paymentType", "");
+  const [coveredBy, setCoveredBy] = useViewState("page:coveredBy", "");
   const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
   const [accountantVerified, setAccountantVerified] = useViewState("page:accountantVerified", "");
   const [adminVerified, setAdminVerified] = useViewState("page:adminVerified", "");
@@ -130,11 +135,11 @@ export default function ExpensesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const loadData = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified,
+        page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
       setCurrentUserId(session.user.id);
@@ -152,7 +157,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified]);
+  }, [setPage, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -178,7 +183,7 @@ export default function ExpensesPage() {
     return () => { cancelled = true; };
   }, [canLoadFleetSelectors]);
 
-  const hasFilters = Boolean(search || category || dateFrom || dateTo || accountantVerified || adminVerified);
+  const hasFilters = Boolean(unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
 
   function openCreate() {
     setForm({ ...emptyExpenseInput, paidBy: currentUser, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) });
@@ -204,7 +209,8 @@ export default function ExpensesPage() {
       else if (batchForms.length === 1) await createExpense(batchForms[0]);
       else await createExpense(form);
       setEditing(undefined);
-      await loadData();
+      setVerificationNotice("Saved.");
+      await loadData(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to save entry");
     } finally {
@@ -240,7 +246,7 @@ export default function ExpensesPage() {
       if (stamp) verificationUndo.current.push({ expenseId: expense.id, verificationId: stamp.id });
       setVerificationNotice("Verified. Press Ctrl+Z to undo.");
       setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
-      if (accountantVerified || adminVerified) await loadData();
+      if (accountantVerified || adminVerified) await loadData(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not verify entry");
     } finally { setVerifying(null); verificationBusy.current = false; }
@@ -254,7 +260,7 @@ export default function ExpensesPage() {
     try {
       const updated = await unverifyExpense(expenseId, verificationId);
       setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
-      if (accountantVerified || adminVerified) await loadData();
+      if (accountantVerified || adminVerified) await loadData(false);
       setVerificationDetails(current => current?.id === updated.id ? updated : current);
       verificationUndo.current = verificationUndo.current.filter(item => item.verificationId !== verificationId);
       setVerificationNotice("Verification removed.");
@@ -289,6 +295,7 @@ export default function ExpensesPage() {
   function clearFilters() {
     setSearch("");
     setCategory("");
+    setUnitNumber(""); setDriverName(""); setPaymentType(""); setPaidBy(""); setCoveredBy("");
 
     setDateFrom("");
     setDateTo("");
@@ -328,7 +335,7 @@ export default function ExpensesPage() {
             <X className="h-3 w-3" /> Clear
           </button>
         )}
-      <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
+      <div className="ml-auto flex max-w-full flex-wrap items-center gap-2"><span role="status" title={verificationNotice} className="h-8 w-52 shrink-0 truncate text-xs leading-8 text-zinc-400">{isSaving ? "Saving…" : verifying ? "Saving verification…" : verificationNotice}</span><ManagementHeader
         icon={WalletCards}
         title="Expenses"
 
@@ -338,20 +345,19 @@ export default function ExpensesPage() {
         secondaryAction={permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses settings</Link> : undefined}
       /></div></div>
 
-      {verificationNotice && <p role="status" className="text-xs text-zinc-400">{verificationNotice}</p>}
 
       <TableShell>
         <table className="w-full min-w-[960px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
                 <th className="px-4 py-3 font-medium"><ColumnFilter label="Date" active={!!(dateFrom || dateTo)}><label className="block space-y-1">From<input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium">Unit / driver</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Unit / driver" active={!!(unitNumber || driverName)}><select aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }} className={filterClass}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }} className={filterClass}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
                 <th className="px-4 py-3 font-medium"><ColumnFilter label="Expense" active={!!category}><label className="block space-y-1">Category<select aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">All categories</option>
           {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select></label></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium">Payment</th>
-                <th className="px-4 py-3 font-medium">Responsibility</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Payment" active={!!(paymentType || paidBy)}><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Responsibility" active={!!coveredBy}><select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
                 <th className="px-4 py-3 text-right font-medium"><ColumnFilter label="Verification" active={!!(accountantVerified || adminVerified)}><label className="block space-y-1">Accountant<select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select></label><label className="block space-y-1">Admin<select aria-label="Admin verification" value={adminVerified} onChange={e => { setAdminVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any admin status</option><option value="false">Unverified by admin</option><option value="true">Verified by admin</option></select></label></ColumnFilter></th>
               </tr>
@@ -435,7 +441,7 @@ export default function ExpensesPage() {
                 onExtracted={(drafts) => {
                   setError("");
                   drafts = drafts.map(draft => {
-                    const value = { ...draft, company: emptyExpenseInput.company, paidBy: currentUser };
+                    const value = { ...draft, paidBy: currentUser };
                     return value.truckId && !value.driverId && !value.driverName ? expenseAssignment(value, "truck", value.truckId, drivers, trucks, owners)
                       : value.driverId && !value.truckId && !value.unitNumber ? expenseAssignment(value, "driver", value.driverId, drivers, trucks, owners)
                       : defaultExpenseResponsibility(value, trucks, owners);

@@ -41,7 +41,7 @@ func TestExpenseVerificationFilters(t *testing.T) {
 }
 
 func TestExpenseFormCannotSetVerification(t *testing.T) {
-	input, err := (expenseRequest{Company: "MS Express", CategoryID: testExpenseCategoryID,
+	input, err := (expenseRequest{CategoryID: testExpenseCategoryID,
 		ExpenseDate: "2026-10-12", Amount: "25", ExpenseType: "Parking", ManagerVerified: true, AccountingVerified: true}).validate()
 	if err != nil {
 		t.Fatal(err)
