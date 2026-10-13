@@ -13,6 +13,11 @@ DataTruck refresh are separate measurements.
 a fast cache hit does not establish this latency target. Do not treat the API
 benchmark below as a browser latency measurement.
 
+On 2026-10-13, the user explicitly accepted the measured improvement and
+authorized merging and deploying this stage despite the unmet 300 ms target.
+That authorization supersedes the original release gate for this deployment;
+the target and remaining optimization work below are still open.
+
 ## Implemented
 
 - The full and selected calculations share the same routing and financial
