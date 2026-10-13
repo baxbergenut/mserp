@@ -53,8 +53,8 @@ try {
       FROM driver_escrows WHERE driver_name IN ('Alex Morgan','Jordan Lee','Sam Rivera','Inactive Demo Driver');
     INSERT INTO driver_escrow_payments(escrow_id,week_start,amount)
       SELECT id,'2026-10-05',CASE driver_name WHEN 'Alex Morgan' THEN 500 ELSE 250.50 END FROM driver_escrows WHERE driver_name IN ('Alex Morgan','Jordan Lee');
-    INSERT INTO expenses(driver_id,charge_driver_id,driver_name,company,category,category_id,expense_date,amount,covered_by,description,expense_type)
-      SELECT id,id,full_name,'MS Express Inc.','Other',(SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'2026-09-28',450,'Driver','Equipment replacement','Equipment' FROM drivers WHERE full_name='Jordan Lee';
+    INSERT INTO expenses(driver_id,charge_driver_id,driver_name,category,category_id,expense_date,amount,covered_by,description,expense_type)
+      SELECT id,id,full_name,'Other',(SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'2026-09-28',450,'Driver','Equipment replacement','Equipment' FROM drivers WHERE full_name='Jordan Lee';
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-09-28',125.25 FROM expenses;
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-10-05',100 FROM expenses;
   `);

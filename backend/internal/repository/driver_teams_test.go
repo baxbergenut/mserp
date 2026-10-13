@@ -222,8 +222,8 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		t.Fatal("investor fuel charged twice")
 	}
 	_ = tx.Rollback(ctx)
-	expense := id(`INSERT INTO expenses(company,category,category_id,expense_type,expense_date,amount,covered_by,driver_id,charge_driver_id)
- VALUES('MS Express','Other',(SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Team expense','2026-09-29',50,'Driver',$1,$1) RETURNING id`, team.ID)
+	expense := id(`INSERT INTO expenses(category,category_id,expense_type,expense_date,amount,covered_by,driver_id,charge_driver_id)
+ VALUES('Other',(SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Team expense','2026-09-29',50,'Driver',$1,$1) RETURNING id`, team.ID)
 	schedule := id(`INSERT INTO driver_charge_schedules(driver_id,kind,name,direction,start_week,eligibility,total,installment_count)
  VALUES($1,'installment','Prior personal balance','charge','2026-09-28','calendar',60,2) RETURNING id`, team.ID)
 	exec(`INSERT INTO driver_charge_phases(schedule_id,week_start,amount) VALUES($1,'2026-09-28',30)`, schedule)

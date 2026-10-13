@@ -85,6 +85,13 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				exec(before)
 				exec(`INSERT INTO expenses(company,category_id,category,expense_date,amount,expense_type,manager_verified) SELECT 'MS Express',id,name,'2026-10-12',25,'Legacy check',true FROM expense_settings WHERE kind='category' AND name='Other'`)
 				exec(string(migration))
+				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql"} {
+					next, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					exec(string(next))
+				}
 				var unknown bool
 				if e := admin.QueryRow(ctx, `SELECT user_id IS NULL AND user_name='' AND verified_at IS NULL FROM expense_verifications`).Scan(&unknown); e != nil || !unknown {
 					t.Fatalf("invented legacy attribution: %v", e)
@@ -112,7 +119,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				}
 			}
 			var id string
-			if e = admin.QueryRow(ctx, `INSERT INTO expenses(company,category_id,category,expense_date,amount,expense_type) SELECT 'MS Express',id,name,'2026-10-12',25,'Review check' FROM expense_settings WHERE kind='category' AND name='Other' RETURNING id::text`).Scan(&id); e != nil {
+			if e = admin.QueryRow(ctx, `INSERT INTO expenses(category_id,category,expense_date,amount,expense_type) SELECT id,name,'2026-10-12',25,'Review check' FROM expense_settings WHERE kind='category' AND name='Other' RETURNING id::text`).Scan(&id); e != nil {
 				t.Fatal(e)
 			}
 			repo := NewExpenseRepository(pool)
@@ -185,8 +192,8 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 			if e = admin.QueryRow(ctx, `SELECT count(*) FROM expense_verifications WHERE expense_id=$1 AND revoked_at IS NOT NULL AND revoked_by IS NOT NULL`, id).Scan(&count); e != nil || count != 3 {
 				t.Fatalf("cancellation audit: %d %v", count, e)
 			}
-			exec(`INSERT INTO expenses(company,category_id,category,expense_date,amount,expense_type,accounting_verified,manager_verified)
- SELECT 'MS Express',s.id,s.name,v.day,v.amount,'Filter fixture',v.accountant,v.admin
+			exec(`INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,accounting_verified,manager_verified)
+ SELECT s.id,s.name,v.day,v.amount,'Filter fixture',v.accountant,v.admin
  FROM expense_settings s CROSS JOIN (VALUES (date '2026-10-12',10,false,false),(date '2026-10-12',20,true,false),(date '2026-10-12',30,false,true),(NULL::date,40,true,true)) v(day,amount,accountant,admin)
  WHERE s.kind='category' AND s.name IN ('Other','Maintenance')`)
 			boolPtr := func(v bool) *bool { return &v }

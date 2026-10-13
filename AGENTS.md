@@ -1268,8 +1268,9 @@ assignment lookup lists.
   fallback.
   Expenses no longer read, require, or write a company field, including AI entry
   and CSV imports. Migration 087 defaults the legacy column during the first
-  deployment; only after that compatible API is live may a subsequent migration
-  drop the column. Cached clients may still send company; it is ignored.
+  deployment; migration 088 drops the column and its historical values after that
+  compatible API is live. Rollbacks must retain a company-independent API (087 or
+  later). Cached clients may still send company; it is ignored.
   Column filters support unitNumber, driverName, paymentType, paidBy, and coveredBy.
   options.filters lists historical values from visible categories, independently
   of active filters; entry suggestions remain separate. Save/verification notices

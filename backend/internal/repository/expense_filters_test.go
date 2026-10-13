@@ -52,13 +52,26 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 				}
 				exec(before)
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,amount,expense_date) SELECT 'Historical company',id,name,'Before migration',7,'2026-10-12' FROM expense_settings WHERE kind='category' AND name='Other'`)
-				exec(after)
+				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql"} {
+					migration, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(strings.ReplaceAll(after, "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n")) {
+						t.Fatal("migration differs from fresh schema", path)
+					}
+					exec(string(migration))
+				}
 				var count int
 				if err := admin.QueryRow(ctx, `SELECT count(*) FROM expenses WHERE expense_type='Before migration' AND amount=7`).Scan(&count); err != nil || count != 1 {
 					t.Fatal("migration lost expense", err)
 				}
 			} else {
 				exec(string(source))
+			}
+			var companyExists bool
+			if err := admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name='expenses' AND column_name='company')`, schema).Scan(&companyExists); err != nil || companyExists {
+				t.Fatal("company column must be removed", err)
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			config := cfg.Copy()

@@ -81,8 +81,13 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(bridge))
+				dropCompany, readErr := os.ReadFile("../../sql/088_drop_expense_company.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(dropCompany))
 			} else {
-				exec(`INSERT INTO expenses(company,category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT 'MS Express',id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
+				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
 			exec(`GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
 			cfg, err := pgxpool.ParseConfig(dsn)

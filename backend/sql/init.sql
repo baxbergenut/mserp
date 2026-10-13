@@ -3308,3 +3308,11 @@ BEGIN;
 -- removes the column. Older API binaries remain usable during this activation.
 ALTER TABLE expenses ALTER COLUMN company SET DEFAULT '';
 COMMIT;
+
+-- Remove retired expense company data (migration 088).
+BEGIN;
+-- Deploy the company-independent API from migration 087 before applying this.
+-- The immediately preceding release remains compatible with this schema.
+-- Dropping the column also removes its company/date index and historical values.
+ALTER TABLE expenses DROP COLUMN company;
+COMMIT;
