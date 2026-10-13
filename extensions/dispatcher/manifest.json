@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MS Express Dispatch Watch",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Private MS Express Carrier 360 load alerts and dispatcher access.",
   "minimum_chrome_version": "120",
   "permissions": ["storage"],

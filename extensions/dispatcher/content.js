@@ -149,7 +149,9 @@
     if (host?.isConnected) return;
     const controls = A.controls();
     if (!controls) return;
-    if (running) stop("The load grid changed. Press Play to start a new baseline.");
+    // Angular rebuilds the paginator during ordinary refreshes. Move the same
+    // host back into it so handlers, scan history and in-flight waits survive.
+    if (host) { controls.append(host); return; }
     host = document.createElement("div"); host.id = "mserp-dispatch-watch"; root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>
       :host{display:inline-flex;max-width:100%;margin-left:8px;font:12px/1.4 system-ui;color:#27272a;vertical-align:middle}

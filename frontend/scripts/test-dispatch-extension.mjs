@@ -80,8 +80,10 @@ try {
       <script>let page=0;async function search(n){page=n;const endpoint='/carrier/secure/loadboard/graphql/native';const payload=JSON.stringify({page:n});let body;
       if(n===1){body=await new Promise(resolve=>{const x=new XMLHttpRequest();x.open('POST',endpoint);x.onload=()=>resolve(x.status===200?JSON.parse(x.responseText):null);x.send(payload);});}else{const r=await fetch(endpoint,{method:'POST',body:payload});if(!r.ok)return;body=await r.json();}if(!body)return;const d=body.data.searchJobsElastic.data;
       document.querySelector('tbody').innerHTML=d.jobs.map(j=>'<tr data-cy="lb-table-row"><td id="jobIdentifier">'+j.jobIdentifier+'</td><td>'+j.bookNowPrice+'</td></tr>').join('');
-      document.querySelector('[aria-label="Go to first page"]').disabled=n===0;document.querySelector('[aria-label="Go to next page"]').disabled=n===d.totalPages-1;}
-      document.querySelector('[aria-label="Refresh"]').onclick=()=>search(page);document.querySelector('[aria-label="Go to first page"]').onclick=()=>search(0);document.querySelector('[aria-label="Go to next page"]').onclick=()=>search(page+1);search(0);</script></body></html>`});
+      const oldPaginator=document.querySelector('.p-paginator');const paginator=oldPaginator.cloneNode(true);paginator.querySelector('.p-paginator-right-content').replaceChildren();oldPaginator.replaceWith(paginator);
+      document.querySelector('[aria-label="Go to first page"]').disabled=n===0;document.querySelector('[aria-label="Go to next page"]').disabled=n===d.totalPages-1;bindPagination();}
+      function bindPagination(){document.querySelector('[aria-label="Go to first page"]').onclick=()=>search(0);document.querySelector('[aria-label="Go to next page"]').onclick=()=>search(page+1);}
+      document.querySelector('[aria-label="Refresh"]').onclick=()=>search(page);bindPagination();search(0);</script></body></html>`});
     if (url.protocol === 'chrome-extension:') return route.continue();
     return route.abort();
   });

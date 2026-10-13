@@ -300,6 +300,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Pause/reload then Play resets the baseline. New rows are highlighted/promoted on
   their native page; a footer popover lists discoveries across pages. Play/Settings
   mount inside the native paginator's right content, never above the fixed-height grid.
+  Reattach the same toolbar when Angular replaces the paginator during refresh;
+  routine DOM replacement must not stop a run or reset its baseline.
 - Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
   `ExtensionAccess.tsx` implement `access.manage` administration at
   GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute

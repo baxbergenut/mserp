@@ -1,6 +1,6 @@
 # MS Express Dispatch Watch
 
-Private Chrome Manifest V3 extension, version 0.2.0.
+Private Chrome Manifest V3 extension, version 0.2.1.
 
 ## Install for a pilot
 
