@@ -1613,10 +1613,13 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   only inside the same read transaction. Histories share one repeatable-read snapshot;
   finalized driver history reads frozen statements directly. Whole-week finalization
   calculates the post-write fleet once before atomically freezing the selected rows.
-- Payroll's bounded process cache (32 reports, 8 MiB, 30 seconds) is keyed by the
-  PostgreSQL MVCC snapshot, report kind/week and current charge week. Equal snapshots
-  have equal committed inputs; any committed dependency write invalidates reuse.
-  TTL is only a memory limit. Writers never use this cache or reuse read memos across
+- Payroll's bounded process cache (32 reports, 8 MiB, five minutes) uses migration
+  090's transactional per-table revisions, report kind/week and current charge week.
+  Statement triggers cover application tables except auth_sessions and
+  schema_migrations; zero-row writes do not invalidate. Committed source writes
+  invalidate atomically; rollbacks/session activity retain cached reports. New tables
+  must add tracking triggers/revision rows; until covered, reads conservatively fall
+  back to MVCC snapshot keys. TTL is only a memory limit. Writers never use this cache or reuse read memos across
   mutation phases. Permission checks remain per request; cached JSON is cloned.
 - MSERP pool connections use jit=off. HTTP Server-Timing and structured performance
   logs include route templates, duration, query count/time, pool acquisition time,
@@ -1694,6 +1697,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   managed driver locks, rejects stale profiles, and retains the existing charge
   pause, assignment release and escrow-review workflow. Directory context menus
   and profile Change status share DriverStatusDialog.
+- GET /driver-pay and /investor-pay accept summary=1 with pagination for compact
+  collapsed-row totals from the same authoritative report. Shared LazyDriverCard
+  fetches a single statement when expanded and reuses it until report reload.
+  Aborted/obsolete responses cannot overwrite a refreshed report or pending edits.
+  Full legacy reads, exports, settlement review and save validation retain details.
+  Run test-payroll-lazy.mjs and test-payroll-expenses.mjs for both pages.
 - GET /driver-pay and /investor-pay accept page/pageSize, search, dispatcherId
   (including __unassigned), and statementId. Paging runs after complete financial
   routing/carry/frozen overlays and uses the snapshot cache; only the selected

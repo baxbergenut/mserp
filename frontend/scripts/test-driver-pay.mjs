@@ -5,7 +5,7 @@ import ts from "typescript";
 const compile = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString("base64")}`;
 const board = compile(readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8"));
 const pay = readFileSync(new URL("../app/accounting/driver-pay/pay.ts", import.meta.url), "utf8").replace('"@/app/gross-board/board"', JSON.stringify(board));
-const { applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments, sourceAmountInput, validSourceAmount } = await import(compile(pay));
+const { applyPayDetails, applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments, sourceAmountInput, validSourceAmount } = await import(compile(pay));
 const edits = { driverId: "driver", weekStart: "2026-09-28", version: 0, notes: "", comments: {}, adjustments: [
   { id: "a", kind: "reimbursement", amount: "0.10" }, { id: "b", kind: "addition", amount: "0.20" }, { id: "c", kind: "deduction", amount: "10.25" },
 ] };
@@ -154,3 +154,13 @@ assert.equal(validSourceAmount('-0.01', '0'), false);
 assert.equal(validAdjustments({ ...auto, fuelOverride: '-100.11' }, owner), false);
 assert.equal(validAdjustments({ ...auto, fuelOverride: '10' }, owner), false);
 console.log('Source-backed charges keep their direction and cannot exceed the source due.');
+
+const summaryRow = { id: 'lazy', loads: [], edits: { driverId:'lazy', weekStart:'2026-10-12', version:1, adjustments:[] }, summary:{loads:1,missingFees:0,review:0,fee:'100.00',payable:'80.00'} };
+const compactReport = {drivers:[summaryRow], pagination:{fee:'1000.00',payable:'800.00',loads:10,review:0}};
+const expanded = {id:'lazy',loads:[{...load,fee:'110.00'}],edits:{...summaryRow.edits,adjustments:[{kind:'deduction',amount:'20.00'}]}};
+assert.equal(driverTotals(summaryRow,summaryRow.edits).payable,8000n);
+const hydrated = applyPayDetails(compactReport,summaryRow,expanded);
+assert.equal(hydrated.pagination.fee,'1010.00');assert.equal(hydrated.pagination.payable,'810.00');
+assert.equal(compactReport.drivers[0],summaryRow);
+assert.equal(applyPayDetails(hydrated,summaryRow,expanded),hydrated,'late detail must not replace a refreshed or edited report');
+console.log('Lazy payroll hydration preserves aggregate totals and rejects obsolete responses.');

@@ -988,6 +988,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  summary?: { loads: number; missingFees: number; review: number; fee: string; payable: string };
   layovers?: { date: string; amount: string }[];
   employmentType?: EmploymentType;
   teamNotice?: string;
@@ -1025,6 +1026,7 @@ export interface PaySourceAcceptance {
   miles: string;
 }
 export interface PayPageQuery {
+  summary?: string;
   page: number;
   pageSize: number;
   search: string;

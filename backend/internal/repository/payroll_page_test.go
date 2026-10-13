@@ -2,6 +2,22 @@ package repository
 
 import "testing"
 
+func TestPaySummariesKeepTotalsAndOmitDetails(t *testing.T) {
+	d := DriverPayDriver{ID: "driver", PayType: "cpm", Loads: []DriverPayLoad{{Fee: "100.00"}, {Fee: "", Issues: []string{"missing"}}}, Edits: DriverPayEdits{DriverID: "driver", WeekStart: "2026-10-12", Version: 3, Adjustments: []DriverPayAdjustment{{Kind: "deduction", Amount: "5.00"}}, ExpenseDeductions: []ExpenseDeduction{{Amount: "10.00"}}}}
+	full := DriverPayWeek{Revision: "revision", Drivers: []DriverPayDriver{d}}
+	page := PaginatePay(full, PayPageQuery{Summary: true})
+	row := page.Drivers[0]
+	if row.Summary == nil || row.Summary.Loads != 2 || row.Summary.MissingFees != 1 || row.Summary.Review != 1 || row.Summary.Fee != "100.00" || row.Summary.Payable != "85.00" {
+		t.Fatalf("summary %+v", row.Summary)
+	}
+	if len(row.Loads) != 0 || len(row.Edits.ExpenseDeductions) != 0 || len(row.Edits.Adjustments) != 0 || row.Edits.Version != 3 || row.Edits.WeekStart != "2026-10-12" || page.Revision != full.Revision {
+		t.Fatal("summary payload contains detail or lost identity")
+	}
+	if len(full.Drivers[0].Loads) != 2 || full.Drivers[0].Summary != nil {
+		t.Fatal("summary mutated cached full report")
+	}
+}
+
 func TestPayPaginationFiltersBeforePagingAndPreservesRevision(t *testing.T) {
 	zero := "0.00"
 	report := DriverPayWeek{Revision: "complete-week", Drivers: []DriverPayDriver{

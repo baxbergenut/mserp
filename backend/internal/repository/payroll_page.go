@@ -9,7 +9,33 @@ import (
 type PayPageQuery struct {
 	Pagination
 	Search, DispatcherID, ID string
+	Summary                  bool
 }
+
+type PayStatementSummary struct {
+	Loads       int    `json:"loads"`
+	MissingFees int    `json:"missingFees"`
+	Review      int    `json:"review"`
+	Fee         string `json:"fee"`
+	Payable     string `json:"payable"`
+}
+
+// Summaries come from the same routed, frozen report as expanded statements.
+func summarizePayStatement(d DriverPayDriver) DriverPayDriver {
+	page := PaginatePay(DriverPayWeek{Drivers: []DriverPayDriver{d}}, PayPageQuery{})
+	summary := &PayStatementSummary{Loads: len(d.Loads), Review: page.Pagination.Review, Fee: page.Pagination.Fee, Payable: page.Pagination.Payable}
+	for _, load := range d.Loads {
+		if load.Fee == "" {
+			summary.MissingFees++
+		}
+	}
+	d.Summary = summary
+	d.Loads = []DriverPayLoad{}
+	d.Edits = DriverPayEdits{DriverID: d.Edits.DriverID, WeekStart: d.Edits.WeekStart, Version: d.Edits.Version, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
+	d.AutoCharges, d.Layovers = nil, nil
+	return d
+}
+
 type PayPageInfo struct {
 	Page        int         `json:"page"`
 	PageSize    int         `json:"pageSize"`
@@ -131,7 +157,11 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	report.SetupRequired = nil
 	for _, r := range rows[query.Offset():min(query.Offset()+query.PageSize, len(rows))] {
 		if r.driver != nil {
-			report.Drivers = append(report.Drivers, *r.driver)
+			driver := *r.driver
+			if query.Summary {
+				driver = summarizePayStatement(driver)
+			}
+			report.Drivers = append(report.Drivers, driver)
 			info.RowIDs = append(info.RowIDs, r.driver.ID)
 		} else {
 			report.SetupRequired = append(report.SetupRequired, *r.setup)

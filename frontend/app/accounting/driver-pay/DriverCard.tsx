@@ -32,7 +32,9 @@ const columns = [
 const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
-type Props = {
+export type DriverCardProps = {
+  detailError?: string;
+  onRetryDetails?: () => void;
   onOpenExpense?: (id: string) => void;
   expenseOpenDisabled?: boolean;
   onAcceptSource?: (load: DriverPayLoad, field: "originalRate" | "totalMiles") => Promise<void>;
@@ -50,7 +52,7 @@ type Props = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled }: Props) {
+export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -61,7 +63,8 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
   const profileHref = investor ? `/investors/detail?id=${driver.investorId}` : `/drivers/detail?id=${driver.id}`;
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
-  const allFeesMissing = driver.loads.length > 0 && totals.missingFees === driver.loads.length;
+  const loadCount = driver.summary?.loads ?? driver.loads.length;
+  const allFeesMissing = loadCount > 0 && totals.missingFees === loadCount;
   const incomplete = totals.review > 0;
   const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses;
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
@@ -127,10 +130,11 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
       {!investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName || "—"}</td>
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
-      <td className="border-b border-zinc-800 px-3 text-right font-mono">{driver.loads.length}</td>
+      <td className="border-b border-zinc-800 px-3 text-right font-mono">{loadCount}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
     </tr>
-    {open && <tr><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
+    {open && driver.summary && <tr><td colSpan={7} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
+    {open && !driver.summary && <tr><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}

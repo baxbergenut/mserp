@@ -54,7 +54,22 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
   const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
-  return { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
+  const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
+  if (driver.summary) return { ...totals, fee: hundredths(driver.summary.fee), payable: hundredths(driver.summary.payable), missingFees: driver.summary.missingFees, review: driver.summary.review };
+  return totals;
+}
+
+export function applyPayDetails(report: DriverPayWeek, expected: DriverPayDriver, detail: DriverPayDriver): DriverPayWeek {
+  if (!report.drivers.includes(expected)) return report;
+  const drivers = report.drivers.map(row => row === expected ? detail : row);
+  if (!report.pagination) return { ...report, drivers };
+  const before = driverTotals(expected, expected.edits), after = driverTotals(detail, detail.edits);
+  return { ...report, drivers, pagination: { ...report.pagination,
+    fee: centsAmount(hundredths(report.pagination.fee) + after.fee - before.fee),
+    payable: centsAmount(hundredths(report.pagination.payable) + after.payable - before.payable),
+    review: report.pagination.review + after.review - before.review,
+    loads: report.pagination.loads + detail.loads.length - (expected.summary?.loads ?? expected.loads.length),
+  } };
 }
 
 export function activeLayovers(driver: DriverPayDriver, edits: DriverPayEdits) {

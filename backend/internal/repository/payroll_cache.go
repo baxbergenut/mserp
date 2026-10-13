@@ -19,14 +19,28 @@ type payrollCache struct {
 	bytes    int
 }
 
-// A PostgreSQL MVCC snapshot is a conservative database-wide dependency token.
-// Equal tokens see the same committed transactions, including transactions that
-// were in flight during the earlier fill. This avoids a fragile list of write
-// hooks, a contended global revision row, and stale historical carry. Only public
-// read-only entry points use this cache; writers must see their own new writes.
+// Revision rows change atomically with their source tables. Reading them in the
+// report's repeatable-read snapshot preserves concurrent-commit safety while
+// allowing cache reuse across unrelated session activity. Writers never use this.
 func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind string, week time.Time, read func() (DriverPayWeek, error)) (DriverPayWeek, error) {
 	var snapshot string
-	if err := tx.QueryRow(ctx, `SELECT pg_current_snapshot()::text`).Scan(&snapshot); err != nil {
+	var revisionTable *string
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('payroll_cache_revisions')::text`).Scan(&revisionTable); err != nil {
+		return DriverPayWeek{}, err
+	}
+	query := `SELECT pg_current_snapshot()::text`
+	if revisionTable != nil {
+		// A future table must opt into change tracking. Until then, conservatively
+		// fall back to MVCC invalidation instead of risking an untracked input.
+		query = `SELECT CASE WHEN EXISTS (
+ SELECT 1 FROM pg_tables t WHERE t.schemaname=current_schema()
+ AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','schema_migrations')
+ AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
+) THEN 'snapshot:' || pg_current_snapshot()::text
+ ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name),'') END
+ FROM payroll_cache_revisions`
+	}
+	if err := tx.QueryRow(ctx, query).Scan(&snapshot); err != nil {
 		return DriverPayWeek{}, err
 	}
 	key := kind + ":" + week.Format(time.DateOnly) + ":" + ChargeCurrentWeek() + ":" + snapshot
@@ -89,7 +103,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 	if old, exists := c.entries[key]; exists {
 		c.bytes -= len(old.body)
 	}
-	c.entries[key] = payrollCacheEntry{body: body, expires: now.Add(30 * time.Second)}
+	c.entries[key] = payrollCacheEntry{body: body, expires: time.Now().Add(5 * time.Minute)}
 	c.bytes += len(body)
 	return report, nil
 }

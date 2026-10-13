@@ -75,30 +75,31 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
-	Layovers         []DriverPayLayover `json:"layovers,omitempty"`
-	TeamNotice       string             `json:"teamNotice,omitempty"`
-	TeamDrivers      []PayPerson        `json:"teamDrivers,omitempty"`
-	TruckInactive    bool               `json:"truckInactive,omitempty"`
-	OperatingDrivers []PayPerson        `json:"operatingDrivers,omitempty"`
-	InvestorID       string             `json:"investorId,omitempty"`
-	ProfileDriverID  string             `json:"profileDriverId,omitempty"`
-	TruckID          string             `json:"truckId,omitempty"`
-	AutoCharges      []PayAutoCharge    `json:"autoCharges,omitempty"`
-	Issues           []string           `json:"issues,omitempty"`
-	Settlement       *PayrollSettlement `json:"settlement,omitempty"`
-	ID               string             `json:"id"`
-	FullName         string             `json:"fullName"`
-	TruckUnit        string             `json:"truckUnit"`
-	DispatcherID     string             `json:"dispatcherId"`
-	DispatcherName   string             `json:"dispatcherName"`
-	EmploymentType   string             `json:"employmentType,omitempty"`
-	IsOwnerOperator  bool               `json:"isOwnerOperator"`
-	PayType          string             `json:"payType"`
-	PayRate          string             `json:"payRate"`
-	FuelTotal        string             `json:"fuelTotal"`
-	TollTotal        string             `json:"tollTotal"`
-	Loads            []DriverPayLoad    `json:"loads"`
-	Edits            DriverPayEdits     `json:"edits"`
+	Summary          *PayStatementSummary `json:"summary,omitempty"`
+	Layovers         []DriverPayLayover   `json:"layovers,omitempty"`
+	TeamNotice       string               `json:"teamNotice,omitempty"`
+	TeamDrivers      []PayPerson          `json:"teamDrivers,omitempty"`
+	TruckInactive    bool                 `json:"truckInactive,omitempty"`
+	OperatingDrivers []PayPerson          `json:"operatingDrivers,omitempty"`
+	InvestorID       string               `json:"investorId,omitempty"`
+	ProfileDriverID  string               `json:"profileDriverId,omitempty"`
+	TruckID          string               `json:"truckId,omitempty"`
+	AutoCharges      []PayAutoCharge      `json:"autoCharges,omitempty"`
+	Issues           []string             `json:"issues,omitempty"`
+	Settlement       *PayrollSettlement   `json:"settlement,omitempty"`
+	ID               string               `json:"id"`
+	FullName         string               `json:"fullName"`
+	TruckUnit        string               `json:"truckUnit"`
+	DispatcherID     string               `json:"dispatcherId"`
+	DispatcherName   string               `json:"dispatcherName"`
+	EmploymentType   string               `json:"employmentType,omitempty"`
+	IsOwnerOperator  bool                 `json:"isOwnerOperator"`
+	PayType          string               `json:"payType"`
+	PayRate          string               `json:"payRate"`
+	FuelTotal        string               `json:"fuelTotal"`
+	TollTotal        string               `json:"tollTotal"`
+	Loads            []DriverPayLoad      `json:"loads"`
+	Edits            DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
 	Pagination    *PayPageInfo         `json:"pagination,omitempty"`

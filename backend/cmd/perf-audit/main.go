@@ -131,6 +131,17 @@ func run() error {
 			out["compact_bytes"] = len(compact)
 			out["compact_gzip_bytes"] = packed.Len()
 		}
+		if report, ok := value.(repository.DriverPayWeek); ok {
+			full, err := json.Marshal(repository.PaginatePay(report, repository.PayPageQuery{Pagination: repository.Pagination{Page: 1, PageSize: 25}}))
+			if err != nil {
+				return err
+			}
+			summary, err := json.Marshal(repository.PaginatePay(report, repository.PayPageQuery{Pagination: repository.Pagination{Page: 1, PageSize: 25}, Summary: true}))
+			if err != nil {
+				return err
+			}
+			out["page_bytes"], out["summary_bytes"] = len(full), len(summary)
+		}
 		if e = json.NewEncoder(os.Stdout).Encode(out); e != nil {
 			return e
 		}
