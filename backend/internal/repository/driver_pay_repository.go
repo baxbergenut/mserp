@@ -34,6 +34,7 @@ type DriverPayAdjustment struct {
 	Amount string `json:"amount"`
 }
 type DriverPayEdits struct {
+	SourceCharges        []PaySourceCharge     `json:"sourceCharges,omitempty"`
 	LayoverExcludedDates []string              `json:"layoverExcludedDates,omitempty"`
 	Costs                *DriverPayCosts       `json:"costs,omitempty"`
 	ExpenseDeductions    []ExpenseDeduction    `json:"expenseDeductions,omitempty"`
@@ -381,7 +382,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
 		return edits, err
 	}
 	members, err := teamPayMembers(ctx, tx, edits.DriverID, edits.WeekStart)
@@ -408,6 +409,9 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	if edits.LayoverExcludedDates == nil {
 		edits.LayoverExcludedDates = []string{}
+	}
+	if err = savePaySources(ctx, tx, costDriver, &edits, "driver", actor); err != nil {
+		return edits, err
 	}
 	if err = saveDriverPayCosts(ctx, tx, costDriver, edits, actor); err != nil {
 		return edits, err

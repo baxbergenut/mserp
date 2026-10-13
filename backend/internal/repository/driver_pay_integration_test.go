@@ -216,7 +216,12 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			edits := report.Drivers[0].Edits
 			edits.Notes = "Weekly note"
-			fuelOverride, tollOverride := "-80.15", "0.00"
+			ineligible := "-80.15"
+			edits.FuelOverride = &ineligible
+			if _, err = pay.Save(ctx, edits); err == nil {
+				t.Fatal("CPM statement accepted fuel beyond its zero amount due")
+			}
+			fuelOverride, tollOverride := "0.00", "0.00"
 			edits.FuelOverride, edits.TollOverride = &fuelOverride, &tollOverride
 			edits.Comments[loads[0].CommentKey] = "Checked receipt"
 			edits.Adjustments = []DriverPayAdjustment{{ID: "00000000-0000-0000-0000-000000000001", Kind: "reimbursement", Name: "Parking", Amount: "35.25"}}

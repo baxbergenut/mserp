@@ -20,5 +20,10 @@ export function restorePayEdit(current: DriverPayEdits, before: DriverPayEdits, 
     const next = after.expenseDeductions?.find(item => item.expenseId === row.expenseId);
     return previous && next && previous.amount !== next.amount ? { ...row, amount: previous.amount, apply: true } : row;
   });
+  restored.sourceCharges = current.sourceCharges?.map(row => {
+    const previous = before.sourceCharges?.find(item => item.source === row.source && item.ownerId === row.ownerId);
+    const next = after.sourceCharges?.find(item => item.source === row.source && item.ownerId === row.ownerId);
+    return previous && next && previous.amount !== next.amount ? { ...row, amount: previous.amount } : row;
+  });
   return restored;
 }

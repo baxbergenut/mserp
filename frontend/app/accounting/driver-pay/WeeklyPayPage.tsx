@@ -124,8 +124,12 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     try {
       for (const submitted of Object.values(changes)) {
         const saved = await savePay(normalizedPayEdits(submitted));
+        // Keyboard edits/undo can arrive before React commits the receipt render.
+        // Adopt its versions immediately so that next draft never reuses an old one.
+        savedRef.current = { ...savedRef.current, [saved.driverId]: saved };
+        changesRef.current = reconcilePaySave(changesRef.current, submitted, saved);
         setReport(current => current && applyPaySave(current, saved));
-        setChanges(current => reconcilePaySave(current, submitted, saved));
+        setChanges(changesRef.current);
       }
       setMessage("All changes saved");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save; your edits are still here."); }

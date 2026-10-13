@@ -311,6 +311,7 @@ func routeTeamPay(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
 			}
 		}
 		main.AutoCharges = append(main.AutoCharges, member.AutoCharges...)
+		main.Edits.SourceCharges = append(main.Edits.SourceCharges, member.Edits.SourceCharges...)
 		// One statement/day even if both teammates have a Shop status.
 		for _, day := range member.Layovers {
 			found := false

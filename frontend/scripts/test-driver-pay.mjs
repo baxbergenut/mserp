@@ -164,3 +164,15 @@ assert.equal(hydrated.pagination.fee,'1010.00');assert.equal(hydrated.pagination
 assert.equal(compactReport.drivers[0],summaryRow);
 assert.equal(applyPayDetails(hydrated,summaryRow,expanded),hydrated,'late detail must not replace a refreshed or edited report');
 console.log('Lazy payroll hydration preserves aggregate totals and rejects obsolete responses.');
+
+const sourceFee = { source: 'truck_charge:truck:fee', ownerId: 'owner', name: 'Fee', base: '-100.00', carry: '-75.00', due: '-175.00', amount: '-25.00', revision: 'r1', saved: false };
+const sourceEdits = { ...auto, sourceCharges: [sourceFee] };
+assert.equal(driverTotals({ ...owner, autoCharges: [{ source: sourceFee.source, name: 'Fee', amount: '-175.00' }] }, sourceEdits).payable, driverTotals(owner, auto).payable - 2500n);
+assert.equal(validAdjustments({ ...sourceEdits, sourceCharges: [{ ...sourceFee, amount: '1.00' }] }), false);
+assert.equal(validAdjustments({ ...sourceEdits, sourceCharges: [{ ...sourceFee, amount: '-175.01' }] }), false);
+const savedSources = { ...sourceEdits, version: 2, sourceCharges: [{ ...sourceFee, revision: 'r2', saved: true }] };
+const sourceUndo = restorePayEdit(savedSources, { ...sourceEdits, sourceCharges: [{ ...sourceFee, amount: '-175.00' }] }, sourceEdits);
+assert.equal(sourceUndo.sourceCharges[0].amount, '-175.00');
+assert.equal(sourceUndo.sourceCharges[0].revision, 'r2');
+assert.equal(reconcilePaySave({driver: {...sourceEdits, sourceCharges: [{...sourceFee, amount: '-30.00'}]}}, sourceEdits, savedSources).driver.sourceCharges[0].revision, 'r2');
+console.log('Truck source deductions: live totals, carry limits, saved undo and in-flight revision reconciliation.');

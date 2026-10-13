@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func TestCostCreditRemainder(t *testing.T) {
+	records := []payCostRecord{{Driver: "driver", Week: "2026-09-28", Fuel: "-100.00", Toll: "40.00", FuelAmount: "25.00", TollAmount: "-10.00"}}
+	fuel, toll := costBalance(records, "driver", "2026-10-05")
+	if fuel != -7500 || toll != 3000 {
+		t.Fatalf("remaining source credit/deduction: %d %d", fuel, toll)
+	}
+}
+
 func TestRecurringRemainderProjection(t *testing.T) {
 	s := ChargeSchedule{ID: "fee", Kind: "recurring", Name: "Fee", Direction: "charge", StartWeek: "2026-09-28", Eligibility: "calendar", Phases: []ChargePhase{{WeekStart: "2026-09-28", Amount: "100.00"}}, Occurrences: []ChargeOccurrence{{WeekStart: "2026-09-28", ScheduledAmount: "-100.00", Amount: "-60.00", Version: 1}}}
 	rows, err := projectCharges(s, "2026-10-12", nil, false)

@@ -159,6 +159,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				}
 			}
 		} else {
+			if err = savePaySources(ctx, tx, d, &d.Edits, "driver", actor); err != nil {
+				return empty, err
+			}
 			if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
 				return empty, err
 			}

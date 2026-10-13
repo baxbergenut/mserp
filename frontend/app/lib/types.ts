@@ -955,7 +955,9 @@ export interface ExpenseDeduction {
   apply?: boolean;
 }
 export interface DriverPaySettings { layoverDailyAmount: string; version: number }
+export interface PaySourceCharge { source: string; ownerId: string; name: string; base: string; carry: string; due: string; amount: string; revision: string; saved: boolean }
 export interface DriverPayEdits {
+  sourceCharges?: PaySourceCharge[];
   layoverExcludedDates?: string[];
   costs?: { revision: string; fuelCarry: string; tollCarry: string; fuelDue: string; tollDue: string };
   expenseDeductions?: ExpenseDeduction[];

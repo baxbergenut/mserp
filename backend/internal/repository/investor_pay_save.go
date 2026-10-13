@@ -44,6 +44,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if len(edits.GeneratedCharges) > 0 {
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
 	}
+	if err = savePaySources(ctx, tx, *card, &edits, "investor", actor); err != nil {
+		return edits, err
+	}
 	if err = validateInvestorCostEdits(*card, edits); err != nil {
 		return edits, err
 	}
@@ -133,6 +136,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 				return empty, err
 			}
 		} else {
+			if err = savePaySources(ctx, tx, d, &d.Edits, "investor", actor); err != nil {
+				return empty, err
+			}
 			if err = validateInvestorCostEdits(d, d.Edits); err != nil {
 				return empty, err
 			}
@@ -200,6 +206,13 @@ func validateInvestorCostEdits(card DriverPayDriver, edits DriverPayEdits) error
 	} {
 		if row.amount == nil {
 			continue
+		}
+		if card.Edits.Costs != nil {
+			if row.name == "Fuel" {
+				row.source = card.Edits.Costs.FuelDue
+			} else {
+				row.source = card.Edits.Costs.TollDue
+			}
 		}
 		due, err := chargeCents(row.source)
 		if err != nil {

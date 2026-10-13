@@ -117,7 +117,7 @@ func payCommentKey(date string, slot int, number string) string { // same stable
 	return date + ":" + strconv.Itoa(slot) + ":" + strings.ToLower(strings.TrimSpace(number))
 }
 
-func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
+func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
 	investor := DriverPayWeek{WeekStart: source.WeekStart, Drivers: []DriverPayDriver{}}
 	config, err := payrollTruckData(ctx, tx)
 	if err != nil {

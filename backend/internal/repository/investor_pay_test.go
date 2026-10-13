@@ -228,7 +228,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 						t.Fatalf("investor costs depend on driver classification (%v, %s): %+v", ownerOperator, payType, costReport)
 					}
 					statement := costReport.Drivers[0]
-					if statement.InvestorID != investor || !statement.IsOwnerOperator || statement.PayType != "gross_percentage" || statement.Edits.Costs != nil {
+					if statement.InvestorID != investor || !statement.IsOwnerOperator || statement.PayType != "gross_percentage" || (statement.Edits.Costs == nil || statement.Edits.Costs.FuelDue != "1550.00" || statement.Edits.Costs.TollDue != "200.00") {
 						t.Fatalf("investor statement inherited personal driver cost eligibility: %+v", statement)
 					}
 				}

@@ -20,6 +20,10 @@ export function validSourceAmount(value: string, source: string) {
 }
 
 export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
+  for (const row of edits.sourceCharges ?? []) {
+    if (row.source.startsWith("investor_cost:") && driver?.investorId) continue;
+    if (!validSourceAmount(row.amount, row.due)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.due), true)}, including carry. Its charge or credit direction is fixed.`;
+  }
   for (const row of edits.generatedCharges ?? []) {
     if (!validSourceAmount(row.amount, row.scheduledAmount)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.scheduledAmount), true)}. Its charge or credit direction is fixed.`;
   }
@@ -32,7 +36,7 @@ export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver):
 }
 
 export function carryBreakdown(current: bigint, carried: bigint): string | undefined {
-  if (carried <= BigInt(0)) return undefined;
+  if (carried === BigInt(0)) return undefined;
   const money = (value: bigint) => decimalDisplay(value, true).replace(/\.00$/, "");
   return current === BigInt(0) ? `${money(carried)} carried` : `${money(current)} this week + ${money(carried)} carried`;
 }
@@ -52,7 +56,7 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   }), { original: BigInt(0), gross: BigInt(0), totalMiles: BigInt(0), loadedMiles: BigInt(0), deadheadMiles: BigInt(0), fee: BigInt(0), missingFees: 0, review: 0 });
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
-  const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []).map(row => ({ ...row, amount: edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? row.amount })), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
   if (driver.summary) return { ...totals, fee: hundredths(driver.summary.fee), payable: hundredths(driver.summary.payable), missingFees: driver.summary.missingFees, review: driver.summary.review };
@@ -111,6 +115,12 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
   else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version,
     ...(saved.costs && { costs: saved.costs }),
+    sourceCharges: result[saved.driverId].sourceCharges?.map(row => {
+      const committed = saved.sourceCharges?.find(r => r.source === row.source && r.ownerId === row.ownerId);
+      const submitted = snapshot.sourceCharges?.find(r => r.source === row.source && r.ownerId === row.ownerId);
+      if (!committed) return row;
+      return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...committed, amount: row.amount };
+    }),
     expenseDeductions: result[saved.driverId].expenseDeductions?.map(row => {
       const committed = saved.expenseDeductions?.find(r => r.expenseId === row.expenseId);
       const submitted = snapshot.expenseDeductions?.find(r => r.expenseId === row.expenseId);
@@ -126,6 +136,7 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   };
   if (!current[saved.driverId]?.generatedCharges && result[saved.driverId]) delete result[saved.driverId].generatedCharges;
   if (!current[saved.driverId]?.expenseDeductions && result[saved.driverId]) delete result[saved.driverId].expenseDeductions;
+  if (!current[saved.driverId]?.sourceCharges && result[saved.driverId]) delete result[saved.driverId].sourceCharges;
   return result;
 }
 

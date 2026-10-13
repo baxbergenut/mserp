@@ -1,3 +1,4 @@
+import { runPaySourceE2E } from "./pay-source-e2e.mjs";
 import { runTruckRecurringE2E } from "./truck-recurring-e2e.mjs";
 // Requires a disposable local _test database, psql, Go, and a /api frontend build.
 // Uses a temporary schema, a real API process, and real browser authentication.
@@ -80,8 +81,8 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
-  await runTruckRecurringE2E({page,base,temp});
-  if (!process.argv.includes("--truck-recurring-only")) {
+  if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
+  if (!process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only")) {
   await verifyExpenseSettings(page, base, temp, { sql, schema });
   await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
   await page.getByRole('button', { name: 'New installment plan', exact: true }).click();
@@ -420,7 +421,7 @@ try {
   expect(errors).toEqual([]);
   }
   expect(errors).toEqual([]);
-  console.log(`${process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
+  console.log(`${process.argv.includes('--pay-source-only') ? 'Shared payroll sources' : process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];
   if (page) { await page.screenshot({ path: join(temp, 'failure.png'), fullPage: true }); console.error('Failure screenshot:', join(temp, 'failure.png')); console.error((await page.locator('body').innerText()).slice(-5000)); }

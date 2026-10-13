@@ -817,6 +817,25 @@ assignment lookup lists.
   changes. Charge type deletion normally requires no truck assignments; Archive
   retains used types. The one-time removal of "charge" is explicit migration data
   cleanup, not a reusable destructive deletion endpoint.
+  Migration 093 restores editable weekly truck-fee collections in both payroll
+  pages through pay_source_collections. Source amounts are signed and bounded by
+  current source plus saved carry; zero defers collection. The ledger follows the
+  truck and original owner across Driver/Investor Pay routing, including excluded
+  fees, without transferring debt on an ownership change. GET never collects.
+  Investor Fuel/Toll now have the same partial/zero carry semantics as Driver Pay;
+  pre-ledger investor overrides resolve their historical sources and are pinned
+  when later collections depend on them. Genuine source credits keep their sign
+  and carry unpaid credit too. Cross-week revisions reject stale saves; later
+  collections must be zeroed before an earlier correction. Finalized snapshots
+  remain frozen and reopening retains collections. Driver autosave uses the
+  exclusive shared financial lock to serialize against truck/investor writes.
+  Source input limits apply in the browser and API; expenses/escrow/installments
+  retain their existing principal bounds. Computed driver earnings, CAT tickets
+  and escrow releases remain fixed on both pages. Payroll undo retains current
+  source revisions, including when a keyboard event precedes the receipt render.
+  node scripts/test-driver-charges-e2e.mjs --pay-source-only tests both real payroll
+  UIs, carry, autosave, undo and bounds. TestPaySourceCollectionsDatabase covers
+  fresh/migrated schemas, legacy overrides, routing and finalized protection.
   TestDriverChargesDatabase and TestTruckRecurringDatabase use the disposable
   MSERP_DRIVER_CHARGES_TEST_DATABASE_URL as mserp_app for fresh/migrated schemas.
   test-driver-charges-e2e.mjs --truck-recurring-only checks direct driver ownership,

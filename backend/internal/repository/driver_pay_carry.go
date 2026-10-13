@@ -110,7 +110,7 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 		if e != nil {
 			return nil, e
 		}
-		report, _, e = routeTruckPay(ctx, tx, report)
+		report, _, e = routeTruckPaySources(ctx, tx, report)
 		if e != nil {
 			return nil, e
 		}
@@ -152,8 +152,8 @@ func costBalance(records []payCostRecord, driver, week string) (int64, int64) {
 		tb, _ := chargeCents(r.Toll)
 		fa, _ := chargeCents(r.FuelAmount)
 		ta, _ := chargeCents(r.TollAmount)
-		f = max(0, f+fb+fa)
-		t = max(0, t+tb+ta)
+		f += fb + fa
+		t += tb + ta
 	}
 	return f, t
 }
@@ -232,12 +232,12 @@ func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits
 	// and editable after a tariff change, without assigning new CPM fuel costs.
 	fuelCPM := d.PayType == "cpm" && state.FuelCarry == "0.00"
 	tollCPM := d.PayType == "cpm" && state.TollCarry == "0.00"
-	if edits.FuelOverride != nil && !fuelCPM {
+	if edits.FuelOverride != nil {
 		if err := validatePaySourceAmount("Fuel", *edits.FuelOverride, -fd); err != nil {
 			return err
 		}
 	}
-	if edits.TollOverride != nil && !tollCPM {
+	if edits.TollOverride != nil {
 		if err := validatePaySourceAmount("Toll", *edits.TollOverride, -td); err != nil {
 			return err
 		}

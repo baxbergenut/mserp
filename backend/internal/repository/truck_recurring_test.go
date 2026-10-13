@@ -64,7 +64,13 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 			if mode == "fresh" {
 				exec(string(source))
 			} else {
-				exec(withoutTruckRecurringMigration(t, strings.ReplaceAll(string(source), "\r\n", "\n")))
+				sourceMigration, sourceErr := os.ReadFile("../../sql/093_pay_source_collections.sql")
+				if sourceErr != nil {
+					t.Fatal(sourceErr)
+				}
+				prior := strings.ReplaceAll(string(source), "\r\n", "\n")
+				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
+				exec(withoutTruckRecurringMigration(t, prior))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
     INSERT INTO driver_charge_types(id,name,direction,amount,amounts) VALUES('81000000-0000-0000-0000-000000000002','charge','charge',25,ARRAY[25]::numeric[]);
     INSERT INTO driver_charge_schedules(id,driver_id,type_id,kind,name,direction,start_week,eligibility) VALUES('81000000-0000-0000-0000-000000000003','81000000-0000-0000-0000-000000000001','81000000-0000-0000-0000-000000000002','recurring','charge','charge','2026-10-05','calendar');
@@ -77,6 +83,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
  INSERT INTO driver_charge_phases(schedule_id,week_start,amount) VALUES('81000000-0000-0000-0000-000000000005','2026-10-05',20);
  INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules) VALUES('81000000-0000-0000-0000-000000000001','2026-10-05','{"frozen":"unchanged"}',ARRAY['81000000-0000-0000-0000-000000000003','81000000-0000-0000-0000-000000000005']::uuid[]);`)
 				applyTruckRecurringMigration(t, ctx, admin)
+				exec(string(sourceMigration))
 				var preserved bool
 				if e = admin.QueryRow(ctx, `SELECT finalized AND report='{"frozen":"unchanged"}'::jsonb
  AND confirmed_schedules=ARRAY['81000000-0000-0000-0000-000000000005']::uuid[]

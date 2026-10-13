@@ -63,6 +63,14 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 			return errors.New("comments must belong to the selected week")
 		}
 	}
+	if len(e.SourceCharges) > 500 {
+		return errors.New("too many source charges")
+	}
+	for _, row := range e.SourceCharges {
+		if !isUUID(row.OwnerID) || len(row.Source) > 200 || len(row.Revision) > 256 || !grossBoardDecimal.MatchString(row.Amount) {
+			return errors.New("invalid source charge amount or identity")
+		}
+	}
 	if len(e.ExpenseDeductions) > 500 {
 		return errors.New("too many expense deductions")
 	}
