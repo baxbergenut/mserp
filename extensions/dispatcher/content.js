@@ -2,13 +2,14 @@
   const A = DispatchWatchAdapter;
   let host, root, running = false, generation = 0, timer, settings = DispatchWatch.defaults;
   let original = [], promotedBody, tracker = DispatchWatch.createTracker();
-  let page = 1, lastRequest = 0, abortWait, latestResponse, checkWait, soundWarning = "";
+  let page = 1, lastRequest = 0, abortWait, latestResponse, checkWait, decorateTimer, soundWarning = "";
   window.addEventListener("message", event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.source !== "mserp-dispatch-response-v1") return;
     const value = event.data;
     if (!Number.isSafeInteger(value.id) || !Number.isFinite(value.startedAt) || (latestResponse && value.id <= latestResponse.id)) return;
     latestResponse = value;
     checkWait?.();
+    scheduleDecorate();
   });
   async function send(message) {
     const r = await chrome.runtime.sendMessage(message);
@@ -23,10 +24,12 @@
   function restore() {
     if (promotedBody?.isConnected) for (const row of original) if (row.parentElement === promotedBody) promotedBody.append(row);
     original = []; promotedBody = null;
-    document.querySelectorAll(A.rowSelector).forEach(row => row.classList.remove("mserp-watch-match", "mserp-watch-gold", "mserp-watch-green", "mserp-watch-blue"));
+    document.querySelectorAll(A.rowSelector).forEach(row => {
+      for (const name of ["mserp-watch-match", "mserp-watch-gold", "mserp-watch-green", "mserp-watch-blue"]) if (row.classList.contains(name)) row.classList.remove(name);
+    });
   }
   function stop(reason = "Paused") {
-    running = false; generation++; clearTimeout(timer); abortWait?.(); restore();
+    running = false; generation++; clearTimeout(timer); abortWait?.();
     if (root) root.querySelector("#play").textContent = "▶ Play";
     status(reason); void send({ type: "stop" }).catch(() => {});
   }
@@ -36,12 +39,48 @@
     list.replaceChildren();
     for (const l of recent.slice(0, 100)) {
       const item = document.createElement("div"); item.className = "load";
-      item.textContent = `${l.id} · ${l.origin} → ${l.destination} · ${l.price === null ? "No price" : "$" + l.price.toLocaleString()} · ${l.rpm === null ? "—" : "$" + l.rpm.toFixed(2) + "/mi"} · page ${l.page}`;
+      item.textContent = `${l.id} · ${l.origin} → ${l.destination} · ${l.price === null ? "No price" : "$" + l.price.toLocaleString()} · ${l.rpm === null ? "—" : "$" + l.rpm.toFixed(2) + "/mi"}`;
+      const detail = document.createElement("p"); detail.className = "hint";
+      const presence = l.presence === "missing" ? "No longer in results — booking status unknown" : l.presence === "unavailable" ? "Reported unavailable in the last response" : `Seen on page ${l.page}`;
+      detail.textContent = `${presence} · last seen ${new Date(l.lastSeenAt).toLocaleTimeString()}`;
+      item.append(detail);
       list.append(item);
     }
     if (!recent.length) list.textContent = tracker.ready ? "No new loads since the baseline." : "The first complete scan is a silent baseline.";
     root.querySelector("#new").textContent = `New loads (${recent.length})`;
     root.querySelector("#history").textContent = `${tracker.ready ? "Baseline ready" : "Building baseline"} · ${tracker.seenCount} IDs seen this run${recent.length > 100 ? " · showing the latest 100" : ""}`;
+  }
+  // Framework rerenders may replace rows after the request has settled, and
+  // users may pause or change pages to inspect a discovery. Decoration is based
+  // on retained IDs, independent of whether this response contains fresh alerts.
+  function decorate() {
+    if (abortWait || A.loading() || !location.pathname.startsWith("/carrier/ngx/load-board/grid")) return;
+    let response;
+    try { response = DispatchWatch.fromResponse(latestResponse?.data); } catch { return; }
+    const entries = A.rows(), loads = new Map(response.jobs.map(l => [l.id, l]));
+    if (entries.length !== loads.size || entries.some(e => !loads.has(e.id))) return;
+    const ranks = new Map(tracker.recent.map(l => [l.id, l.order]));
+    for (const { row, id } of entries) {
+      const active = ranks.has(id) && loads.get(id).available;
+      for (const name of ["mserp-watch-match", "mserp-watch-gold", "mserp-watch-green", "mserp-watch-blue"]) {
+        const wanted = active && (name === "mserp-watch-match" || name === `mserp-watch-${settings.highlight}`);
+        if (row.classList.contains(name) !== wanted) row.classList.toggle(name, wanted);
+      }
+    }
+    if (!entries.some(e => ranks.has(e.id) && loads.get(e.id).available)) return;
+    const body = entries[0].row.parentElement;
+    if (promotedBody !== body || original.length !== body.children.length || original.some(row => row.parentElement !== body)) {
+      promotedBody = body; original = [...body.children];
+    }
+    const rowRanks = new Map(entries.map(e => [e.row, loads.get(e.id).available ? ranks.get(e.id) || 0 : 0]));
+    const desired = [...original].sort((a,b) => (rowRanks.get(b) || 0) - (rowRanks.get(a) || 0));
+    // Avoid changing the DOM when already correct, so observing our own changes
+    // cannot cause a mutation loop. Only original native row nodes are moved.
+    desired.forEach((row, index) => { if (body.children[index] !== row) body.insertBefore(row, body.children[index] || null); });
+  }
+  function scheduleDecorate() {
+    clearTimeout(decorateTimer);
+    decorateTimer = setTimeout(decorate, 50);
   }
   async function inspect() {
     restore();
@@ -50,15 +89,7 @@
     const loads = new Map(response.jobs.map(j => [j.id, j]));
     if (entries.length !== loads.size || entries.some(e => !loads.has(e.id))) throw new Error("The load response and displayed rows disagree. Refresh the search before restarting.");
     const { fresh } = tracker.observe(response);
-    const ranks = new Map(tracker.recent.map(l => [l.id, l.order]));
-    for (const { row, id } of entries) if (ranks.has(id)) row.classList.add("mserp-watch-match", `mserp-watch-${settings.highlight}`);
-    // Only promote existing row nodes. Never clone a booking button or add a row
-    // from another page; the popover shows discoveries across the entire search.
-    if (entries.some(e => ranks.has(e.id))) {
-      promotedBody = entries[0].row.parentElement; original = [...promotedBody.children];
-      const rowRanks = new Map(entries.map(e => [e.row, ranks.get(e.id) || 0]));
-      for (const row of [...original].sort((a,b) => (rowRanks.get(b) || 0) - (rowRanks.get(a) || 0))) promotedBody.append(row);
-    }
+    decorate();
     renderNewLoads();
     if (fresh.length) {
       root.querySelector("#last-new").textContent = `Last notification: ${fresh.length} new load${fresh.length === 1 ? "" : "s"} at ${new Date().toLocaleTimeString()}`;
@@ -145,7 +176,7 @@
     } catch(e) { if (g === generation) stop(e.message); }
   }
   function mount() {
-    if (!location.pathname.startsWith("/carrier/ngx/load-board/grid")) { if (running) stop("Paused outside the load grid"); host?.remove(); return; }
+    if (!location.pathname.startsWith("/carrier/ngx/load-board/grid")) { if (running) stop("Paused outside the load grid"); restore(); host?.remove(); return; }
     if (host?.isConnected) return;
     const controls = A.controls();
     if (!controls) return;
@@ -162,7 +193,7 @@
       #new-loads{inset:auto;box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:min(400px,calc(100dvh - 24px));overflow:auto;border:1px solid #52525b;border-radius:8px;padding:16px;background:#18181b;color:#f4f4f5;box-shadow:0 8px 32px #0005}
       #new-loads h2{font-size:14px;margin:0 0 8px}.hint{font-size:12px;color:#a1a1aa;margin:8px 0}.load{padding:8px 0;border-top:1px solid #3f3f46}
     </style><div class="toolbar" aria-label="Dispatch Watch auto-refresh"><button type="button" id="play">▶ Play</button><button type="button" id="settings">Settings</button><button type="button" id="new" aria-controls="new-loads" aria-expanded="false">New loads (0)</button><span id="status" role="status" aria-live="polite">Paused</span></div>
-    <div id="new-loads" popover="auto" role="region" aria-label="New loads found during this run"><h2>New loads since Play</h2><p class="hint" id="history"></p><p class="hint" id="last-new"></p><div id="loads"></div><p class="hint">Newest discoveries first. Page references reflect the last check. Pause to review or book through J.B. Hunt.</p></div>`;
+    <div id="new-loads" popover="auto" role="region" aria-label="New loads found during this run"><h2>New loads since Play</h2><p class="hint" id="history"></p><p class="hint" id="last-new"></p><div id="loads"></div><p class="hint">Discoveries stay here until the next Play or reload. Missing from results does not confirm booking. Highlighted rows stay at the top of their page, including while paused.</p></div>`;
     controls.append(host);
     root.querySelector("#play").onclick = () => void start();
     root.querySelector("#settings").onclick = () => void send({ type: "options" }).catch(e => status(e.message));
@@ -183,10 +214,11 @@
   for (const type of ["click", "keydown", "input", "change"]) document.addEventListener(type, e => {
     if (e.isTrusted && !e.composedPath().includes(host)) {
       if (running) stop("Paused for site interaction. Play starts a new baseline.");
-      else if (type === "click") restore();
+      restore();
+      scheduleDecorate();
     }
   }, true);
   window.addEventListener("pagehide", () => stop());
-  new MutationObserver(mount).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(() => { mount(); scheduleDecorate(); }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
   mount();
 })();

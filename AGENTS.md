@@ -302,6 +302,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   mount inside the native paginator's right content, never above the fixed-height grid.
   Reattach the same toolbar when Angular replaces the paginator during refresh;
   routine DOM replacement must not stop a run or reset its baseline.
+  Reapply retained discovery highlights/order after row rerenders and keep them
+  while paused. Missing/unavailable discoveries remain in the popover with last-seen
+  time and explicit status; absence never implies booked. Returning IDs regain
+  highlighting without re-alerting. The next Play or reload resets this history.
 - Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
   `ExtensionAccess.tsx` implement `access.manage` administration at
   GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute

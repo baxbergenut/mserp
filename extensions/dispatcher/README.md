@@ -1,6 +1,6 @@
 # MS Express Dispatch Watch
 
-Private Chrome Manifest V3 extension, version 0.2.1.
+Private Chrome Manifest V3 extension, version 0.2.2.
 
 ## Install for a pilot
 
@@ -46,7 +46,11 @@ device volume; Chrome/OS mute settings still apply.
   page. Original row nodes and click handlers are retained and restored before
   the site's next action. The New loads popover beside pagination lists new
   discoveries across pages, newest first, with their last checked page number.
-  Loads absent from a completed scan leave the list but stay in the seen-ID cache.
+  Highlights and promotion are reapplied after row rerenders and remain while
+  paused. Discoveries absent from a completed scan stay in the list with a
+  "No longer in results" label and their last-seen time; this does not confirm
+  booking. Returning discoveries regain their highlight without another alert.
+  The discovery list and baseline reset on the next Play or page reload.
 - Chime, Bell, Radar or Silent, volume control, and three highlight colors.
   One sound per response containing newly discovered IDs; baseline scans and
   unchanged results never play a notification.

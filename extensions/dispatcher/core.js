@@ -31,7 +31,7 @@ globalThis.DispatchWatch = (() => {
       get ready() { return ready; },
       get seenCount() { return seen.size; },
       get recent() { return [...recent.values()].sort((a, b) => b.order - a.order); },
-      observe(response) {
+      observe(response, now = Date.now()) {
         if (response.page !== expectedPage) throw new Error("Search pages changed unexpectedly. Press Play to establish a new baseline.");
         const fresh = [];
         for (const load of response.jobs) {
@@ -42,15 +42,15 @@ globalThis.DispatchWatch = (() => {
             seen.add(load.id);
             if (ready && load.available) {
               fresh.push(load);
-              recent.set(load.id, { ...load, page: response.page + 1, order: ++order });
+              recent.set(load.id, { ...load, page: response.page + 1, order: ++order, foundAt: now });
             }
           }
-          if (!load.available) recent.delete(load.id);
-          else if (recent.has(load.id)) recent.set(load.id, { ...recent.get(load.id), ...load, page: response.page + 1 });
+          if (recent.has(load.id)) recent.set(load.id, { ...recent.get(load.id), ...load,
+            page: response.page + 1, lastSeenAt: now, presence: load.available ? "present" : "unavailable" });
         }
         const complete = response.page + 1 >= response.totalPages;
         if (complete) {
-          for (const id of recent.keys()) if (!scan.has(id)) recent.delete(id);
+          for (const [id, load] of recent) if (!scan.has(id)) recent.set(id, { ...load, presence: "missing" });
           scan.clear(); ready = true; expectedPage = 0;
         } else expectedPage++;
         return { fresh, complete };

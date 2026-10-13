@@ -30,14 +30,17 @@ assert.equal(tracker.observe(response([job('TEST002', 9000), job('TEST003')], 0,
 assert.equal(tracker.observe(response([job('TEST001'), job('TEST003')], 1, 2)).fresh.length, 0);
 assert.equal(tracker.recent.length, 1);
 tracker.observe(response([]));
-assert.equal(tracker.recent.length, 0);
+assert.equal(tracker.recent.length, 1, 'missing discoveries remain in history');
+assert.equal(tracker.recent[0].presence, 'missing');
 assert.equal(tracker.observe(response([job('TEST003')])).fresh.length, 0, 'returning IDs never re-alert');
+assert.equal(tracker.recent[0].presence, 'present', 'returning discoveries regain their highlight');
 assert.equal(tracker.seenCount, 3);
 assert.equal(C.createTracker().observe(response([job('TEST003')])).fresh.length, 0, 'new run resets baseline');
 const empty = C.createTracker(); empty.observe(response([], 0, 0));
 assert.equal(empty.observe(response([job('TEST001')])).fresh.length, 1);
 empty.observe(response([{...job('TEST001'), loadboardStatus: 'BOOKED'}]));
-assert.equal(empty.recent.length, 0);
+assert.equal(empty.recent.length, 1);
+assert.equal(empty.recent[0].presence, 'unavailable');
 assert.throws(() => C.createTracker().observe(response([], 1, 2)), /pages changed/);
 const capped = C.createTracker(1); capped.observe(response([job('TEST001')]));
 assert.throws(() => capped.observe(response([job('TEST002')])), /history is full/);
@@ -74,12 +77,13 @@ try {
     }
     if (url.pathname === '/carrier/ngx/load-board/grid') return route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><title>Carrier 360 synthetic fixture</title><style>
       body{margin:16px;font:14px Arial}main{height:calc(100vh - 32px);display:flex;flex-direction:column}table{width:100%}.table-wrap{flex:1;overflow:auto}td{padding:12px;border-bottom:1px solid #ddd}.p-paginator{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-height:44px;background:#eee}.p-paginator-right-content{margin-left:auto;max-width:100%}</style></head><body><main>
-      <h1>Find Loads — synthetic test</h1><div><label>Native origin <input id="origin" value="Chicago"></label><button data-cy="lb-grid-refresh-button" aria-label="Refresh">Refresh</button></div>
+      <h1>Find Loads — synthetic test</h1><div><label>Native origin <input id="origin" value="Chicago"></label><button data-cy="lb-grid-refresh-button" aria-label="Refresh">Refresh</button><button id="repaint">Repaint rows</button></div>
       <div class="table-wrap"><table><thead><tr><th>Load</th><th>Price</th></tr></thead><tbody></tbody></table></div>
       <div class="p-paginator"><button aria-label="Go to first page" disabled>First</button><button aria-label="Go to next page">Next</button><label>Rows <select><option>100</option></select></label><div class="p-paginator-right-content"></div></div></main>
       <script>let page=0;async function search(n){page=n;const endpoint='/carrier/secure/loadboard/graphql/native';const payload=JSON.stringify({page:n});let body;
       if(n===1){body=await new Promise(resolve=>{const x=new XMLHttpRequest();x.open('POST',endpoint);x.onload=()=>resolve(x.status===200?JSON.parse(x.responseText):null);x.send(payload);});}else{const r=await fetch(endpoint,{method:'POST',body:payload});if(!r.ok)return;body=await r.json();}if(!body)return;const d=body.data.searchJobsElastic.data;
-      document.querySelector('tbody').innerHTML=d.jobs.map(j=>'<tr data-cy="lb-table-row"><td id="jobIdentifier">'+j.jobIdentifier+'</td><td>'+j.bookNowPrice+'</td></tr>').join('');
+      const markup=d.jobs.map(j=>'<tr data-cy="lb-table-row"><td id="jobIdentifier">'+j.jobIdentifier+'</td><td>'+j.bookNowPrice+'</td></tr>').join('');
+      document.querySelector('tbody').innerHTML=markup;document.querySelector('#repaint').onclick=()=>{document.querySelector('tbody').innerHTML=markup;};
       const oldPaginator=document.querySelector('.p-paginator');const paginator=oldPaginator.cloneNode(true);paginator.querySelector('.p-paginator-right-content').replaceChildren();oldPaginator.replaceWith(paginator);
       document.querySelector('[aria-label="Go to first page"]').disabled=n===0;document.querySelector('[aria-label="Go to next page"]').disabled=n===d.totalPages-1;bindPagination();}
       function bindPagination(){document.querySelector('[aria-label="Go to first page"]').onclick=()=>search(0);document.querySelector('[aria-label="Go to next page"]').onclick=()=>search(page+1);}
@@ -122,13 +126,36 @@ try {
   await expect(status).toContainText('page 2/2', {timeout: 10000});
   assert.equal(await page.locator('html').getAttribute('data-test-notifications'), '1', 'page moves and price changes do not alert');
   await expect(page.locator('.mserp-watch-match')).toHaveCount(1);
+  await page.getByRole('button', {name: 'Ⅱ Pause', exact: true}).click();
+  await expect(page.locator('.mserp-watch-match')).toHaveCount(1, {timeout: 3000});
+  await page.getByRole('button', {name: 'Repaint rows', exact: true}).click();
+  await expect(page.locator('.mserp-watch-match')).toHaveCount(1);
+  await expect(page.locator('tbody tr').first()).toContainText('NEW0001');
   await page.locator('#origin').fill('Dallas');
-  await expect(status).toContainText('Paused for site interaction');
-  await expect(page.locator('.mserp-watch-match')).toHaveCount(0);
+  await expect(page.locator('.mserp-watch-match')).toHaveCount(1);
   await page.getByRole('button', {name: '▶ Play', exact: true}).click();
   await expect(status).toContainText('Running', {timeout: 15000});
   await expect(bar.locator('#new')).toHaveText('New loads (0)');
   assert.equal(await page.locator('html').getAttribute('data-test-notifications'), '1', 'restart silently establishes a fresh baseline');
+  pages[0].push(job('NEW0002', 1200));
+  await expect(page.locator('tbody tr').first()).toContainText('NEW0002', {timeout: 12000});
+  await expect(page.locator('html')).toHaveAttribute('data-test-notifications', '2');
+  await expect(status).toContainText('page 2/2', {timeout: 10000});
+  await expect(status).toContainText('page 1/2', {timeout: 10000});
+  await expect(page.locator('tbody tr').first()).toContainText('NEW0002');
+  await expect(page.locator('.mserp-watch-match')).toHaveCount(1);
+  assert.equal(await page.locator('html').getAttribute('data-test-notifications'), '2', 'unchanged refresh retains highlight without another sound');
+  pages[0] = pages[0].filter(j => j.jobIdentifier !== 'NEW0002');
+  await expect(bar.locator('#loads')).toContainText('No longer in results', {timeout: 16000});
+  await expect(bar.locator('#new')).toHaveText('New loads (1)');
+  await bar.locator('#new').click();
+  await expect(bar.locator('#loads')).toContainText('NEW0002');
+  await page.screenshot({path: join(profile, 'missing-load.png')});
+  await bar.locator('#new').click();
+  pages[0].push(job('NEW0002', 1250));
+  await expect(page.locator('tbody tr').first()).toContainText('NEW0002', {timeout: 12000});
+  await expect(page.locator('.mserp-watch-match')).toHaveCount(1);
+  assert.equal(await page.locator('html').getAttribute('data-test-notifications'), '2', 'returning discovery is highlighted without duplicate sound');
   revoked = true;
   await expect(status).toContainText('Access revoked', {timeout: 12000});
   const before = requests.length;
