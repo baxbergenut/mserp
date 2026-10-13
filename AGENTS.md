@@ -286,6 +286,28 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Runtime and setup
 
+### Dispatcher Chrome extension
+
+- `extensions/dispatcher/` is the private Carrier 360 Manifest V3 extension.
+  `network.js` observes only the confirmed loadboard GraphQL endpoint, projecting
+  structured `searchJobsElastic` jobs without credentials/request bodies. Matching,
+  sound and highlighting are local; no load data goes to MSERP. Native grid controls
+  refresh/page at 5 seconds by default, minimum 4 seconds per request. All-page
+  scanning takes multiple intervals; browser throttling can delay timers. No autobook.
+- Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
+  `ExtensionAccess.tsx` implement `access.manage` administration at
+  GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute
+  single-use codes activate one browser for 30 days through POST
+  `/dispatcher-extension/activate`; POST `/dispatcher-extension/check` accepts only
+  a scoped bearer token. Hashes only in the DB; no ERP session privileges. The
+  extension checks each cycle and stops on failure. Replacement/revocation and
+  dispatcher deactivation invalidate tokens. Account reference is unverified metadata.
+- From frontend/, `node scripts/test-dispatch-extension.mjs` uses an isolated browser
+  and fixture HTTP responses. `test-dispatcher-access-views.mjs` checks the ERP UI.
+  Optional `MSERP_EXTENSION_TEST_DATABASE_URL` runs fresh/migrated local `_test`
+  database coverage as mserp_app. Package with `extensions/package-dispatcher.ps1`.
+  See `extensions/dispatcher/README.md` for installation, limits and future ranking.
+
 ### Backend environment
 
 Run the API from `backend/` because `main.go` loads `.env.local` and `.env` from

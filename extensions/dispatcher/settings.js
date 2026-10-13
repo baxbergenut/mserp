@@ -1,0 +1,12 @@
+const form = document.querySelector("#settings"), message = document.querySelector("#message");
+async function send(value) { const result = await chrome.runtime.sendMessage(value); if (!result?.ok) throw new Error(result?.error || "Extension unavailable"); return result; }
+function fill(s) { for (const [key,value] of Object.entries(s)) { const e=form.elements.namedItem(key); if(e) { if(e.type === "checkbox") e.checked=value; else e.value=value; } } }
+function read() { const s={}; for (const key of Object.keys(DispatchWatch.defaults)) { const e=form.elements.namedItem(key); s[key]=e.type === "checkbox" ? e.checked : e.value; } return DispatchWatch.normalize(s); }
+async function load() { const r=await send({type:"settings"}); fill(r.settings); document.querySelector("#identity").textContent=r.activated ? `Activated for ${r.dispatcherName}` : "Not activated"; document.querySelector("#activation").hidden=r.activated; document.querySelector("#forget").hidden=!r.activated; }
+function fail(e) { message.textContent=e.message || "Something went wrong"; }
+document.querySelector("#activate").onclick=async e => { e.target.disabled=true; try { await send({type:"activate",code:document.querySelector("#code").value}); document.querySelector("#code").value=""; await load(); message.textContent="Activated. Press Play on the J.B. Hunt load grid."; }catch(error){fail(error);}finally{e.target.disabled=false;} };
+document.querySelector("#forget").onclick=async()=>{try{await send({type:"forget"});await load();message.textContent="Disconnected. Ask your administrator for a new code to reconnect.";}catch(e){fail(e);}};
+form.onsubmit=async e=>{e.preventDefault();const s=read();if(s.minMiles!==""&&s.maxMiles!==""&&Number(s.minMiles)>Number(s.maxMiles)){message.textContent="Minimum miles cannot exceed maximum miles.";return;}if(s.pickupFrom&&s.pickupTo&&s.pickupFrom>s.pickupTo){message.textContent="Pickup end must be on or after pickup start.";return;}try{await send({type:"save",settings:s});fill(s);message.textContent="Saved. Running monitors use these settings on the next check.";}catch(error){fail(error);}};
+document.querySelector("#reset").onclick=()=>{fill(DispatchWatch.defaults);message.textContent="Defaults restored in the form. Click Save settings to apply.";};
+document.querySelector("#preview").onclick=()=>{const s=read();void DispatchWatchSound.play(s.sound,s.volume).catch(fail);};
+void load().catch(fail);

@@ -285,6 +285,10 @@ func TestPermissionCoverage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	router := NewRouter(logger, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, AuthOptions{}).(chi.Routes)
 	public := map[string]bool{"/healthz": true, "/readyz": true, "/auth/login": true, "/integrations/fleetscope/driver-hired": true, "/integrations/fleetscope/driver-terminated": true}
+	// These two endpoints use high-entropy activation codes / scoped bearer tokens,
+	// never ERP cookies. Their authentication is tested separately.
+	public["/dispatcher-extension/activate"] = true
+	public["/dispatcher-extension/check"] = true
 	err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		route = strings.ReplaceAll(route, "/*/", "/")
 		route = strings.TrimSuffix(route, "/")

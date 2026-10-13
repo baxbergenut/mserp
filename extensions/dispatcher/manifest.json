@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "MS Express Dispatch Watch",
+  "version": "0.1.0",
+  "description": "Private MS Express Carrier 360 load alerts and dispatcher access.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage"],
+  "host_permissions": ["https://erp.msexpressinc.net/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Dispatch Watch", "default_popup": "settings.html" },
+  "options_page": "settings.html",
+  "content_scripts": [{
+    "matches": ["https://scm.jbhunt.com/carrier/*"],
+    "js": ["network.js"],
+    "world": "MAIN",
+    "run_at": "document_start"
+  }, {
+    "matches": ["https://scm.jbhunt.com/carrier/*"],
+    "js": ["core.js", "sound.js", "adapter.js", "content.js"],
+    "css": ["highlight.css"],
+    "run_at": "document_idle"
+  }]
+}
