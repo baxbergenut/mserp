@@ -3,24 +3,28 @@ package repository
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"strings"
 )
 
 func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
 	// Expenses are eligible through the following Wednesday (Thursday is
 	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
-	rows, err := tx.Query(ctx, `SELECT e.charge_driver_id::text,e.id, coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
+	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
+ SELECT * FROM expenses WHERE charge_driver_id=ANY($1::uuid[]) AND NOT driver_settled AND expense_date<$2::date+10 AND amount>=0
+ ), payments AS MATERIALIZED (
+ SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior
+ FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id
+ ) SELECT e.charge_driver_id::text,e.id, coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
  e.expense_date::text,e.amount::text,
  (e.amount-coalesce(p.other,0))::text,
  coalesce(w.amount,e.amount-coalesce(p.other,0))::text,
  (e.amount-coalesce(p.prior,0)-coalesce(w.amount,0))::text,
  (e.amount-coalesce(p.prior,0))::text,
  e.balance_version,w.expense_id IS NOT NULL
- FROM expenses e
+ FROM relevant_expenses e
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$2::date
- LEFT JOIN LATERAL (SELECT sum(amount) FILTER (WHERE week_start<>$2::date) AS other,
- sum(amount) FILTER (WHERE week_start<$2::date) AS prior FROM expense_payments WHERE expense_id=e.id) p ON true
- WHERE e.charge_driver_id=ANY($1::uuid[]) AND w.investor_truck_id IS NULL AND NOT e.driver_settled
- AND e.expense_date<$2::date+10 AND e.amount>=0
+ LEFT JOIN payments p ON p.expense_id=e.id
+ WHERE w.investor_truck_id IS NULL
  AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0))
  ORDER BY e.expense_date,e.id`, drivers, week)
 	if err != nil {
@@ -49,18 +53,14 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 }
 
 func escrowDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
-	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,e.id,e.start_date::text,e.amount::text,
- capacity.available::text,
- coalesce(w.amount,capacity.available)::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0)-coalesce(w.amount,0))::text,
- (e.amount-e.opening_paid-coalesce(p.prior,0)+coalesce(r.prior,0))::text,e.balance_version,w.escrow_id IS NOT NULL
- FROM driver_escrows e
+	rows, err := tx.Query(ctx, `WITH `+strings.NewReplacer("$1", "$2", "$3", "$1").Replace(payrollEscrowCapacityCTE)+` SELECT e.driver_id::text,e.id,e.start_date::text,e.amount::text,
+ capacity.available::text,coalesce(w.amount,capacity.available)::text,
+ (e.amount-e.opening_paid+coalesce(p.delta,0)-coalesce(w.amount,0))::text,
+ (e.amount-e.opening_paid+coalesce(p.delta,0))::text,e.balance_version,w.escrow_id IS NOT NULL
+ FROM pay_escrows e JOIN pay_escrow_capacity capacity ON capacity.id=e.id
  LEFT JOIN driver_escrow_payments w ON w.escrow_id=e.id AND w.week_start=$2::date
- LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_payments WHERE escrow_id=e.id AND week_start<$2::date) p ON true
- LEFT JOIN LATERAL (SELECT sum(amount) prior FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled AND week_start<$2::date) r ON true
- CROSS JOIN LATERAL (SELECT escrow_collection_available(e.id,$2::date) available) capacity
- WHERE e.driver_id=ANY($1::uuid[]) AND e.start_date<$2::date+7
- AND (w.escrow_id IS NOT NULL OR capacity.available>0) ORDER BY e.start_date,e.id`, drivers, week)
+ LEFT JOIN pay_escrow_opening p ON p.id=e.id
+ WHERE w.escrow_id IS NOT NULL OR capacity.available>0 ORDER BY e.start_date,e.id`, drivers, week)
 	if err != nil {
 		return nil, err
 	}

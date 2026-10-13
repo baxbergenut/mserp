@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mserp/internal/db"
 	"sort"
 
 	"github.com/jackc/pgx/v5"
@@ -254,6 +255,7 @@ func teamPeriodFor(periods []DriverTeamPeriod, driver, week string) *DriverTeamP
 // Fleet/Relay identities and personal principals remain unchanged. Only the
 // weekly statement destination follows dated team membership.
 func routeTeamPay(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
+	defer db.Phase(ctx, "team_routing")()
 	teams, err := readDriverTeams(ctx, tx, "")
 	if err != nil {
 		return err

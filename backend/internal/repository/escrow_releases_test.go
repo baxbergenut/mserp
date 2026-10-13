@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -305,5 +306,21 @@ func verifyEscrowReplenishment(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	if len(read(6).ExpenseDeductions) != 0 {
 		t.Fatal("replenishment reintroduced an inactive driver")
+	}
+	// Compare the bulk read projection with the authoritative write guard at
+	// every boundary: existing/future payments, cancelled and scheduled releases,
+	// and release-week versus following-week capacity.
+	for offset := -1; offset <= 7; offset++ {
+		var equal bool
+		query := `WITH ` + strings.ReplaceAll(payrollEscrowCapacityCTE, "$3", "$2") + `
+		 SELECT coalesce(bool_and(c.available=escrow_collection_available(c.id,$1::date)),false)
+		 FROM pay_escrow_capacity c`
+		if err := pool.QueryRow(ctx, query, week.AddDate(0, 0, offset*7), []string{driver}).Scan(&equal); err != nil {
+			t.Fatal(err)
+		}
+		// Before the escrow start date there is intentionally no eligible ledger.
+		if offset >= 0 && !equal {
+			t.Fatalf("bulk escrow capacity differs from write guard at offset %d", offset)
+		}
 	}
 }

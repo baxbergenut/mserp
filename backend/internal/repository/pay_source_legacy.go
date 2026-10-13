@@ -13,8 +13,8 @@ import (
 // Resolve their historical source (or frozen report) without writing on GET.
 func readLegacyInvestorSources(ctx context.Context, tx pgx.Tx, result []paySourceRecord) ([]paySourceRecord, error) {
 	rows, err := tx.Query(ctx, `SELECT truck_id::text,owner_id::text,week_start::text,edits,report,finalized FROM investor_pay_weeks w
-	WHERE (edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
-	OR (edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')) ORDER BY week_start,truck_id`)
+	WHERE ($1::uuid[] IS NULL OR w.owner_id=ANY($1::uuid[])) AND ((edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
+	OR (edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))  ) ORDER BY week_start,truck_id`, payrollOwnerIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +56,24 @@ func readLegacyInvestorSources(ctx context.Context, tx pgx.Tx, result []paySourc
 			report, ok := reports[v.week]
 			if !ok {
 				w, _ := chargeWeek(v.week)
-				source, e := readDriverPaySourceWeek(ctx, tx, w, "")
+				costCtx := context.WithValue(ctx, payrollCostsOnlyKey{}, true)
+				ids := []string{}
+				for _, other := range old {
+					if other.week == v.week && !other.closed {
+						ids = append(ids, other.id)
+					}
+				}
+				costCtx, e := selectPayrollContexts(costCtx, tx, "truck", ids)
 				if e != nil {
 					return nil, e
 				}
-				_, report, e = routeTruckPaySources(ctx, tx, source)
+				costCtx = context.WithValue(costCtx, payrollReadKey{}, (*payrollReadState)(nil))
+				costCtx = payrollReadContext(costCtx, tx)
+				source, e := readDriverPaySourceWeek(costCtx, tx, w, "")
+				if e != nil {
+					return nil, e
+				}
+				_, report, e = routeTruckPaySources(costCtx, tx, source)
 				if e != nil {
 					return nil, e
 				}

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"mserp/internal/db"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,14 +83,25 @@ type truckPayLoadMatch struct {
 // source units and unmatched plans fall back to the unique dated assignment.
 // Unresolved source labels supply candidates for scoped review, never a guess.
 func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]truckPayLoadMatch, error) {
-	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
+	// Filter base tables before materialization so their statistics describe the
+	// load rows. Filtering the CTE again makes PostgreSQL 16 estimate a handful of
+	// rows and repeatedly scan all dated assignments for each actual load.
+	entriesSQL := strings.ReplaceAll(payrollEntriesCTE, "$3", "$2")
+	entriesSQL = strings.Replace(entriesSQL, "WHERE NOT e.deleted", "WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''", 1)
+	rows, err := tx.Query(ctx, `WITH `+entriesSQL+`, entries AS MATERIALIZED (SELECT * FROM pay_entries
+ ), days AS (SELECT DISTINCT driver_id,service_date FROM entries), assigned AS MATERIALIZED (
+ SELECT d.driver_id,d.service_date,array_agg(DISTINCT a.truck_id::text) trucks
+ FROM days d JOIN truck_driver_assignments a ON a.driver_id=d.driver_id
+ AND a.assigned_at < ((d.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at >= ((d.service_date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ GROUP BY d.driver_id,d.service_date
+ ), aliases AS MATERIALIZED (SELECT unit_key,array_agg(truck_id::text) trucks FROM truck_unit_aliases GROUP BY unit_key)
+ SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
  coalesce(l.truck_id::text,''),(l.id IS NULL OR btrim(coalesce(l.truck_unit,''))=''),
- ARRAY(SELECT DISTINCT a.truck_id::text FROM truck_driver_assignments a WHERE a.driver_id=e.driver_id
- AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=e.service_date
- AND (a.unassigned_at IS NULL OR e.service_date<(a.unassigned_at AT TIME ZONE 'America/New_York')::date)),
- ARRAY(SELECT a.truck_id::text FROM truck_unit_aliases a WHERE l.truck_id IS NULL AND a.unit_key=upper(btrim(l.truck_unit)))
- FROM `+grossBoardEntriesSQL+` e `+grossBoardResolvedLoad+`
- WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'' AND e.service_date>=$1::date AND e.service_date<$1::date+7`, week)
+ coalesce(a.trucks,'{}'::text[]),CASE WHEN l.truck_id IS NULL THEN coalesce(aliases.trucks,'{}'::text[]) ELSE '{}'::text[] END
+ FROM entries e `+payrollResolvedLoad+`
+ LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.service_date
+ LEFT JOIN aliases ON aliases.unit_key=upper(btrim(l.truck_unit))`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +130,7 @@ func payCommentKey(date string, slot int, number string) string { // same stable
 }
 
 func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
+	defer db.Phase(ctx, "truck_routing")()
 	investor := DriverPayWeek{WeekStart: source.WeekStart, Drivers: []DriverPayDriver{}}
 	config, err := payrollTruckData(ctx, tx)
 	if err != nil {
@@ -519,7 +532,32 @@ func investorPayView(report DriverPayWeek, target string) DriverPayWeek {
 	return report
 }
 
+func (r *DriverPayRepository) InvestorStatement(ctx context.Context, week time.Time, id string) (DriverPayWeek, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return DriverPayWeek{}, err
+	}
+	defer tx.Rollback(ctx)
+	result, err := r.cachedWeek(ctx, tx, "investor:"+id, week, func() (DriverPayWeek, error) {
+		selected, err := selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "truck", id)
+		if err != nil {
+			return DriverPayWeek{}, err
+		}
+		v, err := readInvestorPay(selected, tx, week)
+		return selectPayDriver(v, id), err
+	})
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}
+
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
+	defer db.Phase(ctx, "investor_calculation")()
+	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
+	if err := payrollQueryPlans(ctx, tx); err != nil {
+		return DriverPayWeek{}, err
+	}
 	ctx = payrollReadContext(ctx, tx)
 	source, err := readDriverPaySourceWeek(ctx, tx, week, "")
 	if err != nil {

@@ -19,6 +19,16 @@ type payrollCache struct {
 	bytes    int
 }
 
+// This is deliberately an exclusion list: every other tracked table remains a
+// dependency, including newly tracked tables and financial audit inputs. Changes
+// to these operational tables cannot affect a payroll amount, name or warning.
+var payrollUnrelatedTables = []string{
+	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
+	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
+	"dispatcher_extension_access", "updater_extension_access", "dispatcher_extension_events",
+	"driver_service_requests", "driver_service_events", "profile_notes",
+}
+
 // Revision rows change atomically with their source tables. Reading them in the
 // report's repeatable-read snapshot preserves concurrent-commit safety while
 // allowing cache reuse across unrelated session activity. Writers never use this.
@@ -29,6 +39,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 		return DriverPayWeek{}, err
 	}
 	query := `SELECT pg_current_snapshot()::text`
+	var args []any
 	if revisionTable != nil {
 		// A future table must opt into change tracking. Until then, conservatively
 		// fall back to MVCC invalidation instead of risking an untracked input.
@@ -37,10 +48,11 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
  AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','schema_migrations')
  AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
 ) THEN 'snapshot:' || pg_current_snapshot()::text
- ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name),'') END
+ ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),'') END
  FROM payroll_cache_revisions`
+		args = []any{payrollUnrelatedTables}
 	}
-	if err := tx.QueryRow(ctx, query).Scan(&snapshot); err != nil {
+	if err := tx.QueryRow(ctx, query, args...).Scan(&snapshot); err != nil {
 		return DriverPayWeek{}, err
 	}
 	key := kind + ":" + week.Format(time.DateOnly) + ":" + ChargeCurrentWeek() + ":" + snapshot

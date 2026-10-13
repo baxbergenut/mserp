@@ -150,8 +150,8 @@ try {
   await page.goto(`${base}/trucks`);
   await page.getByRole('button', { name: 'Add truck', exact: true }).click();
   await page.getByLabel('Unit number', { exact: true }).fill('INV-E2E');
-  await expect(page.getByLabel('Owner', { exact: false }).locator('option', { hasText: 'MS Express Inc.' })).toHaveCount(1);
-  await page.getByLabel('Owner', { exact: false }).selectOption({ label: 'E2e Investor' });
+  await expect(page.getByRole('combobox', { name: 'Truck owner', exact: true }).locator('option', { hasText: 'MS Express Inc.' })).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Truck owner', exact: true }).selectOption({ label: 'E2e Investor' });
   await page.getByRole('button', { name: 'Create truck', exact: true }).click();
   await expect(page.getByRole('link', { name: 'INV-E2E', exact: true })).toBeVisible();
   const truckRow = page.getByRole('row').filter({ hasText: 'INV-E2E' });

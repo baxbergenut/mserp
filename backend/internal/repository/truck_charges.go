@@ -37,7 +37,7 @@ type TruckChargeData struct {
 
 func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
 	d := TruckChargeData{Terms: []TruckTerm{}, Phases: []TruckChargePhase{}}
-	rows, err := q.Query(ctx, `SELECT truck_id::text,week_start::text,owner_id::text,share_percent::text,version FROM truck_settlement_terms ORDER BY week_start,truck_id`)
+	rows, err := q.Query(ctx, `SELECT truck_id::text,week_start::text,owner_id::text,share_percent::text,version FROM truck_settlement_terms WHERE ($1::uuid[] IS NULL OR truck_id=ANY($1::uuid[])) ORDER BY week_start,truck_id`, payrollTruckIDs(ctx))
 	if err != nil {
 		return d, err
 	}
@@ -54,7 +54,7 @@ func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error
 	if err != nil {
 		return d, err
 	}
-	rows, err = q.Query(ctx, `SELECT p.truck_id::text,p.type_id::text,p.week_start::text,p.amount::text,p.included,p.version,t.version FROM truck_charge_phases p JOIN driver_charge_types t ON t.id=p.type_id ORDER BY p.week_start,p.truck_id,p.type_id`)
+	rows, err = q.Query(ctx, `SELECT p.truck_id::text,p.type_id::text,p.week_start::text,p.amount::text,p.included,p.version,t.version FROM truck_charge_phases p JOIN driver_charge_types t ON t.id=p.type_id WHERE ($1::uuid[] IS NULL OR p.truck_id=ANY($1::uuid[])) ORDER BY p.week_start,p.truck_id,p.type_id`, payrollTruckIDs(ctx))
 	if err != nil {
 		return d, err
 	}

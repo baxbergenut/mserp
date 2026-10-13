@@ -279,6 +279,49 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			testOwnerSettlements(t, ctx, admin, pool, driver, other)
 			testExpenseCollectionWindow(t, ctx, admin, pool)
+			// Two clients reading the same unpaid principal in different weeks
+			// must not both collect it, even though weekly edit versions differ.
+			input.Amount = "125.50"
+			concurrentExpense, err := expenses.CreateExpense(ctx, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			drafts := []DriverPayEdits{read(week.AddDate(0, 0, 28)), read(week.AddDate(0, 0, 35))}
+			for i := range drafts {
+				found := false
+				for j := range drafts[i].ExpenseDeductions {
+					if drafts[i].ExpenseDeductions[j].ExpenseID == concurrentExpense.ID {
+						drafts[i].ExpenseDeductions[j].Apply = true
+						found = true
+					}
+				}
+				if !found {
+					t.Fatal("concurrent principal missing")
+				}
+			}
+			start, results := make(chan struct{}), make(chan error, 2)
+			for _, draft := range drafts {
+				go func(draft DriverPayEdits) { <-start; _, err := pay.Save(ctx, draft); results <- err }(draft)
+			}
+			close(start)
+			successes, conflicts := 0, 0
+			for range drafts {
+				switch err := <-results; {
+				case err == nil:
+					successes++
+				case errors.Is(err, ErrDriverPayConflict):
+					conflicts++
+				default:
+					t.Fatal(err)
+				}
+			}
+			if successes != 1 || conflicts != 1 {
+				t.Fatalf("concurrent collections: successes=%d conflicts=%d", successes, conflicts)
+			}
+			var collected string
+			if err := pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, concurrentExpense.ID).Scan(&collected); err != nil || collected != "125.50" {
+				t.Fatalf("concurrent principal collected %s: %v", collected, err)
+			}
 		})
 	}
 }

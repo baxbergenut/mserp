@@ -56,6 +56,9 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 		if err = rows.Scan(&d.TruckID, &d.TruckUnit, &d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.DispatcherID, &d.DispatcherName, &fullWeek); err != nil {
 			return err
 		}
+		if !payrollIncludesTruck(ctx, d.TruckID) {
+			continue
+		}
 		hasLoads, otherDriver := false, false
 		for _, person := range source.Drivers {
 			for _, load := range person.Loads {

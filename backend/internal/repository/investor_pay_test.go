@@ -253,9 +253,30 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatalf("unsafe investor Fuel amount %s accepted", amount)
 				}
 			}
-			saved, e := pr.SaveInvestorPay(ctx, card.Edits, actor)
-			if e != nil {
-				t.Fatal(e)
+			type saveResult struct {
+				edits DriverPayEdits
+				err   error
+			}
+			start, results := make(chan struct{}), make(chan saveResult, 2)
+			for range 2 {
+				go func() { <-start; v, err := pr.SaveInvestorPay(ctx, card.Edits, actor); results <- saveResult{v, err} }()
+			}
+			close(start)
+			var saved DriverPayEdits
+			successes, conflicts := 0, 0
+			for range 2 {
+				result := <-results
+				if result.err == nil {
+					saved = result.edits
+					successes++
+				} else if result.err == ErrDriverPayConflict {
+					conflicts++
+				} else {
+					t.Fatal(result.err)
+				}
+			}
+			if successes != 1 || conflicts != 1 {
+				t.Fatalf("concurrent investor saves: successes=%d conflicts=%d", successes, conflicts)
 			}
 			if len(saved.ExpenseDeductions) != 1 || !saved.ExpenseDeductions[0].Saved {
 				t.Fatal("expense payment not saved")
