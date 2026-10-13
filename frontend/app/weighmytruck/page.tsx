@@ -78,10 +78,8 @@ export default function WeighMyTruckPage() {
   const visible = shown.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return <div className="space-y-4">
-    <ManagementHeader icon={Scale} title="WeighMyTruck" count={tab === "drivers" ? enrolledCount : undefined} secondaryAction={tab === "drivers" && <>
-      <button className="ui-button" disabled={!!busy} onClick={() => { setError(""); void load(); }}><RefreshCw className="h-4 w-4" />Refresh</button>
-      {canWrite && <button className="ui-button ui-button-primary" disabled={!!busy || !data?.configured || !data.initialized} onClick={() => { setDriverId(""); setError(""); setDialog({ kind: "add" }); }}><Plus className="h-4 w-4" />Add driver</button>}
-    </>} />
+    <ManagementHeader icon={Scale} title="WeighMyTruck" count={tab === "drivers" ? enrolledCount : undefined} />
+
     <div role="tablist" aria-label="WeighMyTruck sections" className="flex gap-2 border-b border-zinc-800 pb-2">{(["drivers", "transactions"] as const).map(value => <button key={value} role="tab" aria-selected={tab === value} className={`ui-button ${tab === value ? "bg-blue-500/10 text-blue-400" : "text-zinc-400"}`} onClick={() => setTab(value)}>{value === "drivers" ? "Drivers" : "Transactions"}</button>)}</div>
     {tab === "transactions" ? <TransactionsTab /> : <>
     {error && <ErrorBanner message={error} />}
@@ -91,7 +89,10 @@ export default function WeighMyTruckPage() {
     {unresolvedAdds.map(entry => <ErrorBanner key={entry.id} message={`${entry.name}: ${entry.warning || "The add request has not completed. Refresh for the result."}`} />)}
     <div className="flex flex-wrap items-center gap-2">
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search drivers, email or code" />
-    </div>
+    <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader hideTitle icon={Scale} title="WeighMyTruck" count={tab === "drivers" ? enrolledCount : undefined} secondaryAction={tab === "drivers" && <>
+      <button className="ui-button" disabled={!!busy} onClick={() => { setError(""); void load(); }}><RefreshCw className="h-4 w-4" />Refresh</button>
+      {canWrite && <button className="ui-button ui-button-primary" disabled={!!busy || !data?.configured || !data.initialized} onClick={() => { setDriverId(""); setError(""); setDialog({ kind: "add" }); }}><Plus className="h-4 w-4" />Add driver</button>}
+    </>} /></div></div>
     <TableShell>{loading ? <LoadingTable columns={6} /> : !visible.length ? <EmptyState message={search ? "No added drivers match your search." : "No drivers have been added to WeighMyTruck."} /> : <table className="w-full min-w-[760px] text-left text-[13px]">
       <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Driver", "Email", "Phone", "Code", "Charge to", ""].map((label, i) => <th key={i} className="h-8 px-3 font-medium">{label}</th>)}</tr></thead>
       <tbody className="divide-y divide-zinc-800/60">{visible.map(entry => <tr key={entry.id} className={needsAttention(entry) ? "bg-amber-500/5" : "hover:bg-zinc-800/20"}>

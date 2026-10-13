@@ -76,12 +76,12 @@ export function RelatedExpenses({
         <div>
           <div className="flex items-center gap-2">
             <WalletCards className="h-4 w-4 text-zinc-500" />
-            <h2 className="text-sm font-semibold text-zinc-100">{scope === "personal" ? "Personal expense charges" : scope === "non_personal" ? "Company & other-party expenses" : "Expenses & Charges"}</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">{scope === "personal" ? "Personal expense charges" : scope === "non_personal" ? "Company & other-party expenses" : "Expenses"}</h2>
             <span className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-[11px] text-zinc-400">{total}</span>
           </div>
           <p className="mt-1 text-[12px] text-zinc-500">{scope === "personal" ? "Total charged" : "Linked total"}: {formatMoney(amount)}</p>
         </div>
-        <Link href="/expenses" className="text-[12px] font-medium text-blue-400 transition hover:text-blue-300">Open Expenses & Charges</Link>
+        <Link href="/expenses" className="text-[12px] font-medium text-blue-400 transition hover:text-blue-300">Open Expenses</Link>
       </div>
       {error && <ErrorBanner message={error} />}
       <TableShell>

@@ -4,6 +4,7 @@ import type { DriverPayEdits } from "@/app/lib/types";
 // versions so the existing save endpoint still rejects concurrent changes.
 export function restorePayEdit(current: DriverPayEdits, before: DriverPayEdits, after: DriverPayEdits): DriverPayEdits {
   const restored = { ...current };
+  if (JSON.stringify(before.layoverExcludedDates) !== JSON.stringify(after.layoverExcludedDates)) restored.layoverExcludedDates = before.layoverExcludedDates ?? [];
   for (const key of ["notes", "fuelOverride", "tollOverride", "comments", "adjustments"] as const) {
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) Object.assign(restored, { [key]: before[key] });
   }

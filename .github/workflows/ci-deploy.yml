@@ -179,6 +179,21 @@ jobs:
         working-directory: frontend
         run: node scripts/test-prepass-views.mjs
 
+      - name: Verify expenses, load notes and layovers in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: |
+          node scripts/test-expense-views.mjs
+          node scripts/test-gross-board-notes.mjs
+          node scripts/test-layover-views.mjs
+
+      - name: Verify spreadsheet keyboard navigation in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: |
+          node scripts/test-payroll-grid.mjs
+          node scripts/test-board-grid.mjs
+
       - name: Package release
         shell: bash
         run: |

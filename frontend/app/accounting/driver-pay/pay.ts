@@ -52,9 +52,13 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   }), { original: BigInt(0), gross: BigInt(0), totalMiles: BigInt(0), loadedMiles: BigInt(0), deadheadMiles: BigInt(0), fee: BigInt(0), missingFees: 0, review: 0 });
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
-  const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? [])].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   return { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
+}
+
+export function activeLayovers(driver: DriverPayDriver, edits: DriverPayEdits) {
+  return (driver.layovers ?? []).filter(row => !edits.layoverExcludedDates?.includes(row.date));
 }
 
 // Keep the all-filtered-rows summary current when one visible statement saves.

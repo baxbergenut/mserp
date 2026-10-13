@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 
 import { PageHeader } from "@/app/components/PageHeader";
 
@@ -122,7 +123,7 @@ function LoadingReport() {
   );
 }
 
-function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
+function DriverPayReport({ dashboard, controls }: { dashboard: FinancialDashboard; controls: ReactNode }) {
   const [search, setSearch] = useViewState("WeeklyPayReport:search", "");
   const drivers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -174,6 +175,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
           tone="text-violet-400"
         />
       </div>
+      {controls}
 
       <section className="overflow-hidden rounded-xl border border-zinc-800/60 bg-card">
         <div className="flex flex-col gap-3 border-b border-zinc-800/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -293,7 +295,7 @@ function DriverPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
   );
 }
 
-function DispatcherPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
+function DispatcherPayReport({ dashboard, controls }: { dashboard: FinancialDashboard; controls: ReactNode }) {
   const configured = dashboard.dispatchers.filter((dispatcher) => dispatcher.pay != null);
   const totalPay = configured.reduce((sum, dispatcher) => sum + (dispatcher.pay ?? 0), 0);
   const totalGross = dashboard.dispatchers.reduce((sum, dispatcher) => sum + dispatcher.gross, 0);
@@ -307,6 +309,7 @@ function DispatcherPayReport({ dashboard }: { dashboard: FinancialDashboard }) {
         <KpiCard label="Dispatchers configured" value={`${configured.length} / ${dashboard.dispatchers.length}`} detail="With a commission percentage" icon={UsersRound} tone="text-emerald-400" />
         <KpiCard label="Loads" value={totalLoads.toLocaleString()} detail="Monday–Sunday by pickup date" icon={Route} tone="text-amber-400" />
       </div>
+      {controls}
 
       <section className="overflow-hidden rounded-xl border border-zinc-800/60 bg-card">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-800/50 px-4 py-4 sm:px-5">
@@ -412,26 +415,23 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
   };
 
   const isDriver = kind === "driver";
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-end">
-        <PageHeader><div>
-          <div className="flex items-center gap-2.5">
-            {isDriver ? <UserRound className="h-5 w-5 text-blue-400" /> : <Headset className="h-5 w-5 text-violet-400" />}
-            <h1 className="text-lg font-semibold text-zinc-100">{isDriver ? "Driver pay" : "Dispatcher pay"}</h1>
-          </div>
-
-        </div></PageHeader>
-
-        {dashboard && dashboard.availableWeeks.length > 0 && (
+  const controls = <div className="flex flex-wrap items-center gap-2">{dashboard && dashboard.availableWeeks.length > 0 && (
           <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
             <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
             <select value={weekStart} onChange={(event) => void selectWeek(event.target.value)} className="bg-transparent text-[12px] text-zinc-300 outline-none" aria-label="Select weekly report">
               {dashboard.availableWeeks.map((week) => <option key={week} value={week}>{weekLabel(week)}</option>)}
             </select>
           </label>
-        )}
-      </header>
+        )}</div>;
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader><div>
+          <div className="flex items-center gap-2.5">
+            {isDriver ? <UserRound className="h-5 w-5 text-blue-400" /> : <Headset className="h-5 w-5 text-violet-400" />}
+            <h1 className="text-lg font-semibold text-zinc-100">{isDriver ? "Driver pay" : "Dispatcher pay"}</h1>
+          </div>
+
+        </div></PageHeader>
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[12px] text-red-300" role="alert">
@@ -448,7 +448,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
             <CalendarDays className="h-3.5 w-3.5" />
             {dashboard.period.dateFrom ? `${weekLabel(dashboard.period.dateFrom)} · Monday–Sunday` : "No qualifying report weeks yet"}
           </div>
-          {isDriver ? <DriverPayReport dashboard={dashboard} /> : <DispatcherPayReport dashboard={dashboard} />}
+          {isDriver ? <DriverPayReport dashboard={dashboard} controls={controls} /> : <DispatcherPayReport dashboard={dashboard} controls={controls} />}
         </div>
       ) : null}
     </div>

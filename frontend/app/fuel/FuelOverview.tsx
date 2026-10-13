@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
@@ -249,7 +250,7 @@ function FuelMap({ dashboard }: { dashboard: FuelDashboard }) {
   );
 }
 
-export function FuelOverview({ refreshKey }: { refreshKey: number }) {
+export function FuelOverview({ refreshKey, actions }: { refreshKey: number; actions?: ReactNode }) {
   const today = useMemo(() => new Date(), []);
   const [dateFrom, setDateFrom] = useViewState("FuelOverview:dateFrom", () => `${today.getFullYear()}-01-01`);
   const [dateTo, setDateTo] = useViewState("FuelOverview:dateTo", () => isoDate(today));
@@ -317,6 +318,7 @@ export function FuelOverview({ refreshKey }: { refreshKey: number }) {
         <KpiCard label={`${dashboard.year} gallons purchased`} value={gallons.format(dashboard.totals.gallons)} detail="Diesel gallons only" icon={Droplets} accent="text-cyan-400" />
         <KpiCard label={`${dashboard.year} discount saved`} value={money.format(dashboard.totals.saved)} detail={`${dashboard.totals.gallons > 0 ? price.format(dashboard.totals.saved / dashboard.totals.gallons) : "$0.00"} saved / gal`} icon={BadgeDollarSign} accent="text-emerald-400" />
       </div>
+<div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <ChartCard title="Monthly fuel spending" description={`${dashboard.year} diesel spend and gallons purchased.`}>

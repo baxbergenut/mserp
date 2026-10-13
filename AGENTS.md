@@ -168,6 +168,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/sql/init.sql`: complete schema for a new database.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
   CSV exports and creates an idempotent, source-row-traceable SQL import.
+  Imports after migration 085 create unattributed historical verification records;
+  reimports preserve the application's current approvals and cancellations.
 - `backend/sql/002_add_tolls.sql` through
   `075_relay_drivers.sql`:
   manual incremental migrations for older databases.
@@ -207,16 +209,39 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+  Status Board, Gross Board (including Daily loads), and payroll share opt-in
+  spreadsheet selection/navigation in `app/lib/spreadsheetGrid.ts`: click selects,
+  arrows move, typing replaces, F2/double-click edits with a caret, Ctrl/Cmd+C copies.
+  Gross Board marks stacked fields with data-grid-cell. Suggestions retain their
+  own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
   Keep fields on one line with compact rows. Prioritize columns through ETA;
-  later fields may extend into horizontal scrolling. Show type codes without a legend.
+  later fields may extend into horizontal scrolling. Show type codes in round parentheses after
+  driver names, with a copy-location map pin. No separate type/location columns or
+  per-name history icon; history remains in the toolbar and Loads panel.
   `driver_board_repository.go` and `driver_board_handlers.go` own its backend.
   Status fills follow the TODAY sheet where a matching rule exists. Future
   feature scope, exclusions and rollout order live in `docs/DRIVER_BOARD_PLAN.md`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
-- `frontend/app/expenses/`: paginated expense management, filters, linked fleet
-  assignments, CRUD forms, and review-first AI transaction entry.
+- `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
+  payment balances, row-click editing and modal deletion; review-first AI entry.
+  POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators
+  add the green managerVerified check; roles named Accountant add the blue
+  accountingVerified check. Category View is required. Ordinary single/batch
+  creation cannot set checks; edits preserve them. Verification is version-checked
+  and adds only the caller role’s check, without overwriting the other role.
+  Migration 085 records verifier IDs, name snapshots and timestamps, plus
+  cancellation actor/time. Historical checks have unknown authors. POST
+  `/expenses/{id}/unverify` takes the exact verificationId; own checks, same-role
+  Accountant checks, and both roles for Administrators can be removed. Category
+  View remains required. Old IDs cannot cancel a newer approval. Click the tick
+  for details/removal; Ctrl+Z/Cmd+Z undoes this page session’s own approvals
+  without intercepting form typing. Hover lists each verifier.
+  The session exposes expenseVerificationRole, derived server-side.
+  GET `/expenses` accepts optional accountantVerified/adminVerified (`true` or
+  `false`, omitted for all). Both combine with category/search/date filters before
+  summary totals and pagination. Verify/cancel refresh the filtered result.
 - `frontend/app/investors/`: truck owners, independent investors and driver-linked
   investors. The company is hidden by default with a Show company filter.
   The directory includes driver-linked owners regardless of truck count.
@@ -229,12 +254,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/components/management/ManagementUI.tsx`: shared management page,
   modal, form, table, empty/error, and confirmation primitives. Reuse these
   before creating parallel UI patterns.
+- `frontend/app/components/management/ColumnFilter.tsx`: native popovers in table
+  column headers for record filters, with active indicators and keyboard dismissal.
+  Keep headers present on loading/empty results; keep search and page-wide periods
+  above tables. `test-column-filter-views.mjs` checks 16 views against the isolated
+  local preview using `MSERP_REVIEW_ACCESS_FILE` from `review-local.mjs`.
+  Status Board/Gross Board retain toolbar filters. Column titles have no filter icons.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
 - `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
   links and account menu. PageHeader portals render each page title, icon and count
   on the left of the top bar, preserving page context/handlers. Page headers
   have no descriptions. Sign out exists only in the top-bar account menu.
-  Page action buttons/status controls remain in the main content; global controls
+  Page actions/status controls sit beside filters/search below summary cards; global controls
   stay on the right.
   Explicit search query parameters override remembered
   list search/page values; new query tokens open existing forms once.
@@ -842,6 +873,15 @@ assignment lookup lists.
   The investor E2E runner includes offboarding-e2e.mjs; pass --offboarding-only
   for its focused signed-webhook/form/task flow using the same isolated setup.
 
+- Gross Board load notes use migration 084 and the existing versioned slot autosave.
+  Right-click or Shift+F10 on a load cell opens Add/Edit/Delete note; a dark
+  corner marks notes and hover opens the compact editor. Grouped days retain one
+  note per load. Notes use board.read/write, are limited to 5,000 characters,
+  and clear when a load is replaced, removed or changed to a status. Omitted
+  notes on older clients preserve the existing note for the same load.
+  `node scripts/test-gross-board-notes.mjs` verifies the interaction with fixture
+  APIs after a frontend build using NEXT_PUBLIC_API_URL=/api.
+
 - Gross board plans persist up to 100 load slots per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers whose known setup/
   reactivation week starts by the selected week and inactive
@@ -940,6 +980,19 @@ assignment lookup lists.
   Refresh load details; that action never imports new loads or changes assignments.
   Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
   verify fresh schema and migrations 029-030 as `mserp_app`.
+
+- Shop layover bonuses are separate from deduction carry: migration 086 adds a
+  $100/day default, configurable under Settings > Driver Pay through
+  GET/PUT /settings/driver-pay (access.manage, optimistic version). Count distinct
+  nondeleted Gross Board SHOP dates in the selected Monday–Sunday week, including
+  Shop-only weeks; never use the persistent Status Board status. Positive layovers
+  stay on Driver Pay, including team statements (once per day), never Investor Pay.
+  driver_pay_weeks.layover_excluded_dates persists per-day removal; omitted fields
+  preserve prior exclusions. Removals autosave with payroll versions and support
+  page-session undo. No bonus or exclusion carries into another week. Rate changes
+  affect open statements; finalized JSON snapshots retain their amounts/removals.
+  TestDriverPayLayoverDatabase covers fresh/migrated schemas as mserp_app, and
+  node scripts/test-layover-views.mjs checks the settings/removal UI.
 
 - Migration 053 makes reduced Driver Pay deductions carry forward. Fuel/Toll
   source totals remain separate from opening unpaid balances; collection snapshots
@@ -1337,11 +1390,12 @@ npm run lint
 node scripts/test-gross-board.mjs
 node scripts/test-driver-board.mjs
 node scripts/test-driver-pay.mjs
-node scripts/test-payroll-grid.mjs
 node scripts/test-phone.mjs
 npm run build
 # E2E: build with NEXT_PUBLIC_API_URL=/api; set disposable MSERP_INVESTOR_TEST_DATABASE_URL
 npx playwright install chromium
+node scripts/test-payroll-grid.mjs
+node scripts/test-board-grid.mjs
 node scripts/test-investors-e2e.mjs
 node scripts/test-investors-e2e.mjs --profiles-only
 # Same isolated database safety requirement, using MSERP_DRIVER_CHARGES_TEST_DATABASE_URL

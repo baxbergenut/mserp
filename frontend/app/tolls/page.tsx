@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
@@ -21,7 +23,6 @@ import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   EmptyState,
   ErrorBanner,
-  LoadingTable,
   ManagementHeader,
   ManagementSearch,
   TablePagination,
@@ -139,9 +140,7 @@ export default function TollsPage() {
     setPage(1);
   };
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <ManagementHeader
+  const syncAction = (<ManagementHeader hideTitle
         icon={Receipt}
         title="Tolls"
 
@@ -149,7 +148,11 @@ export default function TollsPage() {
         actionLabel={isSyncing ? "Syncing…" : "Sync tolls"}
         onAction={() => void handleSync()}
         actionIcon={RefreshCw}
-      />
+      />);
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <ManagementHeader icon={Receipt} title="Tolls" count={total} />
 
       {message && (
         <div
@@ -187,7 +190,7 @@ export default function TollsPage() {
         ))}
       </div>
 
-      {(activeTab === "prepass" || activeTab === "trucks") ? <PrePassFleetTab showAttention={activeTab === "trucks"} /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} /> : (
+      {(activeTab === "prepass" || activeTab === "trucks") ? <PrePassFleetTab showAttention={activeTab === "trucks"} /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} actions={syncAction} /> : (
         <>
       {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -207,45 +210,38 @@ export default function TollsPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search unit, plaza, agency, tag…" />
-        <select value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">Truck</option>
-          {units.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <select value={agency} onChange={(event) => { setAgency(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">Agency</option>
-          {agencies.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <div className="flex items-center gap-1.5">
-          <input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} />
-          <span className="text-[13px] text-zinc-700">–</span>
-          <input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} />
-        </div>
+
+
+
         {hasFilters && (
           <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition hover:bg-zinc-800/50 hover:text-zinc-300">
             <X className="h-3 w-3" /> Clear
           </button>
         )}
-      </div>
+      <div className="ml-auto">{syncAction}</div></div>
 
       <TableShell>
-        {isLoading ? (
-          <LoadingTable columns={7} />
-        ) : tolls.length === 0 ? (
-          <EmptyState message={hasFilters ? "No tolls match these filters." : "No PrePass tolls have synced yet."} />
-        ) : (
-          <table className="w-full min-w-[980px] text-left text-[13px]">
+        <table className="w-full min-w-[980px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium">Post date</th>
-                <th className="px-4 py-3 font-medium">Truck</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Post date" active={!!(postFrom || postTo)}><label className="block space-y-1">From<input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Truck" active={!!(unit)}><select aria-label="Toll truck" value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">Truck</option>
+          {units.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></ColumnFilter></th>
                 <th className="px-4 py-3 font-medium">Plaza / route</th>
-                <th className="px-4 py-3 font-medium">Agency</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Agency" active={!!(agency)}><select aria-label="Toll agency" value={agency} onChange={(event) => { setAgency(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">Agency</option>
+          {agencies.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></ColumnFilter></th>
                 <th className="px-4 py-3 font-medium">Class / miles</th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
                 <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody>{isLoading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : tolls.length === 0 ? <tr><td colSpan={7}>{(
+          <EmptyState message={hasFilters ? "No tolls match these filters." : "No PrePass tolls have synced yet."} />
+        )}</td></tr> : <>
               {tolls.map((toll) => (
                 <tr key={toll.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
@@ -273,9 +269,8 @@ export default function TollsPage() {
                   <td className="px-2 py-3 text-right"><TransactionFlagIcon flag={toll.flag} kind="toll" /></td>
                 </tr>
               ))}
-            </tbody>
+            </>}</tbody>
           </table>
-        )}
       </TableShell>
       {!isLoading && (
         <TablePagination

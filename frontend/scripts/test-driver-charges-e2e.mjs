@@ -200,8 +200,10 @@ try {
   if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(penalty).toHaveCount(0);
   await page.goto(`${base}/expenses`);
-  await expect(page.getByRole('columnheader', { name: 'Paid', exact: true })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Remaining', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Paid', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'Remaining', exact: true })).toHaveCount(0);
+  const paidPenalty = page.getByRole('row').filter({ has: page.getByText('Parking violation', { exact: true }) }).filter({ hasText: 'E2e Driver' });
+  await expect(paidPenalty.locator('[title*="Paid:"]')).toHaveAttribute('title', /Paid: \$100\.25[\s\S]*Remaining: \$0\.00/);
   await page.screenshot({ path: join(temp, 'expense-balances-desktop.png'), fullPage: true });
   // Actual ownership drives defaults; the operational driver is a separate link.
   sql(`SET search_path TO ${schema},public;
@@ -378,15 +380,15 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // Browser Back/Forward preserves ordinary list views across the app.
   await page.goto(`${base}/expenses`);
-  await page.getByPlaceholder('Search expenses and charges…').fill('Company repair');
+  await page.getByPlaceholder('Search expenses…').fill('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.getByRole('link',{name:'Drivers',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Drivers',exact:true})).toBeVisible();
   await page.goBack();
-  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
   await expect(page.getByRole('cell',{name:/^Company repair/})).toBeVisible();
   await page.reload();
-  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
   sql(`SET search_path TO ${schema},public; INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
        SELECT 'Navigation list '||n, 'navigation list '||n, 'cpm',0.75 FROM generate_series(1,30) n;`);
   await page.getByRole('link',{name:'Drivers',exact:true}).click();
@@ -394,13 +396,13 @@ try {
   await expect(page.getByText('Page 1 of 2',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Next page',exact:true}).click();
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
-  await page.getByRole('link',{name:'Expenses & Charges',exact:true}).click();
-  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
+  await page.getByRole('link',{name:'Expenses',exact:true}).click();
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
   await page.goBack();
   await expect(page.getByPlaceholder('Search drivers…')).toHaveValue('Navigation list');
   await expect(page.getByText('Page 2 of 2',{exact:true})).toBeVisible();
   await page.goForward();
-  await expect(page.getByPlaceholder('Search expenses and charges…')).toHaveValue('Company repair');
+  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('Company repair');
   // Cancelled loads are selectable statuses and survive a real API save/reload.
   await page.goto(`${base}/gross-board?driverId=${driverId}&date=2026-05-04&slot=0&loadNumber=NAV-SINGLE`);
   await page.getByRole('button', { name: 'Choose day status for E2e Driver, 2026-05-06', exact: true }).click();

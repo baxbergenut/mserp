@@ -136,16 +136,16 @@ export default function DispatchersPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ManagementHeader
+
+      {error && <ErrorBanner message={error} />}
+      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search dispatchers…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={Headset}
         title="Dispatchers and updaters"
 
         count={total}
         actionLabel="Add dispatcher"
         onAction={() => void openCreate()}
-      />
-      {error && <ErrorBanner message={error} />}
-      <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search dispatchers…" />
+      /></div></div>
 
       <TableShell>
         {isLoading ? <LoadingTable columns={8} /> : dispatchers.length === 0 ? (

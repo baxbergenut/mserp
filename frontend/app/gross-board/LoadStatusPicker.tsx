@@ -88,7 +88,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       setDayStatus(current, option.kind === "status" ? option.status.value : ""));
   };
   return <>
-    <div className="relative">
+    <div data-grid-cell className="relative">
       <input ref={input} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
@@ -103,6 +103,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           if (exact && !hasAmounts(entry)) setFocused(false);
           onChange(entry.driverId, entry.date, (current) => exact && !hasAmounts(current) ? setDayStatus(current, exact.value) :
             ({ ...current, dayStatus: "", loadNumber, loadRecordId: null,
+              note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
               enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate,

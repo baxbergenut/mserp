@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Load, SortDir, SortKey } from "../lib/types";
 import { formatDate, formatMiles, formatMoney, formatRate } from "../lib/utils";
 import { StatusDot } from "../components/StatusDot";
 
 interface LoadsTableProps {
+  headerFilters?: Record<string, ReactNode>;
   loads: Load[];
   isLoading: boolean;
   sortKey: SortKey;
@@ -43,33 +45,8 @@ export function LoadsTable({
   sortKey,
   sortDir,
   onSort,
+  headerFilters = {},
 }: LoadsTableProps) {
-  if (isLoading) {
-    return (
-      <div className="overflow-hidden rounded-xl border border-zinc-800/60">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-11 animate-pulse border-b border-zinc-900 bg-zinc-900/20 last:border-0"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (loads.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800/60 py-20 text-center">
-        <p className="text-[13px] text-zinc-500">
-          No loads match these filters.
-        </p>
-        <p className="mt-1 text-[13px] text-zinc-700">
-          Try clearing a filter or widening the date range.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-800/60">
       <table className="w-full min-w-[900px] border-collapse text-left text-[13px]">
@@ -82,6 +59,7 @@ export function LoadsTable({
                   col.align === "right" ? "text-right" : "text-left"
                 }`}
               >
+                {col.key && headerFilters[col.label]}
                 {col.key ? (
                   <button
                     onClick={() => onSort(col.key as SortKey)}
@@ -89,18 +67,18 @@ export function LoadsTable({
                       col.align === "right" ? "flex-row-reverse" : ""
                     }`}
                   >
-                    {col.label}
+                    {headerFilters[col.label] ? <span className="sr-only">Sort {col.label}</span> : col.label}
                     <SortIcon active={sortKey === col.key} dir={sortDir} />
                   </button>
                 ) : (
-                  col.label
+                  headerFilters[col.label] ?? col.label
                 )}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {loads.map((load) => (
+          {isLoading ? <tr><td colSpan={10} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : loads.length === 0 ? <tr><td colSpan={10} className="p-8 text-center text-zinc-500">No loads match these filters.</td></tr> : loads.map((load) => (
             <tr
               key={load.ID}
               className="border-b border-zinc-900/60 text-zinc-300 transition-colors last:border-0 hover:bg-zinc-800/20"
@@ -134,13 +112,13 @@ export function LoadsTable({
                 {formatDate(load.DeliveryTime)}
               </td>
               <td className="px-3 py-2.5 text-right font-mono tabular-nums text-zinc-400">
-                {formatMiles(load.TotalMiles)}
+                {formatMiles(load.TotalMiles ?? NaN)}
               </td>
               <td className="px-3 py-2.5 text-right font-mono tabular-nums text-zinc-400">
-                {formatRate(load.PerMileRevenue)}
+                {formatRate(load.PerMileRevenue ?? NaN)}
               </td>
               <td className="px-3 py-2.5 text-right font-mono tabular-nums text-zinc-200">
-                {formatMoney(load.TotalPay)}
+                {formatMoney(load.TotalPay ?? NaN)}
               </td>
             </tr>
           ))}

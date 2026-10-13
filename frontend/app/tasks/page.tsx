@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Columns3, List, ListChecks, LockKeyhole, Pencil, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
@@ -105,10 +107,10 @@ export default function TasksPage() {
   const title = (task: CustomTask) => <button type="button" title={taskMetadata(task)} className="min-w-0 break-words text-left font-medium text-zinc-100 hover:text-accent" onClick={() => { setError(""); if (task.systemTaskKind === "escrow_release" && !task.completedAt) setEscrowTask(task); else setDetails(task); }}>{task.title}</button>;
   const pagination = (result: TaskPage, change: (page: number) => void) => result.total > 0 && <TablePagination page={result.page} pageSize={result.pageSize} totalItems={result.total} totalPages={result.totalPages} onPageChange={change} onPageSizeChange={size => { setPageSize(size); setPage(1); setOpenPage(1); setProcessPage(1); setCompletedPage(1); }} />;
   return <div className="animate-fade-in space-y-4">
-    <ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canWrite ? "Add task" : undefined} onAction={() => setCreating(true)} />
+
     <div className="flex flex-wrap items-center gap-3">
       <ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); setOpenPage(1); setProcessPage(1); setCompletedPage(1); }} placeholder="Search tasks…" />
-      {view === "list" && <select aria-label="Task status" className={`${controlClass} sm:w-40`} value={status} onChange={event => { setStatus(event.target.value as Status); setPage(1); }}><option value="open">Open</option><option value="in_process">In process</option><option value="completed">Completed</option><option value="all">All tasks</option></select>}
+
       <div className="ml-auto flex items-center gap-2">
         <button type="button" className="ui-button" aria-label="Refresh tasks" onClick={refresh}><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
         <div className="flex gap-1" role="group" aria-label="Task view">
@@ -116,13 +118,13 @@ export default function TasksPage() {
           <button type="button" className={view === "kanban" ? "ui-button ui-button-primary" : "ui-button"} aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><Columns3 className="h-4 w-4" />Kanban</button>
         </div>
       </div>
-    </div>
+    <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canWrite ? "Add task" : undefined} onAction={() => setCreating(true)} /></div></div>
     {error && <ErrorBanner message={error} />}
     {notice && <p role="status" className="text-xs text-zinc-400">{notice}</p>}
     {loading && !data && !columns && <p role="status" className="py-8 text-center text-zinc-500">Loading…</p>}
     {view === "list" && data && <>
       <TableShell><table className="w-full min-w-[560px] text-left text-[13px]">
-        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
+        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label === "Status" ? <ColumnFilter label="Status" active={status !== "all"}><select aria-label="Task status" className={`${controlClass} sm:w-40`} value={status} onChange={event => { setStatus(event.target.value as Status); setPage(1); }}><option value="open">Open</option><option value="in_process">In process</option><option value="completed">Completed</option><option value="all">All tasks</option></select></ColumnFilter> : label}</th>)}</tr></thead>
         <tbody className="divide-y divide-zinc-800">{data.items.map(task => <tr key={task.id} className="bg-card hover:bg-zinc-800/20">
           <td className="max-w-sm px-3 py-2">{title(task)}</td><td className="whitespace-nowrap px-3 py-2 text-zinc-400">{statusLabels[taskStatus(task)]}</td>
           <td className="px-3 py-2 text-zinc-400">{task.assigneeName || "Unassigned"}</td>

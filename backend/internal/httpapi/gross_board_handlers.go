@@ -70,6 +70,13 @@ func (request *grossBoardRequest) validate() error {
 		}
 		seen[key] = true
 		e.LoadNumber = strings.TrimSpace(e.LoadNumber)
+		if e.Note != nil && (len([]rune(*e.Note)) > 5000 || strings.ContainsRune(*e.Note, '\x00')) {
+			return errors.New("load notes must be 5000 characters or fewer and cannot contain null characters")
+		}
+		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
+			empty := ""
+			e.Note = &empty
+		}
 		if len([]rune(e.LoadNumber)) > 200 {
 			return errors.New("load number or planning text must be 200 characters or fewer")
 		}

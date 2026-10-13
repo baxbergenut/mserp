@@ -696,7 +696,16 @@ export interface TollDashboard {
   unmapped: TollDashboardPoint[];
 }
 
+export interface ExpenseVerification {
+  id: string;
+  role: "admin" | "accountant";
+  userId: string | null;
+  userName: string;
+  verifiedAt: string | null;
+}
+
 export interface Expense {
+  verifications: ExpenseVerification[];
  payments: {weekStart: string; amount: string}[];
  ownerId: string | null;
  ownerName: string | null;
@@ -794,6 +803,7 @@ export interface ExpenseExtraction {
 }
 
 export interface AuthUser {
+  expenseVerificationRole: "admin" | "accountant" | "";
   theme: string;
   id: string;
   username: string;
@@ -832,6 +842,7 @@ export interface AuthSession {
 export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "LOAD CANCELLED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
 
 export interface GrossBoardEntry {
+  note?: string;
   slot: number;
   deleted: boolean;
   driverId: string;
@@ -938,7 +949,9 @@ export interface ExpenseDeduction {
   saved: boolean;
   apply?: boolean;
 }
+export interface DriverPaySettings { layoverDailyAmount: string; version: number }
 export interface DriverPayEdits {
+  layoverExcludedDates?: string[];
   costs?: { revision: string; fuelCarry: string; tollCarry: string; fuelDue: string; tollDue: string };
   expenseDeductions?: ExpenseDeduction[];
   generatedCharges?: ChargeOccurrence[];
@@ -974,6 +987,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  layovers?: { date: string; amount: string }[];
   employmentType?: EmploymentType;
   teamNotice?: string;
   teamDrivers?: { id: string; name: string }[];

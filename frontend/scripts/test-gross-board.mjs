@@ -139,3 +139,10 @@ assert.equal(matchLoad({ ...blank, originalRate: "0", miles: "0" }, { id: 1, loa
 const newerGross = editAmount(match, "originalRate", "1400");
 assert.equal(reconcileAutosave({[key]:newerGross}, {[key]:match}, [{...match,version:3}])[key].originalRate, "1400");
 console.log("Entered values and original-to-driver gross defaults passed.");
+
+const annotated = {...plan, note: 'Call receiver'};
+assert.equal(matchLoad(annotated, {id: 1, loadNumber: 'PLAN', originalRate: '100', miles: '1'}).note, 'Call receiver');
+assert.equal(matchLoad(annotated, {id: 2, loadNumber: 'OTHER', originalRate: '100', miles: '1'}).note, '');
+assert.equal(setDayStatus(annotated, 'HOME').note, '');
+assert.equal(reconcileAutosave({[key]: {...annotated, note:'Newest note'}}, {[key]:annotated}, [{...annotated,version:4}])[key].note, 'Newest note');
+console.log('Load note checks passed: identity, status clearing and queued typing.');

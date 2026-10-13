@@ -33,8 +33,8 @@ const NAV_ITEMS = [
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/weighmytruck", label: "Scale", icon: Scale },
-  { href: "/expenses", label: "Expenses & Charges", icon: WalletCards },
-  { href: "/expenses/settings", label: "Expenses & Charges settings", icon: Settings },
+  { href: "/expenses", label: "Expenses", icon: WalletCards },
+  { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/investor-pay", label: "Investor Pay", icon: Banknote },

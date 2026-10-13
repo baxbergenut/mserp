@@ -292,6 +292,8 @@ export async function login(email: string, password: string, trustDevice = false
 }
 
 export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+export const fetchDriverPaySettings = () => apiRequest<import("./types").DriverPaySettings>("/settings/driver-pay");
+export const saveDriverPaySettings = (settings: import("./types").DriverPaySettings) => apiRequest<import("./types").DriverPaySettings>("/settings/driver-pay", { method: "PUT", body: JSON.stringify(settings) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
 export const saveTheme = (theme: string) => apiRequest<void>("/auth/theme", { method: "PUT", body: JSON.stringify({ theme }) });
 export const fetchSystemTaskAssignments = () => apiRequest<SystemTaskAssignment[]>("/settings/system-tasks");
@@ -403,6 +405,8 @@ export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
 export const fetchExpensesPage = (query: PageQuery & {
+  accountantVerified?: string;
+  adminVerified?: string;
   responsibility?: "non_personal";
   chargeDriverId?: string;
   categoryId?: string;
@@ -431,6 +435,12 @@ export const extractExpenses = (text: string, file: File | null) => {
     body: form,
   });
 };
+export const unverifyExpense = (id: string, verificationId: string) =>
+  apiRequest<Expense>(`/expenses/${id}/unverify`, { method: "POST", body: JSON.stringify({ verificationId }) });
+
+export const verifyExpense = (id: string, updatedAt: string) =>
+  apiRequest<Expense>(`/expenses/${id}/verify`, { method: "POST", body: JSON.stringify({ updatedAt }) });
+
 export const updateExpense = (id: string, input: ExpenseInput) =>
   apiRequest<Expense>(`/expenses/${id}`, {
     method: "PUT",

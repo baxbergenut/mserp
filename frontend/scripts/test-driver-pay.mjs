@@ -127,6 +127,21 @@ assert.equal(undone.generatedCharges[0].amount, '-40'); assert.equal(undone.gene
 assert.equal(undone.expenseDeductions[0].amount, '20'); assert.equal(undone.expenseDeductions[0].version, 7); assert.equal(undone.expenseDeductions[0].available, '80'); assert.equal(undone.expenseDeductions[0].apply, true);
 console.log('Payroll undo preserves current concurrency and payment metadata.');
 
+const shopDriver = { ...owner, loads: [], layovers: [{ date: '2026-09-28', amount: '100.00' }, { date: '2026-09-29', amount: '100.00' }], payType: 'cpm' };
+const shopEdits = { ...auto, layoverExcludedDates: [] };
+assert.equal(driverTotals(shopDriver, shopEdits).payable, 20000n);
+const removedLayover = { ...shopEdits, layoverExcludedDates: ['2026-09-28'] };
+assert.equal(driverTotals(shopDriver, removedLayover).payable, 10000n);
+assert.equal(driverTotals({ ...shopDriver, layovers: [] }, removedLayover).payable, 0n);
+const restoredLayover = restorePayEdit({ ...removedLayover, version: 3 }, { ...shopEdits, layoverExcludedDates: undefined }, removedLayover);
+assert.deepEqual(restoredLayover.layoverExcludedDates, []);
+assert.equal(restoredLayover.version, 3);
+assert.equal(driverTotals(shopDriver, restoredLayover).payable, 20000n);
+const queuedRemoval = reconcilePaySave({ driver: { ...removedLayover, layoverExcludedDates: ['2026-09-28', '2026-09-29'] } }, removedLayover, { ...removedLayover, version: 4 }).driver;
+assert.equal(queuedRemoval.version, 4);
+assert.equal(queuedRemoval.layoverExcludedDates.length, 2);
+console.log('Layover bonuses: positive per-day totals, persistent removal drafts, undo, and no carry.');
+
 assert.equal(sourceAmountInput('250', '-400'), '-250');
 assert.equal(sourceAmountInput('+250', '-400'), '-250');
 assert.equal(sourceAmountInput('-2.50', '3.25'), '2.50');

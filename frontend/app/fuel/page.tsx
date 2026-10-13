@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { PageHeader } from "@/app/components/PageHeader";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -25,7 +27,6 @@ import type { FuelTransaction } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   EmptyState,
-  LoadingTable,
   ManagementSearch,
   TablePagination,
   TableShell,
@@ -186,10 +187,19 @@ export default function FuelPage() {
     setPage(1);
   };
 
+  const syncAction = (<button
+          type="button"
+          onClick={() => void handleSync()}
+          disabled={isSyncing}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+          {isSyncing ? "Syncing missing days…" : "Sync fuel"}
+        </button>);
+
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <PageHeader><div>
+      <PageHeader><div>
           <div className="flex items-center gap-3">
             <Fuel className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Fuel</h1>
@@ -203,16 +213,6 @@ export default function FuelPage() {
           </div>
 
         </div></PageHeader>
-        {activeTab !== "drivers" && <button
-          type="button"
-          onClick={() => void handleSync()}
-          disabled={isSyncing}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-          {isSyncing ? "Syncing missing days…" : "Sync fuel"}
-        </button>}
-      </div>
 
       {message && (
         <div
@@ -267,7 +267,7 @@ export default function FuelPage() {
       </div>
 
       {activeTab === "overview" ? (
-        <FuelOverview refreshKey={dashboardRefreshKey} />
+        <FuelOverview refreshKey={dashboardRefreshKey} actions={syncAction} />
       ) : activeTab === "drivers" ? <RelayDriversTab /> : (
         <>
 
@@ -307,59 +307,11 @@ export default function FuelPage() {
           onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search driver, card, merchant, location…"
         />
-        <select
-          value={driver}
-          onChange={(event) => { setDriver(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by driver"
-        >
-          <option value="">Driver</option>
-          {drivers.map((value) => (
-            <option key={value} value={value}>{value}</option>
-          ))}
-        </select>
-        <select
-          value={state}
-          onChange={(event) => { setState(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by state"
-        >
-          <option value="">State</option>
-          {states.map((value) => (
-            <option key={value} value={value}>{value}</option>
-          ))}
-        </select>
-        <select
-          value={category}
-          onChange={(event) => { setCategory(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by purchase category"
-        >
-          <option value="">Category</option>
-          <option value="fuel">Fuel</option>
-          <option value="def">DEF</option>
-          <option value="other">Other</option>
-        </select>
-        <div className="flex items-center gap-1.5">
-          <input
-            aria-label="Purchase date from"
-            type="date"
-            value={dateFrom}
-            onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}
-            className={filterClass}
-          />
-          <span className="text-[13px] text-zinc-700">–</span>
-          <input
-            aria-label="Purchase date to"
-            type="date"
-            value={dateTo}
-            onChange={(event) => { setDateTo(event.target.value); setPage(1); }}
-            className={filterClass}
-          />
-        </div>
-        <span className="text-[11px] text-zinc-600">
-          Dates use each merchant&apos;s local timezone to match Relay reports.
-        </span>
+
+
+
+
+
         {hasFilters && (
           <button
             type="button"
@@ -369,12 +321,67 @@ export default function FuelPage() {
             <X className="h-3 w-3" /> Clear
           </button>
         )}
-      </div>
+      <div className="ml-auto">{syncAction}</div></div>
 
       <TableShell>
-        {isLoading ? (
-          <LoadingTable columns={8} />
-        ) : transactions.length === 0 ? (
+        <table className="w-full min-w-[1080px] text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-zinc-800/50 text-zinc-500">
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Purchased" active={!!(dateFrom || dateTo)}><label className="block space-y-1">From<input
+            aria-label="Purchase date from"
+            type="date"
+            value={dateFrom}
+            onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}
+            className={filterClass}
+          /></label><label className="block space-y-1">To<input
+            aria-label="Purchase date to"
+            type="date"
+            value={dateTo}
+            onChange={(event) => { setDateTo(event.target.value); setPage(1); }}
+            className={filterClass}
+          /></label><span className="text-[11px] text-zinc-600">
+          Dates use each merchant&apos;s local timezone to match Relay reports.
+        </span></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Driver" active={!!(driver)}><select
+          value={driver}
+          onChange={(event) => { setDriver(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by driver"
+        >
+          <option value="">Driver</option>
+          {drivers.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Merchant / location" active={!!(state)}><select
+          value={state}
+          onChange={(event) => { setState(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by state"
+        >
+          <option value="">State</option>
+          {states.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Products" active={!!(category)}><select
+          value={category}
+          onChange={(event) => { setCategory(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by purchase category"
+        >
+          <option value="">Category</option>
+          <option value="fuel">Fuel</option>
+          <option value="def">DEF</option>
+          <option value="other">Other</option>
+        </select></ColumnFilter></th>
+                <th className="px-4 py-3 text-right font-medium">Fuel</th>
+                <th className="px-4 py-3 text-right font-medium">DEF / other</th>
+                <th className="px-4 py-3 text-right font-medium">Paid</th>
+                <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>
+              </tr>
+            </thead>
+            <tbody>{isLoading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : transactions.length === 0 ? <tr><td colSpan={8}>{(
           <EmptyState
             message={
               hasFilters
@@ -382,21 +389,7 @@ export default function FuelPage() {
                 : "No Relay transactions yet. Sync fuel to get started."
             }
           />
-        ) : (
-          <table className="w-full min-w-[1080px] text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium">Purchased</th>
-                <th className="px-4 py-3 font-medium">Driver</th>
-                <th className="px-4 py-3 font-medium">Merchant / location</th>
-                <th className="px-4 py-3 font-medium">Products</th>
-                <th className="px-4 py-3 text-right font-medium">Fuel</th>
-                <th className="px-4 py-3 text-right font-medium">DEF / other</th>
-                <th className="px-4 py-3 text-right font-medium">Paid</th>
-                <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>
-              </tr>
-            </thead>
-            <tbody>
+        )}</td></tr> : <>
               {transactions.map((transaction) => (
                 <tr
                   key={transaction.id}
@@ -452,9 +445,8 @@ export default function FuelPage() {
                   <td className="px-2 py-3 text-right"><TransactionFlagIcon flag={transaction.flag} kind="fuel" /></td>
                 </tr>
               ))}
-            </tbody>
+            </>}</tbody>
           </table>
-        )}
       </TableShell>
       {!isLoading && (
         <TablePagination

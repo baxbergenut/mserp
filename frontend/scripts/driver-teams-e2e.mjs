@@ -16,7 +16,8 @@ export async function runDriverTeamsE2E({ page, base, sql, schema, temp }) {
     ('${main}','Team Main Example','team main example','gross_percentage',90,true,'${week}'),
     ('${team}','Team Member Example','team member example','cpm',0.7,false,'${week}');
     SET mserp.assignment_week='${week}'; UPDATE drivers SET dispatcher_id='${dispatcher}' WHERE id='${main}';
-    INSERT INTO trucks(id,unit_number) VALUES('${truck}','TEAM-BROWSER');
+    INSERT INTO investors(full_name,driver_id) VALUES('Team Main Example','${main}');
+    INSERT INTO trucks(id,unit_number,owner_id) SELECT '${truck}','TEAM-BROWSER',id FROM investors WHERE driver_id='${main}';
     INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${truck}','${main}','${week}'::timestamp AT TIME ZONE 'America/New_York');
     INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount) SELECT id,full_name,'${week}',CASE WHEN id='${main}' THEN 100 ELSE 2500 END FROM drivers WHERE id IN('${main}','${team}');
     WITH f AS (
@@ -57,7 +58,7 @@ export async function runDriverTeamsE2E({ page, base, sql, schema, temp }) {
   expect(board.drivers.some(d => d.id === team)).toBe(false);
   const report = await read(`/driver-pay?weekStart=${week}`);
   expect(report.drivers.filter(d => [main, team].includes(d.id))).toHaveLength(1);
-  expect(report.drivers.find(d => d.id === main)).toMatchObject({ fuelTotal: '123.45', teamDrivers: [{ id: team, name: 'Team Member Example' }] });
+  expect(report.drivers.find(d => d.id === main)).toMatchObject({ isOwnerOperator: true, fuelTotal: '123.45', teamDrivers: [{ id: team, name: 'Team Member Example' }] });
   expect(report.drivers.find(d => d.id === main).edits.expenseDeductions.filter(d => d.source === 'escrow')).toHaveLength(1);
   expect(report.drivers.find(d => d.id === main).edits.expenseDeductions.find(d => d.source === 'escrow').total).toBe('100.00');
   await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
@@ -74,7 +75,8 @@ export async function runDriverTeamsE2E({ page, base, sql, schema, temp }) {
   await page.screenshot({ path: join(temp, 'driver-team-payroll-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}/accounting/driver-charges?driverId=${team}`);
-  await expect(page.getByText('Recurring charges use', { exact: false })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Truck charges', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('row').filter({ has: page.getByRole('link', { name: 'TEAM-BROWSER', exact: true }) })).toContainText('Team Main Example');
   await expect(page.locator('table').getByRole('row').filter({ hasText: 'Team Member Example' })).toHaveCount(0);
   const stale = await page.request.put(`${base}/api/drivers/${main}/team`, { headers, data: { teamDriverId: '', weekStart: week, version: 0 } });
   expect(stale.status()).toBe(409);

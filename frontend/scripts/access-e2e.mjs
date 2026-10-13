@@ -47,8 +47,8 @@ export async function runAccessE2E({ page, base, temp }) {
     await viewer.getByLabel('Trust this device for 30 days', { exact: false }).check();
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(viewer).toHaveURL(`${base}/loads`);
-    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses & Charges', exact: true })).toBeVisible();
-    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses & Charges settings', exact: true })).toHaveCount(0);
+    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses', exact: true })).toBeVisible();
+    await expect(viewer.locator('aside').getByRole('link', { name: 'Expenses settings', exact: true })).toHaveCount(0);
     expect((await viewer.request.get(`${base}/api/expenses?categoryId=${maintenance.id}&page=1&pageSize=10`)).status()).toBe(200);
     expect((await viewer.request.get(`${base}/api/expenses?categoryId=${penalties.id}&page=1&pageSize=10`)).status()).toBe(403);
     const viewerSession = await (await viewer.request.get(`${base}/api/auth/session`)).json();

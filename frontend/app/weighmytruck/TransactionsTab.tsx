@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -10,7 +12,7 @@ import { useViewState } from "../lib/viewMemory";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { currentChargeWeek } from "../accounting/driver-charges/charges";
 import { addDays } from "../gross-board/board";
-import { controlClass, EmptyState, ErrorBanner, LoadingTable, ManagementSearch, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
+import { controlClass, EmptyState, ErrorBanner, ManagementSearch, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
 
 const money = (value: string) => Number(value).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -72,15 +74,15 @@ export function TransactionsTab() {
   }
   return <div className="space-y-4">
     <div className="flex flex-wrap items-end gap-2">
-      <label className="text-[12px] text-zinc-400">From<input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label>
-      <label className="text-[12px] text-zinc-400">To<input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label>
+
+
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search tickets, drivers or trucks" />
       <div className="ml-auto flex items-center gap-3"><span className="text-[13px] tabular-nums text-zinc-300">Total {money(data?.totalAmount ?? "0")}</span>{canWrite && <button className="ui-button" disabled={busy} onClick={() => void sync()}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Sync</button>}</div>
     </div>
     {error && <ErrorBanner message={error} />}{notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
-    <TableShell>{loading ? <LoadingTable columns={8} /> : !data?.items.length ? <EmptyState message="No scale transactions in this date range." /> : <table className="w-full min-w-[900px] text-left text-[13px]">
-      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Date", "Ticket", "Driver", "Truck", "Location", "Charge to", "Amount", ""].map((s,i) => <th key={i} className={`h-8 px-3 font-medium ${s === "Amount" ? "text-right" : ""}`}>{s}</th>)}</tr></thead>
-      <tbody className="divide-y divide-zinc-800/60">{data.items.map(t => <tr key={t.id} className={t.warning ? "bg-amber-500/5" : "hover:bg-zinc-800/20"}>
+    <TableShell><table className="w-full min-w-[900px] text-left text-[13px]">
+      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Date", "Ticket", "Driver", "Truck", "Location", "Charge to", "Amount", ""].map((s,i) => <th key={i} className={`h-8 px-3 font-medium ${s === "Amount" ? "text-right" : ""}`}>{s === "Date" ? <ColumnFilter label="Date" active={!!(from || to)}><label className="text-[12px] text-zinc-400">From<input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-[12px] text-zinc-400">To<input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label></ColumnFilter> : s}</th>)}</tr></thead>
+      <tbody className="divide-y divide-zinc-800/60">{loading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : !data?.items.length ? <tr><td colSpan={8}>{<EmptyState message="No scale transactions in this date range." />}</td></tr> : <>{data.items.map(t => <tr key={t.id} className={t.warning ? "bg-amber-500/5" : "hover:bg-zinc-800/20"}>
         <td className="whitespace-nowrap px-3 py-1.5" title={t.time}>{t.date}</td>
         <td className="px-3 py-1.5" title={t.originalTicket ? `Reweigh of ${t.originalTicket}` : undefined}>{t.ticket}</td>
         <td className="px-3 py-1.5"><div className="flex items-center gap-2">{t.driverId && canProfile ? <Link href={`/drivers/detail?id=${t.driverId}`} className="hover:text-accent">{t.driverName}</Link> : t.driverName || "Unlinked"}{t.warning && <span title={t.warning}><AlertTriangle aria-label="Needs attention" className="h-4 w-4 text-amber-400" /></span>}</div></td>
@@ -89,8 +91,8 @@ export function TransactionsTab() {
         <td className="px-3 py-1.5" title={t.investorName}>{t.payer === "driver" ? "Driver" : t.payer === "investor" ? "Truck investor" : "Company"}</td>
         <td className="px-3 py-1.5 text-right tabular-nums">{money(t.amount)}</td>
         <td className="px-3 py-1.5 text-right">{canLink && <button className="ui-button" disabled={busy} onClick={() => void openLink(t)}>{t.warning ? "Link" : "Edit link"}</button>}</td>
-      </tr>)}</tbody>
-    </table>}</TableShell>
+      </tr>)}</>}</tbody>
+    </table></TableShell>
     <TablePagination page={data?.page ?? page} pageSize={pageSize} totalItems={data?.total ?? 0} totalPages={data?.totalPages ?? 1} onPageChange={setPage} onPageSizeChange={v => { setPageSize(v); setPage(1); }} />
     {data?.lastSync && <p className="text-[12px] text-zinc-500">Last synced {new Date(data.lastSync).toLocaleString()}</p>}
     {entry && <Modal title={`Link ticket ${entry.ticket}`} submitLabel="Save" isSaving={busy} onClose={() => setEntry(null)} onSubmit={e => { e.preventDefault(); void saveLink(); }}>

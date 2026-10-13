@@ -34,17 +34,18 @@ type DriverPayAdjustment struct {
 	Amount string `json:"amount"`
 }
 type DriverPayEdits struct {
-	Costs             *DriverPayCosts       `json:"costs,omitempty"`
-	ExpenseDeductions []ExpenseDeduction    `json:"expenseDeductions,omitempty"`
-	DriverID          string                `json:"driverId"`
-	WeekStart         string                `json:"weekStart"`
-	Notes             string                `json:"notes"`
-	Comments          map[string]string     `json:"comments"`
-	Adjustments       []DriverPayAdjustment `json:"adjustments"`
-	FuelOverride      *string               `json:"fuelOverride"`
-	TollOverride      *string               `json:"tollOverride"`
-	Version           int                   `json:"version"`
-	GeneratedCharges  []ChargeOccurrence    `json:"generatedCharges,omitempty"`
+	LayoverExcludedDates []string              `json:"layoverExcludedDates,omitempty"`
+	Costs                *DriverPayCosts       `json:"costs,omitempty"`
+	ExpenseDeductions    []ExpenseDeduction    `json:"expenseDeductions,omitempty"`
+	DriverID             string                `json:"driverId"`
+	WeekStart            string                `json:"weekStart"`
+	Notes                string                `json:"notes"`
+	Comments             map[string]string     `json:"comments"`
+	Adjustments          []DriverPayAdjustment `json:"adjustments"`
+	FuelOverride         *string               `json:"fuelOverride"`
+	TollOverride         *string               `json:"tollOverride"`
+	Version              int                   `json:"version"`
+	GeneratedCharges     []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
 	BoardVersion       int      `json:"boardVersion"`
@@ -74,6 +75,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	Layovers         []DriverPayLayover `json:"layovers,omitempty"`
 	TeamNotice       string             `json:"teamNotice,omitempty"`
 	TeamDrivers      []PayPerson        `json:"teamDrivers,omitempty"`
 	TruckInactive    bool               `json:"truckInactive,omitempty"`
@@ -174,9 +176,9 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  coalesce(coalesce(e.entered_original_rate,l.total_pay,e.original_rate)::text,''),coalesce(e.driver_rate::text,''),
  coalesce(coalesce(e.entered_miles,l.total_miles,e.miles)::text,''),coalesce(e.version,0),coalesce(l.total_pay::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
- w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text
+ w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM drivers d LEFT JOIN `+grossBoardEntriesSQL+` e ON d.id=e.driver_id
- AND e.service_date >= $1::date AND e.service_date < $1::date+7 AND NOT e.deleted AND btrim(e.load_number)<>''
+ AND e.service_date >= $1::date AND e.service_date < $1::date+7 AND NOT e.deleted AND (btrim(e.load_number)<>'' OR e.day_status='SHOP')
  `+weeklyAssignmentJoins+`
  `+grossBoardResolvedLoad+`
  LEFT JOIN LATERAL (SELECT true present FROM driver_escrow_releases r JOIN driver_escrows x ON x.id=r.escrow_id
@@ -206,7 +208,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.EmploymentType, &d.IsOwnerOperator,
 			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
-			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal); err != nil {
+			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal, &d.Edits.LayoverExcludedDates); err != nil {
 			return result, err
 		}
 		l.CommentKey = l.Date + ":" + strconv.Itoa(l.Slot) + ":" + strings.ToLower(strings.TrimSpace(l.LoadNumber))
@@ -283,8 +285,13 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	if err != nil {
 		return result, err
 	}
+	layovers, err := driverPayLayovers(ctx, tx, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
 	kept := []DriverPayDriver{}
 	for _, d := range result.Drivers {
+		d.Layovers = layovers[d.ID]
 		d.AutoCharges = append(credits[d.ID], scaleCharges[d.ID]...)
 		if d.AutoCharges == nil {
 			d.AutoCharges = []PayAutoCharge{}
@@ -297,7 +304,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if d.Edits.GeneratedCharges == nil {
 			d.Edits.GeneratedCharges = []ChargeOccurrence{}
 		}
-		if len(d.AutoCharges) > 0 || len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
+		if len(d.Layovers) > 0 || len(d.AutoCharges) > 0 || len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
 			kept = append(kept, d)
 		}
 	}
@@ -365,6 +372,9 @@ func driverPayFee(kind, rate, basis string) string {
 }
 
 func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, actors ...string) (DriverPayEdits, error) {
+	if err := validateLayoverExclusions(edits.WeekStart, edits.LayoverExcludedDates); err != nil {
+		return edits, err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return edits, err
@@ -390,6 +400,13 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	costDriver, err := currentDriverPayCosts(ctx, tx, edits)
 	if err != nil {
 		return edits, err
+	}
+	// Older clients omit this field; omission must not resurrect removed bonuses.
+	if edits.LayoverExcludedDates == nil {
+		edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
+	}
+	if edits.LayoverExcludedDates == nil {
+		edits.LayoverExcludedDates = []string{}
 	}
 	if err = saveDriverPayCosts(ctx, tx, costDriver, edits, actor); err != nil {
 		return edits, err
@@ -432,11 +449,11 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	var version int
 	if edits.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override)
- VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override,layover_excluded_dates)
+ VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric,$8) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride, edits.LayoverExcludedDates).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,version=version+1,updated_at=now()
- WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,layover_excluded_dates=$9,version=version+1,updated_at=now()
+ WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride, edits.LayoverExcludedDates).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict

@@ -9,7 +9,6 @@ import {
   controlClass,
   Field,
   FormSection,
-  Toggle,
 } from "../components/management/ManagementUI";
 
 export const emptyExpenseInput: ExpenseInput = {
@@ -140,19 +139,7 @@ export function ExpenseForm({
               <option key={truck.id} value={truck.id}>{truck.unitNumber}</option>
             ))}
           </select>
-          {!value.truckId && (
-            <>
-              <input
-                value={value.unitNumber}
-                onChange={(event) => set("unitNumber", event.target.value)}
-                className={controlClass}
-                placeholder="Enter an unlinked unit number"
-              />
-              {value.unitNumber && (
-                <p className="mt-1 text-[11px] text-amber-400">Unit {value.unitNumber} is not linked to a truck.</p>
-              )}
-            </>
-          )}
+
         </Field>
         <Field label="Driver">
           <select aria-label="Driver"
@@ -167,19 +154,7 @@ export function ExpenseForm({
               <option key={driver.id} value={driver.id}>{driver.fullName}</option>
             ))}
           </select>
-          {!value.driverId && (
-            <>
-              <input
-                value={value.driverName}
-                onChange={(event) => set("driverName", event.target.value)}
-                className={controlClass}
-                placeholder="Enter an unlinked driver name"
-              />
-              {value.driverName && (
-                <p className="mt-1 text-[11px] text-amber-400">Driver {value.driverName} is not linked.</p>
-              )}
-            </>
-          )}
+
         </Field>
         <Field label="Who will cover" wide>
           <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={onChange} className={controlClass} />
@@ -217,18 +192,6 @@ export function ExpenseForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Verification">
-        <Toggle
-          checked={value.managerVerified}
-          onChange={(checked) => set("managerVerified", checked)}
-          label="Manager verified"
-        />
-        <Toggle
-          checked={value.accountingVerified}
-          onChange={(checked) => set("accountingVerified", checked)}
-          label="Accounting verified"
-        />
-      </FormSection>
     </div>
   );
 }

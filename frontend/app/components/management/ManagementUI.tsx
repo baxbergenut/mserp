@@ -35,6 +35,7 @@ export function ManagementHeader({
   onAction,
   actionIcon: ActionIcon = Plus,
   secondaryAction,
+  hideTitle = false,
 }: {
   icon: LucideIcon;
   title: string;
@@ -43,6 +44,7 @@ export function ManagementHeader({
   onAction?: () => void;
   actionIcon?: LucideIcon;
   secondaryAction?: ReactNode;
+  hideTitle?: boolean;
 }) {
   const action = actionLabel && onAction ? <button
     type="button"
@@ -54,8 +56,8 @@ export function ManagementHeader({
   </button> : null;
   return (
 
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
-      <PageHeader><div>
+    <div className={action || secondaryAction ? "flex flex-wrap items-center gap-2" : "contents"}>
+      {!hideTitle && <PageHeader><div>
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">{title}</h1>
@@ -64,8 +66,8 @@ export function ManagementHeader({
           </span>}
         </div>
 
-      </div></PageHeader>
-      {secondaryAction ? <div className="flex shrink-0 items-center gap-2">{secondaryAction}{action}</div> : action}
+      </div></PageHeader>}
+      {secondaryAction ? <div className="flex flex-wrap items-center gap-2">{secondaryAction}{action}</div> : action}
     </div>
 
   );
@@ -100,6 +102,7 @@ export function Modal({
   isSaving,
   submitLabel,
   submitDisabled = false,
+  hideSubmit = false,
   cancelLabel = "Cancel",
   onClose,
   onSubmit,
@@ -112,6 +115,7 @@ export function Modal({
   isSaving: boolean;
   submitLabel: string;
   submitDisabled?: boolean;
+  hideSubmit?: boolean;
   cancelLabel?: string;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -162,14 +166,14 @@ export function Modal({
               >
                 {cancelLabel}
               </button>
-              <button
+              {!hideSubmit && <button
                 type="submit"
                 disabled={isSaving || submitDisabled}
                 className="inline-flex min-w-24 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
               >
                 {isSaving && <LoaderCircle className="h-4 w-4 animate-spin" />}
                 {submitLabel}
-              </button>
+              </button>}
             </div>
           </form>
         </div>

@@ -1,4 +1,10 @@
 @import "tailwindcss";
+
+/* The selected table cell is distinct from its active text editor. */
+.mserp-ui [data-spreadsheet-grid] :is(td, th, [data-grid-cell]):focus {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -2px;
+}
 @import "./themes.css";
 
 :root {

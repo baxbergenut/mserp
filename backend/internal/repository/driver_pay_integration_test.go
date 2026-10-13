@@ -56,7 +56,18 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			layoverMigration, err := os.ReadFile("../../sql/086_driver_pay_layover.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			notesMigration, err := os.ReadFile("../../sql/084_gross_board_notes.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if mode == "migration" {
+				notesBody := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(strings.ReplaceAll(string(notesMigration), "\r\n", "\n"), "BEGIN;")), "COMMIT;"))
+				sql = strings.Replace(sql, notesBody, "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(layoverMigration), "\r\n", "\n"), "", 1)
 				sql = withoutDriverTeams(t, sql)
 			}
 			remainders, err := os.ReadFile("../../sql/053_payroll_remainders.sql")
@@ -149,6 +160,12 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
+				if _, err = admin.Exec(ctx, string(notesMigration)); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = admin.Exec(ctx, string(layoverMigration)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

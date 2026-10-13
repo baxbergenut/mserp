@@ -1,10 +1,13 @@
 "use client";
 
+import { useLoadNotes } from "./useLoadNotes";
+
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus } from "lucide-react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
+import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
 import { additionalLoadEntries, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
@@ -39,6 +42,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   }, [focusSlot, driverId, date, entries, cellId]);
   const visible = entries.filter(entry => !entry.deleted);
   const displayed = visible.length ? visible : [emptyEntry(driverId, date)];
+  const notes = useLoadNotes(displayed, false, onChange);
   const sum = totals(displayed);
   const confirmed = displayed.every(entry => entry.loadRecordId !== null);
   const unmatched = displayed.some(entry => !entry.dayStatus && entry.loadRecordId === null && entry.loadNumber.trim() !== "");
@@ -78,19 +82,20 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
   }
 
   return <>
-    {displayed.length === 1 ? <DayCell id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    {displayed.length === 1 ? <DayCell id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span><div className="flex gap-1">
         <button type="button" aria-label={`${label}, edit loads`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor()}><Pencil className="h-3 w-3" /></button>
         {displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
       </div></div>
-      <button type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
-        onMouseEnter={event => showBreakdown(event.currentTarget)} onMouseLeave={() => setHover(null)} onFocus={event => showBreakdown(event.currentTarget)} onBlur={() => setHover(null)}
+      <div data-grid-cell className="relative">{notes.marker}<button data-grid-action type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
+        onMouseEnter={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onMouseLeave={() => setHover(null)} onFocus={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onBlur={() => setHover(null)}
         title={unmatched ? "Contains unmatched manual loads. Open to review each load." : undefined}
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
         <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? entry.loadRecordId === null ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${entry.loadRecordId === null ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
-      </button>
-      {([["original rate", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <button key={name} type="button" aria-label={`${label}, total ${name}`} className={`${field} ${needsReview && name !== "driver rate" ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value)}</button>)}
+      </button></div>
+      {([["original rate", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell><button data-grid-action type="button" aria-label={`${label}, total ${name}`} className={`${field} ${needsReview && name !== "driver rate" ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value)}</button></div>)}
     </td>}
+    {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 shadow-xl">
       <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">Click to edit</span></div>
       <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Original</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? dayStatuses.find(status => status.value === entry.dayStatus)?.color : entry.loadRecordId !== null ? "text-emerald-300" : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.dayStatus || entry.loadNumber || "Empty"}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{value || "—"}</td>)}</tr>)}</tbody></table></div>
@@ -100,7 +105,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
       event.preventDefault(); applyDraft();
     }} wide>
       {onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>Apply and return to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
-      <div className="overflow-x-auto pb-32"><table className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
+      <div className="overflow-x-auto pb-32"><table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Original", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
         {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={false} onChange={editDraft} />)}
       </tr></tbody></table></div>

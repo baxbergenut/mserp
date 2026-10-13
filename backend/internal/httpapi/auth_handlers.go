@@ -55,13 +55,14 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
-	Theme                 string                             `json:"theme"`
-	ID                    string                             `json:"id"`
-	Username              string                             `json:"username"`
-	Email                 string                             `json:"email"`
-	RoleID                string                             `json:"roleId"`
-	Permissions           []string                           `json:"permissions"`
-	ExpenseCategoryAccess []repository.ExpenseCategoryAccess `json:"expenseCategoryAccess"`
+	Theme                   string                             `json:"theme"`
+	ID                      string                             `json:"id"`
+	Username                string                             `json:"username"`
+	Email                   string                             `json:"email"`
+	ExpenseVerificationRole string                             `json:"expenseVerificationRole"`
+	RoleID                  string                             `json:"roleId"`
+	Permissions             []string                           `json:"permissions"`
+	ExpenseCategoryAccess   []repository.ExpenseCategoryAccess `json:"expenseCategoryAccess"`
 }
 
 type sessionResponse struct {
@@ -311,7 +312,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
 		CSRFToken: csrfToken,
 		ExpiresAt: expiresAt,
 	}

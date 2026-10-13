@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Plus, RefreshCw } from "lucide-react";
@@ -7,7 +9,7 @@ import { changePrePassFleet, fetchPrePassFleet, previewPrePassFleetLink, refresh
 import { usePermissions } from "../lib/access";
 import { useViewState } from "../lib/viewMemory";
 import type { PrePassFleetChange, PrePassFleetEntry, PrePassFleetList, PrePassFleetOperation, PrePassFleetTruck, PrePassVehicleInput, PrePassTruckPreview } from "../lib/types";
-import { controlClass, EmptyState, ErrorBanner, Field, LoadingTable, ManagementSearch, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
+import { controlClass, EmptyState, ErrorBanner, Field, ManagementSearch, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
 import { PrePassVehicleFields, prePassVehicleFromTruck, validPrePassVIN } from "./PrePassVehicleFields";
 import { TruckLinksTab } from "./TruckLinksTab";
 
@@ -122,7 +124,7 @@ export function PrePassFleetTab({ showAttention = false }: { showAttention?: boo
   return <section className="space-y-4" aria-label="PrePass management">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap gap-3 text-[12px] text-zinc-500"><span>{entries.length} trucks</span><span>{devices.length} transponders</span><span>{available.length} available</span>{data?.environment === "nonproduction" && <span>Nonproduction</span>}</div>
-      <div className="flex flex-wrap gap-2"><button className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button>{canWrite && <button className="ui-button ui-button-primary" disabled={locked || !data?.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add truck</button>}</div>
+
     </div>
     {error && !dialog && <ErrorBanner message={error} />}
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
@@ -134,18 +136,18 @@ export function PrePassFleetTab({ showAttention = false }: { showAttention?: boo
       {(["trucks", "transponders", "attention"] as const).map(v => <button key={v} className="ui-button" aria-pressed={view === v} onClick={() => { setView(v); setFilter(""); setPage(1); }}>{v === "trucks" ? "Trucks" : v === "attention" ? "Needs attention" : "Transponders"}</button>)}
       {view !== "attention" && <>
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search unit, VIN, plate or transponder…" />
-      <select aria-label="PrePass status filter" className={selectClass} value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="">All {view}</option>{view === "trucks" ? <><option value="attention">Needs attention</option><option value="unlinked">Unlinked</option><option value="no-device">No transponder</option></> : <><option value="available">Available</option><option value="assigned">Assigned</option></>}</select>
+
       </>}
-    </div>
+    <div className="ml-auto flex flex-wrap gap-2"><button className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button>{canWrite && <button className="ui-button ui-button-primary" disabled={locked || !data?.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add truck</button>}</div></div>
     {view === "attention" ? <TruckLinksTab /> : <>
-    <TableShell>{loading ? <LoadingTable columns={6} /> : !count ? <EmptyState message="No PrePass records match this view." /> : view === "trucks" ? <table className="w-full min-w-[900px] text-left text-[13px]">
-      <thead><tr className="border-b border-zinc-800 text-zinc-500">{["Truck", "VIN", "Plate", "Transponder", "Toll linking", "Actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
-      <tbody>{shownTrucks.slice(offset, offset + pageSize).map(e => <tr key={`${e.vehicle.accountNumber}:${e.vehicle.vin}`} className="border-b border-zinc-800/60">
+    <TableShell>{view === "trucks" ? <table className="w-full min-w-[900px] text-left text-[13px]">
+      <thead><tr className="border-b border-zinc-800 text-zinc-500">{["Truck", "VIN", "Plate", "Transponder", "Toll linking", "Actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{(h === "Toll linking" || h === "Assignment") ? <ColumnFilter label={h} active={!!filter}><select aria-label="PrePass status filter" className={selectClass} value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="">All {view}</option>{view === "trucks" ? <><option value="attention">Needs attention</option><option value="unlinked">Unlinked</option><option value="no-device">No transponder</option></> : <><option value="available">Available</option><option value="assigned">Assigned</option></>}</select></ColumnFilter> : h}</th>)}</tr></thead>
+      <tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownTrucks.slice(offset, offset + pageSize).map(e => <tr key={`${e.vehicle.accountNumber}:${e.vehicle.vin}`} className="border-b border-zinc-800/60">
         <td className="whitespace-nowrap px-3 py-2">{e.truckId ? canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${e.truckId}`}>{e.truckUnit}</Link> : e.truckUnit : <span>{e.vehicle.vehicleNumber}<span className="ml-2 text-amber-400">Unlinked</span></span>}{e.warning && <span className="ml-2 inline-flex align-middle text-amber-400" title={e.warning}><AlertTriangle aria-label={e.warning} className="h-4 w-4" /></span>}</td>
         <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px]">{e.vehicle.vin}</td><td className="whitespace-nowrap px-3 py-2">{e.vehicle.licensePlateNumber} {e.vehicle.licensePlateState}{e.vehicle.tempPlate ? " · Temp" : ""}</td><td className="px-3 py-2 font-mono">{e.vehicle.transponderNumber || "—"}</td><td className="whitespace-nowrap px-3 py-2">{e.tollsLinked ? `From ${e.tollFrom}` : <span className="text-amber-400">Needs linking</span>}</td>
         <td className="px-3 py-1"><div className="flex gap-2">{canLink && <button className="ui-button" disabled={locked} onClick={() => open("link", e)}>{e.truckId ? e.tollsLinked ? "Relink" : "Link tolls" : "Link"}</button>}{canWrite && <><button className="ui-button" disabled={locked} onClick={() => open("edit", e)}>Edit</button>{!e.vehicle.transponderNumber && <button className="ui-button" disabled={locked || !available.some(d => d.accountNumber === e.vehicle.accountNumber)} onClick={() => open("assign", e)}>Assign</button>}<button className="ui-button text-red-400" disabled={locked} onClick={() => open("remove", e)}>Remove</button></>}</div></td>
       </tr>)}</tbody>
-    </table> : <table className="w-full min-w-[650px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-zinc-500">{["Transponder", "Assignment", "Truck", "VIN"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead><tbody>{shownDevices.slice(offset, offset + pageSize).map(d => {
+    </table> : <table className="w-full min-w-[650px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-zinc-500">{["Transponder", "Assignment", "Truck", "VIN"].map(h => <th key={h} className="px-3 py-2 font-medium">{(h === "Toll linking" || h === "Assignment") ? <ColumnFilter label={h} active={!!filter}><select aria-label="PrePass status filter" className={selectClass} value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="">All {view}</option>{<><option value="available">Available</option><option value="assigned">Assigned</option></>}</select></ColumnFilter> : h}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownDevices.slice(offset, offset + pageSize).map(d => {
       const linked = entries.find(e => e.vehicle.accountNumber === d.accountNumber && e.vehicle.vin === d.vin);
       return <tr key={`${d.accountNumber}:${d.transponderNumber}`} className="border-b border-zinc-800/60"><td className="px-3 py-2 font-mono">{d.transponderNumber}</td><td className="px-3 py-2">{available.includes(d) ? "Available" : d.vin || d.vehicleNumber ? "Assigned" : "Needs review"}</td><td className="px-3 py-2">{linked?.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${linked.truckId}`}>{linked.truckUnit}</Link> : linked?.truckUnit || d.vehicleNumber || "—"}</td><td className="px-3 py-2 font-mono text-[12px]">{d.vin || "—"}</td></tr>;
     })}</tbody></table>}</TableShell>

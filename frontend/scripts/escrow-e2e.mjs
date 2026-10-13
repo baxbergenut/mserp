@@ -2,6 +2,11 @@ import { expect } from '@playwright/test';
 import { join } from 'node:path';
 
 export async function verifyEscrow(page, base, temp, driver) {
+  const filterStatus = async value => {
+    await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
+    await page.getByLabel('Escrow payment status').selectOption(value);
+    await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
+  };
   const read = async () => (await (await page.request.get(`${base}/api/escrows?driverId=${driver.id}`)).json()).items[0];
   expect(await read()).toMatchObject({ amount: '2650.00', paidAmount: '0.00', remainingAmount: '2650.00', status: 'unpaid' });
   await page.goto(`${base}/accounting/driver-pay?weekStart=2026-09-21`);
@@ -20,12 +25,12 @@ export async function verifyEscrow(page, base, temp, driver) {
   await expect.poll(async () => (await read()).paidAmount).toBe('100.25');
   await page.goto(`${base}/accounting/escrow`);
   await page.getByPlaceholder('Search drivers…').fill(driver.fullName);
-  await page.getByLabel('Escrow payment status').selectOption('partial');
+  await filterStatus('partial');
   const row = page.getByRole('row').filter({ hasText: driver.fullName });
   await expect(row).toContainText('$2,549.75');
   await expect(row).toContainText('Partially collected');
   await page.screenshot({ path: join(temp, 'escrow-partial.png'), fullPage: true });
-  await page.getByLabel('Escrow payment status').selectOption('unpaid');
+  await filterStatus('unpaid');
   await expect(row).toHaveCount(0);
   await expect(page.getByText('No escrow records match these filters.')).toBeVisible();
   const next = await openPay('2026-10-05');
@@ -37,7 +42,7 @@ export async function verifyEscrow(page, base, temp, driver) {
   await next.press('Tab');
   await expect.poll(async () => (await read()).status).toBe('paid');
   await page.goto(`${base}/accounting/escrow`);
-  await page.getByLabel('Escrow payment status').selectOption('paid');
+  await filterStatus('paid');
   await expect(row).toContainText('Fully collected');
   const rowBefore = await row.boundingBox();
   const history = row.getByRole('button', { name: 'Payment history', exact: true });
@@ -135,7 +140,7 @@ async function verifyReleases(page, base, temp, driver) {
   await page.goto(`${base}/drivers/detail?id=${driver.id}`);
   await page.getByRole('tab', { name: 'Escrow', exact: true }).click();
   const table = page.getByRole('table', { name: 'Driver escrow balances' });
-  await expect(table.getByRole('columnheader')).toHaveText(['Driver', 'Required', 'Balance', 'Still owed', 'Status', 'Actions']);
+  await expect(table.getByRole('columnheader')).toHaveText(['Driver', 'Required', 'Balance', 'Still owed', 'Status', 'Actions'], { useInnerText: true });
   await expect(table).toContainText('Fully collected');
   await page.screenshot({ path: join(temp, 'escrow-replenished.png'), fullPage: true });
 }

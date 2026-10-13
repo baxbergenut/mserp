@@ -190,16 +190,16 @@ export default function TrucksPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ManagementHeader
+
+      {error && <ErrorBanner message={error} />}
+      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={TruckIcon}
         title="Trucks"
 
         count={total}
         actionLabel="Add truck"
         onAction={openCreate}
-      />
-      {error && <ErrorBanner message={error} />}
-      <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" />
+      /></div></div>
 
       <TableShell>
         {isLoading ? <LoadingTable columns={8} /> : trucks.length === 0 ? (

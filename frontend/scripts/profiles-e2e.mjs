@@ -46,7 +46,7 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await expect(page.getByRole('button', { name: 'Morgan Hayes 102', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Morgan Hayes', exact: true })).toHaveAttribute('href', `/investors/detail?id=${f.investor}`);
   await expect(page.getByRole('table', { name: 'Weekly investor pay', exact: true }).locator(':scope > tbody > tr > th')).toHaveCount(1);
-  await expect(page.getByRole('table', { name: 'Weekly investor pay', exact: true }).locator(':scope > thead th')).toHaveText(['Investor', 'Truck', 'Driver', 'Dispatcher', 'Tariff', 'Loads', 'Total payable']);
+  await expect(page.getByRole('table', { name: 'Weekly investor pay', exact: true }).locator(':scope > thead th')).toHaveText(['Investor', 'Truck', 'Driver', 'Dispatcher', 'Tariff', 'Loads', 'Total payable'], { useInnerText: true });
   await expect(page.getByRole('link', { name: 'Jamie Carter', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Morgan Hayes 102', exact: true }).click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: 'Finalize truck', exact: true })).toBeVisible();

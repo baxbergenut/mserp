@@ -1,5 +1,8 @@
 "use client";
 
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 import { History } from "lucide-react";
 import { usePermissions } from "@/app/lib/access";
@@ -13,7 +16,7 @@ import { validChargeWeek } from "./charges";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
-export function TruckCharges({ charges, onChanged, onCountChange }: { charges: ChargeData; onCountChange: (count: number) => void; onChanged: () => Promise<void> }) {
+export function TruckCharges({ charges, onChanged, onCountChange, actions }: { actions?: ReactNode; charges: ChargeData; onCountChange: (count: number) => void; onChanged: () => Promise<void> }) {
   const canWrite = usePermissions().includes("charges.write");
   const [archived, setArchived] = useViewState("truckCharges:archived", false);
   const [typeFilter, setTypeFilter] = useViewState("truckCharges:typeFilter", "");
@@ -56,9 +59,9 @@ export function TruckCharges({ charges, onChanged, onCountChange }: { charges: C
   const truck = trucks.find(t => t.id === phase?.truckId);
   return <div className="space-y-3">
     {!term && !phase && error && <ErrorBanner message={error} />}
-    <div className="overflow-x-auto"><div className="flex min-w-max items-center gap-2"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} /><select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button></div></div>
+    <div className="overflow-x-auto"><div className="flex min-w-max items-center gap-2"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} /><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button><div className="ml-auto">{actions}</div></div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a valid Monday.</p>}
-    {!data ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", "Settlement"].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label}</th>)}{types.map(type => {
+    {!data ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", "Settlement"].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label === "Truck" ? <ColumnFilter label="Truck" active={!!effectiveType || inclusion !== "all" || archived}><label className="block space-y-1">Charge type<select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label className="block space-y-1">Inclusion<select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select></label><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label></ColumnFilter> : label}</th>)}{types.map(type => {
       const targets = visible;
       const included = targets.filter(t => data.phases.filter(p => p.truckId === t.id && p.typeId === type.id && p.weekStart <= week).at(-1)?.included).length;
       const scope = search || inclusion !== "all" ? "visible trucks" : "all trucks";

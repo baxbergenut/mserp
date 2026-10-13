@@ -149,11 +149,15 @@ try {
   // Source workflow completion arrives on the same stream and remains in history.
   Object.assign(tasks.find(t => t.id === 'system'), { completedAt: '2026-10-08T18:00:00Z', completedByName: 'Teammate' });
   pushTasks(); await page.clock.runFor(1000);
+  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await page.getByLabel('Task status', { exact: true }).selectOption('completed');
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('row').filter({ hasText: 'Review Relay account: New driver' })).toContainText('Teammate');
   await expect(page.getByRole('columnheader', { name: 'Completed by', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Review Relay account: New driver', exact: true })).toHaveAttribute('title', /Completed by Teammate/);
+  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await page.getByLabel('Task status', { exact: true }).selectOption('all');
+  await page.keyboard.press('Escape');
   for (const palette of ['default', 'solarized-light', 'solarized-dark', 'monokai', 'monokai-dimmed', 'dark-modern', 'default-light']) {
     theme = palette; await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', palette);
@@ -176,10 +180,10 @@ try {
   }
   theme = 'default';
   await page.goto(`${base}/driver-board`);
-  const header = page.getByRole('columnheader', { name: 'Driver type', exact: true });
-  await expect(page.getByRole('cell', { name: '%-O', exact: true })).toBeVisible();
-  expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  expect(await page.getByRole('cell', { name: '%-O', exact: true }).evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  const driverHeading = page.getByRole('rowheader').filter({ hasText: 'Board Driver' });
+  await expect(driverHeading).toContainText('(%-O)');
+  await expect(page.getByRole('columnheader', { name: 'Driver type', exact: true })).toHaveCount(0);
+  expect(await driverHeading.getByText('(%-O)', { exact: true }).evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
   await expect(page.getByRole('button', { name: 'Customize view', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'My view', exact: true }).dblclick();
   await page.getByRole('checkbox', { name: 'Test Dispatcher', exact: true }).check();

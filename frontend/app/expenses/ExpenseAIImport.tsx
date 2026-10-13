@@ -7,7 +7,7 @@ import { extractExpenses } from "../lib/api";
 import type { AIExpenseDraft, Driver, ExpenseInput, ExpenseSetting, Truck } from "../lib/types";
 import { controlClass } from "../components/management/ManagementUI";
 import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
-import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
+import { expenseAssignment } from "./assignments";
 import type { Investor } from "../lib/types";
 import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
 
@@ -205,7 +205,6 @@ export function ExpenseBatchEditor({
               <th className="px-2 py-2 font-medium">Description</th>
               <th className="px-2 py-2 font-medium">Covered by</th>
               <th className="px-2 py-2 font-medium">Paid by</th>
-              <th className="px-2 py-2 font-medium">Verified</th>
               <th className="w-10 px-2 py-2"><span className="sr-only">Remove</span></th>
             </tr>
           </thead>
@@ -231,7 +230,6 @@ export function ExpenseBatchEditor({
                     <option value="">No linked truck</option>
                     {trucks.map((truck) => <option key={truck.id} value={truck.id}>{truck.unitNumber}</option>)}
                   </select>
-                  <input value={value.unitNumber} onChange={(event) => update(index, defaultExpenseResponsibility({ ...value, truckId: null, unitNumber: event.target.value }, trucks, owners))} className={compactControl} placeholder="Raw unit" />
                 </td>
                 <td className="space-y-1 px-2 py-2">
                   <select
@@ -244,7 +242,6 @@ export function ExpenseBatchEditor({
                     <option value="">No linked driver</option>
                     {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}
                   </select>
-                  <input value={value.driverName} onChange={(event) => update(index, defaultExpenseResponsibility({ ...value, driverId: null, driverName: event.target.value }, trucks, owners))} className={`${compactControl} min-w-44`} placeholder="Raw driver" />
                 </td>
                 <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} /></td>
@@ -252,10 +249,6 @@ export function ExpenseBatchEditor({
                 <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
                 <td className="px-2 py-2"><ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} /></td>
                 <td className="px-2 py-2"><ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} /></td>
-                <td className="px-2 py-2">
-                  <label className="flex items-center gap-2 whitespace-nowrap text-zinc-400"><input type="checkbox" checked={value.managerVerified} onChange={(event) => update(index, { managerVerified: event.target.checked })} /> Manager</label>
-                  <label className="mt-2 flex items-center gap-2 whitespace-nowrap text-zinc-400"><input type="checkbox" checked={value.accountingVerified} onChange={(event) => update(index, { accountingVerified: event.target.checked })} /> Accounting</label>
-                </td>
                 <td className="px-2 py-2">
                   <button type="button" disabled={values.length === 1} onClick={() => onChange(values.filter((_, valueIndex) => valueIndex !== index))} className="rounded-md p-2 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove transaction ${index + 1}`}>
                     <Trash2 className="h-4 w-4" />

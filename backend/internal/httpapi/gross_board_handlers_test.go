@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"mserp/internal/repository"
+	"strings"
 	"testing"
 )
 
@@ -63,5 +64,20 @@ func TestGrossBoardStatuses(t *testing.T) {
 		if r.validate() == nil {
 			t.Fatal("status with linked load accepted")
 		}
+	}
+}
+
+func TestGrossBoardNotes(t *testing.T) {
+	for _, size := range []int{5000, 5001} {
+		note := strings.Repeat("界", size)
+		r := grossBoardRequest{WeekStart: "2026-09-28", Entries: []repository.GrossBoardEntry{{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "PLAN", Note: &note}}}
+		if err := r.validate(); (err == nil) != (size == 5000) {
+			t.Fatalf("note length %d: %v", size, err)
+		}
+	}
+	note := "old note"
+	r := grossBoardRequest{WeekStart: "2026-09-28", Entries: []repository.GrossBoardEntry{{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", Note: &note}}}
+	if err := r.validate(); err != nil || r.Entries[0].Note == nil || *r.Entries[0].Note != "" {
+		t.Fatal("cleared load kept note", err)
 	}
 }

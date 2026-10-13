@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 
 import { RememberedDetails } from "@/app/components/RememberedDetails";
 
@@ -66,7 +67,7 @@ function SpendingChart({ points, color, horizontal = false }: {
   );
 }
 
-export function TollOverview({ refreshKey }: { refreshKey: number }) {
+export function TollOverview({ refreshKey, actions }: { refreshKey: number; actions?: ReactNode }) {
   const [dateFrom, setDateFrom] = useViewState("TollOverview:dateFrom", () => `${new Date().getFullYear()}-01-01`);
   const [dateTo, setDateTo] = useViewState("TollOverview:dateTo", todayDate);
   const [retryKey, setRetryKey] = useState(0);
@@ -91,14 +92,14 @@ export function TollOverview({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      {!dashboard && <div className="flex flex-wrap items-center gap-2">
         <CalendarDays className="h-4 w-4 text-zinc-500" />
         <span className="text-[13px] text-zinc-400">Posting dates</span>
         <input aria-label="Overview start date" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className={inputClass} />
         <span className="text-zinc-600">–</span>
         <input aria-label="Overview end date" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={inputClass} />
         <button type="button" onClick={() => { setDateFrom(`${new Date().getFullYear()}-01-01`); setDateTo(todayDate()); }} className="rounded-lg px-2 py-1.5 text-[12px] text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200">Year to date</button>
-      </div>
+      <div className="ml-auto">{actions}</div></div>}
 
       {error ? (
         <div className="space-y-2">
@@ -120,7 +121,14 @@ export function TollOverview({ refreshKey }: { refreshKey: number }) {
             <KpiCard label="Toll expense" value={money.format(dashboard.totals.spend)} detail="Net charges after credits" icon={CircleDollarSign} accent="text-blue-400" />
             <KpiCard label="Transactions" value={dashboard.totals.transactionCount.toLocaleString()} detail="All charges and credits in range" icon={Receipt} accent="text-cyan-400" />
             <KpiCard label="Truck units" value={dashboard.totals.truckCount.toLocaleString()} detail="Distinct units reported by PrePass" icon={Truck} accent="text-violet-400" />
-          </div>
+          </div><div className="flex flex-wrap items-center gap-2">
+        <CalendarDays className="h-4 w-4 text-zinc-500" />
+        <span className="text-[13px] text-zinc-400">Posting dates</span>
+        <input aria-label="Overview start date" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className={inputClass} />
+        <span className="text-zinc-600">–</span>
+        <input aria-label="Overview end date" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={inputClass} />
+        <button type="button" onClick={() => { setDateFrom(`${new Date().getFullYear()}-01-01`); setDateTo(todayDate()); }} className="rounded-lg px-2 py-1.5 text-[12px] text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200">Year to date</button>
+      <div className="ml-auto">{actions}</div></div>
           {dashboard.totals.transactionCount === 0 ? (
             <EmptyState message="No toll transactions in this date range. Adjust the dates or sync tolls to get started." />
           ) : (

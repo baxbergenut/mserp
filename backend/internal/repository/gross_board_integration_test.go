@@ -104,6 +104,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
+	noteMigration, err := os.ReadFile("../../sql/084_gross_board_notes.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(noteMigration)); err != nil {
+		t.Fatal(err)
+	}
 	cancelledMigration, err := os.ReadFile("../../sql/039_load_cancelled_status.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -372,6 +379,58 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Database constraints also reject invalid status payloads outside HTTP.
+	for _, slot := range []int{0, 1} {
+		note := "Call receiver\nUse gate 2 🚚"
+		rows, err := repo.SaveEntries(ctx, []GrossBoardEntry{{DriverID: carryDriver, Date: "2026-10-03", Slot: slot, LoadNumber: "NOTE-PLAN", Note: &note}})
+		if err != nil || rows[0].Note == nil || *rows[0].Note != note {
+			t.Fatalf("note insert slot %d: %v %+v", slot, err, rows)
+		}
+		stale := rows[0]
+		edit := rows[0]
+		edit.Note = nil // Older clients must preserve notes on ordinary edits.
+		edit.DriverRate = "75"
+		rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edit})
+		if err != nil || rows[0].Note == nil || *rows[0].Note != note {
+			t.Fatalf("note lost on amount edit: %v %+v", err, rows)
+		}
+		if err = repo.Save(ctx, []GrossBoardEntry{stale}); !errors.Is(err, ErrGrossBoardConflict) {
+			t.Fatal("stale note accepted", err)
+		}
+		read, err := repo.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundNote := false
+		for _, e := range read.Entries {
+			if e.DriverID == carryDriver && e.Date == edit.Date && e.Slot == slot {
+				foundNote = e.Note != nil && *e.Note == note
+			}
+		}
+		if !foundNote {
+			t.Fatal("note missing on reload")
+		}
+		edit = rows[0]
+		empty := ""
+		edit.Note = &empty
+		rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edit})
+		if err != nil || rows[0].Note == nil || *rows[0].Note != "" {
+			t.Fatal("note deletion failed", err)
+		}
+		edit = rows[0]
+		edit.Note = &note
+		rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edit})
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit = rows[0]
+		edit.LoadNumber = "REPLACEMENT"
+		edit.Note = nil
+		rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edit})
+		if err != nil || rows[0].Note == nil || *rows[0].Note != "" {
+			t.Fatal("reused slot inherited note", err)
+		}
+	}
+
 	for _, slot := range []int{0, 1} {
 		cancelled := GrossBoardEntry{DriverID: carryDriver, Date: "2026-10-02", Slot: slot, DayStatus: "LOAD CANCELLED"}
 		saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{cancelled})

@@ -39,7 +39,7 @@ export function addDays(date: string, days: number) {
 export const shortDate = (date: string) => `${date.slice(5, 7)}/${date.slice(8, 10)}`;
 export const entryKey = (driverId: string, date: string, slot = 0) => `${driverId}:${date}:${slot}`;
 export const emptyEntry = (driverId: string, date: string, slot = 0): GrossBoardEntry => ({
-  driverId, date, slot, deleted: false, loadNumber: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
+  driverId, date, slot, deleted: false, loadNumber: "", note: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
   enteredOriginalRate: "", enteredMiles: "", duplicate: false, dayStatus: "",
 });
 
@@ -82,6 +82,7 @@ export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBo
   const original = entry.enteredOriginalRate || entry.originalRate || load.originalRate;
   const miles = entry.enteredMiles || entry.miles || load.miles;
   return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
+    note: entry.loadNumber.trim().toLowerCase() === load.loadNumber.trim().toLowerCase() && (entry.loadRecordId === null || entry.loadRecordId === load.id) ? entry.note : "",
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
     originalRate: original, miles, systemOriginalRate: load.originalRate, systemMiles: load.miles,

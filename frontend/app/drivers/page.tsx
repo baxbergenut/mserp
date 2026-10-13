@@ -1,4 +1,6 @@
 "use client";
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { employmentTypeLabel } from "../lib/driverType";
 
 import { formatPhone } from "../lib/phone";
@@ -30,7 +32,6 @@ import {
   ConfirmDialog,
   EmptyState,
   ErrorBanner,
-  LoadingTable,
   ManagementHeader,
   ManagementSearch,
   Modal,
@@ -230,19 +231,32 @@ function DriversContent() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ManagementHeader
+
+
+      {error && <ErrorBanner message={error} />}
+      <div className="flex flex-wrap items-center gap-3">
+        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
+
+      <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={Users}
         title="Drivers"
 
         count={total}
         actionLabel="Add driver"
         onAction={openCreate}
-      />
+      /></div></div>
 
-      {error && <ErrorBanner message={error} />}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
-        <label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
+      <TableShell>
+        <table className="w-full min-w-[920px] text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-zinc-800/50 text-zinc-500">
+                <th className="px-4 py-3 font-medium">Driver</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium">Compensation</th>
+                <th className="px-4 py-3 font-medium">Dispatcher</th>
+                <th className="px-4 py-3 font-medium">Truck</th>
+                <th className="px-4 py-3 font-medium">CDL</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Status" active={!!(showInactiveDrivers)}><label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
           <input
             type="checkbox"
             checked={showInactiveDrivers}
@@ -250,13 +264,11 @@ function DriversContent() {
             className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600"
           />
           Show terminated drivers
-        </label>
-      </div>
-
-      <TableShell>
-        {isLoading ? (
-          <LoadingTable columns={8} />
-        ) : drivers.length === 0 ? (
+        </label></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>{isLoading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : drivers.length === 0 ? <tr><td colSpan={8}>{(
           <EmptyState
             message={
               search
@@ -266,21 +278,7 @@ function DriversContent() {
                   : "No drivers yet. Add your first driver to get started."
             }
           />
-        ) : (
-          <table className="w-full min-w-[920px] text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium">Driver</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Compensation</th>
-                <th className="px-4 py-3 font-medium">Dispatcher</th>
-                <th className="px-4 py-3 font-medium">Truck</th>
-                <th className="px-4 py-3 font-medium">CDL</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        )}</td></tr> : <>
               {drivers.map((driver) => (
                 <tr key={driver.id} tabIndex={!driver.intakeId && permissions.includes("fleet.write") ? 0 : undefined} onContextMenu={event => { if (!driver.intakeId && permissions.includes("fleet.write")) { event.preventDefault(); setStatusMenu({ driver, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (!driver.intakeId && permissions.includes("fleet.write") && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatusMenu({ driver, x: rect.left + 12, y: rect.bottom }); } }} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
@@ -314,9 +312,8 @@ function DriversContent() {
                   <td className="px-4 py-3">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="float-right text-xs text-blue-400 hover:text-blue-300">Set up</button> : <RowActions onEdit={() => openEdit(driver)} onDelete={() => setPendingDelete(driver)} />}</td>
                 </tr>
               ))}
-            </tbody>
+            </>}</tbody>
           </table>
-        )}
       </TableShell>
       {!isLoading && (
         <TablePagination

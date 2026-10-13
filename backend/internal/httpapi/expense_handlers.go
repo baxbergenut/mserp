@@ -40,6 +40,8 @@ func registerExpenseRoutes(
 	r.Post("/expenses/bulk", handler.createExpenses)
 	r.Post("/expenses/extract", handler.extractExpenses)
 	r.Put("/expenses/{id}", handler.updateExpense)
+	r.Post("/expenses/{id}/verify", handler.verifyExpense)
+	r.Post("/expenses/{id}/unverify", handler.unverifyExpense)
 	r.Delete("/expenses/{id}", handler.deleteExpense)
 }
 
@@ -150,8 +152,8 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
 		ExpenseType: optionalString(request.ExpenseType), ReferenceNumber: optionalString(request.ReferenceNumber),
 		Description: optionalString(request.Description), CoveredBy: optionalString(request.CoveredBy),
-		PaidBy: optionalString(request.PaidBy), ManagerVerified: request.ManagerVerified,
-		AccountingVerified: request.AccountingVerified,
+		PaidBy: optionalString(request.PaidBy), ManagerVerified: false,
+		AccountingVerified: false,
 	}, nil
 }
 
@@ -198,11 +200,22 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	categoryID := strings.TrimSpace(r.URL.Query().Get("categoryId"))
+	accountantVerified, err := parseExpenseVerificationFilter(r.URL.Query().Get("accountantVerified"))
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	adminVerified, err := parseExpenseVerificationFilter(r.URL.Query().Get("adminVerified"))
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if categoryID != "" && (!isUUID(categoryID) || !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, categoryID, "view")) {
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to view that category")
 		return
 	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
+		AccountantVerified: accountantVerified, AdminVerified: adminVerified,
 		Pagination:     pagination,
 		ChargeDriverID: chargeDriverID, Responsibility: responsibility,
 		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
@@ -218,6 +231,17 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
+}
+
+func parseExpenseVerificationFilter(value string) (*bool, error) {
+	if value == "" {
+		return nil, nil
+	}
+	if value != "true" && value != "false" {
+		return nil, errors.New("verification filters must be true or false")
+	}
+	verified := value == "true"
+	return &verified, nil
 }
 
 func parseOptionalQueryUUID(value, label string) (*string, error) {

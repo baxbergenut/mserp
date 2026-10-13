@@ -94,6 +94,7 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 			payable -= n
 		}
 		payable += payPageCosts(*d)
+		payable += driverLayoverTotal(*d)
 	}
 	for i := range report.SetupRequired {
 		s := &report.SetupRequired[i]

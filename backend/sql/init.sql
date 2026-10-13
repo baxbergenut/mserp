@@ -3243,3 +3243,61 @@ DROP TRIGGER toll_prepass_truck_mapping ON tolls;
 CREATE TRIGGER toll_prepass_truck_mapping BEFORE INSERT OR UPDATE OF truck_id,equipment_unit,prepass_tag_id,exit_date,customer_id,prepass_environment ON tolls
  FOR EACH ROW EXECUTE FUNCTION apply_prepass_truck_mapping();
 COMMIT;
+
+-- Gross Board load notes (084).
+ALTER TABLE gross_board_entries ADD COLUMN note text NOT NULL DEFAULT '' CHECK (char_length(note) <= 5000);
+ALTER TABLE gross_board_extra_entries ADD COLUMN note text NOT NULL DEFAULT '' CHECK (char_length(note) <= 5000);
+
+-- Expense verification attribution and cancellation (migration 085).
+BEGIN;
+
+CREATE TABLE expense_verifications (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    expense_id uuid NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    verifier_role text NOT NULL CHECK (verifier_role IN ('admin', 'accountant')),
+    user_id uuid REFERENCES app_users(id) ON DELETE SET NULL,
+    user_name text NOT NULL DEFAULT '',
+    verified_at timestamptz,
+    revoked_at timestamptz,
+    revoked_by uuid REFERENCES app_users(id) ON DELETE SET NULL,
+    revoked_by_name text
+);
+CREATE UNIQUE INDEX expense_verifications_active ON expense_verifications(expense_id, verifier_role) WHERE revoked_at IS NULL;
+
+-- Historical checks have no recorded verifier or timestamp. Preserve them
+-- without attributing the approval to the migration operator.
+INSERT INTO expense_verifications(expense_id, verifier_role)
+SELECT id, 'admin' FROM expenses WHERE manager_verified;
+INSERT INTO expense_verifications(expense_id, verifier_role)
+SELECT id, 'accountant' FROM expenses WHERE accounting_verified;
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mserp_app') THEN
+        ALTER TABLE expense_verifications OWNER TO mserp_app;
+    END IF;
+END $$;
+
+COMMIT;
+
+-- Driver pay layover settings and exclusions (migration 086).
+BEGIN;
+
+CREATE TABLE driver_pay_settings (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+ layover_daily_amount numeric(12,2) NOT NULL DEFAULT 100 CHECK (layover_daily_amount >= 0 AND layover_daily_amount <= 999999999.99),
+ version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ updated_by uuid REFERENCES app_users(id) ON DELETE SET NULL
+);
+INSERT INTO driver_pay_settings(singleton) VALUES(true);
+
+ALTER TABLE driver_pay_weeks ADD COLUMN layover_excluded_dates text[] NOT NULL DEFAULT '{}';
+ALTER TABLE driver_pay_weeks ADD CONSTRAINT driver_pay_layover_dates_limit CHECK (cardinality(layover_excluded_dates) <= 7);
+
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='mserp_app') THEN
+  ALTER TABLE driver_pay_settings OWNER TO mserp_app;
+ END IF;
+END $$;
+
+COMMIT;

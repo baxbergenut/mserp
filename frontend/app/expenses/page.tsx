@@ -1,11 +1,13 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Settings, WalletCards, X } from "lucide-react";
+import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   createExpenses,
@@ -16,18 +18,18 @@ import {
   fetchInvestors,
   fetchTrucks,
   updateExpense,
+  verifyExpense,
+  unverifyExpense,
 } from "../lib/api";
-import type { Driver, Expense, ExpenseInput, ExpensePage, Investor, Truck } from "../lib/types";
+import type { Driver, Expense, ExpenseInput, ExpensePage, ExpenseVerification, Investor, Truck } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
   EmptyState,
   ErrorBanner,
-  LoadingTable,
   ManagementHeader,
   ManagementSearch,
   Modal,
-  RowActions,
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
@@ -70,22 +72,19 @@ function formatDate(value: string | null) {
   }).format(new Date(`${value}T00:00:00`));
 }
 
-function formatWeek(value: string | null) {
-  if (!value) return "Week unavailable";
-  const start = new Date(`${value}T00:00:00`);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  const short = (date: Date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${short(start)} – ${short(end)}`;
+function verificationLabel(verification: ExpenseVerification) {
+  const role = verification.role === "admin" ? "Administrator" : "Accountant";
+  return role + ": " + (verification.userName || "Verifier not recorded");
 }
 
-function Verification({ checked, label }: { checked: boolean; label: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[11px] ${checked ? "text-emerald-400" : "text-zinc-600"}`}>
-      {checked ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-      {label}
+function Verification({ expense, onClick }: { expense: Expense; onClick: () => void }) {
+  const label = (expense.verifications ?? []).map(verificationLabel).join("; ") || [expense.accountingVerified && "Accountant: verifier not recorded", expense.managerVerified && "Administrator: verifier not recorded"].filter(Boolean).join("; ");
+  return label ? <button type="button" onClick={onClick} title={label} aria-label={"View verification: " + label} className="inline-flex h-8 min-w-8 items-center justify-center rounded hover:bg-zinc-800/50 focus-visible:outline-2 focus-visible:outline-blue-500">
+    <span aria-label={label} role="img" className="relative inline-block h-5 w-[26px] shrink-0">
+      {expense.accountingVerified && <Check strokeWidth={3} className="absolute left-0 top-0 h-5 w-5 text-blue-500" />}
+      {expense.managerVerified && <Check strokeWidth={3} className={"absolute h-5 w-5 text-emerald-500 " + (expense.accountingVerified ? "left-1.5 top-0" : "left-0 top-0")} />}
     </span>
-  );
+  </button> : null;
 }
 
 export default function ExpensesPage() {
@@ -95,8 +94,10 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [category, setCategory] = useViewState("page:categoryId", "");
-  const [company, setCompany] = useViewState("page:company", "");
+
   const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
+  const [accountantVerified, setAccountantVerified] = useViewState("page:accountantVerified", "");
+  const [adminVerified, setAdminVerified] = useViewState("page:adminVerified", "");
   const [dateTo, setDateTo] = useViewState("page:dateTo", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
@@ -117,6 +118,13 @@ export default function ExpensesPage() {
   const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
   const [batchForms, setBatchForms] = useState<ExpenseInput[]>([]);
   const [currentUser, setCurrentUser] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
+  const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
+  const verificationBusy = useRef(false);
+  const [verificationNotice, setVerificationNotice] = useState("");
+  const [verificationRole, setVerificationRole] = useState<"admin" | "accountant" | "">("");
+  const [verifying, setVerifying] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -126,9 +134,11 @@ export default function ExpensesPage() {
     setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, categoryId: category, company, dateFrom, dateTo,
+        page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
+      setCurrentUserId(session.user.id);
+      setVerificationRole(session.user.expenseVerificationRole ?? "");
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -142,7 +152,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, category, company, dateFrom, dateTo, debouncedSearch, page, pageSize]);
+  }, [setPage, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -168,7 +178,7 @@ export default function ExpensesPage() {
     return () => { cancelled = true; };
   }, [canLoadFleetSelectors]);
 
-  const hasFilters = Boolean(search || category || company || dateFrom || dateTo);
+  const hasFilters = Boolean(search || category || dateFrom || dateTo || accountantVerified || adminVerified);
 
   function openCreate() {
     setForm({ ...emptyExpenseInput, paidBy: currentUser, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) });
@@ -209,6 +219,7 @@ export default function ExpensesPage() {
     try {
       await deleteExpense(pendingDelete.id);
       setPendingDelete(null);
+      setEditing(undefined);
       await loadData();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to delete entry");
@@ -218,26 +229,77 @@ export default function ExpensesPage() {
     }
   }
 
+  async function verify(expense: Expense) {
+    if (verificationBusy.current) return;
+    verificationBusy.current = true;
+    setVerifying(expense.id);
+    setError("");
+    try {
+      const updated = await verifyExpense(expense.id, expense.updatedAt);
+      const stamp = updated.verifications.find(item => item.role === verificationRole && item.userId === currentUserId);
+      if (stamp) verificationUndo.current.push({ expenseId: expense.id, verificationId: stamp.id });
+      setVerificationNotice("Verified. Press Ctrl+Z to undo.");
+      setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
+      if (accountantVerified || adminVerified) await loadData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not verify entry");
+    } finally { setVerifying(null); verificationBusy.current = false; }
+  }
+
+  const cancelVerification = useCallback(async (expenseId: string, verificationId: string) => {
+    if (verificationBusy.current) return;
+    verificationBusy.current = true;
+    setVerifying(expenseId);
+    setError("");
+    try {
+      const updated = await unverifyExpense(expenseId, verificationId);
+      setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
+      if (accountantVerified || adminVerified) await loadData();
+      setVerificationDetails(current => current?.id === updated.id ? updated : current);
+      verificationUndo.current = verificationUndo.current.filter(item => item.verificationId !== verificationId);
+      setVerificationNotice("Verification removed.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not remove verification");
+    } finally { setVerifying(null); verificationBusy.current = false; }
+  }, [accountantVerified, adminVerified, loadData]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.shiftKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || editing !== undefined || verificationDetails) return;
+      if ((event.target as HTMLElement)?.closest("input,textarea,select,[contenteditable='true']")) return;
+      const last = verificationUndo.current.at(-1);
+      if (!last) return;
+      event.preventDefault();
+      if (!verificationBusy.current) void cancelVerification(last.expenseId, last.verificationId);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [cancelVerification, editing, verificationDetails]);
+
+  useEffect(() => {
+    if (!verificationNotice) return;
+    const timeout = window.setTimeout(() => setVerificationNotice(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [verificationNotice]);
+
+  function canCancelVerification(stamp: ExpenseVerification) {
+    return stamp.userId === currentUserId || verificationRole === "admin" || verificationRole === stamp.role;
+  }
+
   function clearFilters() {
     setSearch("");
     setCategory("");
-    setCompany("");
+
     setDateFrom("");
     setDateTo("");
+    setAccountantVerified("");
+    setAdminVerified("");
     setPage(1);
   }
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ManagementHeader
-        icon={WalletCards}
-        title="Expenses & Charges"
 
-        count={total}
-        actionLabel={createCategoryIds.length ? "Add entry" : undefined}
-        onAction={createCategoryIds.length ? openCreate : undefined}
-        secondaryAction={permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses & Charges settings</Link> : undefined}
-      />
 
       {error && <ErrorBanner message={error} />}
 
@@ -257,58 +319,53 @@ export default function ExpensesPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses and charges…" />
-        <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">All categories</option>
-          {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
-        </select>
-        <select value={company} onChange={(event) => { setCompany(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">All companies</option>
-          {options.companies.map((value) => <option key={value}>{value}</option>)}
-        </select>
-        <div className="flex items-center gap-1.5">
-          <input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} />
-          <span className="text-[13px] text-zinc-700">–</span>
-          <input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} />
-        </div>
+        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
+
+
+
         {hasFilters && (
           <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition hover:bg-zinc-800/50 hover:text-zinc-300">
             <X className="h-3 w-3" /> Clear
           </button>
         )}
-      </div>
+      <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
+        icon={WalletCards}
+        title="Expenses"
+
+        count={total}
+        actionLabel={createCategoryIds.length ? "Add entry" : undefined}
+        onAction={createCategoryIds.length ? openCreate : undefined}
+        secondaryAction={permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses settings</Link> : undefined}
+      /></div></div>
+
+      {verificationNotice && <p role="status" className="text-xs text-zinc-400">{verificationNotice}</p>}
 
       <TableShell>
-        {isLoading ? (
-          <LoadingTable columns={8} />
-        ) : expenses.length === 0 ? (
-          <EmptyState message={hasFilters ? "No entries match these filters." : createCategoryIds.length ? "No entries yet. Add the first entry." : "No entries are available in your categories."} />
-        ) : (
-          <table className="w-full min-w-[1380px] text-left text-[13px]">
+        <table className="w-full min-w-[960px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium">Date / week</th>
-                <th className="px-4 py-3 font-medium">Category / company</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Date" active={!!(dateFrom || dateTo)}><label className="block space-y-1">From<input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label></ColumnFilter></th>
                 <th className="px-4 py-3 font-medium">Unit / driver</th>
-                <th className="px-4 py-3 font-medium">Expense</th>
+                <th className="px-4 py-3 font-medium"><ColumnFilter label="Expense" active={!!category}><label className="block space-y-1">Category<select aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">All categories</option>
+          {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
+        </select></label></ColumnFilter></th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Responsibility</th>
-                <th className="px-4 py-3 text-right font-medium">Total amount</th>
-                <th className="px-4 py-3 text-right font-medium">Paid</th><th className="px-4 py-3 text-right font-medium">Remaining</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="px-4 py-3 text-right font-medium"><ColumnFilter label="Verification" active={!!(accountantVerified || adminVerified)}><label className="block space-y-1">Accountant<select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select></label><label className="block space-y-1">Admin<select aria-label="Admin verification" value={adminVerified} onChange={e => { setAdminVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any admin status</option><option value="false">Unverified by admin</option><option value="true">Verified by admin</option></select></label></ColumnFilter></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody>{isLoading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan={7}>{(
+          <EmptyState message={hasFilters ? "No entries match these filters." : createCategoryIds.length ? "No entries yet. Add the first entry." : "No entries are available in your categories."} />
+        )}</td></tr> : <>
               {expenses.map((expense) => (
-                <tr key={expense.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
+                <tr key={expense.id} tabIndex={0} aria-label={"Open " + (expense.expenseType || expense.category)}
+                  onClick={event => { if (!(event.target as HTMLElement).closest("a,button")) openEdit(expense); }}
+                  onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openEdit(expense); } }}
+                  className="cursor-pointer border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/25 focus-visible:outline-2 focus-visible:outline-blue-500">
                   <td className="px-4 py-3">
                     <div className={expense.expenseDate ? "font-mono tabular-nums text-zinc-200" : "text-amber-400"}>{formatDate(expense.expenseDate)}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">{formatWeek(expense.weekStart)}</div>
-					<div className="mt-0.5 text-[11px] text-zinc-600">{expense.createdByName ? `Added by ${expense.createdByName}` : "Added before tracking"}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-zinc-200">{expense.category}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">{expense.company}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-mono text-zinc-300">
@@ -323,8 +380,8 @@ export default function ExpensesPage() {
                     </div>
                   </td>
                   <td className="max-w-[310px] px-4 py-3">
-                    <div className="text-zinc-300">{expense.expenseType || "Uncategorized"}</div>
-                    <div className="mt-0.5 truncate text-[11px] text-zinc-600" title={expense.description ?? undefined}>{expense.description || expense.referenceNumber || "No description"}</div>
+                    <div className="text-zinc-300">{expense.expenseType || "Unnamed expense"}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.category}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.paymentType || "—"}</div>
@@ -332,22 +389,20 @@ export default function ExpensesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
-                    <div className="mt-1 flex gap-2">
-                      <Verification checked={expense.managerVerified} label="Manager" />
-                      <Verification checked={expense.accountingVerified} label="Accounting" />
-                    </div>
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
-                    {formatMoney(expense.amount)}
+                    <span tabIndex={0} title={"Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={expense.driverSettled ? "Existing driver expense: assumed fully paid" : "Saved Driver Pay deductions"}>{expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)}</td>
-                  <td className="px-4 py-3"><RowActions onEdit={categoryAccess.some(item => item.categoryId === expense.categoryId && item.canEdit) ? () => openEdit(expense) : undefined} onDelete={categoryAccess.some(item => item.categoryId === expense.categoryId && item.canDelete) ? () => setPendingDelete(expense) : undefined} /></td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <Verification expense={expense} onClick={() => { setError(""); setVerificationDetails(expense); }} />
+                      {verificationRole && !(verificationRole === "admin" ? expense.managerVerified : expense.accountingVerified) && <button type="button" className="ui-button" disabled={verifying !== null} onClick={() => void verify(expense)}>{verifying === expense.id ? "Verifying…" : "Verify"}</button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
-            </tbody>
+            </>}</tbody>
           </table>
-        )}
       </TableShell>
 
       {!isLoading && (
@@ -364,6 +419,8 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
+          submitDisabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}
+          footerStart={editing && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving}
           submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} entries` : "Create entry"}
           wide={batchForms.length > 0}
@@ -396,10 +453,21 @@ export default function ExpensesPage() {
           {batchForms.length > 0 && !editing ? (
             <ExpenseBatchEditor settings={options.settings} users={options.paidBy} allowedCategoryIds={createCategoryIds} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
           ) : (
-            <ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} />
+            <fieldset disabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} /></fieldset>
           )}
         </Modal>
       )}
+
+      {verificationDetails && <Modal title="Verification" isSaving={!!verifying} submitLabel="Done" hideSubmit cancelLabel="Done" onClose={() => setVerificationDetails(null)} onSubmit={event => event.preventDefault()}>
+        {error && <ErrorBanner message={error} />}
+        <div className="space-y-3">
+          {(verificationDetails.verifications ?? []).map(stamp => <div key={stamp.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 p-3">
+            <div><p className="flex items-center gap-2 text-sm"><Check className={stamp.role === "admin" ? "h-4 w-4 text-emerald-500" : "h-4 w-4 text-blue-500"} />{verificationLabel(stamp)}</p>{stamp.verifiedAt && <p className="mt-1 text-xs text-zinc-500">{new Date(stamp.verifiedAt).toLocaleString()}</p>}</div>
+            {canCancelVerification(stamp) && <button type="button" className="ui-button text-red-400" disabled={!!verifying} onClick={() => void cancelVerification(verificationDetails.id, stamp.id)}>Remove {stamp.role === "admin" ? "Administrator" : "Accountant"} verification</button>}
+          </div>)}
+          {!verificationDetails.verifications?.length && <p className="text-sm text-zinc-400">No active verifications.</p>}
+        </div>
+      </Modal>}
 
       {pendingDelete && (
         <ConfirmDialog

@@ -21,39 +21,48 @@ type ExpensePayment struct {
 	WeekStart string `json:"weekStart"`
 	Amount    string `json:"amount"`
 }
+type ExpenseVerification struct {
+	ID         string     `json:"id"`
+	Role       string     `json:"role"`
+	UserID     *string    `json:"userId"`
+	UserName   string     `json:"userName"`
+	VerifiedAt *time.Time `json:"verifiedAt"`
+}
+
 type Expense struct {
-	Payments            []ExpensePayment `json:"payments"`
-	OwnerID             *string          `json:"ownerId"`
-	OwnerName           *string          `json:"ownerName"`
-	ChargeDriverID      *string          `json:"chargeDriverId"`
-	PaidAmount          *string          `json:"paidAmount"`
-	RemainingAmount     *string          `json:"remainingAmount"`
-	DriverSettled       bool             `json:"driverSettled"`
-	ID                  string           `json:"id"`
-	TruckID             *string          `json:"truckId"`
-	DriverID            *string          `json:"driverId"`
-	Company             string           `json:"company"`
-	Category            string           `json:"category"`
-	CategoryID          string           `json:"categoryId"`
-	CreatedByName       *string          `json:"createdByName"`
-	WeekStart           *string          `json:"weekStart"`
-	ExpenseDate         *string          `json:"expenseDate"`
-	UnitNumber          *string          `json:"unitNumber"`
-	DriverName          *string          `json:"driverName"`
-	Amount              *string          `json:"amount"`
-	PaymentType         *string          `json:"paymentType"`
-	ExpenseType         *string          `json:"expenseType"`
-	ReferenceNumber     *string          `json:"referenceNumber"`
-	Description         *string          `json:"description"`
-	CoveredBy           *string          `json:"coveredBy"`
-	PaidBy              *string          `json:"paidBy"`
-	ManagerVerified     bool             `json:"managerVerified"`
-	AccountingVerified  bool             `json:"accountingVerified"`
-	SourceSpreadsheetID *string          `json:"sourceSpreadsheetId"`
-	SourceSheet         *string          `json:"sourceSheet"`
-	SourceRow           *int             `json:"sourceRow"`
-	CreatedAt           time.Time        `json:"createdAt"`
-	UpdatedAt           time.Time        `json:"updatedAt"`
+	Verifications       []ExpenseVerification `json:"verifications"`
+	Payments            []ExpensePayment      `json:"payments"`
+	OwnerID             *string               `json:"ownerId"`
+	OwnerName           *string               `json:"ownerName"`
+	ChargeDriverID      *string               `json:"chargeDriverId"`
+	PaidAmount          *string               `json:"paidAmount"`
+	RemainingAmount     *string               `json:"remainingAmount"`
+	DriverSettled       bool                  `json:"driverSettled"`
+	ID                  string                `json:"id"`
+	TruckID             *string               `json:"truckId"`
+	DriverID            *string               `json:"driverId"`
+	Company             string                `json:"company"`
+	Category            string                `json:"category"`
+	CategoryID          string                `json:"categoryId"`
+	CreatedByName       *string               `json:"createdByName"`
+	WeekStart           *string               `json:"weekStart"`
+	ExpenseDate         *string               `json:"expenseDate"`
+	UnitNumber          *string               `json:"unitNumber"`
+	DriverName          *string               `json:"driverName"`
+	Amount              *string               `json:"amount"`
+	PaymentType         *string               `json:"paymentType"`
+	ExpenseType         *string               `json:"expenseType"`
+	ReferenceNumber     *string               `json:"referenceNumber"`
+	Description         *string               `json:"description"`
+	CoveredBy           *string               `json:"coveredBy"`
+	PaidBy              *string               `json:"paidBy"`
+	ManagerVerified     bool                  `json:"managerVerified"`
+	AccountingVerified  bool                  `json:"accountingVerified"`
+	SourceSpreadsheetID *string               `json:"sourceSpreadsheetId"`
+	SourceSheet         *string               `json:"sourceSheet"`
+	SourceRow           *int                  `json:"sourceRow"`
+	CreatedAt           time.Time             `json:"createdAt"`
+	UpdatedAt           time.Time             `json:"updatedAt"`
 }
 
 type ExpenseInput struct {
@@ -79,6 +88,8 @@ type ExpenseInput struct {
 }
 
 type ExpensePageQuery struct {
+	AccountantVerified    *bool
+	AdminVerified         *bool
 	Responsibility        string
 	ChargeDriverID        *string
 	Pagination            Pagination
@@ -133,10 +144,13 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	AND ($7::uuid IS NULL OR e.truck_id = $7)
 	AND ($8::uuid IS NULL OR e.driver_id = $8)
  AND ($9::uuid IS NULL OR e.charge_driver_id=$9)
- AND ($10='' OR ($10='non_personal' AND e.charge_driver_id IS DISTINCT FROM $8::uuid))`
+ AND ($10='' OR ($10='non_personal' AND e.charge_driver_id IS DISTINCT FROM $8::uuid))
+ AND ($11::boolean IS NULL OR e.accounting_verified=$11)
+ AND ($12::boolean IS NULL OR e.manager_verified=$12)`
 	args := []any{
 		query.Search, query.VisibleCategoryIDs, query.CategoryID, query.Company, query.DateFrom, query.DateTo,
 		query.TruckID, query.DriverID, query.ChargeDriverID, query.Responsibility,
+		query.AccountantVerified, query.AdminVerified,
 	}
 
 	var total int
@@ -156,7 +170,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.company, e.category, COALESCE(t.unit_number, 
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
 		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		LIMIT $11 OFFSET $12`, pageArgs...)
+		LIMIT $13 OFFSET $14`, pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -383,13 +397,12 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 			driver_name = CASE WHEN $6::uuid IS NULL THEN $8 ELSE (SELECT full_name FROM drivers WHERE id = $6) END,
 			amount = $9::numeric, payment_type = $10,
 			expense_type = $11, reference_number = $12, description = $13,
-			covered_by = $14, paid_by = $15, manager_verified = $16,
-			accounting_verified = $17, owner_id = $18, updated_at = now()
+			covered_by = $14, paid_by = $15, owner_id = $16, updated_at = now()
 		WHERE id = $1`,
 		id, input.Company, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.ManagerVerified, input.AccountingVerified, input.OwnerID,
+		input.OwnerID,
 	)
 	if err != nil {
 		return Expense{}, err
@@ -425,6 +438,7 @@ SELECT e.id, e.truck_id, e.driver_id, e.company, e.category, e.category_id, e.cr
    CASE WHEN e.driver_settled THEN 0 ELSE e.amount-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
+, coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -438,7 +452,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.Description, &value.CoveredBy, &value.PaidBy,
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
-		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments,
+		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
 	)
 	return value, err
 }

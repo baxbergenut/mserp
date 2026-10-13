@@ -5,8 +5,8 @@ import { verifyEscrow } from './escrow-e2e.mjs';
 export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   expect((await page.request.post(`${base}/api/expense-settings`, { data: { kind: 'category', name: 'No CSRF', active: true } })).status()).toBe(403);
   await page.goto(`${base}/expenses`);
-  await page.getByRole('link', { name: 'Expenses & Charges settings', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Expenses & Charges settings', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Expenses settings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Expenses settings', exact: true })).toBeVisible();
   await expect(page.getByLabel('Default driver escrow amount')).toHaveCount(0);
   await page.goto(`${base}/accounting/escrow`);
   await page.getByRole('button', { name: 'Escrow default', exact: true }).click({ button: 'right' });
@@ -86,7 +86,7 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   const expenses = await (await page.request.get(`${base}/api/expenses?page=1&pageSize=100`)).json();
   const saved = expenses.items.find(item => item.expenseType === 'E2E Custom purchase');
   expect(saved.category).toBe('E2E Travel');
-  await page.getByRole('link', { name: 'Expenses & Charges settings', exact: true }).click();
+  await page.getByRole('link', { name: 'Expenses settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Categories & names', exact: true }).click();
   await page.getByRole('button', { name: 'Edit category E2E Travel', exact: true }).click();
   await page.getByLabel('Setting name', { exact: true }).fill('E2E Trips');
@@ -105,7 +105,7 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   await expect(page.getByRole('button', { name: 'Restore payment method E2E Card 1234', exact: true })).toBeVisible();
   await page.goto(`${base}/expenses`);
   const row = page.getByRole('row').filter({ has: page.getByText('E2E Custom purchase', { exact: true }) });
-  await row.getByRole('button', { name: 'Edit', exact: true }).click();
+  await row.getByText('E2E Custom purchase', { exact: true }).click();
   await expect(page.getByLabel('Category', { exact: true }).locator('option:checked')).toHaveText('E2E Trips');
   await expect(page.getByLabel('Payment method', { exact: true })).toHaveValue('E2E Card 1234');
   expect(await page.locator('#payment-types option').evaluateAll(options => options.map(option => option.value))).not.toContain('E2E Card 1234');

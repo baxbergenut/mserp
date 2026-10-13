@@ -1,5 +1,6 @@
 "use client";
 
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useEffect, useState, type ReactNode } from "react";
 import { IntentLink } from "@/app/components/IntentLink";
 import { ErrorBanner, ManagementSearch, TablePagination, TableShell, controlClass } from "@/app/components/management/ManagementUI";
@@ -55,16 +56,16 @@ export function EscrowTable({ driverId = "", toolbarEnd }: { driverId?: string; 
     </div>}
     <div className="flex flex-wrap items-center gap-3">
       {!driverId && <><ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
-        <select aria-label="Escrow payment status" className={`${controlClass} sm:w-48`} value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
-          <option value="">All statuses</option>{statuses.map(value => <option key={value} value={value}>{statusLabels[value]}</option>)}
-        </select>
+
 </>}
       <button className="rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-200" onClick={() => setAttempt(value => value + 1)}>Refresh</button>
       {toolbarEnd}
     </div>
     {error && <ErrorBanner message={error} />}
     <TableShell><table className="w-full min-w-[760px] text-left text-xs" aria-label="Driver escrow balances">
-      <thead><tr className="border-b border-zinc-800 text-zinc-500">{["Driver", "Required", "Balance", group === "terminated" && !driverId ? "Released" : "Still owed", "Status", "Actions"].map(label => <th className="px-4 py-3 font-medium" key={label}>{label}</th>)}</tr></thead>
+      <thead><tr className="border-b border-zinc-800 text-zinc-500">{["Driver", "Required", "Balance", group === "terminated" && !driverId ? "Released" : "Still owed", "Status", "Actions"].map(label => <th className="px-4 py-3 font-medium" key={label}>{label === "Status" && !driverId ? <ColumnFilter label="Status" active={!!status}><select aria-label="Escrow payment status" className={`${controlClass} sm:w-48`} value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
+          <option value="">All statuses</option>{statuses.map(value => <option key={value} value={value}>{statusLabels[value]}</option>)}
+        </select></ColumnFilter> : label}</th>)}</tr></thead>
       <tbody>{loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-500" role="status">Loading escrow…</td></tr> : error ? null : !data?.items.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-500">No escrow records match these filters.</td></tr> : data.items.map(item => <tr key={item.id} className="border-b border-zinc-800/60 align-top text-zinc-300">
         <td className="px-4 py-3">{item.driverId && permissions.includes("fleet.read") ? <IntentLink className="text-blue-400 hover:text-blue-300" href={`/drivers/detail?id=${item.driverId}`}>{item.driverName}</IntentLink> : item.driverName}{!item.active && <span className="ml-2 text-[10px] text-zinc-500">Terminated</span>}</td>
         <td className="px-4 py-3 font-mono">{money(item.amount)}</td><td className="px-4 py-3 font-mono text-emerald-400">{money(item.heldAmount)}</td><td className="px-4 py-3 font-mono">{money(group === "terminated" && !driverId ? item.releasedAmount : item.remainingAmount)}</td>

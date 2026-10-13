@@ -116,6 +116,13 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
+				for _, name := range []string{"084_gross_board_notes.sql", "085_expense_verification.sql", "086_driver_pay_layover.sql"} {
+					body, readErr := os.ReadFile("../../sql/" + name)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					exec(string(body))
+				}
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

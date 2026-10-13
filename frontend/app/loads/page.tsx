@@ -1,5 +1,7 @@
 "use client";
 
+
+import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { PageHeader } from "@/app/components/PageHeader";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -11,8 +13,8 @@ import type { Load, SortDir, SortKey } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { type Filters, EMPTY_FILTERS } from "../lib/utils";
 import { SearchBar } from "../components/SearchBar";
-import { FilterBar } from "../components/FilterBar";
-import { TablePagination } from "../components/management/ManagementUI";
+import { statusLabel } from "../lib/utils";
+import { controlClass, TablePagination } from "../components/management/ManagementUI";
 import { LoadsTable } from "./LoadsTable";
 
 export default function LoadsPage() {
@@ -105,8 +107,7 @@ export default function LoadsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <PageHeader><div className="flex items-center gap-3">
+      <PageHeader><div className="flex items-center gap-3">
           <Package className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">Loads</h1>
           {!isLoading && (
@@ -115,16 +116,6 @@ export default function LoadsPage() {
             </span>
           )}
         </div></PageHeader>
-        <button
-          type="button"
-          onClick={() => void handleSync()}
-          disabled={isSyncing}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-          {isSyncing ? "Syncing loads…" : "Sync DataTruck"}
-        </button>
-      </div>
 
       {message && (
         <div
@@ -150,15 +141,16 @@ export default function LoadsPage() {
           onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search by load, customer, driver, truck…"
         />
-        <FilterBar
-          filters={filters}
-          onChange={(value) => { setFilters(value); setPage(1); }}
-          statusOptions={statusOptions}
-          customerOptions={customerOptions}
-          dispatcherOptions={dispatcherOptions}
-          driverOptions={driverOptions}
-        />
-      </div>
+
+      <div className="ml-auto flex flex-wrap items-center gap-2"><button
+          type="button"
+          onClick={() => void handleSync()}
+          disabled={isSyncing}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+          {isSyncing ? "Syncing loads…" : "Sync DataTruck"}
+        </button></div></div>
 
       <LoadsTable
         loads={loads}
@@ -166,6 +158,12 @@ export default function LoadsPage() {
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
+        headerFilters={{
+          Customer: <ColumnFilter label="Customer" active={!!filters.customer}><select aria-label="Customer filter" className={controlClass} value={filters.customer} onChange={e => { setFilters({ ...filters, customer: e.target.value }); setPage(1); }}><option value="">All customers</option>{customerOptions.map(v => <option key={v}>{v}</option>)}</select></ColumnFilter>,
+          Driver: <ColumnFilter label="Driver" active={!!(filters.driver || filters.dispatcher)}><label className="block space-y-1">Driver<select aria-label="Driver filter" className={controlClass} value={filters.driver} onChange={e => { setFilters({ ...filters, driver: e.target.value }); setPage(1); }}><option value="">All drivers</option>{driverOptions.map(v => <option key={v}>{v}</option>)}</select></label><label className="block space-y-1">Dispatcher<select aria-label="Dispatcher filter" className={controlClass} value={filters.dispatcher} onChange={e => { setFilters({ ...filters, dispatcher: e.target.value }); setPage(1); }}><option value="">All dispatchers</option>{dispatcherOptions.map(v => <option key={v}>{v}</option>)}</select></label></ColumnFilter>,
+          Status: <ColumnFilter label="Status" active={!!filters.status}><select aria-label="Status filter" className={controlClass} value={filters.status} onChange={e => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}><option value="">All statuses</option>{statusOptions.map(v => <option value={v} key={v}>{statusLabel(v)}</option>)}</select></ColumnFilter>,
+          Pickup: <ColumnFilter label="Pickup" active={!!(filters.pickupFrom || filters.pickupTo)}><label className="block space-y-1">From<input aria-label="Pickup from" type="date" className={controlClass} value={filters.pickupFrom} onChange={e => { setFilters({ ...filters, pickupFrom: e.target.value }); setPage(1); }} /></label><label className="block space-y-1">To<input aria-label="Pickup to" type="date" className={controlClass} value={filters.pickupTo} onChange={e => { setFilters({ ...filters, pickupTo: e.target.value }); setPage(1); }} /></label></ColumnFilter>,
+        }}
       />
       {!isLoading && (
         <TablePagination

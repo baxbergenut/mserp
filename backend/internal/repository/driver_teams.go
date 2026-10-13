@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -310,6 +311,20 @@ func routeTeamPay(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
 			}
 		}
 		main.AutoCharges = append(main.AutoCharges, member.AutoCharges...)
+		// One statement/day even if both teammates have a Shop status.
+		for _, day := range member.Layovers {
+			found := false
+			for _, existing := range main.Layovers {
+				if existing.Date == day.Date {
+					found = true
+					break
+				}
+			}
+			if !found {
+				main.Layovers = append(main.Layovers, day)
+			}
+		}
+		sort.Slice(main.Layovers, func(i, j int) bool { return main.Layovers[i].Date < main.Layovers[j].Date })
 		main.Issues = append(main.Issues, member.Issues...)
 	}
 	kept := []DriverPayDriver{}

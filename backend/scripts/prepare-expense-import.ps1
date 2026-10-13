@@ -1,12 +1,18 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$MaintenanceCsv,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$SafetyCsv,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$HRCsv,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$AdministrativeCsv,
+    [Parameter(Mandatory = $false)]
+    [datetime]$SettleBefore,
+    [Parameter(Mandatory = $false)]
+    [switch]$ReplaceAllExpenses,
+    [Parameter(Mandatory = $false)]
+    [datetime]$AllowLegacyUnassignedTruckOwnerBefore,
     [Parameter(Mandatory = $true)]
     [string]$OutputSql
 )
@@ -137,16 +143,28 @@ function Get-ExpenseRows {
 
 $records = @(
     Get-ExpenseRows -Path $MaintenanceCsv -Sheet 'Maintenance_and_other_expenses' -Maintenance
-    Get-ExpenseRows -Path $SafetyCsv -Sheet 'Safety Expenses' -FixedCategory 'Safety'
-    Get-ExpenseRows -Path $HRCsv -Sheet 'HR expenses' -FixedCategory 'HR'
-    Get-ExpenseRows -Path $AdministrativeCsv -Sheet 'Administrative Expenses' -FixedCategory 'Administrative'
+    if ($SafetyCsv) {
+        Get-ExpenseRows -Path $SafetyCsv -Sheet 'Safety Expenses' -FixedCategory 'Safety'
+    }
+    if ($HRCsv) {
+        Get-ExpenseRows -Path $HRCsv -Sheet 'HR expenses' -FixedCategory 'HR'
+    }
+    if ($AdministrativeCsv) {
+        Get-ExpenseRows -Path $AdministrativeCsv -Sheet 'Administrative Expenses' -FixedCategory 'Administrative'
+    }
 )
 
 $lines = [Collections.Generic.List[string]]::new()
 $lines.Add('BEGIN;')
 $lines.Add('SET LOCAL statement_timeout = ''10min'';')
+if ($ReplaceAllExpenses) {
+    $lines.Add('DELETE FROM expenses;')
+}
+if ($AllowLegacyUnassignedTruckOwnerBefore) {
+    $lines.Add('ALTER TABLE expenses DISABLE TRIGGER expenses_00_responsibility;')
+}
 $columns = @(
-    'company', 'category', 'category_id', 'expense_date', 'unit_number', 'driver_name', 'amount',
+    'company', 'category', 'category_id', 'expense_date', 'truck_id', 'driver_id', 'owner_id', 'unit_number', 'driver_name', 'amount',
     'payment_type', 'expense_type', 'reference_number', 'description', 'covered_by',
     'paid_by', 'manager_verified', 'accounting_verified', 'source_spreadsheet_id',
     'source_sheet', 'source_row'
@@ -157,7 +175,11 @@ for ($offset = 0; $offset -lt $records.Count; $offset += 250) {
     $tuples = [Collections.Generic.List[string]]::new()
     for ($index = $offset; $index -le $end; $index++) {
         $row = $records[$index]
-        $tuples.Add("($($row.Company), $($row.Category), (SELECT id FROM expense_settings WHERE kind = 'category' AND active AND name = $($row.Category)), $($row.ExpenseDate), $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.ManagerVerified), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
+        $normalizedUnit = "upper(regexp_replace(btrim($($row.UnitNumber)::text), '\s+', ' ', 'g'))"
+        $truckID = "(SELECT id FROM trucks WHERE upper(regexp_replace(btrim(unit_number), '\s+', ' ', 'g')) = $normalizedUnit LIMIT 1)"
+        $driverID = "(SELECT id FROM drivers WHERE normalized_name = lower(regexp_replace(btrim($($row.DriverName)::text), '\s+', ' ', 'g')) LIMIT 1)"
+        $ownerID = "CASE WHEN lower(btrim($($row.CoveredBy)::text)) = 'truck owner' THEN (SELECT owner_id FROM trucks WHERE upper(regexp_replace(btrim(unit_number), '\s+', ' ', 'g')) = $normalizedUnit LIMIT 1) ELSE NULL END"
+        $tuples.Add("($($row.Company), $($row.Category), (SELECT id FROM expense_settings WHERE kind = 'category' AND active AND name = $($row.Category)), $($row.ExpenseDate), $truckID, $driverID, $ownerID, $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.ManagerVerified), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
     }
     $lines.Add("INSERT INTO expenses ($columns) VALUES")
     $lines.Add(($tuples -join ",`n"))
@@ -178,13 +200,23 @@ DO UPDATE SET
     description = EXCLUDED.description,
     covered_by = EXCLUDED.covered_by,
     paid_by = EXCLUDED.paid_by,
-    manager_verified = EXCLUDED.manager_verified,
-    accounting_verified = EXCLUDED.accounting_verified,
+    -- Reimports preserve approvals and cancellations made in the application.
     updated_at = now();
 '@)
 }
 
 $lines.Add(@"
+-- Imported historical checks have no recorded verifier or timestamp.
+INSERT INTO expense_verifications(expense_id, verifier_role)
+SELECT id, 'admin' FROM expenses
+WHERE source_spreadsheet_id = '$spreadsheetId' AND manager_verified
+ON CONFLICT (expense_id, verifier_role) WHERE revoked_at IS NULL DO NOTHING;
+
+INSERT INTO expense_verifications(expense_id, verifier_role)
+SELECT id, 'accountant' FROM expenses
+WHERE source_spreadsheet_id = '$spreadsheetId' AND accounting_verified
+ON CONFLICT (expense_id, verifier_role) WHERE revoked_at IS NULL DO NOTHING;
+
 UPDATE expenses AS expense
 SET truck_id = truck.id
 FROM trucks AS truck
@@ -200,7 +232,59 @@ WHERE expense.source_spreadsheet_id = '$spreadsheetId'
     AND expense.driver_id IS NULL
     AND expense.driver_name IS NOT NULL
     AND lower(regexp_replace(btrim(expense.driver_name), '\s+', ' ', 'g')) = driver.normalized_name;
+
+UPDATE expenses
+SET charge_driver_id = driver_id
+WHERE source_spreadsheet_id = '$spreadsheetId'
+    AND lower(btrim(covered_by)) = 'driver'
+    AND driver_id IS NOT NULL;
+
+UPDATE expenses AS expense
+SET charge_driver_id = investor.driver_id
+FROM investors AS investor
+WHERE expense.source_spreadsheet_id = '$spreadsheetId'
+    AND lower(btrim(expense.covered_by)) = 'truck owner'
+    AND expense.owner_id = investor.id
+    AND NOT investor.is_company;
 "@)
+
+if ($AllowLegacyUnassignedTruckOwnerBefore) {
+    $legacyCutoff = $AllowLegacyUnassignedTruckOwnerBefore.ToString('yyyy-MM-dd', $invariantCulture)
+    $lines.Add('ALTER TABLE expenses ENABLE TRIGGER expenses_00_responsibility;')
+    $lines.Add(@"
+UPDATE expenses AS expense
+SET covered_by = 'Company', owner_id = NULL, charge_driver_id = NULL
+FROM investors AS investor
+WHERE expense.source_spreadsheet_id = '$spreadsheetId'
+    AND lower(btrim(expense.covered_by)) = 'truck owner'
+    AND expense.owner_id = investor.id
+    AND investor.is_company;
+
+DO `$`$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM expenses
+        WHERE source_spreadsheet_id = '$spreadsheetId'
+          AND lower(btrim(covered_by)) = 'truck owner'
+          AND owner_id IS NULL
+          AND (expense_date IS NULL OR expense_date >= '$legacyCutoff')
+    ) THEN
+        RAISE EXCEPTION 'unassigned truck-owner expenses must predate $legacyCutoff';
+    END IF;
+END
+`$`$;
+"@)
+}
+
+if ($SettleBefore) {
+    $settleBeforeDate = $SettleBefore.ToString('yyyy-MM-dd', $invariantCulture)
+    $lines.Add(@"
+UPDATE expenses
+SET driver_settled = true
+WHERE source_spreadsheet_id = '$spreadsheetId'
+    AND expense_date < '$settleBeforeDate';
+"@)
+}
 
 $lines.Add("DO `$`$")
 $lines.Add('DECLARE imported_count integer; incomplete_count integer;')

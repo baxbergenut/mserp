@@ -71,6 +71,11 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 				exec(`INSERT INTO expenses(company,category,expense_type,expense_date,amount) VALUES('MS Express','Legacy customs','Historical unmatched entry','2026-09-21',20)`)
 				exec(`UPDATE expense_settings SET name='Modern customs' WHERE kind='category' AND name='Legacy customs'`)
 				exec(string(accessMigration))
+				verificationMigration, readErr := os.ReadFile("../../sql/085_expense_verification.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(verificationMigration))
 			} else {
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT 'MS Express',id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}

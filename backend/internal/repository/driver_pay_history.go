@@ -20,7 +20,7 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
 	defer tx.Rollback(ctx)
 	ctx = payrollReadContext(ctx, tx)
 	rows, err := tx.Query(ctx, `WITH weeks AS (
- SELECT date_trunc('week',service_date)::date AS week FROM `+grossBoardEntriesSQL+` e WHERE driver_id=$1 AND NOT deleted AND btrim(load_number)<>''
+ SELECT date_trunc('week',service_date)::date AS week FROM `+grossBoardEntriesSQL+` e WHERE driver_id=$1 AND NOT deleted AND (btrim(load_number)<>'' OR day_status='SHOP')
  UNION SELECT week_start FROM driver_pay_weeks WHERE driver_id=$1
  UNION SELECT p.week_start FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE e.charge_driver_id=$1
  UNION SELECT date_trunc('week',expense_date)::date FROM expenses WHERE charge_driver_id=$1 AND NOT driver_settled
