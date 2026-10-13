@@ -524,6 +524,8 @@ export interface PrePassFleetChange {
 }
 
 export interface Truck {
+  ownerSince?: string | null;
+  ownershipVersion?: string;
   ownerId: string;
   ownerName: string;
   id: string;
@@ -554,6 +556,8 @@ export interface Truck {
 }
 
 export interface TruckInput {
+  ownershipEffectiveDate?: string;
+  expectedOwnershipVersion?: string;
   ownerDriverId?: string | null;
   assignmentWeek?: string;
   ownerId: string | null;

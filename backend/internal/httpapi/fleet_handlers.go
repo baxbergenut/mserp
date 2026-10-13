@@ -255,27 +255,29 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
-	OwnerDriverID       *string `json:"ownerDriverId"`
-	AssignmentWeek      string  `json:"assignmentWeek"`
-	OwnerID             *string `json:"ownerId"`
-	UnitNumber          string  `json:"unitNumber"`
-	VIN                 string  `json:"vin"`
-	Year                *int    `json:"year"`
-	Make                string  `json:"make"`
-	Model               string  `json:"model"`
-	LicensePlate        string  `json:"licensePlate"`
-	LicenseState        string  `json:"licenseState"`
-	IsCompanyOwned      bool    `json:"isCompanyOwned"`
-	Status              string  `json:"status"`
-	Mileage             *int    `json:"mileage"`
-	RegistrationExpires string  `json:"registrationExpires"`
-	InsuranceExpires    string  `json:"insuranceExpires"`
-	LastServiceDate     string  `json:"lastServiceDate"`
-	NextServiceMiles    *int    `json:"nextServiceMiles"`
-	DriverID            *string `json:"driverId"`
-	Active              bool    `json:"active"`
-	Notes               string  `json:"notes"`
-	IRPFileID           *string `json:"irpFileId"`
+	OwnershipEffectiveDate   string  `json:"ownershipEffectiveDate"`
+	ExpectedOwnershipVersion string  `json:"expectedOwnershipVersion"`
+	OwnerDriverID            *string `json:"ownerDriverId"`
+	AssignmentWeek           string  `json:"assignmentWeek"`
+	OwnerID                  *string `json:"ownerId"`
+	UnitNumber               string  `json:"unitNumber"`
+	VIN                      string  `json:"vin"`
+	Year                     *int    `json:"year"`
+	Make                     string  `json:"make"`
+	Model                    string  `json:"model"`
+	LicensePlate             string  `json:"licensePlate"`
+	LicenseState             string  `json:"licenseState"`
+	IsCompanyOwned           bool    `json:"isCompanyOwned"`
+	Status                   string  `json:"status"`
+	Mileage                  *int    `json:"mileage"`
+	RegistrationExpires      string  `json:"registrationExpires"`
+	InsuranceExpires         string  `json:"insuranceExpires"`
+	LastServiceDate          string  `json:"lastServiceDate"`
+	NextServiceMiles         *int    `json:"nextServiceMiles"`
+	DriverID                 *string `json:"driverId"`
+	Active                   bool    `json:"active"`
+	Notes                    string  `json:"notes"`
+	IRPFileID                *string `json:"irpFileId"`
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
@@ -326,8 +328,10 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
-		AssignmentWeek: request.AssignmentWeek,
-		OwnerDriverID:  request.OwnerDriverID, OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
+		OwnershipEffectiveDate:   request.OwnershipEffectiveDate,
+		ExpectedOwnershipVersion: request.ExpectedOwnershipVersion,
+		AssignmentWeek:           request.AssignmentWeek,
+		OwnerDriverID:            request.OwnerDriverID, OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
 		Make: optionalString(request.Make), Model: optionalString(request.Model),
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,

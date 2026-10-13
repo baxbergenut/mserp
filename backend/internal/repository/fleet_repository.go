@@ -109,6 +109,8 @@ func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSet
 }
 
 type Truck struct {
+	OwnerSince          *string    `json:"ownerSince"`
+	OwnershipVersion    string     `json:"ownershipVersion"`
 	OwnerID             string     `json:"ownerId"`
 	OwnerName           string     `json:"ownerName"`
 	ID                  string     `json:"id"`
@@ -139,27 +141,29 @@ type Truck struct {
 }
 
 type TruckInput struct {
-	OwnerDriverID       *string
-	AssignmentWeek      string
-	OwnerID             *string
-	UnitNumber          string
-	VIN                 *string
-	Year                *int
-	Make                *string
-	Model               *string
-	LicensePlate        *string
-	LicenseState        *string
-	IsCompanyOwned      bool
-	Status              string
-	Mileage             *int
-	RegistrationExpires *time.Time
-	InsuranceExpires    *time.Time
-	LastServiceDate     *time.Time
-	NextServiceMiles    *int
-	DriverID            *string
-	Active              bool
-	Notes               *string
-	IRPFileID           *string
+	OwnershipEffectiveDate   string
+	ExpectedOwnershipVersion string
+	OwnerDriverID            *string
+	AssignmentWeek           string
+	OwnerID                  *string
+	UnitNumber               string
+	VIN                      *string
+	Year                     *int
+	Make                     *string
+	Model                    *string
+	LicensePlate             *string
+	LicenseState             *string
+	IsCompanyOwned           bool
+	Status                   string
+	Mileage                  *int
+	RegistrationExpires      *time.Time
+	InsuranceExpires         *time.Time
+	LastServiceDate          *time.Time
+	NextServiceMiles         *int
+	DriverID                 *string
+	Active                   bool
+	Notes                    *string
+	IRPFileID                *string
 }
 
 type Dispatcher struct {
@@ -659,6 +663,11 @@ func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, er
 	if err != nil {
 		return "", err
 	}
+	if input.OwnershipEffectiveDate != "" {
+		if err = setDatedTruckOwner(ctx, tx, id, input); err != nil {
+			return "", err
+		}
+	}
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
 		return "", err
 	}
@@ -705,7 +714,7 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 	if err = resolveTruckDriverOwner(ctx, tx, &input); err != nil {
 		return Truck{}, err
 	}
-	if err = setTruckOwner(ctx, tx, id, input.OwnerID); err != nil {
+	if err = setDatedTruckOwner(ctx, tx, id, input); err != nil {
 		return Truck{}, err
 	}
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
@@ -734,7 +743,9 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.registration_expires, t.insurance_expires, t.last_service_date,
 	t.next_service_miles, a.driver_id, d.full_name, t.active, t.notes,
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
-	t.created_at, t.updated_at
+	t.created_at, t.updated_at,
+	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),'')
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
@@ -753,6 +764,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 		&value.Notes, &value.IRPFileID, &value.IRPFileName,
 		&value.IRPFileContentType, &value.IRPFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt,
+		&value.OwnerSince, &value.OwnershipVersion,
 	)
 	value.UnitNumber = normalizeTruckUnit(value.UnitNumber)
 	value.DriverName = formatPersonNamePtr(value.DriverName)

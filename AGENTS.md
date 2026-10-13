@@ -1836,3 +1836,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Inclusion is attached to trucks, never to the current driver. Counts open an
   Included trucks filter for the chosen charge; searching and selected week still
   apply. Show all non-company trucks, including inactive/unassigned/owner-operated.
+- Truck forms expose ownershipEffectiveDate (a New York calendar date, no future
+  transfers). It can correct the current owner's start without changing owner.
+  Truck reads return ownerSince (null for an unknown migration baseline) and
+  ownershipVersion; forms send expectedOwnershipVersion to reject stale edits.
+  Only the latest boundary can move, never across an earlier known transfer.
+  Adjacent history periods remain contiguous; unknown baseline timestamps are
+  observation dates, not acquisition dates. Fleet/financial locks and affected
+  finalized driver/investor statements guard corrections. Investor agreement
+  percentages and dates remain separate; correcting ownership never invents terms.

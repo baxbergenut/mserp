@@ -37,6 +37,8 @@ export const emptyTruckInput: TruckInput = {
 
 export function truckToInput(truck: Truck): TruckInput {
   return {
+    ownershipEffectiveDate: truck.ownerSince ?? "",
+    expectedOwnershipVersion: truck.ownershipVersion,
     ownerId: truck.ownerId,
     unitNumber: truck.unitNumber,
     vin: truck.vin ?? "",
@@ -83,6 +85,7 @@ export function TruckForm({
   const set = <K extends keyof TruckInput>(key: K, next: TruckInput[K]) =>
     onChange({ ...value, [key]: next, ...(["driverId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
   const numberOrNull = (raw: string) => (raw === "" ? null : Number(raw));
+  const today = new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
 
   return (
     <div className="space-y-6">
@@ -206,13 +209,16 @@ export function TruckForm({
         </Field>
         <Field label="Owner">
           <select required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
-            onChange={(event) => { const owner = event.target.value; onChange({ ...value, ownerDriverId: owner.startsWith("driver:") ? owner.slice(7) : null, ownerId: owner.startsWith("driver:") ? null : owner, isCompanyOwned: investors.find(i => i.id === owner)?.isCompany ?? false }); }}
+            onChange={(event) => { const owner = event.target.value; onChange({ ...value, ownershipEffectiveDate: today, ownerDriverId: owner.startsWith("driver:") ? owner.slice(7) : null, ownerId: owner.startsWith("driver:") ? null : owner, isCompanyOwned: investors.find(i => i.id === owner)?.isCompany ?? false }); }}
             className={controlClass}>
             {investors.filter((i) => (i.active || i.id === value.ownerId) && (!i.driverId || !drivers.some(d => d.id === i.driverId) || i.id === value.ownerId)).map((i) => (
               <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
             ))}
             <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
           </select>
+        </Field>
+        <Field label="Ownership effective date">
+          <input aria-label="Ownership effective date" type="date" min="1900-01-01" max={today} value={value.ownershipEffectiveDate ?? ""} onChange={event => set("ownershipEffectiveDate", event.target.value)} className={controlClass} />
         </Field>
       </FormSection>
 

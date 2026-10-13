@@ -12,6 +12,7 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   await page.getByRole('button',{name:'Add truck',exact:true}).click();
   await page.getByLabel('Unit number',{exact:true}).fill('OWNER-AUTO');
   await page.getByLabel('Truck owner').selectOption(`driver:${driver.id}`);
+  await page.getByLabel('Ownership effective date').fill('2026-09-27');
   const dialog=page.getByRole('dialog');
   await dialog.getByLabel(/Assigned driver/).selectOption(driver.id);
   // New trucks use the normal effective-assignment control.
@@ -22,6 +23,15 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   const trucks=await (await page.request.get(base+'/api/trucks')).json();
   const truck=trucks.find(t=>t.unitNumber==='OWNER-AUTO');
   expect(truck).toBeTruthy();
+  expect(truck.ownerSince).toBe('2026-09-27');
+  // Correct the start while retaining the same owner, just as for migrated records.
+  await page.goto(base+'/trucks/detail?id='+truck.id);
+  await page.getByRole('button',{name:'Edit truck',exact:true}).click();
+  await expect(page.getByLabel('Ownership effective date')).toHaveValue('2026-09-27');
+  await page.getByLabel('Ownership effective date').fill('2026-09-26');
+  await page.getByRole('button',{name:'Save truck',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect((await (await page.request.get(base+'/api/trucks/'+truck.id)).json()).ownerSince).toBe('2026-09-26');
   const owner=await (await page.request.get(base+'/api/drivers/'+driver.id)).json();
   expect(owner.employmentType).toBe('owner_operator');
   expect(owner.isOwnerOperator).toBe(true);
