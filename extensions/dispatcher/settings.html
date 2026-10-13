@@ -1,36 +1,18 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dispatch Watch settings</title><link rel="stylesheet" href="settings.css"></head>
-<body><header><span class="mark">MS</span><div><h1>Dispatch Watch</h1><p>MS Express · Carrier 360</p></div></header>
+<body><header><span class="mark">MS</span><div><h1>Dispatch Watch</h1><p>MS Express · Carrier 360 auto-refresh</p></div></header>
 <p id="message" role="status" aria-live="polite"></p>
-<section><h2>Dispatcher access</h2><p id="identity">Checking activation…</p><div id="activation"><label>Activation code<input id="code" type="password" autocomplete="off" spellcheck="false" placeholder="From your dispatcher profile"></label><button id="activate" type="button">Activate</button></div><button id="forget" type="button" class="secondary" hidden>Disconnect this browser</button></section>
-<form id="settings"><section><h2>Refresh & alerts</h2><div class="grid">
+<section><h2>Team access</h2><p id="identity">Checking activation…</p><div id="activation"><label>Activation code<input id="code" type="password" autocomplete="off" spellcheck="false" placeholder="From your MSERP profile"></label><button id="activate" type="button">Activate</button></div><button id="forget" type="button" class="secondary" hidden>Disconnect this browser</button></section>
+<form id="settings"><section><h2>Refresh & notifications</h2><div class="grid">
 <label>Interval (seconds)<input name="interval" type="number" min="4" max="3600" step="0.5" required></label>
 <label>Notification sound<select name="sound"><option value="chime">Chime</option><option value="bell">Bell</option><option value="radar">Radar</option><option value="silent">Silent</option></select></label>
 <label>Volume<input name="volume" type="range" min="0" max="100"></label>
-<label>Highlight<select name="highlight"><option value="gold">Gold</option><option value="green">Green</option><option value="blue">Blue</option></select></label></div>
+<label>New-load highlight<select name="highlight"><option value="gold">Gold</option><option value="green">Green</option><option value="blue">Blue</option></select></label></div>
 <button id="preview" type="button" class="secondary">Test sound</button>
-<label class="check"><input name="allPages" type="checkbox"> Scan every result page</label>
-<p class="hint">Each refresh or page advance waits at least the selected interval. Larger searches take longer to scan. Keep Chrome and the load board open; background tabs and sleeping computers can delay checks.</p>
-<label class="check"><input name="promote" type="checkbox"> Move matching rows to the top</label>
-<label class="check"><input name="hideOthers" type="checkbox"> Hide nonmatching rows</label>
-<label class="check"><input name="pauseOnMatch" type="checkbox"> Pause when a new match is found</label>
-<label class="check"><input name="alertExisting" type="checkbox"> Alert on existing matches when starting</label>
-<label class="check"><input name="alertPriceChanges" type="checkbox"> Alert again when a matching load’s price changes</label>
-</section><section><h2>Match filters</h2><p class="hint">Set origin radius, destination radius, equipment, job type and date search in J.B. Hunt first. These additional filters apply to those results. Blank means any. Separate text alternatives with semicolons.</p>
-<div class="grid">
-<label>Minimum price ($)<input name="minPrice" type="number" min="0" step="0.01"></label>
-<label>Minimum $ / mile<input name="minRPM" type="number" min="0" step="0.01"></label>
-<label>Minimum loaded miles<input name="minMiles" type="number" min="0"></label>
-<label>Maximum loaded miles<input name="maxMiles" type="number" min="0"></label>
-<label>Maximum weight (lbs)<input name="maxWeight" type="number" min="0"></label>
-<label>Maximum origin deadhead (mi)<input name="maxDeadhead" type="number" min="0"></label>
-<label>Maximum stops<input name="maxStops" type="number" min="0"></label>
-<label>Equipment contains<input name="equipment" placeholder="Dry Van; Power Only" maxlength="250"></label>
-<label>Origin contains<input name="origin" placeholder="Chicago; , IL" maxlength="250"></label>
-<label>Destination contains<input name="destination" placeholder=", TX; , GA" maxlength="250"></label>
-<label>Pickup from<input name="pickupFrom" type="date"></label><label>Pickup through<input name="pickupTo" type="date"></label></div>
-<label class="check"><input name="bookableOnly" type="checkbox"> Only loads with Book Now available</label>
-<p class="hint">Booking is manual. No offers or bookings are submitted by this extension.</p>
+<p class="hint">Set all search filters directly on J.B. Hunt. This extension only refreshes those results and identifies new loads.</p>
+<p class="hint">Each Play starts a silent baseline scan of every result page. After that, a load is new only when its ID has not appeared during this run. Price changes, reordered rows and returning loads do not trigger another notification.</p>
+<p class="hint">New loads are highlighted and moved to the top of their page. The New loads button beside pagination lists discoveries across pages, newest first. Every page request waits at least the selected interval; a complete search takes multiple intervals.</p>
+<p class="hint">Keep Chrome and the load board open. Background tabs and sleeping computers can delay checks. Editing the site pauses monitoring; Play starts a new baseline. Booking stays manual.</p>
 </section><footer><button type="submit">Save settings</button><button type="button" id="reset" class="secondary">Restore defaults</button></footer></form>
-<p class="hint">Open Find Loads → grid, run a search, then press ▶ Play in the Dispatch Watch bar. Monitoring starts paused after a reload.</p>
+<p class="hint">Run a J.B. Hunt search, then press ▶ Play beside the pagination controls at the bottom. Monitoring starts paused after a reload.</p>
 <script src="core.js"></script><script src="sound.js"></script><script src="settings.js"></script></body></html>

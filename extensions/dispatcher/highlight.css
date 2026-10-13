@@ -2,5 +2,4 @@
 [data-cy="lb-table-row"].mserp-watch-green > td { background: #d1fae5 !important; color: #191919 !important; }
 [data-cy="lb-table-row"].mserp-watch-blue > td { background: #dbeafe !important; color: #191919 !important; }
 [data-cy="lb-table-row"].mserp-watch-match > td:first-child { box-shadow: inset 4px 0 #2563eb; }
-[data-cy="lb-table-row"].mserp-watch-match [id="jobIdentifier"]::after { content: "MATCH"; display: block; color: #1746a2; font-size: 10px; font-weight: bold; }
-[data-cy="lb-table-row"].mserp-watch-hidden { display: none !important; }
+[data-cy="lb-table-row"].mserp-watch-match [id="jobIdentifier"]::after { content: "NEW"; display: block; color: #1746a2; font-size: 10px; font-weight: bold; }

@@ -290,10 +290,16 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 - `extensions/dispatcher/` is the private Carrier 360 Manifest V3 extension.
   `network.js` observes only the confirmed loadboard GraphQL endpoint, projecting
-  structured `searchJobsElastic` jobs without credentials/request bodies. Matching,
+  structured `searchJobsElastic` jobs without credentials/request bodies. New-load detection,
   sound and highlighting are local; no load data goes to MSERP. Native grid controls
   refresh/page at 5 seconds by default, minimum 4 seconds per request. All-page
   scanning takes multiple intervals; browser throttling can delay timers. No autobook.
+  Native site filters are the only filters. The first full scan after Play silently
+  seeds a per-run ID set; only unseen available IDs alert. Retain seen IDs through
+  price changes, pagination and disappearances (stop at 100,000 rather than evict).
+  Pause/reload then Play resets the baseline. New rows are highlighted/promoted on
+  their native page; a footer popover lists discoveries across pages. Play/Settings
+  mount inside the native paginator's right content, never above the fixed-height grid.
 - Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
   `ExtensionAccess.tsx` implement `access.manage` administration at
   GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute

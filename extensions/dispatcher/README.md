@@ -1,6 +1,6 @@
 # MS Express Dispatch Watch
 
-Private Chrome Manifest V3 extension, version 0.1.0.
+Private Chrome Manifest V3 extension, version 0.2.0.
 
 ## Install for a pilot
 
@@ -17,8 +17,8 @@ Private Chrome Manifest V3 extension, version 0.1.0.
    browser for 30 days. A replacement code revokes the previous browser.
 5. Reload an already-open J.B. Hunt tab so the response listener is installed.
    Sign in normally, select Find Loads → grid, set the site's search criteria,
-   and run the search. Configure the extension's match filters and sound.
-6. Press **▶ Play** in the Dispatch Watch bar above the load table. Press
+   and run the search. Configure the extension's refresh interval and sound.
+6. Press **▶ Play** beside the pagination controls below the load table. Press
    **Ⅱ Pause** to stop. Sound is unlocked by the page's Play button.
 
 The extension starts paused after reload. Native site interactions pause it so
@@ -35,17 +35,21 @@ device volume; Chrome/OS mute settings still apply.
   `data.searchJobsElastic.data.jobs` responses from the confirmed
   `/carrier/secure/loadboard/graphql/native` endpoint. No token copying, private
   GraphQL request construction, or undocumented booking calls.
-- Supports price, price/mile, loaded-mile range, weight, origin deadhead, stop
-  count, origin/destination/equipment text alternatives, pickup-date range, and
-  Book Now availability. Missing values cannot satisfy an active numeric filter.
-  Zero prices mean pricing unavailable. Dates retain the source's calendar date.
-- Matching rows are highlighted, labeled MATCH, and optionally moved to the top
-  or shown alone. Original row nodes and click handlers are retained and restored
-  before the site's next action. All-page scanning uses explicit response
-  pagination and maintains a combined match list, with page references.
-- Chime, Bell, Radar or Silent, volume control, three highlight colors, optional
-  pause on a match, first-scan alerts, and price-change alerts. Repeated identical
-  matches are deduplicated during the running session (bounded to 10,000 keys).
+- Uses only the filters selected on J.B. Hunt. No extension filters are applied;
+  saved filters from version 0.1 are ignored.
+- The first complete scan of every result page after Play is a silent baseline.
+  Later, an available load with an unseen `jobIdentifier` is new. IDs stay in
+  memory for the entire run, so price changes, page moves and disappearing then
+  returning loads do not alert again. Pause/reload then Play starts a new baseline.
+  At 100,000 seen IDs monitoring stops rather than evicting history.
+- New rows are highlighted, labeled NEW and moved to the top of their native
+  page. Original row nodes and click handlers are retained and restored before
+  the site's next action. The New loads popover beside pagination lists new
+  discoveries across pages, newest first, with their last checked page number.
+  Loads absent from a completed scan leave the list but stay in the seen-ID cache.
+- Chime, Bell, Radar or Silent, volume control, and three highlight colors.
+  One sound per response containing newly discovered IDs; baseline scans and
+  unchanged results never play a notification.
 - One running tab per Chrome profile. Keep Chrome/the tab open and the computer
   awake. Background throttling, memory saving, network latency and sleep can
   delay checks. This does not promise a four-second background SLA.
@@ -54,8 +58,8 @@ device volume; Chrome/OS mute settings still apply.
   the issue; no retry storm or CAPTCHA bypass.
 
 Native origin/destination radii, equipment, job type and search dates remain in
-J.B. Hunt. Extension filters narrow that returned search; they cannot find loads
-excluded by the site's search. More than one result page takes multiple intervals
+J.B. Hunt. The extension monitors only that returned search.
+More than one result page takes multiple intervals
 to scan; for 2 pages at 5 seconds, a full scan takes roughly 10 seconds plus latency.
 The combined list reflects the latest completed checks, not a booking guarantee.
 
@@ -63,7 +67,7 @@ The combined list reflects the latest completed checks, not a booking guarantee.
 
 All load processing and alerts run locally. Load responses, credentials and
 cookies are never sent to MSERP. The main-world observer projects only the load
-fields needed for matching; it does not capture headers, request bodies,
+fields needed for new-load detection and display; it does not capture headers, request bodies,
 coordinates, commodities or unrelated GraphQL operations. Data is in memory only.
 No remote scripts, analytics, all-sites permissions or Telegram traffic.
 
@@ -101,7 +105,8 @@ Official guidance: https://developer.chrome.com/docs/extensions/how-to/distribut
 
 From `frontend/`: `node scripts/test-dispatch-extension.mjs` launches an isolated
 Chromium profile with the actual extension; every HTTP request is locally mocked.
-It checks structured parsing, activation, settings, page scanning, promotion,
+It checks structured parsing, silent all-page baselines, ID deduplication, sound,
+activation, legacy-setting migration, footer layout, page scanning, promotion,
 minimum spacing, revocation and rate-limit stops. It never uses live accounts.
 `node scripts/test-dispatcher-access-views.mjs` checks the ERP access card.
 

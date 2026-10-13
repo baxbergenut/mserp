@@ -6,7 +6,7 @@ async function load() { const r=await send({type:"settings"}); fill(r.settings);
 function fail(e) { message.textContent=e.message || "Something went wrong"; }
 document.querySelector("#activate").onclick=async e => { e.target.disabled=true; try { await send({type:"activate",code:document.querySelector("#code").value}); document.querySelector("#code").value=""; await load(); message.textContent="Activated. Press Play on the J.B. Hunt load grid."; }catch(error){fail(error);}finally{e.target.disabled=false;} };
 document.querySelector("#forget").onclick=async()=>{try{await send({type:"forget"});await load();message.textContent="Disconnected. Ask your administrator for a new code to reconnect.";}catch(e){fail(e);}};
-form.onsubmit=async e=>{e.preventDefault();const s=read();if(s.minMiles!==""&&s.maxMiles!==""&&Number(s.minMiles)>Number(s.maxMiles)){message.textContent="Minimum miles cannot exceed maximum miles.";return;}if(s.pickupFrom&&s.pickupTo&&s.pickupFrom>s.pickupTo){message.textContent="Pickup end must be on or after pickup start.";return;}try{await send({type:"save",settings:s});fill(s);message.textContent="Saved. Running monitors use these settings on the next check.";}catch(error){fail(error);}};
+form.onsubmit=async e=>{e.preventDefault();const s=read();try{await send({type:"save",settings:s});fill(s);message.textContent="Saved. Running monitors use these settings on the next check.";}catch(error){fail(error);}};
 document.querySelector("#reset").onclick=()=>{fill(DispatchWatch.defaults);message.textContent="Defaults restored in the form. Click Save settings to apply.";};
 document.querySelector("#preview").onclick=()=>{const s=read();void DispatchWatchSound.play(s.sound,s.volume).catch(fail);};
 void load().catch(fail);

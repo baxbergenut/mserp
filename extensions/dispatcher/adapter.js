@@ -11,8 +11,12 @@ globalThis.DispatchWatchAdapter = (() => {
   function refresh() { return document.querySelector('[data-cy="lb-grid-refresh-button"]'); }
   function next() { const e = document.querySelector('[aria-label="Go to next page"]'); return e && !e.disabled ? e : null; }
   function first() { const e = document.querySelector('[aria-label="Go to first page"]'); return e && !e.disabled ? e : null; }
+  function controls() {
+    const paginator = document.querySelector('[aria-label="Go to next page"]')?.closest('.p-paginator');
+    return paginator?.querySelector('.p-paginator-right-content') || paginator || null;
+  }
   function blocked() {
     return [...document.querySelectorAll('[role="dialog"], .p-dialog, .p-toast-message-error')].some(visible);
   }
-  return { rows, loading, refresh, next, first, blocked, visible, rowSelector };
+  return { rows, loading, refresh, next, first, controls, blocked, visible, rowSelector };
 })();

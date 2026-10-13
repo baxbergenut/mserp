@@ -1,47 +1,19 @@
-/* Shared pure parsing/filtering functions, also exercised by node tests. */
+/* Shared settings, response validation and per-run new-load tracking. */
 globalThis.DispatchWatch = (() => {
-  const defaults = Object.freeze({ interval: 5, sound: "chime", volume: 65, highlight: "gold", promote: true,
-    hideOthers: false, allPages: true, pauseOnMatch: false, alertExisting: true, alertPriceChanges: true,
-    minPrice: "", minRPM: "", minMiles: "", maxMiles: "", maxWeight: "", maxDeadhead: "", maxStops: "",
-    origin: "", destination: "", equipment: "", pickupFrom: "", pickupTo: "", bookableOnly: false });
-  const numericKeys = ["minPrice", "minRPM", "minMiles", "maxMiles", "maxWeight", "maxDeadhead", "maxStops"];
+  const defaults = Object.freeze({ interval: 5, sound: "chime", volume: 65, highlight: "gold" });
   function normalize(input = {}) {
-    const s = { ...defaults };
-    for (const key of Object.keys(defaults)) if (input[key] !== undefined) s[key] = input[key];
-    s.interval = Math.max(4, Math.min(3600, Number(s.interval) || 5));
-    s.volume = Math.max(0, Math.min(100, Number(s.volume) || 0));
-    for (const key of numericKeys) s[key] = s[key] === "" ? "" : Number.isFinite(Number(s[key])) && Number(s[key]) >= 0 ? String(Number(s[key])) : "";
-    for (const key of ["origin", "destination", "equipment", "pickupFrom", "pickupTo"]) s[key] = String(s[key]).slice(0, 250).trim();
-    for (const key of Object.keys(defaults).filter(k => typeof defaults[k] === "boolean")) s[key] = s[key] === true;
-    if (!["chime", "bell", "radar", "silent"].includes(s.sound)) s.sound = "chime";
-    if (!["gold", "green", "blue"].includes(s.highlight)) s.highlight = "gold";
-    return s;
+    // Ignore legacy match filters and price-change alert settings.
+    return { interval: Math.max(4, Math.min(3600, Number(input.interval) || 5)),
+      volume: Math.max(0, Math.min(100, input.volume === undefined ? 65 : Number(input.volume) || 0)),
+      sound: ["chime", "bell", "radar", "silent"].includes(input.sound) ? input.sound : defaults.sound,
+      highlight: ["gold", "green", "blue"].includes(input.highlight) ? input.highlight : defaults.highlight };
   }
-  function matches(l, s) {
-    if (!l.available) return false;
-    for (const [key, field, min] of [["minPrice","price",true],["minRPM","rpm",true],["minMiles","miles",true],["maxMiles","miles",false],["maxWeight","weight",false],["maxDeadhead","deadhead",false],["maxStops","stops",false]]) {
-      if (s[key] !== "" && (l[field] === null || (min ? l[field] < Number(s[key]) : l[field] > Number(s[key])))) return false;
-    }
-    for (const key of ["origin", "destination", "equipment"]) {
-      const choices = s[key].split(";").map(v => v.trim().toLowerCase()).filter(Boolean);
-      if (choices.length && !choices.some(v => l[key].toLowerCase().includes(v))) return false;
-    }
-    if (s.pickupFrom && (!l.pickupDate || l.pickupDate < s.pickupFrom)) return false;
-    if (s.pickupTo && (!l.pickupDate || l.pickupDate > s.pickupTo)) return false;
-    return !s.bookableOnly || l.bookable;
-  }
-  function signature(l, s) { return s.alertPriceChanges ? `${l.id}:${l.price}:${l.rpm}` : l.id; }
   function fromJob(j) {
-    const numeric = v => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    const price = v => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
     const place = l => [l?.city, l?.state].filter(Boolean).join(", ") + (l?.zipcode ? " " + l.zipcode : "");
     if (!j || typeof j.jobIdentifier !== "string" || !/^[A-Z0-9]{5,20}$/.test(j.jobIdentifier)) throw new Error("Unknown load identifier format");
     return { id: j.jobIdentifier, origin: place(j.firstPickup?.location), destination: place(j.lastDelivery?.location),
-      equipment: [j.equipment?.type, j.equipment?.subType].filter(Boolean).join(" "),
-      pickupDate: /^\d{4}-\d{2}-\d{2} /.test(j.firstPickup?.appointmentBegin || "") ? j.firstPickup.appointmentBegin.slice(0, 10) : null,
-      price: numeric(j.bookNowPrice) > 0 ? j.bookNowPrice : null, rpm: numeric(j.pricePerMile) > 0 ? j.pricePerMile : null,
-      miles: numeric(j.loadedMiles), weight: numeric(j.loadedWeight), deadhead: numeric(j.deadheadOrigin), stops: numeric(j.stopCount),
-      bookable: j.bookNowEligibility === true && j.isJobInDeferredStatus === false,
-      available: j.loadboardStatus === "AVAILABLE" };
+      price: price(j.bookNowPrice), rpm: price(j.pricePerMile), available: j.loadboardStatus === "AVAILABLE" };
   }
   function fromResponse(data) {
     if (!data || !Array.isArray(data.jobs) || data.jobs.length > 1000 || !Number.isInteger(data.page) || data.page < 0 ||
@@ -52,5 +24,38 @@ globalThis.DispatchWatch = (() => {
     if (new Set(jobs.map(j => j.id)).size !== jobs.length) throw new Error("Duplicate load identifiers in response");
     return { ...data, jobs };
   }
-  return { defaults, normalize, numericKeys, matches, signature, fromJob, fromResponse };
+  function createTracker(limit = 100000) {
+    const seen = new Set(), recent = new Map(), scan = new Set();
+    let ready = false, expectedPage = 0, order = 0;
+    return {
+      get ready() { return ready; },
+      get seenCount() { return seen.size; },
+      get recent() { return [...recent.values()].sort((a, b) => b.order - a.order); },
+      observe(response) {
+        if (response.page !== expectedPage) throw new Error("Search pages changed unexpectedly. Press Play to establish a new baseline.");
+        const fresh = [];
+        for (const load of response.jobs) {
+          scan.add(load.id);
+          if (!seen.has(load.id)) {
+            // Stop instead of forgetting IDs and accidentally alerting twice.
+            if (seen.size >= limit) throw new Error("New-load history is full. Press Play to establish a fresh baseline.");
+            seen.add(load.id);
+            if (ready && load.available) {
+              fresh.push(load);
+              recent.set(load.id, { ...load, page: response.page + 1, order: ++order });
+            }
+          }
+          if (!load.available) recent.delete(load.id);
+          else if (recent.has(load.id)) recent.set(load.id, { ...recent.get(load.id), ...load, page: response.page + 1 });
+        }
+        const complete = response.page + 1 >= response.totalPages;
+        if (complete) {
+          for (const id of recent.keys()) if (!scan.has(id)) recent.delete(id);
+          scan.clear(); ready = true; expectedPage = 0;
+        } else expectedPage++;
+        return { fresh, complete };
+      },
+    };
+  }
+  return { defaults, normalize, fromJob, fromResponse, createTracker };
 })();

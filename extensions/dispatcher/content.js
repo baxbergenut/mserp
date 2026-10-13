@@ -1,9 +1,8 @@
 (() => {
   const A = DispatchWatchAdapter;
   let host, root, running = false, generation = 0, timer, settings = DispatchWatch.defaults;
-  let original = [], promotedBody, seen = new Set(), matches = new Map(), cycleIDs = new Set();
-  let firstPass = true, page = 1, lastRequest = 0, abortWait;
-  let latestResponse, checkWait;
+  let original = [], promotedBody, tracker = DispatchWatch.createTracker();
+  let page = 1, lastRequest = 0, abortWait, latestResponse, checkWait, soundWarning = "";
   window.addEventListener("message", event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.source !== "mserp-dispatch-response-v1") return;
     const value = event.data;
@@ -11,56 +10,65 @@
     latestResponse = value;
     checkWait?.();
   });
-  async function send(message) { const r = await chrome.runtime.sendMessage(message); if (!r?.ok) throw new Error(r?.error || "Extension connection lost. Reload the page."); return r; }
-  const status = text => { if (root) root.querySelector("#status").textContent = text; };
+  async function send(message) {
+    const r = await chrome.runtime.sendMessage(message);
+    if (!r?.ok) throw new Error(r?.error || "Extension connection lost. Reload the page.");
+    return r;
+  }
+  function status(text) {
+    if (!root) return;
+    root.querySelector("#status").textContent = text;
+    root.querySelector("#status").title = text;
+  }
   function restore() {
     if (promotedBody?.isConnected) for (const row of original) if (row.parentElement === promotedBody) promotedBody.append(row);
     original = []; promotedBody = null;
-    document.querySelectorAll(A.rowSelector).forEach(row => row.classList.remove("mserp-watch-match", "mserp-watch-gold", "mserp-watch-green", "mserp-watch-blue", "mserp-watch-hidden"));
+    document.querySelectorAll(A.rowSelector).forEach(row => row.classList.remove("mserp-watch-match", "mserp-watch-gold", "mserp-watch-green", "mserp-watch-blue"));
   }
-  function stop(reason = "Paused", preserveHighlights = false) {
-    running = false; generation++; clearTimeout(timer); abortWait?.(); if (!preserveHighlights) restore();
+  function stop(reason = "Paused") {
+    running = false; generation++; clearTimeout(timer); abortWait?.(); restore();
     if (root) root.querySelector("#play").textContent = "▶ Play";
     status(reason); void send({ type: "stop" }).catch(() => {});
   }
-  function renderMatches() {
-    const list = root.querySelector("#matches"); list.replaceChildren();
-    for (const l of [...matches.values()].slice(0, 100)) {
-      const item = document.createElement("div"); item.className = "match";
-      item.textContent = `${l.id} · ${l.origin} → ${l.destination} · ${l.price === null ? "No price" : "$" + l.price.toLocaleString()} · ${l.rpm === null ? "—" : "$" + l.rpm + "/mi"} · page ${l.page}`;
+  function renderNewLoads() {
+    if (!root) return;
+    const recent = tracker.recent, list = root.querySelector("#loads");
+    list.replaceChildren();
+    for (const l of recent.slice(0, 100)) {
+      const item = document.createElement("div"); item.className = "load";
+      item.textContent = `${l.id} · ${l.origin} → ${l.destination} · ${l.price === null ? "No price" : "$" + l.price.toLocaleString()} · ${l.rpm === null ? "—" : "$" + l.rpm.toFixed(2) + "/mi"} · page ${l.page}`;
       list.append(item);
     }
-    root.querySelector("#count").textContent = `${matches.size} matching loads`;
+    if (!recent.length) list.textContent = tracker.ready ? "No new loads since the baseline." : "The first complete scan is a silent baseline.";
+    root.querySelector("#new").textContent = `New loads (${recent.length})`;
+    root.querySelector("#history").textContent = `${tracker.ready ? "Baseline ready" : "Building baseline"} · ${tracker.seenCount} IDs seen this run${recent.length > 100 ? " · showing the latest 100" : ""}`;
   }
   async function inspect() {
-    restore(); const entries = A.rows();
-    const response = DispatchWatch.fromResponse(latestResponse?.data);
+    restore();
+    const entries = A.rows(), response = DispatchWatch.fromResponse(latestResponse?.data);
     page = response.page + 1;
     const loads = new Map(response.jobs.map(j => [j.id, j]));
     if (entries.length !== loads.size || entries.some(e => !loads.has(e.id))) throw new Error("The load response and displayed rows disagree. Refresh the search before restarting.");
-    let fresh = 0;
-    for (const { row, id } of entries) {
-      const load = loads.get(id);
-      cycleIDs.add(load.id);
-      const match = DispatchWatch.matches(load, settings);
-      if (match) {
-        matches.set(load.id, { ...load, page });
-        row.classList.add("mserp-watch-match", `mserp-watch-${settings.highlight}`);
-        const key = DispatchWatch.signature(load, settings);
-        if (!seen.has(key)) { fresh++; seen.add(key); }
-      } else { matches.delete(load.id); if (settings.hideOthers) row.classList.add("mserp-watch-hidden"); }
-    }
-    // Keep Angular's original nodes/event listeners; restore order before any site action.
-    if (settings.promote && entries.length) {
+    const { fresh } = tracker.observe(response);
+    const ranks = new Map(tracker.recent.map(l => [l.id, l.order]));
+    for (const { row, id } of entries) if (ranks.has(id)) row.classList.add("mserp-watch-match", `mserp-watch-${settings.highlight}`);
+    // Only promote existing row nodes. Never clone a booking button or add a row
+    // from another page; the popover shows discoveries across the entire search.
+    if (entries.some(e => ranks.has(e.id))) {
       promotedBody = entries[0].row.parentElement; original = [...promotedBody.children];
-      for (const row of [...original].sort((a,b) => Number(b.classList.contains("mserp-watch-match")) - Number(a.classList.contains("mserp-watch-match")))) promotedBody.append(row);
+      const rowRanks = new Map(entries.map(e => [e.row, ranks.get(e.id) || 0]));
+      for (const row of [...original].sort((a,b) => (rowRanks.get(b) || 0) - (rowRanks.get(a) || 0))) promotedBody.append(row);
     }
-    if (seen.size > 10000) seen = new Set([...seen].slice(-5000));
-    renderMatches();
-    if (fresh && (!firstPass || settings.alertExisting)) {
-      try { await DispatchWatchSound.play(settings.sound, settings.volume); } catch(e) { status(e.message); }
-      if (settings.pauseOnMatch) { stop(`${fresh} new match${fresh === 1 ? "" : "es"} found — paused`, true); return; }
+    renderNewLoads();
+    if (fresh.length) {
+      root.querySelector("#last-new").textContent = `Last notification: ${fresh.length} new load${fresh.length === 1 ? "" : "s"} at ${new Date().toLocaleTimeString()}`;
+      try { await DispatchWatchSound.play(settings.sound, settings.volume); soundWarning = ""; }
+      catch(e) { soundWarning = e.message || "Sound unavailable. Check browser audio."; }
     }
+  }
+  function checkedStatus() {
+    const response = DispatchWatch.fromResponse(latestResponse?.data);
+    status(`${tracker.ready ? "Running" : "Baseline"} · page ${page}/${Math.max(1, response.totalPages)} · ${settings.interval}s${document.hidden ? " · background timing may be delayed" : ""}${soundWarning ? " · " + soundWarning : ""}`);
   }
   function waitForResults(action) {
     return new Promise((resolve, reject) => {
@@ -82,9 +90,9 @@
       checkWait = () => { clearTimeout(quietTimer); quietTimer = setTimeout(finish, 350); };
       const observer = new MutationObserver(checkWait);
       observer.observe(document.querySelector("main") || document.body, { childList: true, subtree: true, characterData: true, attributes: true });
-      const timeout = setTimeout(() => { cleanup(); reject(new Error("No matching load-search response within 30 seconds. Reload J.B. Hunt after installing the extension, then retry.")); }, 30000);
+      const timeout = setTimeout(() => { cleanup(); reject(new Error("No matching load-search response within 30 seconds. Reload J.B. Hunt after updating the extension, then retry.")); }, 30000);
       abortWait = () => { cleanup(); reject(new Error("Paused")); };
-      action.click();
+      try { action.click(); } catch(e) { cleanup(); reject(e); }
     });
   }
   async function tick(g) {
@@ -99,68 +107,83 @@
       if (Date.now() - lastRequest < settings.interval * 1000) { timer = setTimeout(() => void tick(g), settings.interval * 1000 - (Date.now() - lastRequest)); return; }
       if (A.loading()) throw new Error("The site is still loading. Wait for it to finish, then press Play.");
       restore();
-      let action;
       const pagination = DispatchWatch.fromResponse(latestResponse?.data);
-      if (settings.allPages && pagination.page + 1 < pagination.totalPages) {
-        action = A.next(); page++;
-        if (!action) throw new Error("More result pages exist but Next page is unavailable. Monitoring stopped.");
-      }
-      else {
-        // Completed scans remove unavailable loads. No old match survives forever.
-        for (const id of matches.keys()) if (!cycleIDs.has(id)) matches.delete(id);
-        cycleIDs = new Set(); firstPass = false; page = 1;
-        action = settings.allPages && pagination.page > 0 ? A.first() : A.refresh();
-      }
-      if (!action) throw new Error("Run a J.B. Hunt search first. No refresh control was found.");
-      lastRequest = Date.now(); status(`Checking page ${page}…`);
+      const more = pagination.page + 1 < pagination.totalPages;
+      const action = more ? A.next() : pagination.page > 0 ? A.first() : A.refresh();
+      if (!action) throw new Error("The search page controls changed. Run a search and press Play again.");
+      page = more ? pagination.page + 2 : 1;
+      lastRequest = Date.now(); status(`${tracker.ready ? "Checking" : "Baseline"} page ${page}…`);
       await waitForResults(action);
       if (!running || g !== generation) return;
       if (A.blocked()) throw new Error("The site reported an error or opened a dialog. Monitoring paused.");
       await inspect();
       if (!running || g !== generation) return;
-      status(`Running · page ${page} · checked ${new Date().toLocaleTimeString()}${document.hidden ? " · background timing may be delayed" : ""}`);
+      checkedStatus();
       timer = setTimeout(() => void tick(g), Math.max(0, settings.interval * 1000 - (Date.now() - started)));
     } catch (e) { if (g === generation) stop(e.message || "Monitoring stopped"); }
   }
   async function start() {
     if (running) { stop(); return; }
-    const g = ++generation; running = true; root.querySelector("#play").textContent = "Ⅱ Pause"; status("Checking dispatcher access…");
-    // Called directly by a real page click, which unlocks Web Audio.
+    const g = ++generation; running = true; root.querySelector("#play").textContent = "Ⅱ Pause"; status("Checking team access…");
     void DispatchWatchSound.unlock().catch(() => {});
     try {
       const access = await send({ type: "start" });
       if (g !== generation) return;
       if (!A.refresh()) throw new Error("Run a search in the grid first, then press Play.");
       if (A.loading() || A.blocked()) throw new Error("Wait for loading to finish and close open dialogs, then press Play.");
-      settings = access.settings; seen = new Set(); matches = new Map(); cycleIDs = new Set(); firstPass = true;
-      // Always require a fresh successful GraphQL response after authorization.
+      settings = access.settings; tracker = DispatchWatch.createTracker(); soundWarning = "";
+      root.querySelector("#last-new").textContent = ""; renderNewLoads();
       await new Promise(resolve => setTimeout(resolve, Math.max(0, settings.interval * 1000 - (Date.now() - lastRequest))));
       if (g !== generation) return;
-      lastRequest = Date.now();
-      await waitForResults(settings.allPages && A.first() ? A.first() : A.refresh());
+      restore(); lastRequest = Date.now(); status("Baseline page 1…");
+      await waitForResults(A.first() || A.refresh());
       if (g !== generation) return;
-      page = 1;
       await inspect();
       if (!running || g !== generation) return;
-      status(`Running for ${access.dispatcherName} · ${settings.interval}s between checks`);
-      lastRequest = Date.now(); timer = setTimeout(() => void tick(g), settings.interval * 1000);
+      checkedStatus();
+      timer = setTimeout(() => void tick(g), settings.interval * 1000);
     } catch(e) { if (g === generation) stop(e.message); }
   }
   function mount() {
     if (!location.pathname.startsWith("/carrier/ngx/load-board/grid")) { if (running) stop("Paused outside the load grid"); host?.remove(); return; }
     if (host?.isConnected) return;
-    const table = document.querySelector('main table'); if (!table) return;
+    const controls = A.controls();
+    if (!controls) return;
+    if (running) stop("The load grid changed. Press Play to start a new baseline.");
     host = document.createElement("div"); host.id = "mserp-dispatch-watch"; root = host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>:host{display:block;margin:12px 0;font:13px/1.5 system-ui;color:#e4e4e7}.bar{background:#111113;border:1px solid #3f3f46;border-radius:8px;padding:12px 16px}.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}strong{font-size:13px}button{font:inherit;min-height:32px;border-radius:8px;padding:4px 12px;border:1px solid #52525b;background:#27272a;color:white;cursor:pointer}#play{background:#2563eb;border-color:#2563eb}button:focus-visible,summary:focus-visible{outline:2px solid #93c5fd;outline-offset:2px}#status,.hint{font-size:12px;color:#a1a1aa;margin:6px 0 0}details{margin-top:8px}summary{cursor:pointer}.match{padding:8px;border-top:1px solid #3f3f46;color:#fef3c7}#matches{max-height:220px;overflow:auto}.hint{margin-top:8px}</style><div class="bar"><div class="top"><strong>MS Express · Dispatch Watch</strong><button id="play">▶ Play</button><button id="settings">Settings</button><span id="count">0 matching loads</span></div><p id="status" role="status" aria-live="polite">Paused · run a search, then press Play</p><details><summary>Matching loads from this scan</summary><div id="matches"></div><p class="hint">Matches from other pages reflect their last check. Pause and use J.B. Hunt’s page controls to review or book. Booking stays manual.</p></details></div>`;
-    table.closest('p-table')?.before(host);
-    if (!host.isConnected) table.before(host);
+    root.innerHTML = `<style>
+      :host{display:inline-flex;max-width:100%;margin-left:8px;font:12px/1.4 system-ui;color:#27272a;vertical-align:middle}
+      .toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:100%}
+      button{font:inherit;min-height:32px;border-radius:6px;padding:4px 10px;border:1px solid #d4d4d8;background:#fff;color:#27272a;cursor:pointer;white-space:nowrap}
+      #play{background:#2563eb;border-color:#2563eb;color:white}button:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+      #status{font-size:11px;color:#52525b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #new-loads{inset:auto;box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:min(400px,calc(100dvh - 24px));overflow:auto;border:1px solid #52525b;border-radius:8px;padding:16px;background:#18181b;color:#f4f4f5;box-shadow:0 8px 32px #0005}
+      #new-loads h2{font-size:14px;margin:0 0 8px}.hint{font-size:12px;color:#a1a1aa;margin:8px 0}.load{padding:8px 0;border-top:1px solid #3f3f46}
+    </style><div class="toolbar" aria-label="Dispatch Watch auto-refresh"><button type="button" id="play">▶ Play</button><button type="button" id="settings">Settings</button><button type="button" id="new" aria-controls="new-loads" aria-expanded="false">New loads (0)</button><span id="status" role="status" aria-live="polite">Paused</span></div>
+    <div id="new-loads" popover="auto" role="region" aria-label="New loads found during this run"><h2>New loads since Play</h2><p class="hint" id="history"></p><p class="hint" id="last-new"></p><div id="loads"></div><p class="hint">Newest discoveries first. Page references reflect the last check. Pause to review or book through J.B. Hunt.</p></div>`;
+    controls.append(host);
     root.querySelector("#play").onclick = () => void start();
     root.querySelector("#settings").onclick = () => void send({ type: "options" }).catch(e => status(e.message));
+    const panel = root.querySelector("#new-loads"), button = root.querySelector("#new");
+    button.onclick = () => {
+      if (panel.matches(":popover-open")) panel.hidePopover();
+      else {
+        const bounds = button.getBoundingClientRect();
+        panel.style.bottom = Math.max(12, innerHeight - bounds.top + 8) + "px";
+        panel.style.right = Math.max(12, innerWidth - bounds.right) + "px";
+        panel.showPopover();
+      }
+    };
+    panel.addEventListener("toggle", () => button.setAttribute("aria-expanded", String(panel.matches(":popover-open"))));
+    renderNewLoads();
   }
-  // Restore nodes before native Angular handlers execute. User changes pause
-  // monitoring so refresh cannot race a booking, sort, filter edit or pagination.
-  document.addEventListener("click", e => { if (e.isTrusted && !e.composedPath().includes(host)) { if (running) stop("Paused for site interaction. Press Play when ready."); else restore(); } }, true);
-  document.addEventListener("keydown", e => { if (e.isTrusted && running && !e.composedPath().includes(host)) stop("Paused for site interaction."); }, true);
+  // Restore nodes before native site handlers and pause on user edits.
+  for (const type of ["click", "keydown", "input", "change"]) document.addEventListener(type, e => {
+    if (e.isTrusted && !e.composedPath().includes(host)) {
+      if (running) stop("Paused for site interaction. Play starts a new baseline.");
+      else if (type === "click") restore();
+    }
+  }, true);
   window.addEventListener("pagehide", () => stop());
   new MutationObserver(mount).observe(document.body, { childList: true, subtree: true });
   mount();
