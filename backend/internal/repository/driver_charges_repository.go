@@ -69,7 +69,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT s.id::text,s.driver_id::text,d.full_name,s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count FROM driver_charge_schedules s JOIN drivers d ON d.id=s.driver_id WHERE ($1='' OR s.driver_id::text=$1) ORDER BY d.full_name,s.name,s.id`, driver)
+	rows, err = q.Query(ctx, `SELECT s.id::text,s.driver_id::text,d.full_name,s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count FROM driver_charge_schedules s JOIN drivers d ON d.id=s.driver_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY d.full_name,s.name,s.id`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -98,7 +98,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if len(data.Schedules) == 0 {
 		return data, loads, nil
 	}
-	rows, err = q.Query(ctx, `SELECT p.schedule_id::text,p.week_start::text,p.amount::text,p.paused FROM driver_charge_phases p JOIN driver_charge_schedules s ON s.id=p.schedule_id WHERE ($1='' OR s.driver_id::text=$1) ORDER BY p.week_start`, driver)
+	rows, err = q.Query(ctx, `SELECT p.schedule_id::text,p.week_start::text,p.amount::text,p.paused FROM driver_charge_phases p JOIN driver_charge_schedules s ON s.id=p.schedule_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY p.week_start`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -117,7 +117,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version,coalesce(o.base_amount,o.scheduled_amount)::text,o.waive_remainder FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR s.driver_id::text=$1) ORDER BY o.week_start`, driver)
+	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version,coalesce(o.base_amount,o.scheduled_amount)::text,o.waive_remainder FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY o.week_start`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -138,7 +138,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver)
+	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND ($2::uuid[] IS NULL OR e.driver_id=ANY($2::uuid[])) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}

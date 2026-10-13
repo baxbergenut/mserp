@@ -10,21 +10,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/db"
 	"mserp/internal/repository"
 	"os"
-	"sync/atomic"
 	"time"
 )
 
-type tracer struct{ calls atomic.Int64 }
-
-func (t *tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
-	t.calls.Add(1)
-	return ctx
-}
-func (t *tracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 func main() {
 	if e := run(); e != nil {
 		fmt.Fprintln(os.Stderr, "diagnostic failed:", e)
@@ -35,6 +27,7 @@ func run() error {
 	mode := flag.String("mode", "driver", "driver, investor, driver-history, investor-history, fuel, financial, board, gross")
 	weekArg := flag.String("week", "2026-10-05", "Monday YYYY-MM-DD")
 	runs := flag.Int("runs", 2, "sequential samples (1-5)")
+	explain := flag.Bool("explain", false, "bounded read-only plan for the slowest query, with expressions removed")
 	jit := flag.String("jit", "off", "on or off")
 	flag.Parse()
 	if *runs < 1 || *runs > 5 || (*jit != "on" && *jit != "off") {
@@ -60,8 +53,11 @@ func run() error {
 	if role := os.Getenv("MSERP_DIAGNOSTIC_ROLE"); role != "" {
 		cfg.ConnConfig.RuntimeParams["role"] = role
 	}
-	t := &tracer{}
-	cfg.ConnConfig.Tracer = t
+	planTrace := &planTracer{}
+	cfg.ConnConfig.Tracer = db.Tracer{}
+	if *explain {
+		cfg.ConnConfig.Tracer = planTrace
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*runs)*60*time.Second)
 	defer cancel()
 	pool, e := pgxpool.NewWithConfig(ctx, cfg)
@@ -82,27 +78,27 @@ func run() error {
 		}
 	}
 	for i := 0; i < *runs; i++ {
-		t.calls.Store(0)
+		sampleCtx, metrics := db.WithQueryMetrics(ctx)
 		start := time.Now()
 		var value any
 		switch *mode {
 		case "driver":
-			value, e = pay.Get(ctx, week)
+			value, e = pay.Get(sampleCtx, week)
 		case "investor":
-			value, e = pay.InvestorPay(ctx, week)
+			value, e = pay.InvestorPay(sampleCtx, week)
 		case "driver-history":
-			value, e = pay.History(ctx, driver, repository.Pagination{Page: 1, PageSize: 10})
+			value, e = pay.History(sampleCtx, driver, repository.Pagination{Page: 1, PageSize: 10})
 		case "investor-history":
-			value, e = pay.InvestorHistory(ctx, owner, repository.Pagination{Page: 1, PageSize: 10})
+			value, e = pay.InvestorHistory(sampleCtx, owner, repository.Pagination{Page: 1, PageSize: 10})
 		case "fuel":
-			value, e = repository.NewFuelRepository(pool).GetDashboard(ctx, repository.FuelDashboardQuery{Year: week.Year(), MapDateFrom: time.Date(week.Year(), 1, 1, 0, 0, 0, 0, time.UTC), MapDateTo: week.AddDate(0, 0, 3)})
+			value, e = repository.NewFuelRepository(pool).GetDashboard(sampleCtx, repository.FuelDashboardQuery{Year: week.Year(), MapDateFrom: time.Date(week.Year(), 1, 1, 0, 0, 0, 0, time.UTC), MapDateTo: week.AddDate(0, 0, 3)})
 		case "financial":
 			end := week.AddDate(0, 0, 6)
-			value, e = repository.NewDashboardRepository(pool).GetFinancialDashboard(ctx, repository.FinancialDashboardQuery{DateFrom: &week, DateTo: &end})
+			value, e = repository.NewDashboardRepository(pool).GetFinancialDashboard(sampleCtx, repository.FinancialDashboardQuery{DateFrom: &week, DateTo: &end})
 		case "board":
-			value, e = repository.NewDriverBoardRepository(pool).Get(ctx, week)
+			value, e = repository.NewDriverBoardRepository(pool).Get(sampleCtx, week)
 		case "gross":
-			value, e = repository.NewGrossBoardRepository(pool).Get(ctx, week)
+			value, e = repository.NewGrossBoardRepository(pool).Get(sampleCtx, week)
 		default:
 			return fmt.Errorf("unknown mode")
 		}
@@ -118,7 +114,8 @@ func run() error {
 		z := gzip.NewWriter(&compressed)
 		_, _ = z.Write(body)
 		_ = z.Close()
-		out := map[string]any{"mode": *mode, "sample": i + 1, "ms": float64(elapsed.Microseconds()) / 1000, "db_calls": t.calls.Load(), "bytes": len(body), "gzip_bytes": compressed.Len(), "sha256": fmt.Sprintf("%x", sha256.Sum256(body)), "jit": *jit}
+		out := map[string]any{"mode": *mode, "sample": i + 1, "ms": float64(elapsed.Microseconds()) / 1000, "db_calls": metrics.Queries.Load(), "bytes": len(body), "gzip_bytes": compressed.Len(), "sha256": fmt.Sprintf("%x", sha256.Sum256(body)), "jit": *jit}
+		out["phases_ms"], out["queries"] = metrics.Details()
 		if board, ok := value.(repository.DriverBoard); ok {
 			compact, err := json.Marshal(repository.CompactBoard(board))
 			if err != nil {
@@ -141,6 +138,12 @@ func run() error {
 				return err
 			}
 			out["page_bytes"], out["summary_bytes"] = len(full), len(summary)
+		}
+		if *explain && i == 0 {
+			out["plan"], e = planTrace.explain(ctx, pool)
+			if e != nil {
+				return e
+			}
 		}
 		if e = json.NewEncoder(os.Stdout).Encode(out); e != nil {
 			return e

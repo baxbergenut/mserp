@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"mserp/internal/db"
 	"sort"
 	"strconv"
 	"strings"
@@ -135,7 +136,7 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := r.cachedWeek(ctx, tx, "driver", week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, "") })
+	result, err := r.cachedWeek(ctx, tx, "driver:"+driverID, week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, driverID) })
 	result = selectPayDriver(result, driverID)
 	if err != nil {
 		return result, err
@@ -143,6 +144,16 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 	return result, tx.Commit(ctx)
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	defer db.Phase(ctx, "driver_calculation")()
+	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
+	if err := payrollQueryPlans(ctx, tx); err != nil {
+		return DriverPayWeek{}, err
+	}
+	var selectionErr error
+	ctx, selectionErr = selectPayrollContext(ctx, tx, "driver", driverID)
+	if selectionErr != nil {
+		return DriverPayWeek{}, selectionErr
+	}
 	ctx = payrollReadContext(ctx, tx)
 	result, err := readDriverPaySourceWeek(ctx, tx, week, "")
 	if err != nil {
@@ -170,34 +181,27 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	return overlayPayrollSettlements(ctx, tx, result, driverID)
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	defer db.Phase(ctx, "source")()
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
-	rows, err := tx.Query(ctx, driverPayCostsSQL+` SELECT d.id,d.full_name,coalesce(t.id::text,''),coalesce(t.unit_number,''),
- coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'),d.pay_type,d.pay_rate::text,driver_employment_type(d.id,$1::date+6),(driver_employment_type(d.id,$1::date+6)='owner_operator'),
+	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+","+payrollEscrowCapacityCTE+payDriverEligibilitySQL+","+payrollEntriesCTE+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
+ d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
  coalesce(coalesce(e.entered_original_rate,l.total_pay,e.original_rate)::text,''),coalesce(e.driver_rate::text,''),
  coalesce(coalesce(e.entered_miles,l.total_miles,e.miles)::text,''),coalesce(e.version,0),coalesce(l.total_pay::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
- FROM drivers d LEFT JOIN `+grossBoardEntriesSQL+` e ON d.id=e.driver_id
- AND e.service_date >= $1::date AND e.service_date < $1::date+7 AND NOT e.deleted AND (btrim(e.load_number)<>'' OR e.day_status='SHOP')
- `+weeklyAssignmentJoins+`
- `+grossBoardResolvedLoad+`
- LEFT JOIN LATERAL (SELECT true present FROM driver_escrow_releases r JOIN driver_escrows x ON x.id=r.escrow_id
- WHERE x.driver_id=d.id AND r.week_start=$1::date AND NOT r.cancelled LIMIT 1) escrow_release ON true
+ FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
+ AND (btrim(e.load_number)<>'' OR e.day_status='SHOP')
+ `+payrollResolvedLoad+`
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS(SELECT 1 FROM driver_teams dt WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR $1::date<dt.end_week)) OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR escrow_release.present OR EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7)) AND (EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE wt.driver_id=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7) OR escrow_release.present OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR EXISTS
- (SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date)
- OR EXISTS (SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id
- AND NOT x.driver_settled AND x.expense_date<$1::date+10)
- OR EXISTS (SELECT 1 FROM driver_escrows x WHERE x.driver_id=d.id AND x.start_date<$1::date+7
- AND (escrow_collection_available(x.id,$1::date)>0
- OR EXISTS (SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date)))
- OR ((driver_employment_type(d.id,$1::date+6)='owner_operator') AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
- ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID)
+ AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale)
+ AND (d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
+ OR (d.pay_employment_type='owner_operator' AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
+ ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx))
 	if err != nil {
 		return result, err
 	}
@@ -263,6 +267,9 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		return result, err
 	}
 	rows.Close()
+	if payrollCostsOnly(ctx) {
+		return result, nil
+	}
 	data, loads, err := payrollChargeData(ctx, tx, driverID)
 	if err != nil {
 		return result, err
@@ -382,7 +389,10 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
+	endLock := db.Phase(ctx, "financial_lock_wait")
+	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
+	endLock()
+	if err != nil {
 		return edits, err
 	}
 	members, err := teamPayMembers(ctx, tx, edits.DriverID, edits.WeekStart)
@@ -399,7 +409,13 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	if len(actors) > 0 {
 		actor = actors[0]
 	}
+	ctx, err = selectPayrollContext(payrollWeekContext(ctx, edits.WeekStart), tx, "driver", edits.DriverID)
+	if err != nil {
+		return edits, err
+	}
+	endValidation := db.Phase(ctx, "save_calculation")
 	costDriver, err := currentDriverPayCosts(ctx, tx, edits)
+	endValidation()
 	if err != nil {
 		return edits, err
 	}
@@ -410,6 +426,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	if edits.LayoverExcludedDates == nil {
 		edits.LayoverExcludedDates = []string{}
 	}
+	defer db.Phase(ctx, "writes_and_commit")()
 	if err = savePaySources(ctx, tx, costDriver, &edits, "driver", actor); err != nil {
 		return edits, err
 	}

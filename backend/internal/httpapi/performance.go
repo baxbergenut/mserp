@@ -46,7 +46,8 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 			counted := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(&timedWriter{ResponseWriter: counted, start: start, metrics: m}, r.WithContext(ctx))
 			route := chi.RouteContext(r.Context()).RoutePattern()
-			logger.Info("http performance", "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
+			phases, _ := m.Details()
+			logger.Info("http performance", "phases_ms", phases, "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
 		})
 	}
 }

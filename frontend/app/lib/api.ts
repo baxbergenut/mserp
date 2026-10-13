@@ -455,6 +455,7 @@ export const updateExpense = (id: string, input: ExpenseInput) =>
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
 
+// detailIds hydrates remembered expanded rows in the same paginated snapshot.
 export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, ...query }), { signal });
 export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => apiRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, { method: "POST", body: JSON.stringify(input) });
 export const undoPaySystemValues = (investor: boolean, id: string) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/undo-system`, { method: "POST", body: JSON.stringify({ id }) });

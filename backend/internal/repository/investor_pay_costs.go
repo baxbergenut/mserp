@@ -21,14 +21,19 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 		}
 		return result[id]
 	}
-	rows, err := tx.Query(ctx, `SELECT matched.id::text,coalesce(payroll_driver_at(f.driver_id,f.purchased_on)::text,''),sum(i.total_amount_paid)::text FROM fuel_transactions f
- JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
- JOIN LATERAL(SELECT (array_agg(DISTINCT a.truck_id))[1] id FROM truck_unit_aliases a WHERE a.unit_key=ANY(f.reported_truck_units) HAVING count(DISTINCT a.truck_id)=1) matched ON true
-	WHERE matched.id IS NOT NULL AND f.relay_environment='production' AND i.item_kind='fuel'
- AND f.purchased_on >= $1::date
- AND f.purchased_on < $1::date+7
+	rows, err := tx.Query(ctx, `WITH aliases AS MATERIALIZED (
+ SELECT unit_key,(array_agg(DISTINCT truck_id))[1] id FROM truck_unit_aliases GROUP BY unit_key HAVING count(DISTINCT truck_id)=1
+ ), fuel AS MATERIALIZED (
+ SELECT f.reported_truck_units[1] unit,coalesce(team.main_driver_id,f.driver_id) driver_id,sum(i.total_amount_paid) total
+ FROM fuel_transactions f JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
+ LEFT JOIN driver_teams team ON team.team_driver_id=f.driver_id AND team.start_week<=f.purchased_on AND (team.end_week IS NULL OR f.purchased_on<team.end_week)
+ WHERE f.relay_environment='production' AND i.item_kind='fuel' AND f.purchased_on >= $1::date AND f.purchased_on < $1::date+7
  AND cardinality(f.reported_truck_units)=1
- GROUP BY matched.id,payroll_driver_at(f.driver_id,f.purchased_on)`, week)
+ AND ($2::uuid[] IS NULL OR f.reported_truck_units[1] IN (SELECT unit_key FROM aliases WHERE id=ANY($2::uuid[])))
+ GROUP BY f.reported_truck_units[1],coalesce(team.main_driver_id,f.driver_id)
+ ) SELECT matched.id::text,coalesce(f.driver_id::text,''),sum(f.total)::text
+ FROM fuel f JOIN aliases matched ON matched.unit_key=f.unit
+ WHERE ($2::uuid[] IS NULL OR matched.id=ANY($2::uuid[])) GROUP BY matched.id,f.driver_id`, week, payrollTruckIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -56,10 +61,17 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.Query(ctx, `SELECT t.truck_id::text,coalesce(a.driver_id::text,''),sum(t.amount)::text FROM tolls t
- LEFT JOIN LATERAL(SELECT (array_agg(DISTINCT a.driver_id))[1] driver_id FROM truck_driver_assignments a WHERE a.truck_id=t.truck_id
- AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=t.exit_date AND (a.unassigned_at IS NULL OR t.exit_date<(a.unassigned_at AT TIME ZONE 'America/New_York')::date) HAVING count(DISTINCT a.driver_id)=1) a ON true
-	WHERE t.truck_id IS NOT NULL AND (t.prepass_environment IS NULL OR t.prepass_environment='production') AND t.posting_date>=$1::date AND t.posting_date<$1::date+7 GROUP BY t.truck_id,a.driver_id`, week)
+	rows, err = tx.Query(ctx, `WITH toll_days AS MATERIALIZED (
+ SELECT truck_id,exit_date,sum(amount) amount FROM tolls WHERE truck_id IS NOT NULL
+ AND (prepass_environment IS NULL OR prepass_environment='production') AND posting_date>=$1::date AND posting_date<$1::date+7
+ AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) GROUP BY truck_id,exit_date
+ ), attributed AS (
+ SELECT t.truck_id,t.exit_date,t.amount,CASE WHEN count(DISTINCT a.driver_id)=1 THEN (array_agg(DISTINCT a.driver_id))[1] END driver_id
+ FROM toll_days t LEFT JOIN truck_driver_assignments a ON a.truck_id=t.truck_id
+ AND a.assigned_at < ((t.exit_date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at >= ((t.exit_date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ GROUP BY t.truck_id,t.exit_date,t.amount)
+ SELECT truck_id::text,coalesce(driver_id::text,''),sum(amount)::text FROM attributed GROUP BY truck_id,driver_id`, week, payrollTruckIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -131,42 +143,70 @@ func investorExpenseDeductions(ctx context.Context, tx pgx.Tx, truck, owner, wee
 }
 
 func saveInvestorExpenses(ctx context.Context, tx pgx.Tx, d DriverPayDriver, actor string, items []ExpenseDeduction) error {
+	ids := []string{}
+	seen := map[string]bool{}
 	for _, v := range items {
 		if !v.Apply {
 			continue
 		}
-		var version int
-		if err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND truck_id=$2 AND owner_id=$3 AND lower(btrim(covered_by))='truck owner' FOR UPDATE`, v.ExpenseID, d.ID, d.InvestorID).Scan(&version); err != nil {
-			return err
-		}
-		if version != v.Version {
+		if seen[v.ExpenseID] {
 			return ErrDriverPayConflict
 		}
-		current, err := investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, d.Edits.WeekStart, false)
-		if err != nil {
+		seen[v.ExpenseID] = true
+		ids = append(ids, v.ExpenseID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	// Lock the complete set in a stable order before validating versions or
+	// balances. Keep every individual check and database audit trigger.
+	rows, err := tx.Query(ctx, `SELECT id::text,balance_version FROM expenses WHERE id=ANY($1::uuid[]) AND truck_id=$2 AND owner_id=$3 AND lower(btrim(covered_by))='truck owner' ORDER BY id FOR UPDATE`, ids, d.ID, d.InvestorID)
+	if err != nil {
+		return err
+	}
+	versions := map[string]int{}
+	for rows.Next() {
+		var id string
+		var version int
+		if err = rows.Scan(&id, &version); err != nil {
+			rows.Close()
 			return err
 		}
-		found := false
-		for _, c := range current {
-			if c.ExpenseID != v.ExpenseID {
-				continue
-			}
-			found = true
-			n, e := chargeCents(v.Amount)
-			limit, _ := chargeCents(c.Available)
-			if e != nil || n < 0 || n > limit {
-				return chargeInvalid("Expense deduction exceeds its available balance")
-			}
+		versions[id] = version
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	current, err := investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, d.Edits.WeekStart, false)
+	if err != nil {
+		return err
+	}
+	balances := map[string]ExpenseDeduction{}
+	for _, c := range current {
+		balances[c.ExpenseID] = c
+	}
+	batch := &pgx.Batch{}
+	for _, v := range items {
+		if !v.Apply {
+			continue
 		}
+		version, exists := versions[v.ExpenseID]
+		if !exists || version != v.Version {
+			return ErrDriverPayConflict
+		}
+		c, found := balances[v.ExpenseID]
 		if !found {
 			return ErrDriverPayConflict
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,investor_truck_id) VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid,$5) ON CONFLICT(expense_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now() WHERE expense_payments.investor_truck_id=excluded.investor_truck_id`, v.ExpenseID, d.Edits.WeekStart, v.Amount, actor, d.ID); err != nil {
-			return err
+		n, e := chargeCents(v.Amount)
+		limit, _ := chargeCents(c.Available)
+		if e != nil || n < 0 || n > limit {
+			return chargeInvalid("Expense deduction exceeds its available balance")
 		}
-		if _, err = tx.Exec(ctx, `UPDATE expenses SET updated_at=now() WHERE id=$1`, v.ExpenseID); err != nil {
-			return err
-		}
+		batch.Queue(`INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,investor_truck_id) VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid,$5) ON CONFLICT(expense_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now() WHERE expense_payments.investor_truck_id=excluded.investor_truck_id`, v.ExpenseID, d.Edits.WeekStart, v.Amount, actor, d.ID)
+		batch.Queue(`UPDATE expenses SET updated_at=now() WHERE id=$1`, v.ExpenseID)
 	}
-	return nil
+	return tx.SendBatch(ctx, batch).Close()
 }

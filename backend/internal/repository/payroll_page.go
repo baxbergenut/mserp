@@ -10,6 +10,7 @@ type PayPageQuery struct {
 	Pagination
 	Search, DispatcherID, ID string
 	Summary                  bool
+	DetailIDs                map[string]bool
 }
 
 type PayStatementSummary struct {
@@ -158,7 +159,7 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	for _, r := range rows[query.Offset():min(query.Offset()+query.PageSize, len(rows))] {
 		if r.driver != nil {
 			driver := *r.driver
-			if query.Summary {
+			if query.Summary && !query.DetailIDs[driver.ID] {
 				driver = summarizePayStatement(driver)
 			}
 			report.Drivers = append(report.Drivers, driver)

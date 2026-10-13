@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"mserp/internal/db"
 	"sort"
 	"time"
 
@@ -59,11 +60,12 @@ func validatePaySourceAmount(name, amount string, source int64) error {
 }
 
 func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error) {
+	defer db.Phase(ctx, "carry_sources")()
 	memo := payrollReadMemo(ctx, tx)
 	if memo != nil && memo.costsLoaded {
 		return memo.costs, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT driver_id::text,week_start::text,fuel_base::text,toll_base::text,fuel_amount::text,toll_amount::text FROM driver_pay_cost_collections ORDER BY week_start,driver_id`)
+	rows, err := tx.Query(ctx, `SELECT driver_id::text,week_start::text,fuel_base::text,toll_base::text,fuel_amount::text,toll_amount::text FROM driver_pay_cost_collections WHERE ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[])) ORDER BY week_start,driver_id`, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -83,16 +85,27 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	}
 	// Existing overrides predate the collection ledger. Resolve their actual
 	// routed source report (or frozen settlement), preserving historical amounts.
-	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text FROM driver_pay_weeks w WHERE (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`)
+	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text,s.report FROM driver_pay_weeks w LEFT JOIN payroll_settlements s ON s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized WHERE ($1::uuid[] IS NULL OR w.driver_id=ANY($1::uuid[])) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
 	legacy := map[string]map[string]bool{}
 	for rows.Next() {
 		var driver, week string
-		if err = rows.Scan(&driver, &week); err != nil {
+		var frozen []byte
+		if err = rows.Scan(&driver, &week, &frozen); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if len(frozen) > 0 {
+			var d DriverPayDriver
+			if err = json.Unmarshal(frozen, &d); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			f, t := driverCostBase(d)
+			out = append(out, payCostRecord{driver, week, chargeMoney(f), chargeMoney(t), chargeMoney(payrollCostAmount(d.Edits.FuelOverride, f, d.PayType == "cpm")), chargeMoney(payrollCostAmount(d.Edits.TollOverride, t, d.PayType == "cpm"))})
+			continue
 		}
 		if legacy[week] == nil {
 			legacy[week] = map[string]bool{}
@@ -104,13 +117,30 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	if err != nil {
 		return nil, err
 	}
-	for week, drivers := range legacy {
-		w, _ := chargeWeek(week)
-		report, e := readDriverPaySourceWeek(ctx, tx, w, "")
+	legacyIDs := []string{}
+	for _, drivers := range legacy {
+		for id := range drivers {
+			legacyIDs = append(legacyIDs, id)
+		}
+	}
+	costCtx := context.WithValue(ctx, payrollCostsOnlyKey{}, true)
+	if len(legacyIDs) > 0 {
+		var e error
+		costCtx, e = selectPayrollContexts(costCtx, tx, "driver", legacyIDs)
 		if e != nil {
 			return nil, e
 		}
-		report, _, e = routeTruckPaySources(ctx, tx, report)
+	}
+	for week, drivers := range legacy {
+		w, _ := chargeWeek(week)
+		// A subset must not inherit a whole-fleet memo (or vice versa).
+		costCtx = context.WithValue(costCtx, payrollReadKey{}, (*payrollReadState)(nil))
+		costCtx = payrollReadContext(costCtx, tx)
+		report, e := readDriverPayCostWeek(costCtx, tx, w)
+		if e != nil {
+			return nil, e
+		}
+		report, _, e = routeTruckPaySources(costCtx, tx, report)
 		if e != nil {
 			return nil, e
 		}
@@ -159,6 +189,7 @@ func costBalance(records []payCostRecord, driver, week string) (int64, int64) {
 }
 
 func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
+	defer db.Phase(ctx, "carry")()
 	records, err := readPayCostRecords(ctx, tx)
 	if err != nil {
 		return err

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"mserp/internal/db"
 	"sort"
 	"strings"
 
@@ -32,7 +33,8 @@ type paySourceRecord struct {
 
 func sourceKey(source, owner string) string { return source + "|" + owner }
 func readPaySources(ctx context.Context, tx pgx.Tx) ([]paySourceRecord, error) {
-	rows, err := tx.Query(ctx, `SELECT source,owner_id::text,week_start::text,kind,statement_id::text,truck_id::text,name,base::text,amount::text,version,statement FROM pay_source_collections ORDER BY week_start,source,owner_id`)
+	defer db.Phase(ctx, "source_ledger")()
+	rows, err := tx.Query(ctx, `SELECT source,owner_id::text,week_start::text,kind,statement_id::text,truck_id::text,name,base::text,amount::text,version,statement FROM pay_source_collections WHERE ($1::uuid[] IS NULL OR owner_id=ANY($1::uuid[])) ORDER BY week_start,source,owner_id`, payrollOwnerIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -319,6 +321,16 @@ func setInvestorSourceCosts(d *DriverPayDriver) {
 }
 
 func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *DriverPayEdits, kind, actor string) error {
+	defer db.Phase(ctx, "source_validation_write")()
+	if len(d.Edits.SourceCharges) == 0 && len(edits.SourceCharges) == 0 {
+		edits.SourceCharges = []PaySourceCharge{}
+		if kind == "investor" {
+			d.Edits = *edits
+			setInvestorSourceCosts(&d)
+			edits.Costs = d.Edits.Costs
+		}
+		return nil
+	}
 	records, err := readPaySources(ctx, tx)
 	if err != nil {
 		return err

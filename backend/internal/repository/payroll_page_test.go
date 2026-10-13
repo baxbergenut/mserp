@@ -2,6 +2,18 @@ package repository
 
 import "testing"
 
+func TestPayPageDetailsStayOnPage(t *testing.T) {
+	r := DriverPayWeek{Revision: "same-snapshot", Drivers: []DriverPayDriver{
+		{ID: "a", FullName: "Alpha", Loads: []DriverPayLoad{{Fee: "10.00"}}},
+		{ID: "b", FullName: "Beta", Loads: []DriverPayLoad{{Fee: "20.00"}}},
+		{ID: "c", FullName: "Charlie", Loads: []DriverPayLoad{{Fee: "30.00"}}},
+	}}
+	p := PaginatePay(r, PayPageQuery{Pagination: Pagination{Page: 1, PageSize: 2}, Summary: true, DetailIDs: map[string]bool{"a": true, "c": true}})
+	if len(p.Drivers) != 2 || p.Drivers[0].Summary != nil || len(p.Drivers[0].Loads) != 1 || p.Drivers[1].Summary == nil || len(p.Drivers[1].Loads) != 0 || p.Revision != r.Revision || p.Pagination.Total != 3 {
+		t.Fatalf("mixed detail page: %+v", p)
+	}
+}
+
 func TestPaySummariesKeepTotalsAndOmitDetails(t *testing.T) {
 	d := DriverPayDriver{ID: "driver", PayType: "cpm", Loads: []DriverPayLoad{{Fee: "100.00"}, {Fee: "", Issues: []string{"missing"}}}, Edits: DriverPayEdits{DriverID: "driver", WeekStart: "2026-10-12", Version: 3, Adjustments: []DriverPayAdjustment{{Kind: "deduction", Amount: "5.00"}}, ExpenseDeductions: []ExpenseDeduction{{Amount: "10.00"}}}}
 	full := DriverPayWeek{Revision: "revision", Drivers: []DriverPayDriver{d}}

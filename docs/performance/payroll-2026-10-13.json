@@ -1,0 +1,1374 @@
+{
+  "date": "2026-10-13",
+  "baseline_commit": "8e751a4ef9bb5d6f9a8a4c7baddf8d760e05df82",
+  "environment": {
+    "cpu": 1,
+    "nominal_ram_mib": 512,
+    "usable_ram_mib": 458,
+    "postgres_major": 16,
+    "production_services_active": true,
+    "database": "separate synthetic test database"
+  },
+  "measurement": "repository calls; excludes HTTP, network and browser rendering; cold means application report cache cold",
+  "api_budget_ms": 75,
+  "browser_p95_target_ms": 300,
+  "release_gate_satisfied": false,
+  "actions": {
+    "driver/cold": {
+      "first_sample_diagnostics": {
+        "calls": 74,
+        "phases": {
+          "carry": 149.969084,
+          "carry_sources": 149.121777,
+          "cost_source": 29.321249,
+          "driver_calculation": 369.498734,
+          "selection": 60.690342,
+          "source": 95.587832,
+          "source_ledger": 0.908985,
+          "team_routing": 2.424792,
+          "truck_routing": 164.720679
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 3,
+            "ms": 1.955413
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.886184
+          },
+          "09b728cfe8720fcf": {
+            "calls": 2,
+            "ms": 25.02632
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 3,
+            "ms": 0.705087
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 1.499979
+          },
+          "26bc2a17e9fe432e": {
+            "calls": 1,
+            "ms": 0.488763
+          },
+          "286afdef237fc1ec": {
+            "calls": 3,
+            "ms": 11.545161
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 3,
+            "ms": 1.421769
+          },
+          "2f9f226d9fc85936": {
+            "calls": 3,
+            "ms": 1.1805620000000001
+          },
+          "318a496e82c47fa6": {
+            "calls": 6,
+            "ms": 7.141369
+          },
+          "32956c910995e963": {
+            "calls": 3,
+            "ms": 1.225828
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 60.546059
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 0.255884
+          },
+          "3d7e80799331e9af": {
+            "calls": 3,
+            "ms": 2.4642809999999997
+          },
+          "425d4573e0161637": {
+            "calls": 3,
+            "ms": 0.264943
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.363158
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 2.71423
+          },
+          "58785f021aecbab5": {
+            "calls": 2,
+            "ms": 4.243967
+          },
+          "5c73198e67c727ad": {
+            "calls": 4,
+            "ms": 6.996895
+          },
+          "65a76aad066fcd90": {
+            "calls": 3,
+            "ms": 0.499089
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 10.721107
+          },
+          "72d262e0b8794ce7": {
+            "calls": 3,
+            "ms": 35.471059
+          },
+          "87a2a2a800df40ad": {
+            "calls": 3,
+            "ms": 51.366689
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 3,
+            "ms": 11.547246
+          },
+          "8db27fca699e330f": {
+            "calls": 3,
+            "ms": 2.039092
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 1.274894
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.460144
+          },
+          "bf244e481562969e": {
+            "calls": 1,
+            "ms": 0.30404
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 72.216413
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 2.699484
+          },
+          "da295ee7e642d234": {
+            "calls": 3,
+            "ms": 8.278125
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.102365
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.416049
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 3.281567
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.090473
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 326.34,
+      "p95_ms": 398.52,
+      "p99_ms": 436.62,
+      "max_ms": 593.78
+    },
+    "driver/warm": {
+      "first_sample_diagnostics": {
+        "calls": 4,
+        "phases": {},
+        "queries": {
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.426667
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.236132
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.114964
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.10038
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 27.96,
+      "p95_ms": 31.74,
+      "p99_ms": 34.34,
+      "max_ms": 34.45
+    },
+    "driver/changed": {
+      "first_sample_diagnostics": {
+        "calls": 74,
+        "phases": {
+          "carry": 116.769263,
+          "carry_sources": 115.762567,
+          "cost_source": 19.004635,
+          "driver_calculation": 353.759826,
+          "selection": 53.25617,
+          "source": 103.645847,
+          "source_ledger": 0.938625,
+          "team_routing": 3.437775,
+          "truck_routing": 153.238615
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 3,
+            "ms": 1.964204
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.424732
+          },
+          "09b728cfe8720fcf": {
+            "calls": 2,
+            "ms": 16.243236
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 3,
+            "ms": 0.66315
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 1.420627
+          },
+          "26bc2a17e9fe432e": {
+            "calls": 1,
+            "ms": 0.567115
+          },
+          "286afdef237fc1ec": {
+            "calls": 3,
+            "ms": 7.855599
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 3,
+            "ms": 1.232592
+          },
+          "2f9f226d9fc85936": {
+            "calls": 3,
+            "ms": 1.135715
+          },
+          "318a496e82c47fa6": {
+            "calls": 6,
+            "ms": 4.519844
+          },
+          "32956c910995e963": {
+            "calls": 3,
+            "ms": 0.973365
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 52.011418
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 1.430473
+          },
+          "3d7e80799331e9af": {
+            "calls": 3,
+            "ms": 2.878503
+          },
+          "425d4573e0161637": {
+            "calls": 3,
+            "ms": 0.334798
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.69434
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.411161
+          },
+          "58785f021aecbab5": {
+            "calls": 2,
+            "ms": 2.710267
+          },
+          "5c73198e67c727ad": {
+            "calls": 4,
+            "ms": 5.324748
+          },
+          "65a76aad066fcd90": {
+            "calls": 3,
+            "ms": 0.869025
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 7.507085
+          },
+          "72d262e0b8794ce7": {
+            "calls": 3,
+            "ms": 32.391788000000005
+          },
+          "87a2a2a800df40ad": {
+            "calls": 3,
+            "ms": 50.254616999999996
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 3,
+            "ms": 8.528071
+          },
+          "8db27fca699e330f": {
+            "calls": 3,
+            "ms": 1.300837
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.650801
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.535706
+          },
+          "bf244e481562969e": {
+            "calls": 1,
+            "ms": 0.474788
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 86.628907
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 2.131873
+          },
+          "da295ee7e642d234": {
+            "calls": 3,
+            "ms": 3.456399
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.216663
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.38234
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 3.13361
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.530953
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 315.71,
+      "p95_ms": 401.88,
+      "p99_ms": 465.16,
+      "max_ms": 474.68
+    },
+    "driver/expand": {
+      "first_sample_diagnostics": {
+        "calls": 36,
+        "phases": {
+          "carry": 0.783459,
+          "carry_sources": 0.768388,
+          "driver_calculation": 85.386333,
+          "selection": 41.118628,
+          "source": 22.384868,
+          "source_ledger": 0.66402,
+          "team_routing": 0.497784,
+          "truck_routing": 19.048941
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.360668
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.314724
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.218042
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 0.537303
+          },
+          "26bc2a17e9fe432e": {
+            "calls": 1,
+            "ms": 0.519652
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 1.328284
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.462513
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.383746
+          },
+          "318a496e82c47fa6": {
+            "calls": 2,
+            "ms": 1.486309
+          },
+          "32956c910995e963": {
+            "calls": 1,
+            "ms": 0.262743
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 41.04823
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 0.263527
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.832604
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.09138
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.242861
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.033206
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 2.344343
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.194393
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 1.864353
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 5.875434
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 3.353675
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 2.475498
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.298212
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.237425
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.382839
+          },
+          "bf244e481562969e": {
+            "calls": 1,
+            "ms": 0.238177
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 14.601063
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 0.897798
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.242933
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.086566
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.270716
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 1.254804
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.068481
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 83.05,
+      "p95_ms": 104.42,
+      "p99_ms": 122.55,
+      "max_ms": 157.05
+    },
+    "driver/save": {
+      "first_sample_diagnostics": {
+        "calls": 50,
+        "phases": {
+          "carry": 1.759433,
+          "carry_sources": 2.467567,
+          "driver_calculation": 44.373786,
+          "financial_lock_wait": 0.29814,
+          "save_calculation": 44.387297,
+          "selection": 54.467441,
+          "source": 22.060407,
+          "source_ledger": 0.789409,
+          "source_validation_write": 0.000458,
+          "team_routing": 0.568577,
+          "truck_routing": 18.912809,
+          "writes_and_commit": 17.740909
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.430679
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.213245
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.214809
+          },
+          "1508d4be4a278b6a": {
+            "calls": 2,
+            "ms": 4.023726
+          },
+          "1cc4055daa79a500": {
+            "calls": 1,
+            "ms": 4.533603
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 0.601023
+          },
+          "26bc2a17e9fe432e": {
+            "calls": 3,
+            "ms": 1.5194489999999998
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 1.359924
+          },
+          "2c1a8097a83053d7": {
+            "calls": 1,
+            "ms": 0.293117
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.533551
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.373529
+          },
+          "318a496e82c47fa6": {
+            "calls": 2,
+            "ms": 1.723782
+          },
+          "32956c910995e963": {
+            "calls": 1,
+            "ms": 0.273813
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 54.391536
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 0.451541
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.867502
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.120516
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.418805
+          },
+          "5b03d5ebc60a19f6": {
+            "calls": 1,
+            "ms": 0.210542
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 2.445789
+          },
+          "60ee519f1e2de972": {
+            "calls": 1,
+            "ms": 2.557207
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.220153
+          },
+          "668067a15fe5015b": {
+            "calls": 3,
+            "ms": 5.576887
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 5.760203
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 3.344056
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 2.282015
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.421245
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 1.120151
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.467269
+          },
+          "bf244e481562969e": {
+            "calls": 3,
+            "ms": 0.903422
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 13.652386
+          },
+          "d91d84de6d3765dc": {
+            "calls": 3,
+            "ms": 3.164399
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.083661
+          },
+          "e6f07d43b5c21db0": {
+            "calls": 1,
+            "ms": 0.065898
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.310453
+          },
+          "eff25901702c3968": {
+            "calls": 1,
+            "ms": 0.488695
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 1.297294
+          },
+          "f9b2b76c9817610c": {
+            "calls": 1,
+            "ms": 0.314725
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 110.57,
+      "p95_ms": 196.68,
+      "p99_ms": 261.06,
+      "max_ms": 328.35
+    },
+    "driver/save5": {
+      "samples": 500,
+      "errors": 0,
+      "p50_ms": 484.8,
+      "p95_ms": 683.46,
+      "p99_ms": 892.38,
+      "max_ms": 1336.4
+    },
+    "investor/cold": {
+      "first_sample_diagnostics": {
+        "calls": 33,
+        "phases": {
+          "investor_calculation": 225.441426,
+          "source": 102.954371,
+          "source_ledger": 1.76137,
+          "truck_routing": 106.504411
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 1.437266
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.461042
+          },
+          "0ab020717c3e05ff": {
+            "calls": 1,
+            "ms": 0.482108
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.244491
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 1.427463
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 4.998588
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.399713
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.511309
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 1.105427
+          },
+          "39345a47849a6a61": {
+            "calls": 1,
+            "ms": 0.183379
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.897831
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.079179
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.445434
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 2.406585
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 3.292559
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.826083
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 8.389198
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 17.768202
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 36.749261
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 3.941295
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.359473
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 1.542547
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.581964
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 2.570206
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 84.606779
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 2.235574
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.231372
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.094719
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.369655
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 1.154274
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 3.163633
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.08839
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 248.12,
+      "p95_ms": 294.15,
+      "p99_ms": 372.57,
+      "max_ms": 405.67
+    },
+    "investor/warm": {
+      "first_sample_diagnostics": {
+        "calls": 4,
+        "phases": {},
+        "queries": {
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.588724
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.226272
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.105369
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.120206
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 26.39,
+      "p95_ms": 31.89,
+      "p99_ms": 33.06,
+      "max_ms": 33.25
+    },
+    "investor/changed": {
+      "first_sample_diagnostics": {
+        "calls": 33,
+        "phases": {
+          "investor_calculation": 254.772636,
+          "source": 110.734382,
+          "source_ledger": 1.160265,
+          "truck_routing": 123.517139
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 1.390761
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.427981
+          },
+          "0ab020717c3e05ff": {
+            "calls": 1,
+            "ms": 0.407133
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.283287
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 3.965964
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 6.448771
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.392134
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.438309
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 1.358449
+          },
+          "39345a47849a6a61": {
+            "calls": 1,
+            "ms": 0.171281
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 1.134957
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.081473
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.728357
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.681379
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 3.146643
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.204496
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 7.194477
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 24.121803
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 43.745286
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 4.726675
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.674458
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.344741
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.556436
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 2.62742
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 90.449278
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 3.354298
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.294446
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.150789
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.481621
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.577933
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 3.871329
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.155121
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 218.04,
+      "p95_ms": 262.8,
+      "p99_ms": 315.93,
+      "max_ms": 343.66
+    },
+    "investor/expand": {
+      "first_sample_diagnostics": {
+        "calls": 35,
+        "phases": {
+          "investor_calculation": 42.789753,
+          "selection": 33.368347,
+          "source": 21.403669,
+          "source_ledger": 0.615631,
+          "truck_routing": 17.116263
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.494944
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.178271
+          },
+          "0ab020717c3e05ff": {
+            "calls": 1,
+            "ms": 0.13162
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.156204
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 0.527041
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 1.174157
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.468422
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.476396
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 1.043583
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 33.204759
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 0.554215
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.904656
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.121461
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.286202
+          },
+          "4dd8ef5123cbbfd3": {
+            "calls": 1,
+            "ms": 1.863164
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 2.031809
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.244387
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 1.638887
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 5.153387
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 3.421952
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 2.002959
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.314361
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.261257
+          },
+          "a4574eab7962277e": {
+            "calls": 1,
+            "ms": 0.347721
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 1.371363
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 13.656053
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 1.047293
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.209248
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.136404
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.255723
+          },
+          "ed953b87cfa1b357": {
+            "calls": 1,
+            "ms": 0.256431
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 0.823143
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.110281
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 78.74,
+      "p95_ms": 90.81,
+      "p99_ms": 93.85,
+      "max_ms": 94.07
+    },
+    "investor/save": {
+      "first_sample_diagnostics": {
+        "calls": 47,
+        "phases": {
+          "financial_lock_wait": 0.16162,
+          "investor_calculation": 40.76534,
+          "save_calculation": 40.767943,
+          "selection": 29.078292,
+          "source": 17.881151,
+          "source_ledger": 3.006212,
+          "source_validation_write": 13.346724,
+          "truck_routing": 17.942454,
+          "writes_and_commit": 22.786095
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.368444
+          },
+          "08c871aeb8c65225": {
+            "calls": 1,
+            "ms": 1.48274
+          },
+          "0ab020717c3e05ff": {
+            "calls": 1,
+            "ms": 0.201633
+          },
+          "0fc2a0cec7f38a38": {
+            "calls": 1,
+            "ms": 0.157472
+          },
+          "1ea16dca36b92ad2": {
+            "calls": 1,
+            "ms": 0.510905
+          },
+          "286afdef237fc1ec": {
+            "calls": 1,
+            "ms": 1.279071
+          },
+          "2c1a8097a83053d7": {
+            "calls": 1,
+            "ms": 0.158967
+          },
+          "2c1d63d4e53dbb0c": {
+            "calls": 1,
+            "ms": 0.395935
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.414733
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 0.939307
+          },
+          "352572c89c8b2893": {
+            "calls": 2,
+            "ms": 4.711789
+          },
+          "379f9dca2aa0e3d4": {
+            "calls": 1,
+            "ms": 29.020268
+          },
+          "39345a47849a6a61": {
+            "calls": 2,
+            "ms": 0.42032400000000003
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.960143
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.096799
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.527252
+          },
+          "5c73198e67c727ad": {
+            "calls": 2,
+            "ms": 2.2239970000000002
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.182512
+          },
+          "668067a15fe5015b": {
+            "calls": 1,
+            "ms": 1.72239
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 5.608379
+          },
+          "83753e68c4b500db": {
+            "calls": 2,
+            "ms": 1.210591
+          },
+          "87a2a2a800df40ad": {
+            "calls": 1,
+            "ms": 3.749993
+          },
+          "8c7d1ddca01c205c": {
+            "calls": 1,
+            "ms": 1.947422
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.363699
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 6.225979
+          },
+          "a4574eab7962277e": {
+            "calls": 3,
+            "ms": 1.7929629999999999
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 2.223684
+          },
+          "be5f710a3c003f20": {
+            "calls": 3,
+            "ms": 4.790706
+          },
+          "c99a12370082974c": {
+            "calls": 1,
+            "ms": 9.849867
+          },
+          "d91d84de6d3765dc": {
+            "calls": 1,
+            "ms": 1.054083
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 0.643851
+          },
+          "e6f07d43b5c21db0": {
+            "calls": 1,
+            "ms": 0.045246
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.474559
+          },
+          "ed953b87cfa1b357": {
+            "calls": 3,
+            "ms": 1.135128
+          },
+          "eec94d2d84fe32ea": {
+            "calls": 1,
+            "ms": 1.266697
+          },
+          "f068857305b52c40": {
+            "calls": 1,
+            "ms": 1.248317
+          },
+          "f179c7a670308f62": {
+            "calls": 1,
+            "ms": 1.371218
+          }
+        }
+      },
+      "samples": 100,
+      "errors": 0,
+      "p50_ms": 95.35,
+      "p95_ms": 124.66,
+      "p99_ms": 148.92,
+      "max_ms": 214.32
+    },
+    "investor/save5": {
+      "samples": 500,
+      "errors": 0,
+      "p50_ms": 521.54,
+      "p95_ms": 678.06,
+      "p99_ms": 827.59,
+      "max_ms": 913.72
+    }
+  }
+}

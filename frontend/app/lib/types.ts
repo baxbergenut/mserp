@@ -1033,6 +1033,7 @@ export interface PaySourceAcceptance {
 }
 export interface PayPageQuery {
   summary?: string;
+  detailIds?: string;
   page: number;
   pageSize: number;
   search: string;

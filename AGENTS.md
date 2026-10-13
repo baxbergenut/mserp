@@ -1754,6 +1754,24 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Working start dates and paginated payroll
 
+- Payroll latency diagnostics and the unresolved 300 ms p95 release gate are
+  documented in `docs/PAYROLL_PERFORMANCE.md`. `TestPayrollPerformance` is opt-in
+  with `MSERP_PAYROLL_PERF=1` and a disposable local `_test` database. Never use
+  production payroll writes for benchmarks. `perf-audit -explain` is read-only,
+  bounded to three seconds for its plan inspection, and removes plan expressions.
+- Payroll calculations share full-week and conservative selected dependency
+  scopes. Dated relationships remain historical; load/fuel source edges need
+  only the requested week plus unfrozen legacy weeks without collection records.
+  Outstanding balances are never discarded by a calendar cutoff. Save validation
+  bypasses the report cache and retains the financial locks. Query planning uses
+  transaction-local custom plans for the different full/selected cardinalities.
+- Paginated payroll GET accepts `detailIds` (up to 100 comma-separated UUIDs).
+  With `summary=1`, requested rows on the returned page keep full details from
+  the same snapshot. Remembered expansions use this option to avoid a second GET.
+  Existing whole-week revision and pagination metadata contracts remain intact.
+  Explicit unrelated operational cache dependencies are maintained in
+  `payroll_cache.go`; unknown tables still invalidate conservatively.
+
 - New-driver setup asks when the driver started working. Creation derives the
   assignment/roster Monday from hireDate; truck and dispatcher assignments share
   that week, and escrow starts on the actual selected date. Existing profile

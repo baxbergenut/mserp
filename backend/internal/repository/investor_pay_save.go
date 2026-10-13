@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"mserp/internal/db"
 	"strings"
 	"time"
 )
@@ -15,14 +16,23 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		return edits, err
 	}
 	defer tx.Rollback(ctx)
-	if err = lockTruckAccounting(ctx, tx); err != nil {
+	endLock := db.Phase(ctx, "financial_lock_wait")
+	err = lockTruckAccounting(ctx, tx)
+	endLock()
+	if err != nil {
 		return edits, err
 	}
 	week, err := chargeWeek(edits.WeekStart)
 	if err != nil {
 		return edits, err
 	}
+	ctx, err = selectPayrollContext(payrollWeekContext(ctx, edits.WeekStart), tx, "truck", edits.DriverID)
+	if err != nil {
+		return edits, err
+	}
+	endValidation := db.Phase(ctx, "save_calculation")
 	report, err := readInvestorPay(ctx, tx, week)
+	endValidation()
 	if err != nil {
 		return edits, err
 	}
@@ -44,6 +54,7 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if len(edits.GeneratedCharges) > 0 {
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
 	}
+	defer db.Phase(ctx, "writes_and_commit")()
 	if err = savePaySources(ctx, tx, *card, &edits, "investor", actor); err != nil {
 		return edits, err
 	}

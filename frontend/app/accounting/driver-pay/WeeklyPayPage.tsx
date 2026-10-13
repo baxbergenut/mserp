@@ -57,14 +57,16 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const onDetails = useCallback((expected: DriverPayDriver, detail: DriverPayDriver) => { setReport(current => current && applyPayDetails(current, expected, detail)); }, []);
   const [search, setSearch] = useViewState("page:search", "", targetId && !restoringView ? "" : undefined);
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId && !restoringView ? "all" : undefined);
-  const debouncedSearch = useDebouncedValue(search);
+  const debouncedSearch = useDebouncedValue(search, 16);
+  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
+  const openedRef = useRef(opened);
+  useLayoutEffect(() => { openedRef.current = opened; }, [opened]);
   const fetchPay = useCallback((selectedWeek: string, signal?: AbortSignal) => {
-    const query = { summary: "1", page, pageSize, search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter };
+    const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter };
     return investor ? fetchInvestorPay(selectedWeek, driverFilter || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
   }, [investor, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
   const loadedQuery = useRef("");
   const queryKey = JSON.stringify([week, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
-  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -122,7 +124,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     if (savingRef.current || invalid || !dirty || loading || refreshing) return;
     savingRef.current = true; setSaving(true); setError("");
     try {
-      for (const submitted of Object.values(changes)) {
+      for (const id of Object.keys(changesRef.current)) {
+        const submitted = changesRef.current[id];
+        if (!submitted || !validAdjustments(submitted, report?.drivers.find(row => row.id === id))) continue;
         const saved = await savePay(normalizedPayEdits(submitted));
         // Keyboard edits/undo can arrive before React commits the receipt render.
         // Adopt its versions immediately so that next draft never reuses an old one.
@@ -131,14 +135,14 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         setReport(current => current && applyPaySave(current, saved));
         setChanges(changesRef.current);
       }
-      setMessage("All changes saved");
+      if (Object.keys(changesRef.current).length === 0) setMessage("All changes saved");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save; your edits are still here."); }
     finally { savingRef.current = false; setSaving(false); }
-  }, [changes, dirty, invalid, loading, refreshing, savePay]);
+  }, [dirty, invalid, loading, refreshing, report, savePay]);
   useEffect(() => {
     if (!dirty || invalid || saving || loading || refreshing || error) return;
-    const timer = setTimeout(() => { void save(); }, 0);
-    return () => clearTimeout(timer);
+    const frame = requestAnimationFrame(() => { void save(); });
+    return () => cancelAnimationFrame(frame);
   }, [dirty, invalid, saving, loading, refreshing, error, save, pendingWeek, pendingLink]);
   useLayoutEffect(() => {
     undoLatest.current = async () => {
