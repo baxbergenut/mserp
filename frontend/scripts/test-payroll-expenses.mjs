@@ -27,7 +27,10 @@ try {
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
-        expenseDeductions: [{ expenseId: 'expense', name: 'Equipment', expenseDate: week, amount: '25.00', total: '100.00', available: '100.00', openingBalance: '100.00', remaining: '75.00', version: 1, saved: true }],
+        expenseDeductions: [
+          { expenseId: 'expense', name: 'Equipment', expenseDate: week, amount: '25.00', total: '100.00', available: '100.00', openingBalance: '100.00', remaining: '75.00', version: 1, saved: true },
+          { source: 'escrow', expenseId: 'escrow', name: 'Escrow', expenseDate: '2026-09-01', amount: '100.00', total: '2500.00', available: '2500.00', openingBalance: '2500.00', remaining: '2400.00', version: 1, saved: true },
+        ],
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
       },
     };
@@ -37,10 +40,12 @@ try {
     let writes = 0;
     const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
     const errors = [];
+    const expenseReads = [];
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.slice(4);
+      if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
       if (path === '/expenses/expense') {
         if (request.method() === 'PUT') {
           const input=request.postDataJSON(); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
@@ -75,6 +80,15 @@ try {
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
 
+    const escrowRow = region.getByRole('row').filter({ has: page.getByText('Escrow', {exact:true}) });
+    await expect(escrowRow.getByRole('button')).toHaveCount(0);
+    await expect(escrowRow.getByText('09/01', {exact:true})).toHaveCount(0);
+    await expect(escrowRow.getByText('Left: $2,400.00', {exact:true})).toBeVisible();
+    await expect(escrowRow.getByRole('textbox')).toBeEnabled();
+    await escrowRow.getByText('Escrow', {exact:true}).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(expenseReads).toEqual([]);
+
     await expect(region.getByText('09/28', {exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Open expense Equipment',exact:true}).click();
     let modal=page.getByRole('dialog',{name:'Edit entry'});
@@ -105,6 +119,8 @@ try {
     modal=page.getByRole('dialog',{name:'Expense details'});
     await expect(modal.getByLabel('Amount',{exact:true})).toBeDisabled();
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
+    expect(expenseReads.length).toBeGreaterThan(0);
+    expect(expenseReads.every(path => path === '/expenses/expense')).toBe(true);
     expect(errors).toEqual([]); await page.close();
   }
   console.log('Driver and Investor Pay expense dates, editing, fee boundaries, refresh and view-only access passed.');
