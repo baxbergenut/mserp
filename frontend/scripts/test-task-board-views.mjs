@@ -8,11 +8,11 @@ import { tmpdir } from 'node:os';
 
 const week = '2026-10-05';
 const users = [{ id: 'user', name: 'Test user' }, { id: 'teammate', name: 'Teammate' }];
-const assignments = ['driver_onboarding', 'driver_offboarding', 'relay_review'].map(kind => ({ kind, assigneeId: null, version: 1 }));
+const assignments = ['driver_onboarding', 'driver_offboarding', 'relay_review', 'escrow_release', 'five_eld_truck'].map(kind => ({ kind, assigneeId: null, version: 1 }));
 const driverId = '05400000-0000-0000-0000-000000000001';
 const driver = { id: driverId, fullName: 'Board Driver', driverType: '%-O', truckUnit: '123', phone: '', dispatcherId: 'dispatcher', dispatcherName: 'Test Dispatcher', location: null };
 const entry = { driverId, currentLoad: '', trailerNumber: '', status: '', destination: '', eta: '', notes: '', homeTime: '', version: 0 };
-const driverBoard = { weekStart: week, drivers: [driver], entries: [entry], grossEntries: [], loads: {}, eld: { configured: false } };
+const driverBoard = { weekStart: week, drivers: [driver], entries: [entry], grossEntries: [], loads: {}, eld: { configured: true, unmatched: 4, ambiguous: 0, invalid: 0 } };
 const grossRequests = [];
 let tasks = [];
 let taskReads = 0;
@@ -70,19 +70,26 @@ try {
       const task = { ...input, id: 'custom', assignedBy: 'user', assignerName: 'Test user', assigneeName: users.find(u => u.id === input.assignedTo)?.name ?? '', completedAt: null, createdAt: '2026-10-06T12:00:00Z', systemTaskKind: null };
       tasks = [task]; await route.fulfill({ status: method === 'POST' ? 201 : 200, json: task }); return;
     }
+    if (path === '/tasks/five-eld/eld') return route.fulfill({ json: { id: 'eld', vin: '1FUJGLDR0CLBP1234', unitNumber: '0012', version: 1, completed: false } });
+    if (path === '/tasks/five-eld/eld/complete') {
+      const input = route.request().postDataJSON();
+      expect(input.version).toBe(1); expect(input.truck.vin).toBe('1FUJGLDR0CLBP1236'); expect(input.truck.unitNumber).toBe('0013');
+      Object.assign(tasks.find(t => t.id === 'eld'), { completedAt: '2026-10-08T18:00:00Z', completedByName: 'Test user' });
+      return route.fulfill({ status: 201, json: { truckId: 'new-truck' } });
+    }
     if (path === '/gross-board') {
       const requested = url.searchParams.get('weekStart'); grossRequests.push(requested);
       await route.fulfill({ json: { weekStart: requested, drivers: [], entries: [], balances: [] } }); return;
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.write', 'fleet.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.write', 'fleet.write', 'fleet.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
       '/settings/access': { users: users.map(u => ({ id: u.id, username: u.name, email: `${u.id}@example.com`, active: true, roleId: 'role', version: 1 })), roles: [], permissions: [] },
       '/settings/system-tasks': assignments,
       '/tasks/users': users,
       '/tasks/custom': { items: tasks, total: tasks.length, page: 1, pageSize: 25, totalPages: 1 },
       '/tasks/relay-identities': { items: [{ id: 'system', name: 'New driver', environment: 'production', relayDriverId: 'relay-fixture', suggestions: [{ driverId: 'driver', name: 'New driver', active: true, reasons: ['Same email'] }], rejectedDriverIds: [], transactionCount: 1 }], total: 1, page: 1, pageSize: 25, totalPages: 1 },
       '/driver-intake': { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 },
-      '/driver-board': driverBoard, '/drivers': [],
+      '/driver-board': driverBoard, '/drivers': [], '/investors': [{ id: '00000000-0000-0000-0000-000000000001', fullName: 'MS Express', isCompany: true, active: true }],
     };
     await route.fulfill({ json: fixtures[path] ?? [] });
   });
@@ -93,7 +100,21 @@ try {
   await page.getByRole('button', { name: 'Save Driver onboarding assignment', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Driver onboarding assignment saved.');
   await page.reload();
-  await expect(page.getByLabel('Driver onboarding', { exact: true })).toHaveValue('teammate');
+  await expect(page.getByRole('group', { name: 'Driver onboarding assignees', exact: true })).toContainText('Teammate');
+  await page.getByLabel('Driver onboarding', { exact: true }).selectOption('user');
+  await page.getByRole('button', { name: 'Save Driver onboarding assignment', exact: true }).click();
+  expect(assignments.find(a => a.kind === 'driver_onboarding').assigneeIds).toEqual(['teammate', 'user']);
+  const remove = page.getByRole('button', { name: 'Remove Teammate from Driver onboarding', exact: true });
+  await expect(remove).toBeEnabled(); await remove.focus(); await page.clock.runFor(300); await expect(remove).toHaveCSS('opacity', '1'); await remove.click();
+  await page.getByRole('button', { name: 'Save Driver onboarding assignment', exact: true }).click();
+  expect(assignments.find(a => a.kind === 'driver_onboarding').assigneeIds).toEqual(['user']);
+  for (const label of ['Five ELD truck review', 'Escrow release (30 days after termination)']) {
+    await page.getByLabel(label, { exact: true }).selectOption('teammate');
+    await page.getByLabel(label, { exact: true }).selectOption('user');
+    await page.getByRole('button', { name: 'Save ' + label + ' assignment', exact: true }).click();
+    await expect(page.getByRole('group', { name: label + ' assignees', exact: true })).toContainText('Teammate');
+  }
+  await page.screenshot({ path: join(tmpdir(), 'mserp-system-task-assignees.png') });
   await page.goto(`${base}/tasks`);
   await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'System tasks', exact: true })).toHaveCount(0);
@@ -179,7 +200,20 @@ try {
     await page.getByRole('button', { name: 'List', exact: true }).click();
   }
   theme = 'default';
+  tasks.push({ id: 'eld', title: 'Review Five ELD truck 0012', notes: '', assigneeName: 'Test user', systemTaskKind: 'five_eld_truck', completedAt: null, createdAt: '2026-10-08T12:00:00Z' });
+  pushTasks(); await page.clock.runFor(1000);
+  await page.getByRole('button', { name: 'Review Five ELD truck 0012', exact: true }).click();
+  const review = page.getByRole('dialog');
+  await expect(review.getByLabel('VIN', { exact: true })).toHaveValue('1FUJGLDR0CLBP1234');
+  await expect(review.getByLabel('Unit number', { exact: true })).toHaveValue('0012');
+  await review.getByLabel('VIN', { exact: true }).fill('1FUJGLDR0CLBP1236');
+  await review.getByLabel('Unit number', { exact: true }).fill('0013');
+  await page.clock.runFor(300);
+  await page.screenshot({ animations: 'disabled', path: join(tmpdir(), 'mserp-five-eld-review.png') });
+  await review.getByRole('button', { name: 'Add truck to MSERP', exact: true }).click();
+  await expect(review).toHaveCount(0);
   await page.goto(`${base}/driver-board`);
+  await expect(page.getByText(/totals for shown drivers|Five ELD: .*need review/)).toHaveCount(0);
   const driverHeading = page.getByRole('rowheader').filter({ hasText: 'Board Driver' });
   await expect(driverHeading).toContainText('(%-O)');
   await expect(page.getByRole('columnheader', { name: 'Driver type', exact: true })).toHaveCount(0);

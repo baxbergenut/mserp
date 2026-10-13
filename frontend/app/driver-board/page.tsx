@@ -16,7 +16,7 @@ import { PhoneCell } from "./PhoneCell";
 import { LocationCell, formatCoordinates } from "./LocationCell";
 import { StatusCell } from "./StatusCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
-import { addDays, decimalDisplay, indexBoardEntries, shortDate, totals } from "@/app/gross-board/board";
+import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
 import { statuses, statusColor, formatETA, previewCurrentLoad } from "./board";
 import { useDriverBoard } from "./useDriverBoard";
 import { BoardHistory } from "./BoardHistory";
@@ -105,10 +105,9 @@ export default function DriverBoardPage() {
         const next = { id: existing?.id ?? crypto.randomUUID(), name, dispatcherIds };
         setSavedViews(current => [...current.filter(v => v.id !== next.id), next]); selectView(next.id);
       }} onDelete={id => { setSavedViews(current => current.filter(v => v.id !== id)); selectView("all"); }} />
-    <div className="ml-auto flex flex-wrap items-center gap-2">{board && <span className="mr-auto text-xs text-zinc-500">Week {shortDate(board.weekStart)}–{shortDate(addDays(board.weekStart, 6))} · New York · totals for shown drivers</span>}
+    <div className="ml-auto flex flex-wrap items-center gap-2">
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : canEdit ? "All changes saved" : "Read only"}</span>
       {board?.eld.configured && board.eld.lastError && <span className="text-xs text-amber-300">Five ELD refresh failed</span>}
-      {board?.eld.configured && (board.eld.unmatched + board.eld.ambiguous + board.eld.invalid > 0) && <span className="text-xs text-amber-300">Five ELD: {board.eld.unmatched + board.eld.ambiguous + board.eld.invalid} need review</span>}
       {canEdit && board?.eld.configured && <button className={buttonClass} onClick={() => void refreshELD()} disabled={loading || saving || dirty || eldRefreshing} title={board.eld.lastSuccessAt ? `Five ELD last refreshed ${locationTime(board.eld.lastSuccessAt)} NY` : "Refresh Five ELD locations"}><MapPin className="h-4 w-4" />{eldRefreshing ? "Refreshing…" : "Refresh locations"}</button>}
       <button className={buttonClass} onClick={reload} disabled={loading || saving}><RefreshCw className="h-4 w-4" />Reload</button>
       <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "History · shown drivers", ids: drivers.map(d => d.id) })}><History className="h-4 w-4" />History</button></div></div>

@@ -930,7 +930,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { kind: "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
+export interface SystemTaskAssignment { kind: "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -1253,3 +1253,5 @@ export type DispatcherExtensionAccess = {
   activatedAt: string | null; tokenExpiresAt: string | null;
   activationExpiresAt: string | null;
 };
+
+export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }

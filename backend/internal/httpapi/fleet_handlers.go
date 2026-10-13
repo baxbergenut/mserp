@@ -27,6 +27,8 @@ type fleetHandler struct {
 func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository) {
 	handler := fleetHandler{logger: logger, repo: repo}
 
+	r.Get("/tasks/five-eld/{id}", handler.fiveELDTruckTask)
+	r.Post("/tasks/five-eld/{id}/complete", handler.fiveELDTruckTask)
 	r.Get("/investors", handler.listInvestors)
 	r.Get("/investors/{id}", handler.getInvestor)
 	r.Post("/investors", handler.saveInvestor)

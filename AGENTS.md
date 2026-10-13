@@ -1870,3 +1870,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   observation dates, not acquisition dates. Fleet/financial locks and affected
   finalized driver/investor statements guard corrections. Investor agreement
   percentages and dates remain separate; correcting ownership never invents terms.
+
+## Five ELD truck reviews (migration 094)
+
+- Status Board no longer shows the Five ELD review counter or week/totals caption. Missing trucks from the latest successful Five ELD cache become durable `five_eld_truck` system tasks, matched against all local trucks by normalized VIN, including inactive/unassigned trucks. Ambiguous VINs never authorize creation.
+- Settings > System tasks supports multiple people for every category: name chips with hover/focus removal and an Add person dropdown, saved with the existing versioned assignment API. The Five ELD category initially belongs to the unique active Nate Finesse account; later assignment edits apply to existing and future tasks.
+- GET `/tasks/five-eld/{id}` and POST `/tasks/five-eld/{id}/complete` require task visibility plus fleet read/write. Review prefills provider VIN/unit in an editable truck form. Creation and task completion commit atomically with source-version/duplicate guards and a durable source identity/actor-name receipt. No driver assignments are inferred.
+- `TestFiveELDTruckTasksDatabase` uses local disposable `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`; `node scripts/test-task-board-views.mjs` covers review, multi-assignee chips, and caption removal.

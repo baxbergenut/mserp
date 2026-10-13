@@ -128,6 +128,9 @@ func (r *FiveELDRepository) StoreLocations(ctx context.Context, locations []Five
 	if err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `SELECT reconcile_five_eld_tasks()`); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 

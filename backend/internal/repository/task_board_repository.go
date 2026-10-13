@@ -35,7 +35,7 @@ const boardTaskCTE = `WITH tasks AS (
  WHERE ($1::boolean OR
  (t.system_task_kind IS NULL AND (t.assigned_to IS NULL OR t.assigned_to=NULLIF($2,'')::uuid OR t.assigned_by=NULLIF($2,'')::uuid)) OR
  (t.system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM app_users au WHERE au.active AND au.id=NULLIF($2,'')::uuid AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids)))))
- AND (t.system_task_kind IS DISTINCT FROM 'driver_onboarding' OR $3::boolean)
+ AND (coalesce(t.system_task_kind,'') NOT IN ('driver_onboarding','five_eld_truck') OR $3::boolean)
 ) `
 
 func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Pagination, search, status string, fleetRead bool) (Page[BoardTask], error) {
