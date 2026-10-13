@@ -543,5 +543,5 @@ export const changeRelayDrivers = (changes: RelayDriverChange[]) => apiRequest<R
 
 export const fetchDriverServices = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DriverServiceSetup>(`/driver-services/${id}`, { signal });
 export const requestDriverService = (id: string, input: import("./types").DriverServiceIntent) => apiRequest<void>(`/driver-services/${id}`, { method: "POST", body: JSON.stringify(input) });
-export const fetchDispatcherExtension = (id: string) => apiRequest<import("./types").DispatcherExtensionAccess>(`/settings/dispatcher-extension/${encodeURIComponent(id)}`);
-export const saveDispatcherExtension = (id: string, input: { enabled: boolean; accountLabel: string; version: number }) => apiRequest<{ activationCode: string }>(`/settings/dispatcher-extension/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
+export const fetchDispatcherExtension = (id: string, kind: "dispatcher" | "updater" = "dispatcher") => apiRequest<import("./types").DispatcherExtensionAccess>(`/settings/${kind}-extension/${encodeURIComponent(id)}`);
+export const saveDispatcherExtension = (id: string, input: { enabled: boolean; accountLabel: string; version: number }, kind: "dispatcher" | "updater" = "dispatcher") => apiRequest<{ activationCode: string }>(`/settings/${kind}-extension/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });

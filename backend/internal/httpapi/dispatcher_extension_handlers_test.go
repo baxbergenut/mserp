@@ -22,6 +22,12 @@ type extensionStoreFake struct {
 func (s *extensionStoreFake) DispatcherExtensionAccess(context.Context, string) (repository.DispatcherExtensionAccess, error) {
 	return repository.DispatcherExtensionAccess{Enabled: s.enabled, Version: s.version}, nil
 }
+func (s *extensionStoreFake) UpdaterExtensionAccess(ctx context.Context, id string) (repository.DispatcherExtensionAccess, error) {
+	return s.DispatcherExtensionAccess(ctx, id)
+}
+func (s *extensionStoreFake) SetUpdaterExtensionAccess(ctx context.Context, id, actor, label, hash string, v int, enabled bool) error {
+	return s.SetDispatcherExtensionAccess(ctx, id, actor, label, hash, v, enabled)
+}
 func (s *extensionStoreFake) SetDispatcherExtensionAccess(_ context.Context, _, _, _, hash string, v int, enabled bool) error {
 	if v != s.version {
 		return repository.ErrAccessConflict
@@ -48,6 +54,12 @@ func (s *extensionStoreFake) CheckDispatcherExtension(_ context.Context, t strin
 }
 
 func TestDispatcherExtensionBoundaries(t *testing.T) {
+	for _, kind := range []string{"dispatcher", "updater"} {
+		t.Run(kind, func(t *testing.T) { testExtensionBoundaries(t, kind) })
+	}
+}
+
+func testExtensionBoundaries(t *testing.T, kind string) {
 	store := &extensionStoreFake{}
 	r := chi.NewRouter()
 	p := chi.NewRouter()
@@ -69,7 +81,7 @@ func TestDispatcherExtensionBoundaries(t *testing.T) {
 		r.ServeHTTP(w, q)
 		return w
 	}
-	adminPath := "/settings/dispatcher-extension/11111111-1111-4111-8111-111111111111"
+	adminPath := "/settings/" + kind + "-extension/11111111-1111-4111-8111-111111111111"
 	if w := call(adminPath, "PUT", `{"enabled":true,"version":0}`, "", ""); w.Code != 403 {
 		t.Fatal("missing CSRF accepted")
 	}

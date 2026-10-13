@@ -307,6 +307,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Optional `MSERP_EXTENSION_TEST_DATABASE_URL` runs fresh/migrated local `_test`
   database coverage as mserp_app. Package with `extensions/package-dispatcher.ps1`.
   See `extensions/dispatcher/README.md` for installation, limits and future ranking.
+- Migration 092 adds separate `updater_extension_access` records. Updaters have
+  an access.manage-only Chrome extension action on /dispatchers using the shared
+  ExtensionAccess card and GET/PUT `/settings/updater-extension/{id}`. The existing
+  activation/check endpoints accept both profile types, so installed extensions
+  need no update. Deleting an updater cascades access; explicit revoke/replace
+  invalidates its token. Updaters have no active flag; assignment/shift changes
+  preserve access. Never create a dispatcher solely to activate an updater.
 
 ### Backend environment
 

@@ -9,7 +9,8 @@ import (
 )
 
 type DispatcherExtensionAccess struct {
-	DispatcherID        string     `json:"dispatcherId"`
+	DispatcherID        string     `json:"dispatcherId,omitempty"`
+	UpdaterID           string     `json:"updaterId,omitempty"`
 	Enabled             bool       `json:"enabled"`
 	AccountLabel        string     `json:"accountLabel"`
 	Version             int        `json:"version"`
@@ -69,9 +70,15 @@ func (r *AuthRepository) SetDispatcherExtensionAccess(ctx context.Context, id, a
 func (r *AuthRepository) ActivateDispatcherExtension(ctx context.Context, codeHash, tokenHash string) (string, error) {
 	var name string
 	err := r.pool.QueryRow(ctx, `UPDATE dispatcher_extension_access a SET activation_hash=NULL,activation_expires_at=NULL,
- token_hash=$2,token_expires_at=now()+interval '30 days',activated_at=now(),version=version+1
+ token_hash=$2,token_expires_at=now()+interval '30 days',activated_at=now(),version=a.version+1
  FROM dispatchers d WHERE a.dispatcher_id=d.id AND d.active AND a.enabled AND a.activation_hash=$1 AND a.activation_expires_at>now()
  RETURNING d.full_name`, codeHash, tokenHash).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = r.pool.QueryRow(ctx, `UPDATE updater_extension_access a SET activation_hash=NULL,activation_expires_at=NULL,
+ token_hash=$2,token_expires_at=now()+interval '30 days',activated_at=now(),version=a.version+1
+ FROM updaters u WHERE a.updater_id=u.id AND a.enabled AND a.activation_hash=$1 AND a.activation_expires_at>now()
+ RETURNING u.full_name`, codeHash, tokenHash).Scan(&name)
+	}
 	return name, err
 }
 
@@ -81,5 +88,9 @@ func (r *AuthRepository) CheckDispatcherExtension(ctx context.Context, hash stri
 	var name string
 	err := r.pool.QueryRow(ctx, `SELECT d.full_name FROM dispatcher_extension_access a JOIN dispatchers d ON d.id=a.dispatcher_id
  WHERE a.token_hash=$1 AND a.enabled AND d.active AND a.token_expires_at>now()`, hash).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = r.pool.QueryRow(ctx, `SELECT u.full_name FROM updater_extension_access a JOIN updaters u ON u.id=a.updater_id
+ WHERE a.token_hash=$1 AND a.enabled AND a.token_expires_at>now()`, hash).Scan(&name)
+	}
 	return name, err
 }

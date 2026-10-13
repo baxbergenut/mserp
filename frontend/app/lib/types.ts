@@ -1249,7 +1249,7 @@ export interface DriverServiceSetup {
   policies: RelayDriverPolicy[]; canLinkRelay: boolean; environment: string; checkedAt: string;
 }
 export type DispatcherExtensionAccess = {
-  dispatcherId: string; enabled: boolean; accountLabel: string; version: number;
+  dispatcherId?: string; updaterId?: string; enabled: boolean; accountLabel: string; version: number;
   activatedAt: string | null; tokenExpiresAt: string | null;
   activationExpiresAt: string | null;
 };

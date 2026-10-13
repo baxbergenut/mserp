@@ -10,7 +10,8 @@ Private Chrome Manifest V3 extension, version 0.1.0.
    turn on **Developer mode**, choose **Load unpacked**, and select the folder
    containing `manifest.json`. Keep the extracted folder on the computer.
 3. In MSERP, open the dispatcher's details. An administrator with `access.manage`
-   can **Enable and create code** in **Dispatcher Chrome extension**.
+   can **Enable and create code** in **Dispatcher Chrome extension**. For an updater
+   (migration 092), use **Chrome extension** beside their name in the Updaters table.
 4. Paste the code into the extension's toolbar popup and click **Activate**.
    Codes expire in 10 minutes and can be redeemed once. This authorizes one
    browser for 30 days. A replacement code revokes the previous browser.

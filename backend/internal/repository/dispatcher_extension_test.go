@@ -41,6 +41,10 @@ func TestDispatcherExtensionDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	updaterMigration, err := os.ReadFile("../../sql/092_updater_extension.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migrated"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("extension_test_%d", time.Now().UnixNano())
@@ -62,6 +66,7 @@ func TestDispatcherExtensionDatabase(t *testing.T) {
 				}
 				exec(before + "COMMIT;")
 				exec(string(migration))
+				exec(string(updaterMigration))
 			}
 			const id = "11111111-1111-4111-8111-111111111111"
 			// Older baseline tables get their production grants during provisioning.
@@ -152,6 +157,7 @@ func TestDispatcherExtensionDatabase(t *testing.T) {
 			if e != nil || a.Enabled {
 				t.Fatal("deactivation did not revoke")
 			}
+			testUpdaterExtensionLifecycle(t, ctx, repo, exec, actor)
 			exec(`UPDATE app_users SET active=false WHERE id=$1`, actor)
 			if e = repo.SetDispatcherExtensionAccess(ctx, id, actor, "", "bad", a.Version, true); !errors.Is(e, ErrAccessConflict) {
 				t.Fatal("revoked administrator accepted", e)
@@ -161,5 +167,96 @@ func TestDispatcherExtensionDatabase(t *testing.T) {
 				t.Fatal("audit", audits, e)
 			}
 		})
+	}
+}
+
+func testUpdaterExtensionLifecycle(t *testing.T, ctx context.Context, repo *AuthRepository, exec func(string, ...any), actor string) {
+	t.Helper()
+	const id = "33333333-3333-4333-8333-333333333333"
+	exec(`INSERT INTO updaters(id,full_name,normalized_name,shift) VALUES($1,'Test Updater','test updater','main')`, id)
+	a, err := repo.UpdaterExtensionAccess(ctx, id)
+	if err != nil || a.Version != 0 || a.Enabled || a.UpdaterID != id || a.DispatcherID != "" {
+		t.Fatalf("updater initial: %+v %v", a, err)
+	}
+	issue := func(code string) {
+		t.Helper()
+		a, err := repo.UpdaterExtensionAccess(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = repo.SetUpdaterExtensionAccess(ctx, id, actor, "Roy", code, a.Version, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	issue("updater-code-one")
+	if err = repo.SetUpdaterExtensionAccess(ctx, id, actor, "", "stale", 0, true); !errors.Is(err, ErrAccessConflict) {
+		t.Fatal("stale updater write accepted", err)
+	}
+	var wg sync.WaitGroup
+	results := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.ActivateDispatcherExtension(ctx, "updater-code-one", "updater-token-one")
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatal(err)
+		}
+	}
+	if successes != 1 {
+		t.Fatal("updater code not single use")
+	}
+	if name, err := repo.CheckDispatcherExtension(ctx, "updater-token-one"); err != nil || name != "Test Updater" {
+		t.Fatal("updater token rejected", name, err)
+	}
+	issue("updater-code-two")
+	if _, err := repo.CheckDispatcherExtension(ctx, "updater-token-one"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("updater replacement did not revoke", err)
+	}
+	exec(`UPDATE updater_extension_access SET activation_expires_at=now()-interval '1 second' WHERE updater_id=$1`, id)
+	if _, err := repo.ActivateDispatcherExtension(ctx, "updater-code-two", "invalid"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("expired updater code accepted", err)
+	}
+	issue("updater-code-three")
+	if _, err := repo.ActivateDispatcherExtension(ctx, "updater-code-three", "updater-token-three"); err != nil {
+		t.Fatal(err)
+	}
+	a, err = repo.UpdaterExtensionAccess(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.SetUpdaterExtensionAccess(ctx, id, actor, "", "", a.Version, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CheckDispatcherExtension(ctx, "updater-token-three"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("revoked updater token accepted", err)
+	}
+	issue("updater-code-four")
+	if _, err := repo.ActivateDispatcherExtension(ctx, "updater-code-four", "updater-token-four"); err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE updater_extension_access SET token_expires_at=now()-interval '1 second' WHERE updater_id=$1`, id)
+	if _, err := repo.CheckDispatcherExtension(ctx, "updater-token-four"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("expired updater token accepted", err)
+	}
+	issue("updater-code-five")
+	if _, err := repo.ActivateDispatcherExtension(ctx, "updater-code-five", "updater-token-five"); err != nil {
+		t.Fatal(err)
+	}
+	exec(`DELETE FROM updaters WHERE id=$1`, id)
+	if _, err := repo.CheckDispatcherExtension(ctx, "updater-token-five"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("deleted updater token accepted", err)
+	}
+	if err := repo.SetUpdaterExtensionAccess(ctx, id, actor, "", "bad", 0, true); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatal("deleted updater enabled", err)
 	}
 }
