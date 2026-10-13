@@ -420,15 +420,17 @@ export const fetchExpensesPage = (query: PageQuery & {
   truckId?: string;
   driverId?: string;
 }, signal?: AbortSignal) => paginatedRequest<ExpensePage>(withQuery("/expenses", query), signal);
+export const fetchExpense = (id: string, signal?: AbortSignal) => apiRequest<Expense>(`/expenses/${id}`, { signal });
+
 export const createExpense = (input: ExpenseInput) =>
   apiRequest<Expense>("/expenses", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, baseAmount: input.amount }),
   });
 export const createExpenses = (expenses: ExpenseInput[]) =>
   apiRequest<Expense[]>("/expenses/bulk", {
     method: "POST",
-    body: JSON.stringify({ expenses }),
+    body: JSON.stringify({ expenses: expenses.map(input => ({ ...input, baseAmount: input.amount })) }),
   });
 export const extractExpenses = (text: string, file: File | null) => {
   const form = new FormData();
@@ -448,7 +450,7 @@ export const verifyExpense = (id: string, updatedAt: string) =>
 export const updateExpense = (id: string, input: ExpenseInput) =>
   apiRequest<Expense>(`/expenses/${id}`, {
     method: "PUT",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, baseAmount: input.amount }),
   });
 export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });

@@ -52,7 +52,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 				}
 				exec(before)
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,amount,expense_date) SELECT 'Historical company',id,name,'Before migration',7,'2026-10-12' FROM expense_settings WHERE kind='category' AND name='Other'`)
-				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql"} {
+				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)
@@ -170,6 +170,34 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 					t.Fatal("filter choices lost on filtered/empty result")
 				}
 			}
+			// Fee totals feed the same payment ledger used by both payroll reports.
+			principal := "634.00"
+			input.Amount, input.BaseAmount, input.PaymentFee = "640.00", &principal, "6.00"
+			input.PaymentType, input.CoveredBy = payTestString("EFS"), payTestString("Driver")
+			input.ExpenseType = payTestString("EFS fixture")
+			feeExpense, err := repo.CreateExpense(ctx, input)
+			if err != nil || feeExpense.BaseAmount == nil || *feeExpense.BaseAmount != principal || *feeExpense.Amount != "640.00" || feeExpense.PaymentFee != "6.00" || *feeExpense.RemainingAmount != "640.00" {
+				t.Fatalf("fee expense: %+v %v", feeExpense, err)
+			}
+			input.UpdatedAt = &feeExpense.UpdatedAt
+			input.Description = payTestString("Details edited")
+			updatedFee, err := repo.UpdateExpense(ctx, feeExpense.ID, input)
+			if err != nil || *updatedFee.Amount != "640.00" {
+				t.Fatal("fee compounded on edit", err)
+			}
+			if _, err := repo.UpdateExpense(ctx, feeExpense.ID, input); err != ErrExpenseSettingConflict {
+				t.Fatal("stale expense edit accepted", err)
+			}
+			for _, query := range []string{
+				"UPDATE expense_settings SET active=false WHERE kind='payment_method' AND name='EFS'",
+				"UPDATE expense_settings SET name='Other EFS' WHERE kind='payment_method' AND name='EFS'",
+				"DELETE FROM expense_settings WHERE kind='payment_method' AND name='EFS'",
+			} {
+				if _, err := pool.Exec(ctx, query); err == nil {
+					t.Fatal("permanent EFS modified", query)
+				}
+			}
+
 		})
 	}
 }

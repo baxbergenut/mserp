@@ -1246,6 +1246,21 @@ assignment lookup lists.
   Database tests use MSERP_DRIVER_PAY_TEST_DATABASE_URL for fresh and migrated schemas
   as mserp_app; test-driver-charges-e2e.mjs includes expense-settings-e2e.mjs.
 
+- Driver Pay and Investor Pay share expense MM/DD dates and the in-page
+  ExpenseEditModal. GET /expenses/{id} requires category View; updates retain
+  category Edit/Create rules and optionally check updatedAt for stale edits.
+  Opening from payroll waits for pending payroll edits to save; saving reloads
+  the current report. Finalized financial guards remain authoritative.
+- Migration 089 makes EFS a permanent active payment method (no rename/archive/delete).
+  Fee-aware expense requests send baseAmount; the server computes $3 for each
+  started $500 using exact arithmetic (zero has no fee, negatives are rejected).
+  amount remains the fee-inclusive ledger total; baseAmount/paymentFee preserve
+  the breakdown for editing without compounding. Manual and AI batch forms preview
+  fees. Existing historical totals are unchanged by migration; saving an EFS entry
+  through the fee-aware form applies the displayed fee. Legacy requests retain
+  their total-amount contract. node scripts/test-payroll-expenses.mjs covers both
+  payroll pages, fee boundaries, refresh and view-only access.
+
 - Expense type is labeled Name in manual and AI review forms, required after Category.
   The API retains expenseType for compatibility and requires a nonblank name on writes.
   Driver Pay shows this name and a negative deduction amount; unnamed legacy records

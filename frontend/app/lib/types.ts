@@ -705,6 +705,8 @@ export interface ExpenseVerification {
 }
 
 export interface Expense {
+	baseAmount?: string | null;
+	paymentFee?: string;
   verifications: ExpenseVerification[];
  payments: {weekStart: string; amount: string}[];
  ownerId: string | null;
@@ -756,6 +758,7 @@ export interface DriverEscrowSetting {
 }
 
 export interface ExpenseInput {
+	updatedAt?: string;
  ownerId?: string | null;
   categoryId: string;
   expenseDate: string;

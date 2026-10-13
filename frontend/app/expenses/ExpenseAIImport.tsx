@@ -1,5 +1,7 @@
 "use client";
 
+import { ExpenseFeePreview } from "./ExpenseFeePreview";
+
 import { useRef, useState } from "react";
 import type { ClipboardEvent, DragEvent } from "react";
 import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
@@ -242,7 +244,7 @@ export function ExpenseBatchEditor({
                     {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} /></td>
                 <td className="px-2 py-2"><input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>

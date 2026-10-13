@@ -10,6 +10,37 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestExpenseEFSFee(t *testing.T) {
+	for _, tc := range []struct{ base, fee, total string }{
+		{"0", "0.00", "0.00"}, {"0.01", "3.00", "3.01"},
+		{"300", "3.00", "303.00"}, {"500", "3.00", "503.00"},
+		{"500.01", "6.00", "506.01"}, {"634", "6.00", "640.00"},
+		{"1000", "6.00", "1006.00"}, {"1000.01", "9.00", "1009.01"},
+	} {
+		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &tc.base, Amount: "999", PaymentType: " eFs "}
+		value, err := r.validate()
+		if err != nil || value.Amount != tc.total || value.PaymentFee != tc.fee || *value.BaseAmount != tc.base {
+			t.Fatalf("%s: %+v %v", tc.base, value, err)
+		}
+		r.Amount = value.Amount // Editing a saved total must use the original base, not compound the fee.
+		second, err := r.validate()
+		if err != nil || second.Amount != tc.total {
+			t.Fatal("fee compounded", second, err)
+		}
+		r.PaymentType = "Cash"
+		value, err = r.validate()
+		if err != nil || value.Amount != tc.base || value.PaymentFee != "0.00" {
+			t.Fatal("fee remained after switching method", value, err)
+		}
+	}
+	for _, base := range []string{"-1", "1.001", "", "abc"} {
+		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &base, PaymentType: "EFS"}
+		if _, err := r.validate(); err == nil {
+			t.Fatal("invalid EFS base accepted", base)
+		}
+	}
+}
+
 func TestExpenseRequestIgnoresRetiredCompany(t *testing.T) {
 	for _, legacy := range []string{"", `,"company":"Historical company"`, `,"company":null`} {
 		body := `{"categoryId":"` + testExpenseCategoryID + `","expenseDate":"2026-10-12","expenseType":"Repair","amount":"10"` + legacy + `}`

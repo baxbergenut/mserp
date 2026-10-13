@@ -397,7 +397,7 @@ export default function ExpensesPage() {
                     <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
-                    <span tabIndex={0} title={"Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>
+                    <span tabIndex={0} title={(expense.paymentFee && expense.paymentFee !== "0.00" ? "Base: " + formatMoney(expense.baseAmount ?? expense.amount) + "\nEFS fee: " + formatMoney(expense.paymentFee) + "\n" : "") + "Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

@@ -37,6 +37,7 @@ func registerExpenseRoutes(
 	r.Post("/expense-settings", handler.saveSetting)
 	r.Put("/expense-settings/{id}", handler.saveSetting)
 	r.Get("/expenses", handler.listExpenses)
+	r.Get("/expenses/{id}", handler.getExpense)
 	r.Post("/expenses", handler.createExpense)
 	r.Post("/expenses/bulk", handler.createExpenses)
 	r.Post("/expenses/extract", handler.extractExpenses)
@@ -47,7 +48,9 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
-	OwnerID *string `json:"ownerId"`
+	BaseAmount *string    `json:"baseAmount"`
+	UpdatedAt  *time.Time `json:"updatedAt"`
+	OwnerID    *string    `json:"ownerId"`
 
 	LegacyCompany      json.RawMessage `json:"company,omitempty"` // Ignored for clients opened before the field was retired.
 	CategoryID         string          `json:"categoryId"`
@@ -95,6 +98,27 @@ type expenseExtractionResponse struct {
 }
 
 func (request expenseRequest) validate() (repository.ExpenseInput, error) {
+	fee := "0.00"
+	if request.BaseAmount != nil {
+		base := strings.TrimSpace(*request.BaseAmount)
+		if !expenseAmountPattern.MatchString(base) {
+			return repository.ExpenseInput{}, errors.New("amount must be a decimal value with at most two decimal places")
+		}
+		request.BaseAmount = &base
+		request.Amount = base
+		if strings.EqualFold(strings.TrimSpace(request.PaymentType), "EFS") {
+			principal, _ := new(big.Rat).SetString(base)
+			if principal.Sign() < 0 {
+				return repository.ExpenseInput{}, errors.New("EFS amount must be nonnegative")
+			}
+			cents := new(big.Rat).Mul(principal, big.NewRat(100, 1)).Num()
+			blocks := new(big.Int).Quo(new(big.Int).Add(cents, big.NewInt(49999)), big.NewInt(50000))
+			feeValue := new(big.Rat).SetInt(new(big.Int).Mul(blocks, big.NewInt(3)))
+			fee = feeValue.FloatString(2)
+			request.Amount = new(big.Rat).Add(principal, feeValue).FloatString(2)
+			request.PaymentType = "EFS"
+		}
+	}
 	request.CategoryID = strings.TrimSpace(request.CategoryID)
 	request.Amount = strings.TrimSpace(request.Amount)
 	request.ExpenseType = strings.TrimSpace(request.ExpenseType)
@@ -142,6 +166,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		}
 	}
 	return repository.ExpenseInput{
+		BaseAmount: request.BaseAmount, PaymentFee: fee, UpdatedAt: request.UpdatedAt,
 		OwnerID:    request.OwnerID,
 		CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
 		TruckID: request.TruckID, DriverID: request.DriverID,
@@ -488,6 +513,24 @@ func validExtractedAmount(value *string) string {
 	return rational.FloatString(2)
 }
 
+func (handler expenseHandler) getExpense(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	value, err := handler.repo.GetExpense(r.Context(), id)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, value.CategoryID, "view") {
+		writeAPIError(w, http.StatusForbidden, "you do not have permission to view entries in that category")
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
 func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
@@ -581,6 +624,10 @@ func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categor
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpenseSettingConflict) {
+		writeAPIError(w, http.StatusConflict, "expense changed; close and reopen it before saving")
+		return
+	}
 	if errors.Is(err, repository.ErrNotFound) {
 		writeAPIError(w, http.StatusNotFound, "record not found")
 		return

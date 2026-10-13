@@ -2,6 +2,7 @@
 
 import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { expenseAssignment } from "./assignments";
+import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
 
 import type { Driver, Expense, ExpensePage, ExpenseInput, Investor, Truck } from "../lib/types";
@@ -31,6 +32,7 @@ export const emptyExpenseInput: ExpenseInput = {
 
 export function expenseToInput(expense: Expense): ExpenseInput {
   return {
+    updatedAt: expense.updatedAt,
     ownerId: expense.ownerId,
     categoryId: expense.categoryId,
     expenseDate: expense.expenseDate ?? "",
@@ -38,7 +40,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     driverId: expense.driverId,
     unitNumber: expense.unitNumber ?? "",
     driverName: expense.driverName ?? "",
-    amount: expense.amount ?? "",
+    amount: expense.baseAmount ?? expense.amount ?? "",
     paymentType: expense.paymentType ?? "",
     expenseType: expense.expenseType ?? "",
     referenceNumber: expense.referenceNumber ?? "",
@@ -120,6 +122,7 @@ export function ExpenseForm({
             className={controlClass}
             placeholder="0.00"
           />
+          <ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} />
         </Field>
       </FormSection>
 

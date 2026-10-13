@@ -86,6 +86,11 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(dropCompany))
+				efs, readErr := os.ReadFile("../../sql/089_expense_efs.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(efs))
 			} else {
 				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
