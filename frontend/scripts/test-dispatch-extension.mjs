@@ -53,6 +53,7 @@ await appendFile(join(extension, 'sound.js'), '\nconst actualPlay = DispatchWatc
 const context = await chromium.launchPersistentContext(join(profile, 'browser'), {headless: true, channel: 'chromium', viewport: {width: 1280, height: 800},
   args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]});
 const errors = [], requests = [], apiChecks = [];
+const tabRequests = new Map(), tabPages = new Map(), limitedTabs = new Set();
 let revoked = false, rateLimited = false;
 let pages = [[job('TESTLOW', 500), job('TEST001')], [job('TEST002', 4200)]];
 try {
@@ -68,11 +69,14 @@ try {
       throw new Error(`Unexpected ERP endpoint: ${url.pathname}`);
     }
     if (url.pathname === '/carrier/secure/loadboard/graphql/native') {
-      requests.push(Date.now());
-      const n = route.request().postDataJSON().page;
-      if (rateLimited) return route.fulfill({status: 429, json: {error: 'rate limited'}});
+      const {page: n, board: boardName} = route.request().postDataJSON();
+      if (boardName === 'main') requests.push(Date.now());
+      if (!tabRequests.has(boardName)) tabRequests.set(boardName, []);
+      tabRequests.get(boardName).push(Date.now());
+      const resultPages = tabPages.get(boardName) || pages;
+      if ((boardName === 'main' && rateLimited) || limitedTabs.has(boardName)) return route.fulfill({status: 429, json: {error: 'rate limited'}});
       return route.fulfill({json: {data: {searchJobsElastic: {success: true, status: 'OK', data: {
-        page: n, pageSize: 100, totalPages: pages.length, totalElements: pages.flat().length, jobs: pages[n]
+        page: n, pageSize: 100, totalPages: resultPages.length, totalElements: resultPages.flat().length, jobs: resultPages[n]
       }}}}});
     }
     if (url.pathname === '/carrier/ngx/load-board/grid') return route.fulfill({contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><title>Carrier 360 synthetic fixture</title><style>
@@ -80,7 +84,7 @@ try {
       <h1>Find Loads — synthetic test</h1><div><label>Native origin <input id="origin" value="Chicago"></label><button data-cy="lb-grid-refresh-button" aria-label="Refresh">Refresh</button><button id="repaint">Repaint rows</button></div>
       <div class="table-wrap"><table><thead><tr><th>Load</th><th>Price</th></tr></thead><tbody></tbody></table></div>
       <div class="p-paginator"><button aria-label="Go to first page" disabled>First</button><button aria-label="Go to next page">Next</button><label>Rows <select><option>100</option></select></label><div class="p-paginator-right-content"></div></div></main>
-      <script>let page=0;async function search(n){page=n;const endpoint='/carrier/secure/loadboard/graphql/native';const payload=JSON.stringify({page:n});let body;
+      <script>let page=0;async function search(n){page=n;const endpoint='/carrier/secure/loadboard/graphql/native';const payload=JSON.stringify({page:n,board:new URL(location.href).searchParams.get('board')||'main'});let body;
       if(n===1){body=await new Promise(resolve=>{const x=new XMLHttpRequest();x.open('POST',endpoint);x.onload=()=>resolve(x.status===200?JSON.parse(x.responseText):null);x.send(payload);});}else{const r=await fetch(endpoint,{method:'POST',body:payload});if(!r.ok)return;body=await r.json();}if(!body)return;const d=body.data.searchJobsElastic.data;
       const markup=d.jobs.map(j=>'<tr data-cy="lb-table-row"><td id="jobIdentifier">'+j.jobIdentifier+'</td><td>'+j.bookNowPrice+'</td></tr>').join('');
       document.querySelector('tbody').innerHTML=markup;document.querySelector('#repaint').onclick=()=>{document.querySelector('tbody').innerHTML=markup;};
@@ -172,7 +176,50 @@ try {
   await expect(bar.locator('#settings')).toBeInViewport();
   await page.screenshot({path: join(profile, 'compact.png')});
   await settings.screenshot({path: join(profile, 'settings.png'), fullPage: true});
+  // Actual simultaneous content scripts: separate searches/history, shared
+  // preferences, and pausing, closing or rate-limiting one leaves others running.
+  const boards = [];
+  for (const name of ['alpha', 'bravo', 'charlie']) {
+    tabPages.set(name, [[job('BASE001')]]);
+    const board = await context.newPage();
+    board.on('pageerror', e => errors.push(e.message));
+    await board.goto(`https://scm.jbhunt.com/carrier/ngx/load-board/grid?board=${name}`);
+    await board.locator('#origin').fill(name);
+    boards.push(board);
+  }
+  // Simulate upgrading with the old profile-wide lock still in session storage.
+  await worker.evaluate(() => chrome.storage.session.set({watchOwner: {tabId: 999999, lastSeen: Date.now()}}));
+  await Promise.all(boards.map(board => board.getByRole('button', {name: '▶ Play', exact: true}).click()));
+  for (const board of boards) await expect(board.locator('#status')).toContainText('Running', {timeout: 12000});
+  tabPages.get('alpha')[0].push(job('SHARED01'));
+  await expect(boards[0].locator('#new')).toHaveText('New loads (1)', {timeout: 10000});
+  await expect(boards[1].locator('#new')).toHaveText('New loads (0)');
+  tabPages.get('bravo')[0].push(job('SHARED01'));
+  await expect(boards[1].locator('#new')).toHaveText('New loads (1)', {timeout: 10000});
+  assert.equal(await boards[0].locator('html').getAttribute('data-test-notifications'), '1');
+  assert.equal(await boards[1].locator('html').getAttribute('data-test-notifications'), '1', 'same ID independently alerts in another tab');
+  await boards[0].getByRole('button', {name: 'Ⅱ Pause', exact: true}).click();
+  const alphaCount = tabRequests.get('alpha').length, bravoCount = tabRequests.get('bravo').length;
+  await expect.poll(() => tabRequests.get('bravo').length, {timeout: 10000}).toBeGreaterThan(bravoCount);
+  assert.equal(tabRequests.get('alpha').length, alphaCount, 'Pause stops only its own tab');
+  await settings.locator('[name="interval"]').fill('5');
+  await settings.locator('[name="highlight"]').selectOption('blue');
+  await settings.getByRole('button', {name: 'Save settings', exact: true}).click();
+  for (const board of boards.slice(1)) await expect(board.locator('#status')).toContainText('5s', {timeout: 12000});
+  await expect(boards[1].locator('.mserp-watch-blue')).toHaveCount(1);
+  limitedTabs.add('bravo');
+  await expect(boards[1].locator('#status')).toContainText('rate limited', {timeout: 12000});
+  await boards[1].close();
+  const charlieCount = tabRequests.get('charlie').length;
+  await expect.poll(() => tabRequests.get('charlie').length, {timeout: 12000}).toBeGreaterThan(charlieCount);
+  await expect(boards[2].getByRole('button', {name: 'Ⅱ Pause', exact: true})).toBeVisible();
+  revoked = true;
+  await expect(boards[2].locator('#status')).toContainText('Access revoked', {timeout: 12000});
+  const stoppedCount = tabRequests.get('charlie').length;
+  await page.waitForTimeout(5200);
+  assert.equal(tabRequests.get('charlie').length, stoppedCount);
+  for (const timestamps of tabRequests.values()) for (let i = 2; i < timestamps.length; i++) assert.ok(timestamps[i] - timestamps[i - 1] >= 3900, 'minimum interval applies within each tab');
   assert.deepEqual(errors, []);
-  console.log('PASS: silent all-page baseline, ID history, only-new sound, promotion, native filters, restart, footer, settings migration, spacing, revocation and 429 stops.');
+  console.log('PASS: baseline, persistent highlights, three simultaneous independent tabs, shared settings, pause/close/429 isolation, old-lock upgrade, per-tab spacing and revocation.');
   console.log(`Previews: ${profile}`);
 } finally { await context.close(); }

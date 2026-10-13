@@ -1,6 +1,6 @@
 # MS Express Dispatch Watch
 
-Private Chrome Manifest V3 extension, version 0.2.2.
+Private Chrome Manifest V3 extension, version 0.3.0.
 
 ## Install for a pilot
 
@@ -30,7 +30,7 @@ device volume; Chrome/OS mute settings still apply.
 
 - Default interval 5 seconds, minimum 4 seconds, configurable up to one hour.
   The interval is a minimum between automatic refresh/page requests, not a
-  guaranteed deadline. Slow requests are awaited; none overlap.
+  guaranteed deadline. Slow requests are awaited; requests do not overlap within a tab.
 - Uses the site's native Refresh/First/Next controls. Reads structured
   `data.searchJobsElastic.data.jobs` responses from the confirmed
   `/carrier/secure/loadboard/graphql/native` endpoint. No token copying, private
@@ -54,7 +54,15 @@ device volume; Chrome/OS mute settings still apply.
 - Chime, Bell, Radar or Silent, volume control, and three highlight colors.
   One sound per response containing newly discovered IDs; baseline scans and
   unchanged results never play a notification.
-- One running tab per Chrome profile. Keep Chrome/the tab open and the computer
+- No extension-imposed running-tab limit. Each tab independently monitors its
+  native search with its own timer, baseline, discoveries and Play/Pause state.
+  Pausing, closing, or a site error in one tab does not stop the others. Interval,
+  sound, volume and highlight settings remain shared within the Chrome profile;
+  every running tab picks up saved settings on its next access check. Activation
+  remains browser-wide, and revocation/Disconnect stops every tab on its next check.
+  Multiple tabs can independently alert on the same load if their searches overlap.
+  Requests from different tabs may overlap. Chrome resources and J.B. Hunt's
+  service limits still bound practical concurrency. Keep Chrome open and the computer
   awake. Background throttling, memory saving, network latency and sleep can
   delay checks. This does not promise a four-second background SLA.
 - Stops on authorization failure, site errors/429, dialogs, malformed responses,
@@ -111,7 +119,10 @@ From `frontend/`: `node scripts/test-dispatch-extension.mjs` launches an isolate
 Chromium profile with the actual extension; every HTTP request is locally mocked.
 It checks structured parsing, silent all-page baselines, ID deduplication, sound,
 activation, legacy-setting migration, footer layout, page scanning, promotion,
-minimum spacing, revocation and rate-limit stops. It never uses live accounts.
+minimum spacing, three concurrent tabs, shared preferences, pause/close/error
+isolation, revocation and rate-limit stops. It never uses live accounts.
+`node scripts/test-dispatch-extension-background.mjs` checks 100 simultaneous
+starts, independent access checks and the Disconnect/in-flight-check race.
 `node scripts/test-dispatcher-access-views.mjs` checks the ERP access card.
 
 From `backend/`: `go test ./...` and `go vet ./...`. Set the optional

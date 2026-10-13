@@ -306,6 +306,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   while paused. Missing/unavailable discoveries remain in the popover with last-seen
   time and explicit status; absence never implies booked. Returning IDs regain
   highlighting without re-alerting. The next Play or reload resets this history.
+  There is no running-tab cap. Each content script owns its timer/history/pause
+  state; background access checks run independently, with serialized settings/access
+  writes and a current-token recheck after network completion. Preferences and
+  activation stay browser-wide. Pause/close/vendor errors affect only their tab;
+  revocation/Disconnect stops all tabs on their next check. Ignore obsolete
+  watchOwner storage from older versions. The background test exercises 100 tabs.
 - Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
   `ExtensionAccess.tsx` implement `access.manage` administration at
   GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute

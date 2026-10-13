@@ -23,31 +23,25 @@ async function handle(message, sender) {
   if (message.type === "activate" && isSettings(sender)) {
     const result = await api("/activate", { code: String(message.code || "").trim() });
     await chrome.storage.local.set({ token: result.token, dispatcherName: result.dispatcherName });
-    await chrome.storage.session.remove("watchOwner");
     return { dispatcherName: result.dispatcherName };
   }
-  if (message.type === "forget" && isSettings(sender)) { await chrome.storage.local.remove(["token", "dispatcherName"]); await chrome.storage.session.remove("watchOwner"); return {}; }
+  if (message.type === "forget" && isSettings(sender)) { await chrome.storage.local.remove(["token", "dispatcherName"]); return {}; }
   if (!isBoard(sender)) throw new Error("Use Play on the J.B. Hunt grid");
-  const { watchOwner } = await chrome.storage.session.get("watchOwner");
-  const tabId = sender.tab.id;
-  if (message.type === "stop") {
-    if (watchOwner?.tabId === tabId) await chrome.storage.session.remove("watchOwner");
-    return {};
-  }
+  // Each content script owns its timer and history. Stop affects only its tab.
+  if (message.type === "stop") return {};
   if (message.type !== "start" && message.type !== "poll") throw new Error("Unknown action");
   if (!token) throw new Error("Activate the extension from its toolbar icon first.");
-  if (watchOwner && watchOwner.tabId !== tabId && Date.now() - watchOwner.lastSeen < 120000) throw new Error("Already running in another J.B. Hunt tab. Pause it there first.");
-  if (message.type === "poll" && watchOwner?.tabId !== tabId) throw new Error("Monitoring stopped. Press Play to restart.");
   await api("/check", {}, token);
-  await chrome.storage.session.set({ watchOwner: { tabId, lastSeen: Date.now() } });
+  // Concurrent checks must not reuse an activation removed/replaced while the
+  // server was responding. Credentials remain shared across this browser.
+  if ((await chrome.storage.local.get("token")).token !== token) throw new Error("Browser activation changed. Press Play to check access again.");
   return { settings: config, dispatcherName };
 }
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  const run = queue.then(() => handle(message, sender));
-  queue = run.catch(() => {});
+  // Keep settings/access writes serialized, but let each tab check access
+  // independently so a slow request does not stall all other tabs.
+  const run = isBoard(sender) ? handle(message, sender) : queue.then(() => handle(message, sender));
+  if (!isBoard(sender)) queue = run.catch(() => {});
   run.then(result => reply({ ok: true, ...result }), e => reply({ ok: false, error: e.message || "Connection failed" }));
   return true;
-});
-chrome.tabs.onRemoved.addListener(tabId => {
-  queue = queue.then(async () => { const { watchOwner } = await chrome.storage.session.get("watchOwner"); if (watchOwner?.tabId === tabId) await chrome.storage.session.remove("watchOwner"); }).catch(() => {});
 });
