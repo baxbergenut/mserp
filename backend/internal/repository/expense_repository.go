@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -424,11 +425,20 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 }
 
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
-	breakdown, err := expenseCostJSON(input.CostBreakdown)
-	if err != nil {
+	if err := updateExpenseRow(ctx, r.pool, id, input); err != nil {
 		return Expense{}, err
 	}
-	command, err := r.pool.Exec(ctx, `
+	return r.GetExpense(ctx, id)
+}
+
+func updateExpenseRow(ctx context.Context, exec interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}, id string, input ExpenseInput) error {
+	breakdown, err := expenseCostJSON(input.CostBreakdown)
+	if err != nil {
+		return err
+	}
+	command, err := exec.Exec(ctx, `
 		UPDATE expenses SET
 			category_id = $2, category = CASE WHEN category_id=$2::uuid THEN category ELSE (SELECT name FROM expense_settings WHERE id=$2 AND kind='category' AND active) END, expense_date = $3, truck_id = $4, driver_id = $5,
 			unit_number = CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT unit_number FROM trucks WHERE id = $4) END,
@@ -443,15 +453,15 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown,
 	)
 	if err != nil {
-		return Expense{}, err
+		return err
 	}
 	if command.RowsAffected() == 0 {
 		if input.UpdatedAt != nil {
-			return Expense{}, ErrExpenseSettingConflict
+			return ErrExpenseSettingConflict
 		}
-		return Expense{}, ErrNotFound
+		return ErrNotFound
 	}
-	return r.GetExpense(ctx, id)
+	return nil
 }
 
 func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string) error {
@@ -509,3 +519,6 @@ func expenseCostJSON(items *[]ExpenseCostItem) ([]byte, error) {
 	}
 	return json.Marshal(*items)
 }
+
+// Pool allows domain services to coordinate the shared expense ledger.
+func (r *ExpenseRepository) Pool() *pgxpool.Pool { return r.pool }

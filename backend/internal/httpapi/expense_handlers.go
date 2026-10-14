@@ -199,6 +199,24 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, http.StatusForbidden, "your role does not have access to any Expenses & Charges category")
 		return
 	}
+	if r.URL.Query().Get("scope") == "general" {
+		id, err := repository.NewMaintenanceRepository(handler.repo.Pool()).CategoryID(r.Context())
+		if err != nil {
+			handler.writeError(w, err)
+			return
+		}
+		filtered := func(ids []string) []string {
+			values := []string{}
+			for _, value := range ids {
+				if value != id {
+					values = append(values, value)
+				}
+			}
+			return values
+		}
+		visible = filtered(visible)
+		accessible = filtered(accessible)
+	}
 	pagination, err := parsePagination(r)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
@@ -462,6 +480,17 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			return
 		}
 		category := validExtractedCategory(item.Category, categories)
+		if r.FormValue("scope") == "general" {
+			maintenanceCat, err := repository.NewMaintenanceRepository(handler.repo.Pool()).CategoryID(r.Context())
+			if err != nil {
+				handler.writeError(w, err)
+				return
+			}
+			if categoryNames[strings.ToLower(category)] == maintenanceCat {
+				writeAPIError(w, 400, "Use Maintenance for truck service entries, including repairs, PM and oil changes")
+				return
+			}
+		}
 		values = append(values, extractedExpense{
 			CostBreakdown: extractedCostBreakdown(item.CostBreakdown),
 			Category:      category, CategoryID: categoryNames[strings.ToLower(category)],
@@ -653,6 +682,10 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
 			return
 		case "23514":
+			if postgresError.ConstraintName == "maintenance_work_total" {
+				writeAPIError(w, http.StatusBadRequest, "Use Maintenance to change this service visit, its work costs, or its invoice classification")
+				return
+			}
 			if postgresError.ConstraintName == "expense_cost_breakdown_total" {
 				writeAPIError(w, http.StatusBadRequest, "cost breakdown must contain valid names and amounts and exactly match the entered amount")
 				return

@@ -224,6 +224,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Status fills follow the TODAY sheet where a matching rule exists. Future
   feature scope, exclusions and rollout order live in `docs/DRIVER_BOARD_PLAN.md`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
+- `frontend/app/maintenance/`: typed service visits, vendor snapshots, invoice/document
+  history, manual dated odometers, independent PM/oil schedules and cost reports.
+  `repository/maintenance_*`, `httpapi/maintenance_handlers.go` and migration 096
+  own its backend. See `docs/MAINTENANCE.md` for accounting, permissions, migration
+  review and reminder rules. Truck details reuse the workspace in a Maintenance tab.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
   payment balances, row-click editing and modal deletion; review-first AI entry.
   POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators
@@ -1303,6 +1308,12 @@ assignment lookup lists.
   Tests use MSERP_DRIVER_PAY_TEST_DATABASE_URL as mserp_app for fresh/migrated
   schemas; test-driver-charges-e2e.mjs includes escrow-e2e.mjs.
 
+- Maintenance and general Expenses have separate entry/directory flows. General
+  page/search reads send `scope=general`; payroll and legacy API reads retain the
+  complete ledger. A stable Maintenance category ID in maintenance_configuration
+  preserves existing category View/Create/Edit/Delete access and financial routing.
+  Maintenance access/options are scoped server-side; reporting-type administration
+  and fleet schedule defaults require built-in Administrator status.
 - Expense settings at /expenses/settings (linked from Expenses) manage categories,
   category-specific default names, payment methods and common payer suggestions.
   Migration 040 adds expense_settings with optimistic versions and archive/restore;

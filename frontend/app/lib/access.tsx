@@ -18,7 +18,7 @@ export function pagePermission(path: string): string {
   if (path.startsWith("/accounting")) return "payroll.read";
   if (["/drivers", "/trucks", "/dispatchers", "/investors"].some(p => path === p || path.startsWith(p + "/"))) return "fleet.read";
   const resource = path.split("/")[1];
-  return ({ loads: "loads.read", "gross-board": "board.read", "driver-board": "driver_board.read", fuel: "fuel.read", tolls: "tolls.read", expenses: "expenses.read", tasks: "tasks.read" } as Record<string,string>)[resource] ?? "";
+  return ({ loads: "loads.read", "gross-board": "board.read", "driver-board": "driver_board.read", fuel: "fuel.read", tolls: "tolls.read", expenses: "expenses.read", maintenance: "expenses.read", tasks: "tasks.read" } as Record<string,string>)[resource] ?? "";
 }
 
 export function firstAllowedPage(permissions: string[]): string {

@@ -20,7 +20,9 @@ import {
   ListChecks,
   Settings,
   Scale,
+  Wrench,
 } from "lucide-react";
+import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { usePermissions, pagePermission } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
 import { useSidebarCounts } from "./useSidebarCounts";
@@ -33,6 +35,7 @@ const NAV_ITEMS = [
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/weighmytruck", label: "Scale", icon: Scale },
+  { href: "/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
@@ -53,6 +56,7 @@ export function Sidebar() {
   const { count } = useTaskUpdates();
   const alerts = useSidebarCounts();
   const permissions = usePermissions();
+  const maintenanceAccess = useMaintenanceAccess();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(
@@ -81,6 +85,7 @@ export function Sidebar() {
       {/* ── Navigation ── */}
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
+          if(item.href === "/maintenance" && !(maintenanceAccess?.canView || maintenanceAccess?.canCreate)) return null;
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href))) : [];
           if ("children" in item ? children.length === 0 : pagePermission(item.href) && !permissions.includes(pagePermission(item.href))) return null;

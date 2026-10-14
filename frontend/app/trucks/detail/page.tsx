@@ -13,9 +13,11 @@ import { RelatedExpenses } from "@/app/components/expenses/RelatedExpenses";
 import { TruckLocationPanel } from "@/app/components/fleet/TruckLocationPanel";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { AssignmentHistory } from "@/app/drivers/detail/AssignmentHistory";
+import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
+import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
 
-const tabs = ["Overview", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Maintenance", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -30,8 +32,9 @@ export default function TruckDetailPage() {
   const [tab, setTab] = useViewState<typeof tabs[number]>("page:tab", "Overview");
   const permissions = usePermissions();
   const expenseCategoryAccess = useExpenseCategoryAccess();
+  const maintenanceAccess = useMaintenanceAccess();
   const expenseTabsVisible = expenseCategoryAccess.length > 0;
-  const visibleTabs: readonly (typeof tabs)[number][] = expenseTabsVisible ? tabs : tabs.filter(name => name !== "Expenses");
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Expenses" || expenseTabsVisible) && (name !== "Maintenance" || maintenanceAccess?.canView));
   useEffect(() => {
     if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
   }, [expenseTabsVisible, setTab, tab]);
@@ -62,12 +65,13 @@ export default function TruckDetailPage() {
         <div className="min-w-0 space-y-5">
           <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Vehicle details</h2><Details values={[["Unit number", truck.unitNumber], ["VIN", truck.vin], ["Year", truck.year], ["Make", truck.make], ["Model", truck.model], ["License plate", [truck.licensePlate, truck.licenseState].filter(Boolean).join(" · ")]]} /></section>
           <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-zinc-100"><FileBadge className="h-4 w-4 text-zinc-500" />Registration & documents</h2><Details values={[["Registration expires", showDate(truck.registrationExpires)], ["Insurance expires", showDate(truck.insuranceExpires)]]} />{truck.irpFileId ? <a className="mt-5 inline-block text-xs text-blue-400" href={fileDownloadUrl(truck.irpFileId)} target="_blank" rel="noreferrer">Open cab card · {truck.irpFileName}</a> : <p className="mt-5 text-xs text-zinc-500">No cab card uploaded.</p>}</section>
-          <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Maintenance</h2><Details values={[["Last service", showDate(truck.lastServiceDate)], ["Next service", truck.nextServiceMiles === null ? "Not recorded" : `${truck.nextServiceMiles.toLocaleString()} mi`], ["Last updated", showDate(truck.updatedAt)]]} /></section>
+          <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Legacy service information</h2><Details values={[["Last service", showDate(truck.lastServiceDate)], ["Next service", truck.nextServiceMiles === null ? "Not recorded" : `${truck.nextServiceMiles.toLocaleString()} mi`], ["Last updated", showDate(truck.updatedAt)]]} /></section>
           <ProfileNotes key={truck.id} kind="trucks" id={truck.id} legacy={truck.notes} />
         </div>
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
-      {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} />}
+      {tab === "Maintenance" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
+      {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
       {editing && <TruckEditor truck={truck} onClose={() => setEditing(false)} onSaved={value => { setTruck(value); setEditing(false); }} />}
     </>}

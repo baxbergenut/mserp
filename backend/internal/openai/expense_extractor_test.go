@@ -102,6 +102,7 @@ func TestExpensePromptAndSchema(t *testing.T) {
 		}
 	}
 	check(expenseSchema())
+	check(maintenanceExtractionSchema(expenseSchema()))
 }
 
 // Explicit opt-in; uses synthetic receipts and never creates ledger records.

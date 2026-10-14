@@ -33,7 +33,9 @@ export function RelatedExpenses({
   truckId,
   driverId,
   scope,
+  generalOnly = false,
 }: {
+  generalOnly?: boolean;
   truckId?: string;
   driverId?: string;
   scope?: "personal" | "non_personal";
@@ -51,7 +53,7 @@ export function RelatedExpenses({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchExpensesPage({ page, pageSize, truckId, driverId: scope === "personal" ? undefined : driverId, chargeDriverId: scope === "personal" ? driverId : undefined, responsibility: scope === "non_personal" ? scope : undefined });
+      const response = await fetchExpensesPage({scope:generalOnly ? "general":undefined, page, pageSize, truckId, driverId: scope === "personal" ? undefined : driverId, chargeDriverId: scope === "personal" ? driverId : undefined, responsibility: scope === "non_personal" ? scope : undefined });
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -63,7 +65,7 @@ export function RelatedExpenses({
     } finally {
       setLoading(false);
     }
-  }, [setPage, driverId, page, pageSize, truckId, scope]);
+  }, [setPage, driverId, page, pageSize, truckId, scope, generalOnly]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);

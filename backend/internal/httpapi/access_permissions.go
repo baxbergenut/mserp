@@ -89,7 +89,7 @@ func routePermission(method, path string) string {
 		if read {
 			return "tolls.read"
 		}
-	case "expenses":
+	case "expenses", "maintenance":
 		return "authenticated"
 	case "escrows":
 		return pair("escrow")

@@ -710,6 +710,35 @@ export interface ExpenseVerification {
 
 export interface ExpenseCostItem { name: string; amount: string; }
 
+export interface MaintenanceType { code: string; name: string; active: boolean; version: number; }
+export interface MaintenanceVendor { id: string; name: string; address: string; phone: string; contact: string; active: boolean; version: number; }
+export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm" | "oil"; }
+export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
+export interface MaintenanceRecord {
+  id: string; expenseId: string | null; truckId: string | null; unitNumber: string; vendorId: string | null;
+  vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
+  serviceDate: string | null; odometer: number | null; location: "shop" | "roadside" | "internal" | "unknown";
+  status: "completed" | "needs_review" | "voided"; workOrder: string; notes: string; services: MaintenanceWork[]; version: number;
+  createdByName: string; updatedByName: string; createdAt: string; updatedAt: string; voidReason: string;
+  expense: Expense | null; documents: MaintenanceDocument[];
+}
+export interface MaintenanceInput {
+  legacyPaymentTotal?: string;
+  savedOwnerName?: string;
+  id: string; version: number; truckId: string | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
+  serviceDate: string; odometer: number | null; location: MaintenanceRecord["location"]; status: "completed" | "needs_review";
+  workOrder: string; notes: string; services: MaintenanceWork[]; expense: ExpenseInput | null;
+}
+export interface MaintenanceTruck { id: string; unitNumber: string; active: boolean; ownerId: string | null; ownerName: string; ownerDriverId: string | null; isCompanyOwned: boolean; driverId: string | null; driverName: string; }
+export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; administrator: boolean; verificationRole: string; }
+export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm" | "oil"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
+export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
+export interface MaintenanceDue { truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
+export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
+export interface MaintenanceReport { serviceTypes: MaintenanceReportRow[]; trucks: MaintenanceReportRow[]; vendors: MaintenanceReportRow[]; repeatedWork: MaintenanceReportRow[]; total: string; fees: string; unallocated: string; }
+export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: { hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; } | null; }
+export interface MaintenanceChange { actorName: string; happenedAt: string; before: MaintenanceRecord | null; after: MaintenanceRecord; }
+
 export interface Expense {
   costBreakdown?: ExpenseCostItem[];
 	baseAmount?: string | null;

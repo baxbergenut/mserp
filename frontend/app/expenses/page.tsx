@@ -138,7 +138,7 @@ export default function ExpensesPage() {
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const [response, session] = await Promise.all([fetchExpensesPage({
+      const [response, session] = await Promise.all([fetchExpensesPage({scope:"general",
         page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);

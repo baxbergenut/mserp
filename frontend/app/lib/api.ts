@@ -406,6 +406,7 @@ export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
 export const fetchExpensesPage = (query: PageQuery & {
+  scope?: "general";
   accountantVerified?: string;
   adminVerified?: string;
   responsibility?: "non_personal";
@@ -435,6 +436,7 @@ export const createExpenses = (expenses: ExpenseInput[]) =>
   });
 export const extractExpenses = (text: string, file: File | null) => {
   const form = new FormData();
+  form.append("scope","general");
   if (text.trim()) form.append("text", text.trim());
   if (file) form.append("file", file);
   return apiRequest<ExpenseExtraction>("/expenses/extract", {
@@ -550,3 +552,29 @@ export const saveDispatcherExtension = (id: string, input: { enabled: boolean; a
 
 export const fetchFiveELDTruckReview = (id: string) => apiRequest<import("./types").FiveELDTruckReview>(`/tasks/five-eld/${id}`);
 export const completeFiveELDTruckReview = (id: string, version: number, truck: TruckInput) => apiRequest<{ truckId: string }>(`/tasks/five-eld/${id}/complete`, { method: "POST", body: JSON.stringify({ version, truck }) });
+
+export type MaintenanceQuery = { truckId?: string; vendorId?: string; typeCode?: string; status?: string; search?: string; dateFrom?: string; dateTo?: string; expenseId?: string; page?: number; pageSize?: number };
+export const fetchMaintenanceOptions = () => apiRequest<import("./types").MaintenanceOptions>("/maintenance/options");
+export const fetchMaintenancePage = (query: MaintenanceQuery, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").MaintenanceRecord>>(withQuery("/maintenance",query),{signal});
+export const fetchMaintenance = (id: string) => apiRequest<import("./types").MaintenanceRecord>(`/maintenance/${id}`);
+export const saveMaintenance = (input: import("./types").MaintenanceInput) => {
+ const {legacyPaymentTotal,...rest}=input;
+ const body={...rest};delete body.savedOwnerName;
+ const expense=input.expense ? expensePayload({...input.expense,costBreakdown:input.services.filter(s=>s.amount!==null).map(s=>({name:s.name,amount:s.amount!}))}) : null;
+ if(expense && legacyPaymentTotal!==undefined && expense.amount===legacyPaymentTotal && expense.paymentType.trim().toLowerCase()==="efs") {delete (expense as {baseAmount?:string}).baseAmount;}
+ return apiRequest<import("./types").MaintenanceRecord>(input.version ? `/maintenance/${input.id}` : "/maintenance",{method:input.version ? "PUT":"POST",body:JSON.stringify({...body,expense})});
+};
+export const voidMaintenance = (id: string, version: number, reason: string) => apiRequest<void>(`/maintenance/${id}/void`,{method:"POST",body:JSON.stringify({version,reason})});
+export const fetchMaintenanceHistory = (id: string) => apiRequest<import("./types").MaintenanceChange[]>(`/maintenance/${id}/history`);
+export const fetchMaintenanceReports = (query: MaintenanceQuery) => apiRequest<import("./types").MaintenanceReport>(withQuery("/maintenance/reports",query));
+export const fetchMaintenanceDue = (truckId?: string) => apiRequest<import("./types").MaintenanceDue[]>(withQuery("/maintenance/due",{truckId}));
+export const fetchMaintenanceReadings = (truckId?: string) => apiRequest<import("./types").MaintenanceReading[]>(withQuery("/maintenance/readings",{truckId}));
+export const saveMaintenanceReading = (input: import("./types").MaintenanceReading) => apiRequest<import("./types").MaintenanceReading>(input.id ? `/maintenance/readings/${input.id}` : "/maintenance/readings",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
+export const saveMaintenanceSchedule = (input: import("./types").MaintenanceSchedule) => apiRequest<import("./types").MaintenanceSchedule>(input.id ? `/maintenance/schedules/${input.id}` : "/maintenance/schedules",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
+export const saveMaintenanceVendor = (input: import("./types").MaintenanceVendor) => apiRequest<import("./types").MaintenanceVendor>(input.id ? `/maintenance/vendors/${input.id}` : "/maintenance/vendors",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
+export const saveMaintenanceType = (input: import("./types").MaintenanceType) => apiRequest<import("./types").MaintenanceType>(`/maintenance/types/${input.code}`,{method:"PUT",body:JSON.stringify(input)});
+export const uploadMaintenanceDocument = (id: string,file: File) => {const body=new FormData();body.append("file",file);return apiRequest<import("./types").MaintenanceDocument>(`/maintenance/${id}/documents`,{method:"POST",body});};
+export const maintenanceDocumentUrl = (id: string) => `${API_BASE}/maintenance/documents/${id}`;
+export const extractMaintenance = (text: string,file: File | null) => {const body=new FormData();body.append("text",text);if(file)body.append("file",file);return apiRequest<{drafts:import("./types").MaintenanceAIDraft[]}>("/maintenance/extract",{method:"POST",body});};
+
+export const fetchMaintenanceAccess = () => apiRequest<import("./types").ExpenseCategoryAccess>("/maintenance/access");
