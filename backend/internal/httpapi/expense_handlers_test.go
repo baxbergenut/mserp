@@ -10,6 +10,34 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestExpenseCostBreakdownValidation(t *testing.T) {
+	for _, tc := range []struct {
+		rows  []repository.ExpenseCostItem
+		total string
+		valid bool
+	}{
+		{nil, "10", true},
+		{[]repository.ExpenseCostItem{{Name: "Oil change", Amount: "0.10"}, {Name: "Tire issue", Amount: "0.20"}}, "0.30", true},
+		{[]repository.ExpenseCostItem{{Name: "Oil change", Amount: "100"}, {Name: "Discount", Amount: "-10"}}, "90", true},
+		{[]repository.ExpenseCostItem{{Name: "Oil change", Amount: "10.01"}}, "10", false},
+		{[]repository.ExpenseCostItem{{Name: " ", Amount: "10"}}, "10", false},
+		{[]repository.ExpenseCostItem{{Name: "Oil change", Amount: "10.001"}}, "10", false},
+		{[]repository.ExpenseCostItem{{Name: "Oil change", Amount: "NaN"}}, "10", false},
+	} {
+		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-14", ExpenseType: "Maintenance", Amount: tc.total, CostBreakdown: &tc.rows}
+		_, err := r.validate()
+		if (err == nil) != tc.valid {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+	rows := []repository.ExpenseCostItem{{Name: "Oil change", Amount: "500.01"}}
+	base := "500.01"
+	value, err := (expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-14", ExpenseType: "Oil change", Amount: base, BaseAmount: &base, PaymentType: "EFS", CostBreakdown: &rows}).validate()
+	if err != nil || value.Amount != "506.01" {
+		t.Fatal("breakdown must match base before EFS fee", value, err)
+	}
+}
+
 func TestExpenseEFSFee(t *testing.T) {
 	for _, tc := range []struct{ base, fee, total string }{
 		{"0", "0.00", "0.00"}, {"0.01", "3.00", "3.01"},

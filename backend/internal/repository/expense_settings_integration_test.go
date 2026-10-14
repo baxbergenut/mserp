@@ -91,6 +91,11 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(efs))
+				breakdown, readErr := os.ReadFile("../../sql/095_expense_cost_breakdown.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(breakdown))
 			} else {
 				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 			}
@@ -154,10 +159,72 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			if !errors.As(err, &pg) || pg.Code != "23505" {
 				t.Fatalf("duplicate accepted: %v", err)
 			}
-			input := ExpenseInput{CategoryID: cat.ID, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
+			// Every requested Maintenance default is available in fresh and upgraded databases.
+			for _, label := range []string{"Electrical issue", "Towing", "PM service", "Truck wash", "Detailing", "Road service", "Body work", "Leakage", "Brake issue", "Tire issue", "Oil change"} {
+				found := false
+				for _, item := range items {
+					if item.Kind == "name" && item.Name == label && item.CategoryID != nil && *item.CategoryID == categories["Maintenance"] {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatal("missing maintenance default", label)
+				}
+			}
+			costs := []ExpenseCostItem{{Name: "Hotel", Amount: "60.10"}, {Name: "Custom service", Amount: "39.90"}}
+			input := ExpenseInput{CostBreakdown: &costs, CategoryID: cat.ID, ExpenseDate: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), Amount: "100", ExpenseType: payTestString("One-off travel")}
 			expense, err := repo.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if len(expense.CostBreakdown) != 2 || expense.CostBreakdown[1].Name != "Custom service" {
+				t.Fatal("breakdown lost", expense)
+			}
+			// Both repository writes and direct SQL must reject mismatched amounts.
+			bad := input
+			bad.Amount = "99.99"
+			if _, err := repo.CreateExpense(ctx, bad); err == nil {
+				t.Fatal("invalid breakdown saved")
+			}
+			if _, err := pool.Exec(ctx, "UPDATE expenses SET amount=99.99 WHERE id=$1", expense.ID); err == nil {
+				t.Fatal("DB constraint bypassed")
+			}
+			before := 0
+			pool.QueryRow(ctx, "SELECT count(*) FROM expenses").Scan(&before)
+			if _, err := repo.CreateExpenses(ctx, []ExpenseInput{input, bad}); err == nil {
+				t.Fatal("invalid batch accepted")
+			}
+			after := 0
+			pool.QueryRow(ctx, "SELECT count(*) FROM expenses").Scan(&after)
+			if before != after {
+				t.Fatal("partial batch committed")
+			}
+			input.CostBreakdown = nil // Cached clients must preserve the stored breakdown.
+			updated, err := repo.UpdateExpense(ctx, expense.ID, input)
+			if err != nil || len(updated.CostBreakdown) != 2 {
+				t.Fatal("legacy update lost breakdown", err)
+			}
+			stale := input
+			stale.UpdatedAt = &expense.UpdatedAt
+			if _, err := repo.UpdateExpense(ctx, expense.ID, stale); !errors.Is(err, ErrExpenseSettingConflict) {
+				t.Fatal("stale cost update accepted", err)
+			}
+			// Reporting can group exact amounts by saved cost name.
+			var reportTotal string
+			if err := pool.QueryRow(ctx, "SELECT sum((row->>'amount')::numeric)::text FROM expenses e CROSS JOIN LATERAL jsonb_array_elements(e.cost_breakdown) row WHERE e.id=$1", expense.ID).Scan(&reportTotal); err != nil || reportTotal != "100.00" {
+				t.Fatal("cost report mismatch", reportTotal, err)
+			}
+			efsCosts := []ExpenseCostItem{{Name: "Oil change", Amount: "500.01"}}
+			base := "500.01"
+			efsInput := ExpenseInput{CategoryID: categories["Maintenance"], ExpenseDate: input.ExpenseDate, ExpenseType: payTestString("Oil change"), Amount: "506.01", BaseAmount: &base, PaymentFee: "6.00", PaymentType: payTestString("EFS"), CostBreakdown: &efsCosts}
+			efsExpense, err := repo.CreateExpense(ctx, efsInput)
+			if err != nil || *efsExpense.Amount != "506.01" || len(efsExpense.CostBreakdown) != 1 {
+				t.Fatal("EFS breakdown mismatch", err)
+			}
+			clear := []ExpenseCostItem{}
+			efsInput.CostBreakdown = &clear
+			if value, err := repo.UpdateExpense(ctx, efsExpense.ID, efsInput); err != nil || len(value.CostBreakdown) != 0 {
+				t.Fatal("explicit clear failed", err)
 			}
 			old := cat
 			cat.Name = "Travel"

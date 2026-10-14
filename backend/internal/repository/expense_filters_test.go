@@ -52,7 +52,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 				}
 				exec(before)
 				exec(`INSERT INTO expenses(company,category_id,category,expense_type,amount,expense_date) SELECT 'Historical company',id,name,'Before migration',7,'2026-10-12' FROM expense_settings WHERE kind='category' AND name='Other'`)
-				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql"} {
+				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql", "../../sql/095_expense_cost_breakdown.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

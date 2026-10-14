@@ -102,7 +102,8 @@ try {
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $6.00 · Total: $506.01');
     await modal.getByLabel('Amount',{exact:true}).fill('634');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $6.00 · Total: $640.00');
-    await modal.getByLabel('Name',{exact:true}).fill('Parking');
+    await modal.getByLabel('Name',{exact:true}).selectOption('__custom');
+    await modal.getByLabel('Name custom',{exact:true}).fill('Parking');
     await modal.getByLabel('Expense date',{exact:true}).fill('2026-09-14');
     await modal.getByRole('button',{name:'Save changes',exact:true}).click();
     await expect(modal).toHaveCount(0); expect(writes).toBe(1);

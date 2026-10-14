@@ -20,10 +20,10 @@ import (
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
 	"mserp/internal/fiveeld"
-	"mserp/internal/gemini"
 	"mserp/internal/groq"
 	"mserp/internal/httpapi"
 	"mserp/internal/jobs"
+	"mserp/internal/openai"
 	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
@@ -143,7 +143,7 @@ func main() {
 			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, logger,
 		)
 	}
-	expenseExtractor := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiExpenseModel)
+	expenseExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,

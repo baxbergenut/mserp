@@ -10,11 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"mserp/internal/gemini"
+	"mserp/internal/openai"
 	"mserp/internal/repository"
 )
 
@@ -23,14 +24,14 @@ var expenseAmountPattern = regexp.MustCompile(`^-?\d{1,12}(?:\.\d{1,2})?$`)
 type expenseHandler struct {
 	logger    *slog.Logger
 	repo      *repository.ExpenseRepository
-	extractor gemini.ExpenseExtractor
+	extractor openai.ExpenseExtractor
 }
 
 func registerExpenseRoutes(
 	r chi.Router,
 	logger *slog.Logger,
 	repo *repository.ExpenseRepository,
-	extractor gemini.ExpenseExtractor,
+	extractor openai.ExpenseExtractor,
 ) {
 	handler := expenseHandler{logger: logger, repo: repo, extractor: extractor}
 	r.Get("/expense-settings", handler.listSettings)
@@ -48,9 +49,10 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
-	BaseAmount *string    `json:"baseAmount"`
-	UpdatedAt  *time.Time `json:"updatedAt"`
-	OwnerID    *string    `json:"ownerId"`
+	CostBreakdown *[]repository.ExpenseCostItem `json:"costBreakdown"`
+	BaseAmount    *string                       `json:"baseAmount"`
+	UpdatedAt     *time.Time                    `json:"updatedAt"`
+	OwnerID       *string                       `json:"ownerId"`
 
 	LegacyCompany      json.RawMessage `json:"company,omitempty"` // Ignored for clients opened before the field was retired.
 	CategoryID         string          `json:"categoryId"`
@@ -75,22 +77,23 @@ type expenseBatchRequest struct {
 }
 
 type extractedExpense struct {
-	Category        string   `json:"category"`
-	CategoryID      string   `json:"categoryId"`
-	ExpenseDate     string   `json:"expenseDate"`
-	TruckID         *string  `json:"truckId"`
-	DriverID        *string  `json:"driverId"`
-	UnitNumber      string   `json:"unitNumber"`
-	DriverName      string   `json:"driverName"`
-	Amount          string   `json:"amount"`
-	PaymentType     string   `json:"paymentType"`
-	ExpenseType     string   `json:"expenseType"`
-	ReferenceNumber string   `json:"referenceNumber"`
-	Description     string   `json:"description"`
-	CoveredBy       string   `json:"coveredBy"`
-	PaidBy          string   `json:"paidBy"`
-	Confidence      float64  `json:"confidence"`
-	Evidence        []string `json:"evidence"`
+	CostBreakdown   []repository.ExpenseCostItem `json:"costBreakdown"`
+	Category        string                       `json:"category"`
+	CategoryID      string                       `json:"categoryId"`
+	ExpenseDate     string                       `json:"expenseDate"`
+	TruckID         *string                      `json:"truckId"`
+	DriverID        *string                      `json:"driverId"`
+	UnitNumber      string                       `json:"unitNumber"`
+	DriverName      string                       `json:"driverName"`
+	Amount          string                       `json:"amount"`
+	PaymentType     string                       `json:"paymentType"`
+	ExpenseType     string                       `json:"expenseType"`
+	ReferenceNumber string                       `json:"referenceNumber"`
+	Description     string                       `json:"description"`
+	CoveredBy       string                       `json:"coveredBy"`
+	PaidBy          string                       `json:"paidBy"`
+	Confidence      float64                      `json:"confidence"`
+	Evidence        []string                     `json:"evidence"`
 }
 
 type expenseExtractionResponse struct {
@@ -165,8 +168,18 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			return repository.ExpenseInput{}, errors.New("owner expenses must have a nonnegative amount")
 		}
 	}
+	breakdownTotal := request.Amount
+	if request.BaseAmount != nil {
+		breakdownTotal = *request.BaseAmount
+	}
+	if request.CostBreakdown != nil {
+		if err := validateCostBreakdown(*request.CostBreakdown, breakdownTotal); err != nil {
+			return repository.ExpenseInput{}, err
+		}
+	}
 	return repository.ExpenseInput{
-		BaseAmount: request.BaseAmount, PaymentFee: fee, UpdatedAt: request.UpdatedAt,
+		CostBreakdown: request.CostBreakdown,
+		BaseAmount:    request.BaseAmount, PaymentFee: fee, UpdatedAt: request.UpdatedAt,
 		OwnerID:    request.OwnerID,
 		CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
 		TruckID: request.TruckID, DriverID: request.DriverID,
@@ -366,9 +379,9 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		defer r.MultipartForm.RemoveAll()
 	}
 
-	input := gemini.ExpenseInput{
+	input := openai.ExpenseInput{
 		Text:        strings.TrimSpace(r.FormValue("text")),
-		MessageDate: time.Now().UTC(),
+		MessageDate: expenseSubmissionDate(),
 	}
 	if headers := r.MultipartForm.File["file"]; len(headers) > 0 {
 		data, err := readMultipartFile(headers[0], 20<<20)
@@ -422,8 +435,8 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 	}
 	extraction, err := handler.extractor.ExtractExpense(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, gemini.ErrNotConfigured) {
-			writeAPIError(w, http.StatusServiceUnavailable, "GEMINI_API_KEY is not configured on the server")
+		if errors.Is(err, openai.ErrNotConfigured) {
+			writeAPIError(w, http.StatusServiceUnavailable, "OPENAI_API_KEY is not configured on the server")
 			return
 		}
 		handler.logger.Error("extract expenses", "error", err)
@@ -450,7 +463,8 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		}
 		category := validExtractedCategory(item.Category, categories)
 		values = append(values, extractedExpense{
-			Category: category, CategoryID: categoryNames[strings.ToLower(category)],
+			CostBreakdown: extractedCostBreakdown(item.CostBreakdown),
+			Category:      category, CategoryID: categoryNames[strings.ToLower(category)],
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
@@ -639,6 +653,10 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
 			return
 		case "23514":
+			if postgresError.ConstraintName == "expense_cost_breakdown_total" {
+				writeAPIError(w, http.StatusBadRequest, "cost breakdown must contain valid names and amounts and exactly match the entered amount")
+				return
+			}
 			if postgresError.ConstraintName == "expense_active_category" {
 				writeAPIError(w, http.StatusBadRequest, "Select an active category from Expense settings")
 				return
@@ -652,4 +670,48 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 	}
 	handler.logger.Error("expense request failed", "error", err)
 	writeAPIError(w, http.StatusInternalServerError, "the expense request could not be completed")
+}
+
+func validateCostBreakdown(items []repository.ExpenseCostItem, total string) error {
+	if len(items) == 0 {
+		return nil
+	}
+	if len(items) > 100 {
+		return errors.New("cost breakdown may contain at most 100 rows")
+	}
+	sum := new(big.Rat)
+	for i := range items {
+		items[i].Name = strings.TrimSpace(items[i].Name)
+		items[i].Amount = strings.TrimSpace(items[i].Amount)
+		if utf8.RuneCountInString(items[i].Name) < 1 || utf8.RuneCountInString(items[i].Name) > 100 {
+			return errors.New("each cost breakdown name must contain 1 to 100 characters")
+		}
+		if !expenseAmountPattern.MatchString(items[i].Amount) {
+			return errors.New("each cost breakdown amount must have at most two decimal places")
+		}
+		amount, _ := new(big.Rat).SetString(items[i].Amount)
+		sum.Add(sum, amount)
+		items[i].Amount = amount.FloatString(2)
+	}
+	amount, ok := new(big.Rat).SetString(total)
+	if !ok || sum.Cmp(amount) != 0 {
+		return errors.New("cost breakdown total must exactly equal the entered amount")
+	}
+	return nil
+}
+
+func extractedCostBreakdown(items []openai.CostItem) []repository.ExpenseCostItem {
+	values := make([]repository.ExpenseCostItem, 0, len(items))
+	for _, item := range items {
+		values = append(values, repository.ExpenseCostItem{Name: strings.TrimSpace(item.Name), Amount: strings.TrimSpace(item.Amount)})
+	}
+	return values
+}
+
+func expenseSubmissionDate() time.Time {
+	zone, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return time.Now().UTC()
+	}
+	return time.Now().In(zone)
 }

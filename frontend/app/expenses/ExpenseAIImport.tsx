@@ -1,5 +1,6 @@
 "use client";
 
+import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 
 import { useRef, useState } from "react";
@@ -33,6 +34,7 @@ function isSupportedAttachment(file: File) {
 
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
+    costBreakdown: draft.costBreakdown ?? [],
     categoryId: draft.categoryId,
     expenseDate: draft.expenseDate,
     truckId: draft.truckId,
@@ -209,16 +211,15 @@ export function ExpenseBatchEditor({
               <th className="w-10 px-2 py-2"><span className="sr-only">Remove</span></th>
             </tr>
           </thead>
-          <tbody>
             {values.map((value, index) => (
-              <tr key={index} className="border-t border-zinc-800/60 align-top">
+              <tbody key={index} className="border-t border-zinc-800/60"><tr className="border-t border-zinc-800/60 align-top">
                 <td className="px-2 py-2 font-mono text-zinc-500">{index + 1}</td>
                 <td className="px-2 py-2">
                   <select required value={value.categoryId} aria-label={`Transaction ${index + 1} category`} onChange={(event) => update(index, changeExpenseCategory(value, event.target.value, settings))} className={compactControl}>
                     <option value="">Select category</option>{activeExpenseCategories(settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-2"><input required pattern=".*\S.*" aria-label={`Transaction ${index + 1} name`} list={`transaction-${index}-names`} value={value.expenseType} onChange={(event) => update(index, { expenseType: event.target.value })} className={compactControl} /><datalist id={`transaction-${index}-names`}>{expenseNames(settings,value.categoryId).map(name => <option key={name} value={name} />)}</datalist></td>
+                <td className="px-2 py-2"><ExpenseNameSelect key={value.categoryId} value={value.expenseType} names={expenseNames(settings, value.categoryId)} label={`Transaction ${index + 1} name`} className={compactControl} onChange={expenseType => update(index, { expenseType })} /></td>
                 <td className="px-2 py-2"><input required type="date" value={value.expenseDate} onChange={(event) => update(index, { expenseDate: event.target.value })} className={compactControl} /></td>
                 <td className="space-y-1 px-2 py-2">
                   <select
@@ -256,8 +257,9 @@ export function ExpenseBatchEditor({
                   </button>
                 </td>
               </tr>
+              <tr><td colSpan={13} className="px-3 pb-3"><div className="max-w-xl"><ExpenseCostBreakdown value={value} names={expenseNames(settings, value.categoryId)} onChange={next => update(index, next)} label={`Transaction ${index + 1} cost breakdown`} /></div></td></tr>
+              </tbody>
             ))}
-          </tbody>
         </table>
       </div>
     </section>

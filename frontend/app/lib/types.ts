@@ -708,7 +708,10 @@ export interface ExpenseVerification {
   verifiedAt: string | null;
 }
 
+export interface ExpenseCostItem { name: string; amount: string; }
+
 export interface Expense {
+  costBreakdown?: ExpenseCostItem[];
 	baseAmount?: string | null;
 	paymentFee?: string;
   verifications: ExpenseVerification[];
@@ -762,6 +765,7 @@ export interface DriverEscrowSetting {
 }
 
 export interface ExpenseInput {
+  costBreakdown?: ExpenseCostItem[];
 	updatedAt?: string;
  ownerId?: string | null;
   categoryId: string;

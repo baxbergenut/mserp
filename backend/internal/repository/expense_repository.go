@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -29,7 +30,13 @@ type ExpenseVerification struct {
 	VerifiedAt *time.Time `json:"verifiedAt"`
 }
 
+type ExpenseCostItem struct {
+	Name   string `json:"name"`
+	Amount string `json:"amount"`
+}
+
 type Expense struct {
+	CostBreakdown       []ExpenseCostItem     `json:"costBreakdown"`
 	BaseAmount          *string               `json:"baseAmount"`
 	PaymentFee          string                `json:"paymentFee"`
 	Verifications       []ExpenseVerification `json:"verifications"`
@@ -67,6 +74,7 @@ type Expense struct {
 }
 
 type ExpenseInput struct {
+	CostBreakdown      *[]ExpenseCostItem
 	BaseAmount         *string
 	PaymentFee         string
 	UpdatedAt          *time.Time
@@ -390,28 +398,36 @@ type expenseQueryer interface {
 }
 
 func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInput) (string, error) {
+	breakdown, err := expenseCostJSON(input.CostBreakdown)
+	if err != nil {
+		return "", err
+	}
 	var id string
-	err := queryer.QueryRow(ctx, `
+	err = queryer.QueryRow(ctx, `
 		INSERT INTO expenses (
 			category_id, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, manager_verified, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee
+			paid_by, manager_verified, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown
 		) VALUES (
 			$1, (SELECT name FROM expense_settings WHERE id=$1 AND kind='category' AND active), $2, $3, $4,
 			CASE WHEN $3::uuid IS NULL THEN $5 ELSE (SELECT unit_number FROM trucks WHERE id = $3) END,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT full_name FROM drivers WHERE id = $4) END,
-			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17,'')::uuid, NULLIF($18,''), $19::numeric, coalesce(nullif($20,''),'0')::numeric
+			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17,'')::uuid, NULLIF($18,''), $19::numeric, coalesce(nullif($20,''),'0')::numeric, coalesce($21::jsonb,'[]'::jsonb)
 		) RETURNING id`,
 		input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.ManagerVerified, input.AccountingVerified, input.OwnerID, input.CreatedBy, input.CreatedByName,
-		input.BaseAmount, input.PaymentFee,
+		input.BaseAmount, input.PaymentFee, breakdown,
 	).Scan(&id)
 	return id, err
 }
 
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
+	breakdown, err := expenseCostJSON(input.CostBreakdown)
+	if err != nil {
+		return Expense{}, err
+	}
 	command, err := r.pool.Exec(ctx, `
 		UPDATE expenses SET
 			category_id = $2, category = CASE WHEN category_id=$2::uuid THEN category ELSE (SELECT name FROM expense_settings WHERE id=$2 AND kind='category' AND active) END, expense_date = $3, truck_id = $4, driver_id = $5,
@@ -419,12 +435,12 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 			driver_name = CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
 			amount = $8::numeric, payment_type = $9,
 			expense_type = $10, reference_number = $11, description = $12,
-			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric
+			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown)
 		WHERE id = $1 AND ($18::timestamptz IS NULL OR updated_at=$18)`,
 		id, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt,
+		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown,
 	)
 	if err != nil {
 		return Expense{}, err
@@ -464,7 +480,7 @@ SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_na
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -479,7 +495,17 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown,
 	)
 	return value, err
+}
+
+func expenseCostJSON(items *[]ExpenseCostItem) ([]byte, error) {
+	if items == nil {
+		return nil, nil
+	}
+	if *items == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(*items)
 }

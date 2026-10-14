@@ -162,7 +162,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   sync in API-compatible date windows.
 - `backend/internal/groq/`: vision extraction client and normalization for truck
   cab cards. CDL upload/extraction is no longer exposed by the API.
-- `backend/internal/gemini/`: structured expense extraction from user-provided
+- `backend/internal/openai/`: structured expense extraction from user-provided
   text, PDFs, text files, and receipt images.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
@@ -361,8 +361,8 @@ PORT=8080
 BIND_ADDRESS=127.0.0.1
 GROQ_API_KEY=...
 GROQ_MODEL=qwen/qwen3.6-27b
-GEMINI_API_KEY=...
-GEMINI_EXPENSE_MODEL=gemini-3.5-flash-lite
+OPENAI_API_KEY=...
+OPENAI_EXPENSE_MODEL=gpt-6-luna
 FIVE_ELD_API_KEY=...
 FIVE_ELD_PROVIDER_TOKEN=...
 FIVE_ELD_USDOT=...
@@ -1335,6 +1335,19 @@ assignment lookup lists.
   their total-amount contract. node scripts/test-payroll-expenses.mjs covers both
   payroll pages, fee boundaries, refresh and view-only access.
 
+- Migration 095 seeds the requested Maintenance default names and stores optional
+  `expenses.cost_breakdown` JSONB rows (name/decimal amount snapshots). Manual,
+  payroll edit and AI batch forms use proper category-specific Name dropdowns with
+  Custom name entry. Breakdown sums must exactly equal the entered base amount
+  before the EFS fee; browser/API/database enforce decimal precision and a
+  100-row limit. Omitted breakdowns preserve existing rows on legacy updates;
+  an explicit empty array clears them. Reports can group saved names using
+  jsonb_array_elements without parsing descriptions. Fresh/migrated database
+  tests exercise application-role reads/writes, atomic batches and EFS fees.
+  `test-expense-entry-e2e.mjs` uses the isolated review access file for real
+  API/browser create, reload and edit checks. `MSERP_OPENAI_LIVE_TEST=1` opts
+  into synthetic model checks; previews also require
+  `MSERP_REVIEW_OPENAI_ENABLED=1` and server OPENAI_API_KEY for live extraction.
 - Expense type is labeled Name in manual and AI review forms, required after Category.
   The API retains expenseType for compatibility and requires a nonblank name on writes.
   Driver Pay shows this name and a negative deduction amount; unnamed legacy records
@@ -1349,12 +1362,14 @@ assignment lookup lists.
   exact normalized unit/name matches populate the foreign keys and unmatched
   values remain visible for later manual linking.
 - AI expense entry accepts transaction text or one PDF, TXT, PNG, JPEG, or WEBP
-  attachment up to 20 MB. Gemini suggestions never write directly: one detected
+  attachment up to 20 MB. OpenAI Luna suggestions never write directly: one detected
   transaction fills the add-expense form, while multiple transactions are
   returned for editable table review and atomic batch creation. High-confidence
   fleet matches populate foreign keys while raw extracted names and units remain
-  available when unmatched. Gemini capacity responses use a compatible Flash
-  fallback.
+  available when unmatched. Extraction uses the Responses API with strict JSON
+  schema, server-only OPENAI_API_KEY and OPENAI_EXPENSE_MODEL (gpt-6-luna).
+  Receipt line costs use catalog names when their service meaning matches;
+  unresolved amounts stay available for manual review.
   Expenses no longer read, require, or write a company field, including AI entry
   and CSV imports. Migration 087 defaults the legacy column during the first
   deployment; migration 088 drops the column and its historical values after that

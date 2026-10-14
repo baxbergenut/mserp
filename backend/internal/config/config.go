@@ -25,8 +25,8 @@ type Config struct {
 	DataTruckOperationalInterval time.Duration
 	GroqAPIKey                   string
 	GroqModel                    string
-	GeminiAPIKey                 string
-	GeminiExpenseModel           string
+	OpenAIAPIKey                 string
+	OpenAIExpenseModel           string
 	RelayEnvironment             string
 	RelayAPIURL                  string
 	RelayAPIKey                  string
@@ -207,8 +207,8 @@ func Load() (Config, error) {
 		DataTruckCompanyName:         strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
 		GroqAPIKey:                   strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
 		GroqModel:                    envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
-		GeminiAPIKey:                 strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
-		GeminiExpenseModel:           envOrDefault("GEMINI_EXPENSE_MODEL", "gemini-3.5-flash-lite"),
+		OpenAIAPIKey:                 strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIExpenseModel:           envOrDefault("OPENAI_EXPENSE_MODEL", "gpt-6-luna"),
 		RelayEnvironment:             relayEnvironment,
 		RelayAPIURL:                  relayAPIURL,
 		RelayAPIKey:                  relayAPIKey,

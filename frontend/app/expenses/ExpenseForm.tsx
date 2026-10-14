@@ -2,6 +2,7 @@
 
 import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { expenseAssignment } from "./assignments";
+import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
 
@@ -13,6 +14,7 @@ import {
 } from "../components/management/ManagementUI";
 
 export const emptyExpenseInput: ExpenseInput = {
+  costBreakdown: [],
   categoryId: "",
   expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
@@ -32,6 +34,7 @@ export const emptyExpenseInput: ExpenseInput = {
 
 export function expenseToInput(expense: Expense): ExpenseInput {
   return {
+    costBreakdown: expense.costBreakdown ?? [],
     updatedAt: expense.updatedAt,
     ownerId: expense.ownerId,
     categoryId: expense.categoryId,
@@ -90,18 +93,7 @@ export function ExpenseForm({
           </select>
         </Field>
         <Field label="Name">
-          <input aria-label="Name"
-            required
-            pattern=".*\S.*"
-            list="expense-names"
-            value={value.expenseType}
-            onChange={(event) => set("expenseType", event.target.value)}
-            className={controlClass}
-            placeholder="e.g. Parking violation"
-          />
-          <datalist id="expense-names">
-            {expenseNames(options.settings, value.categoryId).map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <ExpenseNameSelect key={value.categoryId} value={value.expenseType} names={expenseNames(options.settings, value.categoryId)} onChange={next => set("expenseType", next)} />
         </Field>
         <Field label="Expense date">
           <input aria-label="Expense date"
@@ -125,6 +117,7 @@ export function ExpenseForm({
           <ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} />
         </Field>
       </FormSection>
+      <ExpenseCostBreakdown value={value} names={expenseNames(options.settings, value.categoryId)} onChange={onChange} />
 
       <FormSection title="Assignment and classification">
         <Field label="Unit number">

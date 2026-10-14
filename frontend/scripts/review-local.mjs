@@ -69,7 +69,7 @@ try {
     FIVE_ELD_API_KEY: '', FIVE_ELD_PROVIDER_TOKEN: '', FIVE_ELD_USDOT: '',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled',
     RELAY_PRODUCTION_API_KEY: 'test-disabled', RELAY_STAGING_API_KEY: '', PREPASS_PRODUCTION_CLIENT_ID: '', PREPASS_PRODUCTION_CLIENT_SECRET: '', PREPASS_NONPRODUCTION_CLIENT_ID: '', PREPASS_NONPRODUCTION_CLIENT_SECRET: '',
-    FLEETSCOPE_COMPANY_ID: '', FLEETSCOPE_WEBHOOK_SECRET: '', GROQ_API_KEY: '', GEMINI_API_KEY: '',
+    FLEETSCOPE_COMPANY_ID: '', FLEETSCOPE_WEBHOOK_SECRET: '', GROQ_API_KEY: '', OPENAI_API_KEY: process.env.MSERP_REVIEW_OPENAI_ENABLED === '1' ? process.env.OPENAI_API_KEY || '' : '',
     AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: base,
   }});
   let log = ''; api.stdout.on('data', chunk => { log += chunk; }); api.stderr.on('data', chunk => { log += chunk; });
