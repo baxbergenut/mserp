@@ -50,10 +50,18 @@ const extension = join(profile, 'extension');
 await cp(source, extension, {recursive: true});
 // Observe actual sound calls without shipping a test hook in the extension.
 await appendFile(join(extension, 'sound.js'), '\nconst actualPlay = DispatchWatchSound.play; DispatchWatchSound.play = (...args) => { document.documentElement.dataset.testNotifications = String(Number(document.documentElement.dataset.testNotifications || 0) + 1); return actualPlay(...args); };\n');
+// Test-only visibility/audio controls in the disposable extension's isolated world.
+await appendFile(join(extension, 'adapter.js'), `
+const nativeHidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden').get;
+Object.defineProperty(document, 'hidden', {get: () => document.documentElement.hasAttribute('data-test-hidden') ? document.documentElement.dataset.testHidden === 'true' : nativeHidden.call(document)});
+const audiblePlay = DispatchWatchSound.play;
+DispatchWatchSound.play = (...args) => document.documentElement.dataset.testSuspendSound ? new Promise(() => {}) : audiblePlay(...args);
+`);
 const context = await chromium.launchPersistentContext(join(profile, 'browser'), {headless: true, channel: 'chromium', viewport: {width: 1280, height: 800},
   args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]});
 const errors = [], requests = [], apiChecks = [];
 const tabRequests = new Map(), tabPages = new Map(), limitedTabs = new Set();
+const heldSearches = new Map();
 let revoked = false, rateLimited = false;
 let pages = [[job('TESTLOW', 500), job('TEST001')], [job('TEST002', 4200)]];
 try {
@@ -73,6 +81,7 @@ try {
       if (boardName === 'main') requests.push(Date.now());
       if (!tabRequests.has(boardName)) tabRequests.set(boardName, []);
       tabRequests.get(boardName).push(Date.now());
+      if (heldSearches.has(boardName)) await new Promise(resolve => heldSearches.set(boardName, resolve));
       const resultPages = tabPages.get(boardName) || pages;
       if ((boardName === 'main' && rateLimited) || limitedTabs.has(boardName)) return route.fulfill({status: 429, json: {error: 'rate limited'}});
       return route.fulfill({json: {data: {searchJobsElastic: {success: true, status: 'OK', data: {
@@ -207,6 +216,57 @@ try {
   await settings.getByRole('button', {name: 'Save settings', exact: true}).click();
   for (const board of boards.slice(1)) await expect(board.locator('#status')).toContainText('5s', {timeout: 12000});
   await expect(boards[1].locator('.mserp-watch-blue')).toHaveCount(1);
+  // Native modifier keydown precedes the browser consuming a tab-switch shortcut.
+  await boards[2].keyboard.down('Control');
+  await boards[2].keyboard.up('Control');
+  await boards[2].keyboard.down('Alt');
+  await boards[2].keyboard.up('Alt');
+  await expect(boards[2].locator('#play')).toHaveText('Ⅱ Pause');
+
+  // One hidden delayed response, one suspended renderer, and one genuine
+  // foreground timeout. Only the last should stop; no request may overlap.
+  await boards[1].evaluate(() => document.documentElement.dataset.testHidden = 'true');
+  await boards[0].evaluate(() => document.documentElement.dataset.testHidden = 'false');
+  await boards[0].getByRole('button', {name: '▶ Play', exact: true}).click();
+  await expect(boards[0].locator('#status')).toContainText('Running', {timeout: 12000});
+  for (const name of ['alpha', 'bravo', 'charlie']) heldSearches.set(name, null);
+  await expect.poll(() => [...heldSearches.values()].every(value => typeof value === 'function'), {timeout: 12000}).toBe(true);
+  const heldCounts = new Map([...tabRequests].map(([name, times]) => [name, times.length]));
+  const lifecycle = await context.newCDPSession(boards[2]);
+  // Headless focus emulation prevents Page.setWebLifecycleState from freezing
+  // this environment. A confirmed debugger pause really suspends JS execution.
+  await lifecycle.send('Debugger.enable');
+  const paused = new Promise(resolve => lifecycle.once('Debugger.paused', resolve));
+  const suspension = lifecycle.send('Runtime.evaluate', {expression: 'debugger; void 0'});
+  await paused;
+  console.log('Testing a confirmed 35-second renderer suspension and delayed background/foreground responses…');
+  await new Promise(resolve => setTimeout(resolve, 35000));
+  await expect(boards[0].locator('#status')).toContainText('30 seconds in the foreground');
+  await expect(boards[0].locator('#play')).toHaveText('▶ Play');
+  await expect(boards[1].locator('#status')).toContainText('Waiting for background search');
+  await expect(boards[1].locator('#play')).toHaveText('Ⅱ Pause');
+  for (const name of heldSearches.keys()) assert.equal(tabRequests.get(name).length, heldCounts.get(name), 'never overlap a delayed request');
+  await lifecycle.send('Debugger.resume');
+  await suspension;
+  // Give the expired timer a chance to run before delivering the response.
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await expect(boards[2].locator('#play')).toHaveText('Ⅱ Pause');
+  tabPages.get('bravo')[0].push(job('LATE001'));
+  tabPages.get('charlie')[0].push(job('LATE002'));
+  for (const release of heldSearches.values()) release();
+  heldSearches.clear();
+  await expect(boards[1].locator('#new')).toHaveText('New loads (2)', {timeout: 10000});
+  await expect(boards[2].locator('#new')).toHaveText('New loads (1)', {timeout: 10000});
+  for (const i of [1, 2]) await expect.poll(() => tabRequests.get(i === 1 ? 'bravo' : 'charlie').length, {timeout: 12000}).toBeGreaterThan(heldCounts.get(i === 1 ? 'bravo' : 'charlie'));
+  assert.equal(await boards[1].locator('html').getAttribute('data-test-notifications'), '2', 'resume preserves baseline/history and does not repeat old alerts');
+  await boards[1].evaluate(() => { document.documentElement.dataset.testHidden = 'false'; document.dispatchEvent(new Event('visibilitychange')); });
+  await lifecycle.detach();
+  await boards[2].evaluate(() => document.documentElement.dataset.testSuspendSound = 'true');
+  tabPages.get('charlie')[0].push(job('SOUND01'));
+  await expect(boards[2].locator('#new')).toHaveText('New loads (2)', {timeout: 12000});
+  const soundCount = tabRequests.get('charlie').length;
+  await expect.poll(() => tabRequests.get('charlie').length, {timeout: 12000}).toBeGreaterThan(soundCount);
+  await boards[2].screenshot({path: join(profile, 'background-resumed.png')});
   limitedTabs.add('bravo');
   await expect(boards[1].locator('#status')).toContainText('rate limited', {timeout: 12000});
   await boards[1].close();
@@ -220,6 +280,6 @@ try {
   assert.equal(tabRequests.get('charlie').length, stoppedCount);
   for (const timestamps of tabRequests.values()) for (let i = 2; i < timestamps.length; i++) assert.ok(timestamps[i] - timestamps[i - 1] >= 3900, 'minimum interval applies within each tab');
   assert.deepEqual(errors, []);
-  console.log('PASS: baseline, persistent highlights, three simultaneous independent tabs, shared settings, pause/close/429 isolation, old-lock upgrade, per-tab spacing and revocation.');
+  console.log('PASS: baseline, persistent highlights, independent tabs, shared settings, hidden response delay, confirmed renderer suspension/resume, foreground timeout, suspended audio, modifier shortcuts, pause/close/429 isolation, per-tab spacing and revocation.');
   console.log(`Previews: ${profile}`);
 } finally { await context.close(); }

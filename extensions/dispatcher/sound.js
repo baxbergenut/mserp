@@ -3,7 +3,12 @@ globalThis.DispatchWatchSound = (() => {
   function unlock() { context ||= new AudioContext(); return context.resume(); }
   async function play(sound, volume) {
     if (sound === "silent" || !volume) return;
-    await unlock();
+    let timeout;
+    try {
+      await Promise.race([unlock(), new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Sound is suspended. Return to the tab and press Pause, then Play to enable it.")), 2000);
+      })]);
+    } finally { clearTimeout(timeout); }
     if (context.state !== "running") throw new Error("Sound is blocked. Press Pause, then Play on the page to enable it.");
     const notes = sound === "bell" ? [880, 1320] : sound === "radar" ? [660, 660, 990] : [523.25, 659.25, 783.99];
     notes.forEach((frequency, i) => {

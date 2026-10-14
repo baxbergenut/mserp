@@ -312,6 +312,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   activation stay browser-wide. Pause/close/vendor errors affect only their tab;
   revocation/Disconnect stops all tabs on their next check. Ignore obsolete
   watchOwner storage from older versions. The background test exercises 100 tabs.
+  Response/DOM events validate results directly: no throttled debounce before
+  acceptance. Hidden pending searches do not time out or overlap requests;
+  visibility/resume restores a 30-second foreground window, and overdue timers
+  allow queued work after a freeze/sleep. Sound promises cannot block scanning.
+  Modifier keys/tab-switch shortcuts do not pause. Chrome freeze/discard/sleep
+  still prevent execution; recommend the site Performance exclusion and Energy
+  Saver off. A discarded/reloaded page starts paused. Browser tests simulate
+  hidden delayed responses and suspend/resume an isolated renderer with CDP's debugger.
 - Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
   `ExtensionAccess.tsx` implement `access.manage` administration at
   GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute

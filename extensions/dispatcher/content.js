@@ -93,8 +93,13 @@
     renderNewLoads();
     if (fresh.length) {
       root.querySelector("#last-new").textContent = `Last notification: ${fresh.length} new load${fresh.length === 1 ? "" : "s"} at ${new Date().toLocaleTimeString()}`;
-      try { await DispatchWatchSound.play(settings.sound, settings.volume); soundWarning = ""; }
-      catch(e) { soundWarning = e.message || "Sound unavailable. Check browser audio."; }
+      // Chrome may suspend audio in a hidden tab. Audio must never hold up scanning.
+      const g = generation;
+      void DispatchWatchSound.play(settings.sound, settings.volume).then(() => {
+        if (g === generation) soundWarning = "";
+      }, e => {
+        if (g === generation) soundWarning = e.message || "Sound unavailable. Check browser audio.";
+      });
     }
   }
   function checkedStatus() {
@@ -103,10 +108,16 @@
   }
   function waitForResults(action) {
     return new Promise((resolve, reject) => {
-      let quietTimer;
+      let timeout, deadline, settled = false;
       const since = Date.now(), baseline = latestResponse?.id || 0;
-      const cleanup = () => { observer.disconnect(); clearTimeout(timeout); clearTimeout(quietTimer); abortWait = undefined; checkWait = undefined; };
+      const cleanup = () => {
+        settled = true; observer.disconnect(); clearTimeout(timeout);
+        document.removeEventListener("visibilitychange", resume);
+        document.removeEventListener("resume", resume);
+        abortWait = undefined; checkWait = undefined;
+      };
       const finish = () => {
+        if (settled) return;
         if (!latestResponse || latestResponse.id <= baseline || latestResponse.startedAt < since) return;
         if (latestResponse.error) { cleanup(); reject(new Error(latestResponse.error)); return; }
         if (!A.loading()) {
@@ -118,10 +129,34 @@
           } catch (e) { cleanup(); reject(e); }
         }
       };
-      checkWait = () => { clearTimeout(quietTimer); quietTimer = setTimeout(finish, 350); };
+      // Inspect on response/DOM events, not a debounce timer that Chrome can
+      // postpone beyond the timeout in a background tab.
+      checkWait = finish;
       const observer = new MutationObserver(checkWait);
       observer.observe(document.querySelector("main") || document.body, { childList: true, subtree: true, characterData: true, attributes: true });
-      const timeout = setTimeout(() => { cleanup(); reject(new Error("No matching load-search response within 30 seconds. Reload J.B. Hunt after updating the extension, then retry.")); }, 30000);
+      const arm = () => {
+        clearTimeout(timeout); deadline = Date.now() + 30000;
+        timeout = setTimeout(expire, 30000);
+      };
+      const expire = () => {
+        finish();
+        if (settled) return;
+        if (document.hidden) {
+          status("Waiting for background search — Chrome may delay this tab");
+          return; // Keep this request; never issue an overlapping refresh.
+        }
+        // A frozen renderer/computer sleep can deliver an overdue timer before
+        // queued network and DOM tasks. Allow those tasks a fresh foreground window.
+        if (Date.now() > deadline + 2000) { arm(); return; }
+        cleanup(); reject(new Error("No matching load-search response after 30 seconds in the foreground. Refresh J.B. Hunt, then press Play."));
+      };
+      function resume() {
+        finish();
+        if (!settled && !document.hidden) arm();
+      }
+      document.addEventListener("visibilitychange", resume);
+      document.addEventListener("resume", resume);
+      arm();
       abortWait = () => { cleanup(); reject(new Error("Paused")); };
       try { action.click(); } catch(e) { cleanup(); reject(e); }
     });
@@ -212,6 +247,10 @@
   }
   // Restore nodes before native site handlers and pause on user edits.
   for (const type of ["click", "keydown", "input", "change"]) document.addEventListener(type, e => {
+    // Modifier keydown arrives before Chrome consumes Ctrl+Tab / Alt+Tab.
+    // Switching tabs is not an edit to the site's search.
+    if (type === "keydown" && (["Control", "Alt", "Meta", "Shift"].includes(e.key) ||
+      (e.key === "Tab" && (e.ctrlKey || e.altKey || e.metaKey)))) return;
     if (e.isTrusted && !e.composedPath().includes(host)) {
       if (running) stop("Paused for site interaction. Play starts a new baseline.");
       restore();

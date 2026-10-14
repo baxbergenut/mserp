@@ -1,6 +1,6 @@
 # MS Express Dispatch Watch
 
-Private Chrome Manifest V3 extension, version 0.3.0.
+Private Chrome Manifest V3 extension, version 0.3.1.
 
 ## Install for a pilot
 
@@ -66,7 +66,13 @@ device volume; Chrome/OS mute settings still apply.
   awake. Background throttling, memory saving, network latency and sleep can
   delay checks. This does not promise a four-second background SLA.
 - Stops on authorization failure, site errors/429, dialogs, malformed responses,
-  response/row mismatch or a 30-second timeout. Restart explicitly after resolving
+  response/row mismatch or a 30-second foreground timeout. Hidden pending searches
+  wait for the response without issuing another request; returning to the tab or
+  resuming after a freeze gives the site a fresh 30-second response window.
+  Valid responses are checked on DOM/network events, without a debounce timer.
+  Frozen/delayed timers do not discard the baseline or discoveries. Suspended
+  sound cannot block the next scan. Ctrl/Alt modifier keys and tab-switch shortcuts
+  do not count as native site edits. Restart explicitly after resolving
   the issue; no retry storm or CAPTCHA bypass.
 
 Native origin/destination radii, equipment, job type and search dates remain in
@@ -74,6 +80,19 @@ J.B. Hunt. The extension monitors only that returned search.
 More than one result page takes multiple intervals
 to scan; for 2 pages at 5 seconds, a full scan takes roughly 10 seconds plus latency.
 The combined list reflects the latest completed checks, not a booking guarantee.
+
+## Background tabs
+
+In Chrome **Settings → Performance → Always keep these sites active**, add
+`scm.jbhunt.com`. Turn **Energy Saver** off while monitoring and keep the computer
+awake. Memory Saver can unload the page; Energy Saver can freeze its JavaScript.
+The extension cannot scan while Chrome has frozen or unloaded the load board.
+Ordinary background timer throttling can still delay the selected interval.
+See [Chrome performance settings](https://support.google.com/chrome/answer/12929150).
+
+A delayed response stays pending without overlapping requests and continues when
+Chrome delivers it. A frozen tab resumes the same run when Chrome unfreezes it.
+A discarded/reloaded tab starts paused and needs Play to build a new baseline.
 
 ## Access and privacy
 
@@ -120,7 +139,10 @@ Chromium profile with the actual extension; every HTTP request is locally mocked
 It checks structured parsing, silent all-page baselines, ID deduplication, sound,
 activation, legacy-setting migration, footer layout, page scanning, promotion,
 minimum spacing, three concurrent tabs, shared preferences, pause/close/error
-isolation, revocation and rate-limit stops. It never uses live accounts.
+isolation, revocation and rate-limit stops. It also holds responses beyond 30 seconds,
+simulates hidden visibility, pauses/resumes an isolated renderer through CDP's debugger,
+checks real foreground timeout handling and verifies suspended sound cannot stop
+scanning. It never uses live accounts.
 `node scripts/test-dispatch-extension-background.mjs` checks 100 simultaneous
 starts, independent access checks and the Disconnect/in-flight-check race.
 `node scripts/test-dispatcher-access-views.mjs` checks the ERP access card.
