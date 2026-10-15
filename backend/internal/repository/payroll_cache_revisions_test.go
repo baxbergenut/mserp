@@ -33,7 +33,7 @@ func TestPayrollRevisionCacheDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public; CREATE TABLE source(id int PRIMARY KEY, amount int); CREATE TABLE auth_sessions(id int); CREATE TABLE custom_tasks(id int); CREATE TABLE five_eld_locations(id int); CREATE TABLE dispatcher_extension_access(id int); INSERT INTO source VALUES(1,100);`)
+	exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public; CREATE TABLE source(id int PRIMARY KEY, amount int); CREATE TABLE auth_sessions(id int); CREATE TABLE custom_tasks(id int); CREATE TABLE five_eld_locations(id int); INSERT INTO source VALUES(1,100);`)
 	defer func() { _, _ = admin.Exec(ctx, `SET search_path TO public; DROP SCHEMA `+quoted+` CASCADE`) }()
 	migration, err := os.ReadFile("../../sql/090_payroll_cache_revisions.sql")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestPayrollRevisionCacheDatabase(t *testing.T) {
 	if fresh() != "100" || fills != 1 {
 		t.Fatal("session invalidated financial cache")
 	}
-	exec(`INSERT INTO custom_tasks VALUES(1); INSERT INTO five_eld_locations VALUES(1); INSERT INTO dispatcher_extension_access VALUES(1)`)
+	exec(`INSERT INTO custom_tasks VALUES(1); INSERT INTO five_eld_locations VALUES(1)`)
 	if fresh() != "100" || fills != 1 {
 		t.Fatal("unrelated operational commits invalidated payroll")
 	}

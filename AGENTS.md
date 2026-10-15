@@ -300,60 +300,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Runtime and setup
 
-### Dispatcher Chrome extension
-
-- `extensions/dispatcher/` is the private Carrier 360 Manifest V3 extension.
-  `network.js` observes only the confirmed loadboard GraphQL endpoint, projecting
-  structured `searchJobsElastic` jobs without credentials/request bodies. New-load detection,
-  sound and highlighting are local; no load data goes to MSERP. Native grid controls
-  refresh/page at 5 seconds by default, minimum 4 seconds per request. All-page
-  scanning takes multiple intervals; browser throttling can delay timers. No autobook.
-  Native site filters are the only filters. The first full scan after Play silently
-  seeds a per-run ID set; only unseen available IDs alert. Retain seen IDs through
-  price changes, pagination and disappearances (stop at 100,000 rather than evict).
-  Pause/reload then Play resets the baseline. New rows are highlighted/promoted on
-  their native page; a footer popover lists discoveries across pages. Play/Settings
-  mount inside the native paginator's right content, never above the fixed-height grid.
-  Reattach the same toolbar when Angular replaces the paginator during refresh;
-  routine DOM replacement must not stop a run or reset its baseline.
-  Reapply retained discovery highlights/order after row rerenders and keep them
-  while paused. Missing/unavailable discoveries remain in the popover with last-seen
-  time and explicit status; absence never implies booked. Returning IDs regain
-  highlighting without re-alerting. The next Play or reload resets this history.
-  There is no running-tab cap. Each content script owns its timer/history/pause
-  state; background access checks run independently, with serialized settings/access
-  writes and a current-token recheck after network completion. Preferences and
-  activation stay browser-wide. Pause/close/vendor errors affect only their tab;
-  revocation/Disconnect stops all tabs on their next check. Ignore obsolete
-  watchOwner storage from older versions. The background test exercises 100 tabs.
-  Response/DOM events validate results directly: no throttled debounce before
-  acceptance. Hidden pending searches do not time out or overlap requests;
-  visibility/resume restores a 30-second foreground window, and overdue timers
-  allow queued work after a freeze/sleep. Sound promises cannot block scanning.
-  Modifier keys/tab-switch shortcuts do not pause. Chrome freeze/discard/sleep
-  still prevent execution; recommend the site Performance exclusion and Energy
-  Saver off. A discarded/reloaded page starts paused. Browser tests simulate
-  hidden delayed responses and suspend/resume an isolated renderer with CDP's debugger.
-- Migration 091, repository/httpapi `dispatcher_extension*` and dispatcher details'
-  `ExtensionAccess.tsx` implement `access.manage` administration at
-  GET/PUT `/settings/dispatcher-extension/{id}`. Versioned, audited 10-minute
-  single-use codes activate one browser for 30 days through POST
-  `/dispatcher-extension/activate`; POST `/dispatcher-extension/check` accepts only
-  a scoped bearer token. Hashes only in the DB; no ERP session privileges. The
-  extension checks each cycle and stops on failure. Replacement/revocation and
-  dispatcher deactivation invalidate tokens. Account reference is unverified metadata.
-- From frontend/, `node scripts/test-dispatch-extension.mjs` uses an isolated browser
-  and fixture HTTP responses. `test-dispatcher-access-views.mjs` checks the ERP UI.
-  Optional `MSERP_EXTENSION_TEST_DATABASE_URL` runs fresh/migrated local `_test`
-  database coverage as mserp_app. Package with `extensions/package-dispatcher.ps1`.
-  See `extensions/dispatcher/README.md` for installation, limits and future ranking.
-- Migration 092 adds separate `updater_extension_access` records. Updaters have
-  an access.manage-only Chrome extension action on /dispatchers using the shared
-  ExtensionAccess card and GET/PUT `/settings/updater-extension/{id}`. The existing
-  activation/check endpoints accept both profile types, so installed extensions
-  need no update. Deleting an updater cascades access; explicit revoke/replace
-  invalidates its token. Updaters have no active flag; assignment/shift changes
-  preserve access. Never create a dispatcher solely to activate an updater.
+Refresher Orb is a separate repository and service. MSERP no longer hosts the
+Chrome extension or issues its credentials. Migration 098 retires the old access
+tables and trigger; migrations 091/092 remain only for upgrade history.
 
 ### Backend environment
 

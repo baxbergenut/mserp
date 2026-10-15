@@ -1286,10 +1286,5 @@ export interface DriverServiceSetup {
   driverId: string; name: string; driverStatus: string; tomorrow: string; items: DriverServiceState[];
   policies: RelayDriverPolicy[]; canLinkRelay: boolean; environment: string; checkedAt: string;
 }
-export type DispatcherExtensionAccess = {
-  dispatcherId?: string; updaterId?: string; enabled: boolean; accountLabel: string; version: number;
-  activatedAt: string | null; tokenExpiresAt: string | null;
-  activationExpiresAt: string | null;
-};
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }

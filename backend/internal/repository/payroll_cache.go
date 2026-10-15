@@ -25,7 +25,6 @@ type payrollCache struct {
 var payrollUnrelatedTables = []string{
 	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
 	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
-	"dispatcher_extension_access", "updater_extension_access", "dispatcher_extension_events",
 	"driver_service_requests", "driver_service_events", "profile_notes",
 }
 

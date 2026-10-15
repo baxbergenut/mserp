@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { usePermissions } from "../lib/access";
-import { ExtensionAccess } from "./ExtensionAccess";
 import { createUpdater, updateUpdater, deleteUpdater } from "../lib/api";
 import type { Updater, UpdaterInput } from "../lib/types";
 import { ConfirmDialog, EmptyState, ErrorBanner, Field, FormSection, Modal, RowActions, TableShell, controlClass } from "../components/management/ManagementUI";
 
 const empty: UpdaterInput = { fullName: "", shift: "main", extension: null };
 export function UpdaterPanel({ updaters, onChanged }: { updaters: Updater[]; onChanged: () => Promise<void> }) {
-  const canManageAccess = usePermissions().includes("access.manage");
-  const [extensionProfile, setExtensionProfile] = useState<Updater | null>(null);
   const [editing, setEditing] = useState<Updater | null | undefined>();
   const [form, setForm] = useState<UpdaterInput>(empty);
   const [pendingDelete, setPendingDelete] = useState<Updater | null>(null);
@@ -37,10 +33,9 @@ export function UpdaterPanel({ updaters, onChanged }: { updaters: Updater[]; onC
     <TableShell>{updaters.length === 0 ? <EmptyState message="No updaters yet. Add an updater, then assign them in a dispatcher profile." /> : <table className="w-full min-w-[680px] text-left text-[13px]">
       <thead><tr className="border-b border-zinc-800/50 text-zinc-500">{["Updater", "Shift", "Phone extension", "Dispatchers", "Actions"].map(label => <th key={label} className="px-4 py-3 font-medium">{label}</th>)}</tr></thead>
       <tbody>{updaters.map(u => <tr key={u.id} className="border-b border-zinc-900/70 text-zinc-300 last:border-0 hover:bg-zinc-800/15">
-        <td className="px-4 py-3 font-medium">{u.fullName}</td><td className="px-4 py-3">{u.shift === "main" ? "Main" : "After hours"}</td><td className="px-4 py-3 font-mono">{u.extension ?? "—"}</td><td className="px-4 py-3 text-zinc-400">{u.dispatcherNames.join(", ") || "Unassigned"}</td><td className="px-4 py-3"><div className="flex items-center gap-2">{canManageAccess && <button type="button" className="ui-button whitespace-nowrap" aria-label={`Chrome extension for ${u.fullName}`} onClick={() => setExtensionProfile(u)}>Chrome extension</button>}<RowActions onEdit={() => { setError(""); setForm({ fullName: u.fullName, shift: u.shift, extension: u.extension, version: u.version }); setEditing(u); }} onDelete={() => setPendingDelete(u)} /></div></td>
+        <td className="px-4 py-3 font-medium">{u.fullName}</td><td className="px-4 py-3">{u.shift === "main" ? "Main" : "After hours"}</td><td className="px-4 py-3 font-mono">{u.extension ?? "—"}</td><td className="px-4 py-3 text-zinc-400">{u.dispatcherNames.join(", ") || "Unassigned"}</td><td className="px-4 py-3"><div className="flex items-center gap-2"><RowActions onEdit={() => { setError(""); setForm({ fullName: u.fullName, shift: u.shift, extension: u.extension, version: u.version }); setEditing(u); }} onDelete={() => setPendingDelete(u)} /></div></td>
       </tr>)}</tbody>
     </table>}</TableShell>
-    {extensionProfile && canManageAccess && <Modal title={`Chrome extension · ${extensionProfile.fullName}`} isSaving={false} submitLabel="" hideSubmit cancelLabel="Done" onClose={() => setExtensionProfile(null)} onSubmit={event => event.preventDefault()}><ExtensionAccess key={extensionProfile.id} profileId={extensionProfile.id} kind="updater" /></Modal>}
     {editing !== undefined && <Modal title={editing ? `Edit ${editing.fullName}` : "Add updater"} isSaving={saving} submitLabel={editing ? "Save changes" : "Create updater"} onClose={() => setEditing(undefined)} onSubmit={event => { event.preventDefault(); void save(); }}>
       {error && <ErrorBanner message={error} />}
       <FormSection title="Updater profile">

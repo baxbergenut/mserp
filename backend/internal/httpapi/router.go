@@ -77,7 +77,6 @@ func NewRouter(
 	protected.Use(auth.requireCSRF)
 	protected.Use(requirePermission)
 	registerAccessRoutes(protected, auth, authRepo)
-	registerDispatcherExtensionRoutes(r, protected, authRepo)
 	protected.Get("/auth/session", auth.session)
 	protected.Post("/auth/logout", auth.logout)
 	protected.Post("/auth/password", auth.changePassword)

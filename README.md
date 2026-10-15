@@ -122,3 +122,9 @@ prioritize new-load discovery, and honor rate-limit cooldowns. Run only one
 scheduled instance with a given token; do not overlap standalone recovery with
 the API's sync jobs. Frequent refreshes skip a cycle while full or payroll
 refreshes are running; new-load discovery can continue during a full scan.
+
+Refresher Orb is now a separate product. The former MSERP Dispatcher Chrome
+extension, activation endpoints and profile access controls have been retired.
+Migration 098 removes its credential tables and deactivation trigger while retaining
+access audit history. Old MSERP activation codes and browser tokens no longer work.
+Dispatcher/updater phone extension numbers are unaffected.

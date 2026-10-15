@@ -34,10 +34,6 @@ func TestUpdaterDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	extensionMigration, err := os.ReadFile("../../sql/092_updater_extension.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, mode := range []string{"fresh", "migrated"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("updater_test_%d", time.Now().UnixNano())
@@ -53,19 +49,12 @@ func TestUpdaterDatabase(t *testing.T) {
 			if mode == "fresh" {
 				exec(string(source))
 			} else {
-				// The extension table references updaters, so apply it after the
-				// updater migration when reconstructing the pre-049 database.
-				baseline := strings.Replace(string(source), string(extensionMigration), "", 1)
-				if baseline == string(source) {
-					t.Fatal("extension migration differs from init")
-				}
-				before, after, ok := strings.Cut(baseline, string(migration))
+				before, after, ok := strings.Cut(string(source), string(migration))
 				if !ok {
 					t.Fatal("migration differs from init")
 				}
 				exec(before + after)
 				exec(string(migration))
-				exec(string(extensionMigration))
 			}
 			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			appcfg := cfg.Copy()

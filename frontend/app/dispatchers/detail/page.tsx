@@ -11,12 +11,10 @@ import { EmptyState, ErrorBanner, Modal, StatusBadge, TableShell } from "@/app/c
 import { usePermissions } from "@/app/lib/access";
 import { formatPhone } from "@/app/lib/phone";
 import { DispatcherForm, dispatcherToInput } from "../DispatcherForm";
-import { ExtensionAccess } from "../ExtensionAccess";
 
 export default function DispatcherDetailPage() {
   const id = useSearchParams().get("id") ?? "";
   const canWrite = usePermissions().includes("fleet.write");
-  const canManageAccess = usePermissions().includes("access.manage");
   const [dispatcher, setDispatcher] = useState<Dispatcher | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [updaters, setUpdaters] = useState<Updater[]>([]);
@@ -35,7 +33,6 @@ export default function DispatcherDetailPage() {
       <section className="ui-card"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[["Phone", formatPhone(dispatcher.phone)], ["Email", dispatcher.email], ["Extension", dispatcher.extension], ["Commission", dispatcher.payPercentage === null ? null : `${dispatcher.payPercentage}%`], ["Main updater", updater(dispatcher.mainUpdaterId)], ["After-hours updater", updater(dispatcher.afterHoursUpdaterId)]].map(([label,value]) => <div key={label}><dt className="text-xs text-zinc-400">{label}</dt><dd className="mt-1 break-words">{value ?? "Not recorded"}</dd></div>)}</dl></section>
       <section className="space-y-3"><h2>Assigned drivers <span className="text-zinc-400">{assigned.length}</span></h2><TableShell>{!assigned.length ? <EmptyState message="No drivers assigned." /> : <table className="[&_th]:px-3 [&_td]:px-3 [&_th]:py-2 [&_td]:py-2 w-full min-w-[500px] text-left"><thead><tr><th>Driver</th><th>Truck</th><th>Phone</th><th>Status</th></tr></thead><tbody>{assigned.map(d => <tr key={d.id}><td><Link href={`/drivers/detail?id=${d.id}`}>{d.fullName}</Link></td><td>{d.truckId ? <Link href={`/trucks/detail?id=${d.truckId}`}>{d.truckUnit}</Link> : "Unassigned"}</td><td>{formatPhone(d.phone) || "—"}</td><td><StatusBadge active={d.active} /></td></tr>)}</tbody></table>}</TableShell></section>
       {dispatcher.notes && <section className="ui-card"><h2>Internal notes</h2><p className="mt-3 whitespace-pre-wrap text-zinc-300">{dispatcher.notes}</p></section>}
-      {canManageAccess && <ExtensionAccess key={id} profileId={id} active={dispatcher.active} />}
     </>}
     {form && <Modal title="Edit dispatcher" isSaving={saving} submitLabel="Save dispatcher" onClose={() => setForm(null)} onSubmit={e => { e.preventDefault(); setSaving(true); setError(""); void updateDispatcher(id, form).then(() => { setForm(null); setAttempt(v => v + 1); }).catch(e => setError(e.message)).finally(() => setSaving(false)); }}>{error && <ErrorBanner message={error} />}<DispatcherForm value={form} onChange={setForm} drivers={drivers} updaters={updaters} dispatcherId={id} /></Modal>}
   </div>;
