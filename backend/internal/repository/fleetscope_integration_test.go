@@ -280,8 +280,8 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal("completed intake still pending", err)
 	}
 
-	// A new source identity resembling an existing driver needs human review;
-	// confirmed linking must not change that driver's rates or truck assignment.
+	// A second source identity cannot take an already-linked local driver.
+	// Identity replacement needs reconciliation, not an intake merge.
 	other := event
 	other.EventID = "00000000-0000-0000-0000-000000000006"
 	other.Driver.ID = "00000000-0000-0000-0000-000000000007"
@@ -304,7 +304,10 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 	if _, err = repo.CompleteDriverIntake(ctx, result.IntakeID, userID, "", &input, false); !errors.Is(err, ErrIntakeMatch) {
 		t.Fatalf("unreviewed match: %v", err)
 	}
-	linked, err := repo.CompleteDriverIntake(ctx, result.IntakeID, userID, driver.ID, nil, false)
+	if _, err = repo.CompleteDriverIntake(ctx, result.IntakeID, userID, driver.ID, nil, false); err == nil {
+		t.Fatal("a second FleetScope identity claimed the linked driver")
+	}
+	linked, err := repo.GetDriver(ctx, driver.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +326,7 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 	}
 	assertDriverCount(0)
 	page, err = repo.ListDriverIntake(ctx, Pagination{})
-	if err != nil || page.Total != 0 {
+	if err != nil || page.Total != 1 || page.Items[0].ID != result.IntakeID {
 		t.Fatal("retry reopened deleted driver", err)
 	}
 }

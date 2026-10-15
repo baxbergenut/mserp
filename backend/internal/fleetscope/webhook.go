@@ -1,4 +1,4 @@
-// Package fleetscope defines the one-way, versioned driver lifecycle handoff.
+// Package fleetscope defines signed driver intake and the separate outbound fleet protocol.
 package fleetscope
 
 import (
@@ -22,6 +22,7 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 type Options struct {
 	CompanyID string
 	Secret    string
+	Sync      SyncOptions
 }
 
 func (o Options) Validate() error {

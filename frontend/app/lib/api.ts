@@ -578,3 +578,8 @@ export const extractMaintenance = (text: string,file: File | null) => {const bod
 export const fetchMaintenanceAccess = () => apiRequest<import("./types").ExpenseCategoryAccess>("/maintenance/access");
 
 export const fetchPreventativeMaintenance = (query: {serviceCode: "pm" | "oil"; search: string; includeInactive: boolean; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").PreventativeTruck>>(withQuery("/maintenance/preventative",query),{signal});
+export const fetchFleetScopeSync = (signal?: AbortSignal) => apiRequest<import("./types").FleetScopeSyncView>("/fleetscope-sync", { signal });
+export const captureFleetScopeSnapshot = () => apiRequest<void>("/fleetscope-sync/snapshot", { method: "POST", body: "{}" });
+export const reviewFleetScopeRecord = (input: import("./types").FleetScopeReview) => apiRequest<void>("/fleetscope-sync/review", { method: "POST", body: JSON.stringify(input) });
+export const fleetScopeSyncAction = (action: "assignments" | "activate" | "pause" | "resume", input: { snapshotId: string; sourceRevision: number; version: number }) => apiRequest<void>(`/fleetscope-sync/${action}`, { method: "POST", body: JSON.stringify(input) });
+export const fleetScopeOperationAction = (id: string, action: "retry" | "supersede") => apiRequest<void>(`/fleetscope-sync/operations/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });

@@ -51,6 +51,28 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/fleetscope/`, `backend/internal/httpapi/fleetscope_handlers.go`,
   and `backend/internal/repository/fleetscope_repository.go`: signed new-hire
   intake and setup tasks. See `docs/FLEETSCOPE_WEBHOOK.md` for configuration.
+- Outbound FleetScope fleet sync uses migration 103, `fleetscope/sync.go`,
+  repository `fleetscope_sync*.go`, `httpapi/fleetscope_sync_handlers.go`, and
+  Settings > FleetScope. Default off; no receiver writes on deployment alone.
+  MSERP owns truck identity/recorded company-driver-investor ownership and crews;
+  FleetScope owns lifecycle/compliance/insurance/trailers. Do not conflate owners
+  with assigned drivers or map investors to lease. Durable transactional source
+  revision capture, immutable outbox bytes, HMAC HTTPS delivery, one-to-one
+  reviewed UUID links, receipt replay, separate assignment revisions/sequences,
+  pinned company/environment/epoch and periodic drift pausing protect writes.
+  V1 applies the whole enrolled fleet crew graph atomically. Initial provisioning
+  and baseline require review; no name matching or implicit VIN adoption.
+  `FLEETSCOPE_SYNC_MODE` (off/reconcile/live), URL, COMPANY_ID, ENVIRONMENT, KEY_ID,
+  SECRET, BOOTSTRAP_KEY_ID and BOOTSTRAP_SECRET use the `FLEETSCOPE_SYNC_` prefix.
+  Outbound company matches the existing webhook company, credentials differ.
+  The independent five-second worker remains off until configuration and reviewed
+  activation; settings reads use cache only. `fleetscope.read/manage/reconcile`
+  plus fleet.read protect routes; reconciliation also requires Administrator.
+  See `docs/FLEETSCOPE_SYNC_WIRE.md` and `docs/FLEETSCOPE_SYNC_RUNBOOK.md` before
+  changing the contract, enabling delivery or recovering restored databases.
+  Exact LF contract bytes/schema hashes and fixtures must match the receiver.
+  `MSERP_FLEETSCOPE_TEST_DATABASE_URL` runs fresh/incremental database tests;
+  build frontend with `/api`, then `node scripts/test-fleetscope-sync-views.mjs`.
 - `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
   API sync.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,

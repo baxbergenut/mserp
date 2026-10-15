@@ -48,6 +48,14 @@ func routePermission(method, path string) string {
 		return "payroll.write"
 	}
 	switch resource {
+	case "fleetscope-sync":
+		if read {
+			return "fleetscope.read"
+		}
+		if path == "/fleetscope-sync/pause" || strings.HasSuffix(path, "/retry") {
+			return "fleetscope.manage"
+		}
+		return "fleetscope.reconcile"
 	case "prepass-fleet":
 		if read || path == "/prepass-fleet/refresh" {
 			return "tolls.read"

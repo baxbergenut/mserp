@@ -1,0 +1,44 @@
+{
+  "protocol": "mserp-fleet-v1",
+  "version": 1,
+  "wireSchemaSHA256": "cd51e15c44665e7150d97f2c633ea15f4c488daa58d8571636923b1d0e168296",
+  "ownershipCapability": "mserp-fleet-ownership-v1",
+  "basePath": "/integrations/mserp/v1",
+  "maxBodyBytes": 4194304,
+  "signature": {
+    "algorithm": "HMAC-SHA256 lowercase hex prefixed v1=",
+    "encoding": "UTF-8, LF separators, no final LF",
+    "components": ["mserp-fleet-v1", "uppercase HTTP method", "exact public request path and query", "Unix seconds", "UUID nonce", "key ID", "environment", "company UUID", "fleetscope", "lowercase SHA256 hex of exact body bytes"],
+    "headers": ["X-MSERP-Key-ID", "X-MSERP-Timestamp", "X-MSERP-Nonce", "X-MSERP-Environment", "X-MSERP-Company-ID", "X-MSERP-Contract", "X-MSERP-Signature"],
+    "clockWindowSeconds": 300,
+    "nonceRetentionSeconds": 600,
+    "contractHash": "SHA256 of the exact UTF-8 bytes of this file"
+  },
+  "routes": {
+    "GET /capabilities": "Capabilities",
+    "POST /snapshots": "empty object -> first Snapshot page",
+    "GET /snapshots/{id}?cursor={cursor}": "Snapshot page from same immutable snapshot",
+    "POST /driver-links": "driver.link Operation -> Result",
+    "POST /truck-links": "truck.link Operation -> Result",
+    "POST /trucks/upsert": "truck.upsert Operation -> Result",
+    "POST /trucks/retire": "truck.retire Operation -> Result",
+    "POST /assignments/apply": "assignments.apply Operation -> Result"
+  },
+  "ownership": {
+    "kind": ["company", "driver", "investor"],
+    "mserpOwnerId": "required UUID",
+    "displayName": "trimmed, 1..200 Unicode code points, no control characters",
+    "mserpOwnerDriverId": "required nullable UUID, non-null exactly when kind is driver",
+    "effectiveDate": "required nullable YYYY-MM-DD",
+    "semantics": "Complete replacement when present; required on initial truck creation/link. Never changes assignments or insurance. Driver owner need not have a local FleetScope driver link. Independent investor is never lease."
+  },
+  "semantics": {
+    "operation": "Strict typed JSON, unknown fields rejected. See sync.go wire structs and docs/FLEETSCOPE_SYNC_WIRE.md for exact fields. Replay same operationId and exact bytes returns committed original Result. Different bytes returns 409. Mutation, external identity, revision and receipt commit atomically.",
+    "truck": "Per-truck strictly increasing sourceRevision. Source IDs are namespaced by company/environment/epoch. Linking requires reviewed snapshotId, expectedRevision and remote ID. No implicit VIN adoption. Upsert existing uses external identity. Provisioning is create-only color/class/GVWR, never ownership. operationalActive cannot remove a receiver safety hold.",
+    "assignment": "Strict company assignmentSequence, initial value 1. Complete desired crews only for explicitly listed trucks. Validate expectedRevision for each crew and all linked driver identities. Empty primary/secondary releases. All affected crews apply atomically; no implicit eviction outside the list. Return complete resulting crews with NEW expectedRevision values. Trailers stay on trucks. No ownership or employment side effects. Repeated unchanged baseline is allowed as a versioned adoption.",
+    "retire": "Must be unassigned, retain history and external identity tombstone, return remote ID and revision.",
+    "snapshot": "Stable id/capturedAt/epoch/company/environment across pages. nextCursor empty at end. Trucks include assignmentRevision even when unassigned, current ownership JSON and projection (complete current MSERP-owned field values; null only before binding). Include retired linked trucks and terminated linked drivers. No SSN, birthdate, payroll or documents.",
+    "bootstrap": "driver.link without hireEventId and truck.link require bootstrap credentials and snapshot preconditions. driver.link with hireEventId can use live enrollment scope for the first binding to that emitted hire only.",
+    "errors": "Non-2xx JSON contains code, never sensitive details. 409 conflict, 422 invalid, 401/403 auth, 429 throttled, 503 transient. Retry-After integer seconds supported. No redirects."
+  }
+}

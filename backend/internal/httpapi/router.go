@@ -158,6 +158,7 @@ func NewRouter(
 	registerWeighMyTruckRoutes(protected, logger, wmtRepo)
 	registerDriverServiceRoutes(protected, logger, repository.NewDriverServiceRepository(pool, fuelRepo, wmtRepo))
 	registerDriverIntakeRoutes(protected, logger, fleetRepo, wmtRepo)
+	registerFleetSyncRoutes(protected, logger, repository.NewFleetSyncRepository(pool, fleetScopeOption.Sync))
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
 	registerTaskBoardRoutes(protected, logger, customTaskRepo)
 	events := newTaskEvents(pool, logger)

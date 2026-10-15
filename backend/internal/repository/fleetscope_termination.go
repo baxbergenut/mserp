@@ -49,6 +49,15 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return IntakeResult{}, err
 		}
+		if driverID == nil {
+			var linkedID string
+			linkErr := tx.QueryRow(ctx, `SELECT i.driver_id::text FROM fleetscope_driver_identity i JOIN drivers d ON d.id=i.driver_id WHERE i.company_id=$1 AND i.fleetscope_driver_id=$2 AND i.confirmed`, event.CompanyID, event.Driver.ID).Scan(&linkedID)
+			if linkErr == nil {
+				driverID = &linkedID
+			} else if !errors.Is(linkErr, pgx.ErrNoRows) {
+				return IntakeResult{}, linkErr
+			}
+		}
 		notes := fmt.Sprintf("FleetScope termination date: %s\nFleetScope driver ID: %s\n", event.TerminationDate, event.Driver.ID)
 		if driverID != nil {
 			if err = lockChargeDrivers(ctx, tx, []string{*driverID}); err != nil {

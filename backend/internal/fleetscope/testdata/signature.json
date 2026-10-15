@@ -1,0 +1,13 @@
+{
+  "canonical": "mserp-fleet-v1\nPOST\n/api/integrations/mserp/v1/snapshots\n1792022400\n22222222-2222-4222-8222-222222222222\nreview-test\nstaging\n11111111-1111-4111-8111-111111111111\nfleetscope\n44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "signature": "v1=f08ef67ce5a4748da525caa426fb488736ad49a6ca2ab23335593e98f1131b8e",
+  "keyId": "review-test",
+  "target": "/api/integrations/mserp/v1/snapshots",
+  "companyId": "11111111-1111-4111-8111-111111111111",
+  "body": "{}",
+  "timestamp": "1792022400",
+  "secret": "public-test-secret-0123456789abcdef",
+  "method": "POST",
+  "nonce": "22222222-2222-4222-8222-222222222222",
+  "environment": "staging"
+}

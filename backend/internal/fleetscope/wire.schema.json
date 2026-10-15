@@ -1,0 +1,736 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MSERP FleetScope v1 wire bundle",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Operation"
+    },
+    {
+      "$ref": "#/$defs/Result"
+    },
+    {
+      "$ref": "#/$defs/Capabilities"
+    },
+    {
+      "$ref": "#/$defs/Snapshot"
+    }
+  ],
+  "$defs": {
+    "Ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "company",
+            "driver",
+            "investor"
+          ]
+        },
+        "mserpOwnerId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mserpOwnerDriverId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effectiveDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "mserpOwnerId",
+        "displayName",
+        "mserpOwnerDriverId",
+        "effectiveDate"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "driver"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "mserpOwnerDriverId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "mserpOwnerDriverId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TruckProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mserpTruckId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "unitNumber": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "vin": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-HJ-NPR-Z0-9]{17}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "make": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "licensePlate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "licenseState": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operationalActive": {
+          "type": "boolean"
+        },
+        "operationalStatus": {
+          "type": "string"
+        },
+        "ownership": {
+          "$ref": "#/$defs/Ownership"
+        }
+      },
+      "required": [
+        "mserpTruckId",
+        "unitNumber",
+        "vin",
+        "year",
+        "make",
+        "model",
+        "licensePlate",
+        "licenseState",
+        "operationalActive",
+        "operationalStatus",
+        "ownership"
+      ]
+    },
+    "Provisioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "truckClass": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "gvwrLbs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200000
+        }
+      },
+      "required": [
+        "color",
+        "truckClass",
+        "gvwrLbs"
+      ]
+    },
+    "DriverRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mserpDriverId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fleetScopeDriverId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "mserpDriverId",
+        "fleetScopeDriverId"
+      ]
+    },
+    "Crew": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mserpTruckId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fleetScopeVehicleId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "primary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriverRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secondary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriverRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mserpTruckId",
+        "fleetScopeVehicleId",
+        "expectedRevision",
+        "primary",
+        "secondary"
+      ]
+    },
+    "Operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "companyId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "staging",
+            "production"
+          ]
+        },
+        "epoch": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "enum": [
+            "driver.link",
+            "truck.link",
+            "truck.upsert",
+            "truck.retire",
+            "assignments.apply"
+          ]
+        },
+        "sourceRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assignmentSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expectedRevision": {
+          "type": "string"
+        },
+        "fleetScopeId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mserpId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "hireEventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "truck": {
+          "$ref": "#/$defs/TruckProjection"
+        },
+        "provisioning": {
+          "$ref": "#/$defs/Provisioning"
+        },
+        "crews": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Crew"
+          }
+        }
+      },
+      "required": [
+        "version",
+        "operationId",
+        "companyId",
+        "environment",
+        "epoch",
+        "occurredAt",
+        "kind",
+        "sourceRevision",
+        "assignmentSequence"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "assignments.apply"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "crews"
+            ],
+            "properties": {
+              "assignmentSequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sourceRevision": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "mserpId"
+            ],
+            "properties": {
+              "assignmentSequence": {
+                "const": 0
+              },
+              "sourceRevision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "truck.upsert",
+                  "truck.link"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "truck"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "truck.link",
+                  "truck.retire"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "fleetScopeId",
+              "expectedRevision"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "driver.link",
+                  "truck.link"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "fleetScopeId"
+            ]
+          }
+        }
+      ]
+    },
+    "Result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "duplicate"
+          ]
+        },
+        "companyId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "staging",
+            "production"
+          ]
+        },
+        "epoch": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fleetScopeId": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "assignmentRevision": {
+          "type": "string"
+        },
+        "sourceRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assignmentSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "crews": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Crew"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operationId",
+        "status",
+        "companyId",
+        "environment",
+        "epoch",
+        "fleetScopeId",
+        "revision",
+        "assignmentRevision",
+        "sourceRevision",
+        "assignmentSequence",
+        "crews"
+      ]
+    },
+    "Capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "contractHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "ownership": {
+          "const": "mserp-fleet-ownership-v1"
+        },
+        "companyId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "staging",
+            "production"
+          ]
+        },
+        "epoch": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mode": {
+          "enum": [
+            "reconcile",
+            "live"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "contractHash",
+        "ownership",
+        "companyId",
+        "environment",
+        "epoch",
+        "mode"
+      ]
+    },
+    "RemoteDriver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mserpId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "status",
+        "revision",
+        "mserpId"
+      ]
+    },
+    "RemoteTruck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "unitNumber": {
+          "type": "string"
+        },
+        "vin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assignmentRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mserpId": {
+          "type": "string"
+        },
+        "primaryId": {
+          "type": "string"
+        },
+        "secondaryId": {
+          "type": "string"
+        },
+        "safetyHold": {
+          "type": "boolean"
+        },
+        "ownership": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "projection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TruckProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "unitNumber",
+        "vin",
+        "revision",
+        "assignmentRevision",
+        "mserpId",
+        "primaryId",
+        "secondaryId",
+        "safetyHold",
+        "ownership",
+        "projection"
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "companyId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "staging",
+            "production"
+          ]
+        },
+        "epoch": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "drivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RemoteDriver"
+          }
+        },
+        "trucks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RemoteTruck"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "environment",
+        "epoch",
+        "capturedAt",
+        "nextCursor",
+        "drivers",
+        "trucks"
+      ]
+    }
+  }
+}

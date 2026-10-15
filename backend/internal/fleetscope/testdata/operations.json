@@ -1,0 +1,212 @@
+[
+  {
+    "request": {
+      "version": 1,
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-15T12:00:00Z",
+      "kind": "truck.link",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "snapshotId": "55555555-5555-4555-8555-555555555555",
+      "expectedRevision": "truck-r1",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "mserpId": "33333333-3333-4333-8333-333333333333",
+      "truck": {
+        "mserpTruckId": "33333333-3333-4333-8333-333333333333",
+        "unitNumber": "001",
+        "vin": "1FUJGLDR9CSBP0001",
+        "year": 2022,
+        "make": "Freightliner",
+        "model": "Cascadia",
+        "licensePlate": "ABC123",
+        "licenseState": "IL",
+        "operationalActive": true,
+        "operationalStatus": "available",
+        "ownership": {
+          "kind": "investor",
+          "mserpOwnerId": "55555555-5555-4555-8555-555555555555",
+          "displayName": "Example Investor",
+          "mserpOwnerDriverId": null,
+          "effectiveDate": null
+        }
+      }
+    },
+    "response": {
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "status": "applied",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "revision": "truck-r2",
+      "assignmentRevision": "crew-r1",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "crews": null
+    }
+  },
+  {
+    "request": {
+      "version": 1,
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-15T12:00:00Z",
+      "kind": "truck.upsert",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "snapshotId": "55555555-5555-4555-8555-555555555555",
+      "mserpId": "33333333-3333-4333-8333-333333333333",
+      "truck": {
+        "mserpTruckId": "33333333-3333-4333-8333-333333333333",
+        "unitNumber": "001",
+        "vin": "1FUJGLDR9CSBP0001",
+        "year": 2022,
+        "make": "Freightliner",
+        "model": "Cascadia",
+        "licensePlate": "ABC123",
+        "licenseState": "IL",
+        "operationalActive": true,
+        "operationalStatus": "available",
+        "ownership": {
+          "kind": "investor",
+          "mserpOwnerId": "55555555-5555-4555-8555-555555555555",
+          "displayName": "Example Investor",
+          "mserpOwnerDriverId": null,
+          "effectiveDate": null
+        }
+      },
+      "provisioning": {
+        "color": "White",
+        "truckClass": "Class 8",
+        "gvwrLbs": 80000
+      }
+    },
+    "response": {
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "status": "applied",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "revision": "truck-r2",
+      "assignmentRevision": "crew-r1",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "crews": null
+    }
+  },
+  {
+    "request": {
+      "version": 1,
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-15T12:00:00Z",
+      "kind": "driver.link",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "snapshotId": "55555555-5555-4555-8555-555555555555",
+      "expectedRevision": "driver-r1",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "mserpId": "33333333-3333-4333-8333-333333333333"
+    },
+    "response": {
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "status": "applied",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "revision": "driver-r2",
+      "assignmentRevision": "",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "crews": null
+    }
+  },
+  {
+    "request": {
+      "version": 1,
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-15T12:00:00Z",
+      "kind": "assignments.apply",
+      "sourceRevision": 0,
+      "assignmentSequence": 1,
+      "snapshotId": "55555555-5555-4555-8555-555555555555",
+      "crews": [
+        {
+          "mserpTruckId": "33333333-3333-4333-8333-333333333333",
+          "fleetScopeVehicleId": "44444444-4444-4444-8444-444444444444",
+          "expectedRevision": "crew-r1",
+          "primary": {
+            "mserpDriverId": "55555555-5555-4555-8555-555555555555",
+            "fleetScopeDriverId": "22222222-2222-4222-8222-222222222222"
+          },
+          "secondary": null
+        }
+      ]
+    },
+    "response": {
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "status": "applied",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "fleetScopeId": "",
+      "revision": "",
+      "assignmentRevision": "",
+      "sourceRevision": 0,
+      "assignmentSequence": 1,
+      "crews": [
+        {
+          "mserpTruckId": "33333333-3333-4333-8333-333333333333",
+          "fleetScopeVehicleId": "44444444-4444-4444-8444-444444444444",
+          "expectedRevision": "crew-r2",
+          "primary": {
+            "mserpDriverId": "55555555-5555-4555-8555-555555555555",
+            "fleetScopeDriverId": "22222222-2222-4222-8222-222222222222"
+          },
+          "secondary": null
+        }
+      ]
+    }
+  },
+  {
+    "request": {
+      "version": 1,
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-15T12:00:00Z",
+      "kind": "truck.retire",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "expectedRevision": "truck-r1",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "mserpId": "33333333-3333-4333-8333-333333333333"
+    },
+    "response": {
+      "operationId": "33333333-3333-4333-8333-333333333333",
+      "status": "applied",
+      "companyId": "11111111-1111-4111-8111-111111111111",
+      "environment": "staging",
+      "epoch": "22222222-2222-4222-8222-222222222222",
+      "fleetScopeId": "44444444-4444-4444-8444-444444444444",
+      "revision": "truck-r2",
+      "assignmentRevision": "crew-r1",
+      "sourceRevision": 1,
+      "assignmentSequence": 0,
+      "crews": null
+    }
+  }
+]

@@ -1297,3 +1297,15 @@ export interface DriverServiceSetup {
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
 
 export interface PreventativeTruck { currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; vendorName: string; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; cost: string | null; oilType: string; notes: string; }
+export type FleetScopeOwnership = { kind: "company" | "driver" | "investor"; mserpOwnerId: string; displayName: string; mserpOwnerDriverId: string | null; effectiveDate: string | null };
+export type FleetScopeTruckProjection = { mserpTruckId: string; unitNumber: string; vin: string | null; year: number | null; make: string | null; model: string | null; licensePlate: string | null; licenseState: string | null; operationalActive: boolean; operationalStatus: string; ownership: FleetScopeOwnership };
+export type FleetScopeProvisioning = { color: string; truckClass: string; gvwrLbs: number };
+export type FleetScopeSyncView = {
+ pendingCount: number; canReview: boolean; canManage: boolean; configured: boolean; configuredMode: string; companyId: string; environment: string; contractHash: string; mode: string; version: number; epoch: string; lastError: string; lastCheckedAt: string | null;
+ local: { sourceRevision: number; week: string; trucks: { truck: FleetScopeTruckProjection; primaryId: string; secondaryId: string; issues: string[] }[]; drivers: { id: string; name: string; status: string; fleetScopeId: string; hireEventId: string }[] };
+ links: { kind: string; localId: string; remoteId: string; remoteRevision: string; assignmentRevision: string; sourceRevision: number; acknowledged: FleetScopeTruckProjection | null; acknowledgedHash: string; provisioning: FleetScopeProvisioning | null; excludedReason: string; lastError: string; lastSyncedAt: string | null; version: number }[];
+ operations: { id: string; entityKey: string; kind: string; state: string; attempts: number; lastError: string; createdAt: string; appliedAt: string | null }[];
+ snapshotId: string; snapshotSourceRevision: number; snapshotCreatedAt: string | null;
+ remote: { id: string; companyId: string; environment: string; epoch: string; capturedAt: string; nextCursor: string; drivers: { id: string; name: string; status: string; revision: string; mserpId: string }[]; trucks: { id: string; unitNumber: string; vin: string; revision: string; assignmentRevision: string; mserpId: string; primaryId: string; secondaryId: string; safetyHold: boolean; projection: FleetScopeTruckProjection | null; ownership: FleetScopeOwnership | null }[] } | null;
+};
+export type FleetScopeReview = { snapshotId: string; sourceRevision: number; action: "link" | "create" | "exclude" | "refresh"; kind: "truck" | "driver"; localId: string; remoteId: string; reason: string; provisioning?: FleetScopeProvisioning };

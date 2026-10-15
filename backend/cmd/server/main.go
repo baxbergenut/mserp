@@ -230,6 +230,12 @@ func main() {
 		}})
 	}()
 	schedulerDone := make(chan struct{})
+	fleetSyncDone := make(chan struct{})
+	go func() {
+		defer close(fleetSyncDone)
+		repo := repository.NewFleetSyncRepository(pool, cfg.FleetScope.Sync)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "fleetscope-fleet-sync", Interval: 5 * time.Second, Run: repo.Process})
+	}()
 	if cfg.ScheduledSyncsEnabled {
 		go func() {
 			defer close(schedulerDone)
@@ -342,6 +348,10 @@ func main() {
 	}
 	select {
 	case <-maintenanceTasksDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-fleetSyncDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

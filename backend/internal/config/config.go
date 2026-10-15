@@ -236,6 +236,25 @@ func Load() (Config, error) {
 		FiveELDSyncInterval:          fiveELDSyncInterval,
 	}
 
+	cfg.FleetScope.Sync = fleetscope.SyncOptions{
+		Mode:            envOrDefault("FLEETSCOPE_SYNC_MODE", "off"),
+		URL:             strings.TrimSpace(os.Getenv("FLEETSCOPE_SYNC_URL")),
+		CompanyID:       strings.ToLower(strings.TrimSpace(os.Getenv("FLEETSCOPE_SYNC_COMPANY_ID"))),
+		Environment:     strings.TrimSpace(os.Getenv("FLEETSCOPE_SYNC_ENVIRONMENT")),
+		KeyID:           strings.TrimSpace(os.Getenv("FLEETSCOPE_SYNC_KEY_ID")),
+		Secret:          os.Getenv("FLEETSCOPE_SYNC_SECRET"),
+		BootstrapKeyID:  strings.TrimSpace(os.Getenv("FLEETSCOPE_SYNC_BOOTSTRAP_KEY_ID")),
+		BootstrapSecret: os.Getenv("FLEETSCOPE_SYNC_BOOTSTRAP_SECRET"),
+	}
+	if err := cfg.FleetScope.Sync.Validate(); err != nil {
+		return Config{}, err
+	}
+	if cfg.FleetScope.Sync.CompanyID != "" && !strings.EqualFold(cfg.FleetScope.Sync.CompanyID, cfg.FleetScope.CompanyID) {
+		return Config{}, errors.New("FleetScope outbound and webhook company IDs must match")
+	}
+	if cfg.FleetScope.Sync.Secret != "" && (cfg.FleetScope.Sync.Secret == cfg.FleetScope.Secret || cfg.FleetScope.Sync.BootstrapSecret == cfg.FleetScope.Secret) {
+		return Config{}, errors.New("FleetScope outbound credentials must differ from the webhook secret")
+	}
 	if err := cfg.WeighMyTruck.Validate(); err != nil {
 		return Config{}, err
 	}

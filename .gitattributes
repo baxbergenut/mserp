@@ -1,0 +1,4 @@
+# The integration handshake hashes exact contract bytes on Windows and Linux.
+backend/internal/fleetscope/protocol.json text eol=lf
+backend/internal/fleetscope/wire.schema.json text eol=lf
+backend/internal/fleetscope/testdata/*.json text eol=lf
