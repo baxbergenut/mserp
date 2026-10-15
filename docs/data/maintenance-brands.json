@@ -1,0 +1,54 @@
+{
+  "retrieved": "2026-10-15",
+  "scope": "Brand directory; branch addresses are entered on work orders",
+  "brands": [
+    {
+      "name": "Love's",
+      "source": "https://www.loves.com/"
+    },
+    {
+      "name": "Speedco",
+      "source": "https://www.loves.com/"
+    },
+    {
+      "name": "TA",
+      "source": "https://www.ta-petro.com/"
+    },
+    {
+      "name": "Petro",
+      "source": "https://www.ta-petro.com/"
+    },
+    {
+      "name": "Goodyear Commercial Tire & Service Centers",
+      "source": "https://www.goodyearctsc.com/"
+    },
+    {
+      "name": "Blue Beacon",
+      "source": "https://bluebeacon.com/"
+    },
+    {
+      "name": "Boss Truck Shops",
+      "source": "https://bosstruckshops.com/"
+    },
+    {
+      "name": "Southern Tire Mart",
+      "source": "https://stmtires.com/"
+    },
+    {
+      "name": "Southern Tire Mart at Pilot",
+      "source": "https://pilotcompany.com/truck-care"
+    },
+    {
+      "name": "Rush Truck Centers",
+      "source": "https://www.rushtruckcenters.com/service/our-services"
+    },
+    {
+      "name": "MHC Kenworth",
+      "source": "https://www.mhc.com/"
+    },
+    {
+      "name": "Velocity Truck Centers",
+      "source": "https://www.velocitytruckcenters.com/locations"
+    }
+  ]
+}

@@ -129,7 +129,7 @@ func (r *MaintenanceRepository) Types(ctx context.Context) ([]MaintenanceType, e
 	return items, rows.Err()
 }
 func (r *MaintenanceRepository) Vendors(ctx context.Context) ([]MaintenanceVendor, error) {
-	rows, err := r.pool.Query(ctx, "SELECT id,name,address,phone,contact,active,version FROM maintenance_vendors ORDER BY lower(name)")
+	rows, err := r.pool.Query(ctx, "SELECT id,name,address,phone,contact,active,version FROM maintenance_vendors WHERE superseded_by IS NULL ORDER BY lower(name)")
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (r *MaintenanceRepository) SaveVendor(ctx context.Context, v MaintenanceVen
 	if v.ID == "" {
 		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_vendors(name,address,phone,contact,active) VALUES($1,$2,$3,$4,$5) RETURNING id,name,address,phone,contact,active,version`, v.Name, v.Address, v.Phone, v.Contact, v.Active)
 	} else {
-		row = r.pool.QueryRow(ctx, `UPDATE maintenance_vendors SET name=$2,address=$3,phone=$4,contact=$5,active=$6,version=version+1 WHERE id=$1 AND version=$7 RETURNING id,name,address,phone,contact,active,version`, v.ID, v.Name, v.Address, v.Phone, v.Contact, v.Active, v.Version)
+		row = r.pool.QueryRow(ctx, `UPDATE maintenance_vendors SET name=$2,address=$3,phone=$4,contact=$5,active=$6,version=version+1 WHERE id=$1 AND version=$7 AND superseded_by IS NULL RETURNING id,name,address,phone,contact,active,version`, v.ID, v.Name, v.Address, v.Phone, v.Contact, v.Active, v.Version)
 	}
 	var result MaintenanceVendor
 	err := row.Scan(&result.ID, &result.Name, &result.Address, &result.Phone, &result.Contact, &result.Active, &result.Version)

@@ -737,7 +737,7 @@ export interface MaintenanceTruck { id: string; unitNumber: string; active: bool
 export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
 export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm" | "oil"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
 export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
-export interface MaintenanceDue { truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
+export interface MaintenanceDue { lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
 export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
 export interface MaintenanceReport { serviceTypes: MaintenanceReportRow[]; trucks: MaintenanceReportRow[]; vendors: MaintenanceReportRow[]; repeatedWork: MaintenanceReportRow[]; total: string; fees: string; unallocated: string; }
 export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: { oilType: string | null; hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; } | null; }
@@ -943,6 +943,8 @@ export type TaskStatus = "open" | "in_process" | "completed";
 
 export interface CustomTask {
   serviceDriverId?: string;
+  maintenanceTruckId?: string;
+  maintenanceService?: string;
   status: TaskStatus;
   id: string;
   title: string;
@@ -967,7 +969,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { kind: "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
+export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "maintenance_oil" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;

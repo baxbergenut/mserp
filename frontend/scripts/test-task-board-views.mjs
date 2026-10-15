@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 
 const week = '2026-10-05';
 const users = [{ id: 'user', name: 'Test user' }, { id: 'teammate', name: 'Teammate' }];
-const assignments = ['driver_onboarding', 'driver_offboarding', 'relay_review', 'escrow_release', 'five_eld_truck'].map(kind => ({ kind, assigneeId: null, version: 1 }));
+const assignments = ['driver_onboarding', 'driver_offboarding', 'relay_review', 'escrow_release', 'five_eld_truck', 'maintenance_pm', 'maintenance_oil'].map(kind => ({ kind, assigneeId: null, version: 1 }));
 const driverId = '05400000-0000-0000-0000-000000000001';
 const driver = { id: driverId, fullName: 'Board Driver', driverType: '%-O', truckUnit: '123', phone: '', dispatcherId: 'dispatcher', dispatcherName: 'Test Dispatcher', location: null };
 const entry = { driverId, currentLoad: '', trailerNumber: '', status: '', destination: '', eta: '', notes: '', homeTime: '', version: 0 };
@@ -83,7 +83,7 @@ try {
     }
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.write', 'fleet.write', 'fleet.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
-      '/settings/access': { users: users.map(u => ({ id: u.id, username: u.name, email: `${u.id}@example.com`, active: true, roleId: 'role', version: 1 })), roles: [], permissions: [] },
+      '/settings/access': { users: users.map(u => ({ id: u.id, username: u.name, email: `${u.id}@example.com`, active: true, roleId: 'role', version: 1 })), roles: [{id:"role",name:"Dispatch team",permissions:[]}], permissions: [] },
       '/settings/system-tasks': assignments,
       '/tasks/users': users,
       '/tasks/custom': { items: tasks, total: tasks.length, page: 1, pageSize: 25, totalPages: 1 },
@@ -114,6 +114,14 @@ try {
     await page.getByRole('button', { name: 'Save ' + label + ' assignment', exact: true }).click();
     await expect(page.getByRole('group', { name: label + ' assignees', exact: true })).toContainText('Teammate');
   }
+  await page.getByLabel('Add role for PM service reminders',{exact:true}).selectOption('role');
+  await page.getByRole('button',{name:'Save PM service reminders assignment',exact:true}).click();
+  expect(assignments.find(a=>a.kind==='maintenance_pm').assigneeRoleIds).toEqual(['role']);
+  await page.reload();
+  await expect(page.getByRole('group',{name:'PM service reminders assignees',exact:true})).toContainText('Role: Dispatch team');
+  await page.getByRole('button',{name:'Remove role Dispatch team from PM service reminders',exact:true}).click();
+  await page.getByRole('button',{name:'Save PM service reminders assignment',exact:true}).click();
+  expect(assignments.find(a=>a.kind==='maintenance_pm').assigneeRoleIds).toEqual([]);
   await page.screenshot({ path: join(tmpdir(), 'mserp-system-task-assignees.png') });
   await page.goto(`${base}/tasks`);
   await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();

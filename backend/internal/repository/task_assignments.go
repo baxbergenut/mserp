@@ -32,7 +32,7 @@ func taskViewerArgs(ctx context.Context) (bool, string) {
 func customTaskVisibility(adminParam, userParam int) string {
 	return fmt.Sprintf(` AND ($%d::boolean OR
       (system_task_kind IS NULL AND (assigned_to IS NULL OR assigned_to=NULLIF($%d,'')::uuid OR assigned_by=NULLIF($%d,'')::uuid)) OR
-      (system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM system_task_assignments a JOIN app_users u ON (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids))
+      (system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM system_task_assignments a JOIN app_users u ON (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids) OR u.role_id=ANY(a.assignee_role_ids))
          WHERE a.kind=system_task_kind AND u.active AND u.id=NULLIF($%d,'')::uuid)))`, adminParam, userParam, userParam, userParam)
 }
 
@@ -47,7 +47,7 @@ func systemTaskVisible(ctx context.Context, q chargeQuery, kind string, lock boo
 	}
 	var visible bool
 	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_users u WHERE u.active AND u.id=NULLIF($2,'')::uuid
- AND (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids))) FROM system_task_assignments a WHERE a.kind=$1`+suffix, kind, userID).Scan(&visible)
+ AND (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids) OR u.role_id=ANY(a.assignee_role_ids))) FROM system_task_assignments a WHERE a.kind=$1`+suffix, kind, userID).Scan(&visible)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -55,10 +55,11 @@ func systemTaskVisible(ctx context.Context, q chargeQuery, kind string, lock boo
 }
 
 type SystemTaskAssignment struct {
-	AssigneeIDs []string `json:"assigneeIds"`
-	Kind        string   `json:"kind"`
-	AssigneeID  *string  `json:"assigneeId"`
-	Version     int      `json:"version"`
+	AssigneeRoleIDs []string `json:"assigneeRoleIds"`
+	AssigneeIDs     []string `json:"assigneeIds"`
+	Kind            string   `json:"kind"`
+	AssigneeID      *string  `json:"assigneeId"`
+	Version         int      `json:"version"`
 }
 type TaskUser struct {
 	ID   string `json:"id"`
@@ -66,7 +67,7 @@ type TaskUser struct {
 }
 
 func (r *AuthRepository) SystemTaskAssignments(ctx context.Context) ([]SystemTaskAssignment, error) {
-	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version,assignee_ids::text[] FROM system_task_assignments ORDER BY kind`)
+	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version,assignee_ids::text[],assignee_role_ids::text[] FROM system_task_assignments ORDER BY kind`)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func (r *AuthRepository) SystemTaskAssignments(ctx context.Context) ([]SystemTas
 	result := []SystemTaskAssignment{}
 	for rows.Next() {
 		var item SystemTaskAssignment
-		if err = rows.Scan(&item.Kind, &item.AssigneeID, &item.Version, &item.AssigneeIDs); err != nil {
+		if err = rows.Scan(&item.Kind, &item.AssigneeID, &item.Version, &item.AssigneeIDs, &item.AssigneeRoleIDs); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -91,7 +92,7 @@ func (r *AuthRepository) SaveSystemTaskAssignment(ctx context.Context, actor str
 	var before SystemTaskAssignment
 	var id string
 	before.Kind = input.Kind
-	if err = tx.QueryRow(ctx, `SELECT id::text,assignee_id::text,version,assignee_ids::text[] FROM system_task_assignments WHERE kind=$1 FOR UPDATE`, input.Kind).Scan(&id, &before.AssigneeID, &before.Version, &before.AssigneeIDs); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT id::text,assignee_id::text,version,assignee_ids::text[],assignee_role_ids::text[] FROM system_task_assignments WHERE kind=$1 FOR UPDATE`, input.Kind).Scan(&id, &before.AssigneeID, &before.Version, &before.AssigneeIDs, &before.AssigneeRoleIDs); err != nil {
 		return mapNotFound(err)
 	}
 	if before.Version != input.Version {
@@ -115,7 +116,18 @@ func (r *AuthRepository) SaveSystemTaskAssignment(ctx context.Context, actor str
 			return ErrAccessConflict
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE system_task_assignments SET assignee_id=$2,version=version+1,updated_at=now(),updated_by=$3,assignee_ids=$4::uuid[] WHERE kind=$1`, input.Kind, input.AssigneeID, actor, input.AssigneeIDs); err != nil {
+	if input.AssigneeRoleIDs == nil {
+		input.AssigneeRoleIDs = before.AssigneeRoleIDs
+	}
+	slices.Sort(input.AssigneeRoleIDs)
+	input.AssigneeRoleIDs = slices.Compact(input.AssigneeRoleIDs)
+	for _, role := range input.AssigneeRoleIDs {
+		var roleID string
+		if err = tx.QueryRow(ctx, "SELECT id::text FROM app_roles WHERE id=$1 FOR SHARE", role).Scan(&roleID); err != nil {
+			return ErrAccessConflict
+		}
+	}
+	if _, err = tx.Exec(ctx, `UPDATE system_task_assignments SET assignee_id=$2,version=version+1,updated_at=now(),updated_by=$3,assignee_ids=$4::uuid[],assignee_role_ids=$5::uuid[] WHERE kind=$1`, input.Kind, input.AssigneeID, actor, input.AssigneeIDs, input.AssigneeRoleIDs); err != nil {
 		return err
 	}
 	input.Version++

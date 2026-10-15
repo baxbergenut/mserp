@@ -307,6 +307,36 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if len(board.Items) != 1 || board.Items[0].CompletedByName != "assignee" {
 				t.Fatal("completed actor snapshot lost")
 			}
+			// Roles are dynamic memberships, combined with direct assignments without duplicates.
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{users["assignee"]}, "assigneeRoleIds": []string{roleID}, "version": 1}, 204)
+			exec(`INSERT INTO system_task_records(id,kind,title,notes,created_at) VALUES(gen_random_uuid(),'maintenance_pm','Role maintenance test','',now())`)
+			for _, name := range []string{"assigner", "assignee", "outsider"} {
+				if list(name, "/tasks?search=Role%20maintenance%20test") != 1 {
+					t.Fatal("role task missing", name)
+				}
+			}
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"bad"}, "version": 2}, 400)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"10000000-0000-0000-0000-000000000001"}, "version": 2}, 409)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{}, "version": 2}, 204)
+			if list("assigner", "/tasks?search=Role%20maintenance%20test") != 0 {
+				t.Fatal("removed role retained visibility")
+			}
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{roleID}, "version": 3}, 204)
+			var otherRole string
+			if e = admin.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES('Different role',ARRAY['tasks.read']) RETURNING id::text`).Scan(&otherRole); e != nil {
+				t.Fatal(e)
+			}
+			exec(`UPDATE app_users SET role_id=$2 WHERE id=$1`, users["assigner"], otherRole)
+			taskRepo := repository.NewCustomTaskRepository(pool)
+			currentBoard, e := taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true)
+			if e != nil || currentBoard.Total != 0 {
+				t.Fatal("former role member retains task", currentBoard, e)
+			}
+			exec(`UPDATE app_users SET role_id=$2 WHERE id=$1`, users["assigner"], roleID)
+			currentBoard, e = taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true)
+			if e != nil || currentBoard.Total != 1 {
+				t.Fatal("new role member missing task", currentBoard, e)
+			}
 			exec(`UPDATE app_users SET active=false WHERE id=$1`, users["outsider"])
 			call("admin", "PUT", "/settings/system-tasks/relay_review", map[string]any{"assigneeId": users["outsider"], "version": 2}, 409)
 		})

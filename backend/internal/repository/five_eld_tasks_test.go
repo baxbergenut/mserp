@@ -57,6 +57,11 @@ func TestFiveELDTruckTasksDatabase(t *testing.T) {
 				}
 				exec(before)
 				exec(string(migration))
+				later, err := os.ReadFile("../../sql/101_maintenance_tasks_roles.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				exec(string(later))
 			}
 			var actor, other string
 			if err = admin.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('ELD reviewer','$2test') RETURNING id::text`).Scan(&actor); err != nil {

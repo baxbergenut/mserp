@@ -68,7 +68,7 @@ ambiguous or unavailable telemetry leaves manual entry available. The GET is
 authorized by Maintenance View/Create/Edit and never writes an odometer by itself.
 Updating mileage between visits is available in Settings with an explanation.
 
-Due services are in-app reminders, refreshed on focus and every 30 visible seconds.
+Due services refresh on focus and every 30 visible seconds. A startup/minute worker also creates PM and oil-change system tasks for upcoming, due and overdue services. See the assignment and lifecycle rules below.
 Reports aggregate exact service amounts by reporting type, truck, vendor and period,
 with separate payment fees and unallocated costs. Repeated repairs group the same
 truck/component across distinct visits, excluding routine preventive/cleaning work
@@ -103,7 +103,7 @@ Verification/cancellation use the existing expense role and receipt guards.
 
 Migration 096 is additive and updates `init.sql`. It backfills existing Maintenance
 expenses as Needs review, retaining their original expense IDs and costs. Service
-date, vendor and odometer remain unknown; no PM/oil completion is invented. Existing
+date, vendor and odometer initially remain unknown. Migration 100 applies the customer-confirmed historical completion/date correction described below. Existing
 clients creating a Maintenance expense receive a review placeholder automatically.
 The database guards completed work costs against mismatching ledger edits. Application
 rollback does not undo this schema or those guards; use a compatible forward fix to
@@ -162,14 +162,14 @@ recorded service. `search` matches unit numbers; `includeInactive=true` includes
 retired trucks. Each row reads its latest Completed tagged visit, with the date,
 vendor snapshot, service odometer, oil grade and notes from that same visit.
 Needs-review and voided work never replace completed history. Clicking its date
-opens the original work order. Service cost sums only allocated matching work
+opens the original work order in a modal on the current overview page. Notes stay on one line with a scrollable hover/focus popup. Service cost sums only allocated matching work
 items, excluding payment fees; historical unknown costs and mixed unallocated
 invoices remain unknown. No new expense is created by an overview read.
 
 Visible rows request live Five ELD mileage with three concurrent calls and abort
 on navigation. The identity roster is cached for five minutes and each reading
 for one minute; every returned reading must still satisfy the one-hour freshness
-rule. If unavailable, the table labels its last saved dated reading explicitly.
+rule. Current mileage uses normal text; unavailable/outdated readings use gray text, with their source/date on hover. Visible rows refresh each minute and on focus.
 The entry input shows source/time on hover, without a note beneath it.
 
 Oil-change selection defaults new entry to SAE 10W-30 and offers common grades,
@@ -183,14 +183,47 @@ administrators edit fleet defaults; existing truck overrides take precedence,
 and the first configured limit reached makes a service due. No numerical service
 interval is invented. Work orders retains its Due services and other tabs.
 
-Migration 099 adds 300 real US locations to the existing chain/custom vendors:
-100 Love’s travel stops, 50 Speedco shops, 100 TA/Petro stops and 50 Blue Beacon
-washes, selected round-robin by state within each network. This is a sourced
-location directory, not a popularity ranking. The versioned
-`docs/data/maintenance-vendors-us.json` records branch URLs, retrieval date and
-selection method. Official sources: [Love’s](https://www.loves.com/location-and-fuel-price-search/all-locations),
-[TA/Petro](https://www.ta-petro.com/location/all-locations/), and
-[Blue Beacon](https://bluebeacon.com/view-all-locations/). Only directory-provided
-locality/phone details are seeded; missing street addresses are not inferred.
-Seeds use unique names and never overwrite existing/custom vendor details or
-archived choices. Vendor source URLs are retained server-side in source_url.
+Migration 100 replaces the untouched branch seeds from 099 with one entry per
+brand: Love's, Speedco, TA, Petro, Goodyear, Blue Beacon, Boss, Southern Tire Mart,
+Southern Tire Mart at Pilot, Rush, MHC and Velocity. Sources are retained in
+`docs/data/maintenance-brands.json`. Superseded branch records remain in the
+database but disappear from vendor options. Existing visits reference the brand
+while keeping their original name/address/phone snapshots. Custom/edited vendors
+are preserved. Enter a location address on the work order, not as another brand.
+Truck-detail History and Due services omit the truck column; Settings is available
+only in the standalone Work orders workspace.
+
+## Historical correction and service tasks (100–101)
+
+The customer confirmed that old expense-sheet work orders were completed and the
+sheet payment date is their service date. Migration 100 copies the already-saved
+`expenses.expense_date` for untouched Needs-review imports from
+`Maintenance_and_other_expenses`, retains ledger IDs/costs, and audits the change.
+Exact PM Service and Oil change names receive their respective completion tags.
+Unlinked historical units remain unlinked but Completed; the scoped legacy flag
+allows this without permitting newly entered completed work to omit a truck.
+Missing dates and edited records are preserved for review. No mileage is invented.
+
+Migration 101 adds PM and oil-change task categories and `assigneeRoleIds` to
+versioned system-task assignments. Settings > System tasks supports users and
+roles together. Active membership is evaluated on each request across list,
+counts and source workflow authorization, so role changes immediately affect
+visibility. Duplicate user/role membership appears once. Assignment changes are
+audited; omitted role arrays preserve previous roles for older clients, while an
+empty array clears them. Existing task permission requirements still apply.
+Unassigned categories are visible to Administrators, matching other categories.
+
+The startup/minute worker evaluates the same PM/oil schedules and precedence as
+Due services, with New York calendar dates. Fresh Five ELD mileage uses exact
+unique VIN identity, bounded concurrency and a 40-second telemetry budget; saved
+dated readings remain the fallback. It never writes telemetry as service history.
+At most one open task exists per truck/service. Repeated runs update the same
+reminder; completed service resolves that cycle and a later due cycle creates a
+new task. Disabling a schedule or retiring a truck resolves with an explicit
+outcome. Missing mileage does not silently clear an existing reminder. Missing
+baselines cannot produce a guessed due date. Task links open filtered Work orders;
+completion comes from recorded service, not generic task editing.
+
+Validation includes fresh and migrated schemas, historical dates without truck
+links, role membership/privacy, idempotent reminders, missing telemetry, completion
+and subsequent cycles, plus the real-API maintenance browser suite.

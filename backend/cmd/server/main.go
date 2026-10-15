@@ -219,6 +219,16 @@ func main() {
 			return customTaskRepo.GenerateEscrowTasks(bounded)
 		}})
 	}()
+	maintenanceTasksDone := make(chan struct{})
+	go func() {
+		defer close(maintenanceTasksDone)
+		repo := repository.NewMaintenanceRepository(pool)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "maintenance-tasks", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 50*time.Second)
+			defer cancel()
+			return jobs.RefreshMaintenanceTasks(bounded, repo, fiveELDJob)
+		}})
+	}()
 	schedulerDone := make(chan struct{})
 	if cfg.ScheduledSyncsEnabled {
 		go func() {
@@ -328,6 +338,10 @@ func main() {
 	}
 	select {
 	case <-escrowTasksDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-maintenanceTasksDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

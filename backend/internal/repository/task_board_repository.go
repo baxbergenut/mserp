@@ -8,7 +8,9 @@ import (
 )
 
 type BoardTask struct {
-	ServiceDriverID string `json:"serviceDriverId,omitempty"`
+	MaintenanceTruckID string `json:"maintenanceTruckId,omitempty"`
+	MaintenanceService string `json:"maintenanceService,omitempty"`
+	ServiceDriverID    string `json:"serviceDriverId,omitempty"`
 	CustomTask
 	Outcome string `json:"outcome"`
 }
@@ -17,15 +19,15 @@ type BoardTask struct {
 // fleet.read boundary for onboarding details. Completed records remain durable.
 const boardTaskCTE = `WITH tasks AS (
  SELECT c.id,c.title,c.notes,c.completed_at,c.created_by,c.created_at,c.updated_at,
- c.assigned_to,c.assigned_by,c.system_task_kind,c.completed_by_name,''::text AS outcome,c.in_process,NULL::uuid AS service_driver_id
+ c.assigned_to,c.assigned_by,c.system_task_kind,c.completed_by_name,''::text AS outcome,c.in_process,NULL::uuid AS service_driver_id,NULL::uuid AS maintenance_truck_id,''::text AS maintenance_service
  FROM custom_tasks c
  UNION ALL
  SELECT s.id,s.title,s.notes,s.completed_at,NULL::uuid,s.created_at,s.created_at,
- NULL::uuid,NULL::uuid,s.kind,s.completed_by_name,s.outcome,false,s.service_driver_id FROM system_task_records s
+ NULL::uuid,NULL::uuid,s.kind,s.completed_by_name,s.outcome,false,s.service_driver_id,s.maintenance_truck_id,s.maintenance_service FROM system_task_records s
  WHERE (s.completed_at IS NOT NULL OR s.available_on<=(now() AT TIME ZONE 'America/New_York')::date) AND (s.kind<>'escrow_release' OR s.completed_at IS NOT NULL OR EXISTS(
  SELECT 1 FROM escrow_release_reviews e WHERE e.id=s.id AND e.due_date<=(now() AT TIME ZONE 'America/New_York')::date))
 ), visible AS (
- SELECT t.*,CASE WHEN t.system_task_kind IS NULL THEN coalesce(u.username,'') ELSE coalesce((SELECT string_agg(au.username, ', ' ORDER BY au.username) FROM app_users au WHERE au.id=a.assignee_id OR au.id=ANY(a.assignee_ids)),'') END AS assignee_name,
+ SELECT t.*,CASE WHEN t.system_task_kind IS NULL THEN coalesce(u.username,'') ELSE coalesce((SELECT string_agg(au.username, ', ' ORDER BY au.username) FROM app_users au WHERE au.active AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids) OR au.role_id=ANY(a.assignee_role_ids))),'') END AS assignee_name,
  CASE WHEN t.system_task_kind IS NOT NULL THEN 'System' ELSE coalesce(b.username,'') END AS assigner_name,
  CASE WHEN t.system_task_kind IS NOT NULL THEN a.assignee_id ELSE t.assigned_to END AS effective_assignee
  FROM tasks t
@@ -34,7 +36,7 @@ const boardTaskCTE = `WITH tasks AS (
  LEFT JOIN app_users b ON b.id=coalesce(t.assigned_by,t.created_by)
  WHERE ($1::boolean OR
  (t.system_task_kind IS NULL AND (t.assigned_to IS NULL OR t.assigned_to=NULLIF($2,'')::uuid OR t.assigned_by=NULLIF($2,'')::uuid)) OR
- (t.system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM app_users au WHERE au.active AND au.id=NULLIF($2,'')::uuid AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids)))))
+ (t.system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM app_users au WHERE au.active AND au.id=NULLIF($2,'')::uuid AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids) OR au.role_id=ANY(a.assignee_role_ids)))))
  AND (coalesce(t.system_task_kind,'') NOT IN ('driver_onboarding','five_eld_truck') OR $3::boolean)
 ) `
 
@@ -52,7 +54,7 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 		return Page[BoardTask]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := tx.Query(ctx, boardTaskCTE+`SELECT id::text,title,notes,completed_at,created_by::text,created_at,updated_at,effective_assignee::text,assigned_by::text,assignee_name,system_task_kind,assigner_name,completed_by_name,outcome,CASE WHEN completed_at IS NOT NULL THEN 'completed' WHEN in_process THEN 'in_process' ELSE 'open' END,coalesce(service_driver_id::text,'') FROM visible`+where+` ORDER BY (completed_at IS NOT NULL),coalesce(completed_at,created_at) DESC,id LIMIT $6 OFFSET $7`, admin, user, fleetRead, search, status, pagination.PageSize, pagination.Offset())
+	rows, err := tx.Query(ctx, boardTaskCTE+`SELECT id::text,title,notes,completed_at,created_by::text,created_at,updated_at,effective_assignee::text,assigned_by::text,assignee_name,system_task_kind,assigner_name,completed_by_name,outcome,CASE WHEN completed_at IS NOT NULL THEN 'completed' WHEN in_process THEN 'in_process' ELSE 'open' END,coalesce(service_driver_id::text,''),coalesce(maintenance_truck_id::text,''),maintenance_service FROM visible`+where+` ORDER BY (completed_at IS NOT NULL),coalesce(completed_at,created_at) DESC,id LIMIT $6 OFFSET $7`, admin, user, fleetRead, search, status, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[BoardTask]{}, err
 	}
@@ -60,7 +62,7 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 	items := []BoardTask{}
 	for rows.Next() {
 		var t BoardTask
-		if err = rows.Scan(&t.ID, &t.Title, &t.Notes, &t.CompletedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.AssignedTo, &t.AssignedBy, &t.AssigneeName, &t.SystemTaskKind, &t.AssignerName, &t.CompletedByName, &t.Outcome, &t.Status, &t.ServiceDriverID); err != nil {
+		if err = rows.Scan(&t.ID, &t.Title, &t.Notes, &t.CompletedAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &t.AssignedTo, &t.AssignedBy, &t.AssigneeName, &t.SystemTaskKind, &t.AssignerName, &t.CompletedByName, &t.Outcome, &t.Status, &t.ServiceDriverID, &t.MaintenanceTruckID, &t.MaintenanceService); err != nil {
 			return Page[BoardTask]{}, err
 		}
 		items = append(items, t)

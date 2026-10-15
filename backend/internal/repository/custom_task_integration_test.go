@@ -38,7 +38,7 @@ func TestCustomTaskDatabase(t *testing.T) {
 			filename := "../../sql/init.sql"
 			if mode == "migration" {
 				filename = "../../sql/026_add_custom_tasks.sql"
-				if _, err := admin.Exec(ctx, `CREATE TABLE app_users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text, password_hash text, active boolean NOT NULL DEFAULT true)`); err != nil {
+				if _, err := admin.Exec(ctx, `CREATE TABLE app_users(role_id uuid, id uuid PRIMARY KEY DEFAULT gen_random_uuid(), username text, password_hash text, active boolean NOT NULL DEFAULT true)`); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -60,7 +60,7 @@ func TestCustomTaskDatabase(t *testing.T) {
 				// This legacy fixture contains only custom-task tables. The complete
 				// 066 migration is exercised by TestTaskAssignmentsDatabase.
 				if _, err = admin.Exec(ctx, `ALTER TABLE custom_tasks ADD COLUMN completed_by uuid REFERENCES app_users(id) ON DELETE SET NULL;
-				ALTER TABLE custom_tasks ADD COLUMN completed_by_name text NOT NULL DEFAULT ''; ALTER TABLE custom_tasks ADD COLUMN in_process boolean NOT NULL DEFAULT false; ALTER TABLE system_task_assignments ADD COLUMN assignee_ids uuid[] NOT NULL DEFAULT '{}'`); err != nil {
+				ALTER TABLE custom_tasks ADD COLUMN completed_by_name text NOT NULL DEFAULT ''; ALTER TABLE custom_tasks ADD COLUMN in_process boolean NOT NULL DEFAULT false; ALTER TABLE system_task_assignments ADD COLUMN assignee_ids uuid[] NOT NULL DEFAULT '{}'; ALTER TABLE system_task_assignments ADD COLUMN assignee_role_ids uuid[] NOT NULL DEFAULT '{}'`); err != nil {
 					t.Fatal(err)
 				}
 			}

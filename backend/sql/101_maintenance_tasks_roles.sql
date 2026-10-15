@@ -1,0 +1,14 @@
+BEGIN;
+ALTER TABLE system_task_assignments ADD COLUMN assignee_role_ids uuid[] NOT NULL DEFAULT '{}';
+ALTER TABLE system_task_assignments DROP CONSTRAINT system_task_assignments_kind_check;
+ALTER TABLE system_task_assignments ADD CONSTRAINT system_task_assignments_kind_check CHECK(kind IN ('driver_onboarding','driver_offboarding','relay_review','escrow_release','relay_setup','weighmytruck_setup','five_eld_truck','maintenance_pm','maintenance_oil'));
+INSERT INTO system_task_assignments(kind) VALUES('maintenance_pm'),('maintenance_oil');
+ALTER TABLE system_task_records ADD COLUMN maintenance_truck_id uuid;
+ALTER TABLE system_task_records ADD COLUMN maintenance_service text NOT NULL DEFAULT '';
+ALTER TABLE system_task_records ADD COLUMN maintenance_baseline_id uuid;
+ALTER TABLE system_task_records ADD COLUMN maintenance_observed_miles integer;
+ALTER TABLE system_task_records ADD COLUMN maintenance_observed_date date;
+DROP TRIGGER task_user_changed ON app_users;
+CREATE TRIGGER task_user_changed AFTER INSERT OR UPDATE OR DELETE ON app_users FOR EACH ROW EXECUTE FUNCTION notify_task_change();
+CREATE UNIQUE INDEX system_task_maintenance_open_idx ON system_task_records(maintenance_truck_id,maintenance_service) WHERE kind IN ('maintenance_pm','maintenance_oil') AND completed_at IS NULL;
+COMMIT;

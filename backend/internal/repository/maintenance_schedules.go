@@ -33,6 +33,7 @@ type MaintenanceSchedule struct {
 	Version       int     `json:"version"`
 }
 type MaintenanceDue struct {
+	LastRecordID *string              `json:"lastRecordId"`
 	TruckID      string               `json:"truckId"`
 	UnitNumber   string               `json:"unitNumber"`
 	ServiceCode  string               `json:"serviceCode"`
@@ -120,7 +121,10 @@ func (r *MaintenanceRepository) SaveReading(ctx context.Context, in MaintenanceR
 	return v, nil
 }
 func (r *MaintenanceRepository) Schedules(ctx context.Context) ([]MaintenanceSchedule, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version FROM maintenance_schedules ORDER BY truck_id NULLS FIRST,service_code`)
+	return maintenanceSchedules(ctx, r.pool)
+}
+func maintenanceSchedules(ctx context.Context, q chargeQuery) ([]MaintenanceSchedule, error) {
+	rows, err := q.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version FROM maintenance_schedules ORDER BY truck_id NULLS FIRST,service_code`)
 	if err != nil {
 		return nil, err
 	}
@@ -150,13 +154,17 @@ func (r *MaintenanceRepository) SaveSchedule(ctx context.Context, in Maintenance
 	return v, err
 }
 func (r *MaintenanceRepository) Due(ctx context.Context, truck string, today time.Time) ([]MaintenanceDue, error) {
-	schedules, err := r.Schedules(ctx)
+	return maintenanceDue(ctx, r.pool, truck, today)
+}
+func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time.Time) ([]MaintenanceDue, error) {
+	schedules, err := maintenanceSchedules(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT t.id,t.unit_number,x.code,
- (SELECT service_date::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC LIMIT 1),
- (SELECT odometer FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC LIMIT 1),
+	rows, err := q.Query(ctx, `SELECT t.id,t.unit_number,x.code,
+ (SELECT id::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
+ (SELECT service_date::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
+ (SELECT odometer FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
  (SELECT reading_date::text FROM maintenance_odometer_readings r WHERE r.truck_id=t.id AND r.active ORDER BY reading_date DESC,updated_at DESC LIMIT 1),
  (SELECT mileage FROM maintenance_odometer_readings r WHERE r.truck_id=t.id AND r.active ORDER BY reading_date DESC,updated_at DESC LIMIT 1)
  FROM trucks t CROSS JOIN (VALUES('pm'),('oil')) x(code) WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,x.code`, truck)
@@ -167,7 +175,7 @@ func (r *MaintenanceRepository) Due(ctx context.Context, truck string, today tim
 	items := []MaintenanceDue{}
 	for rows.Next() {
 		var v MaintenanceDue
-		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles); err != nil {
+		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastRecordID, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles); err != nil {
 			return nil, err
 		}
 		for _, s := range schedules {
@@ -185,6 +193,9 @@ func (r *MaintenanceRepository) Due(ctx context.Context, truck string, today tim
 }
 func calculateMaintenanceDue(v *MaintenanceDue, today time.Time) {
 	v.Status = "missing_information"
+	v.Reason = ""
+	v.NextDate = nil
+	v.NextMiles = nil
 	if v.Schedule == nil {
 		v.Reason = "Configure a service interval"
 		return

@@ -82,6 +82,14 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	brandMigration, err := os.ReadFile("../../sql/100_maintenance_brands_history.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskMigration, err := os.ReadFile("../../sql/101_maintenance_tasks_roles.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -96,6 +104,8 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(taskMigration), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(brandMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(preventativeMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(entryMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
@@ -107,10 +117,17 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(migration))
 				exec(string(entryMigration))
 				exec(string(preventativeMigration))
+				exec(`INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,cost_breakdown,source_spreadsheet_id,source_sheet,source_row,unit_number) SELECT id,name,'PM Service','2026-09-02',20,'[{"name":"PM Service","amount":"20.00"}]','test-sheet','Maintenance_and_other_expenses',2,'Historical unit' FROM expense_settings WHERE kind='category' AND name='Truck upkeep'`)
+				exec(string(brandMigration))
+				var historicalStatus, historicalDate, tracking string
+				if err := admin.QueryRow(ctx, `SELECT m.status,m.service_date::text,m.services->0->>'trackingCode' FROM maintenance_records m JOIN expenses e ON e.id=m.expense_id WHERE e.source_spreadsheet_id='test-sheet'`).Scan(&historicalStatus, &historicalDate, &tracking); err != nil || historicalStatus != "completed" || historicalDate != "2026-09-02" || tracking != "pm" {
+					t.Fatal("historical correction", historicalStatus, historicalDate, tracking, err)
+				}
+				exec(string(taskMigration))
 				var status string
 				var date *time.Time
 				var services []MaintenanceWork
-				if err := admin.QueryRow(ctx, "SELECT status,service_date,services FROM maintenance_records").Scan(&status, &date, &services); err != nil || status != "needs_review" || date != nil || services[0].TrackingCode != "" {
+				if err := admin.QueryRow(ctx, "SELECT m.status,m.service_date,m.services FROM maintenance_records m JOIN expenses e ON e.id=m.expense_id WHERE e.source_spreadsheet_id IS NULL").Scan(&status, &date, &services); err != nil || status != "needs_review" || date != nil || services[0].TrackingCode != "" {
 					t.Fatal("migration invented completion", status, date, err)
 				}
 			}
@@ -133,6 +150,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer pool.Close()
 			// Fleet tables in historical test schemas predate explicit ownership migrations.
 			exec("GRANT SELECT,INSERT,UPDATE,DELETE ON trucks,expenses,expense_settings,drivers,truck_driver_assignments,app_users TO mserp_app")
+			testMaintenanceTaskLifecycle(t, ctx, admin, pool)
 			repo := NewMaintenanceRepository(pool)
 			category, err := repo.CategoryID(ctx)
 			if err != nil {
@@ -172,7 +190,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal("oil must not complete PM", pm, err)
 			}
 			var defaults int
-			if err := pool.QueryRow(ctx, "SELECT count(*) FROM maintenance_vendors WHERE source_url<>''").Scan(&defaults); err != nil || defaults != 300 {
+			if err := pool.QueryRow(ctx, "SELECT count(*) FROM maintenance_vendors WHERE superseded_by IS NULL AND name<>'Test shop'").Scan(&defaults); err != nil || defaults != 12 {
 				t.Fatal("vendor catalog", defaults, err)
 			}
 			if _, err := repo.Save(ctx, input); !errors.Is(err, ErrMaintenanceConflict) {
@@ -305,4 +323,69 @@ func TestMaintenanceOilType(t *testing.T) {
 			t.Fatal(source, actual, want)
 		}
 	}
+}
+
+func testMaintenanceTaskLifecycle(t *testing.T, ctx context.Context, admin *pgx.Conn, pool *pgxpool.Pool) {
+	t.Helper()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := admin.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var truck, baseline string
+	if err := admin.QueryRow(ctx, `INSERT INTO trucks(unit_number,active) VALUES('REMINDER-TEST',true) RETURNING id::text`).Scan(&truck); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, `INSERT INTO maintenance_records(truck_id,status,service_date,odometer,services) VALUES($1,'completed','2026-10-01',1000,'[{"typeCode":"preventive","name":"PM Service","amount":null,"trackingCode":"pm"}]') RETURNING id::text`, truck).Scan(&baseline); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewMaintenanceRepository(pool)
+	miles := 100
+	schedule, err := repo.SaveSchedule(ctx, MaintenanceSchedule{TruckID: &truck, ServiceCode: "pm", IntervalMiles: &miles, Enabled: true, WarningMiles: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
+	live := map[string]MaintenanceReading{truck: {Mileage: 1095, Date: "2026-10-15"}}
+	refresh := func(readings map[string]MaintenanceReading) {
+		t.Helper()
+		if err := repo.RefreshMaintenanceTasks(ctx, today, readings); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func(open, total int) {
+		t.Helper()
+		var a, b int
+		if err := admin.QueryRow(ctx, `SELECT count(*) FILTER(WHERE completed_at IS NULL),count(*) FROM system_task_records WHERE maintenance_truck_id=$1`, truck).Scan(&a, &b); err != nil || a != open || b != total {
+			t.Fatal("reminder counts", a, b, open, total, err)
+		}
+	}
+	exec(`INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,'2026-10-15',1050,'manual','Tester')`, truck)
+	refresh(live)
+	refresh(live)
+	count(1, 1)
+	refresh(nil)
+	count(1, 1) // a telemetry outage must not resolve a warning
+	live[truck] = MaintenanceReading{Mileage: 1101, Date: "2026-10-15"}
+	refresh(live)
+	count(1, 1)
+	var title string
+	if err := admin.QueryRow(ctx, `SELECT title FROM system_task_records WHERE maintenance_truck_id=$1`, truck).Scan(&title); err != nil || !strings.Contains(title, "overdue") {
+		t.Fatal(title, err)
+	}
+	exec(`INSERT INTO maintenance_records(truck_id,status,service_date,odometer,services) VALUES($1,'completed','2026-10-15',1101,'[{"typeCode":"preventive","name":"PM Service","amount":null,"trackingCode":"pm"}]')`, truck)
+	refresh(live)
+	count(0, 1)
+	live[truck] = MaintenanceReading{Mileage: 1195, Date: "2026-10-15"}
+	refresh(live)
+	count(1, 2)
+	schedule.Enabled = false
+	if _, err = repo.SaveSchedule(ctx, schedule); err != nil {
+		t.Fatal(err)
+	}
+	refresh(live)
+	count(0, 2)
+	// Keep this independent fixture out of the other maintenance assertions.
+	exec(`UPDATE trucks SET active=false WHERE id=$1`, truck)
 }

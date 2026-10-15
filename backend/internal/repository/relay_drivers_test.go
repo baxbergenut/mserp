@@ -138,6 +138,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 					}
 					exec(string(migration))
 				}
+				exec(`ALTER TABLE system_task_assignments ADD COLUMN assignee_role_ids uuid[] NOT NULL DEFAULT '{}'; ALTER TABLE system_task_records ADD COLUMN maintenance_truck_id uuid; ALTER TABLE system_task_records ADD COLUMN maintenance_service text NOT NULL DEFAULT ''`)
 			} else {
 				exec(string(source))
 			}

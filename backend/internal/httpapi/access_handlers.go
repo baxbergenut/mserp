@@ -60,15 +60,15 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 			return
 		}
 		input.Kind = chi.URLParam(r, "kind")
-		if (input.Kind != "driver_onboarding" && input.Kind != "driver_offboarding" && input.Kind != "relay_review" && input.Kind != "escrow_release" && input.Kind != "relay_setup" && input.Kind != "weighmytruck_setup" && input.Kind != "five_eld_truck") || input.Version < 1 || (input.AssigneeID != nil && !isUUID(*input.AssigneeID)) {
+		if (input.Kind != "driver_onboarding" && input.Kind != "driver_offboarding" && input.Kind != "relay_review" && input.Kind != "escrow_release" && input.Kind != "relay_setup" && input.Kind != "weighmytruck_setup" && input.Kind != "five_eld_truck" && input.Kind != "maintenance_pm" && input.Kind != "maintenance_oil") || input.Version < 1 || (input.AssigneeID != nil && !isUUID(*input.AssigneeID)) {
 			writeAPIError(w, 400, "Provide a valid system task, assignee and version")
 			return
 		}
-		if len(input.AssigneeIDs) > 100 {
+		if len(input.AssigneeIDs) > 100 || len(input.AssigneeRoleIDs) > 100 {
 			writeAPIError(w, 400, "Too many assignees")
 			return
 		}
-		for _, id := range input.AssigneeIDs {
+		for _, id := range append(append([]string{}, input.AssigneeIDs...), input.AssigneeRoleIDs...) {
 			if !isUUID(id) {
 				writeAPIError(w, 400, "Invalid assignee")
 				return
