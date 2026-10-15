@@ -1,0 +1,2411 @@
+{
+  "retrievedOn": "2026-10-15",
+  "selection": "300 US locations from official directories, selected round-robin by state within each network; not a popularity ranking. 100 Love’s travel stops, 50 Speedco shops, 100 TA/Petro stops and 50 Blue Beacon washes. Address contains only directory-confirmed locality, not an inferred street address.",
+  "sources": [
+    "https://www.loves.com/location-and-fuel-price-search/all-locations",
+    "https://www.ta-petro.com/location/all-locations/",
+    "https://bluebeacon.com/view-all-locations/"
+  ],
+  "locations": [
+    {
+      "name": "Love's Travel Stop #368 — Clanton, AL",
+      "address": "Clanton, AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.loves.com/locations/al/clanton/loves-travel-stop-clanton-368",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #635 — Alma, AR",
+      "address": "Alma, AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.loves.com/locations/ar/alma/loves-travel-stop-alma-635",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #460 — Benson, AZ",
+      "address": "Benson, AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.loves.com/locations/az/benson/loves-travel-stop-benson-460",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #830 — Bakersfield, CA",
+      "address": "Bakersfield, CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.loves.com/locations/ca/bakersfield/loves-travel-stop-bakersfield-830",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #959 — Alamosa, CO",
+      "address": "Alamosa, CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.loves.com/locations/co/alamosa/loves-travel-stop-alamosa-959",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #646 — Willington, CT",
+      "address": "Willington, CT",
+      "phone": "",
+      "state": "CT",
+      "sourceUrl": "https://www.loves.com/locations/ct/willington/loves-travel-stop-willington-646",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #228 — Auburndale, FL",
+      "address": "Auburndale, FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.loves.com/locations/fl/auburndale/loves-travel-stop-auburndale-228",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #808 — Albany, GA",
+      "address": "Albany, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/albany/loves-travel-stop-albany-808",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #411 — Clive/Des Moines, IA",
+      "address": "Clive/Des Moines, IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.loves.com/locations/ia/clive/loves-travel-stop-clive-411",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #812 — Bliss, ID",
+      "address": "Bliss, ID",
+      "phone": "",
+      "state": "ID",
+      "sourceUrl": "https://www.loves.com/locations/id/bliss/loves-travel-stop-bliss-812",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #766 — Atkinson, IL",
+      "address": "Atkinson, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/atkinson/loves-travel-stop-atkinson-766",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #551 — Angola, IN",
+      "address": "Angola, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/angola/loves-travel-stop-angola-551",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #732 — Abilene, KS",
+      "address": "Abilene, KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.loves.com/locations/ks/abilene/loves-travel-stop-abilene-732",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #348 — Calvert City, KY",
+      "address": "Calvert City, KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.loves.com/locations/ky/calvert-city/loves-travel-stop-calvert-city-348",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #720 — Boyce, LA",
+      "address": "Boyce, LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.loves.com/locations/la/boyce/loves-travel-stop-boyce-720",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #537 — Cumberland, MD",
+      "address": "Cumberland, MD",
+      "phone": "",
+      "state": "MD",
+      "sourceUrl": "https://www.loves.com/locations/md/cumberland/loves-travel-stop-cumberland-537",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #878 — Alamo, MI",
+      "address": "Alamo, MI",
+      "phone": "",
+      "state": "MI",
+      "sourceUrl": "https://www.loves.com/locations/mi/alamo/loves-travel-stop-alamo-878",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #337 — Albert Lea, MN",
+      "address": "Albert Lea, MN",
+      "phone": "",
+      "state": "MN",
+      "sourceUrl": "https://www.loves.com/locations/mn/albert-lea/loves-travel-stop-albert-lea-337",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #809 — Bates City, MO",
+      "address": "Bates City, MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.loves.com/locations/mo/bates-city/loves-travel-stop-bates-city-809",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #388 — Batesville, MS",
+      "address": "Batesville, MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.loves.com/locations/ms/batesville/loves-travel-stop-batesville-388",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #789 — Great Falls, MT",
+      "address": "Great Falls, MT",
+      "phone": "",
+      "state": "MT",
+      "sourceUrl": "https://www.loves.com/locations/mt/great-falls/loves-travel-stop-great-falls-789",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #714 — Charlotte, NC",
+      "address": "Charlotte, NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.loves.com/locations/nc/charlotte/loves-travel-stop-charlotte-714",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #843 — Drayton, ND",
+      "address": "Drayton, ND",
+      "phone": "",
+      "state": "ND",
+      "sourceUrl": "https://www.loves.com/locations/nd/drayton/loves-travel-stop-drayton-843",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #309 — Aurora, NE",
+      "address": "Aurora, NE",
+      "phone": "",
+      "state": "NE",
+      "sourceUrl": "https://www.loves.com/locations/ne/aurora/loves-travel-stop-aurora-309",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #404 — Bordentown NJ",
+      "address": "Bordentown NJ",
+      "phone": "",
+      "state": "NJ",
+      "sourceUrl": "https://www.loves.com/locations/nj/bordentown/loves-travel-stop-bordentown-404",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #210 — Albuquerque, NM",
+      "address": "Albuquerque, NM",
+      "phone": "",
+      "state": "NM",
+      "sourceUrl": "https://www.loves.com/locations/nm/albuquerque/loves-travel-stop-albuquerque-210",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #978 — Carlin, NV",
+      "address": "Carlin, NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.loves.com/locations/nv/carlin/loves-travel-stop-carlin-978",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #772 — Bath, NY",
+      "address": "Bath, NY",
+      "phone": "",
+      "state": "NY",
+      "sourceUrl": "https://www.loves.com/locations/ny/bath/loves-travel-stop-bath-772",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #810 — Bellefontaine, OH",
+      "address": "Bellefontaine, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/bellefontaine/loves-travel-stop-bellefontaine-810",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #266 — Ardmore, OK",
+      "address": "Ardmore, OK",
+      "phone": "",
+      "state": "OK",
+      "sourceUrl": "https://www.loves.com/locations/ok/ardmore/loves-travel-stop-ardmore-266",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #728 — Albany, OR",
+      "address": "Albany, OR",
+      "phone": "",
+      "state": "OR",
+      "sourceUrl": "https://www.loves.com/locations/or/albany/loves-travel-stop-albany-728",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #829 — Brookville, PA",
+      "address": "Brookville, PA",
+      "phone": "",
+      "state": "PA",
+      "sourceUrl": "https://www.loves.com/locations/pa/brookville/loves-travel-stop-brookville-829",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #397 — Blacksburg, SC",
+      "address": "Blacksburg, SC",
+      "phone": "",
+      "state": "SC",
+      "sourceUrl": "https://www.loves.com/locations/sc/blacksburg/loves-travel-stop-blacksburg-397",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #602 — Box Elder, SD",
+      "address": "Box Elder, SD",
+      "phone": "",
+      "state": "SD",
+      "sourceUrl": "https://www.loves.com/locations/sd/box-elder/loves-travel-stop-box-elder-602",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #330 — Baxter, TN",
+      "address": "Baxter, TN",
+      "phone": "",
+      "state": "TN",
+      "sourceUrl": "https://www.loves.com/locations/tn/baxter/loves-travel-stop-baxter-330",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #721 — Alma, TX",
+      "address": "Alma, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/alma/loves-travel-stop-alma-721",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #686 — Brigham City, UT",
+      "address": "Brigham City, UT",
+      "phone": "",
+      "state": "UT",
+      "sourceUrl": "https://www.loves.com/locations/ut/brigham-city/loves-travel-stop-brigham-city-686",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #715 — Bastian, VA",
+      "address": "Bastian, VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.loves.com/locations/va/bastian/loves-travel-stop-bastian-715",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #413 — Ellensburg, WA",
+      "address": "Ellensburg, WA",
+      "phone": "",
+      "state": "WA",
+      "sourceUrl": "https://www.loves.com/locations/wa/ellensburg/loves-travel-stop-ellensburg-413",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #637 — Dekorra - Poynette, WI",
+      "address": "Dekorra - Poynette, WI",
+      "phone": "",
+      "state": "WI",
+      "sourceUrl": "https://www.loves.com/locations/wi/dekorra---poynette/loves-travel-stop-dekorra---poynette-637",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #378 — Ripley, WV",
+      "address": "Ripley, WV",
+      "phone": "",
+      "state": "WV",
+      "sourceUrl": "https://www.loves.com/locations/wv/ripley/loves-travel-stop-ripley-378",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #965 — Buffalo, WY",
+      "address": "Buffalo, WY",
+      "phone": "",
+      "state": "WY",
+      "sourceUrl": "https://www.loves.com/locations/wy/buffalo/loves-travel-stop-buffalo-965",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #877 — Cullman, AL",
+      "address": "Cullman, AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.loves.com/locations/al/cullman/loves-travel-stop-cullman-877",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #671 — Blytheville, AR",
+      "address": "Blytheville, AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.loves.com/locations/ar/blytheville/loves-travel-stop-blytheville-671",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #280 — Buckeye, AZ",
+      "address": "Buckeye, AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.loves.com/locations/az/buckeye/loves-travel-stop-buckeye-280",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #374 — Barstow, CA",
+      "address": "Barstow, CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.loves.com/locations/ca/barstow/loves-travel-stop-barstow-374",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #300 — Bennett, CO",
+      "address": "Bennett, CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.loves.com/locations/co/bennett/loves-travel-stop-bennett-300",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #708 — Bushnell, FL",
+      "address": "Bushnell, FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.loves.com/locations/fl/bushnell/loves-travel-stop-bushnell-708",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #405 — Brunswick, GA",
+      "address": "Brunswick, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/brunswick/loves-travel-stop-brunswick-405",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #476 — Davenport, IA",
+      "address": "Davenport, IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.loves.com/locations/ia/davenport/loves-travel-stop-davenport-476",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #334 — Heyburn, ID",
+      "address": "Heyburn, ID",
+      "phone": "",
+      "state": "ID",
+      "sourceUrl": "https://www.loves.com/locations/id/heyburn/loves-travel-stop-heyburn-334",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #768 — Channahon, IL",
+      "address": "Channahon, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/channahon/loves-travel-stop-channahon-768",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #394 — Demotte, IN",
+      "address": "Demotte, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/demotte/loves-travel-stop-demotte-394",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #178 — Belle Plaine, KS",
+      "address": "Belle Plaine, KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.loves.com/locations/ks/belle-plaine/loves-travel-stop-belle-plaine-178",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #321 — Corbin KY",
+      "address": "Corbin KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.loves.com/locations/ky/corbin/loves-travel-stop-corbin-321",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #523 — Duson, LA",
+      "address": "Duson, LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.loves.com/locations/la/duson/loves-travel-stop-duson-523",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #682 — Hagerstown, MD",
+      "address": "Hagerstown, MD",
+      "phone": "",
+      "state": "MD",
+      "sourceUrl": "https://www.loves.com/locations/md/hagerstown/loves-travel-stop-hagerstown-682",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #743 — Bridgeport, MI",
+      "address": "Bridgeport, MI",
+      "phone": "",
+      "state": "MI",
+      "sourceUrl": "https://www.loves.com/locations/mi/bridgeport/loves-travel-stop-bridgeport-743",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #832 — Columbus, MN",
+      "address": "Columbus, MN",
+      "phone": "",
+      "state": "MN",
+      "sourceUrl": "https://www.loves.com/locations/mn/columbus/loves-travel-stop-columbus-832",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #621 — Bevier, MO",
+      "address": "Bevier, MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.loves.com/locations/mo/bevier/loves-travel-stop-bevier-621",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #402 — Biloxi, MS",
+      "address": "Biloxi, MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.loves.com/locations/ms/biloxi/loves-travel-stop-biloxi-402",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #679 — Hardin, MT",
+      "address": "Hardin, MT",
+      "phone": "",
+      "state": "MT",
+      "sourceUrl": "https://www.loves.com/locations/mt/hardin/loves-travel-stop-hardin-679",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #412 — Dunn, NC",
+      "address": "Dunn, NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.loves.com/locations/nc/dunn/loves-travel-stop-dunn-412",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #353 — Fargo, ND",
+      "address": "Fargo, ND",
+      "phone": "",
+      "state": "ND",
+      "sourceUrl": "https://www.loves.com/locations/nd/fargo/loves-travel-stop-fargo-353",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #680 — Norfolk, NE",
+      "address": "Norfolk, NE",
+      "phone": "",
+      "state": "NE",
+      "sourceUrl": "https://www.loves.com/locations/ne/norfolk/loves-travel-stop-norfolk-680",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #614 — Albuquerque, NM",
+      "address": "Albuquerque, NM",
+      "phone": "",
+      "state": "NM",
+      "sourceUrl": "https://www.loves.com/locations/nm/albuquerque/loves-travel-stop-albuquerque-614",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #691 — Ely, NV",
+      "address": "Ely, NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.loves.com/locations/nv/ely/loves-travel-stop-ely-691",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #403 — Binghamton, NY",
+      "address": "Binghamton, NY",
+      "phone": "",
+      "state": "NY",
+      "sourceUrl": "https://www.loves.com/locations/ny/binghamton/loves-travel-stop-binghamton-403",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #711 — Bellville, OH",
+      "address": "Bellville, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/bellville/loves-travel-stop-bellville-711",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #268 — Atoka, OK",
+      "address": "Atoka, OK",
+      "phone": "",
+      "state": "OK",
+      "sourceUrl": "https://www.loves.com/locations/ok/atoka/loves-travel-stop-atoka-268",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #569 — Baker City, OR",
+      "address": "Baker City, OR",
+      "phone": "",
+      "state": "OR",
+      "sourceUrl": "https://www.loves.com/locations/or/baker-city/loves-travel-stop-baker-city-569",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #407 — Carlisle, PA",
+      "address": "Carlisle, PA",
+      "phone": "",
+      "state": "PA",
+      "sourceUrl": "https://www.loves.com/locations/pa/carlisle/loves-travel-stop-carlisle-407",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #657 — Cayce, SC",
+      "address": "Cayce, SC",
+      "phone": "",
+      "state": "SC",
+      "sourceUrl": "https://www.loves.com/locations/sc/cayce/loves-travel-stop-cayce-657",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #816 — Kimball, SD",
+      "address": "Kimball, SD",
+      "phone": "",
+      "state": "SD",
+      "sourceUrl": "https://www.loves.com/locations/sd/kimball/loves-travel-stop-kimball-816",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #364 — Charleston, TN",
+      "address": "Charleston, TN",
+      "phone": "",
+      "state": "TN",
+      "sourceUrl": "https://www.loves.com/locations/tn/charleston/loves-travel-stop-charleston-364",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #200 — Amarillo, TX",
+      "address": "Amarillo, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/amarillo/loves-travel-stop-amarillo-200",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #335 — Cedar City, UT",
+      "address": "Cedar City, UT",
+      "phone": "",
+      "state": "UT",
+      "sourceUrl": "https://www.loves.com/locations/ut/cedar-city/loves-travel-stop-cedar-city-335",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #707 — Low Moor, VA",
+      "address": "Low Moor, VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.loves.com/locations/va/covington/loves-travel-stop-covington-707",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #827 — Moses Lake, WA",
+      "address": "Moses Lake, WA",
+      "phone": "",
+      "state": "WA",
+      "sourceUrl": "https://www.loves.com/locations/wa/moses-lake/loves-travel-stop-moses-lake-827",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #752 — Elkhorn, WI",
+      "address": "Elkhorn, WI",
+      "phone": "",
+      "state": "WI",
+      "sourceUrl": "https://www.loves.com/locations/wi/elkhorn/loves-travel-stop-elkhorn-752",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #1060 — Casper, WY",
+      "address": "Casper, WY",
+      "phone": "",
+      "state": "WY",
+      "sourceUrl": "https://www.loves.com/locations/wy/casper/loves-travel-stop-casper-1060",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #773 — Eutaw, AL",
+      "address": "Eutaw, AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.loves.com/locations/al/eutaw/loves-travel-stop-eutaw-773",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #822 — Clarksville, AR",
+      "address": "Clarksville, AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.loves.com/locations/ar/clarksville/loves-travel-stop-clarksville-822",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #328 — Chandler, AZ",
+      "address": "Chandler, AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.loves.com/locations/az/chandler/loves-travel-stop-chandler-328",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #755 — Boron, CA",
+      "address": "Boron, CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.loves.com/locations/ca/boron/loves-travel-stop-boron-755",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #668 — Berthoud, CO",
+      "address": "Berthoud, CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.loves.com/locations/co/berthoud/loves-travel-stop-berthoud-668",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #453 — Cottondale, FL",
+      "address": "Cottondale, FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.loves.com/locations/fl/cottondale/loves-travel-stop-cottondale-453",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #735 — Calhoun, GA",
+      "address": "Calhoun, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/calhoun/loves-travel-stop-calhoun-735",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #684 — Ellsworth, IA",
+      "address": "Ellsworth, IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.loves.com/locations/ia/ellsworth/loves-travel-stop-ellsworth-684",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #478 — Idaho Falls, ID",
+      "address": "Idaho Falls, ID",
+      "phone": "",
+      "state": "ID",
+      "sourceUrl": "https://www.loves.com/locations/id/idaho-falls/loves-travel-stop-idaho-falls-478",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #746 — Decatur, IL",
+      "address": "Decatur, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/decatur/loves-travel-stop-decatur-746",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #417 — Gary, IN",
+      "address": "Gary, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/gary/loves-travel-stop-gary-417",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #647 — Belleville, KS",
+      "address": "Belleville, KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.loves.com/locations/ks/belleville/loves-travel-stop-belleville-647",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #716 — Elizabethtown, KY",
+      "address": "Elizabethtown, KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.loves.com/locations/ky/elizabethtown/loves-travel-stop-elizabethtown-716",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #209 — Greenwood, LA",
+      "address": "Greenwood, LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.loves.com/locations/la/greenwood/loves-travel-stop-greenwood-209",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #701 — Capac, MI",
+      "address": "Capac, MI",
+      "phone": "",
+      "state": "MI",
+      "sourceUrl": "https://www.loves.com/locations/mi/capac/loves-travel-stop-capac-701",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #842 — Rockville, MN",
+      "address": "Rockville, MN",
+      "phone": "",
+      "state": "MN",
+      "sourceUrl": "https://www.loves.com/locations/mn/rockville/loves-travel-stop-rockville-842",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #488 — Bloomsdale, MO",
+      "address": "Bloomsdale, MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.loves.com/locations/mo/bloomsdale/loves-travel-stop-bloomsdale-488",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #208 — Canton, MS",
+      "address": "Canton, MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.loves.com/locations/ms/canton/loves-travel-stop-canton-208",
+      "brand": "Store"
+    },
+    {
+      "name": "Love's Travel Stop #1043 — Laurel, MT",
+      "address": "Laurel, MT",
+      "phone": "",
+      "state": "MT",
+      "sourceUrl": "https://www.loves.com/locations/mt/laurel/loves-travel-stop-laurel-1043",
+      "brand": "Store"
+    },
+    {
+      "name": "Speedco #911 — Cottondale, AL",
+      "address": "Cottondale, AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.loves.com/locations/al/cottondale/loves-speedco-cottondale-911",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #939 — N Little Rock, AR",
+      "address": "N Little Rock, AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.loves.com/locations/ar/n-little-rock/loves-speedco-n-little-rock-939",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #907 — Casa Grande, AZ",
+      "address": "Casa Grande, AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.loves.com/locations/az/casa-grande/loves-speedco-casa-grande-907",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #910 — Corning, CA",
+      "address": "Corning, CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.loves.com/locations/ca/corning/loves-speedco-corning-910",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #908 — Commerce City, CO",
+      "address": "Commerce City, CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.loves.com/locations/co/commerce-city/loves-speedco-commerce-city-908",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #906 — Brunswick, GA",
+      "address": "Brunswick, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/brunswick/loves-speedco-brunswick-906",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #912 — Council Bluffs, IA",
+      "address": "Council Bluffs, IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.loves.com/locations/ia/council-bluffs/loves-speedco-council-bluffs-912",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #915 — Effingham, IL",
+      "address": "Effingham, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/effingham/loves-speedco-effingham-915",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #920 — Gary, IN",
+      "address": "Gary, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/gary/loves-speedco-gary-920",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #40175 — Topeka, KS",
+      "address": "Topeka, KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.loves.com/locations/ks/topeka/loves-speedco-topeka-40175",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #919 — Franklin, KY",
+      "address": "Franklin, KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.loves.com/locations/ky/franklin/loves-speedco-franklin-919",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #922 — Greenwood, LA",
+      "address": "Greenwood, LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.loves.com/locations/la/greenwood/loves-speedco-greenwood-922",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #929 — Joplin, MO",
+      "address": "Joplin, MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.loves.com/locations/mo/joplin/loves-speedco-joplin-929",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #918 — Flowood, MS",
+      "address": "Flowood, MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.loves.com/locations/ms/flowood/loves-speedco-flowood-918",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #925 — Haw River, NC",
+      "address": "Haw River, NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.loves.com/locations/nc/haw-river/loves-speedco-haw-river-925",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #938 — Milan, NM",
+      "address": "Milan, NM",
+      "phone": "",
+      "state": "NM",
+      "sourceUrl": "https://www.loves.com/locations/nm/milan/loves-speedco-milan-938",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #917 — Fernley, NV",
+      "address": "Fernley, NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.loves.com/locations/nv/fernley/loves-speedco-fernley-917",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #903 — Austinburg, OH",
+      "address": "Austinburg, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/austinburg/loves-speedco-austinburg-903",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #941 — Oklahoma City, OK",
+      "address": "Oklahoma City, OK",
+      "phone": "",
+      "state": "OK",
+      "sourceUrl": "https://www.loves.com/locations/ok/oklahoma-city/loves-speedco-oklahoma-city-941",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #902 — Aurora, OR",
+      "address": "Aurora, OR",
+      "phone": "",
+      "state": "OR",
+      "sourceUrl": "https://www.loves.com/locations/or/aurora/loves-speedco-aurora-902",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #924 — Harrisburg, PA",
+      "address": "Harrisburg, PA",
+      "phone": "",
+      "state": "PA",
+      "sourceUrl": "https://www.loves.com/locations/pa/harrisburg/loves-speedco-harrisburg-924",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #914 — Duncan, SC",
+      "address": "Duncan, SC",
+      "phone": "",
+      "state": "SC",
+      "sourceUrl": "https://www.loves.com/locations/sc/duncan/loves-speedco-duncan-914",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #932 — Knoxville, TN",
+      "address": "Knoxville, TN",
+      "phone": "",
+      "state": "TN",
+      "sourceUrl": "https://www.loves.com/locations/tn/knoxville/loves-speedco-knoxville-932",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #901 — Amarillo, TX",
+      "address": "Amarillo, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/amarillo/loves-speedco-amarillo-901",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #937 — Max Meadows, VA",
+      "address": "Max Meadows, VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.loves.com/locations/va/max-meadows/loves-speedco-max-meadows-937",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #948 — Spokane, WA",
+      "address": "Spokane, WA",
+      "phone": "",
+      "state": "WA",
+      "sourceUrl": "https://www.loves.com/locations/wa/spokane/loves-speedco-spokane-948",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #951 — West Memphis, AR",
+      "address": "West Memphis, AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.loves.com/locations/ar/west-memphis/loves-speedco-west-memphis-951",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #931 — Kingman, AZ",
+      "address": "Kingman, AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.loves.com/locations/az/kingman/loves-speedco-kingman-931",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #944 — Ripon, CA",
+      "address": "Ripon, CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.loves.com/locations/ca/ripon/loves-speedco-ripon-944",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #909 — Conley, GA",
+      "address": "Conley, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/conley/loves-speedco-conley-909",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #950 — Walcott, IA",
+      "address": "Walcott, IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.loves.com/locations/ia/walcott/loves-speedco-walcott-950",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #943 — Pontoon Beach, IL",
+      "address": "Pontoon Beach, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/pontoon-beach/loves-speedco-pontoon-beach-943",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #926 — Indianapolis, IN",
+      "address": "Indianapolis, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/indianapolis/loves-speedco-indianapolis-926",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #953 — Pendleton, KY",
+      "address": "Pendleton, KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.loves.com/locations/ky/pendleton/loves-speedco-pendleton-953",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #923 — Hammond, LA",
+      "address": "Hammond, LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.loves.com/locations/la/hammond/loves-speedco-hammond-923",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #940 — Oak Grove, MO",
+      "address": "Oak Grove, MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.loves.com/locations/mo/oak-grove/loves-speedco-oak-grove-940",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #930 — Kenly, NC",
+      "address": "Kenly, NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.loves.com/locations/nc/kenly/loves-speedco-kenly-930",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #936 — North Las Vegas, NV",
+      "address": "North Las Vegas, NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.loves.com/locations/nv/north-las-vegas/loves-speedco-north-las-vegas-936",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #905 — Beaverdam, OH",
+      "address": "Beaverdam, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/beaverdam/loves-speedco-beaverdam-905",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #904 — Baytown, TX",
+      "address": "Baytown, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/baytown/loves-speedco-baytown-904",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #945 — Ruther Glen, VA",
+      "address": "Ruther Glen, VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.loves.com/locations/va/ruther-glen/loves-speedco-ruther-glen-945",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #928 — Jackson, GA",
+      "address": "Jackson, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/jackson/loves-speedco-jackson-928",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #949 — Troy, IL",
+      "address": "Troy, IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.loves.com/locations/il/troy/loves-speedco-troy-949",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #952 — Whiteland, IN",
+      "address": "Whiteland, IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.loves.com/locations/in/whiteland/loves-speedco-whiteland-952",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #921 — Girard, OH",
+      "address": "Girard, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/girard/loves-speedco-girard-921",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #913 — Dallas, TX",
+      "address": "Dallas, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/dallas/loves-speedco-dallas-913",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #933 — Lake Park, GA",
+      "address": "Lake Park, GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.loves.com/locations/ga/lake-park/loves-speedco-lake-park-933",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #942 — Perrysburg, OH",
+      "address": "Perrysburg, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/perrysburg/loves-speedco-perrysburg-942",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #916 — El Paso, TX",
+      "address": "El Paso, TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.loves.com/locations/tx/el-paso/loves-speedco-el-paso-916",
+      "brand": "Speedco"
+    },
+    {
+      "name": "Speedco #947 — Seville, OH",
+      "address": "Seville, OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.loves.com/locations/oh/seville/loves-speedco-seville-947",
+      "brand": "Speedco"
+    },
+    {
+      "name": "TA Tuscaloosa #0016 — AL",
+      "address": "AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.ta-petro.com/location/al/ta-tuscaloosa/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Earle #0033 — AR",
+      "address": "AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.ta-petro.com/location/ar/ta-earle/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Eloy #0007 — AZ",
+      "address": "AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.ta-petro.com/location/az/ta-eloy/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro Ontario #0026 — CA",
+      "address": "CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.ta-petro.com/location/ca/petro-ontario/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Commerce City #0148 — CO",
+      "address": "CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.ta-petro.com/location/co/ta-commerce-city/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Willington #0022 — CT",
+      "address": "CT",
+      "phone": "",
+      "state": "CT",
+      "sourceUrl": "https://www.ta-petro.com/location/ct/ta-willington/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Wildwood #0053 — FL",
+      "address": "FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.ta-petro.com/location/fl/ta-wildwood/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Madison #0045 — GA",
+      "address": "GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.ta-petro.com/location/ga/ta-madison/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Council Bluffs #0066 — IA",
+      "address": "IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.ta-petro.com/location/ia/ta-council-bluffs/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Boise #0167 — ID",
+      "address": "ID",
+      "phone": "",
+      "state": "ID",
+      "sourceUrl": "https://www.ta-petro.com/location/id/ta-boise/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Chicago North #0030 — IL",
+      "address": "IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.ta-petro.com/location/il/ta-chicago-north/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Gary #0010 — IN",
+      "address": "IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.ta-petro.com/location/in/ta-gary/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Oakley #0091 — KS",
+      "address": "KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.ta-petro.com/location/ks/ta-oakley/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Florence #0093 — KY",
+      "address": "KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.ta-petro.com/location/ky/ta-florence/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Tallulah #0046 — LA",
+      "address": "LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.ta-petro.com/location/la/ta-tallulah/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Elkton #0019 — MD",
+      "address": "MD",
+      "phone": "",
+      "state": "MD",
+      "sourceUrl": "https://www.ta-petro.com/location/md/ta-elkton/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Monroe #0069 — MI",
+      "address": "MI",
+      "phone": "",
+      "state": "MI",
+      "sourceUrl": "https://www.ta-petro.com/location/mi/ta-monroe/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Rogers #0525 — MN",
+      "address": "MN",
+      "phone": "",
+      "state": "MN",
+      "sourceUrl": "https://www.ta-petro.com/location/mn/ta-rogers/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Concordia #0524 — MO",
+      "address": "MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.ta-petro.com/location/mo/ta-concordia/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Meridian #0047 — MS",
+      "address": "MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.ta-petro.com/location/ms/ta-meridian/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Missoula #0531 — MT",
+      "address": "MT",
+      "phone": "",
+      "state": "MT",
+      "sourceUrl": "https://www.ta-petro.com/location/mt/ta-missoula/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Greensboro #0002 — NC",
+      "address": "NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.ta-petro.com/location/nc/ta-greensboro/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Alexander #0259 — ND",
+      "address": "ND",
+      "phone": "",
+      "state": "ND",
+      "sourceUrl": "https://www.ta-petro.com/location/nd/ta-express-alexander/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Ogallala #0090 — NE",
+      "address": "NE",
+      "phone": "",
+      "state": "NE",
+      "sourceUrl": "https://www.ta-petro.com/location/ne/ta-ogallala/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Greenland #0211 — NH",
+      "address": "NH",
+      "phone": "",
+      "state": "NH",
+      "sourceUrl": "https://www.ta-petro.com/location/nh/ta-greenland/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Columbia #0006 — NJ",
+      "address": "NJ",
+      "phone": "",
+      "state": "NJ",
+      "sourceUrl": "https://www.ta-petro.com/location/nj/ta-columbia/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Gallup #0008 — NM",
+      "address": "NM",
+      "phone": "",
+      "state": "NM",
+      "sourceUrl": "https://www.ta-petro.com/location/nm/ta-gallup/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Las Vegas #0108 — NV",
+      "address": "NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.ta-petro.com/location/nv/ta-las-vegas/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Pembroke #0194 — NY",
+      "address": "NY",
+      "phone": "",
+      "state": "NY",
+      "sourceUrl": "https://www.ta-petro.com/location/ny/ta-pembroke/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Dayton #0011 — OH",
+      "address": "OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.ta-petro.com/location/oh/ta-dayton/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Oklahoma City East #0036 — OK",
+      "address": "OK",
+      "phone": "",
+      "state": "OK",
+      "sourceUrl": "https://www.ta-petro.com/location/ok/ta-oklahoma-city-east/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Aurora #0056 — OR",
+      "address": "OR",
+      "phone": "",
+      "state": "OR",
+      "sourceUrl": "https://www.ta-petro.com/location/or/ta-aurora/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Brookville #0003 — PA",
+      "address": "PA",
+      "phone": "",
+      "state": "PA",
+      "sourceUrl": "https://www.ta-petro.com/location/pa/ta-brookville/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA West Greenwich #0253 — RI",
+      "address": "RI",
+      "phone": "",
+      "state": "RI",
+      "sourceUrl": "https://www.ta-petro.com/location/ri/ta-west-greenwich/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Spartanburg #0025 — SC",
+      "address": "SC",
+      "phone": "",
+      "state": "SC",
+      "sourceUrl": "https://www.ta-petro.com/location/sc/ta-spartanburg/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Hot Springs #0273 — SD",
+      "address": "SD",
+      "phone": "",
+      "state": "SD",
+      "sourceUrl": "https://www.ta-petro.com/location/sd/ta-express-hot-springs/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Knoxville East #0013 — TN",
+      "address": "TN",
+      "phone": "",
+      "state": "TN",
+      "sourceUrl": "https://www.ta-petro.com/location/tn/ta-knoxville-east/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Baytown #0017 — TX",
+      "address": "TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.ta-petro.com/location/tx/ta-baytown/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Tooele #0060 — UT",
+      "address": "UT",
+      "phone": "",
+      "state": "UT",
+      "sourceUrl": "https://www.ta-petro.com/location/ut/ta-tooele/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Ashland #0001 — VA",
+      "address": "VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.ta-petro.com/location/va/ta-ashland/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Seattle East #0176 — WA",
+      "address": "WA",
+      "phone": "",
+      "state": "WA",
+      "sourceUrl": "https://www.ta-petro.com/location/wa/ta-seattle-east/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Madison #0050 — WI",
+      "address": "WI",
+      "phone": "",
+      "state": "WI",
+      "sourceUrl": "https://www.ta-petro.com/location/wi/ta-madison/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Wheeling #0032 — WV",
+      "address": "WV",
+      "phone": "",
+      "state": "WV",
+      "sourceUrl": "https://www.ta-petro.com/location/wv/ta-wheeling/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Cheyenne #0187 — WY",
+      "address": "WY",
+      "phone": "",
+      "state": "WY",
+      "sourceUrl": "https://www.ta-petro.com/location/wy/ta-cheyenne/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Mobile #0054 — AL",
+      "address": "AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.ta-petro.com/location/al/ta-mobile/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Prescott #0224 — AR",
+      "address": "AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.ta-petro.com/location/ar/ta-prescott/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Kingman #0094 — AZ",
+      "address": "AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.ta-petro.com/location/az/ta-kingman/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Corning #0040 — CA",
+      "address": "CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.ta-petro.com/location/ca/ta-corning/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Wheat Ridge #0174 — CO",
+      "address": "CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.ta-petro.com/location/co/ta-wheat-ridge/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Southington #0154 — CT",
+      "address": "CT",
+      "phone": "",
+      "state": "CT",
+      "sourceUrl": "https://www.ta-petro.com/location/ct/ta-southington/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Tampa #0158 — FL",
+      "address": "FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.ta-petro.com/location/fl/ta-express-tampa/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Cartersville #0146 — GA",
+      "address": "GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.ta-petro.com/location/ga/ta-cartersville/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Walcott #0077 — IA",
+      "address": "IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.ta-petro.com/location/ia/ta-walcott/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Dubois #0940 — ID",
+      "address": "ID",
+      "phone": "",
+      "state": "ID",
+      "sourceUrl": "https://www.ta-petro.com/location/id/ta-express-dubois/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Effingham #0035 — IL",
+      "address": "IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.ta-petro.com/location/il/ta-effingham/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Seymour #0065 — IN",
+      "address": "IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.ta-petro.com/location/in/ta-seymour/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Beto Junction #0252 — KS",
+      "address": "KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.ta-petro.com/location/ks/ta-beto-junction/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro Glendale #0330 — KY",
+      "address": "KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.ta-petro.com/location/ky/petro-glendale/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Lafayette #0161 — LA",
+      "address": "LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.ta-petro.com/location/la/ta-lafayette/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Baltimore South #0151 — MD",
+      "address": "MD",
+      "phone": "",
+      "state": "MD",
+      "sourceUrl": "https://www.ta-petro.com/location/md/ta-baltimore-south/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Ann Arbor #0089 — MI",
+      "address": "MI",
+      "phone": "",
+      "state": "MI",
+      "sourceUrl": "https://www.ta-petro.com/location/mi/ta-ann-arbor/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro Clearwater #0389 — MN",
+      "address": "MN",
+      "phone": "",
+      "state": "MN",
+      "sourceUrl": "https://www.ta-petro.com/location/mn/petro-clearwater/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Matthews #0051 — MO",
+      "address": "MO",
+      "phone": "",
+      "state": "MO",
+      "sourceUrl": "https://www.ta-petro.com/location/mo/ta-matthews/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro Jackson #0506 — MS",
+      "address": "MS",
+      "phone": "",
+      "state": "MS",
+      "sourceUrl": "https://www.ta-petro.com/location/ms/petro-jackson/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Laurel #0261 — MT",
+      "address": "MT",
+      "phone": "",
+      "state": "MT",
+      "sourceUrl": "https://www.ta-petro.com/location/mt/ta-laurel/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Candler #0221 — NC",
+      "address": "NC",
+      "phone": "",
+      "state": "NC",
+      "sourceUrl": "https://www.ta-petro.com/location/nc/ta-candler/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Steele #0272 — ND",
+      "address": "ND",
+      "phone": "",
+      "state": "ND",
+      "sourceUrl": "https://www.ta-petro.com/location/nd/ta-express-steele/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Grand Island #0193 — NE",
+      "address": "NE",
+      "phone": "",
+      "state": "NE",
+      "sourceUrl": "https://www.ta-petro.com/location/ne/ta-grand-island/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Bloomsbury #0048 — NJ",
+      "address": "NJ",
+      "phone": "",
+      "state": "NJ",
+      "sourceUrl": "https://www.ta-petro.com/location/nj/ta-bloomsbury/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Las Cruces #0014 — NM",
+      "address": "NM",
+      "phone": "",
+      "state": "NM",
+      "sourceUrl": "https://www.ta-petro.com/location/nm/ta-las-cruces/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Sparks #0172 — NV",
+      "address": "NV",
+      "phone": "",
+      "state": "NV",
+      "sourceUrl": "https://www.ta-petro.com/location/nv/ta-sparks/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Binghamton #0207 — NY",
+      "address": "NY",
+      "phone": "",
+      "state": "NY",
+      "sourceUrl": "https://www.ta-petro.com/location/ny/ta-binghamton/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Lodi #0015 — OH",
+      "address": "OH",
+      "phone": "",
+      "state": "OH",
+      "sourceUrl": "https://www.ta-petro.com/location/oh/ta-lodi/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Oklahoma City West #0059 — OK",
+      "address": "OK",
+      "phone": "",
+      "state": "OK",
+      "sourceUrl": "https://www.ta-petro.com/location/ok/ta-oklahoma-city-west/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Coburg #0482 — OR",
+      "address": "OR",
+      "phone": "",
+      "state": "OR",
+      "sourceUrl": "https://www.ta-petro.com/location/or/ta-coburg/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Harrisburg #0012 — PA",
+      "address": "PA",
+      "phone": "",
+      "state": "PA",
+      "sourceUrl": "https://www.ta-petro.com/location/pa/ta-harrisburg/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Manning #0179 — SC",
+      "address": "SC",
+      "phone": "",
+      "state": "SC",
+      "sourceUrl": "https://www.ta-petro.com/location/sc/ta-manning/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Summit #0274 — SD",
+      "address": "SD",
+      "phone": "",
+      "state": "SD",
+      "sourceUrl": "https://www.ta-petro.com/location/sd/ta-express-summit/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Antioch #0117 — TN",
+      "address": "TN",
+      "phone": "",
+      "state": "TN",
+      "sourceUrl": "https://www.ta-petro.com/location/tn/ta-antioch/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Rockwall #0049 — TX",
+      "address": "TX",
+      "phone": "",
+      "state": "TX",
+      "sourceUrl": "https://www.ta-petro.com/location/tx/ta-rockwall/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Parowan #0186 — UT",
+      "address": "UT",
+      "phone": "",
+      "state": "UT",
+      "sourceUrl": "https://www.ta-petro.com/location/ut/ta-express-parowan/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Richmond #0142 — VA",
+      "address": "VA",
+      "phone": "",
+      "state": "VA",
+      "sourceUrl": "https://www.ta-petro.com/location/va/ta-richmond/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro Spokane #0339 — WA",
+      "address": "WA",
+      "phone": "",
+      "state": "WA",
+      "sourceUrl": "https://www.ta-petro.com/location/wa/petro-spokane/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Janesville #0071 — WI",
+      "address": "WI",
+      "phone": "",
+      "state": "WI",
+      "sourceUrl": "https://www.ta-petro.com/location/wi/ta-janesville/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Hurricane #0149 — WV",
+      "address": "WV",
+      "phone": "",
+      "state": "WV",
+      "sourceUrl": "https://www.ta-petro.com/location/wv/ta-hurricane/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Ft. Bridger #0188 — WY",
+      "address": "WY",
+      "phone": "",
+      "state": "WY",
+      "sourceUrl": "https://www.ta-petro.com/location/wy/ta-ft-bridger/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Lincoln #0532 — AL",
+      "address": "AL",
+      "phone": "",
+      "state": "AL",
+      "sourceUrl": "https://www.ta-petro.com/location/al/ta-lincoln/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Petro W. Memphis #0311 — AR",
+      "address": "AR",
+      "phone": "",
+      "state": "AR",
+      "sourceUrl": "https://www.ta-petro.com/location/ar/petro-w-memphis/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Tonopah #0225 — AZ",
+      "address": "AZ",
+      "phone": "",
+      "state": "AZ",
+      "sourceUrl": "https://www.ta-petro.com/location/az/ta-tonopah/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Coachella #0041 — CA",
+      "address": "CA",
+      "phone": "",
+      "state": "CA",
+      "sourceUrl": "https://www.ta-petro.com/location/ca/ta-coachella/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Limon #0228 — CO",
+      "address": "CO",
+      "phone": "",
+      "state": "CO",
+      "sourceUrl": "https://www.ta-petro.com/location/co/ta-limon/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express New Haven #0171 — CT",
+      "address": "CT",
+      "phone": "",
+      "state": "CT",
+      "sourceUrl": "https://www.ta-petro.com/location/ct/ta-express-new-haven/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Marianna #0178 — FL",
+      "address": "FL",
+      "phone": "",
+      "state": "FL",
+      "sourceUrl": "https://www.ta-petro.com/location/fl/ta-marianna/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Commerce #0156 — GA",
+      "address": "GA",
+      "phone": "",
+      "state": "GA",
+      "sourceUrl": "https://www.ta-petro.com/location/ga/ta-commerce/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Brooklyn #0254 — IA",
+      "address": "IA",
+      "phone": "",
+      "state": "IA",
+      "sourceUrl": "https://www.ta-petro.com/location/ia/ta-brooklyn/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Mt Vernon #0043 — IL",
+      "address": "IL",
+      "phone": "",
+      "state": "IL",
+      "sourceUrl": "https://www.ta-petro.com/location/il/ta-mt-vernon/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Whitestown #0173 — IN",
+      "address": "IN",
+      "phone": "",
+      "state": "IN",
+      "sourceUrl": "https://www.ta-petro.com/location/in/ta-whitestown/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Express Edgerton #0284 — KS",
+      "address": "KS",
+      "phone": "",
+      "state": "KS",
+      "sourceUrl": "https://www.ta-petro.com/location/ks/ta-express-edgerton/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Truck Service Franklin #0347 — KY",
+      "address": "KY",
+      "phone": "",
+      "state": "KY",
+      "sourceUrl": "https://www.ta-petro.com/location/ky/ta-truck-service-franklin/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "TA Slidell #0180 — LA",
+      "address": "LA",
+      "phone": "",
+      "state": "LA",
+      "sourceUrl": "https://www.ta-petro.com/location/la/ta-slidell/",
+      "brand": "TA/Petro"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Tuscaloosa, AL",
+      "address": "Tuscaloosa, AL",
+      "phone": "(205) 462-0019",
+      "state": "AL",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/tuscaloosa-al",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Little Rock, AR",
+      "address": "Little Rock, AR",
+      "phone": "(501) 945-7023",
+      "state": "AR",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/little-rock-ar",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Casa Grande, AZ",
+      "address": "Casa Grande, AZ",
+      "phone": "(520) 426-9362",
+      "state": "AZ",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/casa-grande-az",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Barstow, CA",
+      "address": "Barstow, CA",
+      "phone": "(760) 253-7395",
+      "state": "CA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/barstow-ca",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Commerce City, CO",
+      "address": "Commerce City, CO",
+      "phone": "(303) 288-2990",
+      "state": "CO",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/commerce-city-co",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Dade City, FL",
+      "address": "Dade City, FL",
+      "phone": "(352) 588-0095",
+      "state": "FL",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/dade-city-fl",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Atlanta West, GA",
+      "address": "Atlanta West, GA",
+      "phone": "(404) 794-3621",
+      "state": "GA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/atlanta-west-ga",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Council Bluffs, IA",
+      "address": "Council Bluffs, IA",
+      "phone": "(712) 322-7484",
+      "state": "IA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/council-bluffs",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Boise, ID",
+      "address": "Boise, ID",
+      "phone": "(986) 249-0111",
+      "state": "ID",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/boise-id",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Bloomington, IL",
+      "address": "Bloomington, IL",
+      "phone": "(309) 828-2272",
+      "state": "IL",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/bloomington-il",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Evansville, IN",
+      "address": "Evansville, IN",
+      "phone": "(812) 768-5606",
+      "state": "IN",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/evansville-in",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Dodge City, KS",
+      "address": "Dodge City, KS",
+      "phone": "(620) 390-1024",
+      "state": "KS",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/dodge-city-ks",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Corbin, KY",
+      "address": "Corbin, KY",
+      "phone": "(606) 528-4461",
+      "state": "KY",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/corbin-ky",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Hammond, LA",
+      "address": "Hammond, LA",
+      "phone": "(985) 542-7853",
+      "state": "LA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/hammond-la",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Elkton, MD",
+      "address": "Elkton, MD",
+      "phone": "(410) 398-9351",
+      "state": "MD",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/elkton-md",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Benton Harbor, MI",
+      "address": "Benton Harbor, MI",
+      "phone": "(269) 925-9555",
+      "state": "MI",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/benton-harbor-mi",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Cuba, MO",
+      "address": "Cuba, MO",
+      "phone": "(573) 885-0320",
+      "state": "MO",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/cuba-mo",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Pearl, MS",
+      "address": "Pearl, MS",
+      "phone": "(601) 352-9445",
+      "state": "MS",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/pearl-ms",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Haw River, NC",
+      "address": "Haw River, NC",
+      "phone": "(336) 578-3503",
+      "state": "NC",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/haw-river-nc",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Fargo, ND",
+      "address": "Fargo, ND",
+      "phone": "(701) 277-7123",
+      "state": "ND",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/fargo-nd",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — York, NE",
+      "address": "York, NE",
+      "phone": "(402) 362-1655",
+      "state": "NE",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/york-ne",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Bordentown, NJ",
+      "address": "Bordentown, NJ",
+      "phone": "(609) 291-1812",
+      "state": "NJ",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/bordentown-nj",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Gallup, NM",
+      "address": "Gallup, NM",
+      "phone": "(505) 722-2357",
+      "state": "NM",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/gallup-nm",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Fernley, NV",
+      "address": "Fernley, NV",
+      "phone": "(775) 575-4446",
+      "state": "NV",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/fernley-nv",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Kirkwood, NY",
+      "address": "Kirkwood, NY",
+      "phone": "(607) 778-1230",
+      "state": "NY",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/kirkwood-ny",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Beaverdam, OH",
+      "address": "Beaverdam, OH",
+      "phone": "(419) 643-8146",
+      "state": "OH",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/beaverdam-oh",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Oklahoma City North, OK",
+      "address": "Oklahoma City North, OK",
+      "phone": "(405) 478-0833",
+      "state": "OK",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/oklahoma-city-north-ok",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Portland, OR",
+      "address": "Portland, OR",
+      "phone": "(503) 283-3270",
+      "state": "OR",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/portland-or",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Bentleyville, PA",
+      "address": "Bentleyville, PA",
+      "phone": "(724) 918-1080",
+      "state": "PA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/bentleyville-pa",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Columbia, SC",
+      "address": "Columbia, SC",
+      "phone": "(803) 691-1579",
+      "state": "SC",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/columbia-sc",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Sioux Falls, SD",
+      "address": "Sioux Falls, SD",
+      "phone": "(605) 335-0934",
+      "state": "SD",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/sioux-falls",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Knoxville, TN",
+      "address": "Knoxville, TN",
+      "phone": "(865) 690-5228",
+      "state": "TN",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/knoxville-tn",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Amarillo East, TX",
+      "address": "Amarillo East, TX",
+      "phone": "(806) 335-9033",
+      "state": "TX",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/amarillo-east-tx",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Salt Lake City, UT",
+      "address": "Salt Lake City, UT",
+      "phone": "(801) 975-1400",
+      "state": "UT",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/salt-lake-city-ut",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Fort Chiswell, VA",
+      "address": "Fort Chiswell, VA",
+      "phone": "(276) 637-3468",
+      "state": "VA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/fort-chiswell-va",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Spokane, WA",
+      "address": "Spokane, WA",
+      "phone": "(509) 315-5018",
+      "state": "WA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/spokane-wa",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Milwaukee, WI",
+      "address": "Milwaukee, WI",
+      "phone": "(414) 296-4008",
+      "state": "WI",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/milwaukee-wi",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Cheyenne, WY",
+      "address": "Cheyenne, WY",
+      "phone": "(307) 634-6531",
+      "state": "WY",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/cheyenne-wy",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — West Memphis, AR",
+      "address": "West Memphis, AR",
+      "phone": "(870) 735-8068",
+      "state": "AR",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/west-memphis-ar",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Eloy East, AZ",
+      "address": "Eloy East, AZ",
+      "phone": "(520) 464-8011",
+      "state": "AZ",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/eloy-east-az",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Corning, CA",
+      "address": "Corning, CA",
+      "phone": "(530) 824-0474",
+      "state": "CA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/corning-ca",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Ft. Pierce, FL",
+      "address": "Ft. Pierce, FL",
+      "phone": "(772) 429-1459",
+      "state": "FL",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/ft-pierce-fl",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Brunswick, GA",
+      "address": "Brunswick, GA",
+      "phone": "(912) 261-9338",
+      "state": "GA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/brunswick-ga",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Des Moines, IA",
+      "address": "Des Moines, IA",
+      "phone": "(515) 967-0141",
+      "state": "IA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/des-moines-ia",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Twin Falls, ID",
+      "address": "Twin Falls, ID",
+      "phone": "(208) 324-1310",
+      "state": "ID",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/twin-falls-id",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Effingham West, IL",
+      "address": "Effingham West, IL",
+      "phone": "(217) 347-8930",
+      "state": "IL",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/effingham-west-il",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Ft. Wayne, IN",
+      "address": "Ft. Wayne, IN",
+      "phone": "(260) 471-3049",
+      "state": "IN",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/ft-wayne-in",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Emporia, KS",
+      "address": "Emporia, KS",
+      "phone": "(620) 591-3080",
+      "state": "KS",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/emporia-ks",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Glendale, KY",
+      "address": "Glendale, KY",
+      "phone": "(270) 369-0171",
+      "state": "KY",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/glendale-ky",
+      "brand": "Blue Beacon"
+    },
+    {
+      "name": "Blue Beacon Truck Wash — Shreveport, LA",
+      "address": "Shreveport, LA",
+      "phone": "(318) 671-6497",
+      "state": "LA",
+      "sourceUrl": "https://bluebeacon.com/locations/listing/shreveport-la",
+      "brand": "Blue Beacon"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,12 @@ type Position struct {
 }
 
 type Client struct {
+	rosterMu      sync.Mutex
+	rosterUSDOT   string
+	rosterAt      time.Time
+	roster        []odometerUnit
+	odometerMu    sync.Mutex
+	odometers     map[string]cachedOdometer
 	baseURL       string
 	apiKey        string
 	providerToken string

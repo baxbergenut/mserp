@@ -35,7 +35,10 @@ const NAV_ITEMS = [
   { href: "/fuel", label: "Fuel", icon: Fuel },
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/weighmytruck", label: "Scale", icon: Scale },
-  { href: "/maintenance", label: "Maintenance", icon: Wrench },
+  { href: "/fleet", label: "Fleet", icon: Truck, children: [
+    { href: "/maintenance", label: "Work orders", icon: Wrench },
+    { href: "/fleet/preventative-maintenance", label: "Preventative maintenance", icon: CalendarRange },
+  ] },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
@@ -59,9 +62,7 @@ export function Sidebar() {
   const maintenanceAccess = useMaintenanceAccess();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [accountingOpen, setAccountingOpen] = useState(
-    pathname.startsWith("/accounting"),
-  );
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   return (
     <aside
       className={`
@@ -85,11 +86,10 @@ export function Sidebar() {
       {/* ── Navigation ── */}
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
-          if(item.href === "/maintenance" && !(maintenanceAccess?.canView || maintenanceAccess?.canCreate)) return null;
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
-          const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href))) : [];
+          const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href)) && (child.href === "/maintenance" ? maintenanceAccess?.canView || maintenanceAccess?.canCreate : child.href === "/fleet/preventative-maintenance" ? maintenanceAccess?.canView : true)) : [];
           if ("children" in item ? children.length === 0 : pagePermission(item.href) && !permissions.includes(pagePermission(item.href))) return null;
-          const active =
+          const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));
           const Icon = item.icon;
@@ -117,25 +117,25 @@ export function Sidebar() {
               );
             }
 
-            const accountingExpanded = accountingOpen || active;
+            const groupExpanded = openGroups[item.href] ?? active;
 
             return (
               <div key={item.href}>
                 <button
                   type="button"
-                  onClick={() => setAccountingOpen((open) => !open)}
+                  onClick={() => setOpenGroups(groups => ({ ...groups, [item.href]: !groupExpanded }))}
                   className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
                     active
                       ? "text-accent"
                       : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                   }`}
-                  aria-expanded={accountingExpanded}
+                  aria-expanded={groupExpanded}
                 >
                   <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
                   <span className="flex-1 text-left">{item.label}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${accountingExpanded ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupExpanded ? "rotate-180" : ""}`} />
                 </button>
-                {accountingExpanded && (
+                {groupExpanded && (
                   <div className="mt-1 space-y-1 pl-5">
                     {children.map((child) => {
                       const childActive = pathname === child.href;

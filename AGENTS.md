@@ -234,7 +234,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   without a charge. Default US shops are directory records. AI source files attach
   automatically. Today's blank odometer reads Five ELD telemetry by unique exact VIN
   (one-hour freshness); receipt/manual readings and historical dates are preserved.
-  Vendor management lives under Maintenance > Settings, outside the entry modal.
+  Vendor management lives under Fleet > Work orders > Settings, outside the entry modal.
+  Fleet groups Work orders (`/maintenance`, existing workspace) and Preventative
+  maintenance (`/fleet/preventative-maintenance`). Migration 099 stores oil grades
+  and seeds 300 sourced US vendor locations (docs/data/maintenance-vendors-us.json).
+  The preventative API lists each truck with its latest completed PM/oil visit,
+  same-visit vendor/notes/allocated cost, and latest dated reading. Unknown costs
+  remain unknown. Live Five ELD reads are bounded to visible rows, cached briefly,
+  and require category View/Create/Edit. Source/time appears on odometer hover.
+  Oil-change entry defaults to 10W-30, supports other/custom grades, and AI extracts
+  only explicit source grades. Existing unknown historical grades stay blank.
+  Preventative Settings edits independent fleet PM/oil intervals; truck overrides
+  and existing reminder behavior remain in place.
   New UI entries always include an invoice/charge; imported history keeps unknown costs.
   `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
   reviewed `-apply` writes idempotent visits with source notes, never expenses.

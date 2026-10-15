@@ -1,7 +1,8 @@
 # Maintenance
 
-Maintenance has its own directory and entry form at `/maintenance`, and a tab
-on each truck. General Expenses excludes the Maintenance category when reading
+Fleet > Work orders retains the directory and entry form at `/maintenance`, and
+a Work orders tab on each truck. Fleet > Preventative maintenance lives at
+`/fleet/preventative-maintenance` with PM Service and Oil change tabs. General Expenses excludes the Maintenance category when reading
 with `scope=general`; payroll and ordinary legacy expense API reads still use
 the complete financial ledger.
 
@@ -15,14 +16,14 @@ the complete financial ledger.
   Towing & recovery, Cleaning & detailing, and Other maintenance. Detailed names
   now come directly from the reporting type; there is no second work-name field.
   PM service and Oil change are separate types. Administrators add custom service
-  types in Maintenance > Settings. Roadside is a location, not a
+  types in Work orders > Settings. Roadside is a location, not a
   component reporting type. Reporting type codes never change during a rename.
 - A charged visit has exactly one linked expense. Service and financial writes
   commit together; IDs, approvals, payments and existing responsibility routing
   are retained. Driver and owner settlements continue reading the same expense.
   New UI entries always include the invoice amount and charge; there is no optional
   invoice checkbox. Historical/imported entries without known costs retain their
-  existing financial state. Vendor creation and edits live in Maintenance > Settings.
+  existing financial state. Vendor creation and edits live in Work orders > Settings.
 - Itemized work must price every row and equal the invoice base amount exactly.
   The linked expense breakdown must match each priced work row by name and numeric
   amount. Alternatively, all work amounts remain unknown and reports show the
@@ -64,7 +65,7 @@ historical-tracking endpoints using its exact unique VIN. The latest nonfuture
 odometer within one hour fills an empty field. Receipt values and manual edits
 are preserved. Older service dates never receive today's reading. Missing, stale,
 ambiguous or unavailable telemetry leaves manual entry available. The GET is
-authorized by Maintenance Create/Edit and never writes an odometer by itself.
+authorized by Maintenance View/Create/Edit and never writes an odometer by itself.
 Updating mileage between visits is available in Settings with an explanation.
 
 Due services are in-app reminders, refreshed on focus and every 30 visible seconds.
@@ -77,7 +78,7 @@ and unclassified fees. Directory filters scope report totals to matching visits.
 
 The existing server-only Luna Responses client has a strict maintenance schema for
 vendor details, actual service date, odometer, service location, invoice presence,
-work-order number and typed work/cost items. Type codes are restricted to the active
+work-order number, explicit engine oil grade and typed work/cost items. Type codes are restricted to the active
 catalog. Explicit completed internal/no-charge notes are supported. Sources are
 untrusted data; instructions in documents cannot change the extraction task.
 
@@ -152,3 +153,44 @@ Build frontend with `/api`, run `review-local.mjs`, then run
 `MSERP_REVIEW_OPENAI_ENABLED=1`, server `OPENAI_API_KEY`, and
 `MSERP_OPENAI_LIVE_TEST=1` only for explicit synthetic live AI tests. Browser tests
 exercise the real API/database plus text/image/PDF extraction and read-only access.
+
+## Preventative overview and US vendor directory (099)
+
+`GET /maintenance/preventative?serviceCode=pm|oil&page=1&pageSize=25` requires
+category View and returns paginated active trucks, including trucks with no
+recorded service. `search` matches unit numbers; `includeInactive=true` includes
+retired trucks. Each row reads its latest Completed tagged visit, with the date,
+vendor snapshot, service odometer, oil grade and notes from that same visit.
+Needs-review and voided work never replace completed history. Clicking its date
+opens the original work order. Service cost sums only allocated matching work
+items, excluding payment fees; historical unknown costs and mixed unallocated
+invoices remain unknown. No new expense is created by an overview read.
+
+Visible rows request live Five ELD mileage with three concurrent calls and abort
+on navigation. The identity roster is cached for five minutes and each reading
+for one minute; every returned reading must still satisfy the one-hour freshness
+rule. If unavailable, the table labels its last saved dated reading explicitly.
+The entry input shows source/time on hover, without a note beneath it.
+
+Oil-change selection defaults new entry to SAE 10W-30 and offers common grades,
+Unknown and a custom value. AI extracts a grade only from explicit evidence; the
+review form uses its new-entry default when absent. Existing unknown historical
+grades remain blank. The migration backfills only explicitly recorded imported
+source grades, and imports store their source grade on future visits.
+
+Preventative Settings exposes separate fleet PM/oil mileage/day defaults. Only
+administrators edit fleet defaults; existing truck overrides take precedence,
+and the first configured limit reached makes a service due. No numerical service
+interval is invented. Work orders retains its Due services and other tabs.
+
+Migration 099 adds 300 real US locations to the existing chain/custom vendors:
+100 Love’s travel stops, 50 Speedco shops, 100 TA/Petro stops and 50 Blue Beacon
+washes, selected round-robin by state within each network. This is a sourced
+location directory, not a popularity ranking. The versioned
+`docs/data/maintenance-vendors-us.json` records branch URLs, retrieval date and
+selection method. Official sources: [Love’s](https://www.loves.com/location-and-fuel-price-search/all-locations),
+[TA/Petro](https://www.ta-petro.com/location/all-locations/), and
+[Blue Beacon](https://bluebeacon.com/view-all-locations/). Only directory-provided
+locality/phone details are seeded; missing street addresses are not inferred.
+Seeds use unique names and never overwrite existing/custom vendor details or
+archived choices. Vendor source URLs are retained server-side in source_url.

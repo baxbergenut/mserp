@@ -40,6 +40,7 @@ func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Lo
 	r.Get("/maintenance/odometer", h.odometer)
 	r.Get("/maintenance/reports", h.reports)
 	r.Get("/maintenance/due", h.due)
+	r.Get("/maintenance/preventative", h.preventative)
 	r.Post("/maintenance/vendors", h.vendor)
 	r.Put("/maintenance/vendors/{id}", h.vendor)
 	r.Put("/maintenance/types/{code}", h.serviceType)
@@ -193,6 +194,7 @@ func (h maintenanceHandler) due(w http.ResponseWriter, r *http.Request) {
 }
 
 type maintenanceRequest struct {
+	OilType       string                       `json:"oilType"`
 	ID            string                       `json:"id"`
 	Version       int                          `json:"version"`
 	TruckID       *string                      `json:"truckId"`
@@ -214,7 +216,7 @@ type maintenanceRequest struct {
 }
 
 func (in maintenanceRequest) validate(category string) (repository.MaintenanceInput, error) {
-	out := repository.MaintenanceInput{ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
+	out := repository.MaintenanceInput{OilType: repository.NormalizeMaintenanceOilType(in.OilType), ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
 	out.DriverID = in.DriverID
 	if !isUUID(in.ID) || in.Version < 0 {
 		return out, errors.New("invalid maintenance identity")
@@ -248,6 +250,9 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 		if utf8.RuneCountInString(v) > 500 {
 			return out, errors.New("service details are too long")
 		}
+	}
+	if utf8.RuneCountInString(out.OilType) > 100 {
+		return out, errors.New("oil type must be at most 100 characters")
 	}
 	if utf8.RuneCountInString(out.Notes) > 5000 {
 		return out, errors.New("notes must be 5000 characters or fewer")
@@ -745,6 +750,10 @@ func (h maintenanceHandler) extract(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			h.fail(w, err)
 			return
+		}
+		if item.Maintenance != nil && item.Maintenance.OilType != nil {
+			grade := repository.NormalizeMaintenanceOilType(*item.Maintenance.OilType)
+			item.Maintenance.OilType = &grade
 		}
 		drafts = append(drafts, map[string]any{"categoryId": cat, "truckId": truckID, "driverId": driverID, "unitNumber": unit, "driverName": driver, "amount": validExtractedAmount(item.Amount), "expenseDate": validExtractedDate(item.ExpenseDate), "paymentType": cleanExtractedValue(item.PaymentType), "expenseType": cleanExtractedValue(item.ExpenseType), "referenceNumber": cleanExtractedValue(item.ReferenceNumber), "description": cleanExtractedValue(item.Description), "coveredBy": defaultExtractedValue(item.CoveredBy, "Company"), "paidBy": cleanExtractedValue(item.PaidBy), "maintenance": item.Maintenance, "costBreakdown": extractedCostBreakdown(item.CostBreakdown), "evidence": item.Evidence})
 	}

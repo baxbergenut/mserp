@@ -577,3 +577,5 @@ export const maintenanceDocumentUrl = (id: string) => `${API_BASE}/maintenance/d
 export const extractMaintenance = (text: string,file: File | null) => {const body=new FormData();body.append("text",text);if(file)body.append("file",file);return apiRequest<{drafts:import("./types").MaintenanceAIDraft[]}>("/maintenance/extract",{method:"POST",body});};
 
 export const fetchMaintenanceAccess = () => apiRequest<import("./types").ExpenseCategoryAccess>("/maintenance/access");
+
+export const fetchPreventativeMaintenance = (query: {serviceCode: "pm" | "oil"; search: string; includeInactive: boolean; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").PreventativeTruck>>(withQuery("/maintenance/preventative",query),{signal});

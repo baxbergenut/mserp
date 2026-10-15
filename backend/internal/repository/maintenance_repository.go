@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,6 +51,7 @@ type MaintenanceDocument struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 type MaintenanceRecord struct {
+	OilType       string                `json:"oilType"`
 	ID            string                `json:"id"`
 	ExpenseID     *string               `json:"expenseId"`
 	TruckID       *string               `json:"truckId"`
@@ -78,6 +80,7 @@ type MaintenanceRecord struct {
 	Documents     []MaintenanceDocument `json:"documents"`
 }
 type MaintenanceInput struct {
+	OilType                                               string
 	ActorID                                               string
 	ID                                                    string
 	Version                                               int
@@ -170,11 +173,11 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	return result, err
 }
 
-const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
+const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
 
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
-	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName)
+	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType)
 	m.Documents = []MaintenanceDocument{}
 	return m, err
 }
@@ -246,6 +249,7 @@ func (r *MaintenanceRepository) List(ctx context.Context, q MaintenanceQuery) (M
 }
 
 func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (MaintenanceRecord, error) {
+	in.OilType = NormalizeMaintenanceOilType(in.OilType)
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return MaintenanceRecord{}, err
@@ -384,7 +388,7 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if err != nil {
 		return old, err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END,oil_type=$5 WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber, in.OilType); err != nil {
 		return old, err
 	}
 	if _, err := tx.Exec(ctx, "UPDATE maintenance_odometer_readings SET active=false WHERE record_id=$1", in.ID); err != nil {
@@ -578,3 +582,14 @@ func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery)
 }
 
 func cleanMaintenanceText(s string) string { return strings.TrimSpace(s) }
+
+var maintenanceOilGrade = regexp.MustCompile(`^(?:SAE\s*)?(\d{1,2})\s*W\s*[- ]?\s*(\d{2})$`)
+
+// Canonicalize a stated viscosity grade, while preserving custom source names.
+func NormalizeMaintenanceOilType(value string) string {
+	value = strings.TrimSpace(value)
+	if match := maintenanceOilGrade.FindStringSubmatch(strings.ToUpper(value)); match != nil {
+		return match[1] + "W-" + match[2]
+	}
+	return value
+}

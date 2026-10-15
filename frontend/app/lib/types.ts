@@ -715,6 +715,7 @@ export interface MaintenanceVendor { id: string; name: string; address: string; 
 export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm" | "oil"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
 export interface MaintenanceRecord {
+  oilType: string;
   id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;
   vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
   serviceDate: string | null; odometer: number | null; location: "shop" | "roadside" | "internal" | "unknown";
@@ -723,6 +724,7 @@ export interface MaintenanceRecord {
   expense: Expense | null; documents: MaintenanceDocument[];
 }
 export interface MaintenanceInput {
+  oilType: string;
   legacyPaymentTotal?: string;
   savedOwnerName?: string;
   driverId: string | null;
@@ -738,7 +740,7 @@ export interface MaintenanceReading { id: string; truckId: string; recordId: str
 export interface MaintenanceDue { truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
 export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
 export interface MaintenanceReport { serviceTypes: MaintenanceReportRow[]; trucks: MaintenanceReportRow[]; vendors: MaintenanceReportRow[]; repeatedWork: MaintenanceReportRow[]; total: string; fees: string; unallocated: string; }
-export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: { hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; } | null; }
+export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: { oilType: string | null; hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; } | null; }
 export interface MaintenanceChange { actorName: string; happenedAt: string; before: MaintenanceRecord | null; after: MaintenanceRecord; }
 
 export interface Expense {
@@ -1288,3 +1290,5 @@ export interface DriverServiceSetup {
 }
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
+
+export interface PreventativeTruck { truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; vendorName: string; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; cost: string | null; oilType: string; notes: string; }

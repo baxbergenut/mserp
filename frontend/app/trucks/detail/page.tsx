@@ -17,7 +17,7 @@ import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
 
-const tabs = ["Overview", "Maintenance", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Work orders", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -29,12 +29,13 @@ export default function TruckDetailPage() {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useViewState<typeof tabs[number]>("page:tab", "Overview");
+  const [savedTab, setTab] = useViewState<typeof tabs[number] | "Maintenance">("page:tab", "Overview");
+  const tab = savedTab === "Maintenance" ? "Work orders" : savedTab;
   const permissions = usePermissions();
   const expenseCategoryAccess = useExpenseCategoryAccess();
   const maintenanceAccess = useMaintenanceAccess();
   const expenseTabsVisible = expenseCategoryAccess.length > 0;
-  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Expenses" || expenseTabsVisible) && (name !== "Maintenance" || maintenanceAccess?.canView));
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Expenses" || expenseTabsVisible) && (name !== "Work orders" || maintenanceAccess?.canView));
   useEffect(() => {
     if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
   }, [expenseTabsVisible, setTab, tab]);
@@ -70,7 +71,7 @@ export default function TruckDetailPage() {
         </div>
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
-      {tab === "Maintenance" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
+      {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
       {editing && <TruckEditor truck={truck} onClose={() => setEditing(false)} onSaved={value => { setTruck(value); setEditing(false); }} />}

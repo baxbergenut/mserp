@@ -54,3 +54,34 @@ func TestCurrentOdometer(t *testing.T) {
 		})
 	}
 }
+
+func TestOdometerCacheFreshnessAndRoster(t *testing.T) {
+	now := time.Date(2026, 10, 15, 15, 0, 0, 0, time.UTC)
+	roster, trackings := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/externalservice/active-units/123/" {
+			roster++
+			fmt.Fprint(w, `[{"id":"one","vin":"VIN1"},{"id":"two","vin":"VIN2"}]`)
+			return
+		}
+		trackings++
+		fmt.Fprint(w, `[{"odometer":100002.9,"date":"2026-10-15T14:00:30Z"}]`)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL, "key", "token")
+	for _, vin := range []string{"VIN1", "VIN2", "vin1"} {
+		if _, err := client.CurrentOdometer(context.Background(), "123", vin, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if roster != 1 || trackings != 2 {
+		t.Fatal("repeated calls bypassed cache", roster, trackings)
+	}
+	// A cached result must never outlive the provider's one-hour freshness rule.
+	if _, err := client.CurrentOdometer(context.Background(), "123", "VIN1", now.Add(45*time.Second)); !errors.Is(err, ErrOdometerUnavailable) {
+		t.Fatal("stale cached reading returned", err)
+	}
+	if roster != 1 || trackings != 3 {
+		t.Fatal(roster, trackings)
+	}
+}

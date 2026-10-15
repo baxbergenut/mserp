@@ -43,7 +43,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
   return <Modal title={canEdit ? "Edit entry" : "Expense details"} isSaving={saving} submitLabel="Save changes" hideSubmit={!canEdit || !!maintenanceId} onClose={onClose} onSubmit={event => { event.preventDefault(); void save(); }}>
     {error && <ErrorBanner message={error} />}
     {!data && !error && <p role="status" className="text-zinc-500">Loading expense…</p>}
-    {maintenanceId && <p className="mb-4 text-xs text-zinc-400">This charge belongs to a service visit. <Link className="text-blue-400" href={`/maintenance?recordId=${maintenanceId}`}>Open maintenance visit</Link></p>}
+    {maintenanceId && <p className="mb-4 text-xs text-zinc-400">This charge belongs to a service visit. <Link className="text-blue-400" href={`/maintenance?recordId=${maintenanceId}`}>Open work order</Link></p>}
     {data && form && <fieldset disabled={!canEdit || saving || !!maintenanceId}><ExpenseForm value={form} onChange={setForm} options={data.options} originalCategory={{ id: data.expense.categoryId, name: data.expense.category }} allowedCategoryIds={Array.from(new Set([data.expense.categoryId, ...access.filter(a => a.canCreate).map(a => a.categoryId)]))} drivers={data.drivers} trucks={data.trucks} owners={data.owners} /></fieldset>}
   </Modal>;
 }

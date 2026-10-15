@@ -13,7 +13,7 @@ func (h maintenanceHandler) odometer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "create") && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "edit") {
+	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "view") && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "create") && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "edit") {
 		writeAPIError(w, 403, "your role cannot prepare maintenance records")
 		return
 	}

@@ -11,7 +11,7 @@ import { fetchDriversPage, fetchTrucksPage, fetchLoadsPage, fetchExpensesPage, f
 
 type Result = { label: string; detail: string; href: string };
 type Group = { name: string; results: Result[]; failed?: boolean };
-const quickActions = [{ label: "Maintenance", path: "/maintenance" }, { label: "Expenses entry", path: "/expenses" }, { label: "Driver", path: "/drivers" }, { label: "Truck", path: "/trucks" }, { label: "Task", path: "/tasks" }];
+const quickActions = [{ label: "Work order", path: "/maintenance" }, { label: "Expenses entry", path: "/expenses" }, { label: "Driver", path: "/drivers" }, { label: "Truck", path: "/trucks" }, { label: "Task", path: "/tasks" }];
 const itemClass = "block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400";
 
 export function TopBar({ username }: { username: string }) {
@@ -59,8 +59,8 @@ export function TopBar({ username }: { username: string }) {
         { name: "Loads", request: () => fetchLoadsPage(page, controller.signal).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
         { name: "Expenses", request: () => fetchExpensesPage({...page,scope:"general"}, controller.signal).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
       ];
-      if (maintenanceAccess?.canView) requests.push({name:"Maintenance",request:()=>fetchMaintenancePage(page,controller.signal).then(r=>r.items.map(m=>({label:m.services.map(s=>s.name).join(", "),detail:[m.unitNumber,m.serviceDate,m.vendorName].filter(Boolean).join(" · "),href:`/maintenance?recordId=${m.id}`})))});
-      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses": "expenses.read", Maintenance:"expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
+      if (maintenanceAccess?.canView) requests.push({name:"Work orders",request:()=>fetchMaintenancePage(page,controller.signal).then(r=>r.items.map(m=>({label:m.services.map(s=>s.name).join(", "),detail:[m.unitNumber,m.serviceDate,m.vendorName].filter(Boolean).join(" · "),href:`/maintenance?recordId=${m.id}`})))});
+      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses": "expenses.read", "Work orders":"expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
       if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ name: allowedRequests[i].name, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
     }, 250);

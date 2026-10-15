@@ -78,6 +78,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preventativeMigration, err := os.ReadFile("../../sql/099_preventative_maintenance.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -92,6 +96,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(preventativeMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(entryMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
@@ -101,12 +106,19 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec("UPDATE expense_settings SET name='Truck upkeep' WHERE kind='category' AND name='Maintenance'")
 				exec(string(migration))
 				exec(string(entryMigration))
+				exec(string(preventativeMigration))
 				var status string
 				var date *time.Time
 				var services []MaintenanceWork
 				if err := admin.QueryRow(ctx, "SELECT status,service_date,services FROM maintenance_records").Scan(&status, &date, &services); err != nil || status != "needs_review" || date != nil || services[0].TrackingCode != "" {
 					t.Fatal("migration invented completion", status, date, err)
 				}
+			}
+			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
+			exec(string(preventativeMigration))
+			var importedGrade string
+			if err := admin.QueryRow(ctx, "SELECT oil_type FROM maintenance_records WHERE work_order='fleet-board:oil-change:row-999'").Scan(&importedGrade); err != nil || importedGrade != "10W-30" {
+				t.Fatal("historical explicit grade", importedGrade, err)
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
@@ -139,13 +151,29 @@ func TestMaintenanceDatabase(t *testing.T) {
 			odo := 100000
 			amount := "120.30"
 			costs := []ExpenseCostItem{{Name: "Oil change", Amount: "100.10"}, {Name: "Tire repair", Amount: "20.20"}}
-			input := MaintenanceInput{ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "oil", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
+			input := MaintenanceInput{OilType: "15W-40", Notes: "Synthetic last service note", ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "oil", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
 			visit, err := repo.Save(ctx, input)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if visit.Expense == nil || *visit.Expense.Amount != "120.30" || visit.VendorAddress != "Original address" {
 				t.Fatal(visit)
+			}
+			preventive, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
+			if err != nil || len(preventive.Items) != 1 {
+				t.Fatal(preventive, err)
+			}
+			summary := preventive.Items[0]
+			if summary.RecordID == nil || *summary.RecordID != visit.ID || summary.Cost == nil || *summary.Cost != "100.10" || summary.OilType != "15W-40" || summary.Notes != input.Notes || summary.VendorName != "Test shop" || summary.CurrentMiles == nil || *summary.CurrentMiles != odo {
+				t.Fatal("incorrect preventative summary", summary)
+			}
+			pm, err := repo.Preventative(ctx, "pm", "MAINT-TEST", false, 1, 25)
+			if err != nil || len(pm.Items) != 1 || pm.Items[0].RecordID != nil || pm.Items[0].Cost != nil {
+				t.Fatal("oil must not complete PM", pm, err)
+			}
+			var defaults int
+			if err := pool.QueryRow(ctx, "SELECT count(*) FROM maintenance_vendors WHERE source_url<>''").Scan(&defaults); err != nil || defaults != 300 {
+				t.Fatal("vendor catalog", defaults, err)
 			}
 			if _, err := repo.Save(ctx, input); !errors.Is(err, ErrMaintenanceConflict) {
 				t.Fatal("duplicate identity accepted", err)
@@ -254,9 +282,27 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if err != nil || voided.Status != "voided" || voided.ExpenseID != nil {
 				t.Fatal(voided, err)
 			}
+			emptyOil, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
+			if err != nil || len(emptyOil.Items) != 1 || emptyOil.Items[0].RecordID != nil {
+				t.Fatal("voided work reset service", emptyOil, err)
+			}
+			exec(`INSERT INTO maintenance_records(truck_id,status,service_date,services,vendor_name,notes) VALUES($1,'completed','2026-10-13','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]','Historical shop','Known work, cost unknown')`, truck)
+			exec(`INSERT INTO maintenance_records(truck_id,status,service_date,services,vendor_name,notes) VALUES($1,'needs_review','2026-10-15','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]','Unconfirmed shop','Must not replace completed history')`, truck)
+			historical, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
+			if err != nil || len(historical.Items) != 1 || historical.Items[0].Cost != nil || historical.Items[0].VendorName != "Historical shop" || historical.Items[0].OilType != "" || *historical.Items[0].LastDate != "2026-10-13" {
+				t.Fatal("unknown historical cost or unconfirmed latest visit", historical, err)
+			}
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)
 			}
 		})
+	}
+}
+
+func TestMaintenanceOilType(t *testing.T) {
+	for source, want := range map[string]string{"SAE 15W-40": "15W-40", "10w 30": "10W-30", "5 W - 40": "5W-40", " Custom oil ": "Custom oil", "": ""} {
+		if actual := NormalizeMaintenanceOilType(source); actual != want {
+			t.Fatal(source, actual, want)
+		}
 	}
 }

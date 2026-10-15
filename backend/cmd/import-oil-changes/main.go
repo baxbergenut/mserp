@@ -108,7 +108,7 @@ func run(ctx context.Context, pool *pgxpool.Pool, rows []oilRow, apply bool) ([]
 			r.Reason = "requires one exact truck number match, including leading zeros"
 			date, _ := time.Parse(time.DateOnly, row.Date)
 			if apply {
-				if _, err := repo.Save(ctx, repository.MaintenanceInput{ID: row.ID, SourceUnitNumber: row.Unit, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: "needs_review", Notes: sourceNotes(row) + "\nImport review: " + r.Reason, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}); err != nil {
+				if _, err := repo.Save(ctx, repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, SourceUnitNumber: row.Unit, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: "needs_review", Notes: sourceNotes(row) + "\nImport review: " + r.Reason, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}); err != nil {
 					return nil, fmt.Errorf("source row %d: %w", row.Row, err)
 				}
 			}
@@ -150,7 +150,7 @@ func run(ctx context.Context, pool *pgxpool.Pool, rows []oilRow, apply bool) ([]
 			r.Reason = "possible matching invoice requires review"
 		}
 		date, _ := time.Parse(time.DateOnly, row.Date)
-		input := repository.MaintenanceInput{ID: row.ID, TruckID: &truck, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: status, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Notes: notes, Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}
+		input := repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, TruckID: &truck, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: status, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Notes: notes, Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}
 		r.Action = status
 		if apply {
 			if _, err := repo.Save(ctx, input); err != nil {
