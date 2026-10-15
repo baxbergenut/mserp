@@ -528,7 +528,6 @@ export const linkWeighMyTruck = (entry: import("./types").WeighMyTruckEntry, dri
 
 export const fetchWMTTransactions = (query: PageQuery & { from: string; to: string }, signal?: AbortSignal) => apiRequest<import("./types").WMTTransactions>(withQuery("/weighmytruck/transactions", query), { signal });
 export const syncWMTTransactions = () => apiRequest<{ tickets: number }>("/weighmytruck/sync", { method: "POST" });
-export const saveWMTBilling = (input: import("./types").WMTBilling) => apiRequest<void>("/weighmytruck/billing", { method: "PUT", body: JSON.stringify(input) });
 export const linkWMTTransaction = (entry: import("./types").WMTTransaction, driverId: string, truckId: string) => apiRequest<void>(`/weighmytruck/transactions/${entry.id}/link`, { method: "PUT", body: JSON.stringify({ driverId, truckId, version: entry.version }) });
 import type { RelayDriverList, RelayDriverChange } from "./types";
 export const fetchRelayDrivers = (signal?: AbortSignal) => apiRequest<RelayDriverList>("/relay-drivers", { signal });

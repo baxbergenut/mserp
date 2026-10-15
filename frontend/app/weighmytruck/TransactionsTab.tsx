@@ -88,7 +88,7 @@ export function TransactionsTab() {
         <td className="px-3 py-1.5"><div className="flex items-center gap-2">{t.driverId && canProfile ? <Link href={`/drivers/detail?id=${t.driverId}`} className="hover:text-accent">{t.driverName}</Link> : t.driverName || "Unlinked"}{t.warning && <span title={t.warning}><AlertTriangle aria-label="Needs attention" className="h-4 w-4 text-amber-400" /></span>}</div></td>
         <td className="px-3 py-1.5">{t.truckId && canProfile ? <Link href={`/trucks/detail?id=${t.truckId}`} className="hover:text-accent">{t.truckUnit || "Truck"}</Link> : t.truckUnit || "Unlinked"}</td>
         <td className="px-3 py-1.5 text-zinc-400" title={t.location}>{[t.city,t.state].filter(Boolean).join(", ") || t.location}</td>
-        <td className="px-3 py-1.5" title={t.investorName}>{t.payer === "driver" ? "Driver" : t.payer === "investor" ? "Truck investor" : "Company"}</td>
+        <td className="px-3 py-1.5" title={t.investorName}>{t.payer === "driver" ? "Driver" : t.payer === "investor" ? "Truck investor" : t.payer === "company" ? "Company" : "Needs review"}</td>
         <td className="px-3 py-1.5 text-right tabular-nums">{money(t.amount)}</td>
         <td className="px-3 py-1.5 text-right">{canLink && <button className="ui-button" disabled={busy} onClick={() => void openLink(t)}>{t.warning ? "Link" : "Edit link"}</button>}</td>
       </tr>)}</>}</tbody>

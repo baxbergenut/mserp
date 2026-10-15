@@ -1245,7 +1245,7 @@ export type WeighMyTruckEntry = {
   state: "confirmed" | "pending" | "review"; version: number;
   warning: string; addBlockReason: string; canVerify: boolean; updatedAt: string | null;
 };
-export type WMTPayer = "company" | "driver" | "investor";
+export type WMTPayer = "company" | "driver" | "investor" | "review";
 export type WMTBilling = { driverId: string; weekStart: string; payer: WMTPayer; version: number };
 export type WeighMyTruckList = { items: WeighMyTruckEntry[]; configured: boolean; initialized: boolean; billing: WMTBilling[]; requests: { driverId: string; name: string; state: string; error: string }[] };
 export type WMTTransaction = { id: string; date: string; time: string; ticket: string; originalTicket: string; amount: string; truckUnit: string; driverCode: string; driverId: string; driverName: string; truckId: string; location: string; city: string; state: string; payer: WMTPayer; investorName: string; warning: string; version: number };

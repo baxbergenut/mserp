@@ -100,7 +100,7 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
  COALESCE(d.email,''),COALESCE(d.phone,''),
  COALESCE(m.state='review' OR (m.state='pending' AND m.updated_at<now()-interval '2 minutes'),false),
  EXISTS(SELECT 1 FROM truck_driver_assignments a JOIN trucks t ON t.id=a.truck_id JOIN investors i ON i.id=t.owner_id WHERE a.driver_id=d.id AND a.unassigned_at IS NULL AND NOT i.is_company AND i.driver_id IS DISTINCT FROM d.id),
- coalesce((SELECT payer FROM weighmytruck_billing b WHERE b.driver_id=d.id AND b.week_start<=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date ORDER BY week_start DESC LIMIT 1),'company')
+ CASE driver_employment_type(payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)) WHEN 'owner_operator' THEN 'driver' WHEN 'investor_driver' THEN 'investor' WHEN 'company' THEN 'company' ELSE 'review' END
  FROM drivers d FULL JOIN weighmytruck_memberships m ON m.driver_id=d.id
  ORDER BY COALESCE(m.enrolled,false) DESC,lower(COALESCE(d.full_name,m.first_name||' '||m.last_name))`)
 	if err != nil {
@@ -142,24 +142,7 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
 		return result, err
 	}
 	rows.Close()
-	billing, err := r.pool.Query(ctx, `SELECT driver_id::text,week_start::text,payer,version FROM weighmytruck_billing ORDER BY week_start`)
-	if err != nil {
-		return result, err
-	}
-	result.Billing = []WMTBilling{}
-	for billing.Next() {
-		var b WMTBilling
-		if err = billing.Scan(&b.DriverID, &b.WeekStart, &b.Payer, &b.Version); err != nil {
-			billing.Close()
-			return result, err
-		}
-		result.Billing = append(result.Billing, b)
-	}
-	err = billing.Err()
-	billing.Close()
-	if err != nil {
-		return result, err
-	}
+	result.Billing = []WMTBilling{} // Legacy response field; manual preferences no longer apply.
 	pending, err := r.pool.Query(ctx, `SELECT q.driver_id::text,d.full_name,q.state,q.last_error FROM weighmytruck_requests q JOIN drivers d ON d.id=q.driver_id WHERE q.state<>'done'`)
 	if err != nil {
 		return result, err

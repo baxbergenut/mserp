@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -72,6 +73,20 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				execute(string(m))
+				paths, e := filepath.Glob("../../sql/[0-9][0-9][0-9]_*.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				for _, path := range paths {
+					if filepath.Base(path)[:3] <= "074" {
+						continue
+					}
+					body, e := os.ReadFile(path)
+					if e != nil {
+						t.Fatal(e)
+					}
+					execute(string(body))
+				}
 			}
 			execute(`GRANT SELECT,UPDATE ON drivers TO mserp_app; GRANT SELECT ON trucks,truck_driver_assignments TO mserp_app`)
 			pc := cfg.Copy()
@@ -103,7 +118,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 					var input struct{ Date string }
 					json.NewDecoder(r.Body).Decode(&input)
 					if input.Date == repository.ChargeCurrentWeek() {
-						csv := "Date,Ticket Number,Fee,Tractor Number,Site Number,Driver Code\n" + input.Date + ",999,15.25,074,1,007\n"
+						csv := "Date,Ticket Number,Fee,Tractor Number,Site Number,Driver Code\n" + input.Date + ",999,15.25,074,1,007\n" + input.Date + ",1000,12.50,075,1,\n"
 						json.NewEncoder(w).Encode(map[string]any{"csv": base64.StdEncoding.EncodeToString([]byte(csv))})
 					} else {
 						w.Write([]byte(`{"csv":null}`))
@@ -148,6 +163,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			router.Use(auth.requireCSRF, requirePermission)
 			registerWeighMyTruckRoutes(router, logger, repo)
 			registerDriverPayRoutes(router, logger, repository.NewDriverPayRepository(pool), nil)
+			registerInvestorPayRoutes(router, logger, repository.NewDriverPayRepository(pool), nil)
 			router.Get("/auth/session", auth.session)
 			request := func(method, path, body, csrf string, status int) {
 				t.Helper()
@@ -234,9 +250,17 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
 				permissions = append(permissions, "payroll.read", "payroll.write")
+				request("PUT", "/weighmytruck/billing", fmt.Sprintf(`{"driverId":%q,"weekStart":%q,"payer":"company","version":0}`, ids[0], repository.ChargeCurrentWeek()), "fixture-csrf", 400)
 				execute(`GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
-				execute(`INSERT INTO trucks(id,unit_number) VALUES('07400000-0000-0000-0000-000000000001','074')`)
+				execute(`INSERT INTO investors(id,full_name,driver_id) VALUES('07400000-0000-0000-0000-000000000002','Added Driver',$1)`, ids[0])
+				execute(`INSERT INTO trucks(id,unit_number,owner_id) VALUES('07400000-0000-0000-0000-000000000001','074','07400000-0000-0000-0000-000000000002')`)
+				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000001'`, repository.ChargeCurrentWeek())
 				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000001',$1,($2::date::timestamp AT TIME ZONE 'America/New_York'))`, ids[0], repository.ChargeCurrentWeek())
+				execute(`INSERT INTO investors(id,full_name) VALUES('07400000-0000-0000-0000-000000000003','Scale Investor')`)
+				execute(`INSERT INTO trucks(id,unit_number,owner_id) VALUES('07400000-0000-0000-0000-000000000004','075','07400000-0000-0000-0000-000000000003')`)
+				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000004'`, repository.ChargeCurrentWeek())
+				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000004',$1,$2::date::timestamp AT TIME ZONE 'America/New_York')`, ids[1], repository.ChargeCurrentWeek())
+				execute(`INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES('07400000-0000-0000-0000-000000000004','07400000-0000-0000-0000-000000000003',$1::date,90)`, repository.ChargeCurrentWeek())
 				if _, err := repo.SyncSettlements(ctx); err != nil {
 					t.Fatal(err)
 				}

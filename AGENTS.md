@@ -138,8 +138,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   WEIGHMYTRUCK_API_URL and WEIGHMYTRUCK_COMPANY_NAME. No browser vendor calls.
   `MSERP_WMT_TEST_DATABASE_URL` runs fresh/migrated tests as mserp_app;
   `MSERP_WMT_BROWSER_TEST=1` adds real API/database browser checks after a /api build.
-  Migration 074 adds scale transactions, effective-Monday Company/Driver/Truck
-  investor billing (one payer), audited links and durable onboarding enrollment.
+  Migration 074 adds scale transactions, audited links and durable onboarding
+  enrollment. Scale payer is automatic from ticket-date truck ownership: company
+  pays company trucks, owner-operators pay on Driver Pay (CPM and percentage),
+  hired investor-truck drivers charge Investor Pay with matching dated terms.
+  Teams route to the dated main driver. Manual billing rows are history only;
+  the old billing endpoint rejects writes and the UI shows a read-only payer.
+  Missing/conflicting attribution stays in review. Charges frozen elsewhere
+  block a second destination until the old statement is explicitly reopened.
   Drivers/Transactions tabs use server-only CSV settlement sync, scheduled at
   the fuel sync time; `WEIGHMYTRUCK_SYNC_START_DATE=2026-10-05` limits initial
   history to the requested week. The vendor permits only the last 30 days;
@@ -148,7 +154,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   stored unit aliases resolve trucks. Ambiguity is flagged for manual linking.
   Driver and Investor Pay include read-only CAT Scale autoCharges in the ticket
   week. Finalized snapshots stay frozen; differing source tickets show warnings.
-  Billing/link writes require payroll.write and use the financial lock.
+  Link writes require payroll.write and use the financial lock.
   No Expenses & Charges rows are created. FleetScope setup can queue enrollment;
   a startup/minute worker removes terminated enrolled drivers and processes adds.
   Uncertain provider mutations retain the existing review/no-replay boundary.

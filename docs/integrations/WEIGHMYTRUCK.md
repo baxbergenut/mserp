@@ -89,23 +89,28 @@ is flagged, never guessed. Link/Edit link explicitly corrects both IDs with an
 optimistic version and audit event. A changed vendor identity requires review;
 a changed ticket date stops that day's import for source reconciliation.
 
-Each added driver's **Charge to** setting is Company (default), Driver, or
-Truck investor. Only one payer receives each ticket. Settings are effective from
-a selected Monday; no initial charge preferences are inferred. Investor is
-offered for another non-company investor's truck, and historical truck terms
-and ownership determine the actual statement owner. Missing/conflicting owner
-evidence is flagged and not charged. Driver charges apply to CPM and percentage
-drivers alike, including weeks without loads.
+Scale charges route automatically from the ticket's dated truck ownership:
+company trucks stay company-paid, owner-operators pay on Driver Pay (both CPM
+and percentage), and hired drivers on investor trucks charge Investor Pay.
+Team-driver tickets use the dated main driver while preserving the source identity.
+No manual payer setup is required. The Drivers tab shows the current derived
+payer; Transactions shows each ticket's historical payer. Unknown/conflicting
+links or ownership show Needs review; an investor ticket without a matching
+dated truck agreement is flagged and withheld from payroll until configured.
+Existing manual billing rows remain as history and no longer control open
+statements. The legacy billing endpoint rejects changes with a refresh message.
 
 Driver and Investor Pay show individual read-only CAT Scale rows in the ticket
 week. They participate in the existing totals, history and frozen statement
 snapshots. Finalized statements never change during sync. Late/corrected tickets
 that differ from a frozen report show a warning; reopen the affected statement
-to reconcile it. Payer/link corrections reject finalized affected statements.
+to reconcile it. Link corrections reject finalized affected statements, including team statements.
+Tickets already frozen on a different statement are withheld from the new
+destination and flagged for reopening, preventing duplicate collection.
 Transactions do not create Expenses & Charges entries.
 
-Reads/sync use `weighmytruck.read/write`; payer changes additionally require
-`payroll.write`, and manual transaction linking also requires `fleet.read`.
+Reads/sync use `weighmytruck.read/write`; manual transaction linking additionally
+requires `payroll.write` and `fleet.read`.
 Financial writes share the existing payroll finalization lock.
 
 FleetScope setup includes an optional Add to WeighMyTruck checkbox. Validated
@@ -162,7 +167,13 @@ failure classification and absence of mutation retries.
 Build frontend with `NEXT_PUBLIC_API_URL=/api`, install Playwright Chromium, then
 set `MSERP_WMT_BROWSER_TEST=1` for the same Go test. It launches the browser against
 the real Go routes/database and a synthetic upstream OAuth/provider server.
-The browser test covers the added-only roster, active-driver picker, Add/Remove,
+The browser test covers automatic owner/investor scale deductions, read-only payer
+labels, the added-only roster, active-driver picker, Add/Remove,
 double-clicks, timed notices, persistence, search, attention ordering, narrow
 layout and absence of external browser requests. It never
 changes real fleet membership.
+
+`go test ./internal/repository -run TestWMTSettlementDatabase -v` uses the same
+disposable database to verify both fresh/migrated schemas, all payer types,
+credits, teams, historical ownership, legacy preferences, frozen reports,
+reopening, import idempotency and protection against duplicate collection.
