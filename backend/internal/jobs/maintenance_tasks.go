@@ -14,45 +14,42 @@ func RefreshMaintenanceTasks(ctx context.Context, repo *repository.MaintenanceRe
 	zone, _ := time.LoadLocation("America/New_York")
 	now := time.Now().In(zone)
 	today, _ := time.Parse(time.DateOnly, now.Format(time.DateOnly))
-	due, err := repo.Due(ctx, "", today)
+	trucks, err := repo.MaintenanceTelemetryCandidates(ctx)
 	if err != nil {
 		return err
 	}
-	live := map[string]repository.MaintenanceReading{}
 	if eld != nil {
 		telemetryCtx, stopTelemetry := context.WithTimeout(ctx, 40*time.Second)
 		defer stopTelemetry()
-		ids := []string{}
-		seen := map[string]bool{}
-		for _, d := range due {
-			if !seen[d.TruckID] && d.Schedule != nil && d.Schedule.Enabled && d.Schedule.IntervalMiles != nil && d.LastMiles != nil {
-				ids = append(ids, d.TruckID)
-				seen[d.TruckID] = true
-			}
-		}
 		var mu sync.Mutex
 		var wg sync.WaitGroup
+		var storeErr error
 		next := 0
-		for i := 0; i < min(3, len(ids)); i++ {
+		for i := 0; i < min(3, len(trucks)); i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for {
 					mu.Lock()
-					if next >= len(ids) {
+					if next >= len(trucks) {
 						mu.Unlock()
 						return
 					}
-					id := ids[next]
+					truck := trucks[next]
 					next++
 					mu.Unlock()
 					bounded, cancel := context.WithTimeout(telemetryCtx, 10*time.Second)
-					vin, e := repo.OdometerVIN(bounded, id)
+					var value *repository.MaintenanceTelemetry
+					reading, e := eld.MaintenanceOdometer(bounded, truck.VIN)
 					if e == nil {
-						reading, e := eld.MaintenanceOdometer(bounded, vin)
-						if e == nil {
+						value = &repository.MaintenanceTelemetry{Mileage: reading.Mileage, ReportedAt: reading.ReportedAt}
+					}
+					if telemetryCtx.Err() == nil {
+						if e := repo.StoreMaintenanceTelemetry(telemetryCtx, truck, value); e != nil {
 							mu.Lock()
-							live[id] = repository.MaintenanceReading{Mileage: reading.Mileage, Date: reading.ReportedAt.In(zone).Format(time.DateOnly)}
+							if storeErr == nil {
+								storeErr = e
+							}
 							mu.Unlock()
 						}
 					}
@@ -64,6 +61,9 @@ func RefreshMaintenanceTasks(ctx context.Context, repo *repository.MaintenanceRe
 			}()
 		}
 		wg.Wait()
+		if storeErr != nil {
+			return storeErr
+		}
 	}
-	return repo.RefreshMaintenanceTasks(ctx, today, live)
+	return repo.RefreshMaintenanceTasks(ctx, today, nil)
 }

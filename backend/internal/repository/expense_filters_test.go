@@ -92,7 +92,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 				return v
 			}
 			category = id(`SELECT id::text FROM expense_settings WHERE kind='category' AND name='Other'`)
-			hidden = id(`SELECT id::text FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
+			hidden = id(`SELECT id::text FROM expense_settings WHERE kind='category' AND name IN ('Maintenance','Work orders')`)
 			driver = id(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Filter Driver','filter driver','cpm',0.75) RETURNING id::text`)
 			truck = id(`INSERT INTO trucks(unit_number) VALUES('FILTER-01') RETURNING id::text`)
 			repo := NewExpenseRepository(pool)

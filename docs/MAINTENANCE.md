@@ -2,9 +2,10 @@
 
 Fleet > Work orders retains the directory and entry form at `/maintenance`, and
 a Work orders tab on each truck. Fleet > Preventative maintenance lives at
-`/fleet/preventative-maintenance` with PM Service and Oil change tabs. General Expenses excludes the Maintenance category when reading
-with `scope=general`; payroll and ordinary legacy expense API reads still use
-the complete financial ledger.
+`/fleet/preventative-maintenance` with PM Service and Oil change tabs. Expenses
+includes work-order charges in the same ledger alongside other expenses, with
+category-scoped verification. Explicit legacy `scope=general` API reads still
+exclude the configured work-order category. No expense copies are created.
 
 ## Records and accounting
 
@@ -65,8 +66,8 @@ historical-tracking endpoints using its exact unique VIN. The latest nonfuture
 odometer within one hour fills an empty field. Receipt values and manual edits
 are preserved. Older service dates never receive today's reading. Missing, stale,
 ambiguous or unavailable telemetry leaves manual entry available. The GET is
-authorized by Maintenance View/Create/Edit and never writes an odometer by itself.
-Updating mileage between visits is available in Settings with an explanation.
+authorized by Maintenance View/Create/Edit and reads only the background cache.
+The manual odometer-history panel has been removed from Settings.
 
 Due services refresh on focus and every 30 visible seconds. A startup/minute worker also creates PM and oil-change system tasks for upcoming, due and overdue services. See the assignment and lifecycle rules below.
 Reports aggregate exact service amounts by reporting type, truck, vendor and period,
@@ -181,7 +182,7 @@ source grades, and imports store their source grade on future visits.
 Preventative Settings exposes separate fleet PM/oil mileage/day defaults. Only
 administrators edit fleet defaults; existing truck overrides take precedence,
 and the first configured limit reached makes a service due. No numerical service
-interval is invented. Work orders retains its Due services and other tabs.
+interval is invented. Work orders now has History and Settings only.
 
 Migration 100 replaces the untouched branch seeds from 099 with one entry per
 brand: Love's, Speedco, TA, Petro, Goodyear, Blue Beacon, Boss, Southern Tire Mart,
@@ -214,7 +215,7 @@ empty array clears them. Existing task permission requirements still apply.
 Unassigned categories are visible to Administrators, matching other categories.
 
 The startup/minute worker evaluates the same PM/oil schedules and precedence as
-Due services, with New York calendar dates. Fresh Five ELD mileage uses exact
+the preventative overview, with New York calendar dates. Fresh Five ELD mileage uses exact
 unique VIN identity, bounded concurrency and a 40-second telemetry budget; saved
 dated readings remain the fallback. It never writes telemetry as service history.
 At most one open task exists per truck/service. Repeated runs update the same
@@ -227,3 +228,52 @@ completion comes from recorded service, not generic task editing.
 Validation includes fresh and migrated schemas, historical dates without truck
 links, role membership/privacy, idempotent reminders, missing telemetry, completion
 and subsequent cycles, plus the real-API maintenance browser suite.
+
+## Shared accounting workspace and background mileage (102)
+
+The preventative endpoint returns nextMiles, remainingMiles (signed), nextDate,
+status, reason, currentSource and currentReportedAt for both service tabs. Red
+rows are overdue/due; amber rows are within the configured warning threshold.
+Truck-specific settings override fleet defaults, including disabled overrides.
+The next due odometer can be known even without current mileage; remaining miles
+requires a known current reading. Missing baselines never invent a deadline.
+
+The startup/minute maintenance worker selects active trucks by exact unique VIN,
+including trucks without schedules or service history. It persists provider
+mileage/report time separately in maintenance_telemetry, with five-minute attempt
+spacing, three workers, oldest attempts first and a forty-second cycle budget.
+Failures preserve prior observations; changed/ambiguous VINs cannot reuse cache.
+GET /maintenance/odometer and the overview never contact the provider. Only fresh
+cache fills today's blank work-order odometer; source receipts/manual service
+values and older dates are preserved. Telemetry never becomes a dated service
+reading or resets any schedule. Background page refreshes retain table rows.
+
+Settings opens on service reporting types; vendors have search/pagination and
+intervals have their own section. The manual reading panel, Due services and
+Reports UI tabs are removed; the underlying audit, report and correction APIs
+remain compatible. Non-administrators see reporting types without edit controls.
+
+Migration 102 renames the canonical default Maintenance category to Work orders
+without changing its UUID, permissions or historical expense category snapshots.
+The expense options return workOrdersCategoryId for stable form routing. Expenses
+and global expense search include work-order charges; verification uses the same
+record, revision and author checks as before. The list has only financial columns.
+Existing work-order rows open the shared work-order modal in place; deleting a
+service still uses the audited void workflow and existing financial guards.
+
+Selecting Work orders while adding an expense carries the financial draft into
+the work-order modal. Change expense category can return to ordinary entry. AI
+uses nullable strict maintenance metadata for mixed documents, restricted to the
+caller’s creatable categories and active service codes. Each reviewed item saves
+separately in source order, retaining its remaining queue after a failed save.
+Source files attach automatically to work orders after persistence; a failed
+upload retains the saved record for retry. Non-service entries use the ordinary
+expense form. No reviewed service bypasses work-order validation or creates a
+second expense. Category changes, truck/date confirmation, cost allocation and
+oil grades remain editable before saving.
+
+Validation: TestMaintenanceDatabase covers cache persistence/outages, exact VIN
+changes/ambiguity, absence of invented dated readings and independent due math.
+The local review scripts test-work-order-accounting.mjs and test-maintenance-e2e.mjs
+cover entry switching, one ledger charge, verification, in-place editing, compact
+settings, due colors and optional live Luna text/image/PDF mixed extraction.

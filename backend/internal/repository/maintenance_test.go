@@ -34,6 +34,11 @@ func TestMaintenanceDue(t *testing.T) {
 	}
 	missing := MaintenanceDue{LastDate: &last, CurrentDate: &current, CurrentMiles: &now, Schedule: &MaintenanceSchedule{Enabled: true, IntervalMiles: &interval}}
 	calculateMaintenanceDue(&missing, today)
+	withoutCurrent := MaintenanceDue{LastDate: &last, LastMiles: &base, Schedule: &MaintenanceSchedule{Enabled: true, IntervalMiles: &interval}}
+	calculateMaintenanceDue(&withoutCurrent, today)
+	if withoutCurrent.NextMiles == nil || *withoutCurrent.NextMiles != base+interval || withoutCurrent.Status != "missing_information" {
+		t.Fatal("next due must not require current mileage", withoutCurrent)
+	}
 	if missing.Status != "missing_information" {
 		t.Fatal(missing)
 	}
@@ -90,6 +95,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	workspaceMigration, err := os.ReadFile("../../sql/102_work_order_workspace.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -104,6 +113,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(workspaceMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(taskMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(brandMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(preventativeMigration), "\r\n", "\n"), "", 1)
@@ -124,6 +134,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 					t.Fatal("historical correction", historicalStatus, historicalDate, tracking, err)
 				}
 				exec(string(taskMigration))
+				exec(string(workspaceMigration))
 				var status string
 				var date *time.Time
 				var services []MaintenanceWork
@@ -151,6 +162,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			// Fleet tables in historical test schemas predate explicit ownership migrations.
 			exec("GRANT SELECT,INSERT,UPDATE,DELETE ON trucks,expenses,expense_settings,drivers,truck_driver_assignments,app_users TO mserp_app")
 			testMaintenanceTaskLifecycle(t, ctx, admin, pool)
+			testMaintenanceBackgroundTelemetry(t, ctx, admin, pool)
 			repo := NewMaintenanceRepository(pool)
 			category, err := repo.CategoryID(ctx)
 			if err != nil {

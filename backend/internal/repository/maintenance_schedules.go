@@ -33,19 +33,20 @@ type MaintenanceSchedule struct {
 	Version       int     `json:"version"`
 }
 type MaintenanceDue struct {
-	LastRecordID *string              `json:"lastRecordId"`
-	TruckID      string               `json:"truckId"`
-	UnitNumber   string               `json:"unitNumber"`
-	ServiceCode  string               `json:"serviceCode"`
-	Status       string               `json:"status"`
-	Reason       string               `json:"reason"`
-	LastDate     *string              `json:"lastDate"`
-	LastMiles    *int                 `json:"lastMiles"`
-	CurrentDate  *string              `json:"currentDate"`
-	CurrentMiles *int                 `json:"currentMiles"`
-	NextDate     *string              `json:"nextDate"`
-	NextMiles    *int                 `json:"nextMiles"`
-	Schedule     *MaintenanceSchedule `json:"schedule"`
+	CurrentReportedAt *time.Time           `json:"currentReportedAt"`
+	LastRecordID      *string              `json:"lastRecordId"`
+	TruckID           string               `json:"truckId"`
+	UnitNumber        string               `json:"unitNumber"`
+	ServiceCode       string               `json:"serviceCode"`
+	Status            string               `json:"status"`
+	Reason            string               `json:"reason"`
+	LastDate          *string              `json:"lastDate"`
+	LastMiles         *int                 `json:"lastMiles"`
+	CurrentDate       *string              `json:"currentDate"`
+	CurrentMiles      *int                 `json:"currentMiles"`
+	NextDate          *string              `json:"nextDate"`
+	NextMiles         *int                 `json:"nextMiles"`
+	Schedule          *MaintenanceSchedule `json:"schedule"`
 }
 
 func checkMaintenanceReading(ctx context.Context, tx pgx.Tx, truck string, date time.Time, miles int, record, id string) error {
@@ -165,9 +166,8 @@ func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time
  (SELECT id::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
  (SELECT service_date::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
  (SELECT odometer FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
- (SELECT reading_date::text FROM maintenance_odometer_readings r WHERE r.truck_id=t.id AND r.active ORDER BY reading_date DESC,updated_at DESC LIMIT 1),
- (SELECT mileage FROM maintenance_odometer_readings r WHERE r.truck_id=t.id AND r.active ORDER BY reading_date DESC,updated_at DESC LIMIT 1)
- FROM trucks t CROSS JOIN (VALUES('pm'),('oil')) x(code) WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,x.code`, truck)
+ r.reading_date::text,r.mileage,r.reported_at
+ FROM trucks t `+maintenanceCurrentReadingJoin+` CROSS JOIN (VALUES('pm'),('oil')) x(code) WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,x.code`, truck)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time
 	items := []MaintenanceDue{}
 	for rows.Next() {
 		var v MaintenanceDue
-		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastRecordID, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles); err != nil {
+		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastRecordID, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles, &v.CurrentReportedAt); err != nil {
 			return nil, err
 		}
 		for _, s := range schedules {
@@ -228,6 +228,10 @@ func calculateMaintenanceDue(v *MaintenanceDue, today time.Time) {
 		upcoming = delta <= s.WarningDays
 	}
 	if s.IntervalMiles != nil {
+		if v.LastMiles != nil {
+			miles := *v.LastMiles + *s.IntervalMiles
+			v.NextMiles = &miles
+		}
 		if v.LastMiles == nil || v.CurrentMiles == nil {
 			missing = true
 		} else {
@@ -240,6 +244,9 @@ func calculateMaintenanceDue(v *MaintenanceDue, today time.Time) {
 		}
 	}
 	// A stale reading cannot establish that mileage-based maintenance is still current.
+	if s.IntervalMiles != nil && v.CurrentReportedAt != nil && time.Since(*v.CurrentReportedAt) > time.Hour {
+		missing = true
+	}
 	if s.IntervalMiles != nil && v.CurrentDate != nil {
 		date, _ := time.Parse(time.DateOnly, *v.CurrentDate)
 		if today.Sub(date) > 7*24*time.Hour {

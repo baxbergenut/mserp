@@ -129,13 +129,14 @@ type ExpenseFilterValues struct {
 }
 
 type ExpenseFilterOptions struct {
-	Filters      ExpenseFilterValues     `json:"filters"`
-	Settings     []ExpenseSetting        `json:"settings"`
-	Categories   []ExpenseFilterCategory `json:"categories"`
-	PaymentTypes []string                `json:"paymentTypes"`
-	ExpenseTypes []string                `json:"expenseTypes"`
-	PaidBy       []string                `json:"paidBy"`
-	CoveredBy    []string                `json:"coveredBy"`
+	WorkOrdersCategoryID string                  `json:"workOrdersCategoryId"`
+	Filters              ExpenseFilterValues     `json:"filters"`
+	Settings             []ExpenseSetting        `json:"settings"`
+	Categories           []ExpenseFilterCategory `json:"categories"`
+	PaymentTypes         []string                `json:"paymentTypes"`
+	ExpenseTypes         []string                `json:"expenseTypes"`
+	PaidBy               []string                `json:"paidBy"`
+	CoveredBy            []string                `json:"coveredBy"`
 }
 
 type ExpenseFilterCategory struct {
@@ -156,7 +157,7 @@ type ExpensePage struct {
 
 func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpensePageQuery) (ExpensePage, error) {
 	const where = `
-WHERE ($1 = '' OR concat_ws(' ', e.category, COALESCE(t.unit_number, e.unit_number),
+WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings WHERE id=e.category_id), COALESCE(t.unit_number, e.unit_number),
 		COALESCE(d.full_name, e.driver_name), e.payment_type, e.expense_type,
 		e.reference_number, e.description, e.covered_by, e.paid_by)
 	ILIKE '%' || $1 || '%')

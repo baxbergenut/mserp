@@ -77,6 +77,7 @@ type expenseBatchRequest struct {
 }
 
 type extractedExpense struct {
+	Maintenance     *openai.MaintenanceDetails   `json:"maintenance,omitempty"`
 	CostBreakdown   []repository.ExpenseCostItem `json:"costBreakdown"`
 	Category        string                       `json:"category"`
 	CategoryID      string                       `json:"categoryId"`
@@ -288,6 +289,16 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		handler.writeError(w, err)
 		return
 	}
+	cat, err := repository.NewMaintenanceRepository(handler.repo.Pool()).CategoryID(r.Context())
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	for _, id := range accessible {
+		if id == cat {
+			value.Options.WorkOrdersCategoryID = cat
+		}
+	}
 	writeJSON(w, http.StatusOK, value)
 }
 
@@ -451,6 +462,26 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			input.PaymentMethods = append(input.PaymentMethods, item.Name)
 		}
 	}
+	workCategory, err := repository.NewMaintenanceRepository(handler.repo.Pool()).CategoryID(r.Context())
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	if createIDs[workCategory] && categoryIDs[workCategory] != "" && r.FormValue("includeWorkOrders") == "true" {
+		input.MixedMaintenance = true
+		input.WorkOrdersCategory = categoryIDs[workCategory]
+		types, e := repository.NewMaintenanceRepository(handler.repo.Pool()).Types(r.Context())
+		if e != nil {
+			handler.writeError(w, e)
+			return
+		}
+		input.ServiceTypes = map[string]string{}
+		for _, t := range types {
+			if t.Active {
+				input.ServiceTypes[t.Code] = t.Name
+			}
+		}
+	}
 	extraction, err := handler.extractor.ExtractExpense(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, openai.ErrNotConfigured) {
@@ -491,7 +522,14 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 				return
 			}
 		}
-		values = append(values, extractedExpense{
+		if categoryNames[strings.ToLower(category)] != workCategory {
+			item.Maintenance = nil
+		}
+		if item.Maintenance != nil && item.Maintenance.OilType != nil {
+			grade := repository.NormalizeMaintenanceOilType(*item.Maintenance.OilType)
+			item.Maintenance.OilType = &grade
+		}
+		values = append(values, extractedExpense{Maintenance: item.Maintenance,
 			CostBreakdown: extractedCostBreakdown(item.CostBreakdown),
 			Category:      category, CategoryID: categoryNames[strings.ToLower(category)],
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,

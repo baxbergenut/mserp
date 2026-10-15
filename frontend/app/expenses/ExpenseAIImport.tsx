@@ -55,9 +55,10 @@ function toInput(draft: AIExpenseDraft): ExpenseInput {
 
 export function ExpenseAIImport({
   onExtracted,
-  onError,
+  onError, onBusyChange,
 }: {
-  onExtracted: (drafts: ExpenseInput[]) => void;
+  onExtracted: (drafts: ExpenseInput[], file: File | null, source: AIExpenseDraft[]) => void;
+  onBusyChange?: (value: boolean) => void;
   onError: (message: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -112,7 +113,8 @@ export function ExpenseAIImport({
       onError("Paste transaction text or choose a receipt, invoice, or transaction file.");
       return;
     }
-    setIsAnalyzing(true);
+    if(isAnalyzing) return;
+    setIsAnalyzing(true);onBusyChange?.(true);
     onError("");
     try {
       const result = await extractExpenses(text, file);
@@ -120,11 +122,11 @@ export function ExpenseAIImport({
         onError("AI could not find an expense in that content. Add more detail or try a clearer file.");
         return;
       }
-      onExtracted(result.expenses.map(toInput));
+      onExtracted(result.expenses.map(toInput),file,result.expenses);
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "The transaction could not be analyzed");
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalyzing(false);onBusyChange?.(false);
     }
   }
 

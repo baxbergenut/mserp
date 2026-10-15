@@ -7,12 +7,13 @@ import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { MaintenanceWorkspace } from "../maintenance/MaintenanceWorkspace";
 import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
-  createExpenses,
   deleteExpense,
   fetchExpensesPage,
+  fetchMaintenancePage,
   fetchAuthSession,
   fetchDrivers,
   fetchInvestors,
@@ -21,7 +22,7 @@ import {
   verifyExpense,
   unverifyExpense,
 } from "../lib/api";
-import type { Driver, Expense, ExpenseInput, ExpensePage, ExpenseVerification, Investor, Truck } from "../lib/types";
+import type { AIExpenseDraft, Driver, Expense, ExpenseInput, ExpensePage, ExpenseVerification, Investor, Truck } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -38,7 +39,7 @@ import {
   ExpenseForm,
   expenseToInput,
 } from "./ExpenseForm";
-import { ExpenseAIImport, ExpenseBatchEditor } from "./ExpenseAIImport";
+import { ExpenseAIImport } from "./ExpenseAIImport";
 import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
 import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
@@ -121,7 +122,10 @@ export default function ExpensesPage() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
-  const [batchForms, setBatchForms] = useState<ExpenseInput[]>([]);
+  const [review,setReview]=useState<{entries:{form:ExpenseInput;source:AIExpenseDraft}[];index:number;file:File|null}|null>(null);
+  const [workOrder,setWorkOrder]=useState<{key:string;recordId?:string;expense?:ExpenseInput;draft?:AIExpenseDraft;file?:File|null}|null>(null);
+  const [aiBusy,setAIBusy]=useState(false);
+  const saveLock=useRef(false);
   const [currentUser, setCurrentUser] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
@@ -138,7 +142,7 @@ export default function ExpensesPage() {
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const [response, session] = await Promise.all([fetchExpensesPage({scope:"general",
+      const [response, session] = await Promise.all([fetchExpensesPage({
         page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
@@ -183,39 +187,38 @@ export default function ExpensesPage() {
     return () => { cancelled = true; };
   }, [canLoadFleetSelectors]);
 
+  const workCategory=options.workOrdersCategoryId ?? "";
+  function showReview(queue: NonNullable<typeof review>,index:number) {
+    const entry=queue.entries[index];setReview({...queue,index});setError("");
+    if(workCategory && entry.form.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),draft:{...entry.source,...entry.form},file:queue.file});}
+    else {setWorkOrder(null);setForm(entry.form);setEditing(null);}
+  }
+  function completeEntry() {setWorkOrder(null);setEditing(undefined);if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
+  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");}
+  function changeForm(next:ExpenseInput){
+    if(!editing && workCategory && next.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),...(review ? {draft:{...review.entries[review.index].source,...next},file:review.file} : {expense:next})});}
+    else setForm(next);
+  }
   const hasFilters = Boolean(unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
 
   function openCreate() {
-    setForm({ ...emptyExpenseInput, paidBy: currentUser, categoryId: options.settings.find(item => item.kind === "category" && item.active && item.name === "Maintenance" && createCategoryIds.includes(item.id))?.id ?? options.settings.find(item => item.kind === "category" && item.active && createCategoryIds.includes(item.id))?.id ?? "", expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) });
-    setBatchForms([]);
-    setError("");
-    setEditing(null);
+    const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds.find(id=>id!==workCategory) ?? createCategoryIds[0] ?? "";
+    const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
+    setReview(null);setError("");setForm(value);
+    if(workCategory && categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),expense:value});}else{setWorkOrder(null);setEditing(null);}
   }
-
   useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
-
   function openEdit(expense: Expense) {
-    setForm(expenseToInput(expense));
-    setBatchForms([]);
-    setEditing(expense);
+    setReview(null);setError("");
+    if(workCategory && expense.categoryId===workCategory){void fetchMaintenancePage({expenseId:expense.id,pageSize:1}).then(result=>{if(!result.items[0])throw new Error("No work order was found for this charge.");setWorkOrder({key:crypto.randomUUID(),recordId:result.items[0].id});}).catch(e=>setError(e.message));return;}
+    setForm(expenseToInput(expense));setEditing(expense);
   }
-
   async function save() {
-    setIsSaving(true);
-    setError("");
-    try {
-      if (editing) await updateExpense(editing.id, form);
-      else if (batchForms.length > 1) await createExpenses(batchForms);
-      else if (batchForms.length === 1) await createExpense(batchForms[0]);
-      else await createExpense(form);
-      setEditing(undefined);
-      setVerificationNotice("Saved.");
-      await loadData(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to save entry");
-    } finally {
-      setIsSaving(false);
-    }
+    if(saveLock.current || aiBusy)return;
+    saveLock.current=true;setIsSaving(true);setError("");
+    try {if(editing)await updateExpense(editing.id,form);else await createExpense(form);completeEntry();setVerificationNotice("Saved.");await loadData(false);}
+    catch(reason){setError(reason instanceof Error ? reason.message : "Failed to save entry");}
+    finally{setIsSaving(false);saveLock.current=false;}
   }
 
   async function remove() {
@@ -271,7 +274,7 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.shiftKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || editing !== undefined || verificationDetails) return;
+      if (event.defaultPrevented || event.shiftKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || editing !== undefined || workOrder || verificationDetails) return;
       if ((event.target as HTMLElement)?.closest("input,textarea,select,[contenteditable='true']")) return;
       const last = verificationUndo.current.at(-1);
       if (!last) return;
@@ -280,7 +283,7 @@ export default function ExpensesPage() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelVerification, editing, verificationDetails]);
+  }, [cancelVerification, editing, workOrder, verificationDetails]);
 
   useEffect(() => {
     if (!verificationNotice) return;
@@ -387,7 +390,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className="max-w-[310px] px-4 py-3">
                     <div className="text-zinc-300">{expense.expenseType || "Unnamed expense"}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.category}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.categoryId===workCategory ? "Work orders" : expense.category}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.paymentType || "—"}</div>
@@ -427,43 +430,30 @@ export default function ExpensesPage() {
           title={editing ? "Edit entry" : "Add entry"}
           submitDisabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}
           footerStart={editing && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
-          isSaving={isSaving}
-          submitLabel={editing ? "Save changes" : batchForms.length > 1 ? `Create ${batchForms.length} entries` : "Create entry"}
-          wide={batchForms.length > 0}
-          onClose={() => setEditing(undefined)}
+          isSaving={isSaving || aiBusy}
+          submitLabel={editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
+          onClose={closeEntry}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-          {!editing && (
+          {!editing && !review && (
             <div className="mb-5">
               <ExpenseAIImport
                 onError={setError}
-                onExtracted={(drafts) => {
-                  setError("");
-                  drafts = drafts.map(draft => {
-                    const value = { ...draft, paidBy: currentUser };
-                    return value.truckId && !value.driverId && !value.driverName ? expenseAssignment(value, "truck", value.truckId, drivers, trucks, owners)
-                      : value.driverId && !value.truckId && !value.unitNumber ? expenseAssignment(value, "driver", value.driverId, drivers, trucks, owners)
-                      : defaultExpenseResponsibility(value, trucks, owners);
-                  });
-                  if (drafts.length === 1) {
-                    setForm(drafts[0]);
-                    setBatchForms([]);
-                  } else {
-                    setBatchForms(drafts);
-                  }
+                onBusyChange={setAIBusy}
+                onExtracted={(drafts,file,source) => {
+                  const forms=drafts.map(draft=>{const value={...draft,paidBy:currentUser};return value.truckId && !value.driverId && !value.driverName ? expenseAssignment(value,"truck",value.truckId,drivers,trucks,owners) : value.driverId && !value.truckId && !value.unitNumber ? expenseAssignment(value,"driver",value.driverId,drivers,trucks,owners) : defaultExpenseResponsibility(value,trucks,owners);});
+                  showReview({entries:forms.map((form,i)=>({form,source:source[i]})),index:0,file},0);
                 }}
               />
             </div>
           )}
-          {batchForms.length > 0 && !editing ? (
-            <ExpenseBatchEditor settings={options.settings} users={options.paidBy} allowedCategoryIds={createCategoryIds} owners={owners} values={batchForms} drivers={drivers} trucks={trucks} onChange={setBatchForms} />
-          ) : (
-            <fieldset disabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={setForm} /></fieldset>
-          )}
+          {review && <p className="mb-4 text-xs text-zinc-500">Review entry {review.index+1} of {review.entries.length}. Each item is saved separately.</p>}
+          <fieldset disabled={aiBusy || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
         </Modal>
       )}
 
+      {workOrder && <MaintenanceWorkspace key={workOrder.key} modalOnly recordId={workOrder.recordId} initialExpense={workOrder.expense} initialAIDraft={workOrder.draft} initialAttachment={workOrder.file} reviewHasNext={!!review && review.index+1<review.entries.length} reviewLabel={review ? `Review entry ${review.index+1} of ${review.entries.length}` : undefined} onRecordClose={closeEntry} onComplete={completeEntry} onRecordSaved={()=>void loadData(false)} onUseExpense={workOrder.recordId ? undefined : value=>{setWorkOrder(null);setForm({...value,categoryId:""});setEditing(null);}} />}
       {verificationDetails && <Modal title="Verification" isSaving={!!verifying} submitLabel="Done" hideSubmit cancelLabel="Done" onClose={() => setVerificationDetails(null)} onSubmit={event => event.preventDefault()}>
         {error && <ErrorBanner message={error} />}
         <div className="space-y-3">

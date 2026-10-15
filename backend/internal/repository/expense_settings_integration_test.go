@@ -97,7 +97,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 				}
 				exec(string(breakdown))
 			} else {
-				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
+				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name IN ('Maintenance','Work orders')`)
 			}
 			exec(`GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
 			cfg, err := pgxpool.ParseConfig(dsn)
@@ -129,6 +129,9 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			for _, item := range items {
 				if item.Kind == "category" {
 					categories[item.Name] = item.ID
+					if item.Name == "Work orders" {
+						categories["Maintenance"] = item.ID
+					}
 					if item.Name == "Legacy customs" && !item.Active {
 						legacyArchived = true
 					}

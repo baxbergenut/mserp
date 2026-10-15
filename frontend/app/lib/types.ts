@@ -737,10 +737,11 @@ export interface MaintenanceTruck { id: string; unitNumber: string; active: bool
 export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
 export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm" | "oil"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
 export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
-export interface MaintenanceDue { lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
+export interface MaintenanceDue { currentReportedAt: string | null; lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
 export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
 export interface MaintenanceReport { serviceTypes: MaintenanceReportRow[]; trucks: MaintenanceReportRow[]; vendors: MaintenanceReportRow[]; repeatedWork: MaintenanceReportRow[]; total: string; fees: string; unallocated: string; }
-export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: { oilType: string | null; hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; } | null; }
+export type MaintenanceAIDetails = { oilType: string | null; hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; };
+export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: MaintenanceAIDetails | null; }
 export interface MaintenanceChange { actorName: string; happenedAt: string; before: MaintenanceRecord | null; after: MaintenanceRecord; }
 
 export interface Expense {
@@ -820,6 +821,7 @@ export interface ExpenseInput {
 
 export interface ExpensePage extends PaginatedResponse<Expense> {
   options: {
+    workOrdersCategoryId?: string;
     settings: ExpenseSetting[];
     categories: { id: string; name: string }[];
     filters: { drivers: string[]; trucks: string[]; paymentTypes: string[]; paidBy: string[]; coveredBy: string[] };
@@ -835,6 +837,7 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
 }
 
 export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified"> {
+  maintenance?: MaintenanceAIDetails | null;
   category: ExpenseCategory;
   confidence: number;
   evidence: string[];
@@ -1293,4 +1296,4 @@ export interface DriverServiceSetup {
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
 
-export interface PreventativeTruck { truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; vendorName: string; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; cost: string | null; oilType: string; notes: string; }
+export interface PreventativeTruck { currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; vendorName: string; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; cost: string | null; oilType: string; notes: string; }

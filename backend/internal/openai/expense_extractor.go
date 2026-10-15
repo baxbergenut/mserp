@@ -103,15 +103,17 @@ func (response expenseExtractionResponse) extraction() ExpenseExtraction {
 }
 
 type ExpenseInput struct {
-	Maintenance    bool
-	ServiceTypes   map[string]string
-	Categories     map[string][]string
-	PaymentMethods []string
-	Text           string
-	MessageDate    time.Time
-	MIMEType       string
-	FileName       string
-	FileData       []byte
+	Maintenance        bool
+	MixedMaintenance   bool
+	WorkOrdersCategory string
+	ServiceTypes       map[string]string
+	Categories         map[string][]string
+	PaymentMethods     []string
+	Text               string
+	MessageDate        time.Time
+	MIMEType           string
+	FileName           string
+	FileData           []byte
 }
 
 type ExpenseExtractor interface {
@@ -160,8 +162,11 @@ func (c *Client) ExtractExpense(ctx context.Context, input ExpenseInput) (Expens
 		}
 	}
 	schema := expenseSchema()
-	if input.Maintenance {
+	if input.Maintenance || input.MixedMaintenance {
 		schema = maintenanceExtractionSchema(schema)
+		if input.MixedMaintenance {
+			schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["maintenance"].(map[string]any)["type"] = []string{"object", "null"}
+		}
 		if len(input.ServiceTypes) > 0 {
 			codes := []string{}
 			for code := range input.ServiceTypes {
@@ -252,7 +257,7 @@ Use only categories from the expense settings JSON below; return null when none 
 Expense settings: %s
 The following category guidance applies only when that category exists in the settings:
 Use Penalties for fines, violations, tickets, and penalties.
-Use Maintenance for repairs, parts, tires, towing, wash, service, and truck upkeep.
+Use the listed Work orders category (or Maintenance when that is its catalog name) for repairs, parts, tires, towing, wash, service, and truck upkeep.
 Use Safety for inspections, permits, scales, drug tests, MVR/PSP, compliance, and safety equipment.
 Use HR for recruiting, onboarding, payroll-personnel, lodging or transport primarily for a driver/employee.
 Use Administrative for office, bank, filing, software, postage, and general administration. Use Other only when none fit.
@@ -264,11 +269,14 @@ Do not invent a truck, driver, amount, or reference. Evidence should contain sho
 Transaction text:
 %s
 Attachment filename: %s`, input.MessageDate.Format(time.DateOnly), string(catalog), strings.TrimSpace(input.Text), strings.TrimSpace(input.FileName))
-	if input.Maintenance {
+	if input.Maintenance || input.MixedMaintenance {
 		types, _ := json.Marshal(input.ServiceTypes)
 		prompt += fmt.Sprintf(`
 This request is for truck maintenance. In this mode ok means evidence of a real maintenance visit: also accept explicit completed internal/no-charge work, even without an expense. maintenance.hasInvoice is true for an invoice or a billable charge (even if its amount is unreadable), and false only for explicitly free/internal work without an invoice. Never invent a price for a service note. Preserve the complete printed vendor business name, including numbers and suffixes. Treat receipts as service visits, not separate expenses for each service. Also return maintenance for each item, with source-grounded vendorName/address/phone/contact, serviceDate, odometer in whole miles, oilType, location, workOrder, and services. Extract the engine oil viscosity grade only when explicitly stated (for example SAE 10W-30); normalize 10w 30 to 10W-30. Return oilType null when unknown; never infer it from the truck, price, brand or other service. Service date is the actual date work was performed; leave null if unavailable. The financial invoice date and invoice name follow the service date and selected service type labels. Never substitute submission date as a service completion. Do not invent a vendor or an odometer. Convert explicitly stated kilometers to miles and record the conversion in desc; never guess the units. Location is shop, roadside, internal, or unknown. Each service has typeCode, name equal to its selected service type label, amount (decimal string or null), and trackingCode. Group repeated work of the same type into one service when their costs can be combined reliably; preserve source details in desc. Use only these stable type codes: %s. Prefer specific component types; roadside describes location, not a repair category. Road service without known work type belongs to other. Oil change uses typeCode=oil and trackingCode=oil. PM service uses typeCode=preventive and trackingCode=pm. Never assume PM includes oil change. These completions are independent: explicitly confirmed oil replacement still has trackingCode=oil when the source says PM was NOT done. Apply each negation only to the service it describes. Estimates, quotes, plans and purchased parts without evidence of installation never count as completed PM/oil work; trackingCode stays empty. If one priced line includes PM AND confirmed oil change, retain the priced PM item and add a zero-cost Oil change item so costs do not double-count. Work costs must be all priced and sum exactly to amt, or all null when no reliable cost allocation exists. Include explicit tax/fees/discounts under other, with their own source-grounded names. Never fabricate a remainder. If cost allocation is unavailable, preserve known work types but leave all service amounts null and costBreakdown empty. Read every page of a PDF and avoid counting copied invoices twice.
 `, string(types))
+	}
+	if input.MixedMaintenance {
+		prompt += fmt.Sprintf("\nThis is a mixed expense import. The truck-service category in the supplied catalog is %q. Apply the maintenance instructions above ONLY to items in that category; return maintenance=null for all other categories. Include ordinary non-maintenance expenses in their own catalog categories, alongside work orders. Keep one item per invoice or visit, never one per service line. Do not turn tax/fees into extra invoices. Costs must not be counted twice. Preserve service evidence on each work order, even if the source contains unrelated expenses. Do not classify a real truck service as Other merely because other expenses appear in the same document. All items still require source-grounded financial amounts; no invented free work.\n", input.WorkOrdersCategory)
 	}
 	return prompt
 }

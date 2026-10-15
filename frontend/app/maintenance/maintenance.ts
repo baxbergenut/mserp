@@ -47,3 +47,11 @@ export function maintenanceError(value: MaintenanceInput): string {
   const input: ExpenseInput = { ...(value.expense ?? emptyExpenseInput), amount: value.expense?.amount ?? "0", costBreakdown: priced.map(s => ({ name: s.name, amount: s.amount! })) };
   return costBreakdownError(input);
 }
+
+// Selecting Work orders in Expenses retains the user's financial draft.
+export function expenseToMaintenance(value: ExpenseInput, options: MaintenanceOptions): MaintenanceInput {
+ const base=assignMaintenanceTruck(emptyMaintenance(options),value.truckId ?? "",options);
+ const code=value.expenseType ? serviceTypeForName(value.expenseType) : base.services[0].typeCode;
+ const services=[serviceWork(options.types.some(t=>t.code===code&&t.active)?code:"other",options)];
+ return normalizeMaintenance({...base,serviceDate:value.expenseDate,notes:value.description,driverId:value.driverId ?? base.driverId,driverName:value.driverName || base.driverName,services,expense:{...base.expense!,...value,categoryId:options.categoryId}},options);
+}

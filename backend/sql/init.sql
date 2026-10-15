@@ -4164,3 +4164,22 @@ DROP TRIGGER task_user_changed ON app_users;
 CREATE TRIGGER task_user_changed AFTER INSERT OR UPDATE OR DELETE ON app_users FOR EACH ROW EXECUTE FUNCTION notify_task_change();
 CREATE UNIQUE INDEX system_task_maintenance_open_idx ON system_task_records(maintenance_truck_id,maintenance_service) WHERE kind IN ('maintenance_pm','maintenance_oil') AND completed_at IS NULL;
 COMMIT;
+
+-- BEGIN 102_work_order_workspace.sql
+BEGIN;
+CREATE TABLE maintenance_telemetry (
+ truck_id uuid PRIMARY KEY REFERENCES trucks(id) ON DELETE CASCADE,
+ vin text NOT NULL,
+ mileage integer CHECK(mileage>=0),
+ reported_at timestamptz,
+ checked_at timestamptz NOT NULL DEFAULT now(),
+ CHECK ((mileage IS NULL)=(reported_at IS NULL))
+);
+DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON maintenance_telemetry TO mserp_app; END IF; END $$;
+-- Preserve category identity, permissions and financial snapshots.
+UPDATE expense_settings SET name='Work orders',version=version+1
+WHERE id=(SELECT category_id FROM maintenance_configuration) AND name='Maintenance'
+AND NOT EXISTS(SELECT 1 FROM expense_settings WHERE kind='category' AND lower(name)='work orders');
+COMMIT;
+
+-- END 102_work_order_workspace.sql

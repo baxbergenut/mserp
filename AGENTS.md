@@ -231,7 +231,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   feature scope, exclusions and rollout order live in `docs/DRIVER_BOARD_PLAN.md`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
 - `frontend/app/maintenance/`: typed service visits, vendor snapshots, invoice/document
-  history, manual dated odometers, independent PM/oil schedules and cost reports.
+  history, background odometers and independent PM/oil schedules.
   `repository/maintenance_*`, `httpapi/maintenance_handlers.go` and migration 096
   own its backend. See `docs/MAINTENANCE.md` for accounting, permissions, migration
   review and reminder rules. Truck details reuse the workspace in a Maintenance tab.
@@ -246,12 +246,24 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and seeds 300 sourced US vendor locations (docs/data/maintenance-vendors-us.json).
   The preventative API lists each truck with its latest completed PM/oil visit,
   same-visit vendor/notes/allocated cost, and latest dated reading. Unknown costs
-  remain unknown. Live Five ELD reads are bounded to visible rows, cached briefly,
-  and require category View/Create/Edit. Source/time appears on odometer hover.
+  remain unknown. Migration 102 adds durable Five ELD mileage snapshots: the minute
+  worker polls active exact-unique VINs on a five-minute cadence (three concurrent,
+  forty-second budget), independently of browsing and schedules. GETs use cache
+  only; source/time appears on odometer hover. Due odometers, signed miles remaining
+  and status use the same interval/override logic as service tasks. Stale mileage
+  cannot establish Current; historical service readings are never rewritten.
   Oil-change entry defaults to 10W-30, supports other/custom grades, and AI extracts
   only explicit source grades. Existing unknown historical grades stay blank.
   Preventative Settings edits independent fleet PM/oil intervals; truck overrides
-  and existing reminder behavior remain in place.
+  and existing reminder behavior remain in place. Work orders has History/Settings
+  only; Settings separates service types, searchable paginated vendors and intervals.
+  The manual odometer-history, Due services and Reports panels are removed.
+  Expenses includes existing work-order charges once, with ordinary category-scoped
+  verification. Selecting its Work orders category opens the shared work-order modal
+  in place. Mixed AI imports review entries sequentially using the appropriate form
+  and attach source files to work orders after saving. The configuration category
+  UUID stays stable (default display name becomes Work orders); existing financial
+  snapshots, approval/payment identities and legacy scope=general reads are kept.
   New UI entries always include an invoice/charge; imported history keeps unknown costs.
   `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
   reviewed `-apply` writes idempotent visits with source notes, never expenses.

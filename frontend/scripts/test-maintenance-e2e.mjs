@@ -60,6 +60,7 @@ try {
   return response.status() === 204 ? null : response.json();
  };
  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+ await page.getByRole('tab', { name: 'Vendors', exact: true }).click();
  await page.getByRole('button', { name: 'Add vendor', exact: true }).click();
  await page.getByLabel('Vendor directory name').fill(vendorName);
  await page.getByLabel('Vendor directory address').fill('100 Test Road');
@@ -134,9 +135,9 @@ try {
  await expect(page.getByRole('link',{name:'Work orders',exact:true})).toBeVisible();
  await page.getByPlaceholder('Search trucks…').fill(truck.unitNumber);
  await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText(vendorName);
- await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText('650,000');
- await expect(page.locator('td[title^="Five ELD"]')).toHaveCount(1);
- await expect(page.locator('td[data-odometer-fresh="true"]')).toHaveCount(1);
+ await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText('106,000');
+ await expect(page.locator('td[title^="Last saved reading"]')).toHaveCount(1);
+ await expect(page.locator('td[data-odometer-fresh="false"]')).toHaveCount(1);
  const note=page.locator('tbody span.truncate');await note.hover();
  await expect(page.getByRole('tooltip')).toHaveText(saved.notes);
  expect(await note.evaluate(e=>e.scrollWidth>e.clientWidth)).toBe(true);
@@ -171,8 +172,6 @@ try {
  await expect(page.locator('td').getByText(vendorName, { exact: true })).toBeVisible();
  await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveCount(0);
  await expect(page.getByRole('columnheader',{name:'Maintenance truck',exact:true})).toHaveCount(0);
- await page.getByRole('tab',{name:/^Due services/}).click();
- await expect(page.getByRole('columnheader',{name:'Truck',exact:true})).toHaveCount(0);
  await page.goto(access.base + '/maintenance?recordId=' + saved.id);
  await expect(page.getByRole('dialog', { name: 'Work order details', exact: true })).toBeVisible();
  await expect(page.getByLabel('Maintenance odometer', { exact: true })).toHaveValue('100000');
@@ -185,6 +184,7 @@ try {
  expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(2);
  // A paid service retains its driver independently of who covers the charge.
  await page.getByRole('tab',{name:'Settings',exact:true}).click();
+ await page.getByRole('tab',{name:'Service types',exact:true}).click();
  await page.getByRole('button',{name:'Add service type',exact:true}).click();
  const typeName='Air conditioning '+Date.now();
  await page.getByLabel('Service type name').fill(typeName);

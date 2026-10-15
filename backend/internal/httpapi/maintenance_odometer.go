@@ -1,9 +1,7 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
-	"time"
 )
 
 func (h maintenanceHandler) odometer(w http.ResponseWriter, r *http.Request) {
@@ -22,21 +20,14 @@ func (h maintenanceHandler) odometer(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "select a truck")
 		return
 	}
-	if h.eld == nil {
-		writeJSON(w, 200, map[string]any{"reading": nil, "message": "Five ELD is not configured. Enter the service odometer manually."})
-		return
-	}
-	vin, err := h.repo.OdometerVIN(r.Context(), truck)
+	reading, err := h.repo.CachedMaintenanceOdometer(r.Context(), truck)
 	if err != nil {
-		writeJSON(w, 200, map[string]any{"reading": nil, "message": "This truck needs a unique VIN to read its Five ELD odometer."})
+		h.fail(w, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-	defer cancel()
-	reading, err := h.eld.MaintenanceOdometer(ctx, vin)
-	if err != nil {
-		writeJSON(w, 200, map[string]any{"reading": nil, "message": "No recent Five ELD odometer is available. Enter the service odometer manually."})
-		return
+	message := ""
+	if reading == nil {
+		message = "Waiting for a recent background Five ELD reading."
 	}
-	writeJSON(w, 200, map[string]any{"reading": reading, "message": ""})
+	writeJSON(w, 200, map[string]any{"reading": reading, "message": message})
 }

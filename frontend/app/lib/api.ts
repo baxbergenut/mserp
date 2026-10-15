@@ -436,7 +436,7 @@ export const createExpenses = (expenses: ExpenseInput[]) =>
   });
 export const extractExpenses = (text: string, file: File | null) => {
   const form = new FormData();
-  form.append("scope","general");
+  form.append("includeWorkOrders","true");
   if (text.trim()) form.append("text", text.trim());
   if (file) form.append("file", file);
   return apiRequest<ExpenseExtraction>("/expenses/extract", {

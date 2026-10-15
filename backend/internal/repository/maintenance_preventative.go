@@ -1,22 +1,32 @@
 package repository
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Every detail comes from the same latest completed visit. Unknown historical
 // prices stay unknown; a mixed invoice never becomes the price of just its PM.
 type PreventativeTruck struct {
-	TruckID      string  `json:"truckId"`
-	UnitNumber   string  `json:"unitNumber"`
-	Active       bool    `json:"active"`
-	RecordID     *string `json:"recordId"`
-	LastDate     *string `json:"lastDate"`
-	VendorName   string  `json:"vendorName"`
-	LastMiles    *int    `json:"lastMiles"`
-	CurrentMiles *int    `json:"currentMiles"`
-	CurrentDate  *string `json:"currentDate"`
-	Cost         *string `json:"cost"`
-	OilType      string  `json:"oilType"`
-	Notes        string  `json:"notes"`
+	CurrentReportedAt *time.Time `json:"currentReportedAt"`
+	CurrentSource     string     `json:"currentSource"`
+	NextMiles         *int       `json:"nextMiles"`
+	RemainingMiles    *int       `json:"remainingMiles"`
+	NextDate          *string    `json:"nextDate"`
+	Status            string     `json:"status"`
+	Reason            string     `json:"reason"`
+	TruckID           string     `json:"truckId"`
+	UnitNumber        string     `json:"unitNumber"`
+	Active            bool       `json:"active"`
+	RecordID          *string    `json:"recordId"`
+	LastDate          *string    `json:"lastDate"`
+	VendorName        string     `json:"vendorName"`
+	LastMiles         *int       `json:"lastMiles"`
+	CurrentMiles      *int       `json:"currentMiles"`
+	CurrentDate       *string    `json:"currentDate"`
+	Cost              *string    `json:"cost"`
+	OilType           string     `json:"oilType"`
+	Notes             string     `json:"notes"`
 }
 type PreventativePage struct {
 	Items      []PreventativeTruck `json:"items"`
@@ -38,11 +48,11 @@ func (r *MaintenanceRepository) Preventative(ctx context.Context, service, searc
  WHEN NOT EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=$3 AND (s->>'amount') IS NULL)
  THEN (SELECT round(sum((s->>'amount')::numeric),2)::text FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=$3)
  WHEN jsonb_array_length(m.services)=1 THEN coalesce(e.base_amount,CASE WHEN lower(trim(coalesce(e.payment_type,'')))<>'efs' THEN e.amount END)::text
- ELSE NULL END,coalesce(m.oil_type,''),coalesce(m.notes,'')
+ ELSE NULL END,coalesce(m.oil_type,''),coalesce(m.notes,''),r.reported_at,coalesce(r.source,'')
  FROM trucks t
  LEFT JOIN LATERAL (SELECT * FROM maintenance_records v WHERE v.truck_id=t.id AND v.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode'=$3) ORDER BY v.service_date DESC,v.created_at DESC,v.id DESC LIMIT 1) m ON true
  LEFT JOIN expenses e ON e.id=m.expense_id
- LEFT JOIN LATERAL (SELECT mileage,reading_date FROM maintenance_odometer_readings o WHERE o.truck_id=t.id AND o.active ORDER BY reading_date DESC,updated_at DESC,id DESC LIMIT 1) r ON true
+ `+maintenanceCurrentReadingJoin+`
  `+filter+` ORDER BY t.unit_number,t.id LIMIT $4 OFFSET $5`, inactive, search, service, p.PageSize, p.Offset())
 	if err != nil {
 		return PreventativePage{}, err
@@ -51,10 +61,36 @@ func (r *MaintenanceRepository) Preventative(ctx context.Context, service, searc
 	result := PreventativePage{Items: []PreventativeTruck{}, Total: count, Page: p.Page, PageSize: p.PageSize, TotalPages: max(1, (count+p.PageSize-1)/p.PageSize)}
 	for rows.Next() {
 		var v PreventativeTruck
-		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.Active, &v.RecordID, &v.LastDate, &v.VendorName, &v.LastMiles, &v.CurrentMiles, &v.CurrentDate, &v.Cost, &v.OilType, &v.Notes); err != nil {
+		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.Active, &v.RecordID, &v.LastDate, &v.VendorName, &v.LastMiles, &v.CurrentMiles, &v.CurrentDate, &v.Cost, &v.OilType, &v.Notes, &v.CurrentReportedAt, &v.CurrentSource); err != nil {
 			return result, err
 		}
 		result.Items = append(result.Items, v)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	rows.Close()
+	schedules, err := r.Schedules(ctx)
+	if err != nil {
+		return result, err
+	}
+	zone, _ := time.LoadLocation("America/New_York")
+	today, _ := time.Parse(time.DateOnly, time.Now().In(zone).Format(time.DateOnly))
+	for i := range result.Items {
+		v := &result.Items[i]
+		d := MaintenanceDue{TruckID: v.TruckID, ServiceCode: service, LastDate: v.LastDate, LastMiles: v.LastMiles, CurrentDate: v.CurrentDate, CurrentMiles: v.CurrentMiles, CurrentReportedAt: v.CurrentReportedAt}
+		for _, s := range schedules {
+			if s.ServiceCode == service && (s.TruckID == nil || *s.TruckID == v.TruckID) && (d.Schedule == nil || s.TruckID != nil) {
+				copy := s
+				d.Schedule = &copy
+			}
+		}
+		calculateMaintenanceDue(&d, today)
+		v.NextMiles, v.NextDate, v.Status, v.Reason = d.NextMiles, d.NextDate, d.Status, d.Reason
+		if v.NextMiles != nil && v.CurrentMiles != nil {
+			remaining := *v.NextMiles - *v.CurrentMiles
+			v.RemainingMiles = &remaining
+		}
+	}
+	return result, nil
 }
