@@ -125,6 +125,8 @@ driver identity on the visit independently of an invoice or its payer. It preser
 existing financial records and recorded completion evidence. Invoice names derive
 from selected service types; the invoice date follows the service date. The entry
 form has one Amount field, with optional exact service cost allocation.
+Single-service invoices automatically allocate that amount to the selected type;
+only multiple-service invoices offer separate allocation fields.
 
 `backend/cmd/import-oil-changes` imports a bounded A:G JSON snapshot from the Fleet
 board Oil change tab. It defaults to dry run; `-apply` writes source-traceable visits.

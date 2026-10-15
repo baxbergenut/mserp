@@ -290,6 +290,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	}
 	names := []string{}
 	costs := []ExpenseCostItem{}
+	if len(in.Services) == 1 && in.Expense != nil && in.Expense.BaseAmount != nil {
+		in.Services[0].Amount = in.Expense.BaseAmount
+	}
 	for index, work := range in.Services {
 		var active bool
 		var name string

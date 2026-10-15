@@ -61,9 +61,9 @@ try {
  await page.getByLabel('Maintenance odometer', { exact: true }).fill('100000');
  await page.getByLabel('Maintenance vendor', { exact: true }).selectOption(vendor.id);
  await expect(page.getByLabel('Vendor address', { exact: true })).toHaveValue('100 Test Road');
+ await page.getByRole('button', { name: 'Add service', exact: true }).click();
  await page.getByRole('checkbox', { name: /^Split cost by service/ }).check();
  await page.getByLabel('Service 1 cost', { exact: true }).fill('100.10');
- await page.getByRole('button', { name: 'Add service', exact: true }).click();
  await page.getByLabel('Service 2 type', { exact: true }).selectOption('oil');
  await page.getByLabel('Service 2 cost', { exact: true }).fill('0');
  await page.getByRole('button', { name: 'Add service', exact: true }).click();
@@ -134,6 +134,15 @@ try {
  await expect(page.getByRole('dialog')).toHaveCount(0);
  const noCharge=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.some(s=>s.name===typeName));
  expect(noCharge.driverId).toBe(options.drivers[0].id);expect(noCharge.expenseId).toBeNull();
+ await page.getByRole('button',{name:'Add maintenance',exact:true}).click();
+ await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
+ await page.getByLabel('Service 1 type',{exact:true}).selectOption('electrical');
+ await page.getByLabel('Maintenance amount',{exact:true}).fill('35.55');
+ await expect(page.getByLabel('Service 1 cost',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Save maintenance',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ const single=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.length===1&&v.services[0].typeCode==='electrical'&&v.expense?.baseAmount==='35.55');
+ expect(single.services[0].amount).toBe('35.55');
  if (process.env.MSERP_OPENAI_LIVE_TEST === '1') {
   const text = 'Completed service invoice dated 2026-10-05, truck ' + truck.unitNumber + ', odometer 101000 miles. Vendor Synthetic repair shop, 100 Test Road, phone 555-0100. Oil change $100.10; tire repair $20.20; invoice total $120.30. Paid cash. Oil was replaced, no PM inspection.';
   for (const format of ['text', 'image', 'pdf']) {
