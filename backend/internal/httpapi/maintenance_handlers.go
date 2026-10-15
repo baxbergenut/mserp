@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/jobs"
 	"mserp/internal/openai"
 	"mserp/internal/repository"
 )
@@ -23,10 +24,11 @@ type maintenanceHandler struct {
 	expenses  *repository.ExpenseRepository
 	logger    *slog.Logger
 	extractor openai.ExpenseExtractor
+	eld       *jobs.SyncFiveELDJob
 }
 
-func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, expenses *repository.ExpenseRepository, extractor openai.ExpenseExtractor) {
-	h := maintenanceHandler{repo: repository.NewMaintenanceRepository(pool), expenses: expenses, logger: logger, extractor: extractor}
+func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, expenses *repository.ExpenseRepository, extractor openai.ExpenseExtractor, eld *jobs.SyncFiveELDJob) {
+	h := maintenanceHandler{repo: repository.NewMaintenanceRepository(pool), expenses: expenses, logger: logger, extractor: extractor, eld: eld}
 	r.Get("/maintenance", h.list)
 	r.Post("/maintenance", h.save)
 	r.Put("/maintenance/{id}", h.save)
@@ -35,6 +37,7 @@ func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Lo
 	r.Get("/maintenance/{id}/history", h.history)
 	r.Get("/maintenance/access", h.access)
 	r.Get("/maintenance/options", h.options)
+	r.Get("/maintenance/odometer", h.odometer)
 	r.Get("/maintenance/reports", h.reports)
 	r.Get("/maintenance/due", h.due)
 	r.Post("/maintenance/vendors", h.vendor)
@@ -193,6 +196,8 @@ type maintenanceRequest struct {
 	ID            string                       `json:"id"`
 	Version       int                          `json:"version"`
 	TruckID       *string                      `json:"truckId"`
+	DriverID      *string                      `json:"driverId"`
+	DriverName    string                       `json:"driverName"` // Display only; persistence resolves the selected driver's name.
 	VendorID      *string                      `json:"vendorId"`
 	VendorName    string                       `json:"vendorName"`
 	VendorAddress string                       `json:"vendorAddress"`
@@ -210,10 +215,11 @@ type maintenanceRequest struct {
 
 func (in maintenanceRequest) validate(category string) (repository.MaintenanceInput, error) {
 	out := repository.MaintenanceInput{ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
+	out.DriverID = in.DriverID
 	if !isUUID(in.ID) || in.Version < 0 {
 		return out, errors.New("invalid maintenance identity")
 	}
-	for _, id := range []*string{in.TruckID, in.VendorID} {
+	for _, id := range []*string{in.TruckID, in.VendorID, in.DriverID} {
 		if id != nil && !isUUID(*id) {
 			return out, errors.New("select a valid truck and vendor")
 		}
@@ -254,12 +260,13 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 	for i := range out.Services {
 		s := &out.Services[i]
 		s.Name = strings.TrimSpace(s.Name)
-		if s.Name == "" || utf8.RuneCountInString(s.Name) > 100 || s.TypeCode == "" {
-			return out, errors.New("each work item needs a service type and a name")
+		if s.TypeCode == "" {
+			return out, errors.New("each service needs a service type")
 		}
-		if s.TrackingCode != "" && (s.TypeCode != "preventive" || (s.TrackingCode != "pm" && s.TrackingCode != "oil")) {
-			return out, errors.New("PM and oil tracking belong to preventive maintenance")
+		if s.Name == "" {
+			s.Name = s.TypeCode
 		}
+		s.TrackingCode = repository.MaintenanceTrackingCode(s.TypeCode)
 		if s.Amount != nil {
 			v := strings.TrimSpace(*s.Amount)
 			s.Amount = &v
@@ -274,6 +281,13 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 		return out, errors.New("price every work item or leave all costs unallocated")
 	}
 	if in.Expense != nil {
+		if in.ServiceDate != "" {
+			in.Expense.ExpenseDate = in.ServiceDate
+		}
+		if in.Expense.ExpenseType == "" {
+			in.Expense.ExpenseType = out.Services[0].Name
+		}
+		in.Expense.DriverID = in.DriverID
 		in.Expense.CategoryID = category
 		in.Expense.TruckID = in.TruckID
 		in.Expense.CostBreakdown = &costs
@@ -412,7 +426,12 @@ func (h maintenanceHandler) options(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
+	drivers, err := h.repo.DriverChoices(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "drivers": drivers, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
 }
 func (h maintenanceHandler) vendor(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.allowed(w, r, "edit"); !ok {

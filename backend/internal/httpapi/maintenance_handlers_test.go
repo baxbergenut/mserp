@@ -8,7 +8,7 @@ import (
 func TestMaintenanceRequestValidation(t *testing.T) {
 	id := "00000000-0000-4000-8000-000000000098"
 	truck := "00000000-0000-4000-8000-000000000097"
-	base := maintenanceRequest{ID: id, TruckID: &truck, ServiceDate: "2026-10-01", Location: "shop", Status: "completed", Services: []repository.MaintenanceWork{{TypeCode: "preventive", Name: "Oil change", TrackingCode: "oil"}}}
+	base := maintenanceRequest{ID: id, TruckID: &truck, ServiceDate: "2026-10-01", Location: "shop", Status: "completed", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}
 	if _, err := base.validate(testExpenseCategoryID); err != nil {
 		t.Fatal(err)
 	}
@@ -22,8 +22,6 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 		{"future date", func(v *maintenanceRequest) { v.ServiceDate = "2099-01-01" }},
 		{"negative mileage", func(v *maintenanceRequest) { n := -1; v.Odometer = &n }},
 		{"no work", func(v *maintenanceRequest) { v.Services = nil }},
-		{"missing work name", func(v *maintenanceRequest) { v.Services[0].Name = " " }},
-		{"tracking on a repair", func(v *maintenanceRequest) { v.Services[0].TypeCode = "tires" }},
 		{"paid work without invoice", func(v *maintenanceRequest) { v.Services[0].Amount = stringPointer("10") }},
 		{"partial prices", func(v *maintenanceRequest) {
 			v.Services = append(v.Services, repository.MaintenanceWork{TypeCode: "tires", Name: "Tires", Amount: stringPointer("10")})
@@ -37,6 +35,12 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 				t.Fatal("invalid maintenance accepted")
 			}
 		})
+	}
+	canonical := base
+	canonical.Services = []repository.MaintenanceWork{{TypeCode: "electrical", TrackingCode: "pm"}}
+	normalized, err := canonical.validate(testExpenseCategoryID)
+	if err != nil || normalized.Services[0].TrackingCode != "" {
+		t.Fatal("repair spoofed PM completion", err)
 	}
 	review := base
 	review.Status = "needs_review"

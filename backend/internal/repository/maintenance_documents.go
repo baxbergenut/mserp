@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 )
 
 type MaintenanceTruckChoice struct {
@@ -16,6 +17,39 @@ type MaintenanceTruckChoice struct {
 	IsCompanyOwned bool    `json:"isCompanyOwned"`
 	DriverID       *string `json:"driverId"`
 	DriverName     string  `json:"driverName"`
+}
+
+type MaintenanceDriverChoice struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
+}
+
+func (r *MaintenanceRepository) DriverChoices(ctx context.Context) ([]MaintenanceDriverChoice, error) {
+	rows, err := r.pool.Query(ctx, "SELECT id,full_name,active FROM drivers ORDER BY full_name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := []MaintenanceDriverChoice{}
+	for rows.Next() {
+		var v MaintenanceDriverChoice
+		if err := rows.Scan(&v.ID, &v.Name, &v.Active); err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, rows.Err()
+}
+
+func (r *MaintenanceRepository) OdometerVIN(ctx context.Context, truck string) (string, error) {
+	var vin string
+	err := r.pool.QueryRow(ctx, `SELECT coalesce(vin,'') FROM trucks t WHERE id=$1 AND (SELECT count(*) FROM trucks other WHERE upper(regexp_replace(other.vin,'[^a-zA-Z0-9]','','g'))=upper(regexp_replace(t.vin,'[^a-zA-Z0-9]','','g')))=1`, truck).Scan(&vin)
+	vin = strings.ToUpper(strings.TrimSpace(vin))
+	if len(vin) != 17 {
+		return "", ErrMaintenanceInvalid
+	}
+	return vin, mapNotFound(err)
 }
 
 func (r *MaintenanceRepository) Choices(ctx context.Context) ([]MaintenanceTruckChoice, []string, error) {

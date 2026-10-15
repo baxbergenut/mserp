@@ -229,6 +229,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `repository/maintenance_*`, `httpapi/maintenance_handlers.go` and migration 096
   own its backend. See `docs/MAINTENANCE.md` for accounting, permissions, migration
   review and reminder rules. Truck details reuse the workspace in a Maintenance tab.
+  Migration 097 simplifies entry: service types supply work/invoice names and PM/oil
+  resets, service date supplies invoice date, and the visit stores its driver even
+  without a charge. Default US shops are directory records. AI source files attach
+  automatically. Today's blank odometer reads Five ELD telemetry by unique exact VIN
+  (one-hour freshness); receipt/manual readings and historical dates are preserved.
+  `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
+  reviewed `-apply` writes idempotent visits with source notes, never expenses.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
   payment balances, row-click editing and modal deletion; review-first AI entry.
   POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators

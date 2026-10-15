@@ -9,7 +9,7 @@ const browser = await chromium.launch();
 try {
  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
  const vendorName='Synthetic repair shop '+Date.now();
- const errors = []; page.on('pageerror', e => errors.push(e.message));
+ const errors = []; page.on('pageerror', e => errors.push(e.message));page.on('response',async r=>{if(r.status()>=400&&r.url().includes('/api/maintenance'))console.error(r.status(),r.url(),await r.text());});
  await page.goto(access.base + '/login');
  await page.getByLabel('Email or existing username').fill(access.email);
  await page.getByLabel('Password', { exact: true }).fill(access.password);
@@ -18,8 +18,27 @@ try {
  await page.goto(access.base + '/maintenance');
  await expect(page.getByRole('button', { name: 'Add maintenance', exact: true })).toBeVisible();
  let options = await (await page.request.get(access.base + '/api/maintenance/options')).json();
- expect(options.types).toHaveLength(10);
+ expect(options.types.length).toBeGreaterThanOrEqual(11);
  const truck = options.trucks.find(t => t.active);
+ expect(options.vendors.some(v=>v.name==="Love's Truck Care")).toBe(true);
+ await page.route('**/api/maintenance/odometer?*',route=>route.fulfill({json:{reading:{mileage:650000,reportedAt:new Date().toISOString()},message:''}}));
+ await page.getByRole('button',{name:'Add maintenance',exact:true}).click();
+ expect(await page.getByRole('button',{name:'Analyze',exact:true}).evaluate(b=>parseFloat(getComputedStyle(b).minHeight))).toBeGreaterThanOrEqual(32);
+ await expect(page.getByLabel('Maintenance invoice name',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Work 1 name',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Does not reset a schedule',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Attach maintenance receipt',{exact:true})).toHaveCount(0);
+ await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
+ await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('650000');
+ await page.getByLabel('Maintenance service date',{exact:true}).fill('2026-10-01');
+ await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('');
+ await page.getByRole('button',{name:'Add vendor',exact:true}).click();
+ await page.getByLabel('Vendor directory name').fill('Inline shop '+Date.now());
+ await page.getByRole('button',{name:'Save vendor',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Add maintenance',exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog')).toHaveCount(1);
+ await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.unroute('**/api/maintenance/odometer?*');
  const session = await (await page.request.get(access.base + '/api/auth/session')).json();
  const headers = { 'X-CSRF-Token': session.csrfToken, Origin: access.base };
  const api = async (method, path, data) => {
@@ -42,26 +61,19 @@ try {
  await page.getByLabel('Maintenance odometer', { exact: true }).fill('100000');
  await page.getByLabel('Maintenance vendor', { exact: true }).selectOption(vendor.id);
  await expect(page.getByLabel('Vendor address', { exact: true })).toHaveValue('100 Test Road');
- await page.getByRole('checkbox', { name: /^Itemized service costs/ }).check();
- await page.getByLabel('Work 1 name', { exact: true }).selectOption('PM service');
- await page.getByLabel('Work 1 cost', { exact: true }).fill('100.10');
- await page.getByLabel('Work 1 completion', { exact: true }).selectOption('pm');
- await page.getByRole('button', { name: 'Add work', exact: true }).click();
- await page.getByLabel('Work 2 service type', { exact: true }).selectOption('preventive');
- await page.getByLabel('Work 2 name', { exact: true }).selectOption('Oil change');
- await page.getByLabel('Work 2 cost', { exact: true }).fill('0');
- await page.getByLabel('Work 2 completion', { exact: true }).selectOption('oil');
- await page.getByRole('button', { name: 'Add work', exact: true }).click();
- await page.getByLabel('Work 3 service type', { exact: true }).selectOption('tires');
- await page.getByLabel('Work 3 name', { exact: true }).selectOption('Tire issue');
- await page.getByLabel('Work 3 cost', { exact: true }).fill('20.19');
- await page.getByLabel('Maintenance invoice name', { exact: true }).selectOption('PM service');
- await page.getByLabel('Maintenance invoice date', { exact: true }).fill('2026-10-01');
- await page.getByLabel('Maintenance invoice amount', { exact: true }).fill('120.30');
+ await page.getByRole('checkbox', { name: /^Split cost by service/ }).check();
+ await page.getByLabel('Service 1 cost', { exact: true }).fill('100.10');
+ await page.getByRole('button', { name: 'Add service', exact: true }).click();
+ await page.getByLabel('Service 2 type', { exact: true }).selectOption('oil');
+ await page.getByLabel('Service 2 cost', { exact: true }).fill('0');
+ await page.getByRole('button', { name: 'Add service', exact: true }).click();
+ await page.getByLabel('Service 3 type', { exact: true }).selectOption('tires');
+ await page.getByLabel('Service 3 cost', { exact: true }).fill('20.19');
+ await page.getByLabel('Maintenance amount', { exact: true }).fill('120.30');
  await page.getByLabel('Maintenance payment method', { exact: true }).fill('EFS');
  await page.getByRole('button', { name: 'Save maintenance', exact: true }).click();
  await expect(page.getByText('Cost breakdown total must exactly equal the entered amount.', { exact: true }).first()).toBeVisible();
- await page.getByLabel('Work 3 cost', { exact: true }).fill('20.20');
+ await page.getByLabel('Service 3 cost', { exact: true }).fill('20.20');
  await page.screenshot({ path: join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE), 'maintenance-form.png'), fullPage: true });
  await page.getByRole('button', { name: 'Save maintenance', exact: true }).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -103,9 +115,25 @@ try {
  await page.getByRole('button', { name: 'Save maintenance', exact: true }).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  const updated = await api('get', '/maintenance/' + saved.id);
- const stale = await page.request.put(access.base + '/api/maintenance/' + saved.id, { headers, data: { id:saved.id,version:saved.version,truckId:saved.truckId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:updated.notes,services:saved.services,expense: {updatedAt:saved.expense.updatedAt,categoryId:options.categoryId,expenseDate:saved.expense.expenseDate,amount:saved.expense.baseAmount,baseAmount:saved.expense.baseAmount,expenseType:saved.expense.expenseType,paymentType:saved.expense.paymentType,truckId:saved.truckId,driverId:saved.expense.driverId,ownerId:saved.expense.ownerId,coveredBy:saved.expense.coveredBy,paidBy:saved.expense.paidBy} } });
- expect(stale.status()).toBe(409);
+ const stale = await page.request.put(access.base + '/api/maintenance/' + saved.id, { headers, data: { id:saved.id,version:saved.version,truckId:saved.truckId,driverId:saved.driverId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:updated.notes,services:saved.services,expense: {updatedAt:saved.expense.updatedAt,categoryId:options.categoryId,expenseDate:saved.expense.expenseDate,amount:saved.expense.baseAmount,baseAmount:saved.expense.baseAmount,expenseType:saved.expense.expenseType,paymentType:saved.expense.paymentType,truckId:saved.truckId,driverId:saved.expense.driverId,ownerId:saved.expense.ownerId,coveredBy:saved.expense.coveredBy,paidBy:saved.expense.paidBy} } });
+ expect(stale.status(),await stale.text()).toBe(409);
  expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(2);
+ // A no-charge visit retains its driver and a custom service type.
+ await page.getByRole('tab',{name:'Settings',exact:true}).click();
+ await page.getByRole('button',{name:'Add service type',exact:true}).click();
+ const typeName='Air conditioning '+Date.now();
+ await page.getByLabel('Service type name').fill(typeName);
+ await page.getByRole('button',{name:'Save type',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'Add maintenance',exact:true}).click();
+ await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
+ await page.getByLabel('Maintenance driver',{exact:true}).selectOption(options.drivers[0].id);
+ await page.getByRole('checkbox',{name:new RegExp('^Record an invoice / charge')}).uncheck();
+ await page.getByLabel('Service 1 type',{exact:true}).selectOption({label:typeName});
+ await page.getByRole('button',{name:'Save maintenance',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ const noCharge=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.some(s=>s.name===typeName));
+ expect(noCharge.driverId).toBe(options.drivers[0].id);expect(noCharge.expenseId).toBeNull();
  if (process.env.MSERP_OPENAI_LIVE_TEST === '1') {
   const text = 'Completed service invoice dated 2026-10-05, truck ' + truck.unitNumber + ', odometer 101000 miles. Vendor Synthetic repair shop, 100 Test Road, phone 555-0100. Oil change $100.10; tire repair $20.20; invoice total $120.30. Paid cash. Oil was replaced, no PM inspection.';
   for (const format of ['text', 'image', 'pdf']) {
@@ -118,15 +146,20 @@ try {
    const response = await page.request.post(access.base + '/api/maintenance/extract', { headers, multipart: body, timeout: 100000 });
    expect(response.ok(), await response.text()).toBe(true); const drafts = (await response.json()).drafts;
    expect(drafts).toHaveLength(1); expect(drafts[0].maintenance.odometer).toBe(101000); expect(drafts[0].maintenance.vendorName).toBe('Synthetic repair shop');
-   expect(drafts[0].maintenance.services.some(s => s.typeCode === 'preventive' && s.trackingCode === 'oil'), format+': '+JSON.stringify(drafts[0].maintenance.services)).toBe(true);
+   expect(drafts[0].maintenance.services.some(s => s.typeCode === 'oil' && s.trackingCode === 'oil'), format+': '+JSON.stringify(drafts[0].maintenance.services)).toBe(true);
    expect(drafts[0].maintenance.services.some(s => s.trackingCode === 'pm')).toBe(false);
   }
   await page.getByRole('button', { name: 'Add maintenance', exact: true }).click();
-  await page.getByLabel('Maintenance details for AI').fill(text);
+  await page.getByLabel('Maintenance AI attachment').setInputFiles({name:'synthetic-oil-invoice.txt',mimeType:'text/plain',buffer:Buffer.from(text)});
   await page.getByRole('button', { name: 'Analyze', exact: true }).click();
   await expect(page.getByLabel('Maintenance odometer', { exact: true })).toHaveValue('101000', { timeout: 100000 });
   await expect(page.getByLabel('Maintenance status', { exact: true })).toHaveValue('needs_review');
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByLabel('Maintenance status',{exact:true}).selectOption('completed');
+  await page.getByRole('button',{name:'Save maintenance',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const aiVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.vendorName==='Synthetic repair shop');
+  expect(aiVisit.documents).toHaveLength(1);expect(aiVisit.documents[0].fileName).toBe('synthetic-oil-invoice.txt');
+  expect(aiVisit.expense.expenseDate.slice(0,10)).toBe('2026-10-05');expect(aiVisit.expense.expenseType).toContain('Oil change');
  }
 
  // Category View gives access to history/documents, while operational writes remain separate.

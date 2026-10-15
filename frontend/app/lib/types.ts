@@ -715,7 +715,7 @@ export interface MaintenanceVendor { id: string; name: string; address: string; 
 export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm" | "oil"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
 export interface MaintenanceRecord {
-  id: string; expenseId: string | null; truckId: string | null; unitNumber: string; vendorId: string | null;
+  id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;
   vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
   serviceDate: string | null; odometer: number | null; location: "shop" | "roadside" | "internal" | "unknown";
   status: "completed" | "needs_review" | "voided"; workOrder: string; notes: string; services: MaintenanceWork[]; version: number;
@@ -725,12 +725,14 @@ export interface MaintenanceRecord {
 export interface MaintenanceInput {
   legacyPaymentTotal?: string;
   savedOwnerName?: string;
+  driverId: string | null;
+  driverName: string;
   id: string; version: number; truckId: string | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
   serviceDate: string; odometer: number | null; location: MaintenanceRecord["location"]; status: "completed" | "needs_review";
   workOrder: string; notes: string; services: MaintenanceWork[]; expense: ExpenseInput | null;
 }
 export interface MaintenanceTruck { id: string; unitNumber: string; active: boolean; ownerId: string | null; ownerName: string; ownerDriverId: string | null; isCompanyOwned: boolean; driverId: string | null; driverName: string; }
-export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; administrator: boolean; verificationRole: string; }
+export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
 export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm" | "oil"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
 export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
 export interface MaintenanceDue { truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }

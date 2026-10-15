@@ -74,6 +74,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	entryMigration, err := os.ReadFile("../../sql/097_maintenance_entry.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -88,6 +92,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(entryMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(sql)
@@ -95,6 +100,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(`INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,cost_breakdown) SELECT id,name,'Oil change','2026-09-01',10,'[{"name":"Oil change","amount":"10.00"}]' FROM expense_settings WHERE kind='category' AND name='Maintenance'`)
 				exec("UPDATE expense_settings SET name='Truck upkeep' WHERE kind='category' AND name='Maintenance'")
 				exec(string(migration))
+				exec(string(entryMigration))
 				var status string
 				var date *time.Time
 				var services []MaintenanceWork
@@ -133,7 +139,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			odo := 100000
 			amount := "120.30"
 			costs := []ExpenseCostItem{{Name: "Oil change", Amount: "100.10"}, {Name: "Tire repair", Amount: "20.20"}}
-			input := MaintenanceInput{ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "preventive", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
+			input := MaintenanceInput{ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "oil", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
 			visit, err := repo.Save(ctx, input)
 			if err != nil {
 				t.Fatal(err)

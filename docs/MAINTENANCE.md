@@ -10,10 +10,12 @@ the complete financial ledger.
 - A visit stores the truck, actual service date, odometer in miles, vendor and
   contact/address snapshots, service location, work-order number, notes, work
   items and documents. Completed visits require a truck and service date.
-- Work uses stable reporting types: Preventive maintenance, Engine & drivetrain,
+- Work uses stable reporting types: PM service, Oil change, Engine & drivetrain,
   Electrical, Brakes, Tires & wheels, Cooling & fluid systems, Body & chassis,
   Towing & recovery, Cleaning & detailing, and Other maintenance. Detailed names
-  may use the existing defaults or custom text. Roadside is a location, not a
+  now come directly from the reporting type; there is no second work-name field.
+  PM service and Oil change are separate types. Administrators add custom service
+  types in Maintenance > Settings. Roadside is a location, not a
   component reporting type. Reporting type codes never change during a rename.
 - A charged visit has exactly one linked expense. Service and financial writes
   commit together; IDs, approvals, payments and existing responsibility routing
@@ -38,8 +40,9 @@ the complete financial ledger.
 
 ## PM, oil and odometers
 
-PM and Oil change have separate explicit completion tags. Only completed visits
-with the corresponding tag reset that schedule. PM never implies an oil change.
+PM service and Oil change reset their corresponding schedules automatically when
+the visit is confirmed Completed. There is no completion dropdown in the entry form.
+PM never implies an oil change.
 Needs-review entries, estimates and voided visits do not reset a schedule.
 
 Schedules support miles, days or both, with fleet defaults and explicit per-truck
@@ -53,9 +56,14 @@ same-day readings are rejected. Historical service entries never overwrite a new
 reading. For mileage-based schedules, readings older than seven calendar days do
 not establish a Current status; missing/stale readings are shown as Missing
 information unless a known date or mileage limit already proves Due/Overdue.
-The truck's legacy mileage/last-service/next-service fields remain legacy evidence;
-they are not fabricated PM/oil completion records. Five ELD still supplies positions
-only; automatic odometer import is not enabled.
+The truck's legacy mileage/last-service/next-service fields remain legacy evidence.
+For a new visit dated today, selecting the truck reads Five ELD's active-unit and
+historical-tracking endpoints using its exact unique VIN. The latest nonfuture
+odometer within one hour fills an empty field. Receipt values and manual edits
+are preserved. Older service dates never receive today's reading. Missing, stale,
+ambiguous or unavailable telemetry leaves manual entry available. The GET is
+authorized by Maintenance Create/Edit and never writes an odometer by itself.
+Updating mileage between visits is available in Settings with an explanation.
 
 Due services are in-app reminders, refreshed on focus and every 30 visible seconds.
 Reports aggregate exact service amounts by reporting type, truck, vendor and period,
@@ -78,7 +86,8 @@ Save & review next action. File uploads follow a successful visit save; failures
 retain the saved visit and allow upload retry without creating another charge.
 
 Documents live in `maintenance_documents`, independent of fleet cab-card files.
-Downloads require Maintenance category View; fleet file permissions do not grant
+The AI source file is attached automatically after save; there is no separate
+Attach receipt control. Downloads require Maintenance category View; fleet file permissions do not grant
 access. Uploads require category Edit, or Create for a visit owned by that user ID.
 
 ## Permissions and migration
@@ -110,6 +119,22 @@ edit typed visits if an older frontend is temporarily restored.
 Visit, vendor, schedule and reading edits require the displayed version. Invoice
 edits also retain the displayed expense updatedAt. A client UUID identifies each
 new visit, preventing retry-created duplicates.
+
+Migration 097 separates the Oil change type, seeds six US shop chains, and stores
+driver identity on the visit independently of an invoice or its payer. It preserves
+existing financial records and recorded completion evidence. Invoice names derive
+from selected service types; the invoice date follows the service date. The entry
+form has one Amount field, with optional exact service cost allocation.
+
+`backend/cmd/import-oil-changes` imports a bounded A:G JSON snapshot from the Fleet
+board Oil change tab. It defaults to dry run; `-apply` writes source-traceable visits.
+Exact truck matching retains leading zeros. Deterministic event IDs make retries
+idempotent; existing confirmed oil changes on the same date are skipped. Odometer
+conflicts, unlinked source trucks and possible matching unreviewed invoices are
+retained as Needs review. Unlinked entries keep the original unit and reference VIN
+for later linking; they never create fleet profiles. No
+charges, vendors, historical drivers or PM completions are invented. Undated current
+odometer cells and other sheet information remain in source notes.
 
 ## Validation
 

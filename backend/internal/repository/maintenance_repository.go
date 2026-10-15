@@ -54,6 +54,8 @@ type MaintenanceRecord struct {
 	ExpenseID     *string               `json:"expenseId"`
 	TruckID       *string               `json:"truckId"`
 	UnitNumber    string                `json:"unitNumber"`
+	DriverID      *string               `json:"driverId"`
+	DriverName    string                `json:"driverName"`
 	VendorID      *string               `json:"vendorId"`
 	VendorName    string                `json:"vendorName"`
 	VendorAddress string                `json:"vendorAddress"`
@@ -80,6 +82,8 @@ type MaintenanceInput struct {
 	ID                                                    string
 	Version                                               int
 	TruckID                                               *string
+	DriverID                                              *string
+	SourceUnitNumber                                      string
 	VendorID                                              *string
 	VendorName, VendorAddress, VendorPhone, VendorContact string
 	ServiceDate                                           *time.Time
@@ -166,11 +170,11 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	return result, err
 }
 
-const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
+const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
 
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
-	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason)
+	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName)
 	m.Documents = []MaintenanceDocument{}
 	return m, err
 }
@@ -201,7 +205,7 @@ func (r *MaintenanceRepository) Get(ctx context.Context, id string) (Maintenance
 	return m, rows.Err()
 }
 func (r *MaintenanceRepository) List(ctx context.Context, q MaintenanceQuery) (MaintenancePage, error) {
-	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'typeCode'=$3)) AND ($4='' OR m.status=$4) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
+	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'typeCode'=$3)) AND ($4='' OR m.status=$4) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
 	args := []any{q.TruckID, q.VendorID, q.TypeCode, q.Status, q.Search, q.From, q.To, q.ExpenseID}
 	var count int
 	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`+where, args...).Scan(&count); err != nil {
@@ -284,9 +288,12 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 			return old, mapNotFound(err)
 		}
 	}
-	for _, work := range in.Services {
+	names := []string{}
+	costs := []ExpenseCostItem{}
+	for index, work := range in.Services {
 		var active bool
-		if err := tx.QueryRow(ctx, "SELECT active FROM maintenance_types WHERE code=$1", work.TypeCode).Scan(&active); err != nil {
+		var name string
+		if err := tx.QueryRow(ctx, "SELECT active,name FROM maintenance_types WHERE code=$1", work.TypeCode).Scan(&active, &name); err != nil {
 			return old, ErrMaintenanceInvalid
 		}
 		if !active {
@@ -299,6 +306,18 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 			if !unchanged {
 				return old, ErrMaintenanceInvalid
 			}
+		}
+		in.Services[index].Name = name
+		in.Services[index].TrackingCode = MaintenanceTrackingCode(work.TypeCode)
+		names = append(names, name)
+		if work.Amount != nil {
+			costs = append(costs, ExpenseCostItem{Name: name, Amount: *work.Amount})
+		}
+	}
+	var driverName string
+	if in.DriverID != nil {
+		if err := tx.QueryRow(ctx, "SELECT full_name FROM drivers WHERE id=$1", in.DriverID).Scan(&driverName); err != nil {
+			return old, mapNotFound(err)
 		}
 	}
 	if in.VendorID != nil && (old.VendorID == nil || *old.VendorID != *in.VendorID) {
@@ -322,6 +341,13 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	expenseID := old.ExpenseID
 	if in.Expense != nil {
 		in.Expense.TruckID = in.TruckID
+		in.Expense.DriverID = in.DriverID
+		in.Expense.DriverName = &driverName
+		in.Expense.CostBreakdown = &costs
+		title := []rune(strings.Join(names, ", "))
+		title = title[:min(100, len(title))]
+		titleText := string(title)
+		in.Expense.ExpenseType = &titleText
 		if expenseID != nil {
 			if in.Expense.UpdatedAt == nil {
 				return old, ErrMaintenanceConflict
@@ -355,6 +381,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if err != nil {
 		return old, err
 	}
+	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber); err != nil {
+		return old, err
+	}
 	if _, err := tx.Exec(ctx, "UPDATE maintenance_odometer_readings SET active=false WHERE record_id=$1", in.ID); err != nil {
 		return old, err
 	}
@@ -386,6 +415,18 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		return old, err
 	}
 	return r.Get(ctx, in.ID)
+}
+
+// Schedule completion follows the selected service type, independent of payer.
+func MaintenanceTrackingCode(code string) string {
+	switch code {
+	case "preventive":
+		return "pm"
+	case "oil":
+		return "oil"
+	default:
+		return ""
+	}
 }
 
 func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int, reason, actor string) error {
@@ -471,7 +512,7 @@ type MaintenanceReport struct {
 
 func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery) (MaintenanceReport, error) {
 	args := []any{q.TruckID, q.From, q.To, q.VendorID, q.TypeCode, q.Status, q.Search}
-	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE filter_work->>'typeCode'=$5)) AND ($6='' OR m.status=$6) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
+	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE filter_work->>'typeCode'=$5)) AND ($6='' OR m.status=$6) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
 	out := MaintenanceReport{ServiceTypes: []MaintenanceReportRow{}, Trucks: []MaintenanceReportRow{}, Vendors: []MaintenanceReportRow{}, RepeatedWork: []MaintenanceReportRow{}}
 	err := r.pool.QueryRow(ctx, `SELECT coalesce(sum(coalesce(e.base_amount,e.amount)),0)::text,coalesce(sum(e.payment_fee),0)::text,coalesce(sum(coalesce(e.base_amount,e.amount)) FILTER(WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'amount' IS NOT NULL)),0)::text FROM maintenance_records m LEFT JOIN expenses e ON e.id=m.expense_id WHERE `+where, args...).Scan(&out.Total, &out.Fees, &out.Unallocated)
 	if err != nil {
