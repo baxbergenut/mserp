@@ -20,7 +20,9 @@ the complete financial ledger.
 - A charged visit has exactly one linked expense. Service and financial writes
   commit together; IDs, approvals, payments and existing responsibility routing
   are retained. Driver and owner settlements continue reading the same expense.
-  A visit may also record internal/warranty work with no financial record.
+  New UI entries always include the invoice amount and charge; there is no optional
+  invoice checkbox. Historical/imported entries without known costs retain their
+  existing financial state. Vendor creation and edits live in Maintenance > Settings.
 - Itemized work must price every row and equal the invoice base amount exactly.
   The linked expense breakdown must match each priced work row by name and numeric
   amount. Alternatively, all work amounts remain unknown and reports show the

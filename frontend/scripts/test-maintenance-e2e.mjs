@@ -32,11 +32,20 @@ try {
  await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('650000');
  await page.getByLabel('Maintenance service date',{exact:true}).fill('2026-10-01');
  await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('');
- await page.getByRole('button',{name:'Add vendor',exact:true}).click();
- await page.getByLabel('Vendor directory name').fill('Inline shop '+Date.now());
- await page.getByRole('button',{name:'Save vendor',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'Add maintenance',exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Add vendor',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('dialog').getByRole('checkbox',{name:new RegExp('^Record an invoice / charge')})).toHaveCount(0);
+ await expect(page.getByText('The analyzed invoice is saved as the receipt when you save the service.',{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Maintenance amount',{exact:true})).toBeVisible();
+ await page.route('**/api/maintenance/extract',route=>route.fulfill({json:{drafts:[{truckId:truck.id,driverId:null,driverName:'',amount:'',expenseDate:'2026-10-01',paymentType:'',referenceNumber:'',description:'Synthetic service note with price missing',expenseType:'Electrical',maintenance:{hasInvoice:false,vendorName:null,vendorAddress:null,vendorPhone:null,vendorContact:null,serviceDate:'2026-10-01',odometer:null,location:'shop',workOrder:null,services:[{typeCode:'electrical',name:'Electrical',amount:null,trackingCode:''}]}}]}}));
+ await page.getByLabel('Maintenance details for AI').fill('Synthetic service note');
+ await page.getByRole('button',{name:'Analyze',exact:true}).click();
+ await expect(page.getByLabel('Maintenance status',{exact:true})).toHaveValue('needs_review');
+ await expect(page.getByLabel('Maintenance amount',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Maintenance amount',{exact:true})).toHaveValue('');
+ expect(await page.getByLabel('Maintenance amount',{exact:true}).evaluate(input=>input.required)).toBe(true);
+ await page.getByRole('button',{name:'Save maintenance',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(1);
+ await page.unroute('**/api/maintenance/extract');
  await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.unroute('**/api/maintenance/odometer?*');
  const session = await (await page.request.get(access.base + '/api/auth/session')).json();
@@ -46,7 +55,7 @@ try {
   if (!response.ok()) throw new Error(path + ': ' + response.status() + ' ' + await response.text());
   return response.status() === 204 ? null : response.json();
  };
- await page.getByRole('tab', { name: 'Vendors', exact: true }).click();
+ await page.getByRole('tab', { name: 'Settings', exact: true }).click();
  await page.getByRole('button', { name: 'Add vendor', exact: true }).click();
  await page.getByLabel('Vendor directory name').fill(vendorName);
  await page.getByLabel('Vendor directory address').fill('100 Test Road');
@@ -118,7 +127,7 @@ try {
  const stale = await page.request.put(access.base + '/api/maintenance/' + saved.id, { headers, data: { id:saved.id,version:saved.version,truckId:saved.truckId,driverId:saved.driverId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:updated.notes,services:saved.services,expense: {updatedAt:saved.expense.updatedAt,categoryId:options.categoryId,expenseDate:saved.expense.expenseDate,amount:saved.expense.baseAmount,baseAmount:saved.expense.baseAmount,expenseType:saved.expense.expenseType,paymentType:saved.expense.paymentType,truckId:saved.truckId,driverId:saved.expense.driverId,ownerId:saved.expense.ownerId,coveredBy:saved.expense.coveredBy,paidBy:saved.expense.paidBy} } });
  expect(stale.status(),await stale.text()).toBe(409);
  expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(2);
- // A no-charge visit retains its driver and a custom service type.
+ // A paid service retains its driver independently of who covers the charge.
  await page.getByRole('tab',{name:'Settings',exact:true}).click();
  await page.getByRole('button',{name:'Add service type',exact:true}).click();
  const typeName='Air conditioning '+Date.now();
@@ -128,12 +137,13 @@ try {
  await page.getByRole('button',{name:'Add maintenance',exact:true}).click();
  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
  await page.getByLabel('Maintenance driver',{exact:true}).selectOption(options.drivers[0].id);
- await page.getByRole('checkbox',{name:new RegExp('^Record an invoice / charge')}).uncheck();
+ await page.getByLabel('Maintenance amount',{exact:true}).fill('65.55');
+ await page.getByLabel('Maintenance responsibility',{exact:true}).selectOption('Company');
  await page.getByLabel('Service 1 type',{exact:true}).selectOption({label:typeName});
  await page.getByRole('button',{name:'Save maintenance',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
- const noCharge=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.some(s=>s.name===typeName));
- expect(noCharge.driverId).toBe(options.drivers[0].id);expect(noCharge.expenseId).toBeNull();
+ const customVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.some(s=>s.name===typeName));
+ expect(customVisit.driverId).toBe(options.drivers[0].id);expect(customVisit.expenseId).not.toBeNull();expect(customVisit.expense.baseAmount).toBe('65.55');expect(customVisit.expense.coveredBy).toBe('Company');
  await page.getByRole('button',{name:'Add maintenance',exact:true}).click();
  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
  await page.getByLabel('Service 1 type',{exact:true}).selectOption('electrical');

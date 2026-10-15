@@ -7,7 +7,6 @@ import type { MaintenanceInput, MaintenanceOptions, MaintenanceWork } from "../l
 import { controlClass, Field, FormSection, Toggle } from "../components/management/ManagementUI";
 import { ExpensePayerSelect } from "../expenses/ExpenseFields";
 import { ExpenseFeePreview } from "../expenses/ExpenseFeePreview";
-import { emptyExpenseInput } from "../expenses/ExpenseForm";
 import { assignMaintenanceTruck, maintenanceDraft, maintenanceError, normalizeMaintenance, serviceWork, today } from "./maintenance";
 
 export function MaintenanceAI({ options, onDrafts, onError, onBusyChange }: { options: MaintenanceOptions; onDrafts: (drafts: MaintenanceInput[], file: File | null) => void; onError: (message: string) => void; onBusyChange: (busy: boolean) => void }) {
@@ -29,11 +28,10 @@ export function MaintenanceAI({ options, onDrafts, onError, onBusyChange }: { op
       <label className="ui-button cursor-pointer">Browse invoice<input aria-label="Maintenance AI attachment" disabled={busy} type="file" className="sr-only" accept=".pdf,.txt,.png,.jpg,.jpeg,.webp" onChange={e => { if (e.target.files?.[0]) attach(e.target.files[0]); e.target.value = ""; }} /></label>
       <button type="button" className="ui-button ui-button-primary" disabled={busy} onClick={() => void analyze()}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />}{busy ? "Analyzing…" : "Analyze"}</button>
     </div>
-    <p className="text-xs text-zinc-500">The analyzed invoice is saved as the receipt when you save the service.</p>
   </section>;
 }
 
-export function MaintenanceForm({ value, options, onChange, billed = false, odometerMessage, onAddVendor }: { value: MaintenanceInput; options: MaintenanceOptions; onChange: (value: MaintenanceInput) => void; billed?: boolean; odometerMessage?: string; onAddVendor?: () => void }) {
+export function MaintenanceForm({ value, options, onChange, odometerMessage }: { value: MaintenanceInput; options: MaintenanceOptions; onChange: (value: MaintenanceInput) => void; odometerMessage?: string }) {
   const change = (next: MaintenanceInput) => onChange(normalizeMaintenance(next, options));
   const set = <K extends keyof MaintenanceInput>(key: K, next: MaintenanceInput[K]) => change({ ...value, [key]: next });
   const priced = value.services.some(s => s.amount !== null);
@@ -55,7 +53,7 @@ export function MaintenanceForm({ value, options, onChange, billed = false, odom
       <Field label="Work-order number"><input aria-label="Work-order number" maxLength={500} className={controlClass} value={value.workOrder} onChange={e => set("workOrder", e.target.value)} /></Field>
     </FormSection>
     <FormSection title="Vendor">
-      <Field label="Shop"><div className="flex gap-2"><select aria-label="Maintenance vendor" className={`${controlClass} min-w-0 flex-1`} value={value.vendorId ?? ""} onChange={e => { const v = options.vendors.find(v => v.id === e.target.value); change({ ...value, vendorId: v?.id ?? null, vendorName: v?.name ?? "", vendorAddress: v?.address ?? "", vendorPhone: v?.phone ?? "", vendorContact: v?.contact ?? "" }); }}><option value="">Other / custom shop</option>{options.vendors.filter(v => v.active || v.id === value.vendorId).map(v => <option key={v.id} value={v.id}>{v.name}{v.active ? "" : " (archived)"}</option>)}</select>{onAddVendor && <button type="button" className="ui-button shrink-0" onClick={onAddVendor}>Add vendor</button>}</div></Field>
+      <Field label="Shop"><div className="flex gap-2"><select aria-label="Maintenance vendor" className={`${controlClass} min-w-0 flex-1`} value={value.vendorId ?? ""} onChange={e => { const v = options.vendors.find(v => v.id === e.target.value); change({ ...value, vendorId: v?.id ?? null, vendorName: v?.name ?? "", vendorAddress: v?.address ?? "", vendorPhone: v?.phone ?? "", vendorContact: v?.contact ?? "" }); }}><option value="">Other / custom shop</option>{options.vendors.filter(v => v.active || v.id === value.vendorId).map(v => <option key={v.id} value={v.id}>{v.name}{v.active ? "" : " (archived)"}</option>)}</select></div></Field>
       {!value.vendorId && <Field label="Shop name"><input aria-label="Vendor name" maxLength={200} className={controlClass} value={value.vendorName} onChange={e => set("vendorName", e.target.value)} /></Field>}
       <Field label="Shop address"><input aria-label="Vendor address" maxLength={500} className={controlClass} value={value.vendorAddress} onChange={e => set("vendorAddress", e.target.value)} /></Field>
       <Field label="Shop phone"><input aria-label="Vendor phone" maxLength={500} className={controlClass} value={value.vendorPhone} onChange={e => set("vendorPhone", e.target.value)} /></Field>
@@ -71,7 +69,6 @@ export function MaintenanceForm({ value, options, onChange, billed = false, odom
       </div>)}
       {error && <p role="status" className="text-xs text-red-400">{error}</p>}
     </section>
-    <Toggle label="Record an invoice / charge" checked={!!expense} onChange={next => { if (!billed) change({ ...value, services: value.services.map(s => ({ ...s, amount: null })), expense: next ? { ...emptyExpenseInput, categoryId: options.categoryId, truckId: value.truckId, paidBy: options.currentUser, expenseDate: value.serviceDate || today(), coveredBy: truck?.isCompanyOwned ? "Company" : truck?.ownerId ? "Truck Owner" : "Company", ownerId: truck?.ownerId ?? null } : null }); }} description={billed ? "This visit retains its existing financial record." : "Turn off for warranty or internal work with no charge."} />
     {expense && <FormSection title="Payment">
       <Field label="Invoice / reference number"><input aria-label="Maintenance reference number" className={controlClass} value={expense.referenceNumber} onChange={e => finance("referenceNumber", e.target.value)} /></Field>
       <Field label="Payment method"><input aria-label="Maintenance payment method" list="maintenance-payment-methods" className={controlClass} value={expense.paymentType} onChange={e => finance("paymentType", e.target.value)} /><datalist id="maintenance-payment-methods">{options.paymentMethods.map(m => <option key={m} value={m} />)}</datalist></Field>

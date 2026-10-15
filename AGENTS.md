@@ -234,6 +234,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   without a charge. Default US shops are directory records. AI source files attach
   automatically. Today's blank odometer reads Five ELD telemetry by unique exact VIN
   (one-hour freshness); receipt/manual readings and historical dates are preserved.
+  Vendor management lives under Maintenance > Settings, outside the entry modal.
+  New UI entries always include an invoice/charge; imported history keeps unknown costs.
   `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
   reviewed `-apply` writes idempotent visits with source notes, never expenses.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover

@@ -36,9 +36,10 @@ export function maintenanceDraft(draft: MaintenanceAIDraft, options: Maintenance
     return serviceWork(code, options, s.amount);
   });
   const vendor = options.vendors.filter(v => v.active && v.name.toLowerCase() === meta?.vendorName?.trim().toLowerCase());
-  return normalizeMaintenance({ ...matched, driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: meta?.hasInvoice === false ? null : { ...matched.expense!, amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
+  return normalizeMaintenance({ ...matched, driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
 }
 export function maintenanceError(value: MaintenanceInput): string {
+  if (!value.version && !value.expense) return "Enter the service amount and payment details.";
   if (value.status === "completed" && (!value.truckId || !value.serviceDate)) return "Completed work requires a truck and service date.";
   if (!value.services.length || value.services.some(s => !s.typeCode)) return "Choose a type for each service.";
   const priced = value.services.filter(s => s.amount !== null);
