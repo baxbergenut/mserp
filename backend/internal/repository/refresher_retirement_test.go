@@ -48,6 +48,10 @@ func TestRefresherRetirementDatabase(t *testing.T) {
 			exec(`CREATE SCHEMA ` + quoted + `; SET search_path TO ` + quoted + `,public`)
 			defer db.Exec(ctx, `SET search_path TO public; DROP SCHEMA `+quoted+` CASCADE`)
 			exec(read("init.sql"))
+			var initialAudits int
+			if err := db.QueryRow(ctx, `SELECT count(*) FROM access_audit`).Scan(&initialAudits); err != nil {
+				t.Fatal(err)
+			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,UPDATE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			exec(`INSERT INTO dispatchers(id,full_name,normalized_name,extension) VALUES ('11111111-1111-4111-8111-111111111111','Dispatcher','dispatcher',106);
 			INSERT INTO updaters(id,full_name,normalized_name,shift,extension) VALUES ('22222222-2222-4222-8222-222222222222','Updater','updater','main',107);
@@ -74,9 +78,9 @@ func TestRefresherRetirementDatabase(t *testing.T) {
 			if err := db.QueryRow(ctx, `SELECT count(*) FROM access_audit`).Scan(&audits); err != nil {
 				t.Fatal(err)
 			}
-			want := 1
+			want := initialAudits + 1
 			if mode == "migrated" {
-				want = 3
+				want = initialAudits + 3
 			}
 			if audits != want {
 				t.Fatalf("audit history lost or retirement duplicated: %d, want %d", audits, want)
