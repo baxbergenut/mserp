@@ -286,6 +286,7 @@ type truckRequest struct {
 	Year                     *int    `json:"year"`
 	Make                     string  `json:"make"`
 	Model                    string  `json:"model"`
+	Color                    *string `json:"color"`
 	LicensePlate             string  `json:"licensePlate"`
 	LicenseState             string  `json:"licenseState"`
 	IsCompanyOwned           bool    `json:"isCompanyOwned"`
@@ -302,6 +303,13 @@ type truckRequest struct {
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
+	if request.Color != nil {
+		color := strings.TrimSpace(*request.Color)
+		if len([]rune(color)) > 30 || strings.ContainsAny(color, "\x00\r\n") {
+			return repository.TruckInput{}, errors.New("truck color must be at most 30 characters on one line")
+		}
+		request.Color = &color
+	}
 	if err := validateOptionalUUID(request.OwnerDriverID, "owner driver id"); err != nil {
 		return repository.TruckInput{}, err
 	}
@@ -354,7 +362,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		ExpectedOwnershipVersion: request.ExpectedOwnershipVersion,
 		AssignmentWeek:           request.AssignmentWeek,
 		OwnerDriverID:            request.OwnerDriverID, OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
-		Make: optionalString(request.Make), Model: optionalString(request.Model),
+		Make: optionalString(request.Make), Model: optionalString(request.Model), Color: request.Color,
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,
 		RegistrationExpires: registrationExpires, InsuranceExpires: insuranceExpires,

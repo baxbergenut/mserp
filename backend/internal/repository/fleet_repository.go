@@ -124,6 +124,7 @@ type Truck struct {
 	Year                *int       `json:"year"`
 	Make                *string    `json:"make"`
 	Model               *string    `json:"model"`
+	Color               *string    `json:"color"`
 	LicensePlate        *string    `json:"licensePlate"`
 	LicenseState        *string    `json:"licenseState"`
 	IsCompanyOwned      bool       `json:"isCompanyOwned"`
@@ -157,6 +158,7 @@ type TruckInput struct {
 	Year                     *int
 	Make                     *string
 	Model                    *string
+	Color                    *string // nil preserves an existing color; an empty string clears it.
 	LicensePlate             *string
 	LicenseState             *string
 	IsCompanyOwned           bool
@@ -661,14 +663,14 @@ func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, er
 			unit_number, vin, year, make, model, license_plate, license_state,
 			is_company_owned, status, mileage, registration_expires,
 			insurance_expires, last_service_date, next_service_miles, active, notes,
-			irp_file_id, owner_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::uuid,'00000000-0000-0000-0000-000000000001'))
+			irp_file_id, owner_id, color
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::uuid,'00000000-0000-0000-0000-000000000001'), nullif($19,''))
 		RETURNING id`,
 		unitNumber, input.VIN, input.Year, input.Make, input.Model,
 		input.LicensePlate, input.LicenseState, input.IsCompanyOwned, input.Status,
 		input.Mileage, input.RegistrationExpires, input.InsuranceExpires,
 		input.LastServiceDate, input.NextServiceMiles, input.Active, input.Notes,
-		input.IRPFileID, input.OwnerID,
+		input.IRPFileID, input.OwnerID, input.Color,
 	).Scan(&id)
 	if err != nil {
 		return "", err
@@ -707,13 +709,14 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 			is_company_owned = $9, status = $10, mileage = $11,
 			registration_expires = $12, insurance_expires = $13,
 			last_service_date = $14, next_service_miles = $15, active = $16,
-			notes = $17, irp_file_id = CASE WHEN 'irpFileId'=ANY($19::text[]) THEN irp_file_id ELSE $18 END, updated_at = now()
+			notes = $17, irp_file_id = CASE WHEN 'irpFileId'=ANY($19::text[]) THEN irp_file_id ELSE $18 END,
+			color = CASE WHEN $20::text IS NULL THEN color ELSE nullif($20,'') END, updated_at = now()
 		WHERE id = $1`,
 		id, unitNumber, input.VIN, input.Year, input.Make, input.Model,
 		input.LicensePlate, input.LicenseState, input.IsCompanyOwned, input.Status,
 		input.Mileage, input.RegistrationExpires, input.InsuranceExpires,
 		input.LastServiceDate, input.NextServiceMiles, input.Active, input.Notes,
-		input.IRPFileID, input.PreserveFields,
+		input.IRPFileID, input.PreserveFields, input.Color,
 	)
 	if err != nil {
 		return Truck{}, err
@@ -748,7 +751,7 @@ func (r *FleetRepository) DeleteTruck(ctx context.Context, id string) error {
 }
 
 const selectTrucksSQL = `
-SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.vin, t.year, t.make, t.model,
+SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.vin, t.year, t.make, t.model, t.color,
 	t.license_plate, t.license_state, t.is_company_owned, t.status, t.mileage,
 	t.registration_expires, t.insurance_expires, t.last_service_date,
 	t.next_service_miles, a.driver_id, d.full_name, t.active, t.notes,
@@ -767,7 +770,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 	var value Truck
 	err := row.Scan(
 		&value.OwnerID, &value.OwnerName, &value.ID, &value.UnitNumber, &value.VIN, &value.Year, &value.Make,
-		&value.Model, &value.LicensePlate, &value.LicenseState,
+		&value.Model, &value.Color, &value.LicensePlate, &value.LicenseState,
 		&value.IsCompanyOwned, &value.Status, &value.Mileage,
 		&value.RegistrationExpires, &value.InsuranceExpires, &value.LastServiceDate,
 		&value.NextServiceMiles, &value.DriverID, &value.DriverName, &value.Active,

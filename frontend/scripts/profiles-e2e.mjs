@@ -104,6 +104,18 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await page.getByPlaceholder('Investor, truck, or load…').fill('');
   await page.screenshot({ path: join(temp, 'investor-pay.png'), fullPage: true });
   await page.goto(`${base}/trucks/detail?id=${f.extraTruck}`);
+  await page.getByRole('button', { name: 'Edit truck', exact: true }).click();
+  await page.getByLabel('Color', { exact: true }).fill('Pearl White');
+  await page.getByRole('button', { name: 'Save truck', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('Pearl White', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit truck', exact: true }).click();
+  await expect(page.getByLabel('Color', { exact: true })).toHaveValue('Pearl White');
+  await page.getByLabel('Color', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save truck', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('Pearl White', { exact: true })).toHaveCount(0);
   const truckNotes = page.getByRole('region', { name: 'Internal notes', exact: true });
   await truckNotes.getByRole('button', { name: 'Add note' }).click();
   await truckNotes.getByRole('textbox', { name: 'New internal note' }).fill('A dated truck note.');

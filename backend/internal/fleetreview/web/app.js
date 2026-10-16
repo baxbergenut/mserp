@@ -22,8 +22,8 @@ function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
   if(a.status!==v.status||b.status!==fsStatus(v.status))d.push('Status');
   if((a.terminationDate||'')!==(v.terminationDate||'')||(b.terminationDate||'')!==(v.terminationDate||''))d.push('Termination date');
  }else{
-  for(const k of ['unit','vin','year','make','model','plate','plateState'])if(!v[k]||norm(a[k])!==norm(v[k])||norm(b[k])!==norm(v[k]))d.push(labels[k]);
-  for(const k of ['color','truckClass','gvwr']){const compare=k==='truckClass'?v=>norm(truckClass(v)):norm;if(!v[k]||compare(b[k])!==compare(v[k]))d.push(labels[k])}
+  for(const k of ['unit','vin','year','make','model','plate','plateState','color'])if(!v[k]||norm(a[k])!==norm(v[k])||norm(b[k])!==norm(v[k]))d.push(labels[k]);
+  for(const k of ['truckClass','gvwr']){const compare=k==='truckClass'?v=>norm(truckClass(v)):norm;if(!v[k]||compare(b[k])!==compare(v[k]))d.push(labels[k])}
   let owner={};try{owner=JSON.parse(b.ownerSnapshot||'{}')}catch{}
   if(v.ownerDriverId){if(a.ownerDriverRef!==v.ownerDriverId||owner.mserpOwnerDriverId!==v.ownerDriverId)d.push('Ownership')}
   else if(a.ownerId!==v.ownerId||owner.mserpOwnerId!==v.ownerId)d.push('Ownership');
@@ -43,7 +43,7 @@ function fieldDifferent(r,key,av,bv){
  const desired=r.values[key]||'';
  const required=(r.kind==='driver'?['firstName','lastName','email','phone','status']:['unit','vin','year','make','model','plate','plateState','active','status','color','truckClass','gvwr']).includes(key)||(key==='terminationDate'&&r.values.status==='terminated');
  if(required&&!desired)return true;
- if(r.kind==='truck'&&['color','truckClass','gvwr'].includes(key))return compare(bv)!==compare(desired);
+ if(r.kind==='truck'&&['truckClass','gvwr'].includes(key))return compare(bv)!==compare(desired);
  return compare(av)!==compare(bv)||compare(av)!==compare(desired);
 }
 function notice(message,error=false){$('#notice').hidden=!message;$('#notice').textContent=message;$('#notice').className=error?'error':''}

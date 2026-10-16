@@ -55,6 +55,12 @@ directory in `/opt/mserp/releases`, then restart `mserp-api` and reload Nginx.
 
 ## Temporary fleet reconciliation portal
 
+The truck-color build requires MSERP migration 114. Reviewed truck colors are
+saved in both databases on final submission. Unknown MSERP colors remain absent
+from snapshot hashes, preserving existing reviews during the additive rollout;
+once populated, color participates in snapshot conflict checks. Do not replace
+the portal binary while a batch is frozen or partially committed.
+
 The structured-name portal build requires MSERP migration 104. It saves reviewed
 first/last names in both systems and uses those parts in snapshot fences. Before
 upgrading an existing portal, back up its state and resolve any frozen or partially

@@ -22,6 +22,7 @@ export const emptyTruckInput: TruckInput = {
   year: null,
   make: "",
   model: "",
+  color: "",
   licensePlate: "",
   licenseState: "",
   isCompanyOwned: true,
@@ -47,6 +48,7 @@ export function truckToInput(truck: Truck): TruckInput {
     year: truck.year,
     make: truck.make ?? "",
     model: truck.model ?? "",
+    color: truck.color ?? "",
     licensePlate: truck.licensePlate ?? "",
     licenseState: truck.licenseState ?? "",
     isCompanyOwned: truck.isCompanyOwned,
@@ -208,6 +210,15 @@ export function TruckForm({
             onChange={(event) => set("model", event.target.value)}
             className={controlClass}
             placeholder="Cascadia"
+          />
+        </Field>
+        <Field label="Color">
+          <input
+            value={value.color}
+            onChange={(event) => set("color", event.target.value)}
+            className={controlClass}
+            maxLength={30}
+            placeholder="e.g. White"
           />
         </Field>
         <Field label="Owner">

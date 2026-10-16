@@ -59,6 +59,6 @@ func ApplyReviewedTruck(ctx context.Context, tx pgx.Tx, id string, v map[string]
 			return e
 		}
 	}
-	_, e := tx.Exec(ctx, `UPDATE trucks SET unit_number=$2,vin=$3,year=$4::int,make=$5,model=$6,license_plate=$7,license_state=$8,active=$9::boolean,status=$10,updated_at=now() WHERE id=$1`, id, v["unit"], v["vin"], v["year"], v["make"], v["model"], v["plate"], v["plateState"], v["active"], v["status"])
+	_, e := tx.Exec(ctx, `UPDATE trucks SET unit_number=$2,vin=$3,year=$4::int,make=$5,model=$6,license_plate=$7,license_state=$8,active=$9::boolean,status=$10,color=nullif($11,''),updated_at=now() WHERE id=$1`, id, v["unit"], v["vin"], v["year"], v["make"], v["model"], v["plate"], v["plateState"], v["active"], v["status"], v["color"])
 	return e
 }

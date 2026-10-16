@@ -111,6 +111,7 @@ CREATE TABLE trucks (
     year                 INTEGER CHECK (year BETWEEN 1900 AND 2200),
     make                 TEXT,
     model                TEXT,
+    color                TEXT CONSTRAINT trucks_color_length CHECK (color IS NULL OR char_length(color) BETWEEN 1 AND 30),
     license_plate        TEXT,
     license_state        TEXT,
     is_company_owned     BOOLEAN NOT NULL DEFAULT true,

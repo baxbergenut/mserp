@@ -542,6 +542,7 @@ export interface Truck {
   year: number | null;
   make: string | null;
   model: string | null;
+  color: string | null;
   licensePlate: string | null;
   licenseState: string | null;
   isCompanyOwned: boolean;
@@ -574,6 +575,7 @@ export interface TruckInput {
   year: number | null;
   make: string;
   model: string;
+  color: string;
   licensePlate: string;
   licenseState: string;
   isCompanyOwned: boolean;

@@ -242,6 +242,14 @@ func TestDatabaseBatchRecoveryAndFences(t *testing.T) {
 		t.Fatal("duplicate receipt")
 	}
 	stale := makeState()
+	if _, ok := find(stale.Source.Trucks, truck)["color"]; !ok {
+		t.Fatal("known source color missing from snapshot fence")
+	}
+	exec(a, `UPDATE trucks SET color='Blue' WHERE id=$1`, truck)
+	if e := d.Apply(ctx, stale, "test-reviewer"); e == nil || !strings.Contains(e.Error(), "records changed") {
+		t.Fatal("changed color accepted against stale snapshot", e)
+	}
+	exec(a, `UPDATE trucks SET color='White' WHERE id=$1`, truck)
 	exec(a, `UPDATE drivers SET phone='5555550111',updated_at=now() WHERE id=$1`, local)
 	if e := d.Apply(ctx, stale, "test-reviewer"); e == nil || !strings.Contains(e.Error(), "records changed") {
 		t.Fatal("stale source accepted", e)
@@ -314,6 +322,13 @@ func TestDatabaseBatchRecoveryAndFences(t *testing.T) {
 	}
 	if e = b.QueryRow(ctx, `SELECT count(*) FROM vehicles WHERE company_id=$1 AND vin=$2`, company, newVIN).Scan(&count); e != nil || count != 1 {
 		t.Fatal("duplicate/missing created truck", count, e)
+	}
+	var sourceColor, receiverColor string
+	if e = a.QueryRow(ctx, `SELECT color FROM trucks WHERE id=$1`, newTruck).Scan(&sourceColor); e != nil {
+		t.Fatal(e)
+	}
+	if e = b.QueryRow(ctx, `SELECT color FROM vehicles WHERE company_id=$1 AND vin=$2`, company, newVIN).Scan(&receiverColor); e != nil || sourceColor != "White" || receiverColor != sourceColor {
+		t.Fatal("reviewed color must be saved in both systems", e)
 	}
 	if _, e = d.Receiver.Exec(ctx, `UPDATE fleet_review.receipts SET actor='changed' WHERE batch_id=$1`, created.Batch.ID); e == nil {
 		t.Fatal("receipt mutation permitted")

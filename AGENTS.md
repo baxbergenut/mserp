@@ -106,6 +106,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   legacy profile edits can leave both unknown. Portal review saves both parts.
   FleetScope's existing signed full-name-only hire contract remains unchanged;
   its setup form requires a reviewed split, never guessed token positions.
+  Migration 114 adds optional truck `color` (maximum 30 characters). Truck forms
+  and details expose it; omitted/null API input preserves an existing color,
+  while an explicit empty string clears it. Portal batch submission saves the
+  reviewed color to both systems. Unknown source colors are omitted from portal
+  snapshots to preserve existing review fences; known color changes are fenced.
+  The ongoing FleetScope wire contract and color authority are unchanged.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
   A shared priority request gate paces all attempts at 15/minute; discovery
   takes priority over queued refreshes and 429 cooldowns apply to every caller.
