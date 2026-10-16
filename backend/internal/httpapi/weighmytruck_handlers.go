@@ -109,7 +109,7 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 	})
 	r.Post("/weighmytruck/change", func(w http.ResponseWriter, r *http.Request) {
 		var in repository.WMTChange
-		if decodeJSON(r, &in) != nil || in.Version < 0 || (in.Add && !isUUID(in.DriverID)) || (!in.Add && !isUUID(in.MembershipID)) || (in.MembershipID != "" && !isUUID(in.MembershipID)) {
+		if decodeJSON(r, &in) != nil {
 			writeAPIError(w, 400, "Invalid WeighMyTruck change")
 			return
 		}
@@ -119,6 +119,10 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			action = "add"
 		}
 		if !authorizeVendorAction(w, r, "weighmytruck", action) {
+			return
+		}
+		if in.Version < 0 || (in.Add && !isUUID(in.DriverID)) || (!in.Add && !isUUID(in.MembershipID)) || (in.MembershipID != "" && !isUUID(in.MembershipID)) {
+			writeAPIError(w, 400, "Invalid WeighMyTruck change")
 			return
 		}
 		if err := repo.Change(r.Context(), in, session.User.ID); err != nil {

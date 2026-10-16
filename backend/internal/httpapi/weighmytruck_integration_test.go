@@ -150,7 +150,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			if _, err = repo.ImportWeighMyTruck(ctx, strings.NewReader(csv+"New,Driver,new@example.com,5551230098,\n")); err == nil {
 				t.Fatal("import overwrote initialized tracker")
 			}
-			permissions := []string{"weighmytruck.read", "weighmytruck.write"}
+			permissions := []string{"weighmytruck.read", "weighmytruck.create", "weighmytruck.delete", "weighmytruck.link", "weighmytruck.recover"}
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			auth := newAuthHandler(logger, nil, AuthOptions{})
 			router := chi.NewRouter()
@@ -206,7 +206,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			request("POST", "/weighmytruck/change", `{}`, "fixture-csrf", 403)
 			permissions = []string{}
 			request("GET", "/weighmytruck", "", "", 403)
-			permissions = []string{"weighmytruck.read", "weighmytruck.write"}
+			permissions = []string{"weighmytruck.read", "weighmytruck.create", "weighmytruck.delete", "weighmytruck.link", "weighmytruck.recover"}
 			available := find(ids[1])
 			change(available, true, 200)
 			change(available, true, 409)
@@ -249,7 +249,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			execute(`UPDATE weighmytruck_memberships SET updated_at=now()-interval '3 minutes' WHERE driver_id=$1`, ids[1])
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
-				permissions = append(permissions, "payroll.read", "payroll.write")
+				permissions = append(permissions, "driver_pay.read", "driver_pay.edit", "drivers.read")
 				request("PUT", "/weighmytruck/billing", fmt.Sprintf(`{"driverId":%q,"weekStart":%q,"payer":"company","version":0}`, ids[0], repository.ChargeCurrentWeek()), "fixture-csrf", 400)
 				execute(`GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 				execute(`INSERT INTO investors(id,full_name,driver_id) VALUES('07400000-0000-0000-0000-000000000002','Added Driver',$1)`, ids[0])
