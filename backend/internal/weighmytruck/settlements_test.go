@@ -29,6 +29,28 @@ func TestSettlementCSV(t *testing.T) {
 		t.Fatal("credit lost")
 	}
 }
+
+func TestSettlementCSVDatePadding(t *testing.T) {
+	for _, date := range []string{"9-7-26", "09-07-26", "9-07-26", "09-7-26", "9/7/2026", "09/07/2026", "2026-09-07", "9-7-2026", "09-07-2026"} {
+		t.Run(date, func(t *testing.T) {
+			rows, err := ParseTickets(strings.ReplaceAll(ticketCSV, "10-08-26", date))
+			if err != nil || len(rows) != 2 {
+				t.Fatalf("parse %q: rows=%d err=%v", date, len(rows), err)
+			}
+			for _, row := range rows {
+				if row.Date != "2026-09-07" {
+					t.Fatalf("date = %q, want 2026-09-07", row.Date)
+				}
+			}
+		})
+	}
+	for _, date := range []string{"9-31-26", "13-7-26", "9-0-26"} {
+		if _, err := ParseTickets(strings.ReplaceAll(ticketCSV, "10-08-26", date)); err == nil {
+			t.Errorf("invalid calendar date %q accepted", date)
+		}
+	}
+}
+
 func TestFetchSettlements(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/token" {

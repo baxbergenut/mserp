@@ -190,8 +190,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Missing/conflicting attribution stays in review. Charges frozen elsewhere
   block a second destination until the old statement is explicitly reopened.
   Drivers/Transactions tabs use server-only CSV settlement sync, scheduled at
-  the fuel sync time; `WEIGHMYTRUCK_SYNC_START_DATE=2026-10-05` limits initial
-  history to the requested week. The vendor permits only the last 30 days;
+  the fuel sync time; production `WEIGHMYTRUCK_SYNC_START_DATE=2026-09-17`
+  includes the full available month (the code fallback remains October 5).
+  Vendor CSV dates may have unpadded months/days. The vendor permits only the last 30 days;
   rechecking that window catches corrections without duplicate tickets.
   Exact driver codes or unique dated truck assignments resolve drivers, and
   stored unit aliases resolve trucks. Ambiguity is flagged for manual linking.
