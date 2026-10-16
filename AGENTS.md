@@ -75,6 +75,19 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   build frontend with `/api`, then `node scripts/test-fleetscope-sync-views.mjs`.
 - `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
   API sync.
+- The temporary MS Express reconciliation portal is a separate Go binary at
+  `backend/cmd/fleet-review`, with embedded UI and workflow in
+  `backend/internal/fleetreview`. It uses private JSON configuration and state,
+  distinct database credentials and HTTPS at `conflicts.msexpressinc.net`.
+  Drafts never write fleet records. A single explicitly reviewed batch uses
+  snapshot fences and immutable receipts in both databases; partial commits
+  recover only through the same frozen batch. It refuses enrolled integrations.
+  Approved mappings remain in receipts for later integration enrollment; portal
+  submission does not activate ongoing sync. Driver creation excludes missing
+  terminated drivers; ownership and crew/insurance review remain separate.
+  See `deploy/README.md` for installation, recovery and retirement. Local database
+  tests use `MSERP_PORTAL_TEST_DATABASE_URL` and
+  `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
 - `backend/internal/httpapi/gross_board_handlers.go` and

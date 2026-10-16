@@ -42,3 +42,77 @@ retained for manual recovery.
 
 To roll back manually, repoint `/opt/mserp/current` to an earlier directory in
 `/opt/mserp/releases`, then restart `mserp-api` and reload Nginx.
+
+## Temporary fleet reconciliation portal
+
+`backend/cmd/fleet-review` serves the separate, embedded Drivers/Trucks review UI
+at `https://conflicts.msexpressinc.net`. Build it locally for Linux with CGO off;
+it is not part of the normal MSERP release archive. Use the supplied
+`fleet-review.service` and `fleet-review.nginx.conf`, with the same ACME webroot
+and renewal hook as MSERP. Validate Nginx before reloading it.
+
+The operator bootstrap `provision-fleet-review.py` accepts secret JSON over SSH
+stdin, verifies both company identities and the exact ownership migration hash,
+takes private schema/scoped backups, and creates dedicated credentials and
+immutable receipt storage. FleetScope's normal API deployment should apply its
+ownership migration first. Never log the bootstrap payload. The portal is bound
+to loopback port 8096. Its service cannot write outside its private state folder.
+
+- `/etc/fleet-review/config.json`: root-owned, group-readable private settings,
+  database URLs, pinned company identity, login hash and `allowApply` gate.
+- `/var/lib/fleet-review/state.json`: saved snapshot, drafts and frozen batch;
+  private to the service account. Back this up before any operator maintenance.
+- `/var/backups/fleet-review`: restricted operator backups.
+- Each database's `fleet_review.receipts`: immutable plan hash, identity mappings,
+  before/after values and shared reviewer-account attribution. A shared account
+  identifies the review account, not an individual staff member.
+
+Generate credentials using `fleet-review -generate-credentials PRIVATE_PATH`.
+Transfer the password privately to the authorized reviewer; never commit it.
+Changing the configured bcrypt hash and restarting revokes all in-memory sessions.
+Cookies are host-only, Secure, HttpOnly and SameSite Strict; mutations require an
+exact Origin and session CSRF token. Login attempts are throttled. No database
+credentials, payroll amounts, SSNs or documents are sent to the browser.
+
+Reviewers confirm identity, edit values and save drafts before marking rows as
+reviewed. Candidate names/VINs never authorize automatic linking. Missing required
+vehicle facts must be supplied or explicitly deferred; fabricated identifiers are
+rejected. Missing terminated drivers are deferred. Existing drivers' status and
+contact values default to MSERP; named exceptions live in private operator policy.
+Ownership uses existing MSERP owners or a confirmed driver owner, with an explicit
+effective date when ownership changes. Investor ownership is projected into
+FleetScope as a named owner snapshot, never as a lease. Existing insurance facts
+remain intact; owner adoption requires separate coverage review. Crew adoption is
+an explicit per-truck decision and requires all crew identities and eligibility.
+
+Final submission requires every row to be reviewed or explicitly deferred and a
+typed confirmation. The server locks the affected fleet tables briefly, verifies
+the frozen snapshots and commits a durable receipt in MSERP, then FleetScope.
+These are two database commits, not a distributed atomic transaction. On an
+interrupted response/restart, use **Recover the same batch**. Receipt readback
+prevents duplicate creation. If either database changed after a partial commit,
+stop and inspect the immutable receipt and current records; never delete receipts,
+replace the batch or blindly restore a database. **Return uncommitted batch to
+review** is allowed only when neither database has a receipt.
+
+Refreshing before submission preserves drafts and unchanged reviews; changed
+records need another review. Green requires reviewed matching current values.
+Deferred records and coverage/safety/crew differences remain visible after success.
+Normal site changes during review can invalidate the final snapshot, so arrange
+a brief fleet-edit freeze for the final check and application.
+
+The portal refuses existing integration enrollment, links or outbound operations,
+even if mode is off. It records reviewed mappings in receipts, but does not install
+ongoing sync links or activate the worker. Use those receipts in the separately
+reviewed bootstrap/baseline workflow from `docs/FLEETSCOPE_SYNC_RUNBOOK.md` and the
+FleetScope runbook. After reconciliation, disable final application, retire portal
+access and database credentials, preserve its audit records, and only then perform
+the separately approved integration activation.
+
+Validation: `go test ./...`, `go vet ./...`, and browser login/draft/navigation
+checks. The database suite requires full disposable MSERP and FleetScope schemas
+on localhost, with URLs in `MSERP_PORTAL_TEST_DATABASE_URL` and
+`FLEETSCOPE_PORTAL_TEST_DATABASE_URL` (database names end in `_portal_test`). It
+checks restricted runtime permissions, snapshot conflicts, missing-record
+creation, ownership, lifecycle/trailer preservation, partial commits, replay,
+immutable receipts and enrollment fencing. Never point these tests at production.

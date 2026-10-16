@@ -1,0 +1,32 @@
+[Unit]
+Description=MS Express fleet reconciliation portal
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fleetreview
+Group=fleetreview
+WorkingDirectory=/var/lib/fleet-review
+ExecStart=/opt/fleet-review/fleet-review -config /etc/fleet-review/config.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=250
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fleet-review
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryMax=160M
+TasksMax=64
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
