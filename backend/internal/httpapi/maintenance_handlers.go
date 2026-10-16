@@ -296,7 +296,9 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 		in.Expense.DriverID = in.DriverID
 		in.Expense.CategoryID = category
 		in.Expense.TruckID = in.TruckID
-		in.Expense.CostBreakdown = &costs
+		if in.Expense.CostBreakdown == nil {
+			in.Expense.CostBreakdown = &costs
+		}
 		e, err := in.Expense.validate()
 		if err != nil {
 			return out, err

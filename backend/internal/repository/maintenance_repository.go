@@ -365,7 +365,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		in.Expense.TruckID = in.TruckID
 		in.Expense.DriverID = in.DriverID
 		in.Expense.DriverName = &driverName
-		in.Expense.CostBreakdown = &costs
+		if in.Expense.CostBreakdown == nil {
+			in.Expense.CostBreakdown = &costs
+		}
 		title := []rune(strings.Join(names, ", "))
 		title = title[:min(100, len(title))]
 		titleText := string(title)

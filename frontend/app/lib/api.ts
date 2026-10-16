@@ -560,7 +560,7 @@ export const fetchMaintenance = (id: string) => apiRequest<import("./types").Mai
 export const saveMaintenance = (input: import("./types").MaintenanceInput) => {
  const {legacyPaymentTotal,...rest}=input;
  const body={...rest};delete body.savedOwnerName;
- const expense=input.expense ? expensePayload({...input.expense,costBreakdown:input.services.filter(s=>s.amount!==null).map(s=>({name:s.name,amount:s.amount!}))}) : null;
+ const expense=input.expense ? expensePayload({...input.expense,costBreakdown:input.expense.costBreakdown ?? input.services.filter(s=>s.amount!==null).map(s=>({name:s.name,amount:s.amount!}))}) : null;
  if(expense && legacyPaymentTotal!==undefined && expense.amount===legacyPaymentTotal && expense.paymentType.trim().toLowerCase()==="efs") {delete (expense as {baseAmount?:string}).baseAmount;}
  return apiRequest<import("./types").MaintenanceRecord>(input.version ? `/maintenance/${input.id}` : "/maintenance",{method:input.version ? "PUT":"POST",body:JSON.stringify({...body,expense})});
 };

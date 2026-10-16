@@ -58,6 +58,16 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 	if err != nil || input.Expense.Amount != "506.01" {
 		t.Fatal("EFS base validation", input, err)
 	}
+	details := []repository.ExpenseCostItem{{Name: "Parts", Amount: "300"}, {Name: "Labor", Amount: "200.01"}}
+	paid.Expense.CostBreakdown = &details
+	input, err = paid.validate(testExpenseCategoryID)
+	if err != nil || (*input.Expense.CostBreakdown)[1].Name != "Labor" {
+		t.Fatal("independent cost names lost", input, err)
+	}
+	details[1].Amount = "200"
+	if _, err := paid.validate(testExpenseCategoryID); err == nil {
+		t.Fatal("mismatched invoice details accepted")
+	}
 	if routePermission("GET", "/maintenance/documents/"+id) != "authenticated" {
 		t.Fatal("maintenance routes must defer to category access")
 	}

@@ -25,9 +25,13 @@ exclude the configured work-order category. No expense copies are created.
   New UI entries always include the invoice amount and charge; there is no optional
   invoice checkbox. Historical/imported entries without known costs retain their
   existing financial state. Vendor creation and edits live in Work orders > Settings.
-- Itemized work must price every row and equal the invoice base amount exactly.
-  The linked expense breakdown must match each priced work row by name and numeric
-  amount. Alternatively, all work amounts remain unknown and reports show the
+- New entry uses one Service type and the shared Expenses Add cost breakdown.
+  Cost rows have independent names (including custom parts, labor, tax or discounts)
+  and must sum exactly to the invoice base amount. The selected service receives
+  the invoice base amount for reporting and alone controls PM completion.
+  Migration 110 preserves existing rows and removes the old name-for-name coupling.
+  Existing multi-type orders retain their classifications and allocations until
+  the user explicitly chooses a single replacement type. Alternatively, all work amounts remain unknown and reports show the
   invoice cost as unallocated. Tax, fees and discounts use explicit cost rows.
   EFS payment fees remain separate. Unchanged historical EFS invoices with no
   stored base amount retain their original total when adding service metadata.

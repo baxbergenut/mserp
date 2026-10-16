@@ -37,16 +37,17 @@ export function maintenanceDraft(draft: MaintenanceAIDraft, options: Maintenance
     return serviceWork(code, options, s.amount);
   });
   const vendor = options.vendors.filter(v => v.active && v.name.toLowerCase() === meta?.vendorName?.trim().toLowerCase());
-  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
+  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, costBreakdown: draft.costBreakdown?.length ? draft.costBreakdown : source.filter(s => s.amount !== null).map(s => ({ name: s.name || options.types.find(t => t.code === s.typeCode)?.name || s.typeCode, amount: s.amount! })), amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
 }
 export function maintenanceError(value: MaintenanceInput): string {
   if (!value.version && !value.expense) return "Enter the service amount and payment details.";
   if (value.status === "completed" && (!value.truckId || !value.serviceDate)) return "Completed work requires a truck and service date.";
-  if (!value.services.length || value.services.some(s => !s.typeCode)) return "Choose a type for each service.";
+  if (!value.services.length || value.services.some(s => !s.typeCode) || !value.version && value.services.length !== 1) return "Choose a service type.";
   const priced = value.services.filter(s => s.amount !== null);
   if (priced.length && priced.length !== value.services.length) return "Price every service or leave all costs unallocated.";
-  const input: ExpenseInput = { ...(value.expense ?? emptyExpenseInput), amount: value.expense?.amount ?? "0", costBreakdown: priced.map(s => ({ name: s.name, amount: s.amount! })) };
-  return costBreakdownError(input);
+  const amount = value.expense?.amount ?? "0";
+  if (value.services.length > 1 && priced.length && costBreakdownError({ ...emptyExpenseInput, amount, costBreakdown: priced.map(s => ({ name: s.name, amount: s.amount! })) })) return "Choose a single service type before changing the amount on this older work order.";
+  return costBreakdownError({ ...(value.expense ?? emptyExpenseInput), amount, costBreakdown: value.expense?.costBreakdown ?? priced.map(s => ({ name: s.name, amount: s.amount! })) });
 }
 
 // Selecting Work orders in Expenses retains the user's financial draft.

@@ -111,6 +111,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	costDetailMigration, err := os.ReadFile("../../sql/110_work_order_cost_details.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -125,6 +129,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(costDetailMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(unifiedMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(notifyMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(exportMigration), "\r\n", "\n"), "", 1)
@@ -159,6 +164,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 					t.Fatal("migration invented completion", status, date, err)
 				}
 				testMaintenancePMMigration(t, ctx, admin, string(unifiedMigration))
+				exec(string(costDetailMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -350,6 +356,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if err != nil || len(legacyPage.Items) != 1 || legacyPage.Items[0].Services[0].TypeCode != "preventive" || legacyPage.Items[0].Services[0].Name != "PM Service" || legacyPage.Items[0].Services[0].TrackingCode != "pm" {
 				t.Fatal("PM filter must include legacy stored work", legacyPage, err)
 			}
+			testMaintenanceInvoiceDetails(t, ctx, admin, pool)
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)
 			}
@@ -428,4 +435,41 @@ func testMaintenanceTaskLifecycle(t *testing.T, ctx context.Context, admin *pgx.
 	count(0, 2)
 	// Keep this independent fixture out of the other maintenance assertions.
 	exec(`UPDATE trucks SET active=false WHERE id=$1`, truck)
+}
+
+func testMaintenanceInvoiceDetails(t *testing.T, ctx context.Context, admin *pgx.Conn, pool *pgxpool.Pool) {
+	t.Helper()
+	repo := NewMaintenanceRepository(pool)
+	category, err := repo.CategoryID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var truck, id string
+	if err := admin.QueryRow(ctx, "INSERT INTO trucks(unit_number) VALUES('COST-DETAILS') RETURNING id").Scan(&truck); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT gen_random_uuid()").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	date := time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC)
+	costs := []ExpenseCostItem{{Name: "PM Service", Amount: "60"}, {Name: "Labor", Amount: "40.10"}}
+	input := MaintenanceInput{ID: id, TruckID: &truck, ServiceDate: &date, Status: "completed", Location: "shop", Services: []MaintenanceWork{{TypeCode: "electrical"}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, Amount: "100.10", BaseAmount: payTestString("100.10"), CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
+	saved, err := repo.Save(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Services) != 1 || saved.Services[0].TypeCode != "electrical" || saved.Services[0].TrackingCode != "" || *saved.Services[0].Amount != "100.10" || len(saved.Expense.CostBreakdown) != 2 || saved.Expense.CostBreakdown[0].Name != "PM Service" || saved.Expense.CostBreakdown[1].Name != "Labor" {
+		t.Fatal("cost details changed service classification", saved)
+	}
+	pm, err := repo.Preventative(ctx, "COST-DETAILS", false, 1, 25)
+	if err != nil || len(pm.Items) != 1 || pm.Items[0].RecordID != nil {
+		t.Fatal("cost labels must not reset PM", pm, err)
+	}
+	costs[1].Amount = "40"
+	if err := pool.QueryRow(ctx, "SELECT gen_random_uuid()").Scan(&input.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Save(ctx, input); err == nil {
+		t.Fatal("incorrect invoice cost total accepted")
+	}
 }

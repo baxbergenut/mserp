@@ -273,6 +273,8 @@ try {
 
   const service = { typeCode: 'electrical', name: 'Electrical', amount: '12.50', trackingCode: '' };
   const workRecords = [0, 1, 2].map(i => ({ id: 'work-' + i, expenseId: 'invoice-' + i, truckId: 'company-truck', unitNumber: '103', driverId: 'company-driver', driverName: 'Company Driver', vendorId: null, vendorName: 'Saved shop', vendorAddress: '', vendorPhone: '', vendorContact: '', serviceDate: '2026-10-01', odometer: 100000, location: 'shop', status: 'completed', workOrder: 'WO-' + i, notes: i === 0 ? 'Diagnosed intermittent electrical fault' : '', services: [service], version: 1, documents: [], oilType: '', expense: { ...entries[0], expenseType: 'Electrical', description: i < 2 ? 'Original invoice text' : '', amount: '12.50', baseAmount: '12.50', paymentFee: '0.00' } }));
+  workRecords[1].services = [{...service,amount:'6.25'},{typeCode:'brakes',name:'Brakes',amount:'6.25',trackingCode:''}];
+  const legacyServices = structuredClone(workRecords[1].services);
   const workWrites = [];
   await page.route('**/api/maintenance**', async route => {
     const path = new URL(route.request().url()).pathname.slice(4);
@@ -284,7 +286,7 @@ try {
     }
     const fixture = {
       '/maintenance/access': { canView: true, canCreate: true, canEdit: true, canDelete: true },
-      '/maintenance/options': { categoryId: 'maintenance', types: [{ code: 'electrical', name: 'Electrical', active: true }], vendors: [], schedules: [], names: [], paymentMethods: [], users: ['Entry User'], currentUser: 'Entry User', currentUserId: 'user', trucks, drivers: drivers.map(d => ({ id: d.id, name: d.fullName, active: true })), administrator: false, verificationRole: '' },
+      '/maintenance/options': { categoryId: 'maintenance', types: [{ code: 'electrical', name: 'Electrical', active: true },{code:'brakes',name:'Brakes',active:true}], vendors: [], schedules: [], names: [], paymentMethods: [], users: ['Entry User'], currentUser: 'Entry User', currentUserId: 'user', trucks, drivers: drivers.map(d => ({ id: d.id, name: d.fullName, active: true })), administrator: false, verificationRole: '' },
       '/maintenance/reports': { total: '37.50', fees: '0', serviceTypes: [], trucks: [], vendors: [], repeatedWork: [] },
       '/maintenance': { items: workRecords, total: 3, page: 1, pageSize: 25, totalPages: 1 },
     };
@@ -298,6 +300,9 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-descriptions.png'), fullPage: true, animations: 'disabled' });
   await workRow.click();
   await expect(page.getByLabel('Work order description')).toHaveValue(workRecords[0].notes);
+  await expect(page.getByLabel('Service type', { exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Add service', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add cost', exact: true })).toBeVisible();
   expect((await page.getByLabel('Work order description').boundingBox()).y).toBeLessThan((await page.getByLabel('Maintenance truck', { exact: true }).boundingBox()).y);
   await page.getByRole('button', { name: 'Save work order', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -306,17 +311,28 @@ try {
   expect(workWrites[0].services).toEqual([service]);
   await workRow.click();
   await page.getByLabel('Work order description').fill('Replaced damaged wiring connector');
+  await page.getByRole('button', { name: 'Add cost', exact: true }).click();
+  await page.getByLabel('Cost breakdown 1 name', { exact: true }).selectOption('__custom');
+  await page.getByLabel('Cost breakdown 1 name custom', { exact: true }).fill('Labor');
+  await page.getByLabel('Cost breakdown 1 amount', { exact: true }).fill('12.50');
   await page.getByRole('button', { name: 'Save work order', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(workWrites[1].notes).toBe('Replaced damaged wiring connector');
   expect(workWrites[1].expense.description).toBe(workWrites[1].notes);
   expect(workWrites[1].services).toEqual([service]);
+  expect(workWrites[1].expense.costBreakdown).toEqual([{name:'Labor',amount:'12.50'}]);
   await page.setViewportSize({ width: 390, height: 844 });
   await workRow.click();
   await expect(page.getByLabel('Work order description')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-description-mobile.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.getByRole('row', { name: 'Open maintenance work-1', exact: true }).click();
+  await expect(page.getByLabel('Service type', { exact: true })).toHaveValue('__saved');
+  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(workWrites[2].services).toEqual(legacyServices);
   expect(errors).toEqual([]);
   console.log('Expense browser checks passed: ownership, AI entry, layout, verification attribution, Ctrl+Z and cancellation permissions.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

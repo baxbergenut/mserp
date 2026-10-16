@@ -326,6 +326,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   UUID stays stable (default display name becomes Work orders); existing financial
   snapshots, approval/payment identities and legacy scope=general reads are kept.
   New UI entries always include an invoice/charge; imported history keeps unknown costs.
+  Work-order entry uses one unframed Service type and the shared expense Add cost
+  breakdown. Migration 110 separates invoice cost names from typed services while
+  retaining exact totals, historical allocations and PM classification. Existing
+  multi-type orders keep their saved types until an explicit selection replaces them.
   `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
   reviewed `-apply` writes idempotent visits with source notes, never expenses.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
