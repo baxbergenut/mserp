@@ -140,10 +140,10 @@ func TestExpenseRequestValidate(t *testing.T) {
 	}
 }
 
-func TestExpenseNameRequired(t *testing.T) {
+func TestExpenseTypeRequired(t *testing.T) {
 	for _, name := range []string{"", " \t\n "} {
 		request := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-09-29", Amount: "100", ExpenseType: name}
-		if _, err := request.validate(); err == nil || err.Error() != "expense name is required" {
+		if _, err := request.validate(); err == nil || err.Error() != "expense type is required" {
 			t.Fatalf("name %q: expected required name error, got %v", name, err)
 		}
 	}

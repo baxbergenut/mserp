@@ -95,8 +95,11 @@ export function ExpenseForm({
             {activeExpenseCategories(options.settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Name">
+        <Field label="Expense type">
           <ExpenseNameSelect key={value.categoryId} value={value.expenseType} names={expenseNames(options.settings, value.categoryId)} onChange={next => set("expenseType", next)} />
+        </Field>
+        <Field label="Description" wide>
+          <textarea aria-label="Description" rows={3} value={value.description} onChange={event => set("description", event.target.value)} className={controlClass} placeholder="Describe what this expense was for" />
         </Field>
         <Field label="Expense date">
           <input aria-label="Expense date"
@@ -179,14 +182,6 @@ export function ExpenseForm({
           <input
             value={value.referenceNumber}
             onChange={(event) => set("referenceNumber", event.target.value)}
-            className={controlClass}
-          />
-        </Field>
-        <Field label="Description" wide>
-          <textarea
-            rows={3}
-            value={value.description}
-            onChange={(event) => set("description", event.target.value)}
             className={controlClass}
           />
         </Field>

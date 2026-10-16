@@ -193,13 +193,16 @@ func TestMaintenanceDatabase(t *testing.T) {
 			odo := 100000
 			amount := "120.30"
 			costs := []ExpenseCostItem{{Name: "Oil change", Amount: "100.10"}, {Name: "Tire repair", Amount: "20.20"}}
-			input := MaintenanceInput{OilType: "15W-40", Notes: "Synthetic last service note", ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "oil", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
+			input := MaintenanceInput{OilType: "15W-40", Notes: "Synthetic last service note", ID: id, TruckID: &truck, VendorID: &vendor.ID, ServiceDate: &date, Odometer: &odo, Location: "shop", Status: "completed", Actor: "Test operator", Services: []MaintenanceWork{{TypeCode: "oil", Name: "Oil change", Amount: payTestString("100.10"), TrackingCode: "oil"}, {TypeCode: "tires", Name: "Tire repair", Amount: payTestString("20.20")}}, Expense: &ExpenseInput{CategoryID: category, ExpenseDate: date, TruckID: &truck, ExpenseType: payTestString("Oil change & tires"), Description: payTestString("Original invoice description"), Amount: amount, BaseAmount: &amount, PaymentFee: "0.00", CoveredBy: payTestString("Company"), CostBreakdown: &costs}}
 			visit, err := repo.Save(ctx, input)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if visit.Expense == nil || *visit.Expense.Amount != "120.30" || visit.VendorAddress != "Original address" {
 				t.Fatal(visit)
+			}
+			if visit.Expense.WorkOrderDescription == nil || *visit.Expense.WorkOrderDescription != input.Notes || visit.Expense.Description == nil || *visit.Expense.Description != "Original invoice description" {
+				t.Fatal("work description must not replace saved invoice text", visit.Expense)
 			}
 			preventive, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
 			if err != nil || len(preventive.Items) != 1 {

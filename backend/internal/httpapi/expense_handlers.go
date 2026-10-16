@@ -153,7 +153,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		return repository.ExpenseInput{}, errors.New("select a valid category")
 	}
 	if request.ExpenseType == "" {
-		return repository.ExpenseInput{}, errors.New("expense name is required")
+		return repository.ExpenseInput{}, errors.New("expense type is required")
 	}
 	expenseDate, err := parseOptionalDate(request.ExpenseDate, "expense date")
 	if err != nil {

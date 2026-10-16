@@ -775,6 +775,7 @@ export interface Expense {
   expenseType: string | null;
   referenceNumber: string | null;
   description: string | null;
+  workOrderDescription?: string | null;
   coveredBy: string | null;
   paidBy: string | null;
   managerVerified: boolean;

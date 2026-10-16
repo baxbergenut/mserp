@@ -200,14 +200,14 @@ export function ExpenseBatchEditor({
             <tr>
               <th className="px-2 py-2 font-medium">#</th>
               <th className="px-2 py-2 font-medium">Category</th>
-              <th className="px-2 py-2 font-medium">Name</th>
+              <th className="px-2 py-2 font-medium">Expense type</th>
+              <th className="px-2 py-2 font-medium">Description</th>
               <th className="px-2 py-2 font-medium">Date</th>
               <th className="px-2 py-2 font-medium">Truck / unit</th>
               <th className="px-2 py-2 font-medium">Driver</th>
               <th className="px-2 py-2 font-medium">Amount</th>
               <th className="px-2 py-2 font-medium">Payment</th>
               <th className="px-2 py-2 font-medium">Reference</th>
-              <th className="px-2 py-2 font-medium">Description</th>
               <th className="px-2 py-2 font-medium">Covered by</th>
               <th className="px-2 py-2 font-medium">Paid by</th>
               <th className="w-10 px-2 py-2"><span className="sr-only">Remove</span></th>
@@ -221,7 +221,8 @@ export function ExpenseBatchEditor({
                     <option value="">Select category</option>{activeExpenseCategories(settings, allowedCategoryIds).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-2"><ExpenseNameSelect key={value.categoryId} value={value.expenseType} names={expenseNames(settings, value.categoryId)} label={`Transaction ${index + 1} name`} className={compactControl} onChange={expenseType => update(index, { expenseType })} /></td>
+                <td className="px-2 py-2"><ExpenseNameSelect key={value.categoryId} value={value.expenseType} names={expenseNames(settings, value.categoryId)} label={`Transaction ${index + 1} expense type`} className={compactControl} onChange={expenseType => update(index, { expenseType })} /></td>
+                <td className="px-2 py-2"><textarea aria-label={`Transaction ${index + 1} description`} rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
                 <td className="px-2 py-2"><input required type="date" value={value.expenseDate} onChange={(event) => update(index, { expenseDate: event.target.value })} className={compactControl} /></td>
                 <td className="space-y-1 px-2 py-2">
                   <select
@@ -251,7 +252,6 @@ export function ExpenseBatchEditor({
                 <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={isDriverOnlyExpense(settings, value.categoryId) ? "" : value.paymentType} /></td>
                 <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} />}</td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
-                <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
                 <td className="px-2 py-2">{isDriverOnlyExpense(settings, value.categoryId) ? <span>Driver</span> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} />}</td>
                 <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} />}</td>
                 <td className="px-2 py-2">

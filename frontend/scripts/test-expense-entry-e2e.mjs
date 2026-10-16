@@ -16,7 +16,8 @@ try {
   await page.waitForURL(url => !url.pathname.startsWith('/login'));
   await page.goto(`${access.base}/expenses`);
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
-  await page.getByLabel('Name', { exact: true }).selectOption('Office supplies');
+  await page.getByLabel('Expense type', { exact: true }).selectOption('Office supplies');
+  await page.getByLabel('Description', { exact: true }).fill('Office supplies for the dispatch team');
   await page.getByLabel('Amount', { exact: true }).fill('120.30');
   await page.getByRole('button', { name: 'Add cost', exact: true }).click();
   await page.getByLabel('Cost breakdown 1 name', { exact: true }).selectOption('Office supplies');
@@ -35,10 +36,11 @@ try {
   expect(settings.some(item => item.name === 'Synthetic shop service')).toBe(false);
   const listing = await (await page.request.get(`${access.base}/api/expenses?pageSize=100`)).json();
   const saved = listing.items.find(item => item.expenseType === 'Office supplies' && item.baseAmount === '120.30');
+  expect(saved.description).toBe('Office supplies for the dispatch team');
   expect(saved.amount).toBe('123.30');
   expect(saved.costBreakdown).toEqual([{ name: 'Office supplies', amount: '100.10' }, { name: 'Synthetic shop service', amount: '20.20' }]);
   await page.reload();
-  await page.getByRole('row', { name: 'Open Office supplies', exact: true }).click();
+  await page.getByRole('row', { name: 'Open Office supplies for the dispatch team', exact: true }).click();
   await expect(page.getByLabel('Cost breakdown 2 name custom', { exact: true })).toHaveValue('Synthetic shop service');
   await page.getByLabel('Cost breakdown 2 name', { exact: true }).selectOption('__custom');
   await page.getByLabel('Cost breakdown 2 name custom', {exact:true}).fill('Stationery');
@@ -46,6 +48,9 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const reread = await (await page.request.get(`${access.base}/api/expenses/${saved.id}`)).json();
   expect(reread.costBreakdown[1].name).toBe('Stationery');
+  expect(reread.expenseType).toBe(saved.expenseType);
+  expect(reread.description).toBe(saved.description);
+  expect(reread.categoryId).toBe(saved.categoryId);
   const session = await (await page.request.get(`${access.base}/api/auth/session`)).json();
   const bad = await page.request.post(`${access.base}/api/expenses`, { headers: { 'X-CSRF-Token': session.csrfToken, Origin: access.base }, data: { categoryId: saved.categoryId, expenseType: 'Office supplies', expenseDate: '2026-10-14', amount: '12.50', baseAmount: '12.50', costBreakdown: [{ name: 'Office supplies', amount: '12.49' }] } });
   expect(bad.status()).toBe(400);

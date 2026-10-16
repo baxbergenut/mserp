@@ -422,6 +422,7 @@ export const fetchExpensesPage = (query: PageQuery & {
   truckId?: string;
   driverId?: string;
 }, signal?: AbortSignal) => paginatedRequest<ExpensePage>(withQuery("/expenses", query), signal);
+// Expense reads include workOrderDescription for display; writes retain the saved expense description.
 export const fetchExpense = (id: string, signal?: AbortSignal) => apiRequest<Expense>(`/expenses/${id}`, { signal });
 
 export const createExpense = (input: ExpenseInput) =>

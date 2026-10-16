@@ -92,8 +92,8 @@ try {
   await page.getByLabel('Driver', { exact: true }).selectOption('company-driver');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Company');
   await page.getByLabel('Unit number', { exact: true }).selectOption('investor-truck');
-  await expect(page.getByLabel('Name', { exact: true }).locator('option')).toHaveText(['Select name',...maintenanceNames,'Custom name…']);
-  await page.getByLabel('Name', { exact: true }).selectOption('Oil change');
+  await expect(page.getByLabel('Expense type', { exact: true }).locator('option')).toHaveText(['Select expense type',...maintenanceNames,'Custom expense type…']);
+  await page.getByLabel('Expense type', { exact: true }).selectOption('Oil change');
   await page.getByRole('button', {name:'Add cost',exact:true}).click();
   await page.getByLabel('Cost breakdown 1 name',{exact:true}).selectOption('Oil change');
   await page.getByLabel('Cost breakdown 1 amount',{exact:true}).fill('10.10');
@@ -107,10 +107,10 @@ try {
   await expect(page.getByText('Cost breakdown total must exactly equal the entered amount.',{exact:true})).toBeVisible();
   await page.getByLabel('Cost breakdown 2 amount',{exact:true}).fill('2.40');
   await expect(page.getByText('Matches entered amount',{exact:true})).toBeVisible();
-  await page.getByLabel('Name', { exact: true }).selectOption('__custom');
-  await page.getByLabel('Name custom', { exact: true }).pressSequentially('Oil change extra');
-  await expect(page.getByLabel('Name custom', {exact:true})).toHaveValue('Oil change extra');
-  await page.getByLabel('Name custom', { exact: true }).fill('Repair');
+  await page.getByLabel('Expense type', { exact: true }).selectOption('__custom');
+  await page.getByLabel('Expense type custom', { exact: true }).pressSequentially('Oil change extra');
+  await expect(page.getByLabel('Expense type custom', {exact:true})).toHaveValue('Oil change extra');
+  await page.getByLabel('Expense type custom', { exact: true }).fill('Repair');
   const transfer = await page.evaluateHandle(() => { const data = new DataTransfer(); data.items.add(new File(['receipt'], 'receipt.txt', { type: 'text/plain' })); return data; });
   await page.getByLabel('Expense details for AI').dispatchEvent('drop', { dataTransfer: transfer });
   await expect(page.getByText('receipt.txt', { exact: true })).toBeVisible();
@@ -136,8 +136,8 @@ try {
   await page.getByRole('button',{name:'Save & review next',exact:true}).click();
   await expect(page.getByText('Review entry 2 of 2. Each item is saved separately.',{exact:true})).toBeVisible();
   await expect(page.getByLabel('Who will cover')).toHaveValue('Driver');
-  await page.getByLabel('Name',{exact:true}).selectOption('__custom');
-  await page.getByLabel('Name custom',{exact:true}).fill('Custom repair');
+  await page.getByLabel('Expense type',{exact:true}).selectOption('__custom');
+  await page.getByLabel('Expense type custom',{exact:true}).fill('Custom repair');
   await page.getByLabel('Paid by',{exact:true}).selectOption('Other User');
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(3);
@@ -243,8 +243,8 @@ try {
   await expect(page.getByLabel('Paid by',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Who will cover',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Driver',{exact:true})).toHaveAttribute('required','');
-  await page.getByLabel('Name',{exact:true}).selectOption('__custom');
-  await page.getByLabel('Name custom',{exact:true}).fill('Late delivery');
+  await page.getByLabel('Expense type',{exact:true}).selectOption('__custom');
+  await page.getByLabel('Expense type custom',{exact:true}).fill('Late delivery');
   await page.getByLabel('Amount',{exact:true}).fill('500.01');
   const beforePenalty=writes.length;
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
@@ -254,6 +254,69 @@ try {
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(beforePenalty+1);
   expect(writes.at(-1)).toMatchObject({categoryId:'penalties',coveredBy:'Driver',driverId:'hired',ownerId:null,paymentType:'',paidBy:'',baseAmount:'500.01'});
+  // Descriptions lead the directory; classifications and legacy fallbacks remain visible.
+  entries[0].description = 'Replace damaged mirror and inspect mounting';
+  entries[1].description = 'Saved invoice text';
+  entries[1].workOrderDescription = 'Diagnosed intermittent electrical fault';
+  entries[2].description = '   ';
+  await page.reload();
+  const described = page.getByRole('row', { name: 'Open ' + entries[0].description, exact: true });
+  await expect(described.getByText(entries[0].description, { exact: true })).toBeVisible();
+  await expect(described.getByText('Maintenance · Repair 0', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open ' + entries[1].workOrderDescription, exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open Repair 2', exact: true })).toBeVisible();
+  await described.click();
+  await expect(page.getByLabel('Expense type custom', { exact: true })).toHaveValue('Repair 0');
+  await expect(page.getByLabel('Description', { exact: true })).toHaveValue(entries[0].description);
+  expect((await page.getByLabel('Description', { exact: true }).boundingBox()).y).toBeLessThan((await page.getByLabel('Expense date', { exact: true }).boundingBox()).y);
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const service = { typeCode: 'electrical', name: 'Electrical', amount: '12.50', trackingCode: '' };
+  const workRecords = [0, 1, 2].map(i => ({ id: 'work-' + i, expenseId: 'invoice-' + i, truckId: 'company-truck', unitNumber: '103', driverId: 'company-driver', driverName: 'Company Driver', vendorId: null, vendorName: 'Saved shop', vendorAddress: '', vendorPhone: '', vendorContact: '', serviceDate: '2026-10-01', odometer: 100000, location: 'shop', status: 'completed', workOrder: 'WO-' + i, notes: i === 0 ? 'Diagnosed intermittent electrical fault' : '', services: [service], version: 1, documents: [], oilType: '', expense: { ...entries[0], expenseType: 'Electrical', description: i < 2 ? 'Original invoice text' : '', amount: '12.50', baseAmount: '12.50', paymentFee: '0.00' } }));
+  const workWrites = [];
+  await page.route('**/api/maintenance**', async route => {
+    const path = new URL(route.request().url()).pathname.slice(4);
+    if (route.request().method() === 'PUT') {
+      const data = route.request().postDataJSON(); workWrites.push(data);
+      const i = workRecords.findIndex(r => r.id === data.id);
+      workRecords[i] = { ...workRecords[i], ...data, expense: { ...workRecords[i].expense, ...data.expense }, version: workRecords[i].version + 1 };
+      await route.fulfill({ json: workRecords[i] }); return;
+    }
+    const fixture = {
+      '/maintenance/access': { canView: true, canCreate: true, canEdit: true, canDelete: true },
+      '/maintenance/options': { categoryId: 'maintenance', types: [{ code: 'electrical', name: 'Electrical', active: true }], vendors: [], schedules: [], names: [], paymentMethods: [], users: ['Entry User'], currentUser: 'Entry User', currentUserId: 'user', trucks, drivers: drivers.map(d => ({ id: d.id, name: d.fullName, active: true })), administrator: false, verificationRole: '' },
+      '/maintenance/reports': { total: '37.50', fees: '0', serviceTypes: [], trucks: [], vendors: [], repeatedWork: [] },
+      '/maintenance': { items: workRecords, total: 3, page: 1, pageSize: 25, totalPages: 1 },
+    };
+    await route.fulfill({ json: fixture[path] ?? workRecords.find(r => path === '/maintenance/' + r.id) ?? {} });
+  });
+  await page.goto('http://127.0.0.1:' + server.address().port + '/maintenance');
+  const workRow = page.getByRole('row', { name: 'Open maintenance work-0', exact: true });
+  await expect(workRow.getByText(workRecords[0].notes, { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open maintenance work-1', exact: true }).getByText('Original invoice text', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open maintenance work-2', exact: true }).getByText('Electrical', { exact: true })).toHaveCount(2);
+  await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-descriptions.png'), fullPage: true, animations: 'disabled' });
+  await workRow.click();
+  await expect(page.getByLabel('Work order description')).toHaveValue(workRecords[0].notes);
+  expect((await page.getByLabel('Work order description').boundingBox()).y).toBeLessThan((await page.getByLabel('Maintenance truck', { exact: true }).boundingBox()).y);
+  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(workWrites[0].expense.description).toBe('Original invoice text');
+  expect(workWrites[0].notes).toBe('Diagnosed intermittent electrical fault');
+  expect(workWrites[0].services).toEqual([service]);
+  await workRow.click();
+  await page.getByLabel('Work order description').fill('Replaced damaged wiring connector');
+  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(workWrites[1].notes).toBe('Replaced damaged wiring connector');
+  expect(workWrites[1].expense.description).toBe(workWrites[1].notes);
+  expect(workWrites[1].services).toEqual([service]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await workRow.click();
+  await expect(page.getByLabel('Work order description')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-description-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   expect(errors).toEqual([]);
   console.log('Expense browser checks passed: ownership, AI entry, layout, verification attribution, Ctrl+Z and cancellation permissions.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

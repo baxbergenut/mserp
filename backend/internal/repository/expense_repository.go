@@ -37,41 +37,42 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
-	CostBreakdown       []ExpenseCostItem     `json:"costBreakdown"`
-	BaseAmount          *string               `json:"baseAmount"`
-	PaymentFee          string                `json:"paymentFee"`
-	Verifications       []ExpenseVerification `json:"verifications"`
-	Payments            []ExpensePayment      `json:"payments"`
-	OwnerID             *string               `json:"ownerId"`
-	OwnerName           *string               `json:"ownerName"`
-	ChargeDriverID      *string               `json:"chargeDriverId"`
-	PaidAmount          *string               `json:"paidAmount"`
-	RemainingAmount     *string               `json:"remainingAmount"`
-	DriverSettled       bool                  `json:"driverSettled"`
-	ID                  string                `json:"id"`
-	TruckID             *string               `json:"truckId"`
-	DriverID            *string               `json:"driverId"`
-	Category            string                `json:"category"`
-	CategoryID          string                `json:"categoryId"`
-	CreatedByName       *string               `json:"createdByName"`
-	WeekStart           *string               `json:"weekStart"`
-	ExpenseDate         *string               `json:"expenseDate"`
-	UnitNumber          *string               `json:"unitNumber"`
-	DriverName          *string               `json:"driverName"`
-	Amount              *string               `json:"amount"`
-	PaymentType         *string               `json:"paymentType"`
-	ExpenseType         *string               `json:"expenseType"`
-	ReferenceNumber     *string               `json:"referenceNumber"`
-	Description         *string               `json:"description"`
-	CoveredBy           *string               `json:"coveredBy"`
-	PaidBy              *string               `json:"paidBy"`
-	ManagerVerified     bool                  `json:"managerVerified"`
-	AccountingVerified  bool                  `json:"accountingVerified"`
-	SourceSpreadsheetID *string               `json:"sourceSpreadsheetId"`
-	SourceSheet         *string               `json:"sourceSheet"`
-	SourceRow           *int                  `json:"sourceRow"`
-	CreatedAt           time.Time             `json:"createdAt"`
-	UpdatedAt           time.Time             `json:"updatedAt"`
+	CostBreakdown        []ExpenseCostItem     `json:"costBreakdown"`
+	BaseAmount           *string               `json:"baseAmount"`
+	PaymentFee           string                `json:"paymentFee"`
+	Verifications        []ExpenseVerification `json:"verifications"`
+	Payments             []ExpensePayment      `json:"payments"`
+	OwnerID              *string               `json:"ownerId"`
+	OwnerName            *string               `json:"ownerName"`
+	ChargeDriverID       *string               `json:"chargeDriverId"`
+	PaidAmount           *string               `json:"paidAmount"`
+	RemainingAmount      *string               `json:"remainingAmount"`
+	DriverSettled        bool                  `json:"driverSettled"`
+	ID                   string                `json:"id"`
+	TruckID              *string               `json:"truckId"`
+	DriverID             *string               `json:"driverId"`
+	Category             string                `json:"category"`
+	CategoryID           string                `json:"categoryId"`
+	CreatedByName        *string               `json:"createdByName"`
+	WeekStart            *string               `json:"weekStart"`
+	ExpenseDate          *string               `json:"expenseDate"`
+	UnitNumber           *string               `json:"unitNumber"`
+	DriverName           *string               `json:"driverName"`
+	Amount               *string               `json:"amount"`
+	PaymentType          *string               `json:"paymentType"`
+	ExpenseType          *string               `json:"expenseType"`
+	ReferenceNumber      *string               `json:"referenceNumber"`
+	Description          *string               `json:"description"`
+	WorkOrderDescription *string               `json:"workOrderDescription"`
+	CoveredBy            *string               `json:"coveredBy"`
+	PaidBy               *string               `json:"paidBy"`
+	ManagerVerified      bool                  `json:"managerVerified"`
+	AccountingVerified   bool                  `json:"accountingVerified"`
+	SourceSpreadsheetID  *string               `json:"sourceSpreadsheetId"`
+	SourceSheet          *string               `json:"sourceSheet"`
+	SourceRow            *int                  `json:"sourceRow"`
+	CreatedAt            time.Time             `json:"createdAt"`
+	UpdatedAt            time.Time             `json:"updatedAt"`
 }
 
 type ExpenseInput struct {
@@ -491,7 +492,8 @@ SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_na
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text, e.cost_breakdown
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown,
+ (SELECT nullif(btrim(m.notes),'') FROM maintenance_records m WHERE m.expense_id=e.id)
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -506,7 +508,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.WorkOrderDescription,
 	)
 	return value, err
 }

@@ -88,7 +88,7 @@ try {
  await page.getByLabel('Service 3 cost', { exact: true }).fill('20.19');
  await page.getByLabel('Maintenance amount', { exact: true }).fill('120.30');
  await page.getByLabel('Maintenance payment method', { exact: true }).fill('EFS');
- await page.getByLabel('Maintenance notes',{exact:true}).fill('Full service note '+ 'with detailed inspection findings. '.repeat(20));
+ await page.getByLabel('Work order description',{exact:true}).fill('Full service note '+ 'with detailed inspection findings. '.repeat(20));
  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
  await expect(page.getByText('Cost breakdown total must exactly equal the entered amount.', { exact: true }).first()).toBeVisible();
  await page.getByLabel('Service 3 cost', { exact: true }).fill('20.20');
@@ -104,6 +104,8 @@ try {
  expect(expenses.options.settings.some(s => s.id === options.categoryId)).toBe(false);
  const financial = await api('get', '/expenses/' + saved.expenseId);
  expect(financial.id).toBe(saved.expenseId);
+ expect(financial.workOrderDescription).toBe(saved.notes);
+ expect(financial.description).toBe(saved.notes);
  await api('put', '/maintenance/vendors/' + vendor.id, { ...vendor, address: 'Changed directory address' });
  expect((await api('get', '/maintenance/' + saved.id)).vendorAddress).toBe('100 Test Road');
  const attachment = { name: 'synthetic-receipt.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic maintenance receipt') };
@@ -175,10 +177,12 @@ try {
  await page.goto(access.base + '/maintenance?recordId=' + saved.id);
  await expect(page.getByRole('dialog', { name: 'Work order details', exact: true })).toBeVisible();
  await expect(page.getByLabel('Maintenance odometer', { exact: true })).toHaveValue('100000');
- await page.getByLabel('Maintenance notes').fill('Corrected service notes');
+ await page.getByLabel('Work order description').fill('Corrected service notes');
  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  const updated = await api('get', '/maintenance/' + saved.id);
+ expect(updated.expense.description).toBe('Corrected service notes');
+ expect(updated.services.map(s=>s.typeCode)).toEqual(saved.services.map(s=>s.typeCode));
  const stale = await page.request.put(access.base + '/api/maintenance/' + saved.id, { headers, data: { id:saved.id,version:saved.version,truckId:saved.truckId,driverId:saved.driverId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:updated.notes,services:saved.services,expense: {updatedAt:saved.expense.updatedAt,categoryId:options.categoryId,expenseDate:saved.expense.expenseDate,amount:saved.expense.baseAmount,baseAmount:saved.expense.baseAmount,expenseType:saved.expense.expenseType,paymentType:saved.expense.paymentType,truckId:saved.truckId,driverId:saved.expense.driverId,ownerId:saved.expense.ownerId,coveredBy:saved.expense.coveredBy,paidBy:saved.expense.paidBy} } });
  expect(stale.status(),await stale.text()).toBe(409);
  expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(2);

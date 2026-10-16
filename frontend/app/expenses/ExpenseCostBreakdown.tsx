@@ -6,8 +6,8 @@ import type { ExpenseInput } from "../lib/types";
 import { controlClass } from "../components/management/ManagementUI";
 import { centsLabel, costBreakdownError, expenseCents } from "../lib/expenseCosts";
 
-export function ExpenseNameSelect({ value, names, onChange, label = "Name", className = controlClass }: {
-  value: string; names: string[]; onChange: (value: string) => void; label?: string; className?: string;
+export function ExpenseNameSelect({ value, names, onChange, label = "Expense type", optionLabel = "expense type", className = controlClass }: {
+  value: string; names: string[]; onChange: (value: string) => void; label?: string; optionLabel?: string; className?: string;
 }) {
   const [customValue, setCustomValue] = useState<string | null>(null);
   const defaultName = names.find(name => name.toLowerCase() === value.trim().toLowerCase());
@@ -16,11 +16,11 @@ export function ExpenseNameSelect({ value, names, onChange, label = "Name", clas
     <select aria-label={label} required value={customMode ? "__custom" : defaultName ?? ""} className={className} onChange={event => {
       setCustomValue(event.target.value === "__custom" ? "" : null); onChange(event.target.value === "__custom" ? "" : event.target.value);
     }}>
-      <option value="">Select name</option>
+      <option value="">Select {optionLabel}</option>
       {names.map(name => <option key={name} value={name}>{name}</option>)}
-      <option value="__custom">Custom name…</option>
+      <option value="__custom">Custom {optionLabel}…</option>
     </select>
-    {customMode && <input aria-label={`${label} custom`} required pattern=".*\S.*" maxLength={100} value={value} onChange={event => { setCustomValue(event.target.value); onChange(event.target.value); }} className={className} placeholder="Enter custom name" />}
+    {customMode && <input aria-label={`${label} custom`} required pattern=".*\S.*" maxLength={100} value={value} onChange={event => { setCustomValue(event.target.value); onChange(event.target.value); }} className={className} placeholder={`Enter custom ${optionLabel}`} />}
   </div>;
 }
 
@@ -41,7 +41,7 @@ export function ExpenseCostBreakdown({ value, names, onChange, label = "Cost bre
       </button>
     </div>
     {rows.map((row, index) => <div key={index} className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-start gap-2">
-      <ExpenseNameSelect value={row.name} names={names} label={`${label} ${index + 1} name`} onChange={name => onChange({ ...value, costBreakdown: rows.map((item, i) => i === index ? { ...item, name } : item) })} />
+      <ExpenseNameSelect value={row.name} names={names} label={`${label} ${index + 1} name`} optionLabel="name" onChange={name => onChange({ ...value, costBreakdown: rows.map((item, i) => i === index ? { ...item, name } : item) })} />
       <input ref={index === 0 ? firstAmount : undefined} required aria-label={`${label} ${index + 1} amount`} type="number" step="0.01" value={row.amount} className={controlClass} placeholder="0.00" onChange={event => onChange({ ...value, costBreakdown: rows.map((item, i) => i === index ? { ...item, amount: event.target.value } : item) })} />
       <button type="button" aria-label={`Remove ${label.toLowerCase()} ${index + 1}`} className="rounded-md p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-400" onClick={() => onChange({ ...value, costBreakdown: rows.filter((_, i) => i !== index) })}><Trash2 className="h-4 w-4" /></button>
     </div>)}

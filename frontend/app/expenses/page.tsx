@@ -371,7 +371,7 @@ export default function ExpensesPage() {
           <EmptyState message={hasFilters ? "No entries match these filters." : createCategoryIds.length ? "No entries yet. Add the first entry." : "No entries are available in your categories."} />
         )}</td></tr> : <>
               {expenses.map((expense) => (
-                <tr key={expense.id} tabIndex={0} aria-label={"Open " + (expense.expenseType || expense.category)}
+                <tr key={expense.id} tabIndex={0} aria-label={"Open " + (expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || expense.category)}
                   onClick={event => { if (!(event.target as HTMLElement).closest("a,button")) openEdit(expense); }}
                   onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openEdit(expense); } }}
                   className="cursor-pointer border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/25 focus-visible:outline-2 focus-visible:outline-blue-500">
@@ -391,8 +391,8 @@ export default function ExpensesPage() {
                     </div>
                   </td>
                   <td className="max-w-[310px] px-4 py-3">
-                    <div className="text-zinc-300">{expense.expenseType || "Unnamed expense"}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.categoryId===workCategory ? "Work orders" : expense.category}</div>
+                    <div className="truncate text-zinc-300" title={expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || undefined}>{expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || expense.category}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.categoryId===workCategory ? "Work orders" : expense.category}{expense.expenseType && ` · ${expense.expenseType}`}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.paymentType || "—"}</div>

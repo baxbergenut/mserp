@@ -1406,7 +1406,13 @@ assignment lookup lists.
   API/browser create, reload and edit checks. `MSERP_OPENAI_LIVE_TEST=1` opts
   into synthetic model checks; previews also require
   `MSERP_REVIEW_OPENAI_ENABLED=1` and server OPENAI_API_KEY for live extraction.
-- Expense type is labeled Name in manual and AI review forms, required after Category.
+- Expense type is labeled Expense type in manual and AI review forms, required after Category.
+  Description sits immediately below it and is the primary Expenses directory text;
+  blank historical descriptions fall back to the saved type/category. Work-order notes
+  appear as Description beside service types in entry and History, and expense reads
+  expose them separately as read-only workOrderDescription without replacing saved
+  expense descriptions. Only explicit description edits in the work-order form update
+  both note and invoice text. Catalog values, service codes and historical rows stay intact.
   Migration 106 pins driver-only entry behavior to the Penalties category UUID
   (`expense_settings.driver_only`), retaining it across renames. Penalty forms
   require a linked driver and omit responsibility/payment-method/paid-by inputs.
