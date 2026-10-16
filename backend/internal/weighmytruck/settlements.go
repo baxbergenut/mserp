@@ -96,7 +96,7 @@ func ParseTickets(data string) ([]Ticket, error) {
 			}
 		}
 		var date time.Time
-		for _, layout := range []string{"01-02-06", "01/02/2006", "2006-01-02", "01-02-2006"} {
+		for _, layout := range []string{"1-2-06", "1/2/2006", "2006-01-02", "1-2-2006"} {
 			date, e = time.Parse(layout, get("date"))
 			if e == nil {
 				break

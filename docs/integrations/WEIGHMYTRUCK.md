@@ -23,7 +23,7 @@ WEIGHMYTRUCK_TOKEN_URL=https://login.microsoftonline.com/0c42b1f7-92b4-4df0-915d
 WEIGHMYTRUCK_SCOPE=api://6b61f2df-5ec0-4dea-bfb8-b9589ec9942d/.default
 WEIGHMYTRUCK_API_URL=https://app.weighmytruck.com/fleetsettlement
 WEIGHMYTRUCK_COMPANY_NAME=MS Express Inc.
-WEIGHMYTRUCK_SYNC_START_DATE=2026-10-05
+WEIGHMYTRUCK_SYNC_START_DATE=2026-09-17
 ```
 
 Local secrets belong in ignored `backend/.env.local`; production uses
@@ -74,7 +74,10 @@ are validated and fees parsed as exact decimal cents; credits keep their sign.
 Site number plus ticket number is the import identity. Repeated imports upsert
 source values without duplicating deductions. Reweighs remain separate tickets.
 
-The first sync starts October 5, 2026 (the requested current week). Daily sync
+Production's start date is September 17, 2026, expanded on October 16 to import
+the full available month; the code fallback remains October 5, so configure the
+start date explicitly. Vendor CSV dates accept padded or unpadded months/days
+(for example `09-17-26` and `9-17-26`). Daily sync
 uses `SCHEDULED_FUEL_SYNC_TIME` and the scheduler timezone, alongside fuel but
 independent of its success. Each run rechecks available days from the configured
 start through today, capped at the vendor's last 30 days, to find late tickets
