@@ -5,7 +5,7 @@ import { useLoadNotes } from "./useLoadNotes";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
-import { compactDecimal, editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
+import { amountDisplay, compactDecimal, editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { DecimalInput } from "./DecimalInput";
@@ -55,12 +55,12 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
         return <div key={field} data-grid-cell><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
-          value={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
-            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : compactDecimal(entry[field])} disabled={disabled}
+          value={entry[field]} displayValue={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
+            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : amountDisplay(entry[field], field !== "miles")} disabled={disabled}
           nonnegative={field === "miles"}
-          title={different ? `Entered: ${entered}; system: ${system || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
+          title={different ? `Entered: ${amountDisplay(entered, field !== "miles")}; system: ${amountDisplay(system ?? "", field !== "miles") || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0"
-          onFocus={field === "originalRate" ? event => setOriginalTyping(event.currentTarget.value) : undefined}
+          onFocus={field === "originalRate" ? () => setOriginalTyping(compactDecimal(entry.originalRate)) : undefined}
           onBlur={field === "originalRate" ? () => setOriginalTyping(null) : undefined}
           onValueChange={(value, text) => {
             if (field === "originalRate") setOriginalTyping(text);
@@ -74,7 +74,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         <table className="w-full text-left text-sm">
           <thead className="text-zinc-500"><tr><th className="p-2">Field</th><th>Entered</th><th>System</th></tr></thead>
           <tbody>{[["Original rate", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
-            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{entered || "—"}</td><td>{actual || "—"}</td></tr>)}</tbody>
+            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Original rate") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Original rate") || "—"}</td></tr>)}</tbody>
         </table>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the original gross and miles with the values shown here.</p>
         <button className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {

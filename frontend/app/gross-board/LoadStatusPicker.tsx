@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { AlertCircle, Check, ChevronDown } from "lucide-react";
 import { searchGrossBoardLoads } from "@/app/lib/api";
 import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
-import { dayStatuses, exactDayStatus, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
+import { amountDisplay, dayStatuses, exactDayStatus, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
 import { BoardDialog } from "./BoardDialog";
 
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
@@ -138,8 +138,8 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           onClick={() => choose(option)} className={`${option.kind !== "status" ? "col-span-2" : ""} cursor-pointer rounded-md px-2 py-2 text-xs ${index === activeIndex ? "bg-white/10 ring-1 ring-inset ring-zinc-600" : "hover:bg-zinc-800"}`}>
           {option.kind === "status" ? <span className={`inline-flex rounded px-2 py-1 font-medium ${option.status.color}`}>{option.status.value}</span> : option.kind === "clear" ?
             <span className="text-zinc-400">Clear status · Enter a load</span> : <>
-              <div className="font-medium text-zinc-100">{option.load.loadNumber} · ${option.load.originalRate} <span className="text-[10px] text-zinc-500">LOAD</span></div>
-              <div className="mt-1 text-zinc-400">{option.load.driverName || "Unassigned"} · {option.load.pickupDate || "No pickup date"} · {option.load.miles || "—"} mi</div>
+              <div className="font-medium text-zinc-100">{option.load.loadNumber} · {amountDisplay(option.load.originalRate, true)} <span className="text-[10px] text-zinc-500">LOAD</span></div>
+              <div className="mt-1 text-zinc-400">{option.load.driverName || "Unassigned"} · {option.load.pickupDate || "No pickup date"} · {amountDisplay(option.load.miles) || "—"} mi</div>
               <div className="text-zinc-500">Record #{option.load.id}</div>
             </>}
         </li>)}

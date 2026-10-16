@@ -83,6 +83,14 @@ export function decimalDisplay(value: bigint, currency = false) {
   return `${value < BigInt(0) ? "-" : ""}${currency ? "$" : ""}${(absolute / BigInt(100)).toLocaleString("en-US")}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
 }
 
+export function compactDecimalDisplay(value: bigint, currency = false) {
+  return compactDecimal(decimalDisplay(value, currency));
+}
+
+export function amountDisplay(value: string, currency = false) {
+  return value === "" || !validDecimal(value) ? value : compactDecimalDisplay(hundredths(value), currency);
+}
+
 export function totals(entries: GrossBoardEntry[]) {
   return entries.filter((entry) => !entry.dayStatus && !entry.deleted).reduce((sum, entry) => ({
     original: sum.original + hundredths(entry.originalRate),
@@ -131,12 +139,12 @@ export function incompleteRates(entries: GrossBoardEntry[]) {
 }
 
 export const balanceLabel = (balance: bigint) => balance > BigInt(0) ? "Available" : balance < BigInt(0) ? "Uncovered" : "Balanced";
-export const signedMoney = (value: bigint) => (value > BigInt(0) ? "+" : "") + decimalDisplay(value, true);
+export const signedMoney = (value: bigint) => (value > BigInt(0) ? "+" : "") + compactDecimalDisplay(value, true);
 
 export function rpmDisplay(gross: bigint, miles: bigint) {
   if (miles === BigInt(0)) return "—";
   const sign = gross < BigInt(0) ? BigInt(-1) : BigInt(1);
-  return decimalDisplay(sign * ((sign * gross * BigInt(100) + miles / BigInt(2)) / miles), true);
+  return compactDecimalDisplay(sign * ((sign * gross * BigInt(100) + miles / BigInt(2)) / miles), true);
 }
 
 // Rebase edits made during an autosave onto the versions the server committed.

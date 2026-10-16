@@ -6,11 +6,22 @@ import ts from "typescript";
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
 const { compactDecimal, indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { amountDisplay, compactDecimalDisplay, signedMoney } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 for (const [value, display] of [['', ''], ['67', '67'], ['67.00', '67'], ['67.50', '67.5'], ['67.05', '67.05'], ['0.00', '0'], ['0.10', '0.1'], ['-67.50', '-67.5'], ['9999999999.99', '9999999999.99']]) {
   assert.equal(compactDecimal(value), display);
   assert.equal(hundredths(display), hundredths(value));
 }
+for (const [value, display] of [['3400', '$3,400'], ['3400.00', '$3,400'], ['3400.50', '$3,400.5'], ['3400.05', '$3,400.05'], ['0', '$0'], ['-3400.50', '-$3,400.5'], ['9999999999.99', '$9,999,999,999.99']]) {
+  assert.equal(amountDisplay(value, true), display);
+  assert.equal(compactDecimalDisplay(hundredths(value), true), display);
+}
+assert.equal(amountDisplay('', true), '');
+assert.equal(amountDisplay('3400.50'), '3,400.5');
+assert.equal(signedMoney(hundredths('3400.50')), '+$3,400.5');
+assert.equal(signedMoney(hundredths('-3400.50')), '-$3,400.5');
+assert.equal(signedMoney(0n), '$0');
+assert.equal(rpmDisplay(hundredths('3400'), hundredths('1000')), '$3.4');
 
 assert.equal(monday(new Date(2026, 8, 28)), "2026-09-28");
 assert.equal(monday(new Date(2026, 9, 4)), "2026-09-28");

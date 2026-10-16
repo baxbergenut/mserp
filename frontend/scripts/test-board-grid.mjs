@@ -100,7 +100,7 @@ try {
   await page.goto(`${base}/gross-board?weekStart=${week}&driverId=driver-0&date=${week}&slot=0`);
   const amount = (date, field = 'original rate') => page.getByLabel(`Alice Grid, ${date}, ${field}`, { exact: true });
   const original = amount(week);
-  await expect(original).toHaveValue('400');
+  await expect(original).toHaveValue('$400');
   await original.click(); await expect(original.locator('..')).toBeFocused();
   await page.keyboard.type('123'); await expect(original).toHaveValue('123');
   await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
