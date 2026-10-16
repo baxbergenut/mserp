@@ -106,7 +106,7 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
  FROM trucks t JOIN LATERAL (
  SELECT h.owner_id FROM truck_ownership_history h WHERE h.truck_id=t.id
- AND (h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
  AND (NOT h.start_known OR h.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
  AND (h.unassigned_at IS NULL OR h.unassigned_at >= (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
  ORDER BY h.assigned_at DESC,h.id LIMIT 1

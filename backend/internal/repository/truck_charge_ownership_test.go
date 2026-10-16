@@ -53,6 +53,12 @@ func TestTruckChargeOwnershipDatabase(t *testing.T) {
 		check("2026-09-14", "", "")
 		check("2026-09-21", first.ID, first.FullName)
 		check("2026-09-28", next.ID, next.FullName)
+		// A migrated unknown start is an observation date, even when an earlier
+		// backdated transfer moved its stored timestamp to the closing boundary.
+		if _, err = pool.Exec(ctx, `UPDATE truck_ownership_history SET start_known=false,assigned_at=unassigned_at WHERE truck_id=$1 AND owner_id=$2`, truck.ID, first.ID); err != nil {
+			t.Fatal(err)
+		}
+		check("2026-09-14", first.ID, first.FullName)
 		// Correcting the same owner's date also updates historical charge views.
 		input.ExpectedOwnershipVersion = truck.OwnershipVersion
 		input.OwnershipEffectiveDate = "2026-10-05"
