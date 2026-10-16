@@ -279,9 +279,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Dispatcher checkboxes share `components/management/BoardFilter.tsx` with Status
   Board and remember multiple selections (legacy single choices still restore).
   Weekly driver RPM appears beneath Driver gross; Rate balance is the final
-  column after Total miles. Main owns vertical scrolling; `BoardScrollArea.tsx`
-  offsets the original table header 8px below global navigation while preserving
-  horizontal scrolling and frozen Driver/Truck columns.
+  column after Total miles. `BoardScrollArea.tsx` scrolls main until the table is
+  8px below navigation, then main stops and rows scroll inside the bounded table
+  under its native sticky header. Upward scrolling unwinds table rows before
+  revealing the controls. Horizontal scrolling and frozen Driver/Truck remain.
   `node scripts/test-gross-board-layout.mjs` covers filters, RPM, header scrolling,
   frozen columns, resizing and navigation restoration with fixture APIs.
   Numeric fields preserve typed text and the caret through autosave/refresh,

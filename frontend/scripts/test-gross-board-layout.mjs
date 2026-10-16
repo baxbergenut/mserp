@@ -104,16 +104,43 @@ try {
 
   const main = page.getByRole('main');
   const pinDistance = () => area.locator('thead').evaluate(header => header.getBoundingClientRect().top - header.closest('main').getBoundingClientRect().top);
-  // Wheels over the table must scroll the page rather than a nested viewport.
+  // Page first, then rows: the header and page stop at the handoff.
+  await area.evaluate(el => { el.scrollTop = 0; });
   await main.evaluate(el => { el.scrollTop = 0; });
-  await page.mouse.move(700, 500); await page.mouse.wheel(0, 400);
-  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
-  await main.evaluate(el => { el.scrollTop = 600; });
+  await page.mouse.move(700, 500); await page.mouse.wheel(0, 40);
+  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(40);
+  expect(await area.evaluate(el => el.scrollTop)).toBe(0);
+  await page.mouse.wheel(0, 600);
   await expect.poll(pinDistance).toBeCloseTo(8, 0);
-  expect(await area.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+  const pinnedPage = await main.evaluate(el => el.scrollTop);
+  const firstInner = await area.evaluate(el => el.scrollTop);
+  expect(firstInner).toBeGreaterThan(0);
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(firstInner + 200);
+  expect(await main.evaluate(el => el.scrollTop)).toBe(pinnedPage);
+  await expect.poll(pinDistance).toBeCloseTo(8, 0);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(firstInner + 100);
+  expect(await main.evaluate(el => el.scrollTop)).toBe(pinnedPage);
   expect(await page.getByText('Original total gross', { exact: true }).evaluate(el => el.getBoundingClientRect().bottom < el.closest('main').getBoundingClientRect().top)).toBe(true);
   expect(await area.locator('thead').evaluate(el => { const r = el.getBoundingClientRect(); return !!document.elementFromPoint(r.left + 30, r.top + 15)?.closest('thead'); })).toBe(true);
   await page.screenshot({ path: join(tmpdir(), 'mserp-gross-board-layout-scrolled.png') });
+  // Going up consumes table scroll before it reveals the cards.
+  await page.mouse.wheel(0, -(firstInner + 160));
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(0);
+  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(pinnedPage - 60);
+  await page.mouse.wheel(0, 500);
+  await expect.poll(pinDistance).toBeCloseTo(8, 0);
+  // Keyboard paging follows the same handoff and can reach the final totals.
+  await area.focus(); await page.keyboard.press('End');
+  await expect.poll(() => area.evaluate(el => el.scrollTop + el.clientHeight - el.scrollHeight)).toBe(0);
+  expect(await main.evaluate(el => el.scrollTop)).toBe(pinnedPage);
+  await page.keyboard.press('Home');
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(0);
+  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(0);
+  await page.keyboard.press('PageDown');
+  await expect.poll(pinDistance).toBeCloseTo(8, 0);
+  expect(await area.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
   // Horizontal scrolling keeps both frozen columns and the real header aligned.
   await area.evaluate(el => { el.scrollLeft = 400; });
   const columnLefts = () => area.evaluate(el => {
@@ -126,25 +153,42 @@ try {
   await expect.poll(pinDistance).toBeCloseTo(8, 0);
   expect((await columnLefts()).every(distance => distance < 2)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  // Touch gestures use the same page-first handoff on a narrow viewport.
+  await area.focus(); await page.keyboard.press('Home');
+  await area.evaluate(el => {
+    const send = (type, y) => {
+      const touch = new Touch({ identifier: 1, target: el, clientX: 250, clientY: y });
+      el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: [touch], changedTouches: [touch] }));
+    };
+    send('touchstart', 1200); send('touchmove', 1160);
+  });
+  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(40);
+  expect(await area.evaluate(el => el.scrollTop)).toBe(0);
+  await area.evaluate(el => {
+    const touch = new Touch({ identifier: 1, target: el, clientX: 250, clientY: 160 });
+    el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [touch], changedTouches: [touch] }));
+  });
+  await expect.poll(pinDistance).toBeCloseTo(8, 0);
+  expect(await area.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
   await page.setViewportSize({ width: 390, height: 844 });
-  // Wrapped mobile controls can move the table back below the pin threshold.
-  await main.evaluate(el => { el.scrollTop += 200; });
   await area.evaluate(el => { el.scrollLeft = 400; });
   await expect.poll(pinDistance).toBeCloseTo(8, 0);
   expect((await columnLefts()).every(distance => distance < 2)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
   // Browser Back restores the page scroll and horizontal table position.
-  const previous = await main.evaluate(el => el.scrollTop);
+  const previousInner = await area.evaluate(el => el.scrollTop);
   await page.goto(`${base}/gross-board?returnTest=1`);
   await expect(area).toBeVisible();
   await page.goBack();
   await expect(area).toBeVisible();
-  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(previous);
+  await expect.poll(() => main.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBe(0);
   await expect.poll(() => area.evaluate(el => el.scrollLeft)).toBe(400);
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(previousInner);
   await expect.poll(pinDistance).toBeCloseTo(8, 0);
-  await main.evaluate(el => { el.scrollTop = 0; });
-  await expect.poll(() => area.locator('thead').evaluate(el => el.style.transform)).toBe('translateY(0px)');
+  await area.focus(); await page.keyboard.press('Home');
+  await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(0);
   await expect(page.getByText('Original total gross', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1800, height: 1000 });
   await area.evaluate(el => { el.scrollLeft = 0; });
@@ -158,7 +202,7 @@ try {
   });
   await page.keyboard.press('ArrowUp');
   await expect.poll(() => area.evaluate(el => document.activeElement.getBoundingClientRect().top - el.querySelector('thead').getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(0);
-  await main.evaluate(el => { el.scrollTop = 0; });
+  await area.focus(); await page.keyboard.press('Home');
   await page.screenshot({ path: join(tmpdir(), 'mserp-gross-board-layout-top.png') });
 
   // A legacy single selection restores; explicit payroll links reveal all drivers.
@@ -168,6 +212,8 @@ try {
   await legacy.goto(`${base}/gross-board`);
   await expect(legacy.getByLabel('Driver RPM for Alice Layout', { exact: true })).toBeVisible();
   await expect(legacy.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveCount(0);
+  expect(await legacy.getByRole('main').evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+  expect(await legacy.getByRole('region', { name: 'Weekly gross board' }).evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
   await legacy.getByRole('button', { name: 'Dispatcher filter', exact: true }).click();
   await expect(legacy.getByRole('checkbox', { name: 'Alpha', exact: true })).toBeChecked();
   await expect(legacy.getByRole('checkbox', { name: 'Bravo', exact: true })).not.toBeChecked();
@@ -176,5 +222,12 @@ try {
   await expect(legacy.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveCount(1);
   await legacy.close();
   expect(errors).toEqual([]);
-  console.log('Gross Board layout checks passed: checkbox filters, legacy views, filtered totals, weekly RPM/autosave, column order, balance history, page/header scrolling, frozen columns, resize, and Back restoration.');
+  console.log('Gross Board layout checks passed: checkbox filters, legacy views, filtered totals, weekly RPM/autosave, column order, balance history, two-stage wheel/keyboard scrolling, frozen columns, resize, and Back restoration.');
+} catch (error) {
+  const page = browser.contexts()[0]?.pages()[0];
+  if (page) console.log(await page.evaluate(() => {
+    const main = document.querySelector('main'), area = document.querySelector('[data-scroll-key="gross-board"]');
+    return { main: main && { height: main.clientHeight, scroll: main.scrollTop, total: main.scrollHeight }, area: area && { top: area.getBoundingClientRect().top, height: area.clientHeight, scroll: area.scrollTop, total: area.scrollHeight, max: area.style.maxHeight }, header: area?.querySelector('thead')?.getBoundingClientRect().toJSON() };
+  }));
+  throw error;
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

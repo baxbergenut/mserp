@@ -280,7 +280,7 @@ export default function GrossBoardPage() {
       {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea>
         <table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
-          <thead className="relative z-30 bg-zinc-900 text-zinc-300">
+          <thead className="sticky top-0 z-30 bg-zinc-900 text-zinc-300">
             <tr>
               <th className="sticky left-0 z-30 border-b border-r border-zinc-700 bg-zinc-900 px-3 py-3">Driver</th>
               <th className="sticky z-30 border-b border-r border-zinc-700 bg-zinc-900 px-2" style={truckColumnStyle}>Truck</th>
