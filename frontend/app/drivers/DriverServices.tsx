@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { CheckCircle2, Clock3, Fuel, Scale, Loader2, AlertCircle } from "lucide-react";
 import { usePermissions } from "../lib/access";
 import { changeRelayDriver, fetchDriverServices, linkRelayRosterDriver, refreshRelayDrivers, requestDriverService, verifyRelayDriverOperation, verifyWeighMyTruck } from "../lib/api";
@@ -9,7 +9,7 @@ import type { DriverService, DriverServiceIntent, DriverServiceSetup, DriverServ
 import { controlClass, ErrorBanner, Field } from "../components/management/ManagementUI";
 
 const names = { relay: "Relay", weighmytruck: "WeighMyTruck" };
-const writePermission = { relay: "fuel.drivers.write", weighmytruck: "weighmytruck.write" };
+const writePermission = { relay: "fuel.drivers.create", weighmytruck: "weighmytruck.create" };
 const services: DriverService[] = ["relay", "weighmytruck"];
 const button = "ui-button !text-xs aria-pressed:border-blue-500/40 aria-pressed:bg-blue-500/15 aria-pressed:text-blue-300";
 const labels: Record<string, string> = { not_requested: "Not requested", queued: "Waiting to add", running: "Adding…", added: "Added", needs_setup: "Added · policy needed", review: "Needs attention", unconfirmed: "Check result", deferred: "Reminder set", canceled: "Setup canceled" };
@@ -57,7 +57,7 @@ export function DriverServiceChoices({ value, onChange, driverId, disabled }: { 
 
 export function DriverServiceCards({ driverId, allowReminders = false }: { driverId: string; allowReminders?: boolean }) {
   const permissions = usePermissions();
-  const visible = permissions.some(p => ["fuel.read", "fuel.drivers.write", "weighmytruck.read", "weighmytruck.write"].includes(p));
+  const visible = permissions.some(p => ["fuel.read", "fuel.drivers.create", "weighmytruck.read", "weighmytruck.create"].includes(p));
   return visible ? <SavedDriverServices key={driverId} driverId={driverId} allowReminders={allowReminders} /> : null;
 }
 function SavedDriverServices({ driverId, allowReminders }: { driverId: string; allowReminders: boolean }) {
@@ -113,7 +113,7 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
     catch (e) { setError(e instanceof Error ? e.message : "Service setup could not be confirmed."); }
     finally { await refresh(); latch.current = false; setBusy(false); }
   }
-  const queue = (action: "add" | "defer") => act(() => requestDriverService(data.driverId, { service: item.service, action, version: item.version, followUpOn: date }));
+  const queue = (action: "add" | "defer") => writable ? act(() => requestDriverService(data.driverId, { service: item.service, action, version: item.version, followUpOn: date })) : Promise.resolve();
   return <article aria-label={`${names[item.service]} setup`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
     <ServiceTitle service={item.service} state={item.state} />
     {item.message && <p className="text-xs leading-5 text-zinc-400">{item.message}</p>}
@@ -128,14 +128,14 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
         <p className="text-xs text-amber-300">Possible existing account. Confirm the person before linking.</p>
         {data.canLinkRelay ? <><Field label="Existing Relay account"><select className={controlClass} value={candidate} onChange={e => { setCandidate(e.target.value); setVerifiedKey(""); }}><option value="">Choose account</option>{item.candidates.map(v => <option key={v.driver.id} value={v.driver.id}>{v.driver.first_name} {v.driver.last_name} · {v.driver.phone} · {v.driver.id}</option>)}</select></Field><label className="flex gap-2 text-xs text-zinc-400"><input type="checkbox" checked={verified} onChange={e => setVerifiedKey(e.target.checked ? verificationKey : "")} />I confirmed this is {data.name}.</label><button type="button" className={button} disabled={!candidate || !verified || item.state === "unconfirmed"} onClick={() => void act(() => linkRelayRosterDriver(candidate, data.driverId))}>Confirm and link</button></> : <p className="text-xs text-zinc-400">Ask the Relay account review assignee to confirm the link.</p>}
       </div>}
-      {writable && item.relay && item.state === "needs_setup" && <div className="space-y-3">
+      {permissions.includes("fuel.drivers.edit") && item.relay && item.state === "needs_setup" && <div className="space-y-3">
         {item.relay.assignment && !item.relay.assignment.enabled && <button type="button" className={button} onClick={() => void act(() => changeRelayDriver({ requestId: crypto.randomUUID(), action: "enable", relayDriverId: item.relay!.driver.id, revision: item.relay!.revision }))}>Enable existing policy</button>}
         <Field label="Relay policy"><select className={controlClass} value={policyId} onChange={e => { setPolicyId(e.target.value); setPin(""); }}><option value="">Choose policy</option>{data.policies.map(p => <option key={p.id} value={p.id} disabled={p.id === item.relay?.assignment?.policy_id}>{p.name}</option>)}</select></Field>
         {item.relay.assignment && policy && <p className="text-xs text-amber-300">Changing policy resets usage counters. Enable the current policy to keep its usage.</p>}
         {policy && (nonELD ? <><Field label="Driver PIN" hint="Required by Non ELD Policy. Leave blank only if already set in Relay."><input type="password" autoComplete="new-password" maxLength={100} className={controlClass} value={pin} onChange={e => setPin(e.target.value)} /></Field><Field label="Truck number" hint="Leave blank to keep the existing Relay value."><input maxLength={100} className={controlClass} value={truck} onChange={e => setTruck(e.target.value)} /></Field></> : <p className="text-xs leading-5 text-zinc-400">Uses the driver’s existing ELD connection. If missing, have the driver log into their ELD app and check the connection in Relay.</p>)}
         <button type="button" className={`${button} ui-button-primary`} disabled={!policyId} onClick={() => void act(() => changeRelayDriver({ requestId: crypto.randomUUID(), action: "assign", relayDriverId: item.relay!.driver.id, revision: item.relay!.revision, policyId, driverPin: nonELD ? pin : "", truckNumber: nonELD ? truck : "" }))}>Assign policy</button>
       </div>}
-      {writable && item.state === "unconfirmed" && <div className="space-y-3">
+      {permissions.includes(item.service === "relay" ? "fuel.drivers.recover" : "weighmytruck.recover") && item.state === "unconfirmed" && <div className="space-y-3">
         <p className="text-xs leading-5 text-amber-300">The previous result is uncertain. Check the service website before recording the result; don’t submit another enrollment yet.</p>
         {item.service === "weighmytruck" && item.membership?.canVerify && <Field label="Verified WeighMyTruck membership"><select className={controlClass} value={membershipResult} onChange={e => { setMembershipResult(e.target.value); setVerifiedKey(""); }}><option value="">Choose what you verified</option><option value="added">Driver is in our company account</option><option value="absent">Driver is not in our company account</option></select></Field>}
         <label className="flex gap-2 text-xs text-zinc-400"><input type="checkbox" checked={verified} onChange={e => setVerifiedKey(e.target.checked ? verificationKey : "")} />I checked the result on the service website.</label>
@@ -146,7 +146,7 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
     </fieldset>
     {busy && <p role="status" className="text-xs text-zinc-400">Saving service setup…</p>}
     <div className="flex flex-wrap gap-3 text-xs text-blue-400">
-      {item.service === "relay" && permissions.includes("fuel.read") && <button type="button" disabled={busy || working} onClick={() => void act(refreshRelayDrivers)}>Refresh Relay accounts</button>}
+      {item.service === "relay" && permissions.includes("fuel.drivers.sync") && <button type="button" disabled={busy || working} onClick={() => void act(refreshRelayDrivers)}>Refresh Relay accounts</button>}
     </div>
   </article>;
 }

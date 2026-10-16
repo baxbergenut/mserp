@@ -128,7 +128,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 			}
 			for _, user := range []string{actor, second, outsider} {
 				viewer := WithTaskViewer(ctx, user, false)
-				page, err := tasks.Board(viewer, Pagination{}, "Termination review", "open", true)
+				page, err := tasks.Board(viewer, Pagination{}, "Termination review", "open", true, true)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -151,7 +151,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 			if noticeErr != nil {
 				t.Fatal("review date correction did not notify task feeds", noticeErr)
 			}
-			hidden, err := tasks.Board(WithTaskViewer(ctx, second, false), Pagination{}, "Termination review", "open", true)
+			hidden, err := tasks.Board(WithTaskViewer(ctx, second, false), Pagination{}, "Termination review", "open", true, true)
 			if err != nil || hidden.Total != 0 {
 				t.Fatal("corrected future review stayed visible", hidden, err)
 			}
@@ -250,7 +250,7 @@ func TestEscrowTerminationWorkflowDatabase(t *testing.T) {
 			if err = tasks.GenerateEscrowTasks(ctx); err != nil {
 				t.Fatal(err)
 			}
-			open, err := tasks.Board(viewer, Pagination{}, "Zero migration clearance", "open", true)
+			open, err := tasks.Board(viewer, Pagination{}, "Zero migration clearance", "open", true, true)
 			if err != nil || open.Total != 0 {
 				t.Fatal("cleared review recreated", open, err)
 			}

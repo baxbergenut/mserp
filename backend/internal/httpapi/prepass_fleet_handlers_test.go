@@ -9,9 +9,9 @@ import (
 
 func TestPrePassFleetPermissions(t *testing.T) {
 	for _, c := range []struct{ method, path, want string }{
-		{"GET", "/prepass-fleet", "tolls.read"}, {"POST", "/prepass-fleet/refresh", "tolls.read"},
-		{"POST", "/prepass-fleet/link/preview", "tolls.link"}, {"POST", "/prepass-fleet/link", "tolls.link"}, {"POST", "/prepass-fleet/change", "tolls.fleet.write"},
-		{"POST", "/prepass-fleet/operations/id/verify", "tolls.fleet.write"},
+		{"GET", "/prepass-fleet", "tolls.read"}, {"POST", "/prepass-fleet/refresh", "tolls.fleet.sync"},
+		{"POST", "/prepass-fleet/link/preview", "tolls.link"}, {"POST", "/prepass-fleet/link", "tolls.link"}, {"POST", "/prepass-fleet/change", "authenticated"},
+		{"POST", "/prepass-fleet/operations/id/verify", "tolls.fleet.recover"},
 	} {
 		if got := routePermission(c.method, c.path); got != c.want {
 			t.Fatalf("%s: %s", c.path, got)

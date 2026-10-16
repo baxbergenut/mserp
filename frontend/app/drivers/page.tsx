@@ -1,4 +1,5 @@
 "use client";
+import type { DriverOption, TruckOption, DispatcherOption, InvestorOption } from "@/app/lib/types";
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { employmentTypeLabel } from "../lib/driverType";
@@ -9,7 +10,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileBadge, Users } from "lucide-react";
 import {
@@ -17,17 +18,17 @@ import {
   completeDriverIntake,
   deleteDriver,
   fileDownloadUrl,
-  fetchDispatchers,
+  fetchDispatcherOptions,
   fetchDriverDirectory,
   fetchDriverIntakeById,
   fetchDriverSetupDefaults,
-  fetchDrivers,
-  fetchTrucks,
-  fetchInvestors,
+  fetchDriverOptions,
+  fetchTruckOptions,
+  fetchInvestorOptions,
   updateDriver,
 } from "../lib/api";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Dispatcher, Driver, DriverInput, DriverIntake, DriverDirectoryEntry, Investor, Truck } from "../lib/types";
+import type { Driver, DriverInput, DriverIntake, DriverDirectoryEntry } from "../lib/types";
 import {
   ConfirmDialog,
   EmptyState,
@@ -39,7 +40,7 @@ import {
   TablePagination,
   TableShell,
 } from "../components/management/ManagementUI";
-import { usePermissions } from "../lib/access";
+import { usePermissions, canCreateDriver } from "../lib/access";
 import { StatementMenu } from "../accounting/driver-pay/StatementMenu";
 import { DriverServiceCards } from "./DriverServices";
 import type { DriverServiceIntent } from "../lib/types";
@@ -62,10 +63,10 @@ function DriversContent() {
   const searchParams = useSearchParams();
   const setupID = searchParams.get("setup");
   const [drivers, setDrivers] = useState<DriverDirectoryEntry[]>([]);
-  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
-  const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [dispatchers, setDispatchers] = useState<Dispatcher[]>([]);
+  const [trucks, setTrucks] = useState<TruckOption[]>([]);
+  const [dispatchers, setDispatchers] = useState<DispatcherOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [showInactiveDrivers, setShowInactiveDrivers] = useViewState("page:showInactiveDrivers", false);
   const [page, setPage] = useViewState("page:page", 1);
@@ -83,7 +84,7 @@ function DriversContent() {
   const [savedDriver, setSavedDriver] = useState<Driver | null>(null);
   const saveLatch = useRef(false);
   const [intake, setIntake] = useState<DriverIntake | null>(null);
-  const [existingDrivers, setExistingDrivers] = useState<Driver[]>([]);
+  const [existingDrivers, setExistingDrivers] = useState<DriverOption[]>([]);
   const [linkDriverID, setLinkDriverID] = useState("");
   const requestSequence = useRef(0);
   const [separateConfirmed, setSeparateConfirmed] = useState(false);
@@ -113,7 +114,7 @@ function DriversContent() {
     setLoadingLookups(true);
     try {
       const [truckRows, dispatcherRows, driverRows, ownerRows] = await Promise.all([
-        fetchTrucks(), fetchDispatchers(), fetchDrivers(), fetchInvestors(),
+        fetchTruckOptions(), fetchDispatcherOptions(), fetchDriverOptions(), fetchInvestorOptions(),
       ]);
       setInvestors(ownerRows);
       setTrucks(truckRows);
@@ -134,11 +135,12 @@ function DriversContent() {
   }, [loadData]);
 
   const openCreate = () => {
+ if(!canCreateDriver(permissions))return;
     setServiceChoices([]); setSavedDriver(null);
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
-    setForm({ ...emptyDriverInput, newTruck: { ...emptyTruckInput }, hireDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()), escrowAmount: "" });
+    setForm({ ...emptyDriverInput, newTruck: permissions.includes("trucks.create") ? { ...emptyTruckInput } : undefined, hireDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()), escrowAmount: "" });
     void fetchDriverSetupDefaults().then(defaults => {
       setForm(current => current.escrowAmount === "" ? { ...current, escrowAmount: defaults.escrowAmount } : current);
     }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
@@ -149,6 +151,7 @@ function DriversContent() {
   useQuickCreate(openCreate);
 
   const openEdit = (driver: Driver) => {
+ if(!permissions.includes("drivers.edit"))return;
     setServiceChoices([]);
     setIntake(null);
     setLinkDriverID("");
@@ -159,9 +162,11 @@ function DriversContent() {
   };
 
   const openIntake = useCallback((hire: DriverIntake) => {
+    if (!permissions.includes("tasks.review")) { setError("Completing an intake requires Tasks Review permission."); return; }
+ if(!canCreateDriver(permissions)) {setError("Driver setup requires Add driver, private details editing, compensation editing and escrow creation.");return;}
     void loadLookups();
     const source = hire.driver;
-    setForm({ ...emptyDriverInput, newTruck: { ...emptyTruckInput }, escrowAmount: "", fullName: source.fullName,
+    setForm({ ...emptyDriverInput, newTruck: permissions.includes("trucks.create") ? { ...emptyTruckInput } : undefined, escrowAmount: "", fullName: source.fullName,
       hireDate: source.hireDate,
       phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
       city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",
@@ -176,7 +181,7 @@ function DriversContent() {
     setSeparateConfirmed(false); setServiceChoices([]); setSavedDriver(null);
     setEditing(null);
     setError("");
-  }, [loadLookups]);
+  }, [loadLookups, permissions]);
 
   useEffect(() => {
     if (!setupID) return;
@@ -192,6 +197,7 @@ function DriversContent() {
   };
 
   const save = async () => {
+    if (editing ? !permissions.includes("drivers.edit") : !canCreateDriver(permissions)) return;
     if (saveLatch.current) return;
     saveLatch.current = true;
     setIsSaving(true);
@@ -214,7 +220,7 @@ function DriversContent() {
   };
 
   const remove = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !permissions.includes("drivers.delete")) return;
     setIsDeleting(true);
     setError("");
     try {
@@ -234,6 +240,7 @@ function DriversContent() {
 
 
       {error && <ErrorBanner message={error} />}
+      {permissions.includes("drivers.create") && !canCreateDriver(permissions) && <p role="status" className="text-sm text-amber-300">Driver setup also requires: {[["drivers.private.edit", "private details editing"], ["driver_compensation.edit", "compensation editing"], ["escrow.create", "escrow creation"]].filter(([key]) => !permissions.includes(key)).map(([, label]) => label).join(", ")}.</p>}
       <div className="flex flex-wrap items-center gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
 
@@ -252,10 +259,10 @@ function DriversContent() {
               <tr className="border-b border-zinc-800/50 text-zinc-500">
                 <th className="px-4 py-3 font-medium">Driver</th>
                 <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Compensation</th>
+                {permissions.includes("driver_compensation.read") && <th className="px-4 py-3 font-medium">Compensation</th>}
                 <th className="px-4 py-3 font-medium">Dispatcher</th>
                 <th className="px-4 py-3 font-medium">Truck</th>
-                <th className="px-4 py-3 font-medium">CDL</th>
+                {permissions.includes("drivers.documents.read") && <th className="px-4 py-3 font-medium">CDL</th>}
                 <th className="px-4 py-3 font-medium"><ColumnFilter label="Status" active={!!(showInactiveDrivers)}><label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
           <input
             type="checkbox"
@@ -280,19 +287,19 @@ function DriversContent() {
           />
         )}</td></tr> : <>
               {drivers.map((driver) => (
-                <tr key={driver.id} tabIndex={!driver.intakeId && permissions.includes("fleet.write") ? 0 : undefined} onContextMenu={event => { if (!driver.intakeId && permissions.includes("fleet.write")) { event.preventDefault(); setStatusMenu({ driver, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (!driver.intakeId && permissions.includes("fleet.write") && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatusMenu({ driver, x: rect.left + 12, y: rect.bottom }); } }} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
+                <tr key={driver.id} tabIndex={!driver.intakeId && permissions.includes("drivers.edit") ? 0 : undefined} onContextMenu={event => { if (!driver.intakeId && permissions.includes("drivers.edit")) { event.preventDefault(); setStatusMenu({ driver, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (!driver.intakeId && permissions.includes("drivers.edit") && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatusMenu({ driver, x: rect.left + 12, y: rect.bottom }); } }} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="font-medium text-zinc-200 hover:text-blue-400">{driver.fullName}</button> : <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>}{driver.intakeId && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">New</span>}</div>
+                    <div className="flex items-center gap-2">{driver.intakeId ? <button disabled={!canCreateDriver(permissions)} type="button" onClick={() => void startSetup(driver.intakeId!)} className="font-medium text-zinc-200 hover:text-blue-400">{driver.fullName}</button> : <Link href={`/drivers/detail?id=${driver.id}`} className="font-medium text-zinc-200 transition hover:text-blue-400">{driver.fullName}</Link>}{driver.intakeId && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">New</span>}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{formatPhone(driver.phone) || driver.email || "No contact info"}</div>
                     {driver.teamRole && <Link href={`/drivers/detail?id=${driver.teamPartnerId}`} className="text-[11px] text-blue-400">{driver.teamRole === "main" ? "Main" : "Team"} · {driver.teamPartnerName}</Link>}
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{employmentTypeLabel(driver.employmentType)}</td>
-                  <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">
-                    {driver.teamRole === "team" ? <span className="font-sans text-zinc-500">Main driver’s statement</span> : driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate.toFixed(4)}/mi` : `${driver.payRate.toFixed(2)}% gross`}
-                  </td>
+                  {permissions.includes("driver_compensation.read") && <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">
+                    {driver.teamRole === "team" ? <span className="font-sans text-zinc-500">Main driver’s statement</span> : driver.intakeId ? <span className="font-sans text-zinc-500">Not set</span> : driver.payType === "cpm" ? `$${driver.payRate?.toFixed(4)}/mi` : `${driver.payRate?.toFixed(2)}% gross`}
+                  </td>}
                   <td className="px-4 py-3 text-zinc-400">{driver.dispatcherName ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-zinc-300">{driver.truckUnit ?? driver.teamTruckUnit ?? "—"}</td>
-                  <td className="px-4 py-3">
+                  {permissions.includes("drivers.documents.read") && <td className="px-4 py-3">
                     {driver.cdlFileId ? (
                       <a
                         href={fileDownloadUrl(driver.cdlFileId)}
@@ -307,7 +314,7 @@ function DriversContent() {
                     ) : (
                       <span className="text-zinc-600">—</span>
                     )}
-                  </td>
+                  </td>}
                   <td className="px-4 py-3">{driver.intakeId ? <span className="text-xs text-zinc-500">Needs setup</span> : <span className="capitalize text-zinc-400">{driver.status ?? (driver.active ? "active" : "terminated")}</span>}</td>
                   <td className="px-4 py-3">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="float-right text-xs text-blue-400 hover:text-blue-300">Set up</button> : <RowActions onEdit={() => openEdit(driver)} onDelete={() => setPendingDelete(driver)} />}</td>
                 </tr>

@@ -15,9 +15,9 @@ func TestDriverServiceIntentPermissions(t *testing.T) {
 	}{
 		{"relay", []string{"fleet.write", "fuel.read"}, false},
 		{"weighmytruck", []string{"fleet.write", "weighmytruck.read"}, false},
-		{"relay", []string{"fuel.drivers.write"}, true},
-		{"weighmytruck", []string{"weighmytruck.write"}, true},
-		{"relay", []string{"weighmytruck.write"}, false},
+		{"relay", []string{"fuel.drivers.create"}, true},
+		{"weighmytruck", []string{"weighmytruck.create"}, true},
+		{"relay", []string{"weighmytruck.create"}, false},
 	} {
 		for _, action := range []string{"add", "defer"} {
 			req := httptest.NewRequest("POST", "/drivers", nil)
@@ -32,7 +32,7 @@ func TestDriverServiceIntentPermissions(t *testing.T) {
 			}
 		}
 	}
-	if routePermission("GET", "/driver-services/id") != "fleet.read" || routePermission("POST", "/driver-services/id") != "fleet.read" {
+	if routePermission("GET", "/driver-services/id") != "drivers.read" || routePermission("POST", "/driver-services/id") != "drivers.read" {
 		t.Fatal("driver read boundary missing")
 	}
 }

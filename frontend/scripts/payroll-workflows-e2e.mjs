@@ -178,7 +178,8 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   // Working start date drives roster, truck, dispatcher and escrow creation.
   await page.goto(`${base}/drivers`);
   await page.getByRole('button', { name: 'Add driver', exact: true }).click();
-  await page.getByLabel('Full name', { exact: true }).fill('Workflow Started');
+  await page.getByLabel('First name', { exact: true }).fill('Workflow');
+  await page.getByLabel('Last name', { exact: true }).fill('Started');
   await page.getByRole('button',{name:'Continue',exact:true}).click();
   await page.getByLabel('Rate per mile ($)', { exact: false }).fill('0.75');
   await page.getByLabel(/^Dispatcher/).selectOption(dispatcher);
@@ -222,7 +223,8 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await expect(page.getByRole('link', { name: 'Workflow Page 27', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Workflow Page 26', exact: true })).toHaveCount(0);
   const boardSave = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/gross-board', { timeout: 650 });
-  await page.getByLabel(`Workflow Page 27, ${week}, miles`, { exact: true }).fill('11');
+  await page.getByLabel(`Workflow Page 27, ${week}, miles`, { exact: true }).click();
+  await page.keyboard.type('11');
   await boardSave;
   await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
   expect((await read(`/gross-board?weekStart=${week}`)).entries.find(e => e.driverId === pageDriver.id && e.date === week).miles).toBe('11.00');

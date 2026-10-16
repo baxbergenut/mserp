@@ -67,7 +67,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Outbound company matches the existing webhook company, credentials differ.
   The independent five-second worker remains off until configuration and reviewed
   activation; settings reads use cache only. `fleetscope.read/manage/reconcile`
-  plus fleet.read protect routes; reconciliation also requires Administrator.
+  plus drivers.read and trucks.read protect routes; reconciliation also requires Administrator.
   See `docs/FLEETSCOPE_SYNC_WIRE.md` and `docs/FLEETSCOPE_SYNC_RUNBOOK.md` before
   changing the contract, enabling delivery or recovering restored databases.
   Exact LF contract bytes/schema hashes and fixtures must match the receiver.
@@ -365,14 +365,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
   payment balances, row-click editing and modal deletion; review-first AI entry.
   POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators
-  add the green managerVerified check; roles named Accountant add the blue
+  add the green managerVerified check; `expenses.accounting.verify` adds the blue
   accountingVerified check. Category View is required. Ordinary single/batch
   creation cannot set checks; edits preserve them. Verification is version-checked
   and adds only the caller role’s check, without overwriting the other role.
   Migration 085 records verifier IDs, name snapshots and timestamps, plus
   cancellation actor/time. Historical checks have unknown authors. POST
-  `/expenses/{id}/unverify` takes the exact verificationId; own checks, same-role
-  Accountant checks, and both roles for Administrators can be removed. Category
+  `/expenses/{id}/unverify` takes the exact verificationId; own accounting checks with the current verification grant, and both roles
+  for Administrators can be removed. Cancelling another person’s check is Administrator-only. Category
   View remains required. Old IDs cannot cancel a newer approval. Click the tick
   for details/removal; Ctrl+Z/Cmd+Z undoes this page session’s own approvals
   without intercepting form typing. Hover lists each verifier.
@@ -562,9 +562,9 @@ browser bundle.
   source details of already-linked loads only, including older report weeks.
 - Escrow: `GET /escrows` (pagination, search, driverId, status: paid/partial/unpaid),
   `GET/PUT /escrows/settings` for the versioned new-driver default. Dedicated
-  `escrow.read`/`escrow.write` permissions; collection writes use payroll permissions.
+  `escrow.read/create/edit/delete` permissions; collection writes use payroll permissions.
   `POST /escrows/{id}/releases` and `PUT /escrows/{id}/releases/{releaseID}`
-  create/edit/cancel a versioned release using escrow.write.
+  create/edit/cancel a versioned release using escrow.create/edit/delete respectively.
 - Installment plans and charge catalog: `GET /driver-charges` (optional driverId),
   `POST /driver-charges/types`, `DELETE /driver-charges/types/{id}` (version),
   `POST /driver-charges/schedules`,
@@ -766,7 +766,9 @@ assignment lookup lists.
   progress or financial records. Handoff remains a future phase in
   docs/DRIVER_BOARD_PLAN.md.
 
-- Access control uses migration 044. One role per user, with a code-owned
+- Access control uses migrations 044/112. See docs/ACCESS_CONTROL.md for the
+  permission matrix, sensitive data rules, migration and compatible rollback.
+  One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in
   Administrator role is immutable and has the complete catalog. The API checks
   current role permissions on every request and denies unmapped resources;
@@ -782,13 +784,16 @@ assignment lookup lists.
   Session issuance locks/rechecks the user version to prevent stale login races.
   Current role permissions are loaded for every request. Account and role writes
   are versioned and audited without password material; serialized updates retain
-  at least one active Administrator. Fleet read includes full profiles/documents;
-  grant it to roles using fleet selectors. Payroll history/finalization require
-  separate permissions. Login throttling trusts Nginx X-Real-IP only on loopback.
+  at least one active Administrator. Drivers, Trucks, Dispatchers, Updaters and
+  Investors are independent. Private details, documents, compensation and each
+  payroll area require explicit grants. Lookup endpoints return limited choices.
+  Viewers cannot acquire dirty state. Access revision changes clear page drafts
+  and pending reads; backend field projections and file-owner checks are mandatory.
+  Every authenticated method/route needs an explicit policy and coverage test. Login throttling trusts Nginx X-Real-IP only on loopback.
   Tests use disposable local MSERP_ACCESS_TEST_DATABASE_URL (_test database),
   fresh/migrated schemas as mserp_app; access-e2e.mjs runs with investor E2E.
-  Pre-044 binaries do not enforce permissions: rollback to them is unsafe once
-  access restrictions are in use.
+  Pre-112 binaries are not permission-compatible rollback targets. Validate with
+  scripts/test-permissions-v2.mjs against review-local.mjs before deployment.
 
 - Contact phones are optional ten ASCII digits without a country code; blank
   values store as NULL. Drivers, dispatchers, investors, FleetScope intake and
@@ -1406,7 +1411,7 @@ assignment lookup lists.
   driver statement, never Investor Pay. Once releases exist, use a forward fix
   rather than an older binary that cannot display those credits.
   Deleting a driver retains their escrow/name snapshot. Separate escrow.read and
-  escrow.write permissions control the directory/default, while payroll writes
+  escrow.edit permissions control the default, while payroll writes
   retain payroll permissions. Older binaries cannot display migrated escrow and
   cannot create expense-backed escrow; use a forward fix after this migration.
   Tests use MSERP_DRIVER_PAY_TEST_DATABASE_URL as mserp_app for fresh/migrated
@@ -1898,7 +1903,7 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   version. Driver/escrow locks validate actual releases and retain actor/balance
   snapshots. Generic task edits cannot complete system reviews.
 - PUT /escrows/{id}/opening edits Previously paid during the transition with
-  escrow.write, current version and correction reason. Existing funding/collection
+  escrow.edit, current version and correction reason. Existing funding/collection
   guards remain authoritative; each change has an audit event. Saved payroll
   payments and finalized snapshots are not replaced by opening corrections.
 - TestEscrowTerminationWorkflowDatabase uses disposable local
@@ -1994,7 +1999,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   appear only on main profiles with a teammate. Changes use an effective Monday
   and optimistic versions. GET `/drivers/team-trucks?weekStart=...` supplies dated,
   unambiguous main-driver truck choices. GET/PUT `/drivers/{id}/team`
-  use fleet.read/payroll.write. Dispatch, tariff, escrow and recurring charges
+  use drivers.read/driver_pay.edit. Dispatch, tariff, escrow and recurring charges
   belong to the main driver; weekly Driver Pay has one statement showing both names.
   Team members cannot have recurring phases or independent loads/truck assignments
   during the team period. Prior solo history and individual identities remain.
@@ -2010,7 +2015,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Manual Add driver and FleetScope onboarding share `drivers/DriverServices.tsx`: draft Add after saving / Remind me later choices, then durable result cards. Driver Overview and system tasks resume the same setup.
 - `repository/driver_services.go`, `httpapi/driver_service_handlers.go` and migration 079 persist service intent atomically with driver creation/completion. A startup/five-second worker processes queued requests only; failures never undo the driver. Existing vendor receipts prevent uncertain replay. Relay account added and policy enabled are separate statuses; PINs are never queued/stored.
-- GET/POST `/driver-services/{id}` require fleet.read; writes additionally require the selected service’s write permission. New `relay_setup` / `weighmytruck_setup` task kinds inherit onboarding assignees and support versioned follow-up dates, automatic completion and durable history. See `docs/integrations/DRIVER_SERVICE_SETUP.md`.
+- GET/POST `/driver-services/{id}` require drivers.read; writes additionally require the selected service’s create permission. New `relay_setup` / `weighmytruck_setup` task kinds inherit onboarding assignees and support versioned follow-up dates, automatic completion and durable history. See `docs/integrations/DRIVER_SERVICE_SETUP.md`.
 - `TestRelayDriverDatabase` covers fresh/migrated service workflow; `node scripts/test-driver-services-views.mjs` covers both modals and task resumption with fixture APIs.
 
 ## Guided driver setup (migration 080)
@@ -2076,7 +2081,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Status Board no longer shows the Five ELD review counter or week/totals caption. Missing trucks from the latest successful Five ELD cache become durable `five_eld_truck` system tasks, matched against all local trucks by normalized VIN, including inactive/unassigned trucks. Ambiguous VINs never authorize creation.
 - Settings > System tasks supports multiple people for every category: name chips with hover/focus removal and an Add person dropdown, saved with the existing versioned assignment API. The Five ELD category initially belongs to the unique active Nate Finesse account; later assignment edits apply to existing and future tasks.
-- GET `/tasks/five-eld/{id}` and POST `/tasks/five-eld/{id}/complete` require task visibility plus fleet read/write. Review prefills provider VIN/unit in an editable truck form. Creation and task completion commit atomically with source-version/duplicate guards and a durable source identity/actor-name receipt. No driver assignments are inferred.
+- GET `/tasks/five-eld/{id}` and POST `/tasks/five-eld/{id}/complete` require task visibility plus trucks.read/create and tasks.review for completion. Review prefills provider VIN/unit in an editable truck form. Creation and task completion commit atomically with source-version/duplicate guards and a durable source identity/actor-name receipt. No driver assignments are inferred.
 - `TestFiveELDTruckTasksDatabase` uses local disposable `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`; `node scripts/test-task-board-views.mjs` covers review, multi-assignee chips, and caption removal.
 
 ### Maintenance brands, historical dates and service tasks (100–101)

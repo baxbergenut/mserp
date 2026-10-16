@@ -31,7 +31,7 @@ export function useDriverBoard(pauseRefresh = false) {
   const editSequence = useRef(0);
   const pendingUndo = useRef(false);
   const undoLatestRef = useRef<() => Promise<void>>(async () => {});
-  const dirty = Object.keys(changes).length > 0;
+  const dirty = canEdit && Object.keys(changes).length > 0;
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   useLayoutEffect(() => { idle.current = !dirty && !saving && !loading && !eldRefreshing && !pauseRefresh; }, [dirty, saving, loading, eldRefreshing, pauseRefresh]);
@@ -63,6 +63,7 @@ export function useDriverBoard(pauseRefresh = false) {
   }, []);
 
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {
+    if (!canEdit) return;
     activity.current += 1;
     idle.current = false;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
@@ -79,7 +80,7 @@ export function useDriverBoard(pauseRefresh = false) {
     if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
     changesRef.current = result;
     setChanges(result);
-  }, []);
+  }, [canEdit]);
 
   const refreshLoads = useCallback(async (ids: string[]) => {
     try {
@@ -89,7 +90,7 @@ export function useDriverBoard(pauseRefresh = false) {
   }, []);
 
   const save = useCallback(async () => {
-    if (savingRef.current || !Object.keys(changesRef.current).length || loading) return;
+    if (!canEdit || savingRef.current || !Object.keys(changesRef.current).length || loading) return;
     savingRef.current = true; activity.current += 1;
     const snapshot = { ...changesRef.current };
     const draftActions = draftUndo.current;
@@ -115,7 +116,7 @@ export function useDriverBoard(pauseRefresh = false) {
       if (loadIds.length) await refreshLoads(loadIds);
     } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activity.current += 1; savingRef.current = false; setSaving(false); }
-  }, [loading, refreshLoads]);
+  }, [canEdit, loading, refreshLoads]);
 
   useEffect(() => {
     if (!dirty || saving || error || loading) return;
@@ -156,6 +157,7 @@ export function useDriverBoard(pauseRefresh = false) {
   }
 
   async function refreshELD() {
+    if (!canEdit) return;
     if (dirty || savingRef.current || loading || eldRefreshing) return;
     activity.current += 1; idle.current = false; setELDRefreshing(true); setRefreshError("");
     try {
@@ -169,6 +171,7 @@ export function useDriverBoard(pauseRefresh = false) {
   }
 
   async function undo(eventId: number, driverId: string, personal = false) {
+    if (!canEdit) return;
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
@@ -183,6 +186,7 @@ export function useDriverBoard(pauseRefresh = false) {
   }
 
   async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction) {
+    if (!canEdit) return view;
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");

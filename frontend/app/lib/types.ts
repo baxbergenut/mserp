@@ -299,30 +299,30 @@ export interface Driver {
   fullName: string;
   driverType: "O" | "M" | "%-O" | "M-O" | "%";
   isOwnerOperator: boolean;
-  payType: PayType;
-  payRate: number;
+  payType?: PayType;
+  payRate?: number;
   /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
   email: string | null;
-  licenseNumber: string | null;
-  licenseState: string | null;
-  licenseExpires: string | null;
+  licenseNumber?: string | null;
+  licenseState?: string | null;
+  licenseExpires?: string | null;
   hireDate: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
-  emergencyContact: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  emergencyContact?: string | null;
   dispatcherId: string | null;
   dispatcherName: string | null;
   truckId: string | null;
   truckUnit: string | null;
   active: boolean;
   notes: string | null;
-  cdlFileId: string | null;
-  cdlFileName: string | null;
-  cdlFileContentType: string | null;
-  cdlFileSizeBytes: number | null;
+  cdlFileId?: string | null;
+  cdlFileName?: string | null;
+  cdlFileContentType?: string | null;
+  cdlFileSizeBytes?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -552,10 +552,10 @@ export interface Truck {
   driverName: string | null;
   active: boolean;
   notes: string | null;
-  irpFileId: string | null;
-  irpFileName: string | null;
-  irpFileContentType: string | null;
-  irpFileSizeBytes: number | null;
+  irpFileId?: string | null;
+  irpFileName?: string | null;
+  irpFileContentType?: string | null;
+  irpFileSizeBytes?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -630,7 +630,7 @@ export interface Dispatcher {
   email: string | null;
   /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
-  payPercentage: number | null;
+  payPercentage?: number | null;
   active: boolean;
   notes: string | null;
   driverCount: number;
@@ -855,6 +855,7 @@ export interface ExpenseExtraction {
 }
 
 export interface AuthUser {
+  accessRevision?: string;
   expenseVerificationRole: "admin" | "accountant" | "";
   theme: string;
   id: string;
@@ -873,7 +874,7 @@ export interface AccessRole {
   id: string; name: string; permissions: string[]; expenseCategoryAccess: ExpenseCategoryAccess[]; system: boolean; version: number;
 }
 export interface AccessData {
-  users: ManagedUser[]; roles: AccessRole[]; permissions: { key: string; label: string }[];
+  users: ManagedUser[]; roles: AccessRole[]; permissions: PermissionDefinition[];
   expenseCategories: { id: string; name: string; active: boolean }[];
 }
 
@@ -885,7 +886,10 @@ export interface ExpenseCategoryAccess {
   canDelete: boolean;
 }
 
+export interface PermissionDefinition { key: string; label: string; group: string; action: string; requires: string[]; sensitive: boolean; }
+
 export interface AuthSession {
+  permissionCatalog?: PermissionDefinition[];
   user: AuthUser;
   csrfToken: string;
   expiresAt: string;
@@ -1218,7 +1222,7 @@ export interface TruckTerm { truckId: string; ownerId: string; weekStart: string
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
 export interface TruckChargeBulkResult { truckId: string; typeId: string; weekStart: string; error?: string }
 export interface TruckChargeOwner { truckId: string; ownerId: string; ownerName: string }
-export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckChargeOwner[]; terms: TruckTerm[]; phases: TruckChargePhase[] }
+export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckChargeOwner[]; terms?: TruckTerm[]; phases: TruckChargePhase[] }
 
 export interface EscrowRelease { id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
 export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
@@ -1319,3 +1323,10 @@ export type FleetScopeSyncView = {
  remote: { id: string; companyId: string; environment: string; epoch: string; capturedAt: string; nextCursor: string; drivers: { id: string; name: string; status: string; revision: string; mserpId: string }[]; trucks: { id: string; unitNumber: string; vin: string; revision: string; assignmentRevision: string; mserpId: string; primaryId: string; secondaryId: string; safetyHold: boolean; projection: FleetScopeTruckProjection | null; ownership: FleetScopeOwnership | null }[] } | null;
 };
 export type FleetScopeReview = { snapshotId: string; sourceRevision: number; action: "link" | "create" | "exclude" | "refresh"; kind: "truck" | "driver"; localId: string; remoteId: string; reason: string; provisioning?: FleetScopeProvisioning };
+
+// Lookup contracts contain operational choices only, never complete profiles.
+export type DriverOption = Pick<Driver, "id" | "fullName" | "active" | "status" | "employmentType" | "driverType" | "isOwnerOperator" | "dispatcherId" | "dispatcherName" | "truckId" | "truckUnit" | "teamRole" | "teamTruckId" | "teamTruckUnit" | "teamPartnerId" | "teamPartnerName" | "teamStartWeek" | "teamVersion"> & { phone?: Driver["phone"]; email?: Driver["email"] };
+export type TruckOption = Pick<Truck, "id" | "unitNumber" | "active" | "status" | "driverId" | "driverName" | "ownerId" | "ownerName" | "ownerSince" | "ownershipVersion" | "isCompanyOwned" | "year" | "make" | "model">;
+export type DispatcherOption = Pick<Dispatcher, "id" | "fullName" | "active" | "extension" | "mainUpdaterId" | "afterHoursUpdaterId" | "driverCount">;
+export type InvestorOption = Pick<Investor, "id" | "fullName" | "active" | "driverId" | "isCompany" | "trucks">;
+export type UpdaterOption = Pick<Updater, "id" | "fullName" | "shift" | "extension">;

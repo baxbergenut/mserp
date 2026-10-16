@@ -55,6 +55,7 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
+	AccessRevision          string                             `json:"accessRevision"`
 	Theme                   string                             `json:"theme"`
 	ID                      string                             `json:"id"`
 	Username                string                             `json:"username"`
@@ -66,9 +67,10 @@ type authUserResponse struct {
 }
 
 type sessionResponse struct {
-	User      authUserResponse `json:"user"`
-	CSRFToken string           `json:"csrfToken"`
-	ExpiresAt time.Time        `json:"expiresAt"`
+	PermissionCatalog []repository.Permission `json:"permissionCatalog"`
+	User              authUserResponse        `json:"user"`
+	CSRFToken         string                  `json:"csrfToken"`
+	ExpiresAt         time.Time               `json:"expiresAt"`
 }
 
 func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *authHandler {
@@ -312,9 +314,10 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		User:      authUserResponse{ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
-		CSRFToken: csrfToken,
-		ExpiresAt: expiresAt,
+		PermissionCatalog: repository.Permissions,
+		User:              authUserResponse{AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		CSRFToken:         csrfToken,
+		ExpiresAt:         expiresAt,
 	}
 	return response
 }

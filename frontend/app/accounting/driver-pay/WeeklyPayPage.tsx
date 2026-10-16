@@ -31,6 +31,8 @@ type PayUndoAction = { kind: "edit"; id: string; before: DriverPayEdits; after: 
 
 export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const permissions = usePermissions();
+ const payArea=investor?"investor_pay":"driver_pay";
+ const canEdit=permissions.includes(payArea+".edit"),canFinalize=permissions.includes(payArea+".finalize"),canReopen=permissions.includes(payArea+".reopen");
   const restoringView = useRestoringView();
   const savePay = investor ? saveInvestorPay : saveDriverPay;
   const router = useRouter();
@@ -81,7 +83,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const editGroup = useRef(0);
   const pendingUndo = useRef(false);
   const undoLatest = useRef<() => Promise<void>>(async () => {});
-  const dirty = Object.keys(changes).length > 0;
+  const dirty = canEdit && Object.keys(changes).length > 0;
   const sourceError = Object.values(changes).map(edits => paySourceError(edits, report?.drivers.find(row => row.id === edits.driverId))).find(Boolean);
   const invalid = Object.values(changes).some(edits => !validAdjustments(edits, report?.drivers.find(row => row.id === edits.driverId)));
   useLayoutEffect(() => { changesRef.current = changes; }, [changes]);
@@ -107,6 +109,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [week, fetchPay, queryKey, dirty, saving, refreshing]);
   const edit = useCallback((id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => {
+    if(!canEdit)return;
     const before = changesRef.current[id] ?? savedRef.current[id];
     const after = update(before);
     if (JSON.stringify(before) === JSON.stringify(after)) return;
@@ -117,11 +120,11 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     if (undoStack.current.length > 100) undoStack.current.shift();
     changesRef.current = { ...changesRef.current, [id]: after };
     setChanges(changesRef.current); setMessage("");
-  }, []);
+  }, [canEdit]);
   const toggle = useCallback((id: string) => setOpened(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }), [setOpened]);
 
   const save = useCallback(async () => {
-    if (savingRef.current || invalid || !dirty || loading || refreshing) return;
+    if (!canEdit || savingRef.current || invalid || !dirty || loading || refreshing) return;
     savingRef.current = true; setSaving(true); setError("");
     try {
       for (const id of Object.keys(changesRef.current)) {
@@ -138,7 +141,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       if (Object.keys(changesRef.current).length === 0) setMessage("All changes saved");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save; your edits are still here."); }
     finally { savingRef.current = false; setSaving(false); }
-  }, [dirty, invalid, loading, refreshing, report, savePay]);
+  }, [canEdit, dirty, invalid, loading, refreshing, report, savePay]);
   useEffect(() => {
     if (!dirty || invalid || saving || loading || refreshing || error) return;
     const frame = requestAnimationFrame(() => { void save(); });
@@ -146,7 +149,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }, [dirty, invalid, saving, loading, refreshing, error, save, pendingWeek, pendingLink]);
   useLayoutEffect(() => {
     undoLatest.current = async () => {
-      if (loading || refreshing || pendingWeek || pendingLink || !permissions.includes("payroll.write")) return;
+      if (loading || refreshing || pendingWeek || pendingLink || !canEdit) return;
       if (savingRef.current) { pendingUndo.current = true; return; }
       const action = undoStack.current.at(-1);
       if (!action) return;
@@ -226,6 +229,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     finally { setLoading(false); setRefreshing(false); }
   }
   async function prepareSettlement(reopen: boolean, driverId?: string) {
+ if(reopen ? !canReopen : !canFinalize)return;
     if (dirty || saving || loading || refreshing) return;
     setRefreshing(true); setError("");
     try {
@@ -237,6 +241,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     finally { setRefreshing(false); }
   }
   async function acceptSource(load: DriverPayLoad, sourceDriverId: string, field: "originalRate" | "totalMiles") {
+ if(!canEdit)return;
     if (dirty || saving || loading || refreshing || !load.loadRecordId || !load.boardVersion) return;
     setRefreshing(true); setError("");
     try {
@@ -271,14 +276,14 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)}–{shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
       <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={payButtonClass} disabled={busy} onClick={() => switchWeek(currentChargeWeek())}>This week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
-    <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "Updating…" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span><button className={payButtonClass} disabled={saving || busy} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button className={payButtonClass} disabled={saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
-    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">{loading ? <SkeletonBar className="h-3 w-48" /> : <span>{report?.pagination?.finalized ?? report?.drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length ?? 0} of {report?.pagination?.statements ?? report?.drivers.filter(d => !d.truckInactive).length ?? 0} settlements finalized</span>}<button className={payButtonClass} disabled={busy || dirty || saving || !(report?.pagination ? report.pagination.statements > report.pagination.finalized : report?.drivers.some(d => !d.truckInactive && !d.settlement?.finalized))} onClick={() => void prepareSettlement(false)}>Finalize week</button><button className={payButtonClass} disabled={busy || dirty || saving || !(report?.pagination ? report.pagination.finalized > 0 : report?.drivers.some(d => !d.truckInactive && d.settlement?.finalized))} onClick={() => void prepareSettlement(true)}>Reopen week</button>{driverFilter && <button className="text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button>}</div>
+    <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "Updating…" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span><button className={payButtonClass} disabled={saving || busy} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
+    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">{loading ? <SkeletonBar className="h-3 w-48" /> : <span>{report?.pagination?.finalized ?? report?.drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length ?? 0} of {report?.pagination?.statements ?? report?.drivers.filter(d => !d.truckInactive).length ?? 0} settlements finalized</span>}<button hidden={!canFinalize} className={payButtonClass} disabled={busy || dirty || saving || !(report?.pagination ? report.pagination.statements > report.pagination.finalized : report?.drivers.some(d => !d.truckInactive && !d.settlement?.finalized))} onClick={() => void prepareSettlement(false)}>Finalize week</button><button hidden={!canReopen} className={payButtonClass} disabled={busy || dirty || saving || !(report?.pagination ? report.pagination.finalized > 0 : report?.drivers.some(d => !d.truckInactive && d.settlement?.finalized))} onClick={() => void prepareSettlement(true)}>Reopen week</button>{driverFilter && <button className="text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button>}</div>
     {report?.issues?.map((issue, i) => <p key={i} role="alert" className="rounded border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300">{issue}</p>)}
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {sourceError && <p role="alert" className="text-sm text-red-300">{sourceError} This edit has not been saved.</p>}
     {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid ? "Correct invalid amounts or remove unfinished adjustments; enter zero or reset Fuel/Toll before leaving this week." : "Saving edits before leaving this week…"}{error && " Resolve the save error to continue."}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
 
-    {!report ? <WeeklyTableSkeleton /> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label === "Dispatcher" ? <ColumnFilter label="Dispatcher" active={dispatcher !== "all"}><label className="block space-y-1 text-xs text-zinc-400">Dispatcher<select className={`${controlClass} !w-44`} value={dispatcher} disabled={busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select></label></ColumnFilter> : label}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500">No statements match this view.</td></tr> : rows.map(row => row.kind === "statement" ? <LazyDriverCard onDetails={onDetails} onOpenExpense={setExpenseId} expenseOpenDisabled={busy || dirty || saving} key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={reopen => void prepareSettlement(reopen, row.driver.id)} onReload={() => reload()} sourceActionDisabled={busy || dirty || saving || !!row.driver.settlement?.finalized} onAcceptSource={(load, field) => acceptSource(load, row.driver.id, field)} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
+    {!report ? <WeeklyTableSkeleton /> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "24%" }} /><col style={{ width: "10%" }} /><col style={{ width: "15%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "6%" }} /><col style={{ width: "12%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${i >= 5 ? "text-right" : ""}`}>{label === "Dispatcher" ? <ColumnFilter label="Dispatcher" active={dispatcher !== "all"}><label className="block space-y-1 text-xs text-zinc-400">Dispatcher<select className={`${controlClass} !w-44`} value={dispatcher} disabled={busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select></label></ColumnFilter> : label}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500">No statements match this view.</td></tr> : rows.map(row => row.kind === "statement" ? <LazyDriverCard onDetails={onDetails} onOpenExpense={setExpenseId} expenseOpenDisabled={busy || dirty || saving} key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={!canEdit || busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={!canEdit || !permissions.includes("charges.edit") || busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={(row.driver.settlement?.finalized ? canReopen : canFinalize) ? reopen => void prepareSettlement(reopen, row.driver.id) : undefined} onReload={() => reload()} sourceActionDisabled={!canEdit || busy || dirty || saving || !!row.driver.settlement?.finalized} onAcceptSource={canEdit ? (load, field) => acceptSource(load, row.driver.id, field) : undefined} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
     {report?.pagination && !loading && <fieldset disabled={busy || dirty || saving} className="min-w-0"><TablePagination page={report.pagination.page} pageSize={pageSize} totalItems={report.pagination.total} totalPages={report.pagination.totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} /></fieldset>}
     {expenseId && <ExpenseEditModal key={expenseId} id={expenseId} onClose={() => setExpenseId(null)} onSaved={() => reload()} />}
     {settlement && settlementReport && <SettlementDialog investor={investor} report={settlementReport} {...settlement} onClose={() => setSettlement(null)} onSaved={() => { setSettlement(null); setSettlementReport(null); loadedQuery.current = ""; void reload(); }} />}

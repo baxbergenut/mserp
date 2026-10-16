@@ -1,4 +1,5 @@
 "use client";
+import type { TruckOption, DispatcherOption } from "@/app/lib/types";
 
 import { emptyTruckInput } from "../trucks/TruckForm";
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
@@ -8,7 +9,7 @@ import { useEffect, useState } from "react";
 import { usePermissions } from "../lib/access";
 import { PhoneInput } from "../components/management/PhoneInput";
 
-import type { Dispatcher, Driver, DriverInput, DriverTeamTruck, Truck } from "../lib/types";
+import type { Driver, DriverInput, DriverTeamTruck } from "../lib/types";
 import { fetchDriverTeamTrucks } from "../lib/api";
 import {
   controlClass,
@@ -60,8 +61,8 @@ export function driverToInput(driver: Driver): DriverInput {
     firstName: driver.firstName ?? undefined,
     lastName: driver.lastName ?? undefined,
     escrowAmount: "",
-    payType: driver.payType,
-    payRate: driver.payRate,
+    payType: driver.payType ?? "cpm",
+    payRate: driver.payRate ?? 0,
     phone: driver.phone ?? "",
     email: driver.email ?? "",
     licenseNumber: driver.licenseNumber ?? "",
@@ -79,7 +80,7 @@ export function driverToInput(driver: Driver): DriverInput {
     status: driver.status ?? (driver.active ? "active" : "terminated"),
     terminationDate: driver.terminationDate?.slice(0,10) ?? "",
     notes: driver.notes ?? "",
-    cdlFileId: driver.cdlFileId,
+    cdlFileId: driver.cdlFileId ?? null,
   };
 }
 
@@ -94,8 +95,8 @@ export function DriverForm({
   allowNewTruck = false,
 }: {
   value: DriverInput;
-  dispatchers: Dispatcher[];
-  trucks: Truck[];
+  dispatchers: DispatcherOption[];
+  trucks: TruckOption[];
   onChange: (value: DriverInput) => void;
   showEscrow?: boolean;
   editingDriverId?: string;
@@ -103,6 +104,7 @@ export function DriverForm({
   allowNewTruck?: boolean;
 }) {
   const permissions = usePermissions();
+  const canCreateTruck = allowNewTruck && permissions.includes("trucks.create");
   const isTeam = !!value.isTeamDriver;
   const [choices, setChoices] = useState<{ week: string; rows: DriverTeamTruck[]; error: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -167,18 +169,18 @@ export function DriverForm({
             placeholder="driver@company.com"
           />
         </Field>
-        <Field label="Emergency contact" wide>
+        {permissions.includes("drivers.private.read") && <fieldset className="contents" disabled={!permissions.includes("drivers.private.edit")}><Field label="Emergency contact" wide>
           <input
             value={value.emergencyContact}
             onChange={(event) => set("emergencyContact", event.target.value)}
             className={controlClass}
             placeholder="Name and phone number"
           />
-        </Field>
+        </Field></fieldset>}
         </div>
       </section>
 
-      <FormSection title="License and address">
+      {permissions.includes("drivers.private.read") && <fieldset disabled={!permissions.includes("drivers.private.edit")}><FormSection title="License and address">
         <Field label="CDL / license number">
           <input
             value={value.licenseNumber}
@@ -232,7 +234,7 @@ export function DriverForm({
             className={controlClass}
           />
         </Field>
-      </FormSection>
+      </FormSection></fieldset>}
 
       <FormSection title="Notes">        <Field label="Internal notes" wide>
           <textarea
@@ -250,9 +252,9 @@ export function DriverForm({
               role="switch"
               aria-label="Team driver"
               aria-checked={isTeam}
-              disabled={!permissions.includes("payroll.write")}
-              title={!permissions.includes("payroll.write") ? "Payroll write permission is required to change teams" : undefined}
-              onClick={() => onChange({ ...value, isTeamDriver: !isTeam, newTruck: !isTeam ? undefined : allowNewTruck ? { ...emptyTruckInput } : undefined, newTruckOwnedByDriver: false, truckId: null, dispatcherId: null, teamMainDriverId: undefined, teamMainVersion: undefined, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) })}
+              disabled={!permissions.includes("driver_pay.edit")}
+              title={!permissions.includes("driver_pay.edit") ? "Payroll write permission is required to change teams" : undefined}
+              onClick={() => onChange({ ...value, isTeamDriver: !isTeam, newTruck: !isTeam ? undefined : canCreateTruck ? { ...emptyTruckInput } : undefined, newTruckOwnedByDriver: false, truckId: null, dispatcherId: null, teamMainDriverId: undefined, teamMainVersion: undefined, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) })}
               className="relative h-8 w-9 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50"
             >
               <span className={`absolute inset-x-0 top-1.5 h-5 rounded-full transition-colors ${isTeam ? "bg-blue-600" : "bg-zinc-700"}`}>
@@ -287,11 +289,11 @@ export function DriverForm({
             aria-label="Truck"
             required={isTeam && value.active}
             value={value.newTruck && !isTeam ? "__new__" : value.truckId ?? ""}
-            disabled={!value.active || (isTeam && !permissions.includes("payroll.write"))}
+            disabled={!value.active || (isTeam && !permissions.includes("driver_pay.edit"))}
             onChange={(event) => { if (event.target.value === "__new__") { onChange({ ...value, truckId: null, newTruck: { ...emptyTruckInput }, newTruckOwnedByDriver: false }); return; } const selected = teamChoices.find(row => row.truckId === event.target.value); if (isTeam) onChange({ ...value, truckId: event.target.value || null, teamMainDriverId: selected?.mainDriverId, teamMainVersion: selected?.mainVersion, dispatcherId: selected?.dispatcherId ?? null, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) }); else onChange({ ...value, truckId: event.target.value || null, newTruck: undefined, newTruckOwnedByDriver: false, ...(!showEscrow ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) }); }}
             className={controlClass}
           >
-            {allowNewTruck && !isTeam && <option value="__new__">New truck</option>}
+            {canCreateTruck && !isTeam && <option value="__new__">New truck</option>}
             <option value="">{isTeam ? choices?.week === teamWeek ? "Select truck" : "Loading trucks…" : "Unassigned"}</option>
             {isTeam ? teamChoices.map(row => <option key={row.truckId} value={row.truckId}>{row.unitNumber} — {row.mainDriverName}</option>) : trucks.filter((truck) => truck.active || truck.id === value.truckId).map((truck) => (
               <option key={truck.id} value={truck.id}>
@@ -304,7 +306,7 @@ export function DriverForm({
         {isTeam && choices?.week === teamWeek && choices.error && <p role="alert" className="text-xs text-red-400">{choices.error} <button type="button" className="text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry trucks</button></p>}
       </FormSection>
 
-      {!isTeam && <FormSection title="Compensation">
+      {!isTeam && permissions.includes("driver_compensation.read") && <fieldset disabled={!permissions.includes("driver_compensation.edit")}><FormSection title="Compensation">
         <Field label="Pay basis">
           <select
             value={value.payType}
@@ -345,7 +347,7 @@ export function DriverForm({
             className={controlClass}
           />
         </Field>}
-      </FormSection>}
+      </FormSection></fieldset>}
 
       </>}
       {(section === "all" || section === "finalize") && <FormSection title="Finalize" hideTitle={section === "finalize"}>        <Field label={showEscrow ? "Driver started working" : "Hire date"}>

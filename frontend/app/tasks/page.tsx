@@ -3,7 +3,7 @@
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { Check, Columns3, List, ListChecks, LockKeyhole, Pencil, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useViewState } from "../lib/viewMemory";
 import { useQuickCreate } from "../lib/topNavigation";
@@ -34,7 +34,8 @@ function taskMetadata(task: CustomTask) {
 
 export default function TasksPage() {
   const permissions = usePermissions();
-  const canWrite = permissions.includes("tasks.write");
+  const canWrite = permissions.includes("tasks.edit");
+ const canCreate=permissions.includes("tasks.create"),canDelete=permissions.includes("tasks.delete");
   const { revision, refresh } = useTaskUpdates();
   const [view, setView] = useViewState<"list" | "kanban">("tasks:view", "list");
   const [status, setStatus] = useViewState<Status>("tasks:status", "open");
@@ -62,12 +63,12 @@ export default function TasksPage() {
   const mutation = useRef(false);
   const dragId = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<Status | null>(null);
-  useQuickCreate(() => { if (canWrite) setCreating(true); });
+  useQuickCreate(() => { if (canCreate) setCreating(true); });
   useEffect(() => {
     let active = true;
-    if (canWrite) fetchTaskUsers().then(value => { if (active) setUsers(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load assignees"); });
+    if (canWrite || canCreate) fetchTaskUsers().then(value => { if (active) setUsers(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load assignees"); });
     return () => { active = false; };
-  }, [canWrite]);
+  }, [canWrite, canCreate]);
   useEffect(() => {
     let active = true;
     async function load() {
@@ -87,7 +88,7 @@ export default function TasksPage() {
     return () => { active = false; };
   }, [view, page, pageSize, openPage, processPage, completedPage, query, status, revision]);
   async function mutate(action: () => Promise<unknown>, message: string) {
-    if (mutation.current) return;
+    if (mutation.current || !(deleting ? canDelete : creating ? canCreate : details?.systemTaskKind ? permissions.includes("tasks.review") : canWrite)) return;
     mutation.current = true; setSaving(true); setError("");
     try { await action(); if (creating) { setStatus("open"); setPage(1); setOpenPage(1); } setCreating(false); setEditing(null); setDeleting(null); setDetails(null); setNotice(message); refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not save task"); throw e; }
@@ -102,7 +103,8 @@ export default function TasksPage() {
       {!task.completedAt && <button type="button" className="ui-button" disabled={saving} aria-label={`${taskStatus(task) === "in_process" ? "Move to open" : "Start"} ${task.title}`} onClick={() => move(task, taskStatus(task) === "in_process" ? "open" : "in_process")}>{taskStatus(task) === "in_process" ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}</button>}
       <button type="button" className="ui-button" disabled={saving} aria-label={`${task.completedAt ? "Reopen" : "Complete"} ${task.title}`} onClick={() => move(task, task.completedAt ? "open" : "completed")}>{task.completedAt ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
       <button type="button" className="ui-button" disabled={saving} aria-label={`Edit ${task.title}`} onClick={() => setEditing(task)}><Pencil className="h-4 w-4" /></button>
-      <button type="button" className="ui-button" disabled={saving} aria-label={`Delete ${task.title}`} onClick={() => setDeleting(task)}><Trash2 className="h-4 w-4" /></button>
+    </>}
+    {!task.systemTaskKind && canDelete && <><button type="button" className="ui-button" disabled={saving} aria-label={`Delete ${task.title}`} onClick={() => setDeleting(task)}><Trash2 className="h-4 w-4" /></button>
     </>}
     {task.systemTaskKind && <LockKeyhole aria-label="Automatic status" className="h-4 w-4 text-zinc-500" />}
   </div>;
@@ -120,7 +122,7 @@ export default function TasksPage() {
           <button type="button" className={view === "kanban" ? "ui-button ui-button-primary" : "ui-button"} aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><Columns3 className="h-4 w-4" />Kanban</button>
         </div>
       </div>
-    <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canWrite ? "Add task" : undefined} onAction={() => setCreating(true)} /></div></div>
+    <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canCreate ? "Add task" : undefined} onAction={() => setCreating(true)} /></div></div>
     {error && <ErrorBanner message={error} />}
     {notice && <p role="status" className="text-xs text-zinc-400">{notice}</p>}
     {loading && !data && !columns && <p role="status" className="py-8 text-center text-zinc-500">Loading…</p>}
@@ -151,7 +153,7 @@ export default function TasksPage() {
     </div>}
     {(creating || editing) && <TaskForm key={editing?.id ?? "new"} task={editing} saving={saving} users={users} onClose={() => { setCreating(false); setEditing(null); }} onSave={input => mutate(() => editing ? updateCustomTask(editing.id, input) : createCustomTask(input), editing ? "Task updated." : "Task created.")} />}
     {deleting && <ConfirmDialog title="Delete task" message={`Delete “${deleting.title}”? This cannot be undone.`} isDeleting={saving} onCancel={() => setDeleting(null)} onConfirm={() => { void mutate(() => deleteCustomTask(deleting.id), "Task deleted.").catch(() => {}); }} />}
-    {details && <TaskDetails task={details} saving={saving} canWrite={canWrite} canSetup={permissions.includes("fleet.write")} canViewDriver={permissions.includes("fleet.read")} onClose={() => setDetails(null)} onRelay={() => { setRelay(details.id); setDetails(null); }} onConfirm={checklist => mutate(() => confirmOffboarding(details.id, checklist), "Offboarding completed.")} />}
+    {details && <TaskDetails task={details} saving={saving} canWrite={permissions.includes("tasks.review")} canSetup={permissions.includes("drivers.create")} canViewDriver={permissions.includes("drivers.read")} onClose={() => setDetails(null)} onRelay={() => { setRelay(details.id); setDetails(null); }} onConfirm={checklist => mutate(() => confirmOffboarding(details.id, checklist), "Offboarding completed.")} />}
     {eldTask && <FiveELDTruckReviewModal task={eldTask} onClose={() => setEldTask(null)} onCompleted={() => { setEldTask(null); refresh(); }} />}
     {escrowTask && <EscrowTaskReview task={escrowTask} onClose={() => setEscrowTask(null)} onCompleted={() => { setEscrowTask(null); refresh(); }} />}
     {relay && <RelayReview id={relay} onClose={() => setRelay(null)} onChanged={refresh} />}

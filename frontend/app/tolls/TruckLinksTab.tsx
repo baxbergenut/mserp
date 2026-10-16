@@ -2,7 +2,7 @@
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink } from "../lib/api";
 import { usePermissions } from "../lib/access";
@@ -13,7 +13,7 @@ const identity = (key: string) => key.startsWith("tag:") ? `Tag ${key.slice(4)}`
 
 export function TruckLinksTab() {
  const permissions = usePermissions();
- const canWrite = permissions.includes("tolls.link"), canProfile = permissions.includes("fleet.read");
+ const canWrite = permissions.includes("tolls.link"), canProfile = permissions.includes("drivers.read");
  const [data,setData] = useState<PrePassTruckLinks|null>(null);
  const [from,setFrom] = useState("");
  const [error,setError] = useState("");

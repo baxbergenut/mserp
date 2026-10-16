@@ -3,7 +3,7 @@
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { History } from "lucide-react";
 import { fetchDriverAssignments, fetchTruckAssignments } from "@/app/lib/api";
 import type { AssignmentHistoryEntry } from "@/app/lib/types";

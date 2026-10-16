@@ -16,7 +16,7 @@ type BoardTask struct {
 }
 
 // Apply assignment privacy before pagination/counting, and preserve the existing
-// fleet.read boundary for onboarding details. Completed records remain durable.
+// independent driver/truck boundaries. Completed records remain durable.
 const boardTaskCTE = `WITH tasks AS (
  SELECT c.id,c.title,c.notes,c.completed_at,c.created_by,c.created_at,c.updated_at,
  c.assigned_to,c.assigned_by,c.system_task_kind,c.completed_by_name,''::text AS outcome,c.in_process,NULL::uuid AS service_driver_id,NULL::uuid AS maintenance_truck_id,''::text AS maintenance_service
@@ -37,10 +37,10 @@ const boardTaskCTE = `WITH tasks AS (
  WHERE ($1::boolean OR
  (t.system_task_kind IS NULL AND (t.assigned_to IS NULL OR t.assigned_to=NULLIF($2,'')::uuid OR t.assigned_by=NULLIF($2,'')::uuid)) OR
  (t.system_task_kind IS NOT NULL AND EXISTS(SELECT 1 FROM app_users au WHERE au.active AND au.id=NULLIF($2,'')::uuid AND (au.id=a.assignee_id OR au.id=ANY(a.assignee_ids) OR au.role_id=ANY(a.assignee_role_ids)))))
- AND (coalesce(t.system_task_kind,'') NOT IN ('driver_onboarding','five_eld_truck') OR $3::boolean)
+ AND (coalesce(t.system_task_kind,'') NOT IN ('driver_onboarding','five_eld_truck') OR t.system_task_kind=ANY($3::text[]))
 ) `
 
-func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Pagination, search, status string, fleetRead bool) (Page[BoardTask], error) {
+func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Pagination, search, status string, driverRead, truckRead bool) (Page[BoardTask], error) {
 	admin, user := taskViewerArgs(ctx)
 	tx, err := repo.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -50,11 +50,11 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 	where := ` WHERE ($4='' OR strpos(lower(concat_ws(' ',title,notes,assignee_name,assigner_name,completed_by_name)),lower($4))>0)
  AND ($5='all' OR ($5='open' AND completed_at IS NULL AND NOT in_process) OR ($5='in_process' AND completed_at IS NULL AND in_process) OR ($5='completed' AND completed_at IS NOT NULL))`
 	var total int
-	if err = tx.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible`+where, admin, user, fleetRead, search, status).Scan(&total); err != nil {
+	if err = tx.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible`+where, admin, user, taskDirectoryKinds(driverRead, truckRead), search, status).Scan(&total); err != nil {
 		return Page[BoardTask]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := tx.Query(ctx, boardTaskCTE+`SELECT id::text,title,notes,completed_at,created_by::text,created_at,updated_at,effective_assignee::text,assigned_by::text,assignee_name,system_task_kind,assigner_name,completed_by_name,outcome,CASE WHEN completed_at IS NOT NULL THEN 'completed' WHEN in_process THEN 'in_process' ELSE 'open' END,coalesce(service_driver_id::text,''),coalesce(maintenance_truck_id::text,''),maintenance_service FROM visible`+where+` ORDER BY (completed_at IS NOT NULL),coalesce(completed_at,created_at) DESC,id LIMIT $6 OFFSET $7`, admin, user, fleetRead, search, status, pagination.PageSize, pagination.Offset())
+	rows, err := tx.Query(ctx, boardTaskCTE+`SELECT id::text,title,notes,completed_at,created_by::text,created_at,updated_at,effective_assignee::text,assigned_by::text,assignee_name,system_task_kind,assigner_name,completed_by_name,outcome,CASE WHEN completed_at IS NOT NULL THEN 'completed' WHEN in_process THEN 'in_process' ELSE 'open' END,coalesce(service_driver_id::text,''),coalesce(maintenance_truck_id::text,''),maintenance_service FROM visible`+where+` ORDER BY (completed_at IS NOT NULL),coalesce(completed_at,created_at) DESC,id LIMIT $6 OFFSET $7`, admin, user, taskDirectoryKinds(driverRead, truckRead), search, status, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[BoardTask]{}, err
 	}
@@ -70,10 +70,10 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 	return NewPage(items, total, pagination), rows.Err()
 }
 
-func (repo *CustomTaskRepository) OpenCount(ctx context.Context, fleetRead bool) (int, error) {
+func (repo *CustomTaskRepository) OpenCount(ctx context.Context, driverRead, truckRead bool) (int, error) {
 	admin, user := taskViewerArgs(ctx)
 	var count int
-	err := repo.pool.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible WHERE completed_at IS NULL`, admin, user, fleetRead).Scan(&count)
+	err := repo.pool.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible WHERE completed_at IS NULL`, admin, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&count)
 	return count, err
 }
 
@@ -91,4 +91,15 @@ func (repo *CustomTaskRepository) ConfirmOffboarding(ctx context.Context, id str
 		return ErrNotFound
 	}
 	return nil
+}
+
+func taskDirectoryKinds(driverRead, truckRead bool) []string {
+	kinds := []string{}
+	if driverRead {
+		kinds = append(kinds, "driver_onboarding")
+	}
+	if truckRead {
+		kinds = append(kinds, "five_eld_truck")
+	}
+	return kinds
 }

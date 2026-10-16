@@ -1,10 +1,12 @@
 "use client";
+import type { DriverOption, UpdaterOption } from "@/app/lib/types";
+import { usePermissions } from "../lib/access";
 
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
 
 import { PhoneInput } from "../components/management/PhoneInput";
 
-import type { Dispatcher, DispatcherInput, Driver, Updater } from "../lib/types";
+import type { Dispatcher, DispatcherInput } from "../lib/types";
 import {
   controlClass,
   Field,
@@ -26,7 +28,7 @@ export const emptyDispatcherInput: DispatcherInput = {
 
 export function dispatcherToInput(
   dispatcher: Dispatcher,
-  drivers: Driver[],
+  drivers: DriverOption[],
 ): DispatcherInput {
   return {
     extension: dispatcher.extension,
@@ -34,7 +36,7 @@ export function dispatcherToInput(
     fullName: dispatcher.fullName,
     email: dispatcher.email ?? "",
     phone: dispatcher.phone ?? "",
-    payPercentage: dispatcher.payPercentage,
+    payPercentage: dispatcher.payPercentage ?? null,
     driverIds: drivers
       .filter((driver) => driver.dispatcherId === dispatcher.id)
       .map((driver) => driver.id),
@@ -51,8 +53,8 @@ export function DispatcherForm({
   onChange,
 }: {
   value: DispatcherInput;
-  drivers: Driver[];
-  updaters: Updater[];
+  drivers: DriverOption[];
+  updaters: UpdaterOption[];
   dispatcherId: string | null;
   onChange: (value: DispatcherInput) => void;
 }) {
@@ -71,6 +73,7 @@ export function DispatcherForm({
     );
   };
 
+  const permissions=usePermissions();
   return (
     <div className="space-y-6">
       <FormSection title="Dispatcher profile">
@@ -97,7 +100,7 @@ export function DispatcherForm({
             placeholder="dispatcher@company.com"
           />
         </Field>
-        <Field
+        {permissions.includes("dispatcher_compensation.read") && <fieldset className="contents" disabled={!permissions.includes("dispatcher_compensation.edit")}><Field
           label="Commission from gross (%)"
           hint="Optional dispatcher compensation percentage, from 0 to 100."
         >
@@ -115,7 +118,7 @@ export function DispatcherForm({
             }
             className={controlClass}
           />
-        </Field>
+        </Field></fieldset>}
       </FormSection>
 
       <FormSection title="Assigned updaters">

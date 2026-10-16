@@ -19,7 +19,7 @@ export function PaymentHistoryPanel({ title, paid, remaining, previouslyPaid = "
   driverId?: string | null; escrow?: boolean; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const canReadPay = usePermissions().includes("payroll.read");
+  const canReadPay = usePermissions().includes("driver_pay.read");
   useEffect(() => {
     const element = dialog.current;
     const previous = document.activeElement as HTMLElement | null;

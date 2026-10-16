@@ -1,12 +1,13 @@
 "use client";
+import type { DriverOption, TruckOption } from "@/app/lib/types";
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { fetchDrivers, fetchTrucks, fetchWMTTransactions, linkWMTTransaction, syncWMTTransactions } from "../lib/api";
-import type { Driver, Truck, WMTTransaction, WMTTransactions } from "../lib/types";
+import { fetchDriverOptions, fetchTruckOptions, fetchWMTTransactions, linkWMTTransaction, syncWMTTransactions } from "../lib/api";
+import type { WMTTransaction, WMTTransactions } from "../lib/types";
 import { usePermissions } from "../lib/access";
 import { useViewState } from "../lib/viewMemory";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -18,9 +19,9 @@ const money = (value: string) => Number(value).toLocaleString("en-US", { style: 
 
 export function TransactionsTab() {
   const permissions = usePermissions();
-  const canWrite = permissions.includes("weighmytruck.write");
-  const canLink = canWrite && permissions.includes("payroll.write") && permissions.includes("fleet.read");
-  const canProfile = permissions.includes("fleet.read");
+  const canWrite = permissions.includes("weighmytruck.sync");
+  const canLink = permissions.includes("driver_pay.edit") && permissions.includes("drivers.read");
+  const canProfile = permissions.includes("drivers.read");
   const [from, setFrom] = useViewState("wmt:transactions:from", currentChargeWeek);
   const [to, setTo] = useViewState("wmt:transactions:to", () => addDays(currentChargeWeek(), 6));
   const [search, setSearch] = useViewState("wmt:transactions:search", "");
@@ -35,8 +36,8 @@ export function TransactionsTab() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [entry, setEntry] = useState<WMTTransaction | null>(null);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [trucks, setTrucks] = useState<TruckOption[]>([]);
   const [driverId, setDriverId] = useState("");
   const [truckId, setTruckId] = useState("");
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -62,7 +63,7 @@ export function TransactionsTab() {
   async function openLink(value: WMTTransaction) {
     setError("");
     try {
-      const [d, t] = await Promise.all([fetchDrivers(), fetchTrucks()]);
+      const [d, t] = await Promise.all([fetchDriverOptions(), fetchTruckOptions()]);
       setDrivers(d); setTrucks(t); setDriverId(value.driverId); setTruckId(value.truckId); setEntry(value);
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load fleet records."); }
   }

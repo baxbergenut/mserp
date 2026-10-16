@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { fetchInvestorHistory } from "@/app/lib/api";
 import type { InvestorStatementWeek, PaginatedResponse } from "@/app/lib/types";
 import { useViewState } from "@/app/lib/viewMemory";

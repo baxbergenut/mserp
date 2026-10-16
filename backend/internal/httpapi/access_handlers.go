@@ -126,6 +126,12 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		}
 		in.ID = chi.URLParam(r, "id")
 		in.Name = strings.TrimSpace(in.Name)
+		for _, a := range in.ExpenseCategoryAccess {
+			if !a.CanView && (a.CanCreate || a.CanEdit || a.CanDelete) {
+				writeAPIError(w, 400, "Category actions require View access")
+				return
+			}
+		}
 		if in.Name == "" || len(in.Name) > 80 || !repository.ValidPermissions(in.Permissions) || (in.ID != "" && !isUUID(in.ID)) {
 			writeAPIError(w, http.StatusBadRequest, "valid name and permissions are required")
 			return

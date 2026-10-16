@@ -21,11 +21,12 @@ func TestExpenseVerificationCancellationRoles(t *testing.T) {
 		role  string
 		want  bool
 	}{
-		{"own after role change", AuthUser{ID: owner}, "admin", true},
-		{"same accountant role", AuthUser{ID: "other", RoleName: "Accountant"}, "accountant", true},
-		{"accountant cannot remove admin", AuthUser{ID: "other", RoleName: "Accountant"}, "admin", false},
+		{"own after role change", AuthUser{ID: owner}, "admin", false},
+		{"same accountant role", AuthUser{ID: "other", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, "accountant", false},
+		{"accountant cannot remove admin", AuthUser{ID: "other", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, "admin", false},
 		{"admin removes accountant", AuthUser{ID: "other", Administrator: true}, "accountant", true},
 		{"admin removes admin", AuthUser{ID: "other", Administrator: true}, "admin", true},
+		{"own with explicit grant", AuthUser{ID: owner, Permissions: []string{"expenses.accounting.verify"}}, "accountant", true},
 		{"ordinary viewer", AuthUser{ID: "other"}, "accountant", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,7 +113,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			defer pool.Close()
-			actors := []AuthUser{{Username: "Admin", Administrator: true}, {Username: "Accountant One", RoleName: "Accountant"}, {Username: "Accountant Two", RoleName: "Accountant"}, {Username: "Viewer"}}
+			actors := []AuthUser{{Username: "Admin", Administrator: true}, {Username: "Accountant One", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, {Username: "Accountant Two", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, {Username: "Viewer"}}
 			for i := range actors {
 				if e = admin.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES($1,crypt('fixture-password-only',gen_salt('bf'))) RETURNING id::text`, actors[i].Username).Scan(&actors[i].ID); e != nil {
 					t.Fatal(e)
@@ -157,7 +158,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 					t.Fatalf("cancellation permission: %v", e)
 				}
 			}
-			entry, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, first, actors[2])
+			entry, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, first, actors[1])
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -181,7 +182,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			entry, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, adminStamp, AuthUser{ID: actors[0].ID, Username: actors[0].Username})
+			entry, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, adminStamp, actors[0])
 			if e != nil {
 				t.Fatal(e)
 			}

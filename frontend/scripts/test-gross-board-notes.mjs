@@ -29,7 +29,7 @@ try {
  const page=await browser.newPage({viewport:{width:1600,height:1000}});
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',async route=>{
-  const req=route.request(), url=new URL(req.url()),path=url.pathname.slice(4);
+  const req=route.request(), url=new URL(req.url()),path=url.pathname.replace('/lookups/','/').slice(4);
   if(req.method()==='PUT') {
    writes++;
    if(rejectSave) return route.fulfill({status:409,json:{error:'another dispatcher changed this load'}});

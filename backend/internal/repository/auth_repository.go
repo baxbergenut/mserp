@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 var ErrAuthRecordNotFound = errors.New("authentication record not found")
 
 type AuthUser struct {
+	AccessRevision        string
 	Theme                 string
 	ID                    string
 	Username              string
@@ -85,7 +87,7 @@ func (r *AuthRepository) CreatePasswordSession(ctx context.Context, u AuthUser, 
 func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {
 	var s AuthSession
 	var system bool
-	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme,r.name FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName)
+	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme,r.name,u.version::text || ':' || r.version::text FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName, &s.User.AccessRevision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthSession{}, ErrAuthRecordNotFound
 	}
@@ -94,10 +96,10 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 		s.User.Permissions = PermissionKeys()
 	}
 	s.User.ExpenseCategoryAccess = []ExpenseCategoryAccess{}
-	query := `SELECT s.id::text,true,true,true,true FROM expense_settings s WHERE s.kind='category'`
+	query := `SELECT s.id::text,true,true,true,true FROM expense_settings s WHERE s.kind='category' ORDER BY s.id`
 	args := []any{}
 	if !system {
-		query = `SELECT category_id::text,can_view,can_create,can_edit,can_delete FROM role_expense_category_access WHERE role_id=$1`
+		query = `SELECT category_id::text,can_view,can_create,can_edit,can_delete FROM role_expense_category_access WHERE role_id=$1 ORDER BY category_id`
 		args = append(args, s.User.RoleID)
 	}
 	rows, accessErr := r.pool.Query(ctx, query, args...)
@@ -115,7 +117,7 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 	if accessErr = rows.Err(); accessErr != nil {
 		return AuthSession{}, accessErr
 	}
-	if len(s.User.ExpenseCategoryAccess) > 0 {
+	if slices.ContainsFunc(s.User.ExpenseCategoryAccess, func(a ExpenseCategoryAccess) bool { return a.CanView }) {
 		s.User.Permissions = append(s.User.Permissions, "expenses.read")
 	}
 	for _, access := range s.User.ExpenseCategoryAccess {

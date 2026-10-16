@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { fetchDriverCharges } from "@/app/lib/api";
 import type { ChargeData } from "@/app/lib/types";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";

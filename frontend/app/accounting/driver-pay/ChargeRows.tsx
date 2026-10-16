@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { confirmDriverCharges } from "@/app/lib/api";
 import type { ChargeOccurrence, DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { Modal, controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";

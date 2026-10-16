@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, LoaderCircle, Plus, RefreshCw, Scale } from "lucide-react";
 import { changeWeighMyTruck, fetchWeighMyTruck, linkWeighMyTruck } from "../lib/api";
@@ -16,8 +16,10 @@ import { TransactionsTab } from "./TransactionsTab";
 export default function WeighMyTruckPage() {
   const permissions = usePermissions();
   const [tab, setTab] = useViewState<"drivers" | "transactions">("wmt:tab", "drivers");
-  const canWrite = permissions.includes("weighmytruck.write");
-  const canViewProfile = permissions.includes("fleet.read");
+  const canWrite = permissions.includes("weighmytruck.create");
+  const canDelete = permissions.includes("weighmytruck.delete");
+  const canLink = permissions.includes("weighmytruck.link");
+  const canViewProfile = permissions.includes("drivers.read");
   const [data, setData] = useState<WeighMyTruckList | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -54,8 +56,8 @@ export default function WeighMyTruckPage() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  async function mutate(entry: WeighMyTruckEntry, operation: () => Promise<void>, message: string) {
-    if (saving.current) return;
+  async function mutate(permission: string, entry: WeighMyTruckEntry, operation: () => Promise<void>, message: string) {
+    if (saving.current || !permissions.includes(permission)) return;
     saving.current = true; generation.current++; setBusy(entry.id || entry.driverId); setError(""); setNotice("");
     try { await operation(); setNotice(message); setDialog(null); }
     catch (e) { setError(e instanceof Error ? e.message : "The change could not be completed."); }
@@ -96,11 +98,11 @@ export default function WeighMyTruckPage() {
         </td>
         <td className="px-3 py-1.5 text-zinc-400">{entry.email || "—"}</td><td className="whitespace-nowrap px-3 py-1.5 text-zinc-400">{formatPhone(entry.phone) || "—"}</td><td className="px-3 py-1.5 text-zinc-400">{entry.driverCode || "—"}</td>
         <td className="px-3 py-1.5 text-zinc-300" title="Automatically determined by truck ownership">{entry.payer === "driver" ? "Driver" : entry.payer === "investor" ? "Truck investor" : entry.payer === "company" ? "Company" : "Needs review"}</td>
-        <td className="px-3 py-1.5">{canWrite && <div className="flex justify-end gap-2">
-          {!entry.driverId && entry.state === "confirmed" && <button className="ui-button" disabled={!!busy} onClick={() => { setDriverId(""); setDialog({ entry, kind: "link" }); }}>Link driver</button>}
-          <button className="ui-button text-red-400" aria-label={`Remove ${entry.name}`} disabled={!!busy || !data?.configured || !data.initialized || entry.state !== "confirmed"} onClick={() => void mutate(entry, () => changeWeighMyTruck(entry, false), `${entry.name} removed from WeighMyTruck.`)}>
+        <td className="px-3 py-1.5">{(canDelete || canLink) && <div className="flex justify-end gap-2">
+          {canLink && !entry.driverId && entry.state === "confirmed" && <button className="ui-button" disabled={!!busy} onClick={() => { setDriverId(""); setDialog({ entry, kind: "link" }); }}>Link driver</button>}
+          {canDelete && <button className="ui-button text-red-400" aria-label={`Remove ${entry.name}`} disabled={!!busy || !data?.configured || !data.initialized || entry.state !== "confirmed"} onClick={() => void mutate("weighmytruck.delete", entry, () => changeWeighMyTruck(entry, false), `${entry.name} removed from WeighMyTruck.`)}>
             {busy === entry.id && <LoaderCircle className="h-4 w-4 animate-spin" />}Remove
-          </button>
+          </button>}
         </div>}</td>
       </tr>)}</tbody>
     </table>}</TableShell>
@@ -108,11 +110,11 @@ export default function WeighMyTruckPage() {
     </>}
     {dialog && <Modal title={dialog.kind === "add" ? "Add driver to WeighMyTruck" : `Link driver: ${dialog.entry.name}`} isSaving={!!busy} submitLabel={dialog.kind === "add" ? "Add" : "Save"} onClose={() => setDialog(null)} onSubmit={event => {
       event.preventDefault();
-      if (dialog.kind === "link") void mutate(dialog.entry, () => linkWeighMyTruck(dialog.entry, driverId), "Driver linked.");
+      if (dialog.kind === "link") void mutate("weighmytruck.link", dialog.entry, () => linkWeighMyTruck(dialog.entry, driverId), "Driver linked.");
       else {
         const entry = available.find(e => e.driverId === driverId);
         if (!entry || entry.state !== "confirmed" || entry.addBlockReason) { setError(entry?.addBlockReason || "Select an available active driver."); return; }
-        void mutate(entry, async () => { await changeWeighMyTruck(entry, true); setSearch(""); setPage(1); }, `${entry.name} added to WeighMyTruck.`);
+        void mutate("weighmytruck.create", entry, async () => { await changeWeighMyTruck(entry, true); setSearch(""); setPage(1); }, `${entry.name} added to WeighMyTruck.`);
       }
     }}>
       {error && <ErrorBanner message={error} />}

@@ -1,23 +1,24 @@
 "use client";
+import type { DriverOption } from "@/app/lib/types";
 
 import { useEffect, useState } from "react";
-import { fetchDrivers, fetchRelayIdentityTasks, reviewRelayIdentity } from "../lib/api";
-import type { Driver, RelayIdentityTask } from "../lib/types";
+import { fetchDriverOptions, fetchRelayIdentityTasks, reviewRelayIdentity } from "../lib/api";
+import type { RelayIdentityTask } from "../lib/types";
 import { usePermissions } from "../lib/access";
 import { ErrorBanner, Modal } from "../components/management/ManagementUI";
 import { RelayTaskCard } from "./RelayTaskCard";
 
 export function RelayReview({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
-  const fleetRead = usePermissions().includes("fleet.read");
+  const fleetRead = usePermissions().includes("tasks.read");
   const [task, setTask] = useState<RelayIdentityTask | null>(null);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [decision, setDecision] = useState<{ driver: { id: string; name: string }; action: "link" | "reject" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
-    Promise.all([fetchRelayIdentityTasks({ page: 1, pageSize: 1, search: id }), fleetRead ? fetchDrivers() : Promise.resolve([])])
+    Promise.all([fetchRelayIdentityTasks({ page: 1, pageSize: 1, search: id }), fleetRead ? fetchDriverOptions() : Promise.resolve([])])
       .then(([data, fleet]) => { if (active) { setTask(data.items[0] ?? null); setDrivers(fleet); if (!data.items.length) setError("This task is no longer available."); } })
       .catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load review"); });
     return () => { active = false; };

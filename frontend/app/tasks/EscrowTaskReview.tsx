@@ -10,7 +10,7 @@ import { decimalDisplay, hundredths } from "../gross-board/board";
 
 export function EscrowTaskReview({ task, onClose, onCompleted }: { task: CustomTask; onClose: () => void; onCompleted: () => void }) {
  const permissions = usePermissions();
- const canWrite = permissions.includes("tasks.write") && permissions.includes("escrow.write");
+ const canWrite = permissions.includes("tasks.review") && permissions.includes("escrow.edit");
  const [data, setData] = useState<EscrowTaskDetail | null>(null);
  const [revision, setRevision] = useState(0);
  const [reason, setReason] = useState("");
@@ -35,7 +35,7 @@ export function EscrowTaskReview({ task, onClose, onCompleted }: { task: CustomT
    {error && <ErrorBanner message={error} />}
    {!data ? <p role="status" className="text-zinc-400">Loading escrow…</p> : <>
     <p className="text-xs text-zinc-400">Terminated {data.terminationDate} · Review due {data.dueDate}</p>
-    <div className="space-y-2">{data.escrows.length === 0 ? <p className="text-sm text-zinc-400">No escrow balance is recorded.</p> : data.escrows.map(escrow => <div className="flex items-center gap-3 rounded-lg border border-zinc-800 p-3" key={escrow.id}><div className="flex-1 text-sm"><p>{escrow.driverName}</p><p className="text-xs text-zinc-400">Balance {decimalDisplay(hundredths(escrow.heldAmount), true)} · Released {decimalDisplay(hundredths(escrow.releasedAmount), true)}</p></div>{canWrite && hundredths(escrow.heldAmount) > BigInt(0) && <button type="button" className="ui-button" onClick={event => setRelease({ escrow, anchor: event.currentTarget.getBoundingClientRect() })}>Release</button>}</div>)}</div>
+    <div className="space-y-2">{data.escrows.length === 0 ? <p className="text-sm text-zinc-400">No escrow balance is recorded.</p> : data.escrows.map(escrow => <div className="flex items-center gap-3 rounded-lg border border-zinc-800 p-3" key={escrow.id}><div className="flex-1 text-sm"><p>{escrow.driverName}</p><p className="text-xs text-zinc-400">Balance {decimalDisplay(hundredths(escrow.heldAmount), true)} · Released {decimalDisplay(hundredths(escrow.releasedAmount), true)}</p></div>{permissions.includes("tasks.review") && permissions.includes("escrow.create") && hundredths(escrow.heldAmount) > BigInt(0) && <button type="button" className="ui-button" onClick={event => setRelease({ escrow, anchor: event.currentTarget.getBoundingClientRect() })}>Release</button>}</div>)}</div>
     {canWrite && data.decision !== "released" && <Field label="Reason"><textarea aria-label="Reason" required maxLength={5000} className={controlClass} rows={3} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
 
    </>}

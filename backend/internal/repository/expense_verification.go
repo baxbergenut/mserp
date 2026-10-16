@@ -3,17 +3,15 @@ package repository
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrExpenseVerificationForbidden = errors.New("you can only remove your own verification or one made by the same or a lower verification role")
+var ErrExpenseVerificationForbidden = errors.New("only Administrators can remove another person’s verification; accounting verification permission is required to remove your own")
 
 func CanRevokeExpenseVerification(actor AuthUser, verification ExpenseVerification) bool {
-	return verification.UserID != nil && *verification.UserID == actor.ID || actor.Administrator ||
-		verification.Role == "accountant" && strings.EqualFold(strings.TrimSpace(actor.RoleName), "Accountant")
+	return actor.Administrator || (verification.UserID != nil && *verification.UserID == actor.ID && verification.Role == "accountant" && HasPermission(actor, "expenses.accounting.verify"))
 }
 
 // Lock the expense first for every operation. Approval checks the displayed

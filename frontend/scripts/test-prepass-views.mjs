@@ -20,10 +20,11 @@ const writes = []; let readOnly = false, reject = false, refreshFailure = false;
 const server = createServer(async (req, res) => {
   const send = (body, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   try {
-    const url = new URL(req.url, 'http://localhost'), p = url.pathname;
+    const url = new URL(req.url, 'http://localhost'), p = url.pathname.replace('/lookups/','/');
     if (p.startsWith('/api/')) {
-      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'fleet.read', ...(readOnly ? [] : ['tolls.link', 'tolls.fleet.write'])] }, csrfToken: 'fixture' });
+      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['tolls.link', 'tolls.fleet.create','tolls.fleet.edit','tolls.fleet.delete','tolls.fleet.recover','tolls.fleet.sync'])] }, csrfToken: 'fixture' });
       if (p === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0, tollsFrom: '2026-09-01' });
+      if (p === '/api/maintenance/access') return send({ canView: false, canCreate: false, canEdit: false, canDelete: false });
       if (p === '/api/tasks/count') return send({ count: 0 });
       if (p === '/api/toll-dashboard') return send({ totals: { spend: 0, transactionCount: 0, truckCount: 0 }, monthly: [], weekly: [], trucks: [], states: [], agencies: [] });
       if (p === '/api/tolls') return send({ items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, summary: { amount: 0, trucks: 0 }, options: { units: [], agencies: [] } });
@@ -70,7 +71,7 @@ try {
   await page.getByRole('button', { name: 'PrePass', exact: true }).click();
   const region = page.getByRole('region', { name: 'PrePass management' });
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeDisabled();
-  assert.equal(writes.length, 0, 'opening tab must not contact vendor');
+  assert.equal(writes.length, 0, 'opening tab must not contact vendor: '+JSON.stringify(writes));
   await region.getByRole('button', { name: 'Refresh PrePass' }).click();
   await expect(region.getByRole('cell', { name: vin, exact: true })).toBeVisible();
   await region.getByRole('button', { name: 'Link', exact: true }).click();

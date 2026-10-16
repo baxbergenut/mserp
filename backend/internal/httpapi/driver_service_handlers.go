@@ -12,9 +12,9 @@ import (
 
 func driverServicePermission(service string) string {
 	if service == "relay" {
-		return "fuel.drivers.write"
+		return "fuel.drivers.create"
 	}
-	return "weighmytruck.write"
+	return "weighmytruck.create"
 }
 func serviceIntentContext(w http.ResponseWriter, r *http.Request, items []repository.DriverServiceIntent) (*http.Request, bool) {
 	if err := repository.ValidateDriverServiceIntents(items); err != nil {
@@ -66,11 +66,11 @@ func registerDriverServiceRoutes(router chi.Router, logger *slog.Logger, repo *r
 			}
 		}
 		out.Items = items
-		if !slices.Contains(session.User.Permissions, "fuel.read") && !slices.Contains(session.User.Permissions, "fuel.drivers.write") {
+		if !slices.Contains(session.User.Permissions, "fuel.read") && !slices.Contains(session.User.Permissions, "fuel.drivers.create") {
 			out.Policies = nil
 			out.CanLinkRelay = false
 		}
-		out.CanLinkRelay = out.CanLinkRelay && slices.Contains(session.User.Permissions, "tasks.write") && slices.Contains(session.User.Permissions, "fuel.read")
+		out.CanLinkRelay = out.CanLinkRelay && slices.Contains(session.User.Permissions, "tasks.review") && slices.Contains(session.User.Permissions, "fuel.read")
 		if !out.CanLinkRelay {
 			for i := range out.Items {
 				out.Items[i].Candidates = []repository.RelayRosterEntry{}

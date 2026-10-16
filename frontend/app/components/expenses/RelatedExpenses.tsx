@@ -5,7 +5,7 @@ import { PaymentHistoryPanel } from "@/app/components/PaymentHistoryPanel";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { WalletCards } from "lucide-react";
 import { fetchExpensesPage } from "@/app/lib/api";
 import type { Expense } from "@/app/lib/types";

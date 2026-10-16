@@ -8,7 +8,7 @@ import { usePermissions } from "@/app/lib/access";
 import { ErrorBanner, controlClass } from "../management/ManagementUI";
 
 export function ProfileNotes({ kind, id, legacy }: { kind: "drivers" | "trucks"; id: string; legacy: string | null }) {
-  const canWrite = usePermissions().includes("fleet.write");
+  const canWrite = usePermissions().includes(`${kind}.edit`);
   const [notes, setNotes] = useState<ProfileNote[] | null>(null);
   const [body, setBody] = useState("");
   const [adding, setAdding] = useState(false);

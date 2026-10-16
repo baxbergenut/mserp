@@ -133,6 +133,9 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 		writeJSON(w, http.StatusOK, page)
 	})
 	r.Post("/driver-intake/{id}/complete", func(w http.ResponseWriter, r *http.Request) {
+		if !requireCapabilities(w, r, "tasks.review", "drivers.private.read") {
+			return
+		}
 		id, ok := pathID(w, r)
 		if !ok {
 			return
@@ -157,7 +160,7 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			writeAPIError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		if request.AddWeighMyTruck && !slices.Contains(session.User.Permissions, "weighmytruck.write") {
+		if request.AddWeighMyTruck && !slices.Contains(session.User.Permissions, "weighmytruck.create") {
 			writeAPIError(w, 403, "WeighMyTruck write permission is required")
 			return
 		}
@@ -167,6 +170,9 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 		}
 		var input *repository.DriverInput
 		if request.Driver != nil {
+			if !authorizeDriverSetup(w, r, *request.Driver) {
+				return
+			}
 			value, err := request.Driver.validate()
 			if err != nil {
 				writeAPIError(w, http.StatusBadRequest, err.Error())
@@ -176,8 +182,17 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 				writeAPIError(w, http.StatusBadRequest, "set a positive pay rate before completing setup")
 				return
 			}
-			if value.IsTeamDriver != nil && *value.IsTeamDriver && !slices.Contains(session.User.Permissions, "payroll.write") {
+			if value.IsTeamDriver != nil && *value.IsTeamDriver && !slices.Contains(session.User.Permissions, "driver_pay.edit") {
 				writeAPIError(w, 403, "Payroll write permission is required to set up a team driver")
+				return
+			}
+			if !handler.authorizeAttachment(w, r, request.Driver.CDLFileID, "drivers") {
+				return
+			}
+			if request.Driver.NewTruck != nil && !handler.authorizeTruckEffects(w, r, *request.Driver.NewTruck) {
+				return
+			}
+			if request.Driver.NewTruck != nil && !handler.authorizeAttachment(w, r, request.Driver.NewTruck.IRPFileID, "trucks") {
 				return
 			}
 			value.ChargeActor = session.User.ID

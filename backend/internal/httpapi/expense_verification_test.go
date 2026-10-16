@@ -11,8 +11,8 @@ func TestExpenseVerificationRole(t *testing.T) {
 		want string
 	}{
 		{repository.AuthUser{Administrator: true}, "admin"},
-		{repository.AuthUser{RoleName: "Accountant"}, "accountant"},
-		{repository.AuthUser{RoleName: " accountant "}, "accountant"},
+		{repository.AuthUser{RoleName: "Accountant"}, ""},
+		{repository.AuthUser{RoleName: "Renamed role", Permissions: []string{"expenses.accounting.verify"}}, "accountant"},
 		{repository.AuthUser{RoleName: "Manager"}, ""},
 		{repository.AuthUser{RoleName: "Administrator"}, ""},
 		{repository.AuthUser{Permissions: []string{"access.manage", "expenses.write"}}, ""},

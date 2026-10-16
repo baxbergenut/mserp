@@ -153,6 +153,7 @@ func NewRouter(
 	})
 
 	registerFleetRoutes(protected, logger, fleetRepo)
+	registerLookupRoutes(protected, fleetRepo)
 	wmtRepo := repository.NewWeighMyTruckRepository(pool, wmtClient)
 	registerSidebarRoutes(protected, logger, fuelRepo, wmtRepo, tollRepo)
 	registerWeighMyTruckRoutes(protected, logger, wmtRepo)

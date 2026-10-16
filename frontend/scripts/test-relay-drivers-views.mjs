@@ -23,10 +23,10 @@ const writes = [];
 let readOnly = false;
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://localhost'); const path = url.pathname;
+    const url = new URL(req.url, 'http://localhost'); const path = url.pathname.replace('/lookups/','/');
     const send = (body, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
     if (path.startsWith('/api/')) {
-      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'fleet.read', ...(readOnly ? [] : ['fuel.drivers.write', 'tasks.write', 'tolls.read', 'tolls.link', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
+      if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['fuel.drivers.create','fuel.drivers.edit','fuel.drivers.delete','fuel.drivers.recover','fuel.drivers.sync', 'tasks.create','tasks.edit','tasks.delete','tasks.review', 'tolls.read', 'tolls.link', 'weighmytruck.read'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
       if(path==='/api/prepass-fleet')return send({configured:true,accounts:[],vehicles:[],transponders:[],trucks:[],operations:[]});
       if(path==='/api/tolls/truck-links'&&req.method==='GET')return send(tollLinks);
@@ -83,6 +83,7 @@ else {
     const tollBadge = sidebar.getByLabel('125 toll transactions without a linked truck, posted since 2026-09-01', { exact: true });
     await expect(tollBadge).toHaveText('99+');
     await expect(tollBadge).toHaveAttribute('title', /2026-09-01/);
+    await page.getByRole('button',{name:'Filter Driver',exact:true}).click();
     await page.getByLabel('Driver status', { exact: true }).selectOption('no_policy');
     await expect(rows).toHaveCount(1); await expect(rows.first()).toContainText('ELD Driver');
     await page.getByRole('button', { name: 'Link driver', exact: true }).click();
@@ -98,6 +99,7 @@ else {
     await page.getByRole('dialog').getByRole('button', { name: 'Assign policy', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     if (writes.at(-1).driverPin !== '1234' || writes.at(-1).truckNumber !== '101') throw new Error('Non ELD fields not sent');
+    await page.getByRole('button',{name:'Filter Driver',exact:true}).click();
     await page.getByLabel('Driver status', { exact: true }).selectOption('');
     await page.getByLabel('Actions for Terminated Driver').selectOption('disable');
     await expect(page.getByRole('dialog')).toContainText('usage counters are preserved');
@@ -144,7 +146,7 @@ else {
     await expect(sidebar.getByRole('link', { name: /Tolls/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add driver', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Actions for Active Driver')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Refresh Relay', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh Relay', exact: true })).toHaveCount(0);
     await expect(page.getByRole('checkbox',{name:'Select drivers on this page'})).toHaveCount(0);
     readOnly=false;
     await page.setViewportSize({width:1440,height:1000});

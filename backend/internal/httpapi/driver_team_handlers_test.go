@@ -3,7 +3,7 @@ package httpapi
 import "testing"
 
 func TestDriverTeamPermissions(t *testing.T) {
-	for _, tc := range []struct{ method, want string }{{"GET", "fleet.read"}, {"PUT", "payroll.write"}} {
+	for _, tc := range []struct{ method, want string }{{"GET", "drivers.read"}, {"PUT", "driver_pay.edit"}} {
 		if got := routePermission(tc.method, "/drivers/00000000-0000-0000-0000-000000000001/team"); got != tc.want {
 			t.Fatalf("%s requires %s, got %s", tc.method, tc.want, got)
 		}
@@ -21,7 +21,7 @@ func TestTeamDriverRequestHasNoCompensation(t *testing.T) {
 	if _, err = request.validate(); err == nil {
 		t.Fatal("solo pay validation was skipped")
 	}
-	if got := routePermission("GET", "/drivers/team-trucks"); got != "fleet.read" {
+	if got := routePermission("GET", "/drivers/team-trucks"); got != "drivers.read" {
 		t.Fatal("team truck permission", got)
 	}
 }

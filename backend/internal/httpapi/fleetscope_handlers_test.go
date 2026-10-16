@@ -101,7 +101,7 @@ func TestIntakeRoutesRequireSessionAndCSRF(t *testing.T) {
 		}
 	}
 	store.sessions[hashToken("test-session")] = repository.AuthSession{
-		User: repository.AuthUser{ID: "00000000-0000-0000-0000-000000000001"}, CSRFToken: "test-csrf", ExpiresAt: time.Now().Add(time.Hour),
+		User: repository.AuthUser{ID: "00000000-0000-0000-0000-000000000001", Permissions: repository.PermissionKeys()}, CSRFToken: "test-csrf", ExpiresAt: time.Now().Add(time.Hour),
 	}
 	for _, tc := range []struct {
 		name, body, csrf string

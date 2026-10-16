@@ -15,7 +15,7 @@ const server = createServer(async (req, res) => {
  try {
   const p = new URL(req.url, 'http://localhost').pathname;
   if (p.startsWith('/api/')) {
-   if (p === '/api/auth/session') return send({ user: { id: 'user', username: 'Reviewer', theme: 'default', permissions: ['access.manage', 'fleet.read', 'fleetscope.read', 'fleetscope.manage', 'fleetscope.reconcile'] }, csrfToken: 'fixture' });
+   if (p === '/api/auth/session') return send({ user: { id: 'user', username: 'Reviewer', theme: 'default', permissions: ['access.manage', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'fleetscope.read', 'fleetscope.manage', 'fleetscope.reconcile'] }, csrfToken: 'fixture' });
    if (p === '/api/settings/access') return send({ users: [], roles: [], permissions: [], expenseCategories: [] });
    if (p === '/api/sidebar-counts') return send({ fuel: 0, tolls: 0, weighMyTruck: 0 });
    if (p === '/api/tasks/count') return send({ count: 0 });

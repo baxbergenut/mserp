@@ -1,4 +1,5 @@
 "use client";
+import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
 
 import { applyExpenseCategoryRules } from "./catalog";
 
@@ -8,7 +9,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { MaintenanceWorkspace } from "../maintenance/MaintenanceWorkspace";
 import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
@@ -17,14 +18,14 @@ import {
   fetchExpensesPage,
   fetchMaintenancePage,
   fetchAuthSession,
-  fetchDrivers,
-  fetchInvestors,
-  fetchTrucks,
+  fetchDriverOptions,
+  fetchInvestorOptions,
+  fetchTruckOptions,
   updateExpense,
   verifyExpense,
   unverifyExpense,
 } from "../lib/api";
-import type { AIExpenseDraft, Driver, Expense, ExpenseInput, ExpensePage, ExpenseVerification, Investor, Truck } from "../lib/types";
+import type { AIExpenseDraft, Expense, ExpenseInput, ExpensePage, ExpenseVerification } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -117,9 +118,9 @@ export default function ExpensesPage() {
   const createCategoryIds = options.settings
     .filter(item => item.kind === "category" && item.active && categoryAccess.some(access => access.categoryId === item.id && access.canCreate))
     .map(item => item.id);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [owners, setOwners] = useState<Investor[]>([]);
-  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [owners, setOwners] = useState<InvestorOption[]>([]);
+  const [trucks, setTrucks] = useState<TruckOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
@@ -173,7 +174,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     if (!canLoadFleetSelectors) return;
     let cancelled = false;
-    Promise.all([fetchDrivers(), fetchTrucks(), fetchInvestors()])
+    Promise.all([fetchDriverOptions(), fetchTruckOptions(), fetchInvestorOptions()])
       .then(([driverValues, truckValues, ownerValues]) => {
         if (!cancelled) {
           setDrivers(driverValues);
@@ -294,7 +295,7 @@ export default function ExpensesPage() {
   }, [verificationNotice]);
 
   function canCancelVerification(stamp: ExpenseVerification) {
-    return stamp.userId === currentUserId || verificationRole === "admin" || verificationRole === stamp.role;
+    return verificationRole === "admin" || (stamp.userId === currentUserId && verificationRole === "accountant" && stamp.role === "accountant");
   }
 
   function clearFilters() {

@@ -91,7 +91,7 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		data.CanLink = data.CanLink && slices.Contains(session.User.Permissions, "tasks.write")
+		data.CanLink = data.CanLink && slices.Contains(session.User.Permissions, "tasks.review")
 		if !data.CanLink {
 			for i := range data.Items {
 				data.Items[i].Suggestions = []repository.RelaySuggestion{}
@@ -118,6 +118,9 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 		seen := map[string]bool{}
 		for i := range in.Changes {
 			v := &in.Changes[i]
+			if !authorizeVendorAction(w, r, "fuel.drivers", v.Action) {
+				return
+			}
 			if !validateRelayChange(v) || !slices.Contains([]string{"enable", "disable", "remove", "unassign", "assign"}, v.Action) || v.Action != in.Changes[0].Action || seen[v.RelayDriverID] {
 				writeAPIError(w, 400, "Provide one action and distinct drivers with current revisions.")
 				return
@@ -139,6 +142,9 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
+		if !authorizeVendorAction(w, r, "fuel.drivers", in.Action) {
+			return
+		}
 		if err := repo.ChangeRelayDriver(r.Context(), in, session.User.ID); err != nil {
 			fail(w, err)
 			return

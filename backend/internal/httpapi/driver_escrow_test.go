@@ -27,7 +27,7 @@ func TestEscrowPermissions(t *testing.T) {
 			t.Fatal("escrow read must have its own permission")
 		}
 	}
-	if routePermission("PUT", "/escrows/settings") != "escrow.write" || routePermission("POST", "/escrows/id/releases") != "escrow.write" || routePermission("PUT", "/escrows/id/releases/release") != "escrow.write" {
+	if routePermission("PUT", "/escrows/settings") != "escrow.edit" || routePermission("POST", "/escrows/id/releases") != "escrow.create" || routePermission("PUT", "/escrows/id/releases/release") != "escrow.read" {
 		t.Fatal("escrow settings must have their own permission")
 	}
 }

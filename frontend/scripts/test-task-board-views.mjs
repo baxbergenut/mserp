@@ -43,7 +43,7 @@ try {
   await page.clock.install({ time: new Date('2026-10-12T02:00:00Z') });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const url = new URL(route.request().url()), path = url.pathname.slice(4), method = route.request().method();
+    const url = new URL(route.request().url()), path = url.pathname.replace('/lookups/','/').slice(4), method = route.request().method();
     if (path === '/tasks/events') return route.continue();
     if (path === '/tasks/count') return route.fulfill({ json: { count: tasks.filter(t => !t.completedAt).length } });
     if (path === '/tasks') {
@@ -82,7 +82,7 @@ try {
       await route.fulfill({ json: { weekStart: requested, drivers: [], entries: [], balances: [] } }); return;
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.write', 'fleet.write', 'fleet.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.create','tasks.edit','tasks.delete','tasks.review', 'drivers.create','drivers.edit','drivers.delete','trucks.create','trucks.edit','trucks.delete','dispatchers.create','dispatchers.edit','dispatchers.delete','updaters.create','updaters.edit','updaters.delete','investors.create','investors.edit','drivers.private.read','drivers.private.edit','driver_compensation.read','driver_compensation.edit','dispatcher_compensation.read','dispatcher_compensation.edit','escrow.read','escrow.create','escrow.edit','escrow.delete', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
       '/settings/access': { users: users.map(u => ({ id: u.id, username: u.name, email: `${u.id}@example.com`, active: true, roleId: 'role', version: 1 })), roles: [{id:"role",name:"Dispatch team",permissions:[]}], permissions: [] },
       '/settings/system-tasks': assignments,
       '/tasks/users': users,

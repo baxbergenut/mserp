@@ -190,7 +190,7 @@ func TestAccessDatabase(t *testing.T) {
 				t.Fatal("expense categories missing from access settings")
 			}
 			categoryID := data.ExpenseCategories[0].ID
-			status(call("POST", "/settings/roles", repository.AccessRole{Name: "Safety team", Permissions: []string{"fleet.read"}, ExpenseCategoryAccess: []repository.ExpenseCategoryAccess{{CategoryID: categoryID, CanView: true, CanCreate: true}}}, sessionCookie, session.CSRFToken), 204)
+			status(call("POST", "/settings/roles", repository.AccessRole{Name: "Safety team", Permissions: []string{"drivers.read"}, ExpenseCategoryAccess: []repository.ExpenseCategoryAccess{{CategoryID: categoryID, CanView: true, CanCreate: true}}}, sessionCookie, session.CSRFToken), 204)
 			data, e = repo.AccessData(ctx)
 			if e != nil {
 				t.Fatal(e)
@@ -299,7 +299,7 @@ func TestPermissionCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ method, path, want string }{{"GET", "/drivers/abc/pay-history", "payroll.read"}, {"POST", "/driver-pay/finalize", "payroll.finalize"}, {"GET", "/new-resource", ""}, {"POST", "/jobs/sync-fuel", "fuel.sync"}, {"POST", "/jobs/sync-eld", "driver_board.write"}, {"PUT", "/gross-board", "board.write"}} {
+	for _, tc := range []struct{ method, path, want string }{{"GET", "/drivers/abc/pay-history", "driver_pay.read"}, {"POST", "/driver-pay/finalize", "driver_pay.finalize"}, {"GET", "/new-resource", ""}, {"POST", "/jobs/sync-fuel", "fuel.sync"}, {"POST", "/jobs/sync-eld", "driver_board.write"}, {"PUT", "/gross-board", "board.write"}} {
 		if got := routePermission(tc.method, tc.path); got != tc.want {
 			t.Errorf("%s: %s", tc.path, got)
 		}

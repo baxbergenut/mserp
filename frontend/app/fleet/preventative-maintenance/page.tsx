@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MaintenanceWorkspace } from "../../maintenance/MaintenanceWorkspace";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { CalendarRange, Settings } from "lucide-react";
 import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchPreventativeMaintenance } from "../../lib/api";
 import type { MaintenanceOptions, MaintenanceSchedule, PreventativeTruck } from "../../lib/types";

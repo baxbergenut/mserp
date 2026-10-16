@@ -26,7 +26,7 @@ func TestUpdaterValidation(t *testing.T) {
 	if err != nil || !input.ExtensionSet || input.Extension != nil {
 		t.Fatal("explicit clear missing")
 	}
-	if routePermission("GET", "/updaters") != "fleet.read" || routePermission("PUT", "/updaters/id") != "fleet.write" {
+	if routePermission("GET", "/updaters") != "updaters.read" || routePermission("PUT", "/updaters/id") != "updaters.edit" {
 		t.Fatal("updater access mapping missing")
 	}
 }

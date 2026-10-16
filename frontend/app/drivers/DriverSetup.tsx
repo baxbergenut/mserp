@@ -1,9 +1,11 @@
 "use client";
+import type { DriverOption, TruckOption, DispatcherOption, InvestorOption } from "@/app/lib/types";
 
+import { usePermissions } from "../lib/access";
 import { useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { Modal, ErrorBanner, Field, controlClass } from "../components/management/ManagementUI";
-import type { Dispatcher, Driver, DriverInput, DriverIntake, DriverServiceIntent, Investor, Truck } from "../lib/types";
+import type { DriverInput, DriverIntake, DriverServiceIntent, Investor } from "../lib/types";
 import { DriverForm } from "./DriverForm";
 import { DriverServiceChoices } from "./DriverServices";
 import { TruckForm } from "../trucks/TruckForm";
@@ -14,11 +16,12 @@ const labels: Record<Step, string> = { information: "Driver information", assign
 
 export function DriverSetup({ value, onChange, intake, drivers, trucks, dispatchers, investors, linkId, onLink, separateConfirmed, onConfirmSeparate, services, onServices, saving, loading, error, onClose, onSave }: {
   value: DriverInput; onChange: (value: DriverInput) => void; intake: DriverIntake | null;
-  drivers: Driver[]; trucks: Truck[]; dispatchers: Dispatcher[]; investors: Investor[];
+  drivers: DriverOption[]; trucks: TruckOption[]; dispatchers: DispatcherOption[]; investors: InvestorOption[];
   linkId: string; onLink: (id: string) => void; separateConfirmed: boolean; onConfirmSeparate: (value: boolean) => void;
   services: DriverServiceIntent[]; onServices: (value: DriverServiceIntent[]) => void;
   saving: boolean; loading: boolean; error: string; onClose: () => void; onSave: () => Promise<void>;
 }) {
+  const permissions=usePermissions();
   const [step, setStep] = useState<Step>("information");
   const [validation, setValidation] = useState("");
   const content = useRef<HTMLDivElement>(null);
@@ -60,7 +63,7 @@ export function DriverSetup({ value, onChange, intake, drivers, trucks, dispatch
           {linkId ? <p className="text-xs text-zinc-400">Link to {existing?.fullName}. Existing profile and assignments stay unchanged.</p> : <DriverForm section="information" showEscrow value={value} onChange={onChange} trucks={trucks} dispatchers={dispatchers} />}
         </>}
         {step === "assignments" && <DriverForm section="assignments" showEscrow allowNewTruck value={value} onChange={onChange} trucks={trucks} dispatchers={dispatchers} />}
-        {step === "truck" && value.newTruck && <TruckForm setup value={{ ...value.newTruck, ownerId: value.newTruckOwnedByDriver ? "__driver__" : value.newTruck.ownerId }} drivers={[]} investors={[...investors, selfOwner]} onChange={truck => onChange({ ...value, newTruckOwnedByDriver: truck.ownerId === "__driver__", newTruck: { ...truck, ownerId: truck.ownerId === "__driver__" ? null : truck.ownerId } })} />}
+        {step === "truck" && value.newTruck && <TruckForm setup value={{ ...value.newTruck, ownerId: value.newTruckOwnedByDriver ? "__driver__" : value.newTruck.ownerId }} drivers={[]} investors={[...investors, ...(permissions.includes("investors.create") ? [selfOwner] : [])]} onChange={truck => onChange({ ...value, newTruckOwnedByDriver: truck.ownerId === "__driver__", newTruck: { ...truck, ownerId: truck.ownerId === "__driver__" ? null : truck.ownerId } })} />}
         {step === "services" && <DriverServiceChoices key={linkId || "new"} value={services} onChange={onServices} driverId={linkId || undefined} disabled={saving} />}
         {step === "finalize" && <>
           {!linkId && <DriverForm section="finalize" showEscrow value={value} onChange={onChange} trucks={trucks} dispatchers={dispatchers} />}

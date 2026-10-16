@@ -9,7 +9,7 @@ import { controlClass } from "@/app/components/management/ManagementUI";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 
 export function EscrowDefault() {
-  const canManage = usePermissions().includes("escrow.write");
+  const canManage = usePermissions().includes("escrow.edit");
   const [setting, setSetting] = useState<DriverEscrowSetting | null>(null);
   const [amount, setAmount] = useState("");
   const [editing, setEditing] = useState(false);
@@ -33,7 +33,7 @@ export function EscrowDefault() {
     return () => document.removeEventListener("pointerdown", close);
   }, [menu]);
   async function save() {
-    if (!setting || saving) return;
+    if (!canManage || !setting || saving) return;
     setSaving(true); setError("");
     try { const value = await saveDriverEscrowSetting({ defaultAmount: amount, version: setting.version }); setSetting(value); setAmount(value.defaultAmount); setEditing(false); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save the default"); }

@@ -43,8 +43,8 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
     <td {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
         <span>Load {entry.slot + 1}</span><div className="flex gap-1">
-          {onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
-          <button type="button" disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 }))}><X className="h-3 w-3" /></button>
+          {!disabled && onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
+          <button type="button" hidden={disabled} disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 }))}><X className="h-3 w-3" /></button>
         </div>
       </div>
       <div className="relative">{notes.marker}<LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} /></div>{notes.popup}
@@ -77,7 +77,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
             <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Original rate") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Original rate") || "—"}</td></tr>)}</tbody>
         </table>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the original gross and miles with the values shown here.</p>
-        <button className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
+        <button hidden={disabled} disabled={disabled} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             originalRate: current.systemOriginalRate ?? "", miles: current.systemMiles ?? "",
             enteredOriginalRate: current.systemOriginalRate ?? "", enteredMiles: current.systemMiles ?? "" }));

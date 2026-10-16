@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { FileText, History, Wrench } from "lucide-react";
 import { fetchMaintenance, fetchMaintenanceAccess, fetchMaintenanceHistory, fetchMaintenanceOptions, fetchMaintenancePage, fetchMaintenanceReports, maintenanceDocumentUrl, saveMaintenance, uploadMaintenanceDocument, verifyExpense, unverifyExpense, voidMaintenance } from "../lib/api";
 import type { ExpenseInput, AIExpenseDraft, MaintenanceChange, MaintenanceInput, MaintenanceOptions, MaintenanceRecord, MaintenanceReport, MaintenanceSchedule, MaintenanceType, MaintenanceVendor } from "../lib/types";
