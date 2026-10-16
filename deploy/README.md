@@ -113,9 +113,12 @@ Reviewed differences appear amber as **Ready to apply**, while unreviewed record
 remain red. This is a saved decision, not a database write. A blank termination
 date is valid for an active driver. UI status checks run with
 `node backend/scripts/test-fleet-review-status.mjs` from the repository root.
-Drivers and Trucks sidebar links show their own reviewed percentage with a
-left-to-right fill. Saved reviews (including reviewed deferrals) count; drafts do
-not. Progress is independent of search/filter state and updates after each save.
+Drivers and Trucks sidebar links show their own reviewed-or-deferred percentage
+with a left-to-right fill, matching the list's remaining attention rows. Hover
+shows reviewed, deferred and remaining counts. Deferrals count once, even before
+confirmation; this display never sets their review flag or bypasses final checks.
+Other unsaved reviews do not count. Progress is independent of search/filter state
+and updates after each save.
 Deferred records and coverage/safety/crew differences remain visible after success.
 Normal site changes during review can invalidate the final snapshot, so arrange
 a brief fleet-edit freeze for the final check and application.

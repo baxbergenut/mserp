@@ -34,4 +34,11 @@ assert.equal(run("truckClass('class_9')"), 'class_9', 'unknown classes must stil
 run("var truck={kind:'truck',values:{truckClass:'8'}}");
 assert.equal(run("fieldDifferent(truck,'truckClass','','class_8')"), false, 'equivalent class formats agree');
 assert.equal(run("fieldDifferent(truck,'truckClass','','7')"), true, 'different classes still need review');
+run("var progressRows=[...Array.from({length:113},()=>({reviewed:true,action:'update'})),...Array.from({length:56},()=>({reviewed:false,action:'defer'})),...Array.from({length:7},()=>({reviewed:false,action:'update'}))]");
+assert.equal(run('reviewProgress(progressRows).percent'), 96);
+assert.equal(run('reviewProgress(progressRows).remaining'), 7);
+assert.equal(run('reviewProgress(progressRows).done'), 169);
+assert.equal(run('progressRows.filter(r=>r.reviewed).length'), 113, 'progress must not approve deferred rows');
+assert.equal(run("reviewProgress([{reviewed:true,action:'defer'}]).done"), 1, 'reviewed deferrals count once');
+assert.equal(run('reviewProgress([]).percent'), 0);
 console.log('Review status checks passed: pending, verified, stale/failed batch, optional dates, phone and lifecycle normalization.');

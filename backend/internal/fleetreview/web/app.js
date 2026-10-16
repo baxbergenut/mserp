@@ -36,6 +36,7 @@ function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
 }
 function status(r){if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
 function reviewLabel(r){if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
+function reviewProgress(rows){const total=rows.length,deferred=rows.filter(r=>r.action==='defer').length,reviewed=rows.filter(r=>r.reviewed&&r.action!=='defer').length,done=reviewed+deferred;return {total,deferred,reviewed,done,remaining:total-done,percent:total?Math.floor(done*100/total):0}}
 function fieldDifferent(r,key,av,bv){
  if(['coverageDecision','coverageEvidence','reconcileCrew'].includes(key))return false;
  const compare=key==='truckClass'?v=>norm(truckClass(v)):key==='phone'?phone:key==='status'&&r.kind==='driver'?v=>norm(fsStatus(v)):norm;
@@ -51,7 +52,7 @@ async function load(){const data=await api('state');state=data.state;applyBlocke
 function render(){
  for(const a of document.querySelectorAll('[data-page]'))a.classList.toggle('active',a.dataset.page===page);
  $('#title').textContent=page==='review'?'Final review':page==='truck'?'Trucks':'Drivers';$('#subtitle').textContent=page==='review'?'Confirm the complete batch before updating either system.':page==='truck'?'Confirm vehicle identity, ownership and missing details.':'Confirm people, contact details and employment status.';
- for(const kind of ['driver','truck']){const rows=state.rows.filter(r=>r.kind===kind),reviewed=rows.filter(r=>r.reviewed).length,total=rows.length,percent=total?Math.floor(reviewed*100/total):0,bar=$('#'+kind+'-progress');bar.max=total||1;bar.value=reviewed;bar.setAttribute('aria-valuetext',`${reviewed} of ${total} reviewed`);$('#'+kind+'-count').textContent=percent+'%';bar.parentElement.title=`${reviewed} of ${total} reviewed (${percent}%)`}
+ for(const kind of ['driver','truck']){const p=reviewProgress(state.rows.filter(r=>r.kind===kind)),bar=$('#'+kind+'-progress'),description=`${p.done} of ${p.total} reviewed or deferred (${p.percent}%). ${p.reviewed} reviewed, ${p.deferred} deferred, ${p.remaining} remaining. Deferred records are not approved changes.`;bar.max=p.total||1;bar.value=p.done;bar.setAttribute('aria-valuetext',description);$('#'+kind+'-count').textContent=p.percent+'%';bar.parentElement.title=description}
  const rows=page==='review'?state.rows:state.rows.filter(r=>r.kind===page);$('#stat-total').textContent=rows.length;for(const color of ['red','amber','green'])$('#stat-'+color).textContent=rows.filter(r=>status(r)===color).length;
  $('#list-view').hidden=page==='review';$('#final-view').hidden=page!=='review';$('#record-heading').textContent=page==='truck'?'Truck':'Driver';$('#refresh').disabled=!!state.batch;
  const batch=state.batch;$('#batch-notice').hidden=!batch;if(batch)$('#batch-notice').textContent=batch.state==='complete'?'Batch confirmed in both databases. Review remaining coverage, safety and deferred records below. Live synchronization is still off.':batch.state==='applying'?'Applying the saved batch. You can leave this page; the server keeps the batch and receipts.':'Batch needs attention: '+batch.error;
