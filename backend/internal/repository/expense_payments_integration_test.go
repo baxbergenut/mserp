@@ -121,7 +121,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(bridge))
-				for _, name := range []string{"084_gross_board_notes.sql", "085_expense_verification.sql", "086_driver_pay_layover.sql", "089_expense_efs.sql", "090_payroll_cache_revisions.sql", "093_pay_source_collections.sql", "095_expense_cost_breakdown.sql"} {
+				for _, name := range []string{"084_gross_board_notes.sql", "085_expense_verification.sql", "086_driver_pay_layover.sql", "089_expense_efs.sql", "090_payroll_cache_revisions.sql", "093_pay_source_collections.sql", "095_expense_cost_breakdown.sql", "106_driver_only_penalties.sql"} {
 					body, readErr := os.ReadFile("../../sql/" + name)
 					if readErr != nil {
 						t.Fatal(readErr)

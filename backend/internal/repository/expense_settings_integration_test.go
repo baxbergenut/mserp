@@ -96,6 +96,11 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				exec(string(breakdown))
+				penalties, readErr := os.ReadFile("../../sql/106_driver_only_penalties.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(penalties))
 			} else {
 				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name IN ('Maintenance','Work orders')`)
 			}
