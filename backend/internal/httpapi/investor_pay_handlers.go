@@ -39,7 +39,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		return true
 	}
 	r.Get("/truck-charges", func(w http.ResponseWriter, r *http.Request) {
-		v, err := charges.TruckCharges(r.Context())
+		v, err := charges.TruckChargesForWeek(r.Context(), r.URL.Query().Get("weekStart"))
 		if err != nil {
 			fail(w, err)
 			return
