@@ -59,8 +59,10 @@ func TestWatchCommittedEntriesAndRecovery(t *testing.T) {
 				return err
 			}
 			defer c.Close(context.Background())
-			_, err = c.Exec(ctx, "UPDATE expense_sheet_exports SET delivered_at=now() WHERE delivered_at IS NULL")
-			calls <- struct{}{}
+			tag, err := c.Exec(ctx, "UPDATE expense_sheet_exports SET delivered_at=now() WHERE delivered_at IS NULL")
+			if tag.RowsAffected() > 0 {
+				calls <- struct{}{}
+			}
 			return err
 		})
 	}()

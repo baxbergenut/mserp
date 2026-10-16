@@ -32,6 +32,16 @@ func watchExports(ctx context.Context, dsn string, retry time.Duration, deliver 
 		}
 		if err != nil {
 			log.Printf("expense sheet delivery retained for retry: %v", err)
+			// Incoming saves must not bypass outage backoff. Their durable entries
+			// are included on the next attempt, even if notifications are lost.
+			timer := time.NewTimer(retry)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil
+			case <-timer.C:
+			}
+			continue
 		} else {
 			var pending bool
 			if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_sheet_exports WHERE delivered_at IS NULL) AND (SELECT enabled FROM expense_sheet_export_config WHERE singleton)`).Scan(&pending); err != nil {
