@@ -820,7 +820,9 @@ assignment lookup lists.
   Every authenticated method/route needs an explicit policy and coverage test. Login throttling trusts Nginx X-Real-IP only on loopback.
   Tests use disposable local MSERP_ACCESS_TEST_DATABASE_URL (_test database),
   fresh/migrated schemas as mserp_app; access-e2e.mjs runs with investor E2E.
-  Pre-112 binaries are not permission-compatible rollback targets. Validate with
+  Pre-112 binaries are not permission-compatible rollback targets. Install the
+  updated deploy helper before cutover: it stops the API before 112 and refuses
+  incompatible deployment/rollback, leaving the API stopped on failed cutover. Validate with
   scripts/test-permissions-v2.mjs against review-local.mjs before deployment.
 
 - Contact phones are optional ten ASCII digits without a country code; blank

@@ -37,10 +37,13 @@ func TestPermissionsV2Migration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, after, ok := strings.Cut(string(source), "-- Permissions v2 (migration 112).")
-	if !ok || strings.TrimSpace(after) != strings.TrimSpace(string(migration)) {
+	normalizedSource := strings.ReplaceAll(string(source), "\r\n", "\n")
+	normalizedMigration := strings.TrimSpace(strings.ReplaceAll(string(migration), "\r\n", "\n"))
+	if !strings.Contains(normalizedSource, normalizedMigration) {
 		t.Fatal("fresh schema and migration differ")
 	}
+	// Production already has 113: test the cutover with live-board tables present.
+	before := strings.Replace(normalizedSource, normalizedMigration, "", 1)
 	for _, mode := range []string{"fresh", "upgrade"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("permission_v2_%d", time.Now().UnixNano())

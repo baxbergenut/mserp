@@ -27,8 +27,37 @@ incoming_archive=$incoming_root/$release_id.tar.gz
 release_dir=$release_root/$release_id
 staged_archive=
 extract_dir=
+cutover_started=false
+deployment_complete=false
+previous_release=$(readlink -f "$current_link" 2>/dev/null || true)
+permissions_migration=112_permissions_v2.sql
+
+compatible_release() {
+    [[ -n $1 && -d $1 ]] || return 1
+    local applied
+    # Detect the committed schema even if recording the migration ledger failed.
+    applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
+    [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; }
+}
+activate_release() {
+    local target=$1
+    ln -sfnT "$target" "$current_link.new"
+    mv -Tf "$current_link.new" "$current_link"
+}
 
 cleanup() {
+    local status=$?
+    if [[ $cutover_started == true && $deployment_complete != true ]]; then
+        if compatible_release "$previous_release"; then
+            activate_release "$previous_release"
+            systemctl restart mserp-api.service
+            systemctl reload nginx
+            echo "deployment failed; restored compatible application" >&2
+        else
+            systemctl stop mserp-api.service
+            echo "deployment failed; API stopped because the previous release is permission-incompatible" >&2
+        fi
+    fi
     if [[ -n $staged_archive && -f $staged_archive ]]; then
         rm -f -- "$staged_archive"
     fi
@@ -37,6 +66,7 @@ cleanup() {
             "$release_root"/.extract-*) rm -rf -- "$extract_dir" ;;
         esac
     fi
+    return "$status"
 }
 trap cleanup EXIT
 
@@ -77,6 +107,11 @@ if [[ ! -f $extract_dir/backend/mserp-api || ! -f $extract_dir/frontend/login.ht
     exit 1
 fi
 
+if ! compatible_release "$extract_dir"; then
+    echo "database requires a permissions-v2-compatible release" >&2
+    exit 1
+fi
+
 chown -R root:root "$extract_dir"
 find "$extract_dir" -type d -exec chmod 0755 {} +
 find "$extract_dir" -type f -exec chmod 0644 {} +
@@ -114,27 +149,21 @@ for migration in "${migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
+    if [[ $migration_name == "$permissions_migration" ]]; then
+        # No old application may write between the permission cutover and activation.
+        cutover_started=true
+        systemctl stop mserp-api.service
+    fi
     echo "applying migration $migration_name"
     runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 --dbname=mserp --file="$migration"
 	printf "INSERT INTO schema_migrations (version) VALUES (:'migration');\n" | \
 		runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -v migration="$migration_name" --dbname=mserp
 done
 
-previous_release=$(readlink -f "$current_link" 2>/dev/null || true)
-activate_release() {
-    local target=$1
-	ln -sfnT "$target" "$current_link.new"
-    mv -Tf "$current_link.new" "$current_link"
-}
-
+cutover_started=true
 activate_release "$release_dir"
 if ! nginx -t || ! systemctl restart mserp-api.service || ! systemctl reload nginx; then
-    if [[ -n $previous_release && -d $previous_release ]]; then
-        activate_release "$previous_release"
-        systemctl restart mserp-api.service
-        systemctl reload nginx
-    fi
-    echo "release activation failed; application rolled back" >&2
+    echo "release activation failed" >&2
     exit 1
 fi
 
@@ -149,12 +178,7 @@ for _ in {1..15}; do
 done
 
 if [[ $healthy != true ]]; then
-    if [[ -n $previous_release && -d $previous_release ]]; then
-        activate_release "$previous_release"
-        systemctl restart mserp-api.service
-        systemctl reload nginx
-    fi
-    echo "release health check failed; application rolled back" >&2
+    echo "release health check failed" >&2
     exit 1
 fi
 
@@ -162,6 +186,7 @@ if systemctl is-active --quiet mserp-expense-sheet.service; then
     systemctl restart mserp-expense-sheet.service
 fi
 
+deployment_complete=true
 rm -f -- "$incoming_archive"
 logger --tag mserp-deploy "activated release $release_id with backup $backup_file"
 echo "activated MSERP release $release_id"
