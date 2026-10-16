@@ -82,8 +82,10 @@ exact Origin and session CSRF token. Login attempts are throttled. No database
 credentials, payroll amounts, SSNs or documents are sent to the browser.
 
 Reviewers confirm identity, edit values and save drafts before marking rows as
-reviewed. Candidate names/VINs never authorize automatic linking. Missing required
-vehicle facts must be supplied or explicitly deferred; fabricated identifiers are
+reviewed. **Save reviewed record** confirms the review directly, without a separate
+checkbox; **Save draft** leaves the record unreviewed. Candidate names/VINs never
+authorize automatic linking. Missing required vehicle facts must be supplied or
+explicitly deferred; fabricated identifiers are
 rejected. Missing terminated drivers are deferred. Existing drivers' status and
 contact values default to MSERP; named exceptions live in private operator policy.
 Ownership uses existing MSERP owners or a confirmed driver owner, with an explicit
