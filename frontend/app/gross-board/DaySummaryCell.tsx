@@ -4,7 +4,7 @@ import { useLoadNotes } from "./useLoadNotes";
 
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
@@ -83,10 +83,9 @@ export const DaySummaryCell = memo(function DaySummaryCell({ entries, driverId, 
 
   return <>
     {displayed.length === 1 ? <DayCell id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={false} onChange={onChange} onAdd={() => openEditor(true)} /> : <td {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
-      <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span><div className="flex gap-1">
-        <button type="button" aria-label={`${label}, edit loads`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor()}><Pencil className="h-3 w-3" /></button>
+      <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span>
         {displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
-      </div></div>
+      </div>
       <div data-grid-cell className="relative">{notes.marker}<button data-grid-action type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
         onMouseEnter={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onMouseLeave={() => setHover(null)} onFocus={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onBlur={() => setHover(null)}
         title={unmatched ? "Contains unmatched manual loads. Open to review each load." : undefined}
