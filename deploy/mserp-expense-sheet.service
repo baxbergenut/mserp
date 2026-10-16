@@ -4,17 +4,22 @@ After=network-online.target postgresql.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=mserp
 Group=mserp
 WorkingDirectory=/etc/mserp
 EnvironmentFile=/etc/mserp/mserp.env
 EnvironmentFile=/etc/mserp/expense-sheet.env
-ExecStart=/opt/mserp/current/backend/export-expense-sheet -apply
-TimeoutStartSec=240
+ExecStart=/opt/mserp/current/backend/export-expense-sheet -watch -apply
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=40
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -219,10 +219,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   CSV exports and creates an idempotent, source-row-traceable SQL import.
   Imports after migration 085 create unattributed historical verification records;
   reimports preserve the application's current approvals and cancellations.
-- Temporary outbound expense-sheet backup uses migration 105,
+- Temporary outbound expense-sheet backup uses migrations 105/107,
   `backend/cmd/export-expense-sheet`, and `internal/expensesheet`. It captures only
   new native HR/Safety/Penalties/Other/work-order invoices after explicit database activation;
-  deployment alone sends nothing. A separate five-minute systemd timer uses
+  deployment alone sends nothing. A separate notification-driven systemd service uses
   `EXPENSE_SHEET_CREDENTIALS_FILE` (server-only Google service-account JSON key).
   Immutable transactional snapshots and atomic Google row/metadata receipts
   prevent retry duplicates. It never mirrors later edits or backfills history.

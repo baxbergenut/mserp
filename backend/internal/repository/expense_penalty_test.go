@@ -47,9 +47,9 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 			}
 			exec("CREATE SCHEMA " + schema + " AUTHORIZATION mserp_app; SET search_path TO " + schema + ",public")
 			defer func() { admin.Exec(ctx, "RESET ROLE; SET search_path TO public; DROP SCHEMA "+schema+" CASCADE") }()
-			sql := string(source)
+			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if upgrade {
-				sql = strings.Replace(sql, string(migration), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(sql)
 			if upgrade {

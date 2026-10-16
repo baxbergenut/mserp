@@ -1,6 +1,6 @@
 # MSERP deployment
 
-The temporary, opt-in expense-sheet exporter has a separate service/timer and
+The temporary, opt-in expense-sheet exporter has a separate notification-driven service and
 Google service-account setup. See [Expense sheet export](../docs/integrations/EXPENSE_SHEET_EXPORT.md)
 before enabling it; ordinary deployment does not activate sheet writes.
 

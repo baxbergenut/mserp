@@ -35,6 +35,10 @@ func TestOutboxDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	notifyMigration, err := os.ReadFile("../../sql/107_expense_sheet_notify.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("expense_sheet_%d", time.Now().UnixNano())
@@ -46,13 +50,15 @@ func TestOutboxDatabase(t *testing.T) {
 			}
 			exec("CREATE SCHEMA " + schema + " AUTHORIZATION mserp_app; SET search_path TO " + schema + ",public")
 			defer func() { conn.Exec(ctx, "RESET ROLE; SET search_path TO public; DROP SCHEMA "+schema+" CASCADE") }()
-			source := string(schemaSource)
+			source := strings.ReplaceAll(string(schemaSource), "\r\n", "\n")
 			if upgrade {
-				source = strings.Replace(source, string(migration), "", 1)
+				source = strings.Replace(source, strings.ReplaceAll(string(notifyMigration), "\r\n", "\n"), "", 1)
+				source = strings.Replace(source, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(source)
 			if upgrade {
 				exec(string(migration))
+				exec(string(notifyMigration))
 			}
 			exec("SET ROLE mserp_app")
 			count := func(want int) {

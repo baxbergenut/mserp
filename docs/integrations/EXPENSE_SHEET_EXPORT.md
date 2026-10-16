@@ -1,7 +1,8 @@
 # Temporary expense-sheet export
 
 `backend/cmd/export-expense-sheet` is server-side MSERP code that writes directly
-to the Google Sheets API. A VPS systemd timer runs it every five minutes. It does
+to the Google Sheets API. A persistent VPS systemd service wakes on a PostgreSQL notification after each
+committed entry. It does
 not depend on a desktop, browser, chat automation, or a connected ChatGPT account.
 Deploying the code or migration does not enable capture or send any sheet writes.
 
@@ -21,12 +22,17 @@ the entry as originally saved, not a replacement for database backups.
 A deferred transactional trigger captures the final invoice and linked work-order
 metadata at commit. A rolled-back save creates no export. Durable immutable outbox
 payloads survive source deletion and outages; Google availability never gates an
-expense save. Pausing the timer preserves pending work. Disabling capture stops
-queuing future records, so pause only the timer for a temporary outage.
+expense save. Pausing the service preserves pending work. Disabling capture stops
+queuing future records, so pause only the service for a temporary outage.
 
 The exporter takes a PostgreSQL advisory lock, verifies all three pinned sheet IDs and
-the original column headers, and processes up to 10 pending entries per invocation
-to stay within Google's per-user read quota, including receipt checks.
+the original column headers, and processes batches of up to 10 pending entries. Watch mode drains successive
+batches immediately. All Sheets requests share pacing at 50 requests per minute
+to stay below per-user quotas during bursts, including receipt checks. Normal
+entries begin delivery as soon as their save commits; delivery takes a few seconds
+and can queue behind a bulk import. The worker listens before its startup drain,
+recovers pending entries on restart, and checks once a minute for retries or missed
+notifications. A broken listener exits so systemd reconnects after 10 seconds.
 It inserts rows after the last populated expense, before preformatted blank rows.
 It preserves other rows, side lists, literal leading-zero units, and original total
 amounts without calculating an extra EFS fee. Company stays blank because MSERP no
@@ -78,14 +84,15 @@ describe the APIs used here. Authentication uses Google's maintained Go OAuth li
 ## Deploy and activate
 
 The normal release pipeline builds/packages `backend/export-expense-sheet` and
-applies migration 105. No frontend changes or API restart for credentials are
+applies migrations 105/107. The deployment helper restarts an already active
+exporter after release health checks. No frontend changes or API restart for credentials are
 required. For a manual build, run `go build -o export-expense-sheet
 ./cmd/export-expense-sheet` from `backend/`; use GOOS=linux/GOARCH=amd64 for the VPS.
 Install the built binary in the release using the normal release/deploy mechanism.
 Do not replace files inside the active immutable release manually.
 
 After credentials and sharing are ready, initialize the export headers once using
-the same service user and environment as the timer:
+the same service user and environment as the service:
 
 ```sh
 sudo systemd-run --wait --pipe --collect --uid=mserp --gid=mserp \
@@ -97,20 +104,20 @@ sudo systemd-run --wait --pipe --collect --uid=mserp --gid=mserp \
 
 This adds only the dedicated export headers, not a test financial entry. Read
 them back in the spreadsheet and confirm the original fields remain intact.
-Only after initialization succeeds, enable capture and the timer:
+Only after initialization succeeds, enable capture and the service:
 
 ```sh
 sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d mserp -c \
   'UPDATE expense_sheet_export_config SET enabled=true WHERE singleton;'
 sudo install -m 0644 deploy/mserp-expense-sheet.service /etc/systemd/system/
-sudo install -m 0644 deploy/mserp-expense-sheet.timer /etc/systemd/system/
+sudo systemctl disable --now mserp-expense-sheet.timer 2>/dev/null || true
+sudo systemctl stop mserp-expense-sheet.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now mserp-expense-sheet.timer
-sudo systemctl start mserp-expense-sheet.service
+sudo systemctl enable --now mserp-expense-sheet.service
 ```
 
-The `deploy/` paths above refer to this checkout; copy those two templates to the
-VPS first if necessary. The timer is independent of the API's scheduled vendor
+The `deploy/` paths above refer to this checkout; copy the service template to the
+VPS first if necessary. The service is independent of the API's scheduled vendor
 sync settings. For a read-only dry run, use the same `systemd-run` command without
 `-initialize -apply`; it reports pending count without Google or database writes.
 
@@ -122,7 +129,8 @@ sudo -u postgres psql -d mserp -c \
   'SELECT expense_id,attempts,last_attempt_at,delivered_at FROM expense_sheet_exports ORDER BY created_at DESC LIMIT 20;'
 ```
 
-Failures exit nonzero and retain entries for the next run. Logs contain IDs/counts
+Delivery failures retain entries for automatic retry. Listener failures exit
+nonzero and systemd restarts the service. Logs contain IDs/counts
 and sanitized errors, not expense text, Google tokens or credential files. Inspect
 the service journal while the transition is active; no separate alert channel is
 configured. Renamed tabs resolve through their numeric IDs; changed/missing original
@@ -130,10 +138,10 @@ headers stop delivery until an operator restores or reviews them.
 
 ## Finish the transition
 
-After checking the queue is empty, stop/disable `mserp-expense-sheet.timer`, then
+After checking the queue is empty, stop/disable `mserp-expense-sheet.service`, then
 set `expense_sheet_export_config.enabled=false`. Retain the outbox and delivery
 metadata with accounting history. Remove the service-account sharing and key
-when no longer needed. Disable the timer before rolling back to an old release
+when no longer needed. Disable the service before rolling back to an old release
 that lacks the exporter binary.
 
 ## Validation
@@ -144,5 +152,6 @@ commits (including a stale receipt read). `MSERP_EXPENSE_SHEET_TEST_DATABASE_URL
 must be a disposable `_test` database on localhost. Database tests run fresh and
 pre-105 schemas, verify application-role ownership, disabled-by-default capture,
 rollback, source-import exclusion, final work-order capture, Safety routing,
-paid-cutoff boundaries, source deletion and
+paid-cutoff boundaries, source deletion, committed-only notifications, startup
+recovery, retries without a new save, cancellation and
 snapshot/receipt immutability. CI supplies that local database automatically.

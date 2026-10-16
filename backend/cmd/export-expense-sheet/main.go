@@ -10,6 +10,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,8 +46,7 @@ func run(ctx context.Context, apply, initialize bool) error {
 		log.Print("expense sheet export is disabled")
 		return nil
 	}
-	// Ten deliveries stay below Google's per-user, per-minute read quota even
-	// with preflight and post-write receipt checks. The timer drains later batches.
+	// Bound each batch; watch mode drains further batches immediately.
 	rows, err := conn.Query(ctx, "SELECT expense_id::text,spreadsheet_id,sheet_id,payload FROM expense_sheet_exports WHERE delivered_at IS NULL ORDER BY created_at,expense_id LIMIT 10")
 	if err != nil {
 		return err
@@ -68,6 +69,9 @@ func run(ctx context.Context, apply, initialize bool) error {
 		log.Printf("dry run: %d pending entries in next batch; no Google or database writes", len(entries))
 		return nil
 	}
+	if !initialize && len(entries) == 0 {
+		return nil
+	}
 	key, err := os.ReadFile(os.Getenv("EXPENSE_SHEET_CREDENTIALS_FILE"))
 	if err != nil {
 		return errors.New("EXPENSE_SHEET_CREDENTIALS_FILE must name a readable service-account JSON key")
@@ -84,6 +88,7 @@ func run(ctx context.Context, apply, initialize bool) error {
 		return errors.New("invalid Google service-account credentials")
 	}
 	httpClient := credentials.Client(ctx)
+	httpClient.Transport = &pacedTransport{base: httpClient.Transport, gate: &sheetRequests}
 	httpClient.Timeout = 30 * time.Second
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	client := expensesheet.Client{HTTP: httpClient}
@@ -132,10 +137,23 @@ func run(ctx context.Context, apply, initialize bool) error {
 func main() {
 	apply := flag.Bool("apply", false, "Write to Google Sheets and record confirmed deliveries")
 	initialize := flag.Bool("initialize", false, "Verify/add MSERP export headers only; requires -apply to write")
+	watch := flag.Bool("watch", false, "Deliver on committed expense notifications, with startup recovery and minute retries; requires -apply")
 	flag.Parse()
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if err := run(ctx, *apply, *initialize); err != nil {
+	var err error
+	if *watch {
+		if !*apply || *initialize {
+			err = errors.New("-watch requires -apply and cannot be combined with -initialize")
+		} else {
+			err = watchExports(ctx, os.Getenv("DATABASE_URL"), time.Minute, func(ctx context.Context) error { return run(ctx, true, false) })
+		}
+	} else {
+		batchCtx, batchCancel := context.WithTimeout(ctx, 4*time.Minute)
+		defer batchCancel()
+		err = run(batchCtx, *apply, *initialize)
+	}
+	if err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

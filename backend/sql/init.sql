@@ -4455,3 +4455,15 @@ ALTER TABLE expense_settings ADD COLUMN driver_only boolean NOT NULL DEFAULT fal
 UPDATE expense_settings SET driver_only=true WHERE kind='category' AND lower(btrim(name))='penalties';
 ALTER TABLE expense_settings ADD CONSTRAINT expense_setting_driver_only_category CHECK(kind='category' OR NOT driver_only);
 COMMIT;
+
+-- Notifications only wake the exporter; the immutable outbox remains authoritative.
+CREATE OR REPLACE FUNCTION notify_expense_sheet_export() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_notify('mserp_expense_sheet_export', '');
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER expense_sheet_export_notify
+AFTER INSERT ON expense_sheet_exports
+FOR EACH ROW EXECUTE FUNCTION notify_expense_sheet_export();

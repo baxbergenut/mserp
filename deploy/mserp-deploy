@@ -158,6 +158,10 @@ if [[ $healthy != true ]]; then
     exit 1
 fi
 
+if systemctl is-active --quiet mserp-expense-sheet.service; then
+    systemctl restart mserp-expense-sheet.service
+fi
+
 rm -f -- "$incoming_archive"
 logger --tag mserp-deploy "activated release $release_id with backup $backup_file"
 echo "activated MSERP release $release_id"
