@@ -54,7 +54,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				if !strings.Contains(source, body) {
 					t.Fatal("init must contain the exact team migration")
 				}
-				source = withoutFleetScopeSyncMigration(t, withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1)))
+				source = withoutBoardLiveMigration(t, withoutFleetScopeSyncMigration(t, withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1))))
 			}
 			if _, err = admin.Exec(ctx, source); err != nil {
 				t.Fatal(err)
@@ -67,6 +67,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyTruckRecurringMigration(t, ctx, admin)
 				applyFleetScopeSyncMigration(t, ctx, admin)
+				applyBoardLiveMigration(t, ctx, admin)
 			}
 			for _, table := range []string{"driver_teams", "driver_team_events"} {
 				var owner string

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -9,12 +10,103 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"mserp/internal/repository"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestLiveSnapshotSharingAndShutdown(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	h.snapshotEvent = "board"
+	calls := 0
+	h.snapshot = func(context.Context) ([]byte, error) { calls++; return []byte(`{"entries":[]}`), nil }
+	var group sync.WaitGroup
+	for range 16 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if frame := h.frame(context.Background(), "changed"); !strings.Contains(frame, `data: {"entries":[]}`) {
+				t.Error("missing pushed data", frame)
+			}
+		}()
+	}
+	group.Wait()
+	if calls != 1 {
+		t.Fatal("subscribers did not share snapshot", calls)
+	}
+	h.publish()
+	h.frame(context.Background(), "changed")
+	if calls != 2 {
+		t.Fatal("committed revision did not refresh snapshot", calls)
+	}
+	started := make(chan struct{})
+	h.snapshot = func(ctx context.Context) ([]byte, error) { close(started); <-ctx.Done(); return nil, ctx.Err() }
+	h.publish()
+	finished := make(chan struct{})
+	go func() { defer close(finished); h.frame(context.Background(), "changed") }()
+	<-started
+	h.shutdown()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("snapshot blocked server shutdown")
+	}
+}
+
+func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	board := newDatabaseEvents(nil, logger, "mserp_driver_board", "driver_board.read")
+	presence := newDatabaseEvents(nil, logger, "mserp_board_presence", "driver_board.read")
+	board.cancel = func() {}
+	presence.cancel = func() {}
+	board.snapshotEvent = "board"
+	board.snapshot = func(context.Context) ([]byte, error) { return []byte(`{"entries":[]}`), nil }
+	presence.snapshotEvent = "peers"
+	presence.snapshot = func(context.Context) ([]byte, error) { return []byte(`[]`), nil }
+	defer board.shutdown()
+	defer presence.shutdown()
+	hash := hashToken("board-session")
+	store := &fakeAuthStore{sessions: map[string]repository.AuthSession{hash: {User: repository.AuthUser{Permissions: []string{"driver_board.read"}}}}}
+	server := httptest.NewServer(board.serve(newAuthHandler(logger, store, AuthOptions{}), presence))
+	defer server.Close()
+	request, _ := http.NewRequest("GET", server.URL, nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "board-session"})
+	client := server.Client()
+	client.Timeout = 5 * time.Second
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.Header.Get("X-Accel-Buffering") != "no" {
+		t.Fatal("proxy buffering must be disabled")
+	}
+	scanner := bufio.NewScanner(response.Body)
+	event := func(want string) {
+		t.Helper()
+		for scanner.Scan() {
+			if scanner.Text() == "event: "+want {
+				return
+			}
+		}
+		t.Fatal("missing stream event", want, scanner.Err())
+	}
+	event("board")
+	event("peers")
+	presence.publish()
+	event("peers")
+	board.publish()
+	event("board")
+	// Publish synchronizes the revocation with the handler's next auth read.
+	delete(store.sessions, hash)
+	board.publish()
+	event("unauthorized")
+}
 
 func TestTaskEventsCoalesce(t *testing.T) {
 	a, b := make(chan struct{}, 1), make(chan struct{}, 1)
@@ -64,47 +156,52 @@ func TestTaskEventsDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	h := newTaskEvents(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	a, unsubscribe := h.subscribe()
-	defer unsubscribe()
-	b, unsubscribeB := h.subscribe()
-	defer unsubscribeB()
-	receive := func(ch chan struct{}) {
-		t.Helper()
-		select {
-		case <-ch:
-		case <-ctx.Done():
-			t.Fatal("notification missing")
+	for _, channel := range []string{"mserp_tasks", "mserp_driver_board", "mserp_board_presence"} {
+		h := newDatabaseEvents(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), channel, "driver_board.read")
+		a, unsubscribe := h.subscribe()
+		defer unsubscribe()
+		b, unsubscribeB := h.subscribe()
+		defer unsubscribeB()
+		receive := func(ch chan struct{}) {
+			t.Helper()
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				t.Fatal("notification missing")
+			}
 		}
+		receive(a)
+		receive(b) // LISTEN is active before accepting mutations.
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.Exec(ctx, `SELECT pg_notify($1,'')`, channel); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-a:
+			t.Fatal("rollback notified clients")
+		case <-time.After(100 * time.Millisecond):
+		}
+		if _, err = pool.Exec(ctx, `SELECT pg_notify($1,'')`, channel); err != nil {
+			t.Fatal(err)
+		}
+		receive(a)
+		receive(b)
+		// A forced listener disconnect must reconnect and reconcile missed events.
+		if _, err = pool.Exec(ctx, `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=current_database() AND query=$1 AND pid<>pg_backend_pid()`, "LISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil {
+			t.Fatal(err)
+		}
+		receive(a)
+		receive(b)
+		unsubscribe()
+		unsubscribeB()
+		h.shutdown()
 	}
-	receive(a)
-	receive(b) // LISTEN is active before accepting mutations.
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_tasks','')`); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Rollback(ctx); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-a:
-		t.Fatal("rollback notified clients")
-	case <-time.After(100 * time.Millisecond):
-	}
-	if _, err = pool.Exec(ctx, `SELECT pg_notify('mserp_tasks','')`); err != nil {
-		t.Fatal(err)
-	}
-	receive(a)
-	receive(b)
-	// A forced listener disconnect must reconnect and reconcile missed events.
-	if _, err = pool.Exec(ctx, `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=current_database() AND query='LISTEN mserp_tasks' AND pid<>pg_backend_pid()`); err != nil {
-		t.Fatal(err)
-	}
-	receive(a)
-	receive(b)
 }
 
 // An active event stream must not consume the HTTP server's shutdown deadline.

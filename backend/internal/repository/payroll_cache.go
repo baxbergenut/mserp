@@ -25,7 +25,7 @@ type payrollCache struct {
 var payrollUnrelatedTables = []string{
 	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
 	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
-	"driver_service_requests", "driver_service_events", "profile_notes",
+	"driver_service_requests", "driver_service_events", "profile_notes", "driver_board_presence",
 }
 
 // Revision rows change atomically with their source tables. Reading them in the

@@ -25,6 +25,8 @@ import { TrailerCell } from "./TrailerCell";
 import { BoardLoads } from "./BoardLoads";
 import { CurrentLoadInput } from "./CurrentLoadInput";
 import { ETAEditor } from "./ETAEditor";
+import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
+import { CellPresence } from "./CellPresence";
 
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
@@ -50,7 +52,7 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
 
 export default function DriverBoardPage() {
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
-  const state = useDriverBoard(etaEditor !== null);
+  const state = useDriverBoard(etaEditor?.id);
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -106,6 +108,7 @@ export default function DriverBoardPage() {
       <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} />
       <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
+      <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "All changes saved" : "Read only"}</span>
       {board?.eld.configured && board.eld.lastError && <span className="text-xs text-amber-300">Five ELD refresh failed</span>}
       {canEdit && board?.eld.configured && <button className={buttonClass} onClick={() => void refreshELD()} disabled={loading || saving || dirty || eldRefreshing} title={board.eld.lastSuccessAt ? `Five ELD last refreshed ${locationTime(board.eld.lastSuccessAt)} NY` : "Refresh Five ELD locations"}><MapPin className="h-4 w-4" />{eldRefreshing ? "Refreshing…" : "Refresh locations"}</button>}
@@ -115,7 +118,7 @@ export default function DriverBoardPage() {
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
-    <div data-scroll-key="driver-board" className="max-h-[72vh] overflow-auto rounded-xl border border-zinc-800" aria-busy={loading}>
+    <StatusBoardScrollArea loading={loading}>
       <table {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
         const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");
@@ -125,7 +128,7 @@ export default function DriverBoardPage() {
         const field = cell ? fields[cell.cellIndex] : "";
         if (!driver || !field) return;
         event.preventDefault(); setHistory({ driverId: driver.id, name: driver.fullName + " · Cell history", ids: [driver.id], field });
-      }} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
+      }} data-spreadsheet-grid data-status-board-grid className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
         <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
         <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" style={i < 2 ? { left: i === 0 ? 0 : driverColumnOffset } : undefined} className={`${i < 2 ? "sm:sticky sm:z-[21]" : ""} h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 text-left font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
         <tbody>
@@ -194,8 +197,8 @@ export default function DriverBoardPage() {
           {!loading && drivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Reload to retry." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
-    </div>
-    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save immediately. Ctrl+Z undoes your last action. Right-click a cell to view its history. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
+    </StatusBoardScrollArea>
+    <CellPresence peers={state.peers} />
     {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}

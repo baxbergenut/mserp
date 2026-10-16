@@ -10,6 +10,10 @@ type routeAccess struct{ method, path, permission string }
 
 // Every registered authenticated route has an explicit policy, including handler-owned checks.
 var routeAccessPolicies = []routeAccess{
+ {"GET", "/driver-board/events", "driver_board.read"},
+ {"GET", "/driver-board/presence", "driver_board.read"},
+ {"PUT", "/driver-board/presence", "driver_board.read"},
+ {"DELETE", "/driver-board/presence/{clientId}", "driver_board.read"},
 	{"POST", "/fleetscope-sync/assignments", "fleetscope.reconcile"},
 	{"POST", "/fleetscope-sync/operations/{id}/supersede", "fleetscope.reconcile"},
 	{"POST", "/auth/logout", "authenticated"},

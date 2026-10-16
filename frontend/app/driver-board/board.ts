@@ -18,7 +18,7 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   return { ...loads, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
 }
 
-// Stored dates remain readable, but the live board displays only time and miles.
+// Retain legacy history, while the live board shows a single time or mileage.
 export function parseETA(value: string): { time: string; miles: string } | null {
   if (!value) return { time: "", miles: "" };
   const legacy = /^(\d{4}-\d{2}-\d{2})(?:T([01]\d|2[0-3]):([0-5]\d))?$/.exec(value);
@@ -35,7 +35,10 @@ export function formatETA(value: string, full = false) {
   const eta = parseETA(value);
   if (!eta) return value;
   if (full && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.replace("T", " · ");
-  return [eta.time, eta.miles ? eta.miles + " mi" : ""].filter(Boolean).join(" · ") || "—";
+  // Older combined values did not record entry order. Use their last stored
+  // component (miles) until edited, and preserve exact values in history.
+  if (full && eta.time && eta.miles) return value;
+  return (eta.miles ? eta.miles + " mi" : eta.time) || "—";
 }
 
 export const statuses = ["ENROUTE", "DISPATCHED", "RESERVED", "HOME", "VACATION", "SHOP", "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD", "LOAD CANCELLED", "REJECTED"];

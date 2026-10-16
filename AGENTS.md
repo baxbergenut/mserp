@@ -301,8 +301,36 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Migration 113 adds commit-only PostgreSQL notifications for board sources and
+  authenticated `/driver-board/events` SSE. Board snapshots and named cursors
+  are pushed directly as board/peers frames, avoiding a follow-up browser GET.
+  Per-channel snapshots are shared across subscribers for the same revision;
+  each subscriber still rechecks authorization. Empty invalidations are the
+  fallback if snapshot loading fails; GET/polling also recover missed updates.
+  `useBoardLive.ts` publishes a tab's selected cell; session-owned cursors expire
+  after 30 seconds, heartbeat every 10 seconds, and clear on hide/navigation/logout.
+  Presence GET/PUT/DELETE require driver_board.read, including read-only viewers;
+  actor/session identity comes only from the cookie. No session hashes reach clients.
+  Incoming updates preserve dirty, saving and actively edited rows, while refreshing
+  other rows immediately; existing version conflicts still prevent lost writes.
+  `CellPresence.tsx` clips named outlines to visible cells and sticky columns.
+  The shared notification hub in httpapi/task_events.go listens once per channel
+  per API process, reconciles reconnects, rechecks sessions and drains on shutdown.
+  TestDriverBoardDatabase covers fresh/migrated cursor ownership, expiry and revocation;
+  TestTaskEventsDatabase covers both channels and reconnect/rollback behavior.
+  `node scripts/test-investors-e2e.mjs --board-only` includes two-user live updates,
+  cell movement, concurrent typing, reconnect, expiry and navigation cleanup.
+  It verifies zero follow-up board reads and measures edit-to-screen latency with
+  both local networking and simulated 178 ms round-trip latency, including SSE frames.
   Saves run immediately and queue typing during in-flight requests. ETA accepts
-  24-hour time, numeric miles left, or both; legacy dated ETAs display time only.
+  24-hour time or numeric miles left: entering either clears the other; the
+  last input wins. Legacy dated ETAs display time only, and old combined values
+  display their last stored component (miles), retaining full audit history.
+  StatusBoardScrollArea caps page scrolling at the table header, then routes
+  vertical wheel/touch scrolling into the table; upward scrolling reverses that
+  order. Its viewport sizing follows main and keeps horizontal scrolling local.
+  `node scripts/test-status-board-layout.mjs` checks ETA persistence and wheel,
+  touch, reverse, horizontal and resize behavior with isolated browser fixtures.
   Dispatcher and status dropdowns retain checked selections (intersection),
   including previous My view selections. Notes precedes ETA. Trailer cells use
   right-click Add/Edit/Delete note and hover previews with corner markers;

@@ -58,6 +58,11 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(migration))
+				loadMigration, err := os.ReadFile("../../sql/048_status_board_loads.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				exec(string(loadMigration))
 				updaterMigration, err := os.ReadFile("../../sql/049_dispatcher_updaters.sql")
 				if err != nil {
 					t.Fatal(err)

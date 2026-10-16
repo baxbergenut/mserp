@@ -118,6 +118,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			defer pool.Close()
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
+			testBoardPresence(t, ctx, pool, repo, fleet)
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)

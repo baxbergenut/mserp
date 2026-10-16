@@ -53,8 +53,9 @@ func TestUpdaterDatabase(t *testing.T) {
 				if !ok {
 					t.Fatal("migration differs from init")
 				}
-				exec(before + after)
+				exec(withoutBoardLiveMigration(t, before+after))
 				exec(string(migration))
+				applyBoardLiveMigration(t, ctx, admin)
 			}
 			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			appcfg := cfg.Copy()

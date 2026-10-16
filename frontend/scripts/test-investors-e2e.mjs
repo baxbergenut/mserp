@@ -18,7 +18,7 @@ import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
@@ -37,6 +37,8 @@ const webhookSecret = randomBytes(32).toString('hex');
 const temp = await mkdtemp(join(tmpdir(), 'mserp-investor-e2e-'));
 const sql = (input) => execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let api, browser, server;
+let networkLatency = 0;
+const setNetworkLatency = ms => { networkLatency = ms; };
 try {
   const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
   sql(`CREATE SCHEMA ${schema}; GRANT USAGE ON SCHEMA ${schema} TO mserp_app; SET search_path TO ${schema},public;\n${init}\n
@@ -62,16 +64,24 @@ try {
     try {
       const url = new URL(req.url, `http://127.0.0.1:${webPort}`);
       if (url.pathname.startsWith('/api/')) {
+        const latency = networkLatency;
+        if (latency) await new Promise(done => setTimeout(done, latency / 2));
         const chunks = []; for await (const chunk of req) chunks.push(chunk);
         const headers = {};
         for (const key of ['cookie', 'content-type', 'x-csrf-token', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
         const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
+        if (latency) await new Promise(done => setTimeout(done, latency / 2));
         res.writeHead(response.status, Object.fromEntries(response.headers));
         if (response.headers.get('content-type')?.includes('text/event-stream')) {
           const stream = Readable.fromWeb(response.body);
           res.on('close', () => stream.destroy());
           stream.on('error', () => res.end());
-          stream.pipe(res); return;
+          // Also delay existing streaming frames by one network leg, so live
+          // measurements include sender -> API -> subscriber latency.
+          stream.pipe(new Transform({ transform(chunk, encoding, done) {
+            if (networkLatency) setTimeout(() => done(null, chunk), networkLatency / 2);
+            else done(null, chunk);
+          } })).pipe(res); return;
         }
         res.end(Buffer.from(await response.arrayBuffer())); return;
       }
@@ -103,7 +113,7 @@ try {
   } else if (process.argv.includes('--driver-setup-only')) {
     await runDriverSetupE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--board-only')) {
-    await runDriverBoardE2E({ page, base, sql, schema, temp });
+    await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });
   } else if (process.argv.includes('--teams-only')) {
     await runDriverTeamsE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--payroll-workflows-only')) {
@@ -182,7 +192,7 @@ try {
   await runPhoneE2E({ page, base });
   await runAccessE2E({ page, base, sql, schema, temp });
   await runInvestorPayE2E({ page, base, sql, schema, temp });
-  await runDriverBoardE2E({ page, base, sql, schema, temp });
+  await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });
   await runAssignmentWeekE2E({ page, base, sql, schema });
   await runPayrollWorkflowsE2E({ page, base, sql, schema, temp });
   await page.goto(`${base}/investors`);

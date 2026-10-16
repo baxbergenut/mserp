@@ -55,6 +55,7 @@ func (request *driverBoardRequest) validate() error {
 }
 
 func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository) {
+	registerBoardPresenceRoutes(r, logger, repo)
 	fail := func(w http.ResponseWriter, err error) {
 		if errors.Is(err, repository.ErrNotFound) {
 			writeAPIError(w, 404, "history event not found")

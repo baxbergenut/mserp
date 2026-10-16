@@ -16,18 +16,35 @@ import (
 )
 
 // One dedicated LISTEN connection per API process with active subscribers, not
-// one database connection per browser. Notifications contain no task data.
+// one database connection per browser. PostgreSQL notifications contain no record
+// data; authorized subscribers receive shared snapshots over their HTTP streams.
 type taskEvents struct {
-	mu      sync.Mutex
-	clients map[chan struct{}]struct{}
-	cancel  context.CancelFunc
-	config  *pgx.ConnConfig
-	logger  *slog.Logger
-	stopped chan struct{}
+	mu               sync.Mutex
+	clients          map[chan struct{}]struct{}
+	cancel           context.CancelFunc
+	config           *pgx.ConnConfig
+	logger           *slog.Logger
+	stopped          chan struct{}
+	channel          string
+	permission       string
+	revision         uint64
+	snapshot         func(context.Context) ([]byte, error)
+	snapshotEvent    string
+	snapshotMu       sync.Mutex
+	snapshotRevision uint64
+	snapshotBody     []byte
+	snapshotAt       time.Time
+	shutdownContext  context.Context
+	stopSnapshots    context.CancelFunc
 }
 
 func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
-	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{})}
+	return newDatabaseEvents(pool, logger, "mserp_tasks", "tasks.read")
+}
+
+func newDatabaseEvents(pool *pgxpool.Pool, logger *slog.Logger, channel, permission string) *taskEvents {
+	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{}), channel: channel, permission: permission}
+	h.shutdownContext, h.stopSnapshots = context.WithCancel(context.Background())
 	if pool != nil {
 		h.config = pool.Config().ConnConfig.Copy()
 	}
@@ -45,6 +62,7 @@ func (h *taskEvents) shutdown() {
 	if h.cancel != nil {
 		h.cancel()
 	}
+	h.stopSnapshots()
 }
 
 func (h *taskEvents) subscribe() (chan struct{}, func()) {
@@ -65,6 +83,9 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 	return ch, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		if _, exists := h.clients[ch]; !exists {
+			return
+		}
 		delete(h.clients, ch)
 		if len(h.clients) == 0 {
 			h.cancel()
@@ -75,12 +96,40 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 func (h *taskEvents) publish() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.revision++
 	for ch := range h.clients {
 		select {
 		case ch <- struct{}{}:
 		default:
 		}
 	}
+}
+
+// Share a committed snapshot among subscribers to the same notification. The
+// session is checked separately for each subscriber before any frame is sent.
+func (h *taskEvents) frame(ctx context.Context, fallback string) string {
+	if h.snapshot == nil {
+		return "event: " + fallback + "\ndata: {}\n\n"
+	}
+	h.snapshotMu.Lock()
+	defer h.snapshotMu.Unlock()
+	h.mu.Lock()
+	revision := h.revision
+	h.mu.Unlock()
+	if h.snapshotBody == nil || h.snapshotRevision != revision || time.Since(h.snapshotAt) > time.Second {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		stop := context.AfterFunc(h.shutdownContext, cancel)
+		body, err := h.snapshot(ctx)
+		stop()
+		cancel()
+		if err != nil {
+			return "event: " + fallback + "\ndata: {}\n\n"
+		}
+		h.snapshotBody = body
+		h.snapshotRevision = revision
+		h.snapshotAt = time.Now()
+	}
+	return "event: " + h.snapshotEvent + "\ndata: " + string(h.snapshotBody) + "\n\n"
 }
 func (h *taskEvents) listen(ctx context.Context) {
 	delay := time.Second
@@ -89,7 +138,7 @@ func (h *taskEvents) listen(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		h.logger.Warn("task notifications reconnecting", "error", err)
+		h.logger.Warn("database notifications reconnecting", "channel", h.channel, "error", err)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -112,7 +161,7 @@ func (h *taskEvents) receive(ctx context.Context) error {
 		defer c()
 		_ = conn.Close(closeCtx)
 	}()
-	if _, err = conn.Exec(ctx, "LISTEN mserp_tasks"); err != nil {
+	if _, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{h.channel}.Sanitize()); err != nil {
 		return err
 	}
 	// Reconcile anything missed during a connection interruption.
@@ -125,7 +174,7 @@ func (h *taskEvents) receive(ctx context.Context) error {
 	}
 }
 
-func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
+func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
@@ -133,6 +182,12 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 		}
 		changes, unsubscribe := h.subscribe()
 		defer unsubscribe()
+		var presenceChanges chan struct{}
+		if len(presence) > 0 {
+			var closePresence func()
+			presenceChanges, closePresence = presence[0].subscribe()
+			defer closePresence()
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache, no-store")
 		w.Header().Set("X-Accel-Buffering", "no")
@@ -151,7 +206,10 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			// before waiting: an expired HTTP write deadline cannot be extended.
 			return controller.SetWriteDeadline(time.Time{}) == nil
 		}
-		if !send("retry: 5000\nevent: changed\ndata: {}\n\n") {
+		if !send("retry: 5000\n" + h.frame(r.Context(), "changed")) {
+			return
+		}
+		if presenceChanges != nil && !send(presence[0].frame(r.Context(), "presence")) {
 			return
 		}
 		heartbeat := time.NewTicker(25 * time.Second)
@@ -159,7 +217,7 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 		lifetime := time.NewTimer(10 * time.Minute)
 		defer lifetime.Stop()
 		for {
-			changed := false
+			changed, presenceChanged := false, false
 			select {
 			case <-r.Context().Done():
 				return
@@ -170,6 +228,8 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			case <-heartbeat.C:
 			case <-changes:
 				changed = true
+			case <-presenceChanges:
+				presenceChanged = true
 			}
 			// Role changes, disabled accounts and revoked/expired sessions take effect
 			// on this connection too. Every data fetch also performs normal authorization.
@@ -179,12 +239,16 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			if err != nil && !errors.Is(err, repository.ErrAuthRecordNotFound) {
 				return
 			}
-			if err != nil || !slices.Contains(session.User.Permissions, "tasks.read") {
+			if err != nil || !slices.Contains(session.User.Permissions, h.permission) {
 				send("event: unauthorized\ndata: {}\n\n")
 				return
 			}
 			if changed {
-				if !send("event: changed\ndata: {}\n\n") {
+				if !send(h.frame(r.Context(), "changed")) {
+					return
+				}
+			} else if presenceChanged {
+				if !send(presence[0].frame(r.Context(), "presence")) {
 					return
 				}
 			} else if !send(": keepalive\n\n") {
