@@ -9,7 +9,7 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
-import { additionalLoadEntries, amountDisplay, compactDecimalDisplay as decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
+import { additionalLoadEntries, amountDisplay, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
   entries: GrossBoardEntry[];

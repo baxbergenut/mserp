@@ -57,7 +57,7 @@ export function validDecimal(value: string, nonnegative = false) {
   return value === "" || (/^-?\d{1,10}(\.\d{1,2})?$/.test(value) && (!nonnegative || !value.startsWith("-")));
 }
 
-// Compact field display only; keep the exact saved decimal for calculations.
+// Plain editing text; keep the exact saved decimal for calculations.
 export function compactDecimal(value: string) {
   return value.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
 }
@@ -83,12 +83,8 @@ export function decimalDisplay(value: bigint, currency = false) {
   return `${value < BigInt(0) ? "-" : ""}${currency ? "$" : ""}${(absolute / BigInt(100)).toLocaleString("en-US")}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
 }
 
-export function compactDecimalDisplay(value: bigint, currency = false) {
-  return compactDecimal(decimalDisplay(value, currency));
-}
-
 export function amountDisplay(value: string, currency = false) {
-  return value === "" || !validDecimal(value) ? value : compactDecimalDisplay(hundredths(value), currency);
+  return value === "" || !validDecimal(value) ? value : decimalDisplay(hundredths(value), currency);
 }
 
 export function totals(entries: GrossBoardEntry[]) {
@@ -139,12 +135,12 @@ export function incompleteRates(entries: GrossBoardEntry[]) {
 }
 
 export const balanceLabel = (balance: bigint) => balance > BigInt(0) ? "Available" : balance < BigInt(0) ? "Uncovered" : "Balanced";
-export const signedMoney = (value: bigint) => (value > BigInt(0) ? "+" : "") + compactDecimalDisplay(value, true);
+export const signedMoney = (value: bigint) => (value > BigInt(0) ? "+" : "") + decimalDisplay(value, true);
 
 export function rpmDisplay(gross: bigint, miles: bigint) {
   if (miles === BigInt(0)) return "—";
   const sign = gross < BigInt(0) ? BigInt(-1) : BigInt(1);
-  return compactDecimalDisplay(sign * ((sign * gross * BigInt(100) + miles / BigInt(2)) / miles), true);
+  return decimalDisplay(sign * ((sign * gross * BigInt(100) + miles / BigInt(2)) / miles), true);
 }
 
 // Rebase edits made during an autosave onto the versions the server committed.

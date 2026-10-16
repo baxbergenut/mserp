@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchGrossBoardBalance } from "@/app/lib/api";
 import type { GrossBoardBalanceLine, GrossBoardEntry } from "@/app/lib/types";
 import { BoardDialog } from "./BoardDialog";
-import { balanceLabel, compactDecimalDisplay as decimalDisplay, hundredths, incompleteRates, rateBalance, rateChange, signedMoney } from "./board";
+import { balanceLabel, decimalDisplay, hundredths, incompleteRates, rateBalance, rateChange, signedMoney } from "./board";
 
 export function BalanceDetails({ driverId, driverName, week, opening, openingIncomplete, entries, onClose }: {
   driverId: string; driverName: string; week: string; opening: string; openingIncomplete: number;

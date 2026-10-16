@@ -280,7 +280,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   reject more than two decimal places, and send only complete decimals to the API.
   While editing Original gross, a following Driver gross mirrors its exact text;
   load fields show comma separators and gross dollar signs outside editing;
-  totals, balances, previews and RPM share the compact decimal style, without
+  totals, balances, previews and RPM share two decimal places, without
   changing saved amounts or exact-decimal totals. Editing uses plain numbers.
   New load matches default blank Driver gross to Original gross on both browser
   selection and server exact-number resolution; explicit amounts, including zero,

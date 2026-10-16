@@ -100,7 +100,7 @@ try {
   await page.goto(`${base}/gross-board?weekStart=${week}&driverId=driver-0&date=${week}&slot=0`);
   const amount = (date, field = 'original rate') => page.getByLabel(`Alice Grid, ${date}, ${field}`, { exact: true });
   const original = amount(week);
-  await expect(original).toHaveValue('$400');
+  await expect(original).toHaveValue('$400.00');
   await original.click(); await expect(original.locator('..')).toBeFocused();
   await page.keyboard.type('123'); await expect(original).toHaveValue('123');
   await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
@@ -108,7 +108,7 @@ try {
   await page.keyboard.type('456'); await page.keyboard.press('Enter');
   await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-13', 'miles').locator('..')).toBeFocused();
   await page.keyboard.type('12'); await page.keyboard.press('Enter'); await page.keyboard.press('Control+c');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('12');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('12.00');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
