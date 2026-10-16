@@ -1,5 +1,9 @@
 # MSERP deployment
 
+The temporary, opt-in expense-sheet exporter has a separate service/timer and
+Google service-account setup. See [Expense sheet export](../docs/integrations/EXPENSE_SHEET_EXPORT.md)
+before enabling it; ordinary deployment does not activate sheet writes.
+
 GitHub Actions builds the Linux API and static frontend. Production receives a
 checksum-verified archive through the unprivileged `mserp-deploy` account. The
 root-owned `mserp-deploy` helper then:

@@ -4,7 +4,7 @@ import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields
 import { expenseAssignment } from "./assignments";
 import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
-import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
+import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
 import type { Driver, Expense, ExpensePage, ExpenseInput, Investor, Truck } from "../lib/types";
 import {
@@ -56,7 +56,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
 }
 
 export function ExpenseForm({
-  value,
+  value: initialValue,
   options,
   originalCategory,
   allowedCategoryIds,
@@ -74,8 +74,11 @@ export function ExpenseForm({
   owners: Investor[];
   onChange: (value: ExpenseInput) => void;
 }) {
+  const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);
+  const value = applyExpenseCategoryRules(initialValue, options.settings);
+  const change = (next: ExpenseInput) => onChange(applyExpenseCategoryRules(next, options.settings));
   const set = <K extends keyof ExpenseInput>(key: K, next: ExpenseInput[K]) =>
-    onChange({ ...value, [key]: next });
+    change({ ...value, [key]: next });
 
   return (
     <div className="space-y-6">
@@ -84,7 +87,7 @@ export function ExpenseForm({
           <select autoFocus aria-label="Category"
             required
             value={value.categoryId}
-            onChange={(event) => onChange(changeExpenseCategory(value, event.target.value, options.settings))}
+            onChange={(event) => change(changeExpenseCategory(value, event.target.value, options.settings))}
             className={controlClass}
           >
             <option value="">Select category</option>
@@ -117,14 +120,14 @@ export function ExpenseForm({
           <ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} />
         </Field>
       </FormSection>
-      <ExpenseCostBreakdown value={value} names={expenseNames(options.settings, value.categoryId)} onChange={onChange} />
+      <ExpenseCostBreakdown value={value} names={expenseNames(options.settings, value.categoryId)} onChange={change} />
 
       <FormSection title="Assignment and classification">
         <Field label="Unit number">
           <select aria-label="Unit number"
             value={value.truckId ?? ""}
             onChange={(event) => {
-              onChange(expenseAssignment(value, "truck", event.target.value, drivers, trucks, owners));
+              change(expenseAssignment(value, "truck", event.target.value, drivers, trucks, owners));
             }}
             className={controlClass}
           >
@@ -137,21 +140,23 @@ export function ExpenseForm({
         </Field>
         <Field label="Driver">
           <select aria-label="Driver"
+            required={driverOnly}
             value={value.driverId ?? ""}
             onChange={(event) => {
-              onChange(expenseAssignment(value, "driver", event.target.value, drivers, trucks, owners));
+              change(expenseAssignment(value, "driver", event.target.value, drivers, trucks, owners));
             }}
             className={controlClass}
           >
-            <option value="">No linked driver</option>
+            <option value="">{driverOnly ? "Select driver" : "No linked driver"}</option>
             {drivers.map((driver) => (
               <option key={driver.id} value={driver.id}>{driver.fullName}</option>
             ))}
           </select>
 
         </Field>
+        {driverOnly ? <p className="text-xs text-zinc-400 sm:col-span-2">Charged to the selected driver.</p> : <>
         <Field label="Who will cover" wide>
-          <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={onChange} className={controlClass} />
+          <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={change} className={controlClass} />
         </Field>
         <Field label="Payment method">
           <input
@@ -169,6 +174,7 @@ export function ExpenseForm({
         <Field label="Paid by">
           <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />
         </Field>
+        </>}
         <Field label="Reference number" wide>
           <input
             value={value.referenceNumber}

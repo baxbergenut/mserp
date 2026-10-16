@@ -1,5 +1,7 @@
 "use client";
 
+import { applyExpenseCategoryRules } from "./catalog";
+
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -216,7 +218,7 @@ export default function ExpensesPage() {
   async function save() {
     if(saveLock.current || aiBusy)return;
     saveLock.current=true;setIsSaving(true);setError("");
-    try {if(editing)await updateExpense(editing.id,form);else await createExpense(form);completeEntry();setVerificationNotice("Saved.");await loadData(false);}
+    try {const input=applyExpenseCategoryRules(form,options.settings);if(editing)await updateExpense(editing.id,input);else await createExpense(input);completeEntry();setVerificationNotice("Saved.");await loadData(false);}
     catch(reason){setError(reason instanceof Error ? reason.message : "Failed to save entry");}
     finally{setIsSaving(false);saveLock.current=false;}
   }

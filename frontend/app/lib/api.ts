@@ -492,7 +492,7 @@ export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequ
 export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason}) });
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
-export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
+export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id" | "driverOnly"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
 export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/escrows/settings");
 export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 

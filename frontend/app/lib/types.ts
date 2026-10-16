@@ -795,6 +795,7 @@ export interface ExpenseSetting {
   name: string;
   active: boolean;
   version: number;
+  driverOnly?: boolean;
 }
 
 export interface DriverEscrowSetting {

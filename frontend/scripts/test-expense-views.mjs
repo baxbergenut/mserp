@@ -22,6 +22,7 @@ const trucks = [
 ];
 const maintenanceNames = ['Electrical issue','Towing','PM service','Truck wash','Detailing','Road service','Body work','Leakage','Brake issue','Tire issue','Oil change'];
 const settings = [{ id: 'maintenance', name: 'Maintenance', kind: 'category', active: true }, ...maintenanceNames.map((name,i)=>({id:'name-'+i, name,kind:'name',categoryId:'maintenance',active:true}))];
+settings.push({id:'penalties',name:'Penalties',kind:'category',active:true,driverOnly:true});
 const blankDraft = { company: 'Wrong company', categoryId: 'maintenance', expenseDate: '2026-09-28', truckId: 'investor-truck', driverId: 'hired', unitNumber: '101', driverName: 'Hired Driver', amount: '12.50', paymentType: '', expenseType: 'Repair', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: 'Invented payer' };
 let drafts = [{...blankDraft,costBreakdown:[{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]}];
 const writes = [];
@@ -69,7 +70,7 @@ try {
     const q = new URL(route.request().url()).searchParams;
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'fleet.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true }] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'fleet.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canRead:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
       '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: [], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
@@ -232,6 +233,27 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(verified).toEqual(['expense-0', 'expense-1', 'expense-2', 'expense-1']);
+  await page.setViewportSize({width:1280,height:1000});
+  await page.getByRole('button',{name:'Add entry',exact:true}).click();
+  // Switching away from an EFS expense must discard its hidden payer and fee.
+  await page.getByLabel('Payment method',{exact:true}).fill('EFS');
+  await page.getByLabel('Paid by',{exact:true}).selectOption('Other User');
+  await page.getByLabel('Category',{exact:true}).selectOption('penalties');
+  await expect(page.getByLabel('Payment method',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Paid by',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Who will cover',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Driver',{exact:true})).toHaveAttribute('required','');
+  await page.getByLabel('Name',{exact:true}).selectOption('__custom');
+  await page.getByLabel('Name custom',{exact:true}).fill('Late delivery');
+  await page.getByLabel('Amount',{exact:true}).fill('500.01');
+  const beforePenalty=writes.length;
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  expect(writes.length).toBe(beforePenalty); // Browser validation requires the debtor.
+  await page.getByLabel('Driver',{exact:true}).selectOption('hired');
+  await page.screenshot({path:join(tmpdir(),'mserp-penalty-modal.png'),fullPage:true});
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  await expect.poll(()=>writes.length).toBe(beforePenalty+1);
+  expect(writes.at(-1)).toMatchObject({categoryId:'penalties',coveredBy:'Driver',driverId:'hired',ownerId:null,paymentType:'',paidBy:'',baseAmount:'500.01'});
   expect(errors).toEqual([]);
   console.log('Expense browser checks passed: ownership, AI entry, layout, verification attribution, Ctrl+Z and cancellation permissions.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

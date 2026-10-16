@@ -1,0 +1,20 @@
+[Unit]
+Description=MSERP temporary expense-sheet export
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mserp
+Group=mserp
+WorkingDirectory=/etc/mserp
+EnvironmentFile=/etc/mserp/mserp.env
+EnvironmentFile=/etc/mserp/expense-sheet.env
+ExecStart=/opt/mserp/current/backend/export-expense-sheet -apply
+TimeoutStartSec=240
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

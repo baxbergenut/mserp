@@ -219,6 +219,20 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   CSV exports and creates an idempotent, source-row-traceable SQL import.
   Imports after migration 085 create unattributed historical verification records;
   reimports preserve the application's current approvals and cancellations.
+- Temporary outbound expense-sheet backup uses migration 105,
+  `backend/cmd/export-expense-sheet`, and `internal/expensesheet`. It captures only
+  new native HR/Safety/Penalties/Other/work-order invoices after explicit database activation;
+  deployment alone sends nothing. A separate five-minute systemd timer uses
+  `EXPENSE_SHEET_CREDENTIALS_FILE` (server-only Google service-account JSON key).
+  Immutable transactional snapshots and atomic Google row/metadata receipts
+  prevent retry duplicates. It never mirrors later edits or backfills history.
+  While activated, eligible native entries dated before September 28, 2026 are
+  settled on creation; later dates retain normal payment status. The dedicated
+  MSERP Paid export column stays separate from verification checkboxes.
+  Imported/system-generated records and other categories are excluded. Sheet
+  MSERP Entry ID columns prevent feedback through the CSV import helper. See
+  `docs/integrations/EXPENSE_SHEET_EXPORT.md` for sharing, activation and retirement.
+  `MSERP_EXPENSE_SHEET_TEST_DATABASE_URL` runs local fresh/migrated database tests.
 - `backend/sql/002_add_tolls.sql` through
   `075_relay_drivers.sql`:
   manual incremental migrations for older databases.
@@ -1390,6 +1404,11 @@ assignment lookup lists.
   into synthetic model checks; previews also require
   `MSERP_REVIEW_OPENAI_ENABLED=1` and server OPENAI_API_KEY for live extraction.
 - Expense type is labeled Name in manual and AI review forms, required after Category.
+  Migration 106 pins driver-only entry behavior to the Penalties category UUID
+  (`expense_settings.driver_only`), retaining it across renames. Penalty forms
+  require a linked driver and omit responsibility/payment-method/paid-by inputs.
+  Single, batch and update APIs enforce Driver responsibility, clear owner/payer
+  fields and apply no EFS fee. Existing ledger rows and financial locks are retained.
   The API retains expenseType for compatibility and requires a nonblank name on writes.
   Driver Pay shows this name and a negative deduction amount; unnamed legacy records
   fall back to category. A small muted Left balance beside the name previews the

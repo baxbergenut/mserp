@@ -10,6 +10,28 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestDriverOnlyExpenseRequest(t *testing.T) {
+	driver := "00000000-0000-4000-8000-000000000098"
+	owner := "00000000-0000-4000-8000-000000000097"
+	base := "500.01"
+	request := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-16", ExpenseType: "Penalty", BaseAmount: &base, PaymentType: "EFS", PaidBy: "Someone", CoveredBy: "Truck Owner", OwnerID: &owner, DriverID: &driver}
+	request.applyDriverOnly()
+	input, err := request.validate()
+	if err != nil || input.Amount != base || input.PaymentFee != "0.00" || input.CoveredBy == nil || *input.CoveredBy != "Driver" || input.OwnerID != nil || input.PaymentType != nil || input.PaidBy != nil {
+		t.Fatalf("driver-only penalty: %+v, %v", input, err)
+	}
+	request.DriverID = nil
+	if _, err = request.validate(); err == nil {
+		t.Fatal("penalty must require a linked driver")
+	}
+	request.DriverID = &driver
+	negative := "-1.00"
+	request.BaseAmount = &negative
+	if _, err = request.validate(); err == nil {
+		t.Fatal("penalty must reject negative deductions")
+	}
+}
+
 func TestExpenseCostBreakdownValidation(t *testing.T) {
 	for _, tc := range []struct {
 		rows  []repository.ExpenseCostItem

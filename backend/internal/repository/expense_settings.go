@@ -19,10 +19,11 @@ type ExpenseSetting struct {
 	Name       string  `json:"name"`
 	Active     bool    `json:"active"`
 	Version    int     `json:"version"`
+	DriverOnly bool    `json:"driverOnly"`
 }
 
 func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseSetting, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,kind,category_id,name,active,version FROM expense_settings ORDER BY lower(name),id`)
+	rows, err := r.pool.Query(ctx, `SELECT id,kind,category_id,name,active,version,driver_only FROM expense_settings ORDER BY lower(name),id`)
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +31,18 @@ func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseS
 	result := []ExpenseSetting{}
 	for rows.Next() {
 		var v ExpenseSetting
-		if err = rows.Scan(&v.ID, &v.Kind, &v.CategoryID, &v.Name, &v.Active, &v.Version); err != nil {
+		if err = rows.Scan(&v.ID, &v.Kind, &v.CategoryID, &v.Name, &v.Active, &v.Version, &v.DriverOnly); err != nil {
 			return nil, err
 		}
 		result = append(result, v)
 	}
 	return result, rows.Err()
+}
+
+func (r *ExpenseRepository) ExpenseCategoryDriverOnly(ctx context.Context, id string) (bool, error) {
+	var driverOnly bool
+	err := r.pool.QueryRow(ctx, `SELECT coalesce((SELECT driver_only FROM expense_settings WHERE id=$1 AND kind='category'),false)`, id).Scan(&driverOnly)
+	return driverOnly, err
 }
 
 func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, input ExpenseSetting) (ExpenseSetting, error) {
@@ -53,12 +60,12 @@ func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, i
 	}
 	var row pgx.Row
 	if id == "" {
-		row = r.pool.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version`, input.Kind, input.CategoryID, input.Name, input.Active)
+		row = r.pool.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only`, input.Kind, input.CategoryID, input.Name, input.Active)
 	} else {
-		row = r.pool.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
+		row = r.pool.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version,driver_only`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
 	}
 	var result ExpenseSetting
-	err := row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version)
+	err := row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version, &result.DriverOnly)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrExpenseSettingConflict
 	}

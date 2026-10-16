@@ -12,7 +12,7 @@ import { controlClass } from "../components/management/ManagementUI";
 import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { expenseAssignment } from "./assignments";
 import type { Investor } from "../lib/types";
-import { activeExpenseCategories, changeExpenseCategory, expenseNames } from "./catalog";
+import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
 const compactControl = `${controlClass} min-w-32 px-2 py-1.5 text-[12px]`;
 const MAX_ATTACHMENT_SIZE = 20 << 20;
@@ -185,7 +185,7 @@ export function ExpenseBatchEditor({
   onChange: (values: ExpenseInput[]) => void;
 }) {
   function update(index: number, patch: Partial<ExpenseInput>) {
-    onChange(values.map((value, valueIndex) => valueIndex === index ? { ...value, ...patch } : value));
+    onChange(values.map((value, valueIndex) => valueIndex === index ? applyExpenseCategoryRules({ ...value, ...patch }, settings) : value));
   }
 
   return (
@@ -238,6 +238,7 @@ export function ExpenseBatchEditor({
                 <td className="space-y-1 px-2 py-2">
                   <select
                     value={value.driverId ?? ""}
+                    required={isDriverOnlyExpense(settings, value.categoryId)}
                     onChange={(event) => {
                       update(index, expenseAssignment(value,"driver",event.target.value,drivers,trucks,owners));
                     }}
@@ -247,12 +248,12 @@ export function ExpenseBatchEditor({
                     {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}
                   </select>
                 </td>
-                <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} /></td>
-                <td className="px-2 py-2"><input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={isDriverOnlyExpense(settings, value.categoryId) ? "" : value.paymentType} /></td>
+                <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} />}</td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2"><textarea rows={3} value={value.description} onChange={(event) => update(index, { description: event.target.value })} className={`${compactControl} min-w-56`} /></td>
-                <td className="px-2 py-2"><ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} /></td>
-                <td className="px-2 py-2"><ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} /></td>
+                <td className="px-2 py-2">{isDriverOnlyExpense(settings, value.categoryId) ? <span>Driver</span> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} />}</td>
+                <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} />}</td>
                 <td className="px-2 py-2">
                   <button type="button" disabled={values.length === 1} onClick={() => onChange(values.filter((_, valueIndex) => valueIndex !== index))} className="rounded-md p-2 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove transaction ${index + 1}`}>
                     <Trash2 className="h-4 w-4" />

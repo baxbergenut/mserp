@@ -82,6 +82,10 @@ find "$extract_dir" -type d -exec chmod 0755 {} +
 find "$extract_dir" -type f -exec chmod 0644 {} +
 chown root:mserp "$extract_dir/backend/mserp-api"
 chmod 0750 "$extract_dir/backend/mserp-api"
+if [[ -f $extract_dir/backend/export-expense-sheet ]]; then
+    chown root:mserp "$extract_dir/backend/export-expense-sheet"
+    chmod 0750 "$extract_dir/backend/export-expense-sheet"
+fi
 mv "$extract_dir" "$release_dir"
 extract_dir=
 

@@ -108,6 +108,15 @@ function Get-ExpenseRows {
     $rows = @(Import-Csv -LiteralPath $Path)
     for ($index = 0; $index -lt $rows.Count; $index++) {
         $row = $rows[$index]
+        # Native MSERP entries mirrored back to the sheet already have a ledger ID.
+        # Keep their source row positions, but never reimport them as new expenses.
+        if ($row.'MSERP Entry ID') {
+            $exportID = [guid]::Empty
+            if (-not [guid]::TryParse(([string]$row.'MSERP Entry ID').Trim(), [ref]$exportID)) {
+                throw "Invalid MSERP Entry ID at $Sheet row $($index + 2)."
+            }
+            continue
+        }
         if (-not (
             $row.Date -or $row.Amount -or $row.Description -or
             $row.'Expense Type' -or $row.Driver -or $row.'Unit #'

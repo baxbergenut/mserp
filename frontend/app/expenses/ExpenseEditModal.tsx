@@ -7,6 +7,7 @@ import { useExpenseCategoryAccess, usePermissions } from "@/app/lib/access";
 import type { Driver, Expense, ExpenseInput, ExpensePage, Investor, Truck } from "@/app/lib/types";
 import { ErrorBanner, Modal } from "@/app/components/management/ManagementUI";
 import { ExpenseForm, expenseToInput } from "./ExpenseForm";
+import { applyExpenseCategoryRules } from "./catalog";
 
 export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => Promise<void> }) {
   const access = useExpenseCategoryAccess();
@@ -34,9 +35,9 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
   }, [id, fleet]);
 
   async function save() {
-    if (!form || !canEdit) return;
+    if (!form || !canEdit || !data) return;
     setSaving(true); setError("");
-    try { await updateExpense(id, form); await onSaved(); onClose(); }
+    try { await updateExpense(id, applyExpenseCategoryRules(form, data.options.settings)); await onSaved(); onClose(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save expense"); }
     finally { setSaving(false); }
   }

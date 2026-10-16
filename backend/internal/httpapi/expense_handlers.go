@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -74,6 +75,28 @@ type expenseRequest struct {
 
 type expenseBatchRequest struct {
 	Expenses []expenseRequest `json:"expenses"`
+}
+
+func (request *expenseRequest) applyDriverOnly() {
+	request.CoveredBy = "Driver"
+	request.OwnerID = nil
+	request.PaymentType = ""
+	request.PaidBy = ""
+}
+
+// Apply category rules before fee/driver validation, including for older clients.
+func (handler expenseHandler) normalizeExpenseRequest(ctx context.Context, request *expenseRequest) error {
+	if !isUUID(strings.TrimSpace(request.CategoryID)) {
+		return nil
+	}
+	driverOnly, err := handler.repo.ExpenseCategoryDriverOnly(ctx, strings.TrimSpace(request.CategoryID))
+	if err != nil {
+		return err
+	}
+	if driverOnly {
+		request.applyDriverOnly()
+	}
+	return nil
 }
 
 type extractedExpense struct {
@@ -330,6 +353,10 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := handler.normalizeExpenseRequest(r.Context(), &request); err != nil {
+		handler.writeError(w, err)
+		return
+	}
 	input, err := request.validate()
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
@@ -362,6 +389,10 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 	inputs := make([]repository.ExpenseInput, 0, len(request.Expenses))
 	session, _ := authSessionFromContext(r.Context())
 	for index, expense := range request.Expenses {
+		if err := handler.normalizeExpenseRequest(r.Context(), &expense); err != nil {
+			handler.writeError(w, err)
+			return
+		}
 		input, err := expense.validate()
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, "expense "+strconv.Itoa(index+1)+": "+err.Error())
@@ -620,6 +651,10 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 	var request expenseRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := handler.normalizeExpenseRequest(r.Context(), &request); err != nil {
+		handler.writeError(w, err)
 		return
 	}
 	input, err := request.validate()
