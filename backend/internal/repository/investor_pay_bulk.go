@@ -41,7 +41,7 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
  WHERE a.assigned_at<(($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
  AND (a.unassigned_at IS NULL OR a.unassigned_at>=(($1::date+7)::timestamp AT TIME ZONE 'America/New_York')) GROUP BY a.truck_id)
  SELECT s.truck_id::text,t.unit_number,coalesce(d.full_name,i.full_name),coalesce(i.driver_id::text,''),
- c.truck_id IS NOT NULL,coalesce(a.members=1 AND a.driver_id=i.driver_id,false)
+ c.truck_id IS NOT NULL,coalesce(a.members=1 AND a.driver_id=i.driver_id AND d.active,false)
  FROM terms s JOIN trucks t ON t.id=s.truck_id JOIN investors i ON i.id=s.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
  LEFT JOIN conflicts c ON c.truck_id=s.truck_id LEFT JOIN full_week a ON a.truck_id=s.truck_id`, week, payrollTruckIDs(ctx))
 	if e != nil {
@@ -122,18 +122,18 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
 		return v, nil
 	}
 	rows, e = tx.Query(ctx, `WITH terms AS (SELECT DISTINCT ON(truck_id) truck_id,owner_id FROM truck_settlement_terms WHERE week_start<=$1::date AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) ORDER BY truck_id,week_start DESC), relevant_expenses AS MATERIALIZED (
- SELECT e.* FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
+ SELECT e.*, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
  WHERE lower(btrim(e.covered_by))='truck owner' AND NOT e.driver_settled AND e.amount>=0 AND e.expense_date<$1::date+10
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$1::date) other,sum(p.amount) FILTER(WHERE p.week_start<$1::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id)
- SELECT e.truck_id::text,w.investor_truck_id::text,e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.amount::text,
- (e.amount-coalesce(p.other,0))::text,coalesce(w.amount,e.amount-coalesce(p.other,0))::text,
- (e.amount-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.amount-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
+ SELECT e.truck_id::text,w.investor_truck_id::text,e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.settlement_total::text,
+ (e.settlement_total-coalesce(p.other,0))::text,coalesce(w.amount,e.settlement_total-coalesce(p.other,0))::text,
+ (e.settlement_total-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.settlement_total-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
  FROM relevant_expenses e
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$1::date
  LEFT JOIN payments p ON p.expense_id=e.id
- WHERE (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
+ WHERE (w.expense_id IS NOT NULL OR e.settlement_total>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
 	if e != nil {
 		return v, e
 	}

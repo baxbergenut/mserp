@@ -183,6 +183,105 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			if len(card(reopened).Edits.ExpenseDeductions) != 7 || len(card(read(week.AddDate(0, 0, 7))).Edits.ExpenseDeductions) != 4 {
 				t.Fatal("reopening did not preserve payments and expose the new expense")
 			}
+			t.Run("efs", func(t *testing.T) {
+				feeWeek := week.AddDate(0, 0, 28)
+				otherCategory := id(`SELECT id FROM expense_settings WHERE kind='category' AND name='Other'`)
+				createFee := func(amount, method string, base *string, fee string, penalty bool) Expense {
+					t.Helper()
+					categoryID := otherCategory
+					if penalty {
+						categoryID = category
+					}
+					v, err := expenses.CreateExpense(ctx, ExpenseInput{CategoryID: categoryID, ExpenseType: payTestString("EFS collection"), ExpenseDate: feeWeek,
+						DriverID: &driver, OwnerID: owner, TruckID: truck, CoveredBy: &coveredBy, Amount: amount, PaymentType: &method, BaseAmount: base, PaymentFee: fee})
+					if err != nil {
+						t.Fatal(err)
+					}
+					return v
+				}
+				cases := []struct {
+					amount, method, fee, want string
+					base                      *string
+					penalty                   bool
+				}{
+					{amount: "0", method: "EFS", want: "0.00"},
+					{amount: "0.01", method: "EFS", want: "3.01"},
+					{amount: "500", method: "EFS", want: "503.00"},
+					{amount: "500.01", method: " eFs ", want: "506.01"},
+					{amount: "1000", method: "EFS", want: "1006.00"},
+					{amount: "640", method: "EFS", base: payTestString("634"), fee: "6", want: "640.00"},
+					{amount: "634", method: "Cash", want: "634.00"},
+					{amount: "100", method: "EFS", penalty: true, want: "100.00"},
+				}
+				var target Expense
+				for _, tc := range cases {
+					v := createFee(tc.amount, tc.method, tc.base, tc.fee, tc.penalty)
+					x, err := expenses.GetExpense(ctx, v.ID)
+					if err != nil || x.RemainingAmount == nil || *x.RemainingAmount != tc.want {
+						t.Fatalf("expense balance %+v: %+v %v", tc, x, err)
+					}
+					found := false
+					for _, row := range card(read(feeWeek)).Edits.ExpenseDeductions {
+						if row.ExpenseID != v.ID {
+							continue
+						}
+						found = true
+						if row.Total != tc.want || row.Amount != tc.want || row.Available != tc.want {
+							t.Fatalf("fee missing or doubled: %+v %+v", tc, row)
+						}
+					}
+					if !found && tc.amount != "0" {
+						t.Fatal("EFS expense missing", tc)
+					}
+					if tc.amount == "500.01" {
+						target = v
+					}
+				}
+				selectTarget := func(w time.Time, amount string) DriverPayEdits {
+					t.Helper()
+					edits := card(read(w)).Edits
+					for _, row := range edits.ExpenseDeductions {
+						if row.ExpenseID == target.ID {
+							row.Amount, row.Apply = amount, true
+							edits.ExpenseDeductions = []ExpenseDeduction{row}
+							return edits
+						}
+					}
+					t.Fatal("EFS remainder missing")
+					return edits
+				}
+				if _, err := save(selectTarget(feeWeek, "506.02")); err == nil {
+					t.Fatal("collection above principal plus EFS fee accepted")
+				}
+				if _, err := save(selectTarget(feeWeek, "500.01")); err != nil {
+					t.Fatal("partial EFS collection", err)
+				}
+				// Paying the original principal must leave the fee available next
+				// week. The fee is charged once, not again on each partial payment.
+				nextWeek := feeWeek.AddDate(0, 0, 7)
+				nextEdits := selectTarget(nextWeek, "6.00")
+				if nextEdits.ExpenseDeductions[0].Available != "6.00" {
+					t.Fatalf("fee carry: %+v", nextEdits)
+				}
+				if _, err := save(nextEdits); err != nil {
+					t.Fatal("fee collection", err)
+				}
+				x, err := expenses.GetExpense(ctx, target.ID)
+				if err != nil || *x.Amount != "500.01" || x.BaseAmount != nil || x.PaymentFee != "0.00" || *x.PaidAmount != "506.01" || *x.RemainingAmount != "0.00" {
+					t.Fatalf("source changed or fee not collected once: %+v %v", x, err)
+				}
+				for _, row := range card(read(nextWeek.AddDate(0, 0, 7))).Edits.ExpenseDeductions {
+					if row.ExpenseID == target.ID {
+						t.Fatal("fully paid EFS fee repeated")
+					}
+				}
+				if _, err := pool.Exec(ctx, `UPDATE expenses SET payment_type='Cash' WHERE id=$1`, target.ID); err == nil {
+					t.Fatal("payment metadata changed the collected balance")
+				}
+				if _, err := pool.Exec(ctx, `UPDATE expenses SET description='Reviewed' WHERE id=$1`, target.ID); err != nil {
+					t.Fatal("unrelated expense edit blocked", err)
+				}
+			})
 		})
 	}
 }

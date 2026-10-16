@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type TruckTerm struct {
@@ -34,6 +35,15 @@ type TruckChargeData struct {
 	Terms            []TruckTerm        `json:"terms"`
 	Phases           []TruckChargePhase `json:"phases"`
 }
+
+type TruckChargeBulkResult struct {
+	TruckID   string `json:"truckId"`
+	TypeID    string `json:"typeId"`
+	WeekStart string `json:"weekStart"`
+	Error     string `json:"error,omitempty"`
+}
+
+const MaxTruckChargeBulkSize = 1000
 
 func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
 	d := TruckChargeData{Terms: []TruckTerm{}, Phases: []TruckChargePhase{}}
@@ -203,13 +213,6 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	return tx.Commit(ctx)
 }
 func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckChargePhase, actor string) error {
-	if _, err := chargeWeek(v.WeekStart); err != nil {
-		return err
-	}
-	amount, err := chargeCents(v.Amount)
-	if err != nil || amount < 0 {
-		return chargeInvalid("Choose a nonnegative charge amount")
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -217,6 +220,78 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 	defer tx.Rollback(ctx)
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
+	}
+	if err = saveTruckCharge(ctx, tx, v, actor); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// One request, financial lock and commit for the whole selection. Savepoints
+// isolate expected row failures so a stale or finalized truck cannot stop later
+// trucks. Unexpected database failures roll back the batch rather than claiming
+// that any uncommitted rows succeeded.
+func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates []TruckChargePhase, actor string) ([]TruckChargeBulkResult, error) {
+	if len(updates) == 0 || len(updates) > MaxTruckChargeBulkSize {
+		return nil, chargeInvalid("Choose between 1 and %d truck charges", MaxTruckChargeBulkSize)
+	}
+	seen := make(map[string]bool, len(updates))
+	for _, v := range updates {
+		key := v.TruckID + ":" + v.TypeID + ":" + v.WeekStart
+		if seen[key] {
+			return nil, chargeInvalid("Choose each truck charge only once")
+		}
+		seen[key] = true
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return nil, err
+	}
+	results := make([]TruckChargeBulkResult, 0, len(updates))
+	for _, v := range updates {
+		row, err := tx.Begin(ctx) // pgx nested transactions are savepoints.
+		if err != nil {
+			return nil, err
+		}
+		result := TruckChargeBulkResult{TruckID: v.TruckID, TypeID: v.TypeID, WeekStart: v.WeekStart}
+		if err = saveTruckCharge(ctx, row, v, actor); err != nil {
+			if rollbackErr := row.Rollback(ctx); rollbackErr != nil {
+				return nil, rollbackErr
+			}
+			var invalid *ChargeValidationError
+			var pg *pgconn.PgError
+			switch {
+			case errors.As(err, &invalid), errors.Is(err, ErrChargeConflict):
+				result.Error = err.Error()
+			case errors.Is(err, pgx.ErrNoRows):
+				result.Error = "Record not found"
+			case errors.As(err, &pg) && (pg.Code == "23514" || pg.Code == "23503" || pg.Code == "23505"):
+				result.Error = "A related settlement or charge changed; reload and review"
+			default:
+				return nil, err
+			}
+		} else if err = row.Commit(ctx); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor string) error {
+	if _, err := chargeWeek(v.WeekStart); err != nil {
+		return err
+	}
+	amount, err := chargeCents(v.Amount)
+	if err != nil || amount < 0 {
+		return chargeInvalid("Choose a nonnegative charge amount")
 	}
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "charge", v.TypeID); err != nil {
 		return err
@@ -253,5 +328,5 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 	if err = truckAudit(ctx, tx, v.TruckID, v.WeekStart, "charge", actor, v); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }

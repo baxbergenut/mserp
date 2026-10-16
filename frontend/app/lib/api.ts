@@ -503,6 +503,7 @@ export const settleInvestorPay = (weekStart: string, revision: string, driverId:
 export const fetchTruckCharges = () => apiRequest<import("./types").TruckChargeData>("/truck-charges");
 export const saveTruckTerm = (input: import("./types").TruckTerm) => apiRequest<void>("/truck-charges/terms", { method: "PUT", body: JSON.stringify(input) });
 export const saveTruckCharge = (input: import("./types").TruckChargePhase) => apiRequest<void>("/truck-charges/recurring", { method: "PUT", body: JSON.stringify(input) });
+export const saveTruckCharges = (updates: import("./types").TruckChargePhase[]) => apiRequest<import("./types").TruckChargeBulkResult[]>("/truck-charges/recurring/bulk", { method: "PUT", body: JSON.stringify({ updates }) });
 
 export const fetchUpdaters = () => apiRequest<Updater[]>("/updaters");
 export const createUpdater = (value: UpdaterInput) => apiRequest<Updater>("/updaters", { method: "POST", body: JSON.stringify(value) });

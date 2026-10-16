@@ -10,22 +10,22 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	// Expenses are eligible through the following Wednesday (Thursday is
 	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
 	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
- SELECT * FROM expenses WHERE charge_driver_id=ANY($1::uuid[]) AND NOT driver_settled AND expense_date<$2::date+10 AND amount>=0
+ SELECT e.*, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND NOT driver_settled AND expense_date<$2::date+10 AND amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id
  ) SELECT e.charge_driver_id::text,e.id, coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
- e.expense_date::text,e.amount::text,
- (e.amount-coalesce(p.other,0))::text,
- coalesce(w.amount,e.amount-coalesce(p.other,0))::text,
- (e.amount-coalesce(p.prior,0)-coalesce(w.amount,0))::text,
- (e.amount-coalesce(p.prior,0))::text,
+ e.expense_date::text,e.settlement_total::text,
+ (e.settlement_total-coalesce(p.other,0))::text,
+ coalesce(w.amount,e.settlement_total-coalesce(p.other,0))::text,
+ (e.settlement_total-coalesce(p.prior,0)-coalesce(w.amount,0))::text,
+ (e.settlement_total-coalesce(p.prior,0))::text,
  e.balance_version,w.expense_id IS NOT NULL
  FROM relevant_expenses e
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$2::date
  LEFT JOIN payments p ON p.expense_id=e.id
  WHERE w.investor_truck_id IS NULL
- AND (w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0))
+ AND (w.expense_id IS NOT NULL OR e.settlement_total>coalesce(p.other,0))
  ORDER BY e.expense_date,e.id`, drivers, week)
 	if err != nil {
 		return nil, err

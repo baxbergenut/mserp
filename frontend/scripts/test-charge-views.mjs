@@ -11,6 +11,10 @@ const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00']
 let trucks = [];
 const truckCharges = { terms: [], phases: [], eligibleTruckIds: [] };
 const truckWrites = [];
+const bulkWrites = [];
+let bulkFailure = '';
+let holdBulk = false;
+let releaseBulk;
 const archivedType = { ...type, id: 'archived', name: 'Archived fee', archived: true };
 const extraTypes = Array.from({ length: 6 }, (_, index) => ({ ...type, id: `fee-${index}`, name: `Other fee ${index}` }));
 const data = { currentWeek: week, types: [type, ...extraTypes, archivedType], schedules: [] };
@@ -34,12 +38,25 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname.slice(4);
-    if (route.request().method() === 'PUT' && path === '/truck-charges/recurring') {
-      const input = route.request().postDataJSON();
+    const saveTruck = input => {
       truckWrites.push(input);
       const existing = truckCharges.phases.find(p => p.truckId === input.truckId && p.typeId === input.typeId && p.weekStart === input.weekStart);
       expect(input.version).toBe(existing?.version ?? 0);
       truckCharges.phases = [...truckCharges.phases.filter(p => p !== existing), { ...input, version: input.version + 1 }];
+    };
+    if (route.request().method() === 'PUT' && path === '/truck-charges/recurring/bulk') {
+      const { updates } = route.request().postDataJSON();
+      bulkWrites.push(updates);
+      if (holdBulk) await new Promise(resolve => { releaseBulk = resolve; });
+      const results = updates.map(input => {
+        const error = input.truckId === bulkFailure ? 'Reopen affected finalized settlements before changing truck terms or charges' : undefined;
+        if (!error) saveTruck(input);
+        return { truckId: input.truckId, typeId: input.typeId, weekStart: input.weekStart, error };
+      });
+      await route.fulfill({ json: results }); return;
+    }
+    if (route.request().method() === 'PUT' && path === '/truck-charges/recurring') {
+      saveTruck(route.request().postDataJSON());
       await route.fulfill({ status: 204 }); return;
     }
     if (route.request().method() === 'DELETE' && path.startsWith('/driver-charges/types/')) {
@@ -84,6 +101,33 @@ try {
   await trucksAll.click();
   await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  expect(bulkWrites).toHaveLength(1);
+  expect(bulkWrites[0]).toHaveLength(3);
+  // The entire selection paints before the server responds. A rejected
+  // middle truck is restored while later trucks still save.
+  holdBulk = true;
+  bulkFailure = 'truck-b';
+  await trucksAll.click();
+  await expect.poll(() => typeof releaseBulk).toBe('function');
+  for (const unit of ['201', '202', 'INACTIVE']) {
+    await expect(page.getByRole('checkbox', { name: `${unit}, Admin fee`, exact: true })).not.toBeChecked();
+  }
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeDisabled();
+  holdBulk = false;
+  releaseBulk();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(page.getByText('2 truck charges updated; 1 could not be saved. Review the trucks below.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Truck charges that could not be saved' })).toContainText('Truck 202: Reopen affected finalized settlements');
+  await expect(truckCheck).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'INACTIVE, Admin fee', exact: true })).not.toBeChecked();
+  expect(bulkWrites).toHaveLength(2);
+  bulkFailure = '';
+  await trucksAll.click(); // Clear remaining included truck.
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await trucksAll.click(); // Select all again after the partial failure.
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(page.getByRole('list', { name: 'Truck charges that could not be saved' })).toHaveCount(0);
   await page.reload();
   await expect(truckCheck).toBeChecked();
   await expect(page.getByLabel('201, Admin fee amount', { exact: true })).toHaveValue('75.00');

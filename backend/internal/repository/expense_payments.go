@@ -27,6 +27,16 @@ type ExpenseDeduction struct {
 	Apply          bool   `json:"apply,omitempty"`
 }
 
+// Fee-aware entries already include their fee in amount. Older/imported EFS
+// entries store only principal; add the missing fee to their settlement balance
+// without rewriting the entered expense or charging it again on each payment.
+// Keep the identity guard in migration 109 in sync with this expression.
+const expenseSettlementTotalSQL = `(CASE WHEN e.base_amount IS NULL AND e.payment_fee=0
+ AND upper(btrim(e.payment_type))='EFS' AND lower(btrim(e.covered_by)) IN ('driver','truck owner')
+ AND e.amount>0 AND NOT e.driver_settled
+ AND NOT EXISTS(SELECT 1 FROM expense_settings c WHERE c.id=e.category_id AND c.driver_only)
+ THEN e.amount+ceil(e.amount/500)*3 ELSE e.amount END)`
+
 func expenseDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]ExpenseDeduction, error) {
 	all, err := expenseDeductionsBulk(ctx, tx, []string{driver}, week)
 	values := all[driver]

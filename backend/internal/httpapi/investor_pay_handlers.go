@@ -76,6 +76,26 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		}
 		w.WriteHeader(204)
 	})
+	r.Put("/truck-charges/recurring/bulk", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Updates []repository.TruckChargePhase `json:"updates"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		for _, v := range input.Updates {
+			if !isUUID(v.TruckID) || !isUUID(v.TypeID) || v.Version < 0 || (v.MoveScheduleID != "" && !isUUID(v.MoveScheduleID)) {
+				writeAPIError(w, 400, "Invalid truck charge")
+				return
+			}
+		}
+		results, err := charges.SaveTruckCharges(r.Context(), input.Updates, actor(r))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, results)
+	})
 	registerPaySourceAcceptance(r, "/investor-pay", pay, fail)
 	r.Get("/investor-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))

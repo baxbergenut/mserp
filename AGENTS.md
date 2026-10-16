@@ -878,6 +878,13 @@ assignment lookup lists.
   changes. Charge type deletion normally requires no truck assignments; Archive
   retains used types. The one-time removal of "charge" is explicit migration data
   cleanup, not a reusable destructive deletion endpoint.
+  Truck matrix selections update immediately and save through
+  `PUT /truck-charges/recurring/bulk` (`updates`, at most 1000 unique cells).
+  One financial lock/commit and per-cell savepoints retain valid changes when
+  another truck is stale, ineligible or finalized. Ordered results identify each
+  truck/type/week and optional error; unexpected database errors roll back the
+  batch. The UI restores rejected cells and lists their errors, then refreshes
+  truck charges once. Single-cell saves retain the existing endpoint.
   Migration 093 restores editable weekly truck-fee collections in both payroll
   pages through pay_source_collections. Source amounts are signed and bounded by
   current source plus saved carry; zero defers collection. The ledger follows the
@@ -1311,6 +1318,10 @@ assignment lookup lists.
   Inactive drivers do not enter Driver Pay through automatic charges, expenses,
   escrow or carried fuel/tolls alone; actual weekly loads, saved payroll and frozen
   settlements remain available. Fully paid escrow alone does not create empty weeks.
+  Owner-truck fee routing enforces the same driver activity boundary even when
+  an active truck retains an old open assignment. No-load inactive owners with
+  explicit truck terms stay in Investor Pay; ownership does not reactivate driving.
+  Team membership alone cannot bypass the driver's inactive status.
   Migration 059 transfers system and named driver escrow expenses and their
   payments to driver_escrows/driver_escrow_payments, preserving IDs, exact amounts,
   actors, source snapshots, and frozen payroll/audit JSON. Settled legacy records
@@ -1393,6 +1404,15 @@ assignment lookup lists.
   through the fee-aware form applies the displayed fee. Legacy requests retain
   their total-amount contract. node scripts/test-payroll-expenses.mjs covers both
   payroll pages, fee boundaries, refresh and view-only access.
+  Payroll also adds the missing EFS fee to unsettled legacy/imported Driver/Truck
+  Owner entries with no baseAmount or recorded paymentFee, leaving their source
+  amounts unchanged. Shared settlement totals drive Driver/Investor Pay, save
+  limits, partial-payment carry and Expenses remaining balances. Existing explicit
+  fees are never added twice; company/driver-only categories and assumed-paid
+  history stay excluded. Saved deductions and finalized snapshots retain their
+  amounts. Migration 109 prevents later payment/category metadata edits from
+  changing a collected expense's settlement total. TestExpensePaymentsDatabase
+  covers all three routes (driver, investor, owner-driver) on fresh/upgraded schemas.
 
 - Migration 095 seeds the requested Maintenance default names and stores optional
   `expenses.cost_breakdown` JSONB rows (name/decimal amount snapshots). Manual,

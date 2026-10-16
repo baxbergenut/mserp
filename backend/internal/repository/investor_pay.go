@@ -420,7 +420,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 		}
 		if !found && (len(g.card.AutoCharges) > 0 || g.card.FuelTotal != "0.00" || g.card.TollTotal != "0.00" || len(g.card.Edits.ExpenseDeductions) > 0) {
 			var d DriverPayDriver
-			err = tx.QueryRow(ctx, `SELECT id::text,full_name,pay_type,pay_rate::text,(driver_employment_type(id,$2::date+6)='owner_operator') FROM drivers WHERE id=$1`, g.ownerDriver, source.WeekStart).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
+			err = tx.QueryRow(ctx, `SELECT id::text,full_name,pay_type,pay_rate::text,(driver_employment_type(id,$2::date+6)='owner_operator') FROM drivers WHERE id=$1 AND active`, g.ownerDriver, source.WeekStart).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator)
+			if err == pgx.ErrNoRows {
+				continue
+			}
 			if err != nil {
 				return source, investor, err
 			}

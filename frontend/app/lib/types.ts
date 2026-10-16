@@ -1214,6 +1214,7 @@ export interface SettlementEvent { action: string; version: number; actor: strin
 
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
+export interface TruckChargeBulkResult { truckId: string; typeId: string; weekStart: string; error?: string }
 export interface TruckChargeData { eligibleTruckIds: string[]; terms: TruckTerm[]; phases: TruckChargePhase[] }
 
 export interface EscrowRelease { id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }

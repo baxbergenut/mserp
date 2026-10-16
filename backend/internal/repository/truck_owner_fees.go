@@ -29,7 +29,7 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 	if err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,d.id::text,d.full_name,d.pay_type,d.pay_rate::text,
+	rows, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,d.id::text,d.full_name,d.pay_type,d.pay_rate::text,d.active,
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=d.id
  AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=$1::date
@@ -52,8 +52,8 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 	defer rows.Close()
 	for rows.Next() {
 		var d DriverPayDriver
-		var fullWeek bool
-		if err = rows.Scan(&d.TruckID, &d.TruckUnit, &d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.DispatcherID, &d.DispatcherName, &fullWeek); err != nil {
+		var active, fullWeek bool
+		if err = rows.Scan(&d.TruckID, &d.TruckUnit, &d.ID, &d.FullName, &d.PayType, &d.PayRate, &active, &d.DispatcherID, &d.DispatcherName, &fullWeek); err != nil {
 			return err
 		}
 		if !payrollIncludesTruck(ctx, d.TruckID) {
@@ -84,6 +84,11 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 			}
 		}
 		if !found {
+			// An open historical assignment and truck fees cannot re-enroll a
+			// terminated driver. Existing weekly work/saved statements stay above.
+			if !active {
+				continue
+			}
 			d.IsOwnerOperator = true
 			d.EmploymentType = "owner_operator"
 			d.FuelTotal, d.TollTotal = "0.00", "0.00"

@@ -530,7 +530,7 @@ SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_na
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
    CASE WHEN e.driver_settled THEN e.amount ELSE coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
-   CASE WHEN e.driver_settled THEN 0 ELSE e.amount-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+   CASE WHEN e.driver_settled THEN 0 ELSE ` + expenseSettlementTotalSQL + `-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)

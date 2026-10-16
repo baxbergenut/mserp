@@ -76,6 +76,17 @@ the available remainder. Saved historical deductions and finalized snapshots
 retain their recorded amounts. Overlapping open statements can suggest the same
 unpaid expense, but a stale save must reload after another week collects it.
 
+EFS expenses payable by a driver or truck owner include $3 for each started $500
+in their collectible balance (for example, $500 is $503; $500.01 is $506.01).
+Fee-aware entries already store that total. Legacy/imported entries without a
+fee breakdown retain their entered expense amount; payroll adds the missing fee
+to the balance without rewriting the expense. The fee applies once to the full
+expense, including when collection spans weeks or moves between statement routes.
+Zero amounts, company-paid expenses, driver-only Penalties categories and
+assumed-paid history receive no additional fee. Saved deductions and finalized
+snapshots retain their recorded amounts; any unpaid fee remains available in
+later open weeks. Payment/category metadata cannot change a collected balance.
+
 ## Identity, activity and review
 
 Driver activity and investor activity are independent. An inactive driver may
