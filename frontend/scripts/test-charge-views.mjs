@@ -11,6 +11,9 @@ const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00']
 let trucks = [];
 const truckCharges = { terms: [], phases: [], eligibleTruckIds: [] };
 const truckWrites = [];
+const termWrites = [];
+let datedOwners = false;
+let renamedOwner = 'Felix & Den';
 const bulkWrites = [];
 let bulkFailure = '';
 let holdBulk = false;
@@ -59,6 +62,10 @@ try {
       saveTruck(route.request().postDataJSON());
       await route.fulfill({ status: 204 }); return;
     }
+    if (route.request().method() === 'PUT' && path === '/truck-charges/terms') {
+      termWrites.push(route.request().postDataJSON());
+      await route.fulfill({ status: 204 }); return;
+    }
     if (route.request().method() === 'DELETE' && path.startsWith('/driver-charges/types/')) {
       const id = path.split('/').at(-1);
       expect(route.request().postDataJSON()).toEqual({ version: 1 });
@@ -68,7 +75,8 @@ try {
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
       '/driver-charges': url.searchParams.has('driverId') ? { ...data, schedules: data.schedules.filter(s => s.driverId === url.searchParams.get('driverId')) } : data,
-      '/drivers': [driver], '/truck-charges': truckCharges, '/trucks': trucks, '/investors': [{ id: 'owner', fullName: 'Truck Owner', active: true }],
+      '/drivers': [driver], '/truck-charges': datedOwners ? { ...truckCharges, owners: trucks.map(t => ({ truckId: t.id, ownerId: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? 'new-owner' : t.ownerId, ownerName: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? renamedOwner : t.ownerName })) } : truckCharges,
+      '/trucks': trucks, '/investors': [{ id: 'owner', fullName: 'Truck Owner', active: true }, { id: 'new-owner', fullName: renamedOwner, active: true }],
     };
     await route.fulfill({ json: path === '/trucks' && url.searchParams.has('page') ? { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } : fixtures[path] ?? [] });
   });
@@ -169,6 +177,29 @@ try {
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:join(tmpdir(),'mserp-truck-charges-narrow.png'),fullPage:true,animations:'disabled'});
   await page.setViewportSize({width:1440,height:1000});
+  // Fleet ownership wins over an older agreement, using the requested week.
+  datedOwners = true;
+  truckCharges.terms = [{ truckId: 'truck-a', ownerId: 'owner', weekStart: '2026-09-21', sharePercent: '88', version: 1 }];
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  const ownerRow = page.locator('tbody tr').filter({ has: page.getByRole('link', { name: '201', exact: true }) });
+  await expect(ownerRow.getByRole('link', { name: 'Felix & Den', exact: true })).toHaveAttribute('href', '/investors/detail?id=new-owner');
+  await expect(ownerRow.getByRole('button', { name: 'Review terms', exact: true })).toHaveAttribute('title', /Truck Owner/);
+  await page.getByLabel('Search trucks').fill('Felix');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await ownerRow.getByRole('button', { name: 'Review terms', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('select')).toHaveValue('new-owner');
+  await expect(page.getByRole('dialog').getByRole('spinbutton')).toHaveValue('88');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByLabel('Search trucks').fill('');
+  await page.getByRole('button', { name: 'Previous week', exact: true }).click();
+  await expect(ownerRow.getByRole('link', { name: 'Truck Owner', exact: true })).toBeVisible();
+  await expect(ownerRow.getByRole('button', { name: '88%', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next week', exact: true }).click();
+  await expect(ownerRow.getByRole('link', { name: 'Felix & Den', exact: true })).toBeVisible();
+  renamedOwner = 'Updated owner';
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(ownerRow.getByRole('link', { name: 'Updated owner', exact: true })).toBeVisible();
+  expect(termWrites).toEqual([]);
   await page.getByRole('tab', {name:'Charge types',exact:true}).click();
   await page.getByRole('button',{name:'Delete Other fee 0',exact:true}).click();
   await page.getByRole('button',{name:'Delete type',exact:true}).click();

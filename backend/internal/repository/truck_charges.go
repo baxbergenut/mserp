@@ -32,8 +32,16 @@ type TruckChargePhase struct {
 }
 type TruckChargeData struct {
 	EligibleTruckIDs []string           `json:"eligibleTruckIds"`
+	Owners           []TruckChargeOwner `json:"owners,omitempty"`
 	Terms            []TruckTerm        `json:"terms"`
 	Phases           []TruckChargePhase `json:"phases"`
+}
+
+// Ownership comes from the fleet history, independently of settlement agreements.
+type TruckChargeOwner struct {
+	TruckID   string `json:"truckId"`
+	OwnerID   string `json:"ownerId"`
+	OwnerName string `json:"ownerName"`
 }
 
 type TruckChargeBulkResult struct {
@@ -79,24 +87,44 @@ func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error
 	return d, rows.Err()
 }
 func (r *DriverChargeRepository) TruckCharges(ctx context.Context) (TruckChargeData, error) {
+	return r.TruckChargesForWeek(ctx, ChargeCurrentWeek())
+}
+
+func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week string) (TruckChargeData, error) {
+	if week == "" {
+		week = ChargeCurrentWeek()
+	}
+	if _, err := chargeWeek(week); err != nil {
+		return TruckChargeData{}, err
+	}
 	d, err := truckChargeData(ctx, r.pool)
 	if err != nil {
 		return d, err
 	}
 	d.EligibleTruckIDs = []string{}
-	rows, err := r.pool.Query(ctx, `SELECT t.id::text FROM trucks t JOIN investors i ON i.id=t.owner_id WHERE `+investorTruckEligibility)
+	d.Owners = []TruckChargeOwner{}
+	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
+ FROM trucks t JOIN LATERAL (
+ SELECT h.owner_id FROM truck_ownership_history h WHERE h.truck_id=t.id
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
+ AND (NOT h.start_known OR h.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at >= (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
+ ORDER BY h.assigned_at DESC,h.id LIMIT 1
+ ) ownership ON true JOIN investors i ON i.id=ownership.owner_id
+ LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company ORDER BY t.id`, week)
 	if err != nil {
 		return d, err
 	}
 	defer rows.Close()
 	eligible := map[string]bool{}
 	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
+		var owner TruckChargeOwner
+		if err = rows.Scan(&owner.TruckID, &owner.OwnerID, &owner.OwnerName); err != nil {
 			return d, err
 		}
-		d.EligibleTruckIDs = append(d.EligibleTruckIDs, id)
-		eligible[id] = true
+		d.EligibleTruckIDs = append(d.EligibleTruckIDs, owner.TruckID)
+		d.Owners = append(d.Owners, owner)
+		eligible[owner.TruckID] = true
 	}
 	terms := []TruckTerm{}
 	for _, term := range d.Terms {

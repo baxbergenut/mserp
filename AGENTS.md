@@ -2012,6 +2012,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   investor driver_id prevents duplicate owner identities. Driver and investor
   statements remain separate. A failed truck save must not leave a new investor.
 - Recurring Charges contains Truck charges, Installment plans, Charge types.
+  GET /truck-charges accepts weekStart (Monday, current week by default) and
+  returns owners from fleet ownership history at the selected week's end.
+  Owner links, search, sorting and eligibility use that history, independently
+  of settlement terms. An agreement naming another owner shows Review terms;
+  ownership edits do not infer percentages or rewrite accounting agreements.
+  Returning to the browser tab refreshes idle charge views.
   Inclusion is attached to trucks, never to the current driver. Counts open an
   Included trucks filter for the chosen charge; searching and selected week still
   apply. Show all non-company trucks, including inactive/unassigned/owner-operated.
