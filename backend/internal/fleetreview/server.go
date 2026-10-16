@@ -71,6 +71,12 @@ func NewServer(ctx context.Context, db *DB, cfg Config) (*Server, error) {
 	if e != nil {
 		return nil, e
 	}
+	if normalizeTruckClasses(&s.state) {
+		s.state.Version++
+		if e = s.save(); e != nil {
+			return nil, e
+		}
+	}
 	if s.state.Batch != nil && s.state.Batch.State == "applying" {
 		s.state.Batch.State = "needs_attention"
 		s.state.Batch.Error = "The server restarted during submission. Recover this saved batch to verify both database receipts and finish any remaining commit."
@@ -309,6 +315,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 				fail(w, 400, "Field is too long or contains unsupported characters")
 				return
 			}
+		}
+		if old.Kind == "truck" {
+			clean["truckClass"] = truckClass(clean["truckClass"])
 		}
 		in.Row.Values = clean
 		in.Row.Evidence = old.Evidence

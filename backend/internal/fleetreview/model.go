@@ -78,6 +78,27 @@ func digest(v any) string {
 	return hex.EncodeToString(h[:])
 }
 func norm(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+func truckClass(s string) string {
+	if norm(s) == "class_8" {
+		return "8"
+	}
+	return s
+}
+
+// Only draft values may be upgraded; snapshots and frozen receipt plans stay exact.
+func normalizeTruckClasses(s *State) bool {
+	if s.Batch != nil {
+		return false
+	}
+	changed := false
+	for _, r := range s.Rows {
+		if r.Kind == "truck" && r.Values["truckClass"] != truckClass(r.Values["truckClass"]) {
+			r.Values["truckClass"] = truckClass(r.Values["truckClass"])
+			changed = true
+		}
+	}
+	return changed
+}
 func copyRecord(r Record) Record {
 	c := Record{}
 	for k, v := range r {
@@ -221,6 +242,7 @@ func initial(source, remote Snapshot, policy Policy) State {
 			s.Rows = append(s.Rows, r)
 		}
 	}
+	normalizeTruckClasses(&s)
 	return s
 }
 func validateRow(r Row, s State) error {

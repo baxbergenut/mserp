@@ -88,6 +88,9 @@ authorize automatic linking. Missing required vehicle facts must be supplied or
 explicitly deferred; fabricated identifiers are
 rejected. Missing terminated drivers are deferred. Existing drivers' status and
 contact values default to MSERP; named exceptions live in private operator policy.
+FleetScope's legacy `class_8` is displayed and saved as `8`. Startup upgrades only
+unfrozen draft values and increments the review version, preserving review flags
+and exact source snapshots. Frozen batches and their receipt hashes stay unchanged.
 Ownership uses existing MSERP owners or a confirmed driver owner, with an explicit
 effective date when ownership changes. Investor ownership is projected into
 FleetScope as a named owner snapshot, never as a lease. Existing insurance facts
@@ -110,6 +113,9 @@ Reviewed differences appear amber as **Ready to apply**, while unreviewed record
 remain red. This is a saved decision, not a database write. A blank termination
 date is valid for an active driver. UI status checks run with
 `node backend/scripts/test-fleet-review-status.mjs` from the repository root.
+Drivers and Trucks sidebar links show their own reviewed percentage with a
+left-to-right fill. Saved reviews (including reviewed deferrals) count; drafts do
+not. Progress is independent of search/filter state and updates after each save.
 Deferred records and coverage/safety/crew differences remain visible after success.
 Normal site changes during review can invalidate the final snapshot, so arrange
 a brief fleet-edit freeze for the final check and application.

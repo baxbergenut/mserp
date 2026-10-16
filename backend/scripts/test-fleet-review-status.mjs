@@ -29,4 +29,9 @@ run("state.source.drivers[0]={id:'local',name:'Jane Doe',...row.values};state.re
 assert.equal(run('reviewLabel(row)'), 'Verified matching');
 run("row.action='defer'");
 assert.equal(run('reviewLabel(row)'), 'Deferred');
+assert.equal(run("truckClass('class_8')"), '8');
+assert.equal(run("truckClass('class_9')"), 'class_9', 'unknown classes must still fail validation');
+run("var truck={kind:'truck',values:{truckClass:'8'}}");
+assert.equal(run("fieldDifferent(truck,'truckClass','','class_8')"), false, 'equivalent class formats agree');
+assert.equal(run("fieldDifferent(truck,'truckClass','','7')"), true, 'different classes still need review');
 console.log('Review status checks passed: pending, verified, stale/failed batch, optional dates, phone and lifecycle normalization.');
