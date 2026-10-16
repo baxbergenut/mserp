@@ -5,7 +5,7 @@ import { useLoadNotes } from "./useLoadNotes";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
-import { editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
+import { compactDecimal, editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { DecimalInput } from "./DecimalInput";
@@ -56,10 +56,10 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         return <div key={field} data-grid-cell><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
           value={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
-            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : entry[field]} disabled={disabled}
+            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : compactDecimal(entry[field])} disabled={disabled}
           nonnegative={field === "miles"}
           title={different ? `Entered: ${entered}; system: ${system || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
-          placeholder="0.00"
+          placeholder="0"
           onFocus={field === "originalRate" ? event => setOriginalTyping(event.currentTarget.value) : undefined}
           onBlur={field === "originalRate" ? () => setOriginalTyping(null) : undefined}
           onValueChange={(value, text) => {

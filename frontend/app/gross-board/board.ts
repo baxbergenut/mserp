@@ -57,6 +57,11 @@ export function validDecimal(value: string, nonnegative = false) {
   return value === "" || (/^-?\d{1,10}(\.\d{1,2})?$/.test(value) && (!nonnegative || !value.startsWith("-")));
 }
 
+// Compact field display only; keep the exact saved decimal for calculations.
+export function compactDecimal(value: string) {
+  return value.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
+}
+
 // Accept intermediate typing, but send only complete decimals to autosave.
 // null rejects the edit (including a third fractional digit) before it is queued.
 export function decimalInputValue(value: string, nonnegative = false): string | null {

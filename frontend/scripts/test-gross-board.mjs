@@ -5,7 +5,12 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { compactDecimal, indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+
+for (const [value, display] of [['', ''], ['67', '67'], ['67.00', '67'], ['67.50', '67.5'], ['67.05', '67.05'], ['0.00', '0'], ['0.10', '0.1'], ['-67.50', '-67.5'], ['9999999999.99', '9999999999.99']]) {
+  assert.equal(compactDecimal(value), display);
+  assert.equal(hundredths(display), hundredths(value));
+}
 
 assert.equal(monday(new Date(2026, 8, 28)), "2026-09-28");
 assert.equal(monday(new Date(2026, 9, 4)), "2026-09-28");
