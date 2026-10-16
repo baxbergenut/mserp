@@ -166,7 +166,7 @@ try {
   const footer = page.locator('tfoot tr').getByRole('cell');
   await expect(footer.nth(0)).toHaveText('$5,108.00');
   await expect(footer.nth(1)).toHaveText('$5,027.50');
-  await expect(footer.nth(3)).toHaveText('425.25');
+  await expect(footer.nth(2)).toHaveText('425.25');
   await expect(amount('total original rate', '2026-10-14')).toHaveText('$67.00');
   await expect(amount('total driver rate', '2026-10-14')).toHaveText('$67.00');
   expect(invalidWrites).toEqual([]);

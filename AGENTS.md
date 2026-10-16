@@ -276,6 +276,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+  Dispatcher checkboxes share `components/management/BoardFilter.tsx` with Status
+  Board and remember multiple selections (legacy single choices still restore).
+  Weekly driver RPM appears beneath Driver gross; Rate balance is the final
+  column after Total miles. Main owns vertical scrolling; `BoardScrollArea.tsx`
+  offsets the original table header 8px below global navigation while preserving
+  horizontal scrolling and frozen Driver/Truck columns.
+  `node scripts/test-gross-board-layout.mjs` covers filters, RPM, header scrolling,
+  frozen columns, resizing and navigation restoration with fixture APIs.
   Numeric fields preserve typed text and the caret through autosave/refresh,
   reject more than two decimal places, and send only complete decimals to the API.
   While editing Original gross, a following Driver gross mirrors its exact text;

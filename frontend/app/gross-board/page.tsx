@@ -14,11 +14,13 @@ import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { MetricCard } from "@/app/components/MetricCard";
-import { ManagementSearch, controlClass } from "@/app/components/management/ManagementUI";
+import { ManagementSearch } from "@/app/components/management/ManagementUI";
+import { BoardFilter } from "@/app/components/management/BoardFilter";
 import { parseBoardLoadTarget } from "./loadLink";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
+import { BoardScrollArea } from "./BoardScrollArea";
 import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -34,14 +36,16 @@ export default function GrossBoardPage() {
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
   const [week, setWeek] = useState(() => loadTarget?.week ?? currentChargeWeek());
-  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", loadTarget ? "all" : undefined);
+  // Keep the old key so remembered single-dispatcher views become checked choices.
+  const [dispatcher, setDispatcher] = useViewState<string[] | null | string>("page:dispatcher", null, loadTarget ? null : undefined);
+  const selectedDispatchers = useMemo(() => typeof dispatcher === "string" ? dispatcher === "all" ? null : [dispatcher] : dispatcher, [dispatcher]);
   const [search, setSearch] = useViewState("page:search", "", loadTarget ? "" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
   useEffect(() => {
     const target = parseBoardLoadTarget(searchParams.toString());
     if (!target) return;
-    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher("all"); setSearch(""); }, 0);
+    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher(null); setSearch(""); }, 0);
     return () => clearTimeout(timer);
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
@@ -124,8 +128,8 @@ export default function GrossBoardPage() {
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
-  const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => (dispatcher === "all" || driver.dispatcherId === dispatcher) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [board, dispatcher, search]);
-  const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName])).entries()), [board]);
+  const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [board, selectedDispatchers, search]);
+  const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [board]);
   const shownEntries = useMemo(() => {
     const ids = new Set(drivers.map((driver) => driver.id));
     return Object.values(allEntries).filter((entry) => ids.has(entry.driverId));
@@ -260,12 +264,7 @@ export default function GrossBoardPage() {
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers…" /></div>
-        <label className="ml-auto flex items-center gap-2 text-xs text-zinc-400">Dispatcher
-          <select aria-label="Dispatcher" className={`${controlClass} !w-48`} value={dispatcher} onChange={(event) => setDispatcher(event.target.value)} disabled={saving}>
-            <option value="all">All dispatchers</option>
-            {dispatchers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-        </label>
+        <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
@@ -275,27 +274,19 @@ export default function GrossBoardPage() {
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
       {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">Saving edits before leaving this week…{invalid || error ? " Resolve the highlighted issue to continue." : ""}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
-      <div className="flex flex-wrap gap-4 text-[11px] text-zinc-500">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />Green = confirmed load; entered gross and miles take precedence</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red load = unmatched manual entry</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Red rates/miles = entered values differ from the system</span>
-        <span>Rate balance carries forward through the selected week · Click a balance for history</span>
-        <span>Type a load or status · Use the dropdown to see all day statuses</span>
-        <span>{loading ? <SkeletonBar className="h-3 w-16 align-middle" /> : `${drivers.length} drivers`} · Daily totals · Hover grouped loads for details; click to edit</span>
-      </div>
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
-      {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers for this dispatcher.</div> : board && <div className="weekly-content-enter max-h-[70vh] overflow-auto rounded-xl border border-zinc-800" role="region" aria-label="Weekly gross board" tabIndex={0}>
+      {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea>
         <table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
-          <thead className="sticky top-0 z-30 bg-zinc-900 text-zinc-300">
+          <thead className="relative z-30 bg-zinc-900 text-zinc-300">
             <tr>
               <th className="sticky left-0 z-30 border-b border-r border-zinc-700 bg-zinc-900 px-3 py-3">Driver</th>
               <th className="sticky z-30 border-b border-r border-zinc-700 bg-zinc-900 px-2" style={truckColumnStyle}>Truck</th>
               <th className="border-b border-r border-zinc-700" aria-label="Field" />
               {dates.map((date, i) => <th key={date} className="border-b border-r border-zinc-700 py-2"><div className="font-medium">{weekdays[i]}</div><div className="mt-1 font-mono text-[11px] font-normal text-zinc-500">{shortDate(date)}</div></th>)}
-              {["Original gross", "Driver gross", "Rate balance", "Total miles"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
+              {["Original gross", "Driver gross", "Total miles", "Rate balance"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -313,15 +304,20 @@ export default function GrossBoardPage() {
                   <th colSpan={10} scope="rowgroup" className="border-b border-zinc-700 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th>
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-blue-200">{decimalDisplay(group.original, true)}</td>
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.driver, true)}</td>
-                  <td className={`border-b border-r border-zinc-700 px-2 py-2 ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}</td>
-                  <td className="border-b border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.miles)}</td>
+                  <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.miles)}</td>
+                  <td className={`border-b border-zinc-700 px-2 py-2 ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}</td>
                 </tr>}
                 <tr>
                   <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Original", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
                   {dayEntries.map((entries, i) => <DaySummaryCell onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
-                  {[decimalDisplay(sum.original, true), decimalDisplay(sum.driver, true)].map((value, i) => <td key={i} className={`border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono ${i === 0 ? "text-blue-200" : "text-zinc-300"}`}>{value}</td>)}
+                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
+                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">
+                    {decimalDisplay(sum.driver, true)}
+                    <span className="mt-1 block text-[10px] text-zinc-500" aria-label={`Driver RPM for ${driver.fullName}`}>RPM {rpmDisplay(sum.driver, sum.miles)}</span>
+                  </td>
+                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
                   <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
                       <span className="font-mono">{signedMoney(balance)}</span><span className="mt-1 block text-[10px]">{balanceLabel(balance)}</span>
@@ -329,18 +325,17 @@ export default function GrossBoardPage() {
                       {entries.some((entry) => entry.duplicate) && <span className="mt-1 block text-[10px] text-amber-300">Repeated load</span>}
                     </button>
                   </td>
-                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
                 </tr>
               </Fragment>;
             })}
           </tbody>
           <tfoot><tr className="bg-zinc-900 font-mono text-zinc-200"><th colSpan={10} className="border-t border-zinc-700 p-3 text-left"><span className="sticky left-3">Totals · balance through week end</span></th>
             {[decimalDisplay(summary.original, true), decimalDisplay(summary.driver, true)].map((value, i) => <td key={i} className="border-t border-zinc-700 px-2 py-3">{value}</td>)}
-            <td className="border-t border-zinc-700 px-2 py-3">{signedMoney(balanceTotal)}{uncoveredTotal > BigInt(0) && <span className="mt-1 block text-[10px] text-red-300">{decimalDisplay(uncoveredTotal, true)} uncovered</span>}</td>
             <td className="border-t border-zinc-700 px-2 py-3">{decimalDisplay(summary.miles)}</td>
+            <td className="border-t border-zinc-700 px-2 py-3">{signedMoney(balanceTotal)}{uncoveredTotal > BigInt(0) && <span className="mt-1 block text-[10px] text-red-300">{decimalDisplay(uncoveredTotal, true)} uncovered</span>}</td>
           </tr></tfoot>
         </table>
-      </div>}
+      </BoardScrollArea>}
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
         opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
         entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}

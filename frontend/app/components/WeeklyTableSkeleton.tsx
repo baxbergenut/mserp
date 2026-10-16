@@ -4,7 +4,7 @@ export function SkeletonBar({ className = "" }: { className?: string }) {
 
 export function WeeklyTableSkeleton({ board = false }: { board?: boolean }) {
   const headers = board
-    ? ["Driver", "Truck", "Field", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Original gross", "Driver gross", "Rate balance", "Total miles"]
+    ? ["Driver", "Truck", "Field", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Original gross", "Driver gross", "Total miles", "Rate balance"]
     : ["Driver", "Truck", "Driver type", "Tariff", "Dispatcher", "Loads", "Total payable"];
   const widths = board ? [170,65,82,145,145,145,145,145,145,145,112,112,112,112] : [24,10,15,17,16,6,12];
   return <div role="status" aria-label={board ? "Loading gross board" : "Loading driver pay"} aria-busy="true" className="max-h-[70vh] overflow-hidden rounded-xl border border-zinc-800">
