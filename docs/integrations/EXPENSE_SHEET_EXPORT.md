@@ -69,7 +69,8 @@ these rows cannot feed back through that importer.
 The entry cells and a deterministic, spreadsheet-unique Google developer-metadata
 ID are written in one atomic batch. A duplicate metadata ID rejects the entire batch,
 including its cell writes. After a timeout or restart the worker checks that
-receipt before trying again. A hash collision or foreign receipt stops that entry
+receipt and re-reads the written entry cells before confirming delivery. A readback
+mismatch holds the entry for review without overwriting a subsequent manual edit. A hash collision or foreign receipt stops that entry
 for review rather than adding another row. Delivered outbox receipts are retained.
 Do not delete the Google developer metadata or clear local delivery receipts.
 

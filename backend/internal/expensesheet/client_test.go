@@ -51,12 +51,14 @@ func TestUncertainCommitReconcilesWithoutSecondInsert(t *testing.T) {
 					searches++
 					// Simulate an old read racing the completion of the first uncertain batch.
 					if receipt && !(lateReceipt && searches == 2) {
-						fmt.Fprintf(w, `{"matchedDeveloperMetadata":[{"developerMetadata":{"metadataId":%d,"metadataKey":%q,"metadataValue":%q,"location":{"dimensionRange":{"sheetId":7}}}}]}`, metadataID(e.ID), metadataKey, e.ID)
+						fmt.Fprintf(w, `{"matchedDeveloperMetadata":[{"developerMetadata":{"metadataId":%d,"metadataKey":%q,"metadataValue":%q,"location":{"dimensionRange":{"sheetId":7,"startIndex":2,"endIndex":3}}}}]}`, metadataID(e.ID), metadataKey, e.ID)
 					} else {
 						fmt.Fprint(w, `{}`)
 					}
 				case strings.Contains(r.URL.Path, "/values/"):
-					if strings.Contains(r.URL.Path, "!A3:") {
+					if strings.Contains(r.URL.Path, "!A3:") && receipt && !(lateReceipt && searches == 2) {
+						json.NewEncoder(w).Encode(map[string]any{"values": [][]any{testValues(e, Tab{IDColumn: 19})}})
+					} else if strings.Contains(r.URL.Path, "!A3:") {
 						fmt.Fprint(w, `{"values":[["","","","","","","","","","","","","",false,false]]}`)
 					} else {
 						fmt.Fprint(w, `{"values":[["header"],["","Other","","10/13/2026"],["","","","","","","","","","","","","",false,false]]}`)
@@ -137,7 +139,7 @@ func TestPrepareRefusesChangedHeaders(t *testing.T) {
 
 func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing.T) {
 	for _, compact := range []bool{false, true} {
-		for _, occupied := range []string{"", "formula", "accounting", "entry-id", "full-tab"} {
+		for _, occupied := range []string{"", "formula", "accounting", "entry-id", "full-tab", "corrupt-readback"} {
 			t.Run(fmt.Sprintf("compact=%t/occupied=%s", compact, occupied), func(t *testing.T) {
 				tab := Tab{ID: 7, Title: "Expenses", Rows: 100, IDColumn: 19, Compact: compact}
 				if compact {
@@ -178,7 +180,7 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 					switch {
 					case strings.HasSuffix(r.URL.Path, "/developerMetadata:search"):
 						if written {
-							fmt.Fprintf(w, `{"matchedDeveloperMetadata":[{"developerMetadata":{"metadataKey":%q,"metadataValue":%q,"location":{"dimensionRange":{"sheetId":7}}}}]}`, metadataKey, e.ID)
+							fmt.Fprintf(w, `{"matchedDeveloperMetadata":[{"developerMetadata":{"metadataKey":%q,"metadataValue":%q,"location":{"dimensionRange":{"sheetId":7,"startIndex":5,"endIndex":6}}}}]}`, metadataKey, e.ID)
 						} else {
 							fmt.Fprint(w, `{}`)
 						}
@@ -189,6 +191,12 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 						values := scan
 						if strings.Contains(r.URL.Path, "!A6:") {
 							values = [][]any{target}
+							if written {
+								values = [][]any{testValues(e, tab)}
+								if occupied == "corrupt-readback" {
+									values[0][2] = ""
+								}
+							}
 						} else if !strings.Contains(r.URL.Path, "!A1:") {
 							t.Errorf("unexpected row %s", r.URL.Path)
 						}
@@ -233,10 +241,30 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 					if err != nil || batches != 1 {
 						t.Fatalf("err=%v batches=%d", err, batches)
 					}
+				} else if occupied == "corrupt-readback" {
+					if err == nil || batches != 1 {
+						t.Fatalf("readback mismatch must hold: err=%v batches=%d", err, batches)
+					}
 				} else if err == nil || batches != 0 {
 					t.Fatalf("occupied row must be held without writes: err=%v batches=%d", err, batches)
 				}
 			})
 		}
 	}
+}
+
+// Simulated Sheets values for a completed literal write.
+func testValues(e Entry, t Tab) []any {
+	cells, _ := entryCells(e, t)
+	v := make([]any, len(cells))
+	for i, cell := range cells {
+		value := cell.(map[string]any)["userEnteredValue"]
+		if value == nil {
+			continue
+		}
+		for _, x := range value.(map[string]any) {
+			v[i] = x
+		}
+	}
+	return v
 }

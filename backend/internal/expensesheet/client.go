@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -219,28 +220,30 @@ func metadataID(id string) int {
 	h := sha256.Sum256([]byte(metadataKey + ":" + id))
 	return int(binary.BigEndian.Uint32(h[:4])%0x7fffffff) + 1
 }
-func (c *Client) received(ctx context.Context, e Entry) (bool, error) {
+func (c *Client) received(ctx context.Context, e Entry) (int, error) {
 	var response struct {
 		Matched []struct {
 			Metadata struct {
 				MetadataID                 int
 				MetadataKey, MetadataValue string
-				Location                   struct{ DimensionRange struct{ SheetID int } }
+				Location                   struct {
+					DimensionRange struct{ SheetID, StartIndex, EndIndex int }
+				}
 			} `json:"developerMetadata"`
 		} `json:"matchedDeveloperMetadata"`
 	}
 	body := map[string]any{"dataFilters": []any{map[string]any{"developerMetadataLookup": map[string]any{"metadataId": metadataID(e.ID)}}}}
 	if err := c.request(ctx, http.MethodPost, url.PathEscape(e.Spreadsheet)+"/developerMetadata:search", body, &response); err != nil {
-		return false, err
+		return -1, err
 	}
 	if len(response.Matched) == 0 {
-		return false, nil
+		return -1, nil
 	}
 	m := response.Matched[0].Metadata
-	if len(response.Matched) != 1 || m.MetadataKey != metadataKey || m.MetadataValue != e.ID || m.Location.DimensionRange.SheetID != e.SheetID {
-		return false, errors.New("Sheets receipt ID collision or different destination; operator review required")
+	if len(response.Matched) != 1 || m.MetadataKey != metadataKey || m.MetadataValue != e.ID || m.Location.DimensionRange.SheetID != e.SheetID || m.Location.DimensionRange.StartIndex < 1 || m.Location.DimensionRange.EndIndex != m.Location.DimensionRange.StartIndex+1 {
+		return -1, errors.New("Sheets receipt ID collision or different destination; operator review required")
 	}
-	return true, nil
+	return m.Location.DimensionRange.StartIndex, nil
 }
 
 // Deliver fills the next blank expense row and records a unique metadata ID in ONE
@@ -251,8 +254,8 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 	if err != nil {
 		return err
 	}
-	if found {
-		return nil
+	if found >= 0 {
+		return c.verifyWritten(ctx, e, t, found)
 	}
 	data, err := c.values(ctx, e.Spreadsheet, t.Title, "A1:"+column(t.IDColumn+len(extraHeaders))+strconv.Itoa(t.Rows))
 	if err != nil {
@@ -314,11 +317,52 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 	if err != nil {
 		return err
 	}
-	if !found {
+	if found < 0 {
 		return errors.New("Sheets write returned without its receipt")
+	}
+	return c.verifyWritten(ctx, e, t, found)
+}
+
+// Receipt and cell readback are both required before recording delivery locally.
+// A mismatch holds for review; it never overwrites a later manual edit.
+func (c *Client) verifyWritten(ctx context.Context, e Entry, t Tab, row int) error {
+	expected, err := entryCells(e, t)
+	if err != nil {
+		return err
+	}
+	actual, err := c.values(ctx, e.Spreadsheet, t.Title, "A"+strconv.Itoa(row+1)+":"+column(len(expected))+strconv.Itoa(row+1))
+	if err != nil {
+		return err
+	}
+	accountant := len(baseHeaders(t.Compact)) - 1
+	for col, cell := range expected {
+		if col >= accountant && col < t.IDColumn {
+			continue
+		}
+		value := cell.(map[string]any)["userEnteredValue"]
+		if value == nil {
+			continue
+		}
+		match := false
+		for kind, want := range value.(map[string]any) {
+			switch kind {
+			case "numberValue":
+				w, okW := new(big.Rat).SetString(text(want))
+				a, okA := new(big.Rat).SetString(at(actual, 0, col))
+				match = okW && okA && a.Cmp(w) == 0
+			case "stringValue":
+				match = at(actual, 0, col) == text(want)
+			case "boolValue":
+				match = at(actual, 0, col) == text(want)
+			}
+		}
+		if !match {
+			return errors.New("Sheets receipt exists but entry cell readback differs; held for review without overwriting")
+		}
 	}
 	return nil
 }
+
 func entryCells(e Entry, t Tab) ([]any, error) {
 	var snapshot struct {
 		Expense     map[string]any
