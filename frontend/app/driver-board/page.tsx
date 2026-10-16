@@ -116,7 +116,7 @@ export default function DriverBoardPage() {
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
-    <StatusBoardScrollArea loading={loading} footer={<p className="text-[11px] text-zinc-500">{canEdit ? "Edits save immediately. Ctrl+Z undoes your last action. Right-click a cell to view its history. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>}>
+    <StatusBoardScrollArea loading={loading}>
       <table {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
         const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");

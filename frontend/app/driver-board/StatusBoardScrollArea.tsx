@@ -2,10 +2,10 @@
 
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-// Size the table and its footer to one main viewport. This makes main's natural
+// Size the table to one main viewport. This makes main's natural
 // scroll limit land at the table header, without changing the shared shell.
-export function StatusBoardScrollArea({ children, footer, loading }: {
-  children: ReactNode; footer: ReactNode; loading: boolean;
+export function StatusBoardScrollArea({ children, loading }: {
+  children: ReactNode; loading: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -65,10 +65,9 @@ export function StatusBoardScrollArea({ children, footer, loading }: {
       main.removeEventListener("touchmove", move); main.removeEventListener("touchend", end); main.removeEventListener("touchcancel", end);
     };
   }, []);
-  return <div ref={ref} data-status-board-scroll className="flex min-h-0 flex-col gap-5">
+  return <div ref={ref} data-status-board-scroll className="flex min-h-0 flex-col">
     <div ref={tableRef} data-scroll-key="driver-board" className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-xl border border-zinc-800" aria-busy={loading}>
       {children}
     </div>
-    <div className="shrink-0">{footer}</div>
   </div>;
 }
