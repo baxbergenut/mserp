@@ -56,13 +56,17 @@ func TestUncertainCommitReconcilesWithoutSecondInsert(t *testing.T) {
 						fmt.Fprint(w, `{}`)
 					}
 				case strings.Contains(r.URL.Path, "/values/"):
-					fmt.Fprint(w, `{"values":[["header"],["","Other","","10/13/2026"],["","","","","","","","","","","","","",false,false]]}`)
+					if strings.Contains(r.URL.Path, "!A3:") {
+						fmt.Fprint(w, `{"values":[["","","","","","","","","","","","","",false,false]]}`)
+					} else {
+						fmt.Fprint(w, `{"values":[["header"],["","Other","","10/13/2026"],["","","","","","","","","","","","","",false,false]]}`)
+					}
 				case strings.HasSuffix(r.URL.Path, ":batchUpdate"):
 					var body struct{ Requests []map[string]json.RawMessage }
 					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 						t.Error(err)
 					}
-					if len(body.Requests) < 4 || body.Requests[0]["insertDimension"] == nil || body.Requests[len(body.Requests)-1]["createDeveloperMetadata"] == nil {
+					if len(body.Requests) < 4 || body.Requests[0]["insertDimension"] != nil || body.Requests[len(body.Requests)-1]["createDeveloperMetadata"] == nil {
 						t.Error("row and receipt must share one batch")
 					}
 					batches++
@@ -128,5 +132,111 @@ func TestPrepareRefusesChangedHeaders(t *testing.T) {
 	c := Client{HTTP: server.Client(), baseURL: server.URL + "/"}
 	if _, err := c.Prepare(context.Background(), "test", 7, 8, 9, true, true); err == nil || writes != 0 {
 		t.Fatalf("err=%v writes=%d", err, writes)
+	}
+}
+
+func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		for _, occupied := range []string{"", "formula", "accounting", "entry-id", "full-tab"} {
+			t.Run(fmt.Sprintf("compact=%t/occupied=%s", compact, occupied), func(t *testing.T) {
+				tab := Tab{ID: 7, Title: "Expenses", Rows: 100, IDColumn: 19, Compact: compact}
+				if compact {
+					tab.IDColumn = 27
+				}
+				accountant := len(baseHeaders(compact)) - 1
+				width := tab.IDColumn + len(extraHeaders)
+				e := testEntry()
+				written := false
+				batches := 0
+				scan := make([][]any, 90) // preformatted blanks do not place the entry at row 91
+				scan[0] = []any{"Header"}
+				scan[4] = make([]any, width)
+				scan[4][tab.IDColumn] = "previous-mserp-entry" // ID-only rows still count
+				for i := 5; i < len(scan); i++ {
+					scan[i] = make([]any, accountant+1)
+					scan[i][accountant-1] = false
+					scan[i][accountant] = false
+				}
+				if occupied == "full-tab" {
+					tab.Rows = 5
+					scan = scan[:5]
+				}
+				target := make([]any, width)
+				target[accountant] = false
+				target[accountant-1] = false
+				target[accountant+1] = "unrelated dropdown catalog"
+				switch occupied {
+				case "formula":
+					target[0] = `=IF(FALSE,"","")`
+				case "accounting":
+					target[accountant] = true
+				case "entry-id":
+					target[tab.IDColumn] = "concurrent entry"
+				}
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					switch {
+					case strings.HasSuffix(r.URL.Path, "/developerMetadata:search"):
+						if written {
+							fmt.Fprintf(w, `{"matchedDeveloperMetadata":[{"developerMetadata":{"metadataKey":%q,"metadataValue":%q,"location":{"dimensionRange":{"sheetId":7}}}}]}`, metadataKey, e.ID)
+						} else {
+							fmt.Fprint(w, `{}`)
+						}
+					case strings.Contains(r.URL.Path, "/values/"):
+						if r.URL.Query().Get("valueRenderOption") != "FORMULA" {
+							t.Error("must detect formulas even when their result is blank")
+						}
+						values := scan
+						if strings.Contains(r.URL.Path, "!A6:") {
+							values = [][]any{target}
+						} else if !strings.Contains(r.URL.Path, "!A1:") {
+							t.Errorf("unexpected row %s", r.URL.Path)
+						}
+						json.NewEncoder(w).Encode(map[string]any{"values": values})
+					case strings.HasSuffix(r.URL.Path, ":batchUpdate"):
+						batches++
+						var body struct {
+							Requests []map[string]map[string]json.RawMessage
+						}
+						if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+							t.Error(err)
+						}
+						for _, request := range body.Requests {
+							for kind, fields := range request {
+								if kind == "insertDimension" || kind == "appendDimension" {
+									t.Error("must not insert/append whole rows")
+								}
+								for _, name := range []string{"range", "source", "destination"} {
+									if raw := fields[name]; raw != nil {
+										var g struct{ StartRowIndex, EndRowIndex, StartColumnIndex, EndColumnIndex int }
+										json.Unmarshal(raw, &g)
+										if !(g.EndColumnIndex <= accountant || g.StartColumnIndex >= tab.IDColumn) {
+											t.Error("request touches accounting or side-list columns", kind, name)
+										}
+										if name != "source" && (g.StartRowIndex != 5 || g.EndRowIndex != 6) {
+											t.Error("must write immediately after latest expense", g)
+										}
+									}
+								}
+							}
+						}
+						written = true
+						fmt.Fprint(w, `{}`)
+					default:
+						t.Errorf("unexpected request %s", r.URL.Path)
+					}
+				}))
+				defer server.Close()
+				c := Client{HTTP: server.Client(), baseURL: server.URL + "/"}
+				err := c.Deliver(context.Background(), e, tab)
+				if occupied == "" {
+					if err != nil || batches != 1 {
+						t.Fatalf("err=%v batches=%d", err, batches)
+					}
+				} else if err == nil || batches != 0 {
+					t.Fatalf("occupied row must be held without writes: err=%v batches=%d", err, batches)
+				}
+			})
+		}
 	}
 }

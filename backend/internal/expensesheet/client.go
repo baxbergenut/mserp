@@ -98,7 +98,7 @@ func column(n int) string {
 func quoted(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 func (c *Client) values(ctx context.Context, spreadsheetID, title, area string) ([][]any, error) {
 	var r valueRange
-	err := c.request(ctx, http.MethodGet, url.PathEscape(spreadsheetID)+"/values/"+url.PathEscape(quoted(title)+"!"+area)+"?valueRenderOption=UNFORMATTED_VALUE", nil, &r)
+	err := c.request(ctx, http.MethodGet, url.PathEscape(spreadsheetID)+"/values/"+url.PathEscape(quoted(title)+"!"+area)+"?valueRenderOption=FORMULA", nil, &r)
 	return r.Values, err
 }
 func text(v any) string {
@@ -243,8 +243,8 @@ func (c *Client) received(ctx context.Context, e Entry) (bool, error) {
 	return true, nil
 }
 
-// Deliver puts the row and a unique, deterministic developer-metadata ID in ONE
-// atomic Google request. Repeating an uncertain request cannot insert a second row:
+// Deliver fills the next blank expense row and records a unique metadata ID in ONE
+// atomic Google request. Repeating an uncertain request cannot write a second row:
 // Google's duplicate metadata-ID rejection rolls back the entire repeated batch.
 func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 	found, err := c.received(ctx, e)
@@ -254,7 +254,7 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 	if found {
 		return nil
 	}
-	data, err := c.values(ctx, e.Spreadsheet, t.Title, "A1:"+column(len(baseHeaders(t.Compact)))+strconv.Itoa(t.Rows))
+	data, err := c.values(ctx, e.Spreadsheet, t.Title, "A1:"+column(t.IDColumn+len(extraHeaders))+strconv.Itoa(t.Rows))
 	if err != nil {
 		return err
 	}
@@ -263,6 +263,7 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 	if t.Compact {
 		indices = []int{2, 3, 4, 5, 7, 8}
 	}
+	indices = append(indices, t.IDColumn)
 	for row := 1; row < len(data); row++ {
 		for _, col := range indices {
 			if at(data, row, col) != "" {
@@ -271,24 +272,41 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 			}
 		}
 	}
-	row := last + 1 // Insert before unused/preformatted rows, preserving any other columns.
+	row := last + 1 // Use the existing blank row directly after the latest expense.
+	if row >= t.Rows {
+		return errors.New("no blank row after latest expense; add blank rows to this tab")
+	}
 	cells, err := entryCells(e, t)
 	if err != nil {
 		return err
 	}
-	requests := []any{map[string]any{"insertDimension": map[string]any{"range": map[string]any{"sheetId": t.ID, "dimension": "ROWS", "startIndex": row, "endIndex": row + 1}, "inheritFromBefore": true}}}
-	if row > 1 {
-		requests = append(requests, map[string]any{"copyPaste": map[string]any{"source": grid(t.ID, row-1, row, 0, len(baseHeaders(t.Compact))), "destination": grid(t.ID, row, row+1, 0, len(baseHeaders(t.Compact))), "pasteType": "PASTE_FORMAT"}})
+	// Accounting Verification is protected (O on Maintenance, M on HR/Safety).
+	// Never include it in value, validation, formatting, or structural writes.
+	accountant := len(baseHeaders(t.Compact)) - 1
+	area := "A" + strconv.Itoa(row+1) + ":" + column(len(cells)) + strconv.Itoa(row+1)
+	target, err := c.values(ctx, e.Spreadsheet, t.Title, area)
+	if err != nil {
+		return err
 	}
-	// New custom names/payers may not exist in the old sheet's dropdown catalog.
-	// Use literal values and preserve checkbox controls without changing old rows.
-	requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, 0, len(cells))}})
-	check := 13
-	if t.Compact {
-		check = 11
+	for col := 0; col < len(cells); col++ {
+		if col > accountant && col < t.IDColumn {
+			continue
+		} // unrelated side lists
+		v := at(target, 0, col)
+		if v != "" && !((col == accountant || col == accountant-1) && v == "false") {
+			return errors.New("next expense row contains existing data or a formula; retained for review")
+		}
 	}
-	requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, check, check+2), "rule": map[string]any{"condition": map[string]any{"type": "BOOLEAN"}, "strict": true}}})
-	requests = append(requests, map[string]any{"updateCells": map[string]any{"range": grid(t.ID, row, row+1, 0, len(cells)), "rows": []any{map[string]any{"values": cells}}, "fields": "userEnteredValue"}}, map[string]any{"createDeveloperMetadata": map[string]any{"developerMetadata": map[string]any{"metadataId": metadataID(e.ID), "metadataKey": metadataKey, "metadataValue": e.ID, "visibility": "DOCUMENT", "location": map[string]any{"dimensionRange": map[string]any{"sheetId": t.ID, "dimension": "ROWS", "startIndex": row, "endIndex": row + 1}}}}})
+	requests := []any{}
+	for _, span := range [][2]int{{0, accountant}, {t.IDColumn, len(cells)}} {
+		left, right := span[0], span[1]
+		if row > 1 {
+			requests = append(requests, map[string]any{"copyPaste": map[string]any{"source": grid(t.ID, row-1, row, left, right), "destination": grid(t.ID, row, row+1, left, right), "pasteType": "PASTE_FORMAT"}})
+		}
+		requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, left, right)}}, map[string]any{"updateCells": map[string]any{"range": grid(t.ID, row, row+1, left, right), "rows": []any{map[string]any{"values": cells[left:right]}}, "fields": "userEnteredValue"}})
+	}
+	requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, accountant-1, accountant), "rule": map[string]any{"condition": map[string]any{"type": "BOOLEAN"}, "strict": true}}}, map[string]any{"createDeveloperMetadata": map[string]any{"developerMetadata": map[string]any{"metadataId": metadataID(e.ID), "metadataKey": metadataKey, "metadataValue": e.ID, "visibility": "DOCUMENT", "location": map[string]any{"dimensionRange": map[string]any{"sheetId": t.ID, "dimension": "ROWS", "startIndex": row, "endIndex": row + 1}}}}})
+
 	if err = c.request(ctx, http.MethodPost, url.PathEscape(e.Spreadsheet)+":batchUpdate", map[string]any{"requests": requests}, nil); err != nil {
 		return err
 	}

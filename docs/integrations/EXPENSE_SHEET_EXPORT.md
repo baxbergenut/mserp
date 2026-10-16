@@ -33,13 +33,25 @@ entries begin delivery as soon as their save commits; delivery takes a few secon
 and can queue behind a bulk import. The worker listens before its startup drain,
 recovers pending entries on restart, and checks once a minute for retries or missed
 notifications. A broken listener exits so systemd reconnects after 10 seconds.
-It inserts rows after the last populated expense, before preformatted blank rows.
+It fills the first existing blank row immediately after the last populated expense,
+not the bottom of the preformatted grid. Receipt IDs also count as populated rows.
+It never inserts whole rows or changes the sheet dimensions. If no blank row
+remains, delivery waits for an operator to add blank rows.
 It preserves other rows, side lists, literal leading-zero units, and original total
 amounts without calculating an extra EFS fee. Company stays blank because MSERP no
 longer records that field. The old category label `Maintenance` is used for work
 orders. New text is written as literal strings, never interpreted as formulas.
-New rows retain formatting and verification checkboxes; obsolete dropdown lists
-do not constrain new MSERP names or payers. Existing dropdowns are left alone.
+Only the original entry columns through Manager Verification and the dedicated
+MSERP columns are written. Accounting Verification (O on Maintenance, M on HR/Safety)
+is excluded from every value, validation and formatting request; its protection
+and existing blank/unchecked value remain untouched. Side-list columns between
+the entry and MSERP columns are also untouched. Safe spans copy the preceding
+entry format and retain the manager checkbox, while obsolete dropdown constraints
+on those new cells are cleared. The exact target row is re-read with FORMULA
+rendering immediately before writing; existing data, formulas, entry IDs or an
+already-checked accounting box hold the entry for review. Sheets offers no
+compare-and-set cell write, so concurrent manual appends can still race that
+last read; use MSERP for new entries during this transition.
 
 Dedicated columns start at **T** on Maintenance and **AB** on HR/Safety: MSERP Entry ID,
 creation time, work-order ID/date/odometer/vendor/location/service detail JSON,
@@ -54,9 +66,9 @@ refuses occupied reserved columns or changed source headers. Unknown service
 values remain blank. `prepare-expense-import.ps1` skips valid MSERP Entry IDs so
 these rows cannot feed back through that importer.
 
-Each row and a deterministic, spreadsheet-unique Google developer-metadata ID are
-created in one atomic batch. A duplicate metadata ID rejects the entire batch,
-including its row insertion. After a timeout or restart the worker checks that
+The entry cells and a deterministic, spreadsheet-unique Google developer-metadata
+ID are written in one atomic batch. A duplicate metadata ID rejects the entire batch,
+including its cell writes. After a timeout or restart the worker checks that
 receipt before trying again. A hash collision or foreign receipt stops that entry
 for review rather than adding another row. Delivered outbox receipts are retained.
 Do not delete the Google developer metadata or clear local delivery receipts.
@@ -153,5 +165,6 @@ must be a disposable `_test` database on localhost. Database tests run fresh and
 pre-105 schemas, verify application-role ownership, disabled-by-default capture,
 rollback, source-import exclusion, final work-order capture, Safety routing,
 paid-cutoff boundaries, source deletion, committed-only notifications, startup
-recovery, retries without a new save, cancellation and
+recovery, retries without a new save, cancellation, next-used-row placement,
+protected accounting/side-list exclusion, occupied/formula target refusal and
 snapshot/receipt immutability. CI supplies that local database automatically.

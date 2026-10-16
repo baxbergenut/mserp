@@ -125,7 +125,6 @@ func run(ctx context.Context, apply, initialize bool) error {
 			return err
 		}
 		delivered++
-		tab.Rows++
 		tabs[e.SheetID] = tab
 	}
 	log.Printf("expense sheet export: %d delivered, %d retained for retry", delivered, failed)

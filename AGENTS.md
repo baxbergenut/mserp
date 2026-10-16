@@ -225,7 +225,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   deployment alone sends nothing. A separate notification-driven systemd service uses
   `EXPENSE_SHEET_CREDENTIALS_FILE` (server-only Google service-account JSON key).
   Immutable transactional snapshots and atomic Google row/metadata receipts
-  prevent retry duplicates. It never mirrors later edits or backfills history.
+  prevent retry duplicates. It fills the blank row after the latest expense, excluding
+  Accounting Verification and side-list columns from all writes; no row insertion
+  or dimension changes. Occupied targets and exhausted blank rows hold for review.
+  It never mirrors later edits or backfills history.
   While activated, eligible native entries dated before September 28, 2026 are
   settled on creation; later dates retain normal payment status. The dedicated
   MSERP Paid export column stays separate from verification checkboxes.
