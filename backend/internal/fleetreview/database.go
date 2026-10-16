@@ -66,7 +66,7 @@ func (d *DB) source(ctx context.Context, q queryer) (s Snapshot, e error) {
 			return s, errors.New("MSERP company identity does not match the pinned company")
 		}
 	}
-	s.Drivers, e = records(ctx, q, `SELECT jsonb_build_object('id',d.id,'name',d.full_name,'email',d.email,'phone',d.phone,'status',d.status,'active',d.active,'terminationDate',d.termination_date::date,'updatedAt',d.updated_at,
+	s.Drivers, e = records(ctx, q, `SELECT jsonb_build_object('id',d.id,'name',d.full_name,'firstName',d.first_name,'lastName',d.last_name,'email',d.email,'phone',d.phone,'status',d.status,'active',d.active,'terminationDate',d.termination_date::date,'updatedAt',d.updated_at,
  'fleetScopeId',(SELECT CASE WHEN count(DISTINCT i.fleetscope_driver_id)=1 THEN min(i.fleetscope_driver_id::text) END FROM fleetscope_driver_intake i WHERE i.company_id=$1::uuid AND i.driver_id=d.id AND i.completed_at IS NOT NULL),'identityIssue',(SELECT count(DISTINCT i.fleetscope_driver_id)>1 FROM fleetscope_driver_intake i WHERE i.company_id=$1::uuid AND i.driver_id=d.id AND i.completed_at IS NOT NULL)) FROM drivers d ORDER BY d.id`, d.CompanyID)
 	if e != nil {
 		return

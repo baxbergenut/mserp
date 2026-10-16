@@ -129,6 +129,8 @@ type driverRequest struct {
 	ChargePauseWeek       string                           `json:"chargePauseWeek"`
 	EscrowAmount          string                           `json:"escrowAmount"`
 	FullName              string                           `json:"fullName"`
+	FirstName             *string                          `json:"firstName"`
+	LastName              *string                          `json:"lastName"`
 	IsOwnerOperator       bool                             `json:"isOwnerOperator"`
 	PayType               string                           `json:"payType"`
 	PayRate               float64                          `json:"payRate"`
@@ -177,6 +179,18 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("termination date cannot be in the future")
 	}
 	request.FullName = strings.TrimSpace(request.FullName)
+	if request.FirstName != nil || request.LastName != nil {
+		if request.FirstName == nil || request.LastName == nil {
+			return repository.DriverInput{}, errors.New("given and family names must be supplied together")
+		}
+		first := strings.Join(strings.Fields(*request.FirstName), " ")
+		last := strings.Join(strings.Fields(*request.LastName), " ")
+		if len([]rune(first)) < 1 || len([]rune(first)) > 50 || len([]rune(last)) < 1 || len([]rune(last)) > 50 {
+			return repository.DriverInput{}, errors.New("given and family names must each contain 1–50 characters")
+		}
+		request.FirstName, request.LastName = &first, &last
+		request.FullName = first + " " + last
+	}
 	if request.FullName == "" {
 		return repository.DriverInput{}, errors.New("full name is required")
 	}
@@ -245,6 +259,8 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		ChargePauseWeek: request.ChargePauseWeek,
 		EscrowAmount:    request.EscrowAmount,
 		FullName:        request.FullName, // Ownership is derived from the assigned truck.
+		FirstName:       request.FirstName,
+		LastName:        request.LastName,
 		PayType:         request.PayType, PayRate: request.PayRate,
 		Phone: optionalString(normalizedPhone), Email: optionalString(request.Email),
 		LicenseNumber: optionalString(request.LicenseNumber), LicenseState: optionalString(request.LicenseState),

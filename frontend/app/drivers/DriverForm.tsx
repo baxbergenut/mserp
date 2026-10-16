@@ -25,6 +25,8 @@ function startWeek(date: string) {
 
 export const emptyDriverInput: DriverInput = {
   fullName: "",
+  firstName: "",
+  lastName: "",
   escrowAmount: "2500.00",
   payType: "cpm",
   payRate: 0,
@@ -55,6 +57,8 @@ export function driverToInput(driver: Driver): DriverInput {
     teamMainDriverId: driver.teamRole === "team" ? driver.teamPartnerId : undefined,
     assignmentWeek: driver.teamRole === "team" && driver.teamStartWeek && driver.teamStartWeek > currentChargeWeek() ? driver.teamStartWeek : undefined,
     fullName: driver.fullName,
+    firstName: driver.firstName ?? undefined,
+    lastName: driver.lastName ?? undefined,
     escrowAmount: "",
     payType: driver.payType,
     payRate: driver.payRate,
@@ -118,6 +122,13 @@ export function DriverForm({
   const set = <K extends keyof DriverInput>(key: K, next: DriverInput[K]) =>
     onChange({ ...value, [key]: next, ...(isTeam && showEscrow && key === "hireDate" && startWeek(String(next)) !== teamWeek ? { truckId: null, teamMainDriverId: undefined, teamMainVersion: undefined } : {}), ...(!showEscrow && ["dispatcherId","truckId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
 
+  const setName = (key: "firstName" | "lastName", text: string) => {
+    const next = { ...value, firstName: value.firstName ?? "", lastName: value.lastName ?? "", [key]: text };
+    next.fullName = `${next.firstName} ${next.lastName}`.trim().replace(/\s+/g, " ");
+    onChange(next);
+  };
+  const requireNameParts = !editingDriverId || value.firstName !== undefined || value.lastName !== undefined;
+
   return (
     <div className="space-y-6">
       {(section === "all" || section === "information") && <><section className="space-y-3">
@@ -125,15 +136,24 @@ export function DriverForm({
           <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">Driver profile</h3>
         </div>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Full name">
+        {value.firstName === undefined && value.lastName === undefined && <p className="text-sm text-zinc-500 sm:col-span-2">Recorded name: <strong>{value.fullName}</strong>. Confirm the given and family names below when known. Other details can be saved without splitting the name.</p>}
+        {!editingDriverId && !value.firstName && !value.lastName && value.fullName && <p className="text-sm text-zinc-500 sm:col-span-2">Imported name: <strong>{value.fullName}</strong>. Confirm its given and family names.</p>}
+        <Field label="First name">
           <input
-            required
+            required={requireNameParts}
             autoFocus
-            value={value.fullName}
-            onChange={(event) => set("fullName", event.target.value)}
+            autoComplete="given-name"
+            maxLength={50}
+            value={value.firstName ?? ""}
+            onChange={(event) => setName("firstName", event.target.value)}
             className={controlClass}
-            placeholder="e.g. Marcus Reed"
+            placeholder="e.g. Marcus"
           />
+        </Field>
+        <Field label="Last name">
+          <input required={requireNameParts} autoComplete="family-name" maxLength={50}
+            value={value.lastName ?? ""} onChange={(event) => setName("lastName", event.target.value)}
+            className={controlClass} placeholder="e.g. Reed" />
         </Field>
         <Field label="Phone">
           <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />

@@ -33,6 +33,8 @@ type Driver struct {
 	TerminationDate    *time.Time `json:"terminationDate"`
 	ID                 string     `json:"id"`
 	FullName           string     `json:"fullName"`
+	FirstName          *string    `json:"firstName"`
+	LastName           *string    `json:"lastName"`
 	EmploymentType     string     `json:"employmentType"`
 	DriverType         string     `json:"driverType"`
 	IsOwnerOperator    bool       `json:"isOwnerOperator"`
@@ -77,6 +79,8 @@ type DriverInput struct {
 	ChargeActor           string
 	EscrowAmount          string
 	FullName              string
+	FirstName             *string
+	LastName              *string
 	IsOwnerOperator       bool
 	PayType               string
 	PayRate               float64
@@ -325,14 +329,14 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			phone, email, license_number, license_state, license_expires, hire_date,
 			address, city, state, postal_code, emergency_contact, dispatcher_id,
-			active, notes, cdl_file_id, status, termination_date
+			active, notes, cdl_file_id, status, termination_date, first_name, last_name
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce(nullif($21,''),'active'), $22
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce(nullif($21,''),'active'), $22, $23, $24
 		) RETURNING id`,
 		displayName, normalizeName(displayName), false, input.PayType, input.PayRate,
 		input.Phone, input.Email, input.LicenseNumber, input.LicenseState, input.LicenseExpires, input.HireDate,
 		input.Address, input.City, input.State, input.PostalCode, input.EmergencyContact, input.DispatcherID,
-		input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate,
+		input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName,
 	).Scan(&id)
 	if err != nil {
 		return "", err
@@ -434,13 +438,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 			hire_date = $12, address = $13, city = $14, state = $15,
 			postal_code = $16, emergency_contact = $17, dispatcher_id = $18,
 			active = $19, notes = $20, cdl_file_id = $21, updated_at = now(),
-			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date)
+			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date),
+			first_name = coalesce($24,first_name), last_name = coalesce($25,last_name)
 		WHERE id = $1`,
 		id, displayName, normalizeName(displayName), false,
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
-		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate,
+		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName,
 	)
 	if err != nil {
 		return Driver{}, err
@@ -488,7 +493,7 @@ func (r *FleetRepository) DeleteDriver(ctx context.Context, id string) error {
 }
 
 const selectDriversSQL = `
-SELECT d.id, d.full_name, (driver_employment_type(d.id)='owner_operator'), d.pay_type, d.pay_rate,
+SELECT d.id, d.full_name, d.first_name, d.last_name, (driver_employment_type(d.id)='owner_operator'), d.pay_type, d.pay_rate,
 	coalesce(NOT i.is_company,false), coalesce(i.driver_id=d.id,false),
 	d.phone, d.email, d.license_number, d.license_state, d.license_expires,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
@@ -523,7 +528,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 	var value Driver
 	var investorTruck, ownTruck bool
 	err := row.Scan(
-		&value.ID, &value.FullName, &value.IsOwnerOperator, &value.PayType, &value.PayRate,
+		&value.ID, &value.FullName, &value.FirstName, &value.LastName, &value.IsOwnerOperator, &value.PayType, &value.PayRate,
 		&investorTruck, &ownTruck,
 		&value.Phone, &value.Email, &value.LicenseNumber, &value.LicenseState, &value.LicenseExpires,
 		&value.HireDate, &value.Address, &value.City, &value.State, &value.PostalCode,
@@ -537,7 +542,9 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.TeamStartWeek,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
-	value.FullName = formatPersonName(value.FullName)
+	if value.FirstName == nil {
+		value.FullName = formatPersonName(value.FullName)
+	}
 	value.DispatcherName = formatPersonNamePtr(value.DispatcherName)
 	value.TruckUnit = normalizeTruckUnitPtr(value.TruckUnit)
 	return value, err

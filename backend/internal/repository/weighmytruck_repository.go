@@ -72,9 +72,13 @@ type WMTVerification struct {
 	Reason   string `json:"reason"`
 }
 
-func wmtDriver(name, email, phone string) (weighmytruck.Driver, error) {
-	parts := strings.Fields(name)
-	if len(parts) < 2 {
+func wmtDriver(name, email, phone string, confirmed ...string) (weighmytruck.Driver, error) {
+	first, last := "", ""
+	if len(confirmed) == 2 {
+		first, last = confirmed[0], confirmed[1]
+	}
+	first, last = driverProviderName(name, first, last)
+	if first == "" || last == "" {
 		return weighmytruck.Driver{}, &WMTValidationError{"Add a first and last name to the driver profile."}
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -85,7 +89,7 @@ func wmtDriver(name, email, phone string) (weighmytruck.Driver, error) {
 	if len(phone) != 10 || strings.Trim(phone, "0123456789") != "" {
 		return weighmytruck.Driver{}, &WMTValidationError{"Add a valid phone number to the driver profile."}
 	}
-	return weighmytruck.Driver{FirstName: parts[0], LastName: strings.Join(parts[1:], " "), Email: email, Phone: phone}, nil
+	return weighmytruck.Driver{FirstName: first, LastName: last, Email: email, Phone: phone}, nil
 }
 
 func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
@@ -180,15 +184,15 @@ func (r *WeighMyTruckRepository) reserve(ctx context.Context, in WMTChange, acto
 	}
 	id := in.MembershipID
 	if in.Add {
-		var name, email, phone, status string
-		err = tx.QueryRow(ctx, `SELECT full_name,COALESCE(email,''),COALESCE(phone,''),status FROM drivers WHERE id=$1 FOR UPDATE`, in.DriverID).Scan(&name, &email, &phone, &status)
+		var name, email, phone, status, first, last string
+		err = tx.QueryRow(ctx, `SELECT full_name,COALESCE(email,''),COALESCE(phone,''),status,coalesce(to_jsonb(d)->>'first_name',''),coalesce(to_jsonb(d)->>'last_name','') FROM drivers d WHERE id=$1 FOR UPDATE`, in.DriverID).Scan(&name, &email, &phone, &status, &first, &last)
 		if err != nil {
 			return "", 0, d, err
 		}
 		if status == "terminated" {
 			return "", 0, d, &WMTValidationError{"Terminated drivers cannot be added."}
 		}
-		d, err = wmtDriver(name, email, phone)
+		d, err = wmtDriver(name, email, phone, first, last)
 		if err != nil {
 			return "", 0, d, err
 		}

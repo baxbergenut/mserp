@@ -45,6 +45,13 @@ To roll back manually, repoint `/opt/mserp/current` to an earlier directory in
 
 ## Temporary fleet reconciliation portal
 
+The structured-name portal build requires MSERP migration 104. It saves reviewed
+first/last names in both systems and uses those parts in snapshot fences. Before
+upgrading an existing portal, back up its state and resolve any frozen or partially
+committed batch using the original binary; do not change snapshot formats during
+recovery. After upgrading, refresh the snapshots and re-review changed driver rows.
+The migration leaves all existing full names untouched and does not activate sync.
+
 `backend/cmd/fleet-review` serves the separate, embedded Drivers/Trucks review UI
 at `https://conflicts.msexpressinc.net`. Build it locally for Linux with CGO off;
 it is not part of the normal MSERP release archive. Use the supplied

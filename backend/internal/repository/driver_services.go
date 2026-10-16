@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -365,13 +364,13 @@ func (r *DriverServiceRepository) enroll(ctx context.Context, driver, service, a
 			}
 		}
 	}
-	var name, phone, email string
-	if err = r.pool.QueryRow(ctx, `SELECT full_name,coalesce(phone,''),coalesce(email,'') FROM drivers WHERE id=$1 AND status='active'`, driver).Scan(&name, &phone, &email); err != nil {
+	var name, phone, email, first, last string
+	if err = r.pool.QueryRow(ctx, `SELECT full_name,coalesce(phone,''),coalesce(email,''),coalesce(to_jsonb(d)->>'first_name',''),coalesce(to_jsonb(d)->>'last_name','') FROM drivers d WHERE id=$1 AND status='active'`, driver).Scan(&name, &phone, &email, &first, &last); err != nil {
 		return err
 	}
-	parts := strings.Fields(name)
-	if len(parts) < 2 || len(phone) != 10 {
+	first, last = driverProviderName(name, first, last)
+	if first == "" || last == "" || len(phone) != 10 {
 		return &RelayDriverValidation{"Add a first and last name and a valid phone number to the driver profile."}
 	}
-	return r.fuel.ChangeRelayDriver(ctx, RelayDriverChange{RequestID: requestID, Action: "add", DriverID: driver, FirstName: parts[0], LastName: strings.Join(parts[1:], " "), Phone: "+1" + phone, Email: email}, actor)
+	return r.fuel.ChangeRelayDriver(ctx, RelayDriverChange{RequestID: requestID, Action: "add", DriverID: driver, FirstName: first, LastName: last, Phone: "+1" + phone, Email: email}, actor)
 }

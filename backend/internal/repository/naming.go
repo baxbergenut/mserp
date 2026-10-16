@@ -30,6 +30,19 @@ func normalizeName(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
 }
 
+// Prefer confirmed profile fields. Retain the legacy provider fallback only for
+// profiles whose split has not yet been reviewed; never persist that guess.
+func driverProviderName(full, first, last string) (string, string) {
+	if first != "" && last != "" {
+		return first, last
+	}
+	parts := strings.Fields(full)
+	if len(parts) < 2 {
+		return "", ""
+	}
+	return parts[0], strings.Join(parts[1:], " ")
+}
+
 // personNameTokenSignature matches high-confidence upstream name permutations
 // such as "Jane Mary Doe" and "Doe Jane Mary" without treating partial names
 // as the same person. Punctuation and token order are ignored; every token must

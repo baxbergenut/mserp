@@ -20,6 +20,7 @@ const server=createServer(async(req,res)=>{
   if(p.startsWith('/api/')){
    if(p==='/api/auth/session')return send({user:{id:'test-user',username:'Test User',theme:'default',permissions:['fleet.read','fuel.read','weighmytruck.read','tasks.read',...(readOnly?[]:['fleet.write','fuel.drivers.write','weighmytruck.write','tasks.write'])]},csrfToken:'fixture'});
    if(p==='/api/sidebar-counts')return send({fuel:0,weighMyTruck:0,tolls:0,tollsFrom:'2026-09-01'});
+   if(p==='/api/maintenance/access')return send({});
    if(p==='/api/tasks/events'){res.writeHead(200,{'Content-Type':'text/event-stream'});res.write(': fixture\n\n');return;}
    if(p==='/api/tasks/count')return send({count:1});
    if(p==='/api/tasks/users')return send([]);
@@ -64,7 +65,8 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${base}/drivers`);await page.getByRole('button',{name:'Add driver',exact:true}).click();
  const dialog=page.getByRole('dialog');
- await dialog.getByLabel('Full name',{exact:true}).fill('Browser Driver');
+ await dialog.getByLabel('First name',{exact:true}).fill('Browser');
+ await dialog.getByLabel('Last name',{exact:true}).fill('Driver');
  await page.screenshot({animations:"disabled",path:join(tmpdir(),'mserp-setup-information.png')});
  await expect(dialog.locator('input[type=file]')).toHaveCount(0);
  await expect(dialog.getByLabel('Driver home',{exact:true})).toHaveCount(0);
@@ -79,7 +81,7 @@ try{
  const draft=dialog.getByRole('region',{name:'Driver services'});
  await draft.getByRole('button',{name:'Add after saving'}).nth(0).click();
  await draft.getByRole('button',{name:'Remind me later'}).nth(1).click();
- assert.equal(writes.length,0,'draft must never create vendor writes');
+ assert.equal(writes.length,0,`draft must never create vendor writes: ${JSON.stringify(writes)}`);
  await page.screenshot({animations:"disabled",path:join(tmpdir(),'mserp-service-choices.png')});
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();
  await dialog.getByLabel('Driver started working').fill('2026-10-12');
@@ -118,6 +120,10 @@ try{
  await dialog.getByRole('button',{name:'Done',exact:true}).click();await expect(dialog).toHaveCount(0);
  // Onboarding uses the same draft cards and persists intents in the completion request.
  await page.goto(`${base}/drivers?setup=intake-1`);await expect(dialog).toHaveAttribute('aria-label','Set up Onboard Browser');
+ await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');
+ await expect(dialog.getByLabel('Last name',{exact:true})).toHaveValue('');
+ await dialog.getByLabel('First name',{exact:true}).fill('Onboard');
+ await dialog.getByLabel('Last name',{exact:true}).fill('Browser');
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();
  await dialog.getByLabel('Truck',{exact:true}).selectOption('');
  await dialog.getByLabel('Rate per mile ($)').fill('0.65');

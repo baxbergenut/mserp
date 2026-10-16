@@ -98,6 +98,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`
   also owns assignment transactions; `naming.go` owns canonical person and truck
   naming; `load_repository.go` maps DataTruck records to local loads.
+  Migration 104 adds nullable driver `first_name`/`last_name` (API `firstName`/
+  `lastName`, each 1–50 characters), matching FleetScope's name structure.
+  Confirmed parts produce `full_name` in First Last order and its matching key;
+  legacy full-name-only writers cannot overwrite confirmed parts. Existing names
+  are never split automatically. Forms require both for new drivers; unrelated
+  legacy profile edits can leave both unknown. Portal review saves both parts.
+  FleetScope's existing signed full-name-only hire contract remains unchanged;
+  its setup form requires a reviewed split, never guessed token positions.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
   A shared priority request gate paces all attempts at 15/minute; discovery
   takes priority over queued refreshes and 429 cooldowns apply to every caller.

@@ -283,6 +283,8 @@ export interface DriverStatusChange {
   updatedAt: string;
 }
 export interface Driver {
+  firstName?: string | null;
+  lastName?: string | null;
   employmentType: EmploymentType;
   teamVersion?: number;
   teamTruckId?: string;
@@ -326,6 +328,8 @@ export interface Driver {
 }
 
 export interface DriverInput {
+  firstName?: string;
+  lastName?: string;
   newTruck?: TruckInput;
   newTruckOwnedByDriver?: boolean;
   services?: DriverServiceIntent[];
@@ -1263,7 +1267,7 @@ export interface RelayRosterEntry {
   assignment: RelayPolicyAssignment | null; revision: string; identityId: string; driverId: string; driverName: string;
   status: string; warning: string; pending: boolean; suggestions: RelayIdentityTask["suggestions"];
 }
-export interface RelayDriverChoice { id: string; name: string; status: string; phone: string; email: string; truck: string }
+export interface RelayDriverChoice { id: string; name: string; firstName?: string; lastName?: string; status: string; phone: string; email: string; truck: string }
 export interface RelayDriverOperation { id: string; action: string; relayDriverId: string; driverId: string; createdAt: string }
 export interface RelayDriverList {
   items: RelayRosterEntry[]; policies: RelayDriverPolicy[]; configured: boolean; refreshedAt: string | null; environment: string;

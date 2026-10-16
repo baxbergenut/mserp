@@ -195,8 +195,8 @@ func initial(source, remote Snapshot, policy Policy) State {
 			if kind == "driver" {
 				// Never guess given/family names from a full name. Reuse an existing structured
 				// name only when it has the exact same token set; otherwise the reviewer enters it.
-				r.Values["firstName"], r.Values["lastName"] = "", ""
-				if target != nil && strings.Join(names(a["name"]), " ") == strings.Join(names(target["name"]), " ") {
+				r.Values["firstName"], r.Values["lastName"] = a["firstName"], a["lastName"]
+				if a["firstName"] == "" && a["lastName"] == "" && target != nil && strings.Join(names(a["name"]), " ") == strings.Join(names(target["name"]), " ") {
 					r.Values["firstName"], r.Values["lastName"] = target["firstName"], target["lastName"]
 				}
 				if a["status"] == "terminated" && r.RemoteID == "" {

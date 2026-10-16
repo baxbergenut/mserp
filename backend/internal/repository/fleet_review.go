@@ -30,7 +30,7 @@ func ApplyReviewedDriver(ctx context.Context, tx pgx.Tx, id string, v map[string
 		}
 	}
 	name := strings.Join(strings.Fields(v["firstName"]+" "+v["lastName"]), " ")
-	_, e := tx.Exec(ctx, `UPDATE drivers SET full_name=$2,normalized_name=$3,email=nullif($4,''),phone=nullif($5,''),status=$6,active=$7,termination_date=nullif($8,'')::date,dispatcher_id=CASE WHEN $7 THEN dispatcher_id ELSE NULL END,updated_at=now() WHERE id=$1`, id, name, normalizeName(name), v["email"], v["phone"], v["status"], active, v["terminationDate"])
+	_, e := tx.Exec(ctx, `UPDATE drivers SET full_name=$2,normalized_name=$3,email=nullif($4,''),phone=nullif($5,''),status=$6,active=$7,termination_date=nullif($8,'')::date,dispatcher_id=CASE WHEN $7 THEN dispatcher_id ELSE NULL END,updated_at=now(),first_name=$9,last_name=$10 WHERE id=$1`, id, name, normalizeName(name), v["email"], v["phone"], v["status"], active, v["terminationDate"], v["firstName"], v["lastName"])
 	return e
 }
 

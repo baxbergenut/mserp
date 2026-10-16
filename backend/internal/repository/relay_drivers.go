@@ -59,12 +59,14 @@ type RelayRosterSnapshot struct {
 	Policies []relay.DriverPolicy `json:"policies"`
 }
 type RelayDriverChoice struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Phone  string `json:"phone"`
-	Email  string `json:"email"`
-	Truck  string `json:"truck"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Phone     string `json:"phone"`
+	Email     string `json:"email"`
+	Truck     string `json:"truck"`
 }
 type RelayDriverOperation struct {
 	ID            string    `json:"id"`
@@ -148,14 +150,14 @@ func (r *FuelRepository) RelayDrivers(ctx context.Context) (RelayDriverList, err
 	if err != nil {
 		return result, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id::text,full_name,status,coalesce(phone,''),coalesce(email,''),coalesce((SELECT t.unit_number FROM truck_driver_assignments a JOIN trucks t ON t.id=a.truck_id WHERE a.driver_id=d.id AND a.unassigned_at IS NULL LIMIT 1),'') FROM drivers d ORDER BY full_name,id`)
+	rows, err := r.pool.Query(ctx, `SELECT id::text,full_name,status,coalesce(phone,''),coalesce(email,''),coalesce((SELECT t.unit_number FROM truck_driver_assignments a JOIN trucks t ON t.id=a.truck_id WHERE a.driver_id=d.id AND a.unassigned_at IS NULL LIMIT 1),''),coalesce(to_jsonb(d)->>'first_name',''),coalesce(to_jsonb(d)->>'last_name','') FROM drivers d ORDER BY full_name,id`)
 	if err != nil {
 		return result, err
 	}
 	candidates := []RelaySuggestion{}
 	for rows.Next() {
 		var d RelayDriverChoice
-		if err = rows.Scan(&d.ID, &d.Name, &d.Status, &d.Phone, &d.Email, &d.Truck); err != nil {
+		if err = rows.Scan(&d.ID, &d.Name, &d.Status, &d.Phone, &d.Email, &d.Truck, &d.FirstName, &d.LastName); err != nil {
 			rows.Close()
 			return result, err
 		}

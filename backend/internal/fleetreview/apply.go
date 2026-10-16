@@ -194,7 +194,7 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 				if kind == "driver" {
 					v["phone"] = phone(v["phone"])
 					old := find(source.Drivers, r.LocalID)
-					if old["name"] == strings.TrimSpace(v["firstName"]+" "+v["lastName"]) && old["email"] == v["email"] && old["phone"] == v["phone"] && old["status"] == v["status"] && old["terminationDate"] == v["terminationDate"] {
+					if old["firstName"] == v["firstName"] && old["lastName"] == v["lastName"] && old["name"] == strings.TrimSpace(v["firstName"]+" "+v["lastName"]) && old["email"] == v["email"] && old["phone"] == v["phone"] && old["status"] == v["status"] && old["terminationDate"] == v["terminationDate"] {
 						continue
 					}
 					e = repository.ApplyReviewedDriver(ctx, a, r.LocalID, v)

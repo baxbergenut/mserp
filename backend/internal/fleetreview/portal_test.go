@@ -91,6 +91,11 @@ func TestMatchingNeverConfirmsIdentity(t *testing.T) {
 	if s.Rows[1].RemoteID != "" || s.Rows[1].Action != "defer" {
 		t.Fatal("rejected identity reused")
 	}
+	source.Drivers[0]["firstName"], source.Drivers[0]["lastName"] = "Jane Mary", "Doe"
+	s = initial(source, remote, p)
+	if s.Rows[0].Values["firstName"] != "Jane Mary" || s.Rows[0].Values["lastName"] != "Doe" || s.Rows[0].Reviewed {
+		t.Fatal("source structured name not preferred, or identity automatically approved")
+	}
 }
 
 func TestInterruptedBatchRemainsRecoverableAfterRestart(t *testing.T) {
@@ -220,6 +225,10 @@ func TestDatabaseBatchRecoveryAndFences(t *testing.T) {
 		t.Fatal(e)
 	}
 	var name string
+	var firstName, lastName, fullName string
+	if e := a.QueryRow(ctx, `SELECT first_name,last_name,full_name FROM drivers WHERE id=$1`, local).Scan(&firstName, &lastName, &fullName); e != nil || firstName != "Jane" || lastName != "Doe "+local[:8] || fullName != "Jane Doe "+local[:8] {
+		t.Fatal("reviewed source name parts not retained", firstName, lastName, fullName, e)
+	}
 	var managed, hold bool
 	if e := b.QueryRow(ctx, `SELECT mserp_owner_snapshot->>'displayName',mserp_managed,mserp_coverage_review FROM vehicles WHERE id=$1`, remoteTruck).Scan(&name, &managed, &hold); e != nil || name != "Test Investor" || !managed || !hold {
 		t.Fatal("ownership/evidence projection", name, managed, hold, e)
