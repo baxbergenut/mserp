@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const script = readFileSync(new URL('../internal/fleetreview/web/app.js', import.meta.url), 'utf8');
+const context = vm.createContext({ location: { pathname: '/drivers' } });
+vm.runInContext(script.slice(0, script.indexOf('function notice(')), context);
+const run = code => vm.runInContext(code, context);
+run(`
+state={source:{drivers:[{id:'local',name:'Jane Mary Doe',email:'current@example.test',phone:'5555550100',status:'active'}]},receiver:{drivers:[{id:'remote',name:'Jane Doe',firstName:'Jane',lastName:'Doe',email:'old@example.test',phone:'5555550101',status:'active'}]},batch:null};
+var row={kind:'driver',localId:'local',remoteId:'remote',action:'update',reviewed:true,values:{firstName:'Jane',lastName:'Doe',email:'current@example.test',phone:'5555550100',status:'active',terminationDate:''}};
+`);
+assert.equal(run('status(row)'), 'amber', 'saved differences must leave Needs attention');
+assert.equal(run('reviewLabel(row)'), 'Ready to apply');
+assert.equal(run("fieldDifferent(row,'terminationDate','','')"), false, 'active driver needs no termination date');
+assert.equal(run("fieldDifferent(row,'email','current@example.test','old@example.test')"), true);
+assert.equal(run("fieldDifferent(row,'phone','5555550100','+1 (555) 555-0100')"), false);
+run("row.values.status='vacation'");
+assert.equal(run("fieldDifferent(row,'status','vacation','on_vacation')"), false);
+run("row.values.status='terminated'");
+assert.equal(run("fieldDifferent(row,'terminationDate','','')"), true, 'terminated driver still requires a date');
+run("row.values.status='active';row.reviewed=false");
+assert.equal(run('status(row)'), 'red');
+run("row.reviewed=true;state.batch={state:'needs_attention'}");
+assert.equal(run('reviewLabel(row)'), 'Needs attention', 'an interrupted batch is not ready for another submission');
+run("state.batch={state:'complete'}");
+assert.equal(run('status(row)'), 'red', 'remaining differences after application are not verified');
+run("state.source.drivers[0]={id:'local',name:'Jane Doe',...row.values};state.receiver.drivers[0]={id:'remote',name:'Jane Doe',...row.values}");
+assert.equal(run('reviewLabel(row)'), 'Verified matching');
+run("row.action='defer'");
+assert.equal(run('reviewLabel(row)'), 'Deferred');
+console.log('Review status checks passed: pending, verified, stale/failed batch, optional dates, phone and lifecycle normalization.');

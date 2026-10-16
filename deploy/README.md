@@ -104,6 +104,10 @@ review** is allowed only when neither database has a receipt.
 
 Refreshing before submission preserves drafts and unchanged reviews; changed
 records need another review. Green requires reviewed matching current values.
+Reviewed differences appear amber as **Ready to apply**, while unreviewed records
+remain red. This is a saved decision, not a database write. A blank termination
+date is valid for an active driver. UI status checks run with
+`node backend/scripts/test-fleet-review-status.mjs` from the repository root.
 Deferred records and coverage/safety/crew differences remain visible after success.
 Normal site changes during review can invalidate the final snapshot, so arrange
 a brief fleet-edit freeze for the final check and application.
