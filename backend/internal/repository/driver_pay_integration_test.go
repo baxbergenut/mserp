@@ -68,7 +68,7 @@ func TestDriverPayDatabase(t *testing.T) {
 				notesBody := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(strings.ReplaceAll(string(notesMigration), "\r\n", "\n"), "BEGIN;")), "COMMIT;"))
 				sql = strings.Replace(sql, notesBody, "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(layoverMigration), "\r\n", "\n"), "", 1)
-				sql = withoutDriverTeams(t, sql)
+				sql = withoutBoardLiveMigration(t, withoutDriverTeams(t, sql))
 			}
 			remainders, err := os.ReadFile("../../sql/053_payroll_remainders.sql")
 			if err != nil {
@@ -161,6 +161,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
 				applyFleetScopeSyncMigration(t, ctx, admin)
+				applyBoardLiveMigration(t, ctx, admin)
 				if _, err = admin.Exec(ctx, string(notesMigration)); err != nil {
 					t.Fatal(err)
 				}
