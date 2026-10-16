@@ -128,6 +128,15 @@ assert.equal(indexedEntries[0].slot, 2); // Source ordering is unchanged.
 console.log("Board indexing checks passed: driver/day isolation, slots and tombstones.");
 
 const { editAmount } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { decimalInputValue } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+for (const text of ['', '-', '.', '-.']) assert.equal(decimalInputValue(text), '');
+for (const [text, value] of [['6', '6'], ['67', '67'], ['67.', '67'], ['67.1', '67.1'], ['67.12', '67.12'], ['.5', '0.5'], ['-.5', '-0.5'], ['1234567890.12', '1234567890.12']]) {
+  assert.equal(decimalInputValue(text), value);
+}
+for (const text of ['67.123', '6.007', '1..2', '1e2', 'abc', '12345678901']) assert.equal(decimalInputValue(text), null);
+assert.equal(decimalInputValue('-1', true), null);
+assert.equal(decimalInputValue('-', true), null);
+assert.equal(decimalInputValue('0.25', true), '0.25');
 const autoGross = editAmount(blank, "originalRate", "1200");
 assert.equal(autoGross.driverRate, "1200");
 assert.equal(editAmount(autoGross, "originalRate", "1500").driverRate, "1500");
@@ -138,6 +147,12 @@ assert.equal(matchLoad(blank, { id: 1, loadNumber: "L1", originalRate: "900", mi
 assert.equal(matchLoad({ ...blank, originalRate: "0", miles: "0" }, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).originalRate, "0");
 const newerGross = editAmount(match, "originalRate", "1400");
 assert.equal(reconcileAutosave({[key]:newerGross}, {[key]:match}, [{...match,version:3}])[key].originalRate, "1400");
+// Server-side matching may finish while a note/amount is edited. Adopt its
+// driver-gross default unless the dispatcher has since changed that field.
+const pendingMatch = {...blank, loadNumber: 'L1'};
+const serverMatch = {...matchLoad(pendingMatch, {id: 1, loadNumber: 'L1', originalRate: '900.00', miles: '500.00'}), version: 1};
+assert.equal(reconcileAutosave({[key]: {...pendingMatch, note: 'New note'}}, {[key]: pendingMatch}, [serverMatch])[key].driverRate, '900.00');
+assert.equal(reconcileAutosave({[key]: {...pendingMatch, driverRate: '800'}}, {[key]: pendingMatch}, [serverMatch])[key].driverRate, '800');
 console.log("Entered values and original-to-driver gross defaults passed.");
 
 const annotated = {...plan, note: 'Call receiver'};

@@ -276,6 +276,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+  Numeric fields preserve typed text and the caret through autosave/refresh,
+  reject more than two decimal places, and send only complete decimals to the API.
+  New load matches default blank Driver gross to Original gross on both browser
+  selection and server exact-number resolution; explicit amounts, including zero,
+  remain intact. `test-gross-board-numbers.mjs` covers delayed formatted saves.
   Status Board, Gross Board (including Daily loads), and payroll share opt-in
   spreadsheet selection/navigation in `app/lib/spreadsheetGrid.ts`: click selects,
   arrows move, typing replaces, F2/double-click edits with a caret, Ctrl/Cmd+C copies.

@@ -321,6 +321,15 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			}
 			enteredOriginal, enteredMiles = original, miles
 		}
+		// Exact-number resolution can beat the browser's load lookup. Apply the
+		// same initial driver-gross default here, preserving explicit amounts
+		// (including zero) and later edits to an already linked entry.
+		if loadID != nil && e.DriverRate == "" && (e.LoadRecordID == nil || e.Version == 0) {
+			e.DriverRate = enteredOriginal
+			if e.DriverRate == "" {
+				e.DriverRate = original
+			}
+		}
 		var version int
 		if e.Slot > 0 {
 			if e.Version == 0 {

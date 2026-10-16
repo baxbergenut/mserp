@@ -8,6 +8,7 @@ import { Plus, X } from "lucide-react";
 import { editAmount, emptyEntry, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
+import { DecimalInput } from "./DecimalInput";
 
 type DayCellProps = {
   entry: GrossBoardEntry;
@@ -49,11 +50,12 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : false;
         const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
         const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
-        return <div key={field} data-grid-cell><input aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
+        return <div key={field} data-grid-cell><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal" value={entry[field]} disabled={disabled}
+          nonnegative={field === "miles"}
           title={different ? `Entered: ${entered}; system: ${system || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0.00"
-          onChange={(event) => { const value = event.target.value; onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value)); }}
+          onValueChange={value => onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value))}
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : "text-zinc-300"}`}
         /></div>;
       })}

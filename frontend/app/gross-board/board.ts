@@ -57,6 +57,14 @@ export function validDecimal(value: string, nonnegative = false) {
   return value === "" || (/^-?\d{1,10}(\.\d{1,2})?$/.test(value) && (!nonnegative || !value.startsWith("-")));
 }
 
+// Accept intermediate typing, but send only complete decimals to autosave.
+// null rejects the edit (including a third fractional digit) before it is queued.
+export function decimalInputValue(value: string, nonnegative = false): string | null {
+  if (!/^-?\d{0,10}(\.\d{0,2})?$/.test(value) || (nonnegative && value.startsWith("-"))) return null;
+  if (["", "-", ".", "-."].includes(value)) return "";
+  return value.replace(/\.$/, "").replace(/^(-?)\./, (_, sign: string) => `${sign}0.`);
+}
+
 // Keep money and mileage in hundredths; never accumulate binary floats.
 export function hundredths(value: string) {
   if (!/^-?\d+(\.\d{1,2})?$/.test(value)) return BigInt(0);
@@ -139,6 +147,7 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
       ...(sameLoad && entry.loadRecordId !== null ? {
         loadRecordId: entry.loadRecordId,
         originalRate: draft.originalRate === snapshot[key].originalRate ? entry.originalRate : draft.originalRate,
+        driverRate: draft.driverRate === snapshot[key].driverRate ? entry.driverRate : draft.driverRate,
         miles: draft.miles === snapshot[key].miles ? entry.miles : draft.miles,
         systemOriginalRate: entry.systemOriginalRate, systemMiles: entry.systemMiles,
         enteredOriginalRate: draft.enteredOriginalRate === snapshot[key].enteredOriginalRate ? entry.enteredOriginalRate : draft.enteredOriginalRate,

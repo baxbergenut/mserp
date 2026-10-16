@@ -442,4 +442,38 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if err = repo.Save(ctx, []GrossBoardEntry{bad}); err == nil {
 		t.Fatal("database accepted money on a status day")
 	}
+	// Autosave may resolve the load before the browser lookup returns. Both
+	// primary and extra slots must persist the same initial driver-gross default.
+	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.loads(id,load_id,total_pay,total_miles) VALUES(99,'DEFAULT-GROSS',1234.56,300)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, slot := range []int{0, 1} {
+		for i, tc := range []struct{ original, driver, want string }{
+			{"", "", "1234.56"},
+			{"900", "", "900.00"},
+			{"", "0", "0.00"},
+			{"", "750", "750.00"},
+		} {
+			day := fmt.Sprintf("2026-10-%02d", 12+i)
+			rows, err := repo.SaveEntries(ctx, []GrossBoardEntry{{DriverID: carryDriver, Date: day, Slot: slot, LoadNumber: "DEFAULT-GROSS", OriginalRate: tc.original, DriverRate: tc.driver}})
+			if err != nil || len(rows) != 1 || rows[0].DriverRate != tc.want {
+				t.Fatalf("initial driver gross slot %d case %d: %v %+v", slot, i, err, rows)
+			}
+			var stored string
+			table := "gross_board_entries"
+			if slot > 0 {
+				table = "gross_board_extra_entries"
+			}
+			if err = pool.QueryRow(ctx, "SELECT driver_rate::text FROM "+table+" WHERE driver_id=$1 AND service_date=$2::date", carryDriver, day).Scan(&stored); err != nil || stored != tc.want {
+				t.Fatal("driver gross default was not persisted", err, stored)
+			}
+			// Clearing a previously linked amount remains an explicit edit.
+			edited := rows[0]
+			edited.DriverRate = ""
+			rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edited})
+			if err != nil || rows[0].DriverRate != "" {
+				t.Fatal("linked driver gross edit was replaced by a default", err, rows)
+			}
+		}
+	}
 }

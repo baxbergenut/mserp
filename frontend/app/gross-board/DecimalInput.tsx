@@ -1,0 +1,22 @@
+import { useState, type InputHTMLAttributes } from "react";
+import { decimalInputValue } from "./board";
+
+export function DecimalInput({ value, onValueChange, nonnegative = false, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
+  value: string;
+  onValueChange: (value: string) => void;
+  nonnegative?: boolean;
+}) {
+  // Database responses normalize numbers to two places. Keep the exact text
+  // under the caret while editing, even when an autosave or refresh finishes.
+  const [typing, setTyping] = useState<string | null>(null);
+  return <input {...props} value={typing ?? value}
+    onFocus={event => { setTyping(event.currentTarget.value); props.onFocus?.(event); }}
+    onBlur={event => { setTyping(null); props.onBlur?.(event); }}
+    onChange={event => {
+      const text = event.currentTarget.value;
+      const next = decimalInputValue(text, nonnegative);
+      if (next === null) return;
+      setTyping(text);
+      onValueChange(next);
+    }} />;
+}
