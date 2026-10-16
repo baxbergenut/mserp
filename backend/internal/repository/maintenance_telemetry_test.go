@@ -37,7 +37,7 @@ func testMaintenanceBackgroundTelemetry(t *testing.T, ctx context.Context, admin
 	zone, _ := time.LoadLocation("America/New_York")
 	date := time.Now().In(zone).AddDate(0, 0, -1).Format(time.DateOnly)
 	exec(`INSERT INTO maintenance_records(truck_id,status,service_date,odometer,services) VALUES($1,'completed',$2,1000,'[{"typeCode":"preventive","name":"PM Service","amount":null,"trackingCode":"pm"},{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`, truck, date)
-	for code, interval := range map[string]int{"pm": 100, "oil": 200} {
+	for code, interval := range map[string]int{"pm": 100} {
 		if _, err := repo.SaveSchedule(ctx, MaintenanceSchedule{TruckID: &truck, ServiceCode: code, IntervalMiles: &interval, Enabled: true, WarningMiles: 10}); err != nil {
 			t.Fatal(err)
 		}
@@ -46,9 +46,9 @@ func testMaintenanceBackgroundTelemetry(t *testing.T, ctx context.Context, admin
 	if err := repo.StoreMaintenanceTelemetry(ctx, candidate, &MaintenanceTelemetry{Mileage: 1095, ReportedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	check := func(code, status string, next, remaining int) {
+	check := func(status string, next, remaining int) {
 		t.Helper()
-		page, err := repo.Preventative(ctx, code, "TELEMETRY-TEST", false, 1, 25)
+		page, err := repo.Preventative(ctx, "TELEMETRY-TEST", false, 1, 25)
 		if err != nil || len(page.Items) != 1 {
 			t.Fatal(page, err)
 		}
@@ -57,8 +57,7 @@ func testMaintenanceBackgroundTelemetry(t *testing.T, ctx context.Context, admin
 			t.Fatal("incorrect service interval", v)
 		}
 	}
-	check("pm", "upcoming", 1100, 5)
-	check("oil", "current", 1200, 105)
+	check("upcoming", 1100, 5)
 	if err := repo.StoreMaintenanceTelemetry(ctx, candidate, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +72,7 @@ func testMaintenanceBackgroundTelemetry(t *testing.T, ctx context.Context, admin
 	if err := repo.StoreMaintenanceTelemetry(ctx, candidate, &MaintenanceTelemetry{Mileage: 1101, ReportedAt: now.Add(time.Second)}); err != nil {
 		t.Fatal(err)
 	}
-	check("pm", "overdue", 1100, -1)
+	check("overdue", 1100, -1)
 	exec(`UPDATE maintenance_telemetry SET reported_at=now()-interval '2 hours' WHERE truck_id=$1`, truck)
 	cached, err = repo.CachedMaintenanceOdometer(ctx, truck)
 	if err != nil || cached != nil {

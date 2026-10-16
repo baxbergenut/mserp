@@ -113,7 +113,7 @@ func (r *MaintenanceRepository) CategoryID(ctx context.Context) (string, error) 
 	return id, err
 }
 func (r *MaintenanceRepository) Types(ctx context.Context) ([]MaintenanceType, error) {
-	rows, err := r.pool.Query(ctx, "SELECT code,name,active,version FROM maintenance_types ORDER BY name")
+	rows, err := r.pool.Query(ctx, "SELECT code,name,active,version FROM maintenance_types WHERE code<>'oil' ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +159,9 @@ func (r *MaintenanceRepository) SaveVendor(ctx context.Context, v MaintenanceVen
 	return result, err
 }
 func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType) (MaintenanceType, error) {
+	if v.Code == "oil" {
+		return v, ErrMaintenanceInvalid
+	}
 	var row pgx.Row
 	if v.Version == 0 {
 		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_types(code,name,active) VALUES($1,$2,$3) RETURNING code,name,active,version`, v.Code, v.Name, v.Active)
@@ -178,6 +181,16 @@ const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_n
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
 	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType)
+	// Present historical aliases with the current terminology without rewriting ledger snapshots.
+	for i := range m.Services {
+		if m.Services[i].TypeCode == "oil" || m.Services[i].TypeCode == "preventive" {
+			m.Services[i].TypeCode = "preventive"
+			m.Services[i].Name = "PM Service"
+			if m.Services[i].TrackingCode == "oil" {
+				m.Services[i].TrackingCode = "pm"
+			}
+		}
+	}
 	m.Documents = []MaintenanceDocument{}
 	return m, err
 }
@@ -208,7 +221,7 @@ func (r *MaintenanceRepository) Get(ctx context.Context, id string) (Maintenance
 	return m, rows.Err()
 }
 func (r *MaintenanceRepository) List(ctx context.Context, q MaintenanceQuery) (MaintenancePage, error) {
-	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'typeCode'=$3)) AND ($4='' OR m.status=$4) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
+	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE CASE WHEN s->>'typeCode'='oil' THEN 'preventive' ELSE s->>'typeCode' END=$3)) AND ($4='' OR m.status=$4) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
 	args := []any{q.TruckID, q.VendorID, q.TypeCode, q.Status, q.Search, q.From, q.To, q.ExpenseID}
 	var count int
 	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`+where, args...).Scan(&count); err != nil {
@@ -298,6 +311,8 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		in.Services[0].Amount = in.Expense.BaseAmount
 	}
 	for index, work := range in.Services {
+		work.TypeCode = MaintenanceTypeCode(work.TypeCode)
+		in.Services[index].TypeCode = work.TypeCode
 		var active bool
 		var name string
 		if err := tx.QueryRow(ctx, "SELECT active,name FROM maintenance_types WHERE code=$1", work.TypeCode).Scan(&active, &name); err != nil {
@@ -424,13 +439,19 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	return r.Get(ctx, in.ID)
 }
 
+// MaintenanceTypeCode accepts old clients and import commands using the retired type.
+func MaintenanceTypeCode(code string) string {
+	if code == "oil" {
+		return "preventive"
+	}
+	return code
+}
+
 // Schedule completion follows the selected service type, independent of payer.
 func MaintenanceTrackingCode(code string) string {
 	switch code {
-	case "preventive":
+	case "preventive", "oil":
 		return "pm"
-	case "oil":
-		return "oil"
 	default:
 		return ""
 	}
@@ -519,7 +540,7 @@ type MaintenanceReport struct {
 
 func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery) (MaintenanceReport, error) {
 	args := []any{q.TruckID, q.From, q.To, q.VendorID, q.TypeCode, q.Status, q.Search}
-	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE filter_work->>'typeCode'=$5)) AND ($6='' OR m.status=$6) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
+	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE CASE WHEN filter_work->>'typeCode'='oil' THEN 'preventive' ELSE filter_work->>'typeCode' END=$5)) AND ($6='' OR m.status=$6) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
 	out := MaintenanceReport{ServiceTypes: []MaintenanceReportRow{}, Trucks: []MaintenanceReportRow{}, Vendors: []MaintenanceReportRow{}, RepeatedWork: []MaintenanceReportRow{}}
 	err := r.pool.QueryRow(ctx, `SELECT coalesce(sum(coalesce(e.base_amount,e.amount)),0)::text,coalesce(sum(e.payment_fee),0)::text,coalesce(sum(coalesce(e.base_amount,e.amount)) FILTER(WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'amount' IS NOT NULL)),0)::text FROM maintenance_records m LEFT JOIN expenses e ON e.id=m.expense_id WHERE `+where, args...).Scan(&out.Total, &out.Fees, &out.Unallocated)
 	if err != nil {
@@ -536,7 +557,7 @@ func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery)
 			joins += ` LEFT JOIN maintenance_vendors vendor ON vendor.id=m.vendor_id`
 		}
 		if group == "types" || group == "repeated" {
-			joins += ` CROSS JOIN LATERAL jsonb_array_elements(m.services) s LEFT JOIN maintenance_types st ON st.code=s->>'typeCode'`
+			joins += ` CROSS JOIN LATERAL jsonb_array_elements(m.services) s LEFT JOIN maintenance_types st ON st.code=CASE WHEN s->>'typeCode'='oil' THEN 'preventive' ELSE s->>'typeCode' END`
 			selectGroup = `coalesce(st.name,'Other maintenance')`
 			amount = `coalesce((s->>'amount')::numeric,0)`
 			work = `count(*)`
@@ -547,7 +568,7 @@ func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery)
 		}
 		reportWhere := where
 		if group == "repeated" {
-			reportWhere += ` AND s->>'typeCode' NOT IN ('preventive','cleaning','other')`
+			reportWhere += ` AND s->>'typeCode' NOT IN ('preventive','oil','cleaning','other')`
 		}
 		rows, err := r.pool.Query(ctx, `SELECT `+selectGroup+`,sum(`+amount+`)::text,`+work+`,count(DISTINCT m.id) FROM maintenance_records m LEFT JOIN expenses e ON e.id=m.expense_id `+joins+` WHERE `+reportWhere+` GROUP BY 1`+having+` ORDER BY sum(`+amount+`) DESC,1`, args...)
 		if err != nil {

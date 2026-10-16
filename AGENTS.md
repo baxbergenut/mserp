@@ -295,7 +295,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `repository/maintenance_*`, `httpapi/maintenance_handlers.go` and migration 096
   own its backend. See `docs/MAINTENANCE.md` for accounting, permissions, migration
   review and reminder rules. Truck details reuse the workspace in a Maintenance tab.
-  Migration 097 simplifies entry: service types supply work/invoice names and PM/oil
+  Migration 097 simplifies entry: service types supply work/invoice names and PM Service
   resets, service date supplies invoice date, and the visit stores its driver even
   without a charge. Default US shops are directory records. AI source files attach
   automatically. Today's blank odometer reads Five ELD telemetry by unique exact VIN
@@ -304,17 +304,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Fleet groups Work orders (`/maintenance`, existing workspace) and Preventative
   maintenance (`/fleet/preventative-maintenance`). Migration 099 stores oil grades
   and seeds 300 sourced US vendor locations (docs/data/maintenance-vendors-us.json).
-  The preventative API lists each truck with its latest completed PM/oil visit,
-  same-visit vendor/notes/allocated cost, and latest dated reading. Unknown costs
-  remain unknown. Migration 102 adds durable Five ELD mileage snapshots: the minute
+  The preventative API lists each truck with its latest completed PM Service visit
+  and latest dated reading. PM and legacy oil completions reset the same schedule;
+  one table has no service tabs, vendor, service cost or last-service-note columns. Migration 102 adds durable Five ELD mileage snapshots: the minute
   worker polls active exact-unique VINs on a five-minute cadence (three concurrent,
   forty-second budget), independently of browsing and schedules. GETs use cache
   only; source/time appears on odometer hover. Due odometers, signed miles remaining
   and status use the same interval/override logic as service tasks. Stale mileage
   cannot establish Current; historical service readings are never rewritten.
-  Oil-change entry defaults to 10W-30, supports other/custom grades, and AI extracts
+  New PM Service entry defaults to 10W-30, supports other/custom grades, and AI extracts
   only explicit source grades. Existing unknown historical grades stay blank.
-  Preventative Settings edits independent fleet PM/oil intervals; truck overrides
+  Preventative Settings edits one fleet PM Service interval; truck overrides
   and existing reminder behavior remain in place. Work orders has History/Settings
   only; Settings separates service types, searchable paginated vendors and intervals.
   The manual odometer-history, Due services and Reports panels are removed.
@@ -2010,7 +2010,22 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 ### Maintenance brands, historical dates and service tasks (100–101)
 
 - Migration 100 consolidates untouched branch vendors into 12 brands; superseded rows are hidden from options, while work-order address/name snapshots remain historical. Enter branch addresses per work order. Sources: docs/data/maintenance-brands.json.
-- Customer-confirmed untouched expense-sheet imports use saved expense_date as service date and Completed status, audited without changing ledger amounts. Only legacy imports can be Completed without a resolved truck. Exact PM Service/Oil change names reset their respective schedules; missing mileage stays unknown.
+- Customer-confirmed untouched expense-sheet imports use saved expense_date as service date and Completed status, audited without changing ledger amounts. Only legacy imports can be Completed without a resolved truck. Exact PM Service/Oil change names reset the unified PM Service schedule; missing mileage stays unknown.
 - Preventative dates open the shared work-order modal in place; notes truncate with hover/focus details, and stale mileage is gray. Embedded truck History/Due services omit Truck; Settings remains on standalone Work orders.
-- Migration 101 adds maintenance_pm/maintenance_oil system categories and assigneeRoleIds. Settings supports people and roles; all active current role members receive the category. Keep role membership checks synchronized in task_assignments.go and task_board_repository.go. API writes validate role IDs and versions, preserve omitted role arrays, and audit changes.
-- repository/maintenance_tasks.go and jobs/maintenance_tasks.go reconcile service tasks at startup/every minute using existing schedules plus fresh exact-VIN Five ELD mileage. One open task per truck/service; source completion closes its cycle. Missing telemetry preserves outstanding reminders. Worker never creates service/expense readings. See docs/MAINTENANCE.md for lifecycle and history rules.
+- Migration 101 originally added maintenance_pm/maintenance_oil system categories and assigneeRoleIds. Settings supports people and roles; all active current role members receive the category. Keep role membership checks synchronized in task_assignments.go and task_board_repository.go. API writes validate role IDs and versions, preserve omitted role arrays, and audit changes.
+- repository/maintenance_tasks.go and jobs/maintenance_tasks.go reconcile service tasks at startup/every minute using existing schedules plus fresh exact-VIN Five ELD mileage. One open PM Service task per truck; source completion closes its cycle. Missing telemetry preserves outstanding reminders. Worker never creates service/expense readings. See docs/MAINTENANCE.md for lifecycle and history rules.
+
+### Unified PM Service (108)
+
+- PM and former oil completions share one PM Service schedule and reminder category.
+  Migration 108 keeps existing PM intervals per scope, promotes oil-only intervals,
+  merges people/role assignees, and retains duplicate reminders as completed history.
+  Prior schedules and assignments are saved in access_audit. Retired oil schedule
+  writes are rejected; legacy work/import type codes are normalized to preventive/pm.
+- Historical services, invoice amounts, itemized names and audit snapshots remain
+  stored unchanged. Maintenance reads present the legacy oil type as PM Service;
+  due calculations and reminders use the latest completed pm or oil tag. Unconfirmed
+  and voided records never reset the schedule. The retired type is hidden from options.
+- Preventative maintenance has one table and one interval setting; vendor, service
+  cost and last-service-note fields are removed from its API response and table.
+  Work-order invoices retain their normal accounting fields and oil-grade evidence.

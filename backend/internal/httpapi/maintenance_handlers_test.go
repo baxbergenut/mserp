@@ -9,8 +9,9 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 	id := "00000000-0000-4000-8000-000000000098"
 	truck := "00000000-0000-4000-8000-000000000097"
 	base := maintenanceRequest{ID: id, TruckID: &truck, ServiceDate: "2026-10-01", Location: "shop", Status: "completed", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}
-	if _, err := base.validate(testExpenseCategoryID); err != nil {
-		t.Fatal(err)
+	normalizedLegacy, err := base.validate(testExpenseCategoryID)
+	if err != nil || normalizedLegacy.Services[0].TypeCode != "preventive" || normalizedLegacy.Services[0].TrackingCode != "pm" {
+		t.Fatal("legacy completion must use PM Service", normalizedLegacy, err)
 	}
 	for _, tc := range []struct {
 		name   string

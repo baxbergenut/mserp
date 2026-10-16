@@ -716,7 +716,7 @@ export interface ExpenseCostItem { name: string; amount: string; }
 
 export interface MaintenanceType { code: string; name: string; active: boolean; version: number; }
 export interface MaintenanceVendor { id: string; name: string; address: string; phone: string; contact: string; active: boolean; version: number; }
-export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm" | "oil"; }
+export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
 export interface MaintenanceRecord {
   oilType: string;
@@ -739,9 +739,9 @@ export interface MaintenanceInput {
 }
 export interface MaintenanceTruck { id: string; unitNumber: string; active: boolean; ownerId: string | null; ownerName: string; ownerDriverId: string | null; isCompanyOwned: boolean; driverId: string | null; driverName: string; }
 export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
-export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm" | "oil"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
+export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
 export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
-export interface MaintenanceDue { currentReportedAt: string | null; lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm" | "oil"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
+export interface MaintenanceDue { currentReportedAt: string | null; lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
 export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
 export interface MaintenanceReport { serviceTypes: MaintenanceReportRow[]; trucks: MaintenanceReportRow[]; vendors: MaintenanceReportRow[]; repeatedWork: MaintenanceReportRow[]; total: string; fees: string; unallocated: string; }
 export type MaintenanceAIDetails = { oilType: string | null; hasInvoice: boolean; vendorName: string | null; vendorAddress: string | null; vendorPhone: string | null; vendorContact: string | null; serviceDate: string | null; odometer: number | null; location: MaintenanceRecord["location"]; workOrder: string | null; services: MaintenanceWork[]; };
@@ -978,7 +978,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "maintenance_oil" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
+export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -1302,7 +1302,7 @@ export interface DriverServiceSetup {
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
 
-export interface PreventativeTruck { currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; vendorName: string; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; cost: string | null; oilType: string; notes: string; }
+export interface PreventativeTruck { currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; oilType: string; }
 export type FleetScopeOwnership = { kind: "company" | "driver" | "investor"; mserpOwnerId: string; displayName: string; mserpOwnerDriverId: string | null; effectiveDate: string | null };
 export type FleetScopeTruckProjection = { mserpTruckId: string; unitNumber: string; vin: string | null; year: number | null; make: string | null; model: string | null; licensePlate: string | null; licenseState: string | null; operationalActive: boolean; operationalStatus: string; ownership: FleetScopeOwnership };
 export type FleetScopeProvisioning = { color: string; truckClass: string; gvwrLbs: number };

@@ -108,7 +108,7 @@ func run(ctx context.Context, pool *pgxpool.Pool, rows []oilRow, apply bool) ([]
 			r.Reason = "requires one exact truck number match, including leading zeros"
 			date, _ := time.Parse(time.DateOnly, row.Date)
 			if apply {
-				if _, err := repo.Save(ctx, repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, SourceUnitNumber: row.Unit, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: "needs_review", Notes: sourceNotes(row) + "\nImport review: " + r.Reason, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}); err != nil {
+				if _, err := repo.Save(ctx, repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, SourceUnitNumber: row.Unit, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: "needs_review", Notes: sourceNotes(row) + "\nImport review: " + r.Reason, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "preventive", Name: "PM Service", TrackingCode: "pm"}}}); err != nil {
 					return nil, fmt.Errorf("source row %d: %w", row.Row, err)
 				}
 			}
@@ -117,13 +117,13 @@ func run(ctx context.Context, pool *pgxpool.Pool, rows []oilRow, apply bool) ([]
 		}
 		truck := trucks[0]
 		var prior []string
-		if err := pool.QueryRow(ctx, `SELECT coalesce(array_agg(id::text),'{}') FROM maintenance_records m WHERE truck_id=$1 AND service_date=$2::date AND status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(services) s WHERE s->>'trackingCode'='oil')`, truck, row.Date).Scan(&prior); err != nil {
+		if err := pool.QueryRow(ctx, `SELECT coalesce(array_agg(id::text),'{}') FROM maintenance_records m WHERE truck_id=$1 AND service_date=$2::date AND status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(services) s WHERE s->>'trackingCode' IN ('pm','oil'))`, truck, row.Date).Scan(&prior); err != nil {
 			return nil, err
 		}
 		if len(prior) > 0 {
 			r.Action = "skipped"
 			r.RecordID = strings.Join(prior, ",")
-			r.Reason = "confirmed oil change already exists on this service date"
+			r.Reason = "confirmed PM Service already exists on this service date"
 			out = append(out, r)
 			continue
 		}
@@ -150,7 +150,7 @@ func run(ctx context.Context, pool *pgxpool.Pool, rows []oilRow, apply bool) ([]
 			r.Reason = "possible matching invoice requires review"
 		}
 		date, _ := time.Parse(time.DateOnly, row.Date)
-		input := repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, TruckID: &truck, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: status, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Notes: notes, Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "oil", Name: "Oil change", TrackingCode: "oil"}}}
+		input := repository.MaintenanceInput{OilType: strings.ToUpper(strings.TrimSpace(row.Oil)), ID: row.ID, TruckID: &truck, ServiceDate: &date, Odometer: &row.Miles, Location: "unknown", Status: status, WorkOrder: fmt.Sprintf("fleet-board:oil-change:row-%d", row.Row), Notes: notes, Actor: "Fleet board import", Services: []repository.MaintenanceWork{{TypeCode: "preventive", Name: "PM Service", TrackingCode: "pm"}}}
 		r.Action = status
 		if apply {
 			if _, err := repo.Save(ctx, input); err != nil {

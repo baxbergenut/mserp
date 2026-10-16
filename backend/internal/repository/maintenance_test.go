@@ -107,6 +107,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unifiedMigration, err := os.ReadFile("../../sql/108_unified_pm_service.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -121,6 +125,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(unifiedMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(notifyMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(exportMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(workspaceMigration), "\r\n", "\n"), "", 1)
@@ -153,6 +158,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				if err := admin.QueryRow(ctx, "SELECT m.status,m.service_date,m.services FROM maintenance_records m JOIN expenses e ON e.id=m.expense_id WHERE e.source_spreadsheet_id IS NULL").Scan(&status, &date, &services); err != nil || status != "needs_review" || date != nil || services[0].TrackingCode != "" {
 					t.Fatal("migration invented completion", status, date, err)
 				}
+				testMaintenancePMMigration(t, ctx, admin, string(unifiedMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -204,17 +210,20 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if visit.Expense.WorkOrderDescription == nil || *visit.Expense.WorkOrderDescription != input.Notes || visit.Expense.Description == nil || *visit.Expense.Description != "Original invoice description" {
 				t.Fatal("work description must not replace saved invoice text", visit.Expense)
 			}
-			preventive, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
+			listing, err := NewExpenseRepository(pool).ListExpensesPage(ctx, ExpensePageQuery{TruckID: &truck, VisibleCategoryIDs: []string{category}, AccessibleCategoryIDs: []string{category}, Pagination: Pagination{Page: 1, PageSize: 25}})
+			if err != nil || len(listing.Items) != 1 || listing.Items[0].WorkOrderDescription == nil || *listing.Items[0].WorkOrderDescription != input.Notes || listing.Items[0].Description == nil || *listing.Items[0].Description != "Original invoice description" {
+				t.Fatal("expense directory must preserve both descriptions", listing.Items, err)
+			}
+			preventive, err := repo.Preventative(ctx, "MAINT-TEST", false, 1, 25)
 			if err != nil || len(preventive.Items) != 1 {
 				t.Fatal(preventive, err)
 			}
 			summary := preventive.Items[0]
-			if summary.RecordID == nil || *summary.RecordID != visit.ID || summary.Cost == nil || *summary.Cost != "100.10" || summary.OilType != "15W-40" || summary.Notes != input.Notes || summary.VendorName != "Test shop" || summary.CurrentMiles == nil || *summary.CurrentMiles != odo {
+			if summary.RecordID == nil || *summary.RecordID != visit.ID || summary.OilType != "15W-40" || summary.CurrentMiles == nil || *summary.CurrentMiles != odo {
 				t.Fatal("incorrect preventative summary", summary)
 			}
-			pm, err := repo.Preventative(ctx, "pm", "MAINT-TEST", false, 1, 25)
-			if err != nil || len(pm.Items) != 1 || pm.Items[0].RecordID != nil || pm.Items[0].Cost != nil {
-				t.Fatal("oil must not complete PM", pm, err)
+			if visit.Services[0].TypeCode != "preventive" || visit.Services[0].TrackingCode != "pm" || visit.Services[0].Name != "PM Service" {
+				t.Fatal("legacy work must use the PM contract", visit.Services)
 			}
 			var defaults int
 			if err := pool.QueryRow(ctx, "SELECT count(*) FROM maintenance_vendors WHERE superseded_by IS NULL AND name<>'Test shop'").Scan(&defaults); err != nil || defaults != 12 {
@@ -267,7 +276,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal("manual reading chronology was bypassed")
 			}
 			interval := 5000
-			schedule, err := repo.SaveSchedule(ctx, MaintenanceSchedule{ServiceCode: "oil", IntervalMiles: &interval, Enabled: true, WarningMiles: 1000, WarningDays: 14})
+			schedule, err := repo.SaveSchedule(ctx, MaintenanceSchedule{ServiceCode: "pm", IntervalMiles: &interval, Enabled: true, WarningMiles: 1000, WarningDays: 14})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -276,11 +285,11 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, d := range due {
-				if d.ServiceCode == "oil" && (d.Status != "overdue" || d.LastMiles == nil || *d.LastMiles != odo) {
+				if d.ServiceCode == "pm" && (d.Status != "overdue" || d.LastMiles == nil || *d.LastMiles != odo) {
 					t.Fatal(d)
 				}
-				if d.ServiceCode == "pm" && d.LastDate != nil {
-					t.Fatal("oil change reset PM")
+				if d.ServiceCode != "pm" || d.LastDate == nil {
+					t.Fatal("one unified PM cycle required", d)
 				}
 			}
 			schedule.TruckID = &truck
@@ -295,7 +304,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, d := range due {
-				if d.ServiceCode == "oil" && d.Status != "disabled" {
+				if d.ServiceCode == "pm" && d.Status != "disabled" {
 					t.Fatal("override failed", d)
 				}
 			}
@@ -327,15 +336,19 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if err != nil || voided.Status != "voided" || voided.ExpenseID != nil {
 				t.Fatal(voided, err)
 			}
-			emptyOil, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
+			emptyOil, err := repo.Preventative(ctx, "MAINT-TEST", false, 1, 25)
 			if err != nil || len(emptyOil.Items) != 1 || emptyOil.Items[0].RecordID != nil {
 				t.Fatal("voided work reset service", emptyOil, err)
 			}
 			exec(`INSERT INTO maintenance_records(truck_id,status,service_date,services,vendor_name,notes) VALUES($1,'completed','2026-10-13','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]','Historical shop','Known work, cost unknown')`, truck)
 			exec(`INSERT INTO maintenance_records(truck_id,status,service_date,services,vendor_name,notes) VALUES($1,'needs_review','2026-10-15','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]','Unconfirmed shop','Must not replace completed history')`, truck)
-			historical, err := repo.Preventative(ctx, "oil", "MAINT-TEST", false, 1, 25)
-			if err != nil || len(historical.Items) != 1 || historical.Items[0].Cost != nil || historical.Items[0].VendorName != "Historical shop" || historical.Items[0].OilType != "" || *historical.Items[0].LastDate != "2026-10-13" {
-				t.Fatal("unknown historical cost or unconfirmed latest visit", historical, err)
+			historical, err := repo.Preventative(ctx, "MAINT-TEST", false, 1, 25)
+			if err != nil || len(historical.Items) != 1 || historical.Items[0].OilType != "" || *historical.Items[0].LastDate != "2026-10-13" {
+				t.Fatal("unconfirmed latest visit replaced completed history", historical, err)
+			}
+			legacyPage, err := repo.List(ctx, MaintenanceQuery{TruckID: truck, TypeCode: "preventive", Status: "completed"})
+			if err != nil || len(legacyPage.Items) != 1 || legacyPage.Items[0].Services[0].TypeCode != "preventive" || legacyPage.Items[0].Services[0].Name != "PM Service" || legacyPage.Items[0].Services[0].TrackingCode != "pm" {
+				t.Fatal("PM filter must include legacy stored work", legacyPage, err)
 			}
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)
@@ -401,7 +414,7 @@ func testMaintenanceTaskLifecycle(t *testing.T, ctx context.Context, admin *pgx.
 	if err := admin.QueryRow(ctx, `SELECT title FROM system_task_records WHERE maintenance_truck_id=$1`, truck).Scan(&title); err != nil || !strings.Contains(title, "overdue") {
 		t.Fatal(title, err)
 	}
-	exec(`INSERT INTO maintenance_records(truck_id,status,service_date,odometer,services) VALUES($1,'completed','2026-10-15',1101,'[{"typeCode":"preventive","name":"PM Service","amount":null,"trackingCode":"pm"}]')`, truck)
+	exec(`INSERT INTO maintenance_records(truck_id,status,service_date,odometer,services) VALUES($1,'completed','2026-10-15',1101,'[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`, truck)
 	refresh(live)
 	count(0, 1)
 	live[truck] = MaintenanceReading{Mileage: 1195, Date: "2026-10-15"}

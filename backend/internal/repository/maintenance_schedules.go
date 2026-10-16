@@ -125,7 +125,7 @@ func (r *MaintenanceRepository) Schedules(ctx context.Context) ([]MaintenanceSch
 	return maintenanceSchedules(ctx, r.pool)
 }
 func maintenanceSchedules(ctx context.Context, q chargeQuery) ([]MaintenanceSchedule, error) {
-	rows, err := q.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version FROM maintenance_schedules ORDER BY truck_id NULLS FIRST,service_code`)
+	rows, err := q.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version FROM maintenance_schedules WHERE service_code='pm' ORDER BY truck_id NULLS FIRST,service_code`)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +141,9 @@ func maintenanceSchedules(ctx context.Context, q chargeQuery) ([]MaintenanceSche
 	return items, rows.Err()
 }
 func (r *MaintenanceRepository) SaveSchedule(ctx context.Context, in MaintenanceSchedule) (MaintenanceSchedule, error) {
+	if in.ServiceCode != "pm" {
+		return in, ErrMaintenanceInvalid
+	}
 	var row pgx.Row
 	if in.ID == "" {
 		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_schedules(truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version`, in.TruckID, in.ServiceCode, in.IntervalMiles, in.IntervalDays, in.WarningMiles, in.WarningDays, in.Enabled)
@@ -162,12 +165,13 @@ func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.Query(ctx, `SELECT t.id,t.unit_number,x.code,
- (SELECT id::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
- (SELECT service_date::text FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
- (SELECT odometer FROM maintenance_records m WHERE m.truck_id=t.id AND m.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode'=x.code) ORDER BY service_date DESC,created_at DESC,m.id DESC LIMIT 1),
+	rows, err := q.Query(ctx, `SELECT t.id,t.unit_number,'pm',m.id::text,m.service_date::text,m.odometer,
  r.reading_date::text,r.mileage,r.reported_at
- FROM trucks t `+maintenanceCurrentReadingJoin+` CROSS JOIN (VALUES('pm'),('oil')) x(code) WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,x.code`, truck)
+ FROM trucks t
+ LEFT JOIN LATERAL (SELECT v.id,v.service_date,v.odometer FROM maintenance_records v
+ WHERE v.truck_id=t.id AND v.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode' IN ('pm','oil'))
+ ORDER BY v.service_date DESC,v.created_at DESC,v.id DESC LIMIT 1) m ON true
+ `+maintenanceCurrentReadingJoin+` WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,t.id`, truck)
 	if err != nil {
 		return nil, err
 	}

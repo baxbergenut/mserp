@@ -8,6 +8,7 @@ if (!['localhost', '127.0.0.1'].includes(new URL(access.base).hostname) || !/^re
 const browser = await chromium.launch();
 try {
  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+ page.setDefaultTimeout(15000);
  const vendorName='Synthetic repair shop '+Date.now();
  const errors = []; page.on('pageerror', e => errors.push(e.message));page.on('response',async r=>{if(r.status()>=400&&r.url().includes('/api/maintenance'))console.error(r.status(),r.url(),await r.text());});
  await page.goto(access.base + '/login');
@@ -18,7 +19,9 @@ try {
  await page.goto(access.base + '/maintenance');
  await expect(page.getByRole('button', { name: 'Add work order', exact: true })).toBeVisible();
  let options = await (await page.request.get(access.base + '/api/maintenance/options')).json();
- expect(options.types.length).toBeGreaterThanOrEqual(11);
+ expect(options.types.length).toBeGreaterThanOrEqual(10);
+ expect(options.types.some(t=>t.code==='oil')).toBe(false);
+ expect(options.types.find(t=>t.code==='preventive').name).toBe('PM Service');
  const truck = options.trucks.find(t => t.active);
  expect(options.vendors.some(v=>v.name.includes(" — "))).toBe(false);
  expect(options.vendors.length).toBeGreaterThanOrEqual(12);
@@ -78,7 +81,7 @@ try {
  await page.getByRole('button', { name: 'Add service', exact: true }).click();
  await page.getByRole('checkbox', { name: /^Split cost by service/ }).check();
  await page.getByLabel('Service 1 cost', { exact: true }).fill('100.10');
- await page.getByLabel('Service 2 type', { exact: true }).selectOption('oil');
+ await page.getByLabel('Service 2 type', { exact: true }).selectOption('preventive');
  await expect(page.getByLabel('Oil type',{exact:true})).toHaveValue('10W-30');
  await page.getByLabel('Oil type',{exact:true}).selectOption('custom');
  await page.getByLabel('Custom oil type',{exact:true}).fill('20W-50');
@@ -114,43 +117,37 @@ try {
  const downloaded = await page.request.get(access.base + '/api/maintenance/documents/' + document.id);
  expect(await downloaded.text()).toBe('Synthetic maintenance receipt');
  await api(options.schedules.find(s=>s.truckId===null&&s.serviceCode==='pm') ? 'put':'post', '/maintenance/schedules'+(options.schedules.find(s=>s.truckId===null&&s.serviceCode==='pm') ? '/'+options.schedules.find(s=>s.truckId===null&&s.serviceCode==='pm').id:''), { ...options.schedules.find(s=>s.truckId===null&&s.serviceCode==='pm'),truckId: null, serviceCode: 'pm', intervalMiles: 5000, intervalDays: 30, warningMiles: 1000, warningDays: 7, enabled: true });
- await api(options.schedules.find(s=>s.truckId===null&&s.serviceCode==='oil') ? 'put':'post', '/maintenance/schedules'+(options.schedules.find(s=>s.truckId===null&&s.serviceCode==='oil') ? '/'+options.schedules.find(s=>s.truckId===null&&s.serviceCode==='oil').id:''), { ...options.schedules.find(s=>s.truckId===null&&s.serviceCode==='oil'),truckId: null, serviceCode: 'oil', intervalMiles: 10000, intervalDays: null, warningMiles: 1000, warningDays: 7, enabled: true });
  await api('post', '/maintenance/readings', { truckId: truck.id, date: '2026-10-14', mileage: 106000 });
  const reminders = await api('get', '/maintenance/due?truckId=' + truck.id);
+ expect(reminders).toHaveLength(1);
  expect(reminders.find(d => d.serviceCode === 'pm').status).toBe('overdue');
- await expect.poll(async()=>{const board=await api('get','/tasks?status=open&search='+encodeURIComponent('PM service overdue'));return board.items.some(t=>t.maintenanceTruckId===truck.id&&t.systemTaskKind==='maintenance_pm');},{timeout:75000,intervals:[1000,3000,5000]}).toBe(true);
- expect(reminders.find(d => d.serviceCode === 'oil').status).toBe('current');
- expect(reminders.find(d => d.serviceCode === 'oil').lastDate).toBe('2026-10-01');
+ await expect.poll(async()=>{const board=await api('get','/tasks?status=open&search='+encodeURIComponent('PM Service overdue'));return board.items.some(t=>t.maintenanceTruckId===truck.id&&t.systemTaskKind==='maintenance_pm');},{timeout:75000,intervals:[1000,3000,5000]}).toBe(true);
  const conflict = await page.request.post(access.base + '/api/maintenance/readings', { headers, data: { truckId: truck.id, date: '2026-10-02', mileage: 120000 } });
  expect(conflict.status()).toBe(400);
  const report = await api('get', '/maintenance/reports?truckId=' + truck.id+'&vendorId='+vendor.id);
  expect(report.total).toBe('120.30'); expect(report.fees).toBe('3.00');
  expect(report.serviceTypes.find(r => r.group === 'Tires & wheels').amount).toBe('20.20');
  const pmSummary = (await api('get','/maintenance/preventative?serviceCode=pm&search='+encodeURIComponent(truck.unitNumber))).items.find(t=>t.truckId===truck.id);
- expect(pmSummary.recordId).toBe(saved.id);expect(pmSummary.cost).toBe('100.10');expect(pmSummary.vendorName).toBe(vendorName);expect(pmSummary.currentMiles).toBe(106000);
- const oilSummary = (await api('get','/maintenance/preventative?serviceCode=oil&search='+encodeURIComponent(truck.unitNumber))).items.find(t=>t.truckId===truck.id);
- expect(oilSummary.cost).toBe('0.00');expect(oilSummary.oilType).toBe('20W-50');
  await page.route('**/api/maintenance/odometer?*',route=>route.fulfill({json:{reading:{mileage:650000,reportedAt:new Date().toISOString()},message:''}}));
  await page.goto(access.base+'/fleet/preventative-maintenance');
  await expect(page.getByRole('heading',{name:'Preventative maintenance',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Fleet',exact:true})).toHaveAttribute('aria-expanded','true');
  await expect(page.getByRole('link',{name:'Work orders',exact:true})).toBeVisible();
  await page.getByPlaceholder('Search trucks…').fill(truck.unitNumber);
- await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText(vendorName);
+ expect(pmSummary.recordId).toBe(saved.id);expect(pmSummary.currentMiles).toBe(106000);
+ expect(pmSummary).not.toHaveProperty('vendorName');expect(pmSummary).not.toHaveProperty('cost');expect(pmSummary).not.toHaveProperty('notes');
+ await expect(page.getByRole('tab')).toHaveCount(0);
+ await expect(page.getByRole('columnheader')).toHaveText(['Truck','Last PM date','Service odometer','Current odometer','Next due odometer / date','Miles remaining','Status','Oil type']);
+ await expect(page.locator('tbody')).not.toContainText(vendorName);
  await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText('106,000');
  await expect(page.locator('td[title^="Last saved reading"]')).toHaveCount(1);
  await expect(page.locator('td[data-odometer-fresh="false"]')).toHaveCount(1);
- const note=page.locator('tbody span.truncate');await note.hover();
- await expect(page.getByRole('tooltip')).toHaveText(saved.notes);
- expect(await note.evaluate(e=>e.scrollWidth>e.clientWidth)).toBe(true);
  await page.getByRole('heading',{name:'Preventative maintenance',exact:true}).hover();
  await page.getByRole('button',{name:saved.serviceDate,exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Work order details',exact:true})).toBeVisible();
  expect(new URL(page.url()).pathname).toBe('/fleet/preventative-maintenance');
  await page.getByRole('button',{name:'Close',exact:true}).click();
- await page.getByRole('tab',{name:'Oil change',exact:true}).click();
  await expect(page.locator('tbody')).toContainText('20W-50');
- await expect(page.locator('tbody')).toContainText('$0.00');
  await page.screenshot({path:join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE),'preventative-maintenance.png'),fullPage:true});
  await page.unroute('**/api/maintenance/odometer?*');
  await page.route('**/api/maintenance/odometer?*',route=>route.fulfill({json:{reading:null,message:'Unavailable'}}));
@@ -161,12 +158,12 @@ try {
  await page.getByRole('button',{name:'Settings',exact:true}).click();
  await page.getByRole('button',{name:'Set PM Service interval',exact:true}).click();
  await expect(page.getByLabel('Schedule truck',{exact:true})).toBeDisabled();
- await expect(page.getByLabel('Tracked service',{exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Tracked service',{exact:true})).toHaveCount(0);
  await page.getByLabel('Interval miles',{exact:true}).fill('6000');
  await page.getByRole('button',{name:'Save interval',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Preventative maintenance settings',exact:true})).toBeVisible();
  expect((await api('get','/maintenance/options')).schedules.find(s=>s.truckId===null&&s.serviceCode==='pm').intervalMiles).toBe(6000);
- expect((await api('get','/maintenance/options')).schedules.find(s=>s.truckId===null&&s.serviceCode==='oil').intervalMiles).toBe(10000);
+ expect((await api('get','/maintenance/options')).schedules.every(s=>s.serviceCode==='pm')).toBe(true);
  await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.unroute('**/api/maintenance/odometer?*');
  await page.goto(access.base + '/trucks/detail?id=' + truck.id);
@@ -225,8 +222,8 @@ try {
    const response = await page.request.post(access.base + '/api/maintenance/extract', { headers, multipart: body, timeout: 100000 });
    expect(response.ok(), await response.text()).toBe(true); const drafts = (await response.json()).drafts;
    expect(drafts).toHaveLength(1); expect(drafts[0].maintenance.oilType).toBe('15W-40'); expect(drafts[0].maintenance.odometer).toBe(101000); expect(drafts[0].maintenance.vendorName).toBe('Synthetic repair shop');
-   expect(drafts[0].maintenance.services.some(s => s.typeCode === 'oil' && s.trackingCode === 'oil'), format+': '+JSON.stringify(drafts[0].maintenance.services)).toBe(true);
-   expect(drafts[0].maintenance.services.some(s => s.trackingCode === 'pm')).toBe(false);
+   expect(drafts[0].maintenance.services.some(s => s.typeCode === 'preventive' && s.trackingCode === 'pm'), format+': '+JSON.stringify(drafts[0].maintenance.services)).toBe(true);
+   expect(drafts[0].maintenance.services.some(s => s.trackingCode === 'oil')).toBe(false);
   }
   await page.getByRole('button', { name: 'Add work order', exact: true }).click();
   await page.getByLabel('Maintenance AI attachment').setInputFiles({name:'synthetic-oil-invoice.txt',mimeType:'text/plain',buffer:Buffer.from(text)});
@@ -238,7 +235,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const aiVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.vendorName==='Synthetic repair shop');
   expect(aiVisit.documents).toHaveLength(1);expect(aiVisit.documents[0].fileName).toBe('synthetic-oil-invoice.txt');
-  expect(aiVisit.expense.expenseDate.slice(0,10)).toBe('2026-10-05');expect(aiVisit.expense.expenseType).toContain('Oil change');
+  expect(aiVisit.expense.expenseDate.slice(0,10)).toBe('2026-10-05');expect(aiVisit.expense.expenseType).toContain('PM Service');
  }
 
  // Category View gives access to history/documents, while operational writes remain separate.
@@ -262,5 +259,5 @@ try {
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
  await page.getByRole('button', { name: 'Close', exact: true }).click();
  expect(errors).toEqual([]);
- console.log('Maintenance E2E passed: vendors, typed costs, history, attachments, ledger separation, EFS, odometers, independent schedules, reports, stale writes and AI.');
+ console.log('Maintenance E2E passed: vendors, typed costs, history, attachments, ledger separation, EFS, odometers, unified PM schedules, reports, stale writes and AI.');
 } finally { await browser.close(); }

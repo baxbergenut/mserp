@@ -30,7 +30,7 @@ func (r *MaintenanceRepository) RefreshMaintenanceTasks(ctx context.Context, tod
 		miles                        *int
 		date                         *string
 	}
-	rows, err := tx.Query(ctx, `SELECT id::text,maintenance_truck_id::text,maintenance_service,coalesce(maintenance_baseline_id::text,''),maintenance_observed_miles,maintenance_observed_date::text FROM system_task_records WHERE kind IN ('maintenance_pm','maintenance_oil') AND completed_at IS NULL FOR UPDATE`)
+	rows, err := tx.Query(ctx, `SELECT id::text,maintenance_truck_id::text,maintenance_service,coalesce(maintenance_baseline_id::text,''),maintenance_observed_miles,maintenance_observed_date::text FROM system_task_records WHERE kind='maintenance_pm' AND completed_at IS NULL FOR UPDATE`)
 	if err != nil {
 		return err
 	}
@@ -86,10 +86,7 @@ func (r *MaintenanceRepository) RefreshMaintenanceTasks(ctx context.Context, tod
 		if !alert {
 			continue
 		}
-		service := "PM service"
-		if d.ServiceCode == "oil" {
-			service = "Oil change"
-		}
+		service := "PM Service"
 		title := fmt.Sprintf("%s %s · Truck %s", service, strings.ReplaceAll(d.Status, "_", " "), d.UnitNumber)
 		notes := []string{"Record completed service in Work orders to resolve this reminder."}
 		if d.NextDate != nil {

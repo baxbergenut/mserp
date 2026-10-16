@@ -2,7 +2,7 @@
 
 Fleet > Work orders retains the directory and entry form at `/maintenance`, and
 a Work orders tab on each truck. Fleet > Preventative maintenance lives at
-`/fleet/preventative-maintenance` with PM Service and Oil change tabs. Expenses
+`/fleet/preventative-maintenance` with one PM Service table. Expenses
 includes work-order charges in the same ledger alongside other expenses, with
 category-scoped verification. Explicit legacy `scope=general` API reads still
 exclude the configured work-order category. No expense copies are created.
@@ -12,11 +12,11 @@ exclude the configured work-order category. No expense copies are created.
 - A visit stores the truck, actual service date, odometer in miles, vendor and
   contact/address snapshots, service location, work-order number, notes, work
   items and documents. Completed visits require a truck and service date.
-- Work uses stable reporting types: PM service, Oil change, Engine & drivetrain,
+- Work uses stable reporting types: PM Service, Engine & drivetrain,
   Electrical, Brakes, Tires & wheels, Cooling & fluid systems, Body & chassis,
   Towing & recovery, Cleaning & detailing, and Other maintenance. Detailed names
   now come directly from the reporting type; there is no second work-name field.
-  PM service and Oil change are separate types. Administrators add custom service
+  PM Service includes both PM work and oil replacement. Administrators add custom service
   types in Work orders > Settings. Roadside is a location, not a
   component reporting type. Reporting type codes never change during a rename.
 - A charged visit has exactly one linked expense. Service and financial writes
@@ -42,11 +42,10 @@ exclude the configured work-order category. No expense copies are created.
   when an invoice differs from the directory. Saved historical owners remain the
   financial payer across ownership changes.
 
-## PM, oil and odometers
+## PM Service and odometers
 
-PM service and Oil change reset their corresponding schedules automatically when
+PM work and oil replacement reset the same PM Service schedule automatically when
 the visit is confirmed Completed. There is no completion dropdown in the entry form.
-PM never implies an oil change.
 Needs-review entries, estimates and voided visits do not reset a schedule.
 
 Schedules support miles, days or both, with fleet defaults and explicit per-truck
@@ -69,7 +68,7 @@ ambiguous or unavailable telemetry leaves manual entry available. The GET is
 authorized by Maintenance View/Create/Edit and reads only the background cache.
 The manual odometer-history panel has been removed from Settings.
 
-Due services refresh on focus and every 30 visible seconds. A startup/minute worker also creates PM and oil-change system tasks for upcoming, due and overdue services. See the assignment and lifecycle rules below.
+Due services refresh on focus and every 30 visible seconds. A startup/minute worker also creates PM Service system tasks for upcoming, due and overdue services. See the assignment and lifecycle rules below.
 Reports aggregate exact service amounts by reporting type, truck, vendor and period,
 with separate payment fees and unallocated costs. Repeated repairs group the same
 truck/component across distinct visits, excluding routine preventive/cleaning work
@@ -139,7 +138,8 @@ idempotent; existing confirmed oil changes on the same date are skipped. Odomete
 conflicts, unlinked source trucks and possible matching unreviewed invoices are
 retained as Needs review. Unlinked entries keep the original unit and reference VIN
 for later linking; they never create fleet profiles. No
-charges, vendors, historical drivers or PM completions are invented. Undated current
+charges, vendors or historical drivers are invented; confirmed source service
+resets the unified PM Service schedule. Undated current
 odometer cells and other sheet information remain in source notes.
 
 ## Validation
@@ -147,7 +147,7 @@ odometer cells and other sheet information remain in source notes.
 `TestMaintenanceDatabase` uses the existing local disposable
 `MSERP_DRIVER_PAY_TEST_DATABASE_URL` for fresh and pre-096 migrations as mserp_app.
 It checks cost atomicity, EFS separation, vendor history, odometer chronology,
-independent schedules, version guards, reporting and void history.
+the unified PM schedule, version guards, reporting and void history.
 
 Build frontend with `/api`, run `review-local.mjs`, then run
 `node scripts/test-maintenance-e2e.mjs` with `MSERP_REVIEW_ACCESS_FILE`. Set
@@ -157,15 +157,14 @@ exercise the real API/database plus text/image/PDF extraction and read-only acce
 
 ## Preventative overview and US vendor directory (099)
 
-`GET /maintenance/preventative?serviceCode=pm|oil&page=1&pageSize=25` requires
+`GET /maintenance/preventative?page=1&pageSize=25` requires
 category View and returns paginated active trucks, including trucks with no
 recorded service. `search` matches unit numbers; `includeInactive=true` includes
-retired trucks. Each row reads its latest Completed tagged visit, with the date,
-vendor snapshot, service odometer, oil grade and notes from that same visit.
+retired trucks. Each row reads its latest Completed PM or legacy oil-tagged visit, with the date,
+service odometer and oil grade from that same visit.
 Needs-review and voided work never replace completed history. Clicking its date
-opens the original work order in a modal on the current overview page. Notes stay on one line with a scrollable hover/focus popup. Service cost sums only allocated matching work
-items, excluding payment fees; historical unknown costs and mixed unallocated
-invoices remain unknown. No new expense is created by an overview read.
+opens the original work order in a modal on the current overview page. Vendor, service cost and last-service-note fields are omitted from the overview API
+and table. No new expense is created by an overview read.
 
 Visible rows request live Five ELD mileage with three concurrent calls and abort
 on navigation. The identity roster is cached for five minutes and each reading
@@ -173,13 +172,13 @@ for one minute; every returned reading must still satisfy the one-hour freshness
 rule. Current mileage uses normal text; unavailable/outdated readings use gray text, with their source/date on hover. Visible rows refresh each minute and on focus.
 The entry input shows source/time on hover, without a note beneath it.
 
-Oil-change selection defaults new entry to SAE 10W-30 and offers common grades,
+PM Service selection defaults new entry to SAE 10W-30 and offers common grades,
 Unknown and a custom value. AI extracts a grade only from explicit evidence; the
 review form uses its new-entry default when absent. Existing unknown historical
 grades remain blank. The migration backfills only explicitly recorded imported
 source grades, and imports store their source grade on future visits.
 
-Preventative Settings exposes separate fleet PM/oil mileage/day defaults. Only
+Preventative Settings exposes one fleet PM Service mileage/day default. Only
 administrators edit fleet defaults; existing truck overrides take precedence,
 and the first configured limit reached makes a service due. No numerical service
 interval is invented. Work orders now has History and Settings only.
@@ -214,11 +213,11 @@ audited; omitted role arrays preserve previous roles for older clients, while an
 empty array clears them. Existing task permission requirements still apply.
 Unassigned categories are visible to Administrators, matching other categories.
 
-The startup/minute worker evaluates the same PM/oil schedules and precedence as
+The startup/minute worker evaluates the same PM Service schedule and precedence as
 the preventative overview, with New York calendar dates. Fresh Five ELD mileage uses exact
 unique VIN identity, bounded concurrency and a 40-second telemetry budget; saved
 dated readings remain the fallback. It never writes telemetry as service history.
-At most one open task exists per truck/service. Repeated runs update the same
+At most one open PM Service task exists per truck. Repeated runs update the same
 reminder; completed service resolves that cycle and a later due cycle creates a
 new task. Disabling a schedule or retiring a truck resolves with an explicit
 outcome. Missing mileage does not silently clear an existing reminder. Missing
@@ -232,7 +231,7 @@ and subsequent cycles, plus the real-API maintenance browser suite.
 ## Shared accounting workspace and background mileage (102)
 
 The preventative endpoint returns nextMiles, remainingMiles (signed), nextDate,
-status, reason, currentSource and currentReportedAt for both service tabs. Red
+status, reason, currentSource and currentReportedAt for the unified PM Service table. Red
 rows are overdue/due; amber rows are within the configured warning threshold.
 Truck-specific settings override fleet defaults, including disabled overrides.
 The next due odometer can be known even without current mileage; remaining miles
@@ -273,7 +272,26 @@ second expense. Category changes, truck/date confirmation, cost allocation and
 oil grades remain editable before saving.
 
 Validation: TestMaintenanceDatabase covers cache persistence/outages, exact VIN
-changes/ambiguity, absence of invented dated readings and independent due math.
+changes/ambiguity, absence of invented dated readings and unified PM due math.
 The local review scripts test-work-order-accounting.mjs and test-maintenance-e2e.mjs
 cover entry switching, one ledger charge, verification, in-place editing, compact
 settings, due colors and optional live Luna text/image/PDF mixed extraction.
+
+## Unified PM Service (108)
+
+PM Service is the single service name, reporting type, schedule and reminder
+category. Both completed PM and former oil-tagged work reset it using the latest
+completed visit; Needs review and voided records remain excluded. The overview has
+no service tabs. Vendor, service cost and last-service-note columns are removed.
+Oil grade remains available on PM Service work orders and in the overview.
+
+Migration 108 retains existing PM intervals at each fleet/truck scope and promotes
+an oil-only interval at that scope to PM. Conflicting retired settings are recorded
+in access_audit, along with both original assignment configurations. People and
+role assignees are merged. One open reminder per truck survives with the strongest
+observed mileage; duplicate reminders remain as completed history. Historical
+invoice amounts, cost breakdown names, service evidence and audit snapshots are
+not rewritten. Reads display legacy service types as PM Service; edits and imports
+normalize old oil type codes to preventive/pm under the usual financial guards.
+The old serviceCode overview selector is accepted for existing clients, but every
+read returns the unified PM cycle. Schedule writes accept only pm.

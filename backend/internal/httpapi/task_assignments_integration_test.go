@@ -308,20 +308,24 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 				t.Fatal("completed actor snapshot lost")
 			}
 			// Roles are dynamic memberships, combined with direct assignments without duplicates.
-			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{users["assignee"]}, "assigneeRoleIds": []string{roleID}, "version": 1}, 204)
+			var maintenanceVersion int
+			if err := admin.QueryRow(ctx, `SELECT version FROM system_task_assignments WHERE kind='maintenance_pm'`).Scan(&maintenanceVersion); err != nil {
+				t.Fatal(err)
+			}
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{users["assignee"]}, "assigneeRoleIds": []string{roleID}, "version": maintenanceVersion}, 204)
 			exec(`INSERT INTO system_task_records(id,kind,title,notes,created_at) VALUES(gen_random_uuid(),'maintenance_pm','Role maintenance test','',now())`)
 			for _, name := range []string{"assigner", "assignee", "outsider"} {
 				if list(name, "/tasks?search=Role%20maintenance%20test") != 1 {
 					t.Fatal("role task missing", name)
 				}
 			}
-			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"bad"}, "version": 2}, 400)
-			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"10000000-0000-0000-0000-000000000001"}, "version": 2}, 409)
-			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{}, "version": 2}, 204)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"bad"}, "version": maintenanceVersion + 1}, 400)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeRoleIds": []string{"10000000-0000-0000-0000-000000000001"}, "version": maintenanceVersion + 1}, 409)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{}, "version": maintenanceVersion + 1}, 204)
 			if list("assigner", "/tasks?search=Role%20maintenance%20test") != 0 {
 				t.Fatal("removed role retained visibility")
 			}
-			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{roleID}, "version": 3}, 204)
+			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{roleID}, "version": maintenanceVersion + 2}, 204)
 			var otherRole string
 			if e = admin.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES('Different role',ARRAY['tasks.read']) RETURNING id::text`).Scan(&otherRole); e != nil {
 				t.Fatal(e)

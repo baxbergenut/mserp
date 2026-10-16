@@ -264,6 +264,7 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 	priced := 0
 	for i := range out.Services {
 		s := &out.Services[i]
+		s.TypeCode = repository.MaintenanceTypeCode(s.TypeCode)
 		s.Name = strings.TrimSpace(s.Name)
 		if s.TypeCode == "" {
 			return out, errors.New("each service needs a service type")
@@ -575,7 +576,7 @@ func (h maintenanceHandler) schedule(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "select a valid truck")
 		return
 	}
-	if (in.ServiceCode != "pm" && in.ServiceCode != "oil") || in.WarningDays < 0 || in.WarningMiles < 0 || in.WarningDays > 36500 || in.WarningMiles > 2000000000 || in.IntervalDays != nil && (*in.IntervalDays < 1 || *in.IntervalDays > 36500) || in.IntervalMiles != nil && (*in.IntervalMiles < 1 || *in.IntervalMiles > 2000000000) || in.Enabled && in.IntervalDays == nil && in.IntervalMiles == nil {
+	if in.ServiceCode != "pm" || in.WarningDays < 0 || in.WarningMiles < 0 || in.WarningDays > 36500 || in.WarningMiles > 2000000000 || in.IntervalDays != nil && (*in.IntervalDays < 1 || *in.IntervalDays > 36500) || in.IntervalMiles != nil && (*in.IntervalMiles < 1 || *in.IntervalMiles > 2000000000) || in.Enabled && in.IntervalDays == nil && in.IntervalMiles == nil {
 		writeAPIError(w, 400, "set a positive mileage/day interval and nonnegative reminder thresholds")
 		return
 	}

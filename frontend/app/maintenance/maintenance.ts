@@ -3,19 +3,20 @@ import { emptyExpenseInput, expenseToInput } from "../expenses/ExpenseForm";
 import { costBreakdownError } from "../lib/expenseCosts";
 
 export const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-export const serviceTypeForName = (name: string) => ({ "pm service": "preventive", "oil change": "oil", "electrical issue": "electrical", "electrical repair": "electrical", "brake issue": "brakes", "tire issue": "tires", "tire replacement": "tires", leakage: "fluids", "body work": "body", towing: "recovery", "truck wash": "cleaning", detailing: "cleaning" } as Record<string, string>)[name.trim().toLowerCase()] ?? "other";
-export const trackingForType = (code: string): MaintenanceWork["trackingCode"] => code === "preventive" ? "pm" : code === "oil" ? "oil" : "";
+export const serviceTypeForName = (name: string) => ({ "pm service": "preventive", "oil change": "preventive", "electrical issue": "electrical", "electrical repair": "electrical", "brake issue": "brakes", "tire issue": "tires", "tire replacement": "tires", leakage: "fluids", "body work": "body", towing: "recovery", "truck wash": "cleaning", detailing: "cleaning" } as Record<string, string>)[name.trim().toLowerCase()] ?? "other";
+export const trackingForType = (code: string): MaintenanceWork["trackingCode"] => code === "preventive" || code === "oil" ? "pm" : "";
 export function serviceWork(code: string, options: MaintenanceOptions, amount: string | null = null): MaintenanceWork {
+  if (code === "oil") code = "preventive";
   return { typeCode: code, name: options.types.find(t => t.code === code)?.name ?? code, amount, trackingCode: trackingForType(code) };
 }
 export function normalizeMaintenance(value: MaintenanceInput, options: MaintenanceOptions): MaintenanceInput {
   const services = value.services.map(s => serviceWork(s.typeCode, options, s.amount));
   if (services.length === 1 && value.expense?.amount && value.legacyPaymentTotal !== value.expense.amount) services[0].amount = value.expense.amount;
-  return { ...value, oilType: services.some(s => s.typeCode === "oil") ? value.oilType : "", services, expense: value.expense ? { ...value.expense, driverId: value.driverId, driverName: value.driverName, expenseType: [...new Set(services.map(s => s.name))].join(", ").slice(0, 100), expenseDate: value.serviceDate || value.expense.expenseDate } : null };
+  return { ...value, oilType: services.some(s => s.typeCode === "preventive") ? value.oilType : "", services, expense: value.expense ? { ...value.expense, driverId: value.driverId, driverName: value.driverName, expenseType: [...new Set(services.map(s => s.name))].join(", ").slice(0, 100), expenseDate: value.serviceDate || value.expense.expenseDate } : null };
 }
 export function emptyMaintenance(options: MaintenanceOptions, truckId?: string): MaintenanceInput {
   const code = options.types.find(t => t.active && t.code === "preventive")?.code ?? options.types.find(t => t.active)?.code ?? "other";
-  return assignMaintenanceTruck({ oilType: "", id: crypto.randomUUID(), version: 0, truckId: null, driverId: null, driverName: "", vendorId: null, vendorName: "", vendorAddress: "", vendorPhone: "", vendorContact: "", serviceDate: today(), odometer: null, location: "shop", status: "completed", workOrder: "", notes: "", services: [serviceWork(code, options)], expense: { ...emptyExpenseInput, categoryId: options.categoryId, paidBy: options.currentUser, expenseDate: today(), costBreakdown: [] } }, truckId ?? "", options);
+  return assignMaintenanceTruck({ oilType: code === "preventive" ? "10W-30" : "", id: crypto.randomUUID(), version: 0, truckId: null, driverId: null, driverName: "", vendorId: null, vendorName: "", vendorAddress: "", vendorPhone: "", vendorContact: "", serviceDate: today(), odometer: null, location: "shop", status: "completed", workOrder: "", notes: "", services: [serviceWork(code, options)], expense: { ...emptyExpenseInput, categoryId: options.categoryId, paidBy: options.currentUser, expenseDate: today(), costBreakdown: [] } }, truckId ?? "", options);
 }
 export function assignMaintenanceTruck(value: MaintenanceInput, id: string, options: MaintenanceOptions): MaintenanceInput {
   const truck = options.trucks.find(t => t.id === id);
@@ -31,12 +32,12 @@ export function maintenanceDraft(draft: MaintenanceAIDraft, options: Maintenance
   const matched = assignMaintenanceTruck(emptyMaintenance(options), draft.truckId ?? "", options);
   const source = meta?.services?.length ? meta.services : draft.costBreakdown?.length ? draft.costBreakdown.map(s => ({ ...s, typeCode: serviceTypeForName(s.name), trackingCode: "" })) : [{ typeCode: serviceTypeForName(draft.expenseType), name: draft.expenseType || "", amount: null, trackingCode: "" }];
   const services = source.map(s => {
-    let code = s.typeCode === "preventive" && (s.trackingCode === "oil" || serviceTypeForName(s.name) === "oil") ? "oil" : s.typeCode;
+    let code = s.typeCode === "oil" ? "preventive" : s.typeCode;
     if (!options.types.some(t => t.active && t.code === code)) code = options.types.find(t => t.active && t.code === "other")?.code ?? options.types.find(t => t.active)?.code ?? "other";
     return serviceWork(code, options, s.amount);
   });
   const vendor = options.vendors.filter(v => v.active && v.name.toLowerCase() === meta?.vendorName?.trim().toLowerCase());
-  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "oil") ? "10W-30" : ""), driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
+  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
 }
 export function maintenanceError(value: MaintenanceInput): string {
   if (!value.version && !value.expense) return "Enter the service amount and payment details.";

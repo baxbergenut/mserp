@@ -217,6 +217,9 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 	if err := rows.Err(); err != nil {
 		return ExpensePage{}, err
 	}
+	if err := r.loadWorkOrderDescriptions(ctx, values); err != nil {
+		return ExpensePage{}, err
+	}
 
 	options := ExpenseFilterOptions{Categories: []ExpenseFilterCategory{}}
 	if err := r.pool.QueryRow(ctx, `SELECT
@@ -283,7 +286,46 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 
 func (r *ExpenseRepository) GetExpense(ctx context.Context, id string) (Expense, error) {
 	value, err := scanExpense(r.pool.QueryRow(ctx, selectExpensesSQL+" WHERE e.id = $1", id))
-	return value, mapNotFound(err)
+	if err != nil {
+		return value, mapNotFound(err)
+	}
+	values := []Expense{value}
+	err = r.loadWorkOrderDescriptions(ctx, values)
+	return values[0], err
+}
+
+// Load display text separately so legacy expense-only schemas remain readable.
+// A page uses one bounded lookup and never replaces the saved invoice description.
+func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, values []Expense) error {
+	if len(values) == 0 {
+		return nil
+	}
+	ids := make([]string, len(values))
+	byID := make(map[string]int, len(values))
+	for i := range values {
+		ids[i] = values[i].ID
+		byID[values[i].ID] = i
+	}
+	rows, err := r.pool.Query(ctx, `SELECT expense_id::text, nullif(btrim(notes),'') FROM maintenance_records WHERE expense_id=ANY($1::uuid[])`, ids)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
+			return nil // Work orders were introduced in migration 096.
+		}
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var description *string
+		if err := rows.Scan(&id, &description); err != nil {
+			return err
+		}
+		if i, ok := byID[id]; ok {
+			values[i].WorkOrderDescription = description
+		}
+	}
+	return rows.Err()
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {
@@ -492,8 +534,7 @@ SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_na
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text, e.cost_breakdown,
- (SELECT nullif(btrim(m.notes),'') FROM maintenance_records m WHERE m.expense_id=e.id)
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = e.driver_id`
@@ -508,7 +549,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.WorkOrderDescription,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown,
 	)
 	return value, err
 }
