@@ -3,7 +3,7 @@ import { decimalInputValue } from "./board";
 
 export function DecimalInput({ value, onValueChange, nonnegative = false, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
   value: string;
-  onValueChange: (value: string) => void;
+  onValueChange: (value: string, text: string) => void;
   nonnegative?: boolean;
 }) {
   // Database responses normalize numbers to two places. Keep the exact text
@@ -17,6 +17,6 @@ export function DecimalInput({ value, onValueChange, nonnegative = false, ...pro
       const next = decimalInputValue(text, nonnegative);
       if (next === null) return;
       setTyping(text);
-      onValueChange(next);
+      onValueChange(next, text);
     }} />;
 }

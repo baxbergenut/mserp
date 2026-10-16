@@ -98,8 +98,24 @@ try {
   const manual = amount('original rate', '2026-10-13');
   await manual.click(); await page.keyboard.type('6');
   await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('6.00');
-  await page.keyboard.type('7'); await page.keyboard.press('Enter');
+  const followingDriver = amount('driver rate', '2026-10-13');
+  await expect(followingDriver).toHaveValue('6');
+  await page.keyboard.type('7');
   await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('67.00');
+  await expect(followingDriver).toHaveValue('67');
+  await page.keyboard.type('.'); await expect(followingDriver).toHaveValue('67.');
+  await page.keyboard.type('0');
+  await expect.poll(() => stored('originalRate', '2026-10-13')).toBe('67.00');
+  await expect(followingDriver).toHaveValue('67.0');
+  await page.keyboard.press('Enter');
+  await expect(followingDriver).toHaveValue('67.00');
+  // A deliberately different Driver gross must keep its own value and format.
+  await followingDriver.click(); await page.keyboard.type('50'); await page.keyboard.press('Enter');
+  await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('50.00');
+  await manual.click(); await page.keyboard.type('80');
+  await expect.poll(() => stored('originalRate', '2026-10-13')).toBe('80.00');
+  await expect(followingDriver).toHaveValue('50.00');
+  await page.keyboard.press('Enter');
   // Server resolution can win before the browser's 250 ms lookup finishes.
   const loadNumber = amount('load number or status', '2026-10-15');
   await loadNumber.click(); await page.keyboard.type(source.loadNumber);
@@ -112,6 +128,10 @@ try {
   // Daily loads use the same decimal guard, including leading-dot input.
   await page.getByRole('button', { name: 'Number Driver, 2026-10-14, load numbers and details', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
+  const dailyOriginal = dialog.getByLabel('Number Driver, 2026-10-14, original rate', { exact: true }).first();
+  const dailyDriver = dialog.getByLabel('Number Driver, 2026-10-14, driver rate', { exact: true }).first();
+  await dailyOriginal.click(); await page.keyboard.type('67.0');
+  await expect(dailyDriver).toHaveValue('67.0');
   const daily = dialog.getByLabel('Number Driver, 2026-10-14, miles', { exact: true }).first();
   await daily.click(); await page.keyboard.type('.12'); await page.keyboard.type('3');
   await expect(daily).toHaveValue('.12');

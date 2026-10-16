@@ -5,7 +5,7 @@ import { useLoadNotes } from "./useLoadNotes";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
-import { editAmount, emptyEntry, mismatch, validDecimal } from "./board";
+import { editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { DecimalInput } from "./DecimalInput";
@@ -30,6 +30,9 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   }, [highlighted]);
   const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
+  // Mirror the active text into a following Driver gross, including a trailing
+  // decimal point or zero, without exposing the autosave's formatting mid-edit.
+  const [originalTyping, setOriginalTyping] = useState<string | null>(null);
   const confirmed = entry.loadRecordId !== null;
   const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
   const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
@@ -51,11 +54,18 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
         const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
         return <div key={field} data-grid-cell><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
-          aria-invalid={!valid} inputMode="decimal" value={entry[field]} disabled={disabled}
+          aria-invalid={!valid} inputMode="decimal"
+          value={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
+            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : entry[field]} disabled={disabled}
           nonnegative={field === "miles"}
           title={different ? `Entered: ${entered}; system: ${system || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0.00"
-          onValueChange={value => onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value))}
+          onFocus={field === "originalRate" ? event => setOriginalTyping(event.currentTarget.value) : undefined}
+          onBlur={field === "originalRate" ? () => setOriginalTyping(null) : undefined}
+          onValueChange={(value, text) => {
+            if (field === "originalRate") setOriginalTyping(text);
+            onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value));
+          }}
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : "text-zinc-300"}`}
         /></div>;
       })}

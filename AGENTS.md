@@ -278,6 +278,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
   Numeric fields preserve typed text and the caret through autosave/refresh,
   reject more than two decimal places, and send only complete decimals to the API.
+  While editing Original gross, a following Driver gross mirrors its exact text;
+  saved decimal formatting appears after leaving the field.
   New load matches default blank Driver gross to Original gross on both browser
   selection and server exact-number resolution; explicit amounts, including zero,
   remain intact. `test-gross-board-numbers.mjs` covers delayed formatted saves.
