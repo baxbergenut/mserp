@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -165,9 +167,27 @@ func NewRouter(
 	protected.Get("/tasks/events", events.serve(auth))
 	boardEvents := newDatabaseEvents(pool, logger, "mserp_driver_board", "driver_board.read")
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
+	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
+	boardEvents.snapshotEvent = "board"
+	boardEvents.snapshot = func(ctx context.Context) ([]byte, error) {
+		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
+		value, err := boardRepo.Get(ctx, week)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value)
+	}
+	boardPresence.snapshotEvent = "peers"
+	boardPresence.snapshot = func(ctx context.Context) ([]byte, error) {
+		value, err := boardRepo.Presence(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value)
+	}
 	protected.Get("/driver-board/events", boardEvents.serve(auth, boardPresence))
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
-	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool, fiveELDJob != nil))
+	registerDriverBoardRoutes(protected, logger, boardRepo)
 	payRepo := repository.NewDriverPayRepository(pool)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))

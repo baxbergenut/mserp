@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { join } from 'node:path';
 
 // Two separate authenticated browser contexts and committed database notifications.
-export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp }) {
+export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp, setNetworkLatency }) {
   await viewer.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(page.getByText('Live', { exact: true })).toBeVisible();
   await expect(viewer.getByText('Live', { exact: true })).toBeVisible();
@@ -16,8 +16,13 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
   await expect(cursor).toHaveAttribute('aria-label', /Board Cpm.*Trailer/, { timeout: 2500 });
   await page.screenshot({ path: join(temp, 'status-board-live-presence.png'), fullPage: true, animations: 'disabled' });
+  const extraReads = [];
+  const track = request => { if (request.method()==='GET' && new URL(request.url()).pathname==='/api/driver-board') extraReads.push(request.url()); };
+  viewer.on('request',track);
   await notes(page).fill('Live change from dispatcher');
   await expect(notes(viewer)).toHaveValue('Live change from dispatcher', { timeout: 2500 });
+  viewer.off('request',track);
+  expect(extraReads).toEqual([]);
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await page.getByRole('heading', { name: 'Status Board', exact: true }).click();
   await page.keyboard.press('Control+z');
@@ -43,6 +48,34 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await expect(notes(viewer)).toHaveValue('Still typing locally', { timeout: 2500 });
   expect((await read(id)).notes).toBe('Still typing locally');
+  // Measure actual input-to-other-screen time, rather than the assertion timeout.
+  if (setNetworkLatency) {
+    for (const latency of [0, 178]) {
+      setNetworkLatency(latency);
+      const samples = [];
+      try {
+        for (let i=0;i<5;i++) {
+          const value=`Live timing ${latency} ${i}`;
+          await viewer.evaluate(value => {
+            window.liveProbe = new Promise((resolve,reject) => {
+              const deadline = setTimeout(() => reject(new Error('Live update did not arrive')),2500);
+              const check = () => {
+                if (document.querySelector('input[aria-label="Board Cpm · Notes"]').value===value) {clearTimeout(deadline); resolve(Date.now());}
+                else requestAnimationFrame(check);
+              };
+              check();
+            });
+          },value);
+          const started=Date.now();
+          await notes(page).fill(value);
+          samples.push(await viewer.evaluate(() => window.liveProbe)-started);
+          await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+        }
+      } finally { setNetworkLatency(0); }
+      console.log(`Status Board actual edit-to-other-screen latency, ${latency}ms network RTT: ${samples.join(', ')}ms`);
+      expect(Math.max(...samples)).toBeLessThan(1000);
+    }
+  }
   // Reconnect reconciles data missed while offline, without waiting for polling.
   await viewer.context().setOffline(true);
   await expect(viewer.getByText('Connecting…', { exact: true })).toBeVisible();
@@ -63,5 +96,5 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await expect(cursor).toHaveCount(0, { timeout: 2500 });
   const rows = await (await page.request.get(`${base}/api/driver-board/presence`)).json();
   expect(rows.every(p => !('sessionHash' in p) && !('session_hash' in p))).toBe(true);
-  console.log('Status Board live E2E passed: two-user updates under 2.5s, named cell movement, read-only presence, personal undo, protected in-flight typing, reconnect, expiry and navigation cleanup.');
+  console.log('Status Board live E2E passed: direct two-user data pushes without follow-up board reads, named cell movement, read-only presence, personal undo, protected in-flight typing, reconnect, expiry and navigation cleanup.');
 }

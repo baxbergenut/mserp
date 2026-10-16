@@ -25,10 +25,11 @@ export function useDriverBoard(lockedDriverId?: string) {
   const activity = useRef(0);
   const savingRef = useRef(false);
   const idle = useRef(false);
-  const refreshWanted = useRef<() => void>(() => {});
+  const refreshWanted = useRef<(board?: DriverBoard) => void>(() => {});
+  const resumeLive = useRef<() => void>(() => {});
   const busyDrivers = useRef<string[]>([]);
   const lockedDriver = useRef(lockedDriverId);
-  const live = useBoardLive(useCallback(() => refreshWanted.current(), []));
+  const live = useBoardLive(useCallback((value?: DriverBoard) => refreshWanted.current(value), []));
   const savedRef = useRef<Record<string, DriverBoardEntry>>({});
   const changesRef = useRef(changes);
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
@@ -43,7 +44,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   useLayoutEffect(() => {
     idle.current = !loading && !eldRefreshing;
     lockedDriver.current = lockedDriverId;
-    refreshWanted.current();
+    resumeLive.current();
   }, [dirty, saving, loading, eldRefreshing, lockedDriverId]);
 
   useEffect(() => {
@@ -56,44 +57,47 @@ export function useDriverBoard(lockedDriverId?: string) {
 
   useEffect(() => {
     let cancelled = false, inFlight = false, pending = false;
+    let latest: DriverBoard | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const accept = (value: DriverBoard) => {
+      if (cancelled) return;
+      latest = value;
+      if (!idle.current || document.hidden) return;
+      setBoard(current => {
+        if (!current) return value;
+        const retained = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
+        const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
+        if (focused) retained.add(focused.driverId);
+        if (lockedDriver.current) retained.add(lockedDriver.current);
+        for (const entry of value.entries) {
+          if ((savedRef.current[entry.driverId]?.version ?? 0) > entry.version) retained.add(entry.driverId);
+        }
+        const previous = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
+        const entries = value.entries.map(e => retained.has(e.driverId) ? previous[e.driverId] ?? e : e);
+        const loads = { ...value.loads };
+        for (const id of retained) if (current.loads[id]) loads[id] = current.loads[id];
+        return { ...value, entries, loads };
+      });
+      setRefreshError("");
+    };
     const refresh = async () => {
       if (!idle.current || document.visibilityState !== "visible" || inFlight) return;
       pending = false;
       inFlight = true;
       try {
         const value = await fetchDriverBoard(currentChargeWeek());
-        if (!cancelled && idle.current) {
-          const protectedIds = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
-          const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
-          if (focused) protectedIds.add(focused.driverId);
-          if (lockedDriver.current) protectedIds.add(lockedDriver.current);
-          setBoard(current => {
-            if (!current) return value;
-            // Keep the row's concurrency token with its active editor. Other
-            // rows still update immediately, including while a save is pending.
-            const retained = new Set(protectedIds);
-            for (const entry of value.entries) {
-              if ((savedRef.current[entry.driverId]?.version ?? 0) > entry.version) retained.add(entry.driverId);
-            }
-            const previous = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
-            const entries = value.entries.map(e => retained.has(e.driverId) ? previous[e.driverId] ?? e : e);
-            const loads = { ...value.loads };
-            for (const id of retained) if (current.loads[id]) loads[id] = current.loads[id];
-            return { ...value, entries, loads };
-          });
-          setRefreshError("");
-        }
+        accept(value);
       } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Use Reload to update totals and assignments."); }
       finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
-    const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 50); };
-    refreshWanted.current = schedule;
+    const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
+    refreshWanted.current = value => value ? accept(value) : schedule();
+    resumeLive.current = () => { if (latest) accept(latest); };
     const fallback = setInterval(schedule, 30000);
     const focus = () => schedule();
     window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus);
     document.addEventListener("focusout", focus);
-    return () => { cancelled = true; refreshWanted.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
+    return () => { cancelled = true; refreshWanted.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
   }, []);
 
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {

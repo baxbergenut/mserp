@@ -16,16 +16,26 @@ import (
 )
 
 // One dedicated LISTEN connection per API process with active subscribers, not
-// one database connection per browser. Notifications contain no application data.
+// one database connection per browser. PostgreSQL notifications contain no record
+// data; authorized subscribers receive shared snapshots over their HTTP streams.
 type taskEvents struct {
-	mu         sync.Mutex
-	clients    map[chan struct{}]struct{}
-	cancel     context.CancelFunc
-	config     *pgx.ConnConfig
-	logger     *slog.Logger
-	stopped    chan struct{}
-	channel    string
-	permission string
+	mu               sync.Mutex
+	clients          map[chan struct{}]struct{}
+	cancel           context.CancelFunc
+	config           *pgx.ConnConfig
+	logger           *slog.Logger
+	stopped          chan struct{}
+	channel          string
+	permission       string
+	revision         uint64
+	snapshot         func(context.Context) ([]byte, error)
+	snapshotEvent    string
+	snapshotMu       sync.Mutex
+	snapshotRevision uint64
+	snapshotBody     []byte
+	snapshotAt       time.Time
+	shutdownContext  context.Context
+	stopSnapshots    context.CancelFunc
 }
 
 func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
@@ -34,6 +44,7 @@ func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
 
 func newDatabaseEvents(pool *pgxpool.Pool, logger *slog.Logger, channel, permission string) *taskEvents {
 	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{}), channel: channel, permission: permission}
+	h.shutdownContext, h.stopSnapshots = context.WithCancel(context.Background())
 	if pool != nil {
 		h.config = pool.Config().ConnConfig.Copy()
 	}
@@ -51,6 +62,7 @@ func (h *taskEvents) shutdown() {
 	if h.cancel != nil {
 		h.cancel()
 	}
+	h.stopSnapshots()
 }
 
 func (h *taskEvents) subscribe() (chan struct{}, func()) {
@@ -84,12 +96,40 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 func (h *taskEvents) publish() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.revision++
 	for ch := range h.clients {
 		select {
 		case ch <- struct{}{}:
 		default:
 		}
 	}
+}
+
+// Share a committed snapshot among subscribers to the same notification. The
+// session is checked separately for each subscriber before any frame is sent.
+func (h *taskEvents) frame(ctx context.Context, fallback string) string {
+	if h.snapshot == nil {
+		return "event: " + fallback + "\ndata: {}\n\n"
+	}
+	h.snapshotMu.Lock()
+	defer h.snapshotMu.Unlock()
+	h.mu.Lock()
+	revision := h.revision
+	h.mu.Unlock()
+	if h.snapshotBody == nil || h.snapshotRevision != revision || time.Since(h.snapshotAt) > time.Second {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		stop := context.AfterFunc(h.shutdownContext, cancel)
+		body, err := h.snapshot(ctx)
+		stop()
+		cancel()
+		if err != nil {
+			return "event: " + fallback + "\ndata: {}\n\n"
+		}
+		h.snapshotBody = body
+		h.snapshotRevision = revision
+		h.snapshotAt = time.Now()
+	}
+	return "event: " + h.snapshotEvent + "\ndata: " + string(h.snapshotBody) + "\n\n"
 }
 func (h *taskEvents) listen(ctx context.Context) {
 	delay := time.Second
@@ -166,10 +206,10 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			// before waiting: an expired HTTP write deadline cannot be extended.
 			return controller.SetWriteDeadline(time.Time{}) == nil
 		}
-		if !send("retry: 5000\nevent: changed\ndata: {}\n\n") {
+		if !send("retry: 5000\n" + h.frame(r.Context(), "changed")) {
 			return
 		}
-		if presenceChanges != nil && !send("event: presence\ndata: {}\n\n") {
+		if presenceChanges != nil && !send(presence[0].frame(r.Context(), "presence")) {
 			return
 		}
 		heartbeat := time.NewTicker(25 * time.Second)
@@ -204,11 +244,11 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 				return
 			}
 			if changed {
-				if !send("event: changed\ndata: {}\n\n") {
+				if !send(h.frame(r.Context(), "changed")) {
 					return
 				}
 			} else if presenceChanged {
-				if !send("event: presence\ndata: {}\n\n") {
+				if !send(presence[0].frame(r.Context(), "presence")) {
 					return
 				}
 			} else if !send(": keepalive\n\n") {

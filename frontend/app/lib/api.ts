@@ -163,12 +163,14 @@ export const updateBoardPresence = (clientId: string, driverId: string, column: 
   performRequest<void>("/driver-board/presence", { method: "PUT", body: JSON.stringify({ clientId, driverId, column }) });
 export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
-export function subscribeBoardEvents(changed: () => void, presence: () => void, connection: (connected: boolean) => void, unauthorized: () => void) {
+export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const stream = new EventSource(`${API_BASE}/driver-board/events`, { withCredentials: true });
   stream.addEventListener("open", () => connection(true));
   stream.addEventListener("error", () => connection(false));
-  stream.addEventListener("changed", changed);
-  stream.addEventListener("presence", presence);
+  stream.addEventListener("changed", () => changed());
+  stream.addEventListener("presence", () => presence());
+  stream.addEventListener("board", event => { try { changed(JSON.parse(event.data)); } catch { changed(); } });
+  stream.addEventListener("peers", event => { try { presence(JSON.parse(event.data)); } catch { presence(); } });
   stream.addEventListener("unauthorized", () => { stream.close(); connection(false); unauthorized(); });
   return () => stream.close();
 }

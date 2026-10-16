@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,12 +20,54 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func TestLiveSnapshotSharingAndShutdown(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	h.snapshotEvent = "board"
+	calls := 0
+	h.snapshot = func(context.Context) ([]byte, error) { calls++; return []byte(`{"entries":[]}`), nil }
+	var group sync.WaitGroup
+	for range 16 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if frame := h.frame(context.Background(), "changed"); !strings.Contains(frame, `data: {"entries":[]}`) {
+				t.Error("missing pushed data", frame)
+			}
+		}()
+	}
+	group.Wait()
+	if calls != 1 {
+		t.Fatal("subscribers did not share snapshot", calls)
+	}
+	h.publish()
+	h.frame(context.Background(), "changed")
+	if calls != 2 {
+		t.Fatal("committed revision did not refresh snapshot", calls)
+	}
+	started := make(chan struct{})
+	h.snapshot = func(ctx context.Context) ([]byte, error) { close(started); <-ctx.Done(); return nil, ctx.Err() }
+	h.publish()
+	finished := make(chan struct{})
+	go func() { defer close(finished); h.frame(context.Background(), "changed") }()
+	<-started
+	h.shutdown()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("snapshot blocked server shutdown")
+	}
+}
+
 func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	board := newDatabaseEvents(nil, logger, "mserp_driver_board", "driver_board.read")
 	presence := newDatabaseEvents(nil, logger, "mserp_board_presence", "driver_board.read")
 	board.cancel = func() {}
 	presence.cancel = func() {}
+	board.snapshotEvent = "board"
+	board.snapshot = func(context.Context) ([]byte, error) { return []byte(`{"entries":[]}`), nil }
+	presence.snapshotEvent = "peers"
+	presence.snapshot = func(context.Context) ([]byte, error) { return []byte(`[]`), nil }
 	defer board.shutdown()
 	defer presence.shutdown()
 	hash := hashToken("board-session")
@@ -53,12 +96,12 @@ func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 		}
 		t.Fatal("missing stream event", want, scanner.Err())
 	}
-	event("changed")
-	event("presence")
+	event("board")
+	event("peers")
 	presence.publish()
-	event("presence")
+	event("peers")
 	board.publish()
-	event("changed")
+	event("board")
 	// Publish synchronizes the revocation with the handler's next auth read.
 	delete(store.sessions, hash)
 	board.publish()

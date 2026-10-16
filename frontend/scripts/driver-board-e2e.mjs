@@ -6,7 +6,7 @@ import { runStatusBoardLoadsE2E } from './status-board-loads-e2e.mjs';
 import { runStatusBoardProgressE2E } from './status-board-progress-e2e.mjs';
 import { runFleetLocationE2E } from './fleet-location-e2e.mjs';
 
-export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
+export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
   const week = date.toISOString().slice(0, 10);
@@ -302,7 +302,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp }) {
     await expect(viewer.getByRole('dialog').getByRole('button', { name: 'Set current', exact: true })).toHaveCount(0);
     const loads = await (await viewer.request.get(`${base}/api/driver-board/loads/${id}`)).json();
     expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
-    await runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp });
+    await runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp, setNetworkLatency });
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();

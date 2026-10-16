@@ -3,10 +3,10 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CurrentUserIDContext } from "@/app/lib/access";
 import { clearBoardPresence, fetchBoardPresence, subscribeBoardEvents, updateBoardPresence } from "@/app/lib/api";
-import type { BoardPresence } from "@/app/lib/types";
+import type { BoardPresence, DriverBoard } from "@/app/lib/types";
 import { selectedBoardCell } from "./boardCells";
 
-export function useBoardLive(onChanged: () => void) {
+export function useBoardLive(onChanged: (board?: DriverBoard) => void) {
   const userId = useContext(CurrentUserIDContext);
   const [clientId] = useState(() => crypto.randomUUID());
   const [peers, setPeers] = useState<BoardPresence[]>([]);
@@ -19,20 +19,22 @@ export function useBoardLive(onChanged: () => void) {
     let readTimer: ReturnType<typeof setTimeout> | undefined;
     let staleTimer: ReturnType<typeof setTimeout> | undefined;
     let writes = Promise.resolve();
+    const accept = (rows: BoardPresence[]) => {
+      if (!active || document.hidden || !navigator.onLine) return;
+      setPeers(rows.filter(p => p.clientId !== clientId && p.userId !== userId));
+      clearTimeout(staleTimer); staleTimer = setTimeout(() => { if (active) setPeers([]); }, 35000);
+    };
     const read = async () => {
       if (!active || document.hidden || !navigator.onLine) return;
       if (reading) { pending = true; return; }
       reading = true;
       try {
         const rows = await fetchBoardPresence();
-        if (active) {
-          setPeers(rows.filter(p => p.clientId !== clientId && p.userId !== userId));
-          clearTimeout(staleTimer); staleTimer = setTimeout(() => { if (active) setPeers([]); }, 35000);
-        }
+        accept(rows);
       } catch { /* The next presence event or expiry check retries without blocking editing. */ }
       finally { reading = false; if (pending) { pending = false; schedule(); } }
     };
-    const schedule = () => { clearTimeout(readTimer); readTimer = setTimeout(() => void read(), 60); };
+    const schedule = () => { clearTimeout(readTimer); readTimer = setTimeout(() => void read(), 0); };
     const announce = () => {
       const cell = selection;
       if (!cell || !active || document.hidden || !navigator.onLine) return;
@@ -52,7 +54,7 @@ export function useBoardLive(onChanged: () => void) {
     let close = () => {};
     const connect = () => {
       close();
-      if (navigator.onLine) close = subscribeBoardEvents(() => callback.current(), schedule, value => { if (active) setConnected(value); }, () => { if (active) setPeers([]); });
+      if (navigator.onLine) close = subscribeBoardEvents(value => callback.current(value), rows => rows ? accept(rows) : schedule(), value => { if (active) setConnected(value); }, () => { if (active) setPeers([]); });
     };
     const online = () => { connect(); announce(); schedule(); callback.current(); };
     const offline = () => { close(); setConnected(false); setPeers([]); };
