@@ -39,8 +39,8 @@ func (request *driverBoardRequest) validate() error {
 		for _, field := range []struct {
 			value *string
 			max   int
-		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}} {
-			*field.value = strings.TrimSpace(*field.value)
+		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.TrailerNote, 5000}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}} {
+			// Preserve spaces while an editor saves on every keystroke.
 			if len([]rune(*field.value)) > field.max || strings.ContainsRune(*field.value, 0) {
 				return errors.New("a board field exceeds its character limit or contains invalid text")
 			}
@@ -148,7 +148,10 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		writeJSON(w, 200, entries)
 	})
 	r.Get("/driver-board/history", func(w http.ResponseWriter, r *http.Request) {
-		ids := strings.Split(r.URL.Query().Get("driverIds"), ",")
+		var ids []string
+		if raw := r.URL.Query().Get("driverIds"); raw != "" {
+			ids = strings.Split(raw, ",")
+		}
 		if len(ids) > 1000 {
 			writeAPIError(w, 400, "too many drivers")
 			return
@@ -168,7 +171,14 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 				return
 			}
 		}
-		result, err := repo.History(r.Context(), ids, cursor)
+		field := r.URL.Query().Get("field")
+		switch field {
+		case "", "currentLoad", "trailerNumber", "trailerNote", "status", "destination", "eta", "notes", "homeTime", "loadPlan", "driverHome":
+		default:
+			writeAPIError(w, 400, "invalid history field")
+			return
+		}
+		result, err := repo.History(r.Context(), ids, cursor, field)
 		if err != nil {
 			fail(w, err)
 			return

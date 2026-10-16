@@ -84,6 +84,43 @@ func testDriverBoardHistory(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 		t.Fatal("ABA undo accepted", err)
 	}
 	count := len(history().Items)
+	// Trailer notes survive reads and unrelated edits, and are independently audited.
+	e.TrailerNumber = "TR-300"
+	e.TrailerNote = "Door seal 42"
+	save()
+	noteEvent := history().Items[0]
+	if noteEvent.After["trailerNote"] != "Door seal 42" || noteEvent.ActorID != actor {
+		t.Fatal("trailer note attribution missing", noteEvent)
+	}
+	board, err := repo.Get(ctx, repo.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range board.Entries {
+		if row.DriverID == driver.ID {
+			found = row.TrailerNote == e.TrailerNote
+		}
+	}
+	if !found {
+		t.Fatal("trailer note missing from board read")
+	}
+	filtered, err := repo.History(ctx, []string{driver.ID}, 0, "trailerNote")
+	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].ID != noteEvent.ID {
+		t.Fatal("cell history filter", filtered, err)
+	}
+	all, err := repo.History(ctx, nil, 0, "trailerNote")
+	if err != nil || len(all.Items) == 0 || all.Items[0].ID != noteEvent.ID {
+		t.Fatal("whole-board history", all, err)
+	}
+	if _, err = repo.Undo(ctx, noteEvent.ID, driver.ID, e.Version, "another-user", true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("personal undo accepted another actor", err)
+	}
+	e, err = repo.Undo(ctx, noteEvent.ID, driver.ID, e.Version, actor, true)
+	if err != nil || e.TrailerNumber != "" || e.TrailerNote != "" {
+		t.Fatal("trailer note undo", e, err)
+	}
+	count = len(history().Items)
 	stale := e
 	stale.Version--
 	if _, err = repo.Save(ctx, []DriverBoardEntry{stale}, actor); !errors.Is(err, ErrDriverBoardConflict) {

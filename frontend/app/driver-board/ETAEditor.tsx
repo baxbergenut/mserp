@@ -8,7 +8,7 @@ export function ETAEditor({ name, value, anchor, onApply, onClose }: {
   name: string; value: string; anchor: HTMLButtonElement; onApply: (value: string) => void; onClose: () => void;
 }) {
   const initial = parseETA(value);
-  const [date, setDate] = useState(initial?.date ?? "");
+  const [miles, setMiles] = useState(initial?.miles ?? "");
   const [time, setTime] = useState(initial?.time ?? "");
   const panel = useRef<HTMLFormElement>(null);
   useLayoutEffect(() => {
@@ -48,14 +48,14 @@ export function ETAEditor({ name, value, anchor, onApply, onClose }: {
     if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) onClose();
   }} onSubmit={event => {
     event.preventDefault();
-    const next = date + (time ? `T${time}` : "");
-    if (date && parseETA(next)) onApply(next);
+    const next = [time, miles ? `${Number(miles)} mi` : ""].filter(Boolean).join(" · ");
+    if (!next || parseETA(next)) onApply(next);
   }}>
     <div className="mb-3 flex items-center justify-between text-xs"><span className="font-medium text-zinc-100">ETA</span><span className="text-zinc-500">New York time</span></div>
-    {!initial && value && <p className="mb-2 break-words text-xs text-amber-200">Existing ETA: {value}. Choose a date to replace it.</p>}
+    {!initial && value && <p className="mb-2 break-words text-xs text-amber-200">Existing ETA: {value}. Enter a time or miles to replace it.</p>}
     <div className="grid grid-cols-[1.1fr_1fr] gap-2">
-      <label className="text-[11px] text-zinc-400">Arrival date<input required type="date" min="2000-01-01" max="2100-12-31" value={date} onChange={e => setDate(e.target.value)} className={inputClass} /></label>
-      <label className="text-[11px] text-zinc-400">Arrival time (optional)<input type="time" step={60} value={time} onChange={e => setTime(e.target.value)} className={inputClass} /></label>
+      <label className="text-[11px] text-zinc-400">Miles left<input type="number" min="0" max="9999999" step="0.01" value={miles} onChange={e => setMiles(e.target.value)} className={inputClass} /></label>
+      <label className="text-[11px] text-zinc-400">Arrival time<input type="time" step={60} value={time} onChange={e => setTime(e.target.value)} className={inputClass} /></label>
     </div>
     <div className="mt-3 flex items-center gap-1"><button type="button" className={`${buttonClass} mr-auto`} onClick={() => onApply("")}>Clear ETA</button><button type="button" className={buttonClass} onClick={onClose}>Cancel</button><button type="submit" className="rounded bg-blue-600 px-2 py-1.5 text-xs text-white hover:bg-blue-500">Apply ETA</button></div>
   </form>, document.body);

@@ -375,6 +375,7 @@ export interface DriverBoardEntry {
   driverId: string;
   currentLoad: string;
   trailerNumber: string;
+  trailerNote: string;
   status: string;
   destination: string;
   eta: string;

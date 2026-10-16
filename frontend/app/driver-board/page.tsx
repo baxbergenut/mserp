@@ -1,14 +1,14 @@
 "use client";
 
 
-import { Fragment, memo, useMemo, useState } from "react";
+import { Fragment, memo, useContext, useMemo, useState } from "react";
 import { Banknote, CloudCheck, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { IntentLink as Link } from "@/app/components/IntentLink";
-import { useViewState } from "@/app/lib/viewMemory";
+import { readMemory, ViewMemoryContext, useViewState } from "@/app/lib/viewMemory";
 import { usePermissions } from "@/app/lib/access";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
@@ -20,15 +20,16 @@ import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/boa
 import { statuses, statusColor, formatETA, previewCurrentLoad } from "./board";
 import { useDriverBoard } from "./useDriverBoard";
 import { BoardHistory } from "./BoardHistory";
-import { BoardViews, type BoardView } from "./BoardViews";
+import { BoardFilter } from "@/app/components/management/BoardFilter";
+import { TrailerCell } from "./TrailerCell";
 import { BoardLoads } from "./BoardLoads";
 import { CurrentLoadInput } from "./CurrentLoadInput";
 import { ETAEditor } from "./ETAEditor";
 
 const columns = [
-  ["Current load", 95], ["Driver", 180], ["Truck", 50], ["Trailer", 100],
-  ["Original gross", 90], ["Driver gross", 90], ["Phone", 115], ["Status", 95],
-  ["Destination", 119], ["ETA", 96], ["Next loads", 180], ["Notes", 180], ["Home time", 120],
+  ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
+  ["Original gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
+  ["Destination", 110], ["Notes", 130], ["ETA", 115], ["Next loads", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -53,20 +54,25 @@ export default function DriverBoardPage() {
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
-  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all");
+  const scope = useContext(ViewMemoryContext);
+  const [selectedDispatchers, setSelectedDispatchers] = useViewState<string[] | null>("page:dispatcherChecks", () => {
+    const read = <T,>(name: string, fallback: T) => readMemory<T>(scope + ":view:page:" + name, fallback);
+    const dispatcher = read<string>("dispatcher", "all"), view = read<string>("view", "all");
+    if (dispatcher !== "all") return [dispatcher];
+    if (view === "my") return read<string[]>("myDispatchers", []);
+    return view === "all" ? null : read<{id: string; dispatcherIds: string[]}[]>("savedViews", []).find(v => v.id === view)?.dispatcherIds ?? null;
+  });
   const [search, setSearch] = useViewState("page:search", "");
-  const [status, setStatus] = useViewState("page:status", "all");
-  const [view, setView] = useViewState("page:view", "all");
-  const [myIds, setMyIds] = useViewState<string[]>("page:myDispatchers", []);
-  const [savedViews, setSavedViews] = useViewState<BoardView[]>("page:savedViews", []);
-  const [history, setHistory] = useState<{ driverId?: string; name: string; ids: string[] } | null>(null);
+  const [selectedStatuses, setSelectedStatuses] = useViewState<string[] | null>("page:statusChecks", () => {
+    const legacy = readMemory<string>(scope + ":view:page:status", "all");
+    return legacy === "all" ? null : [legacy];
+  });
+  const [history, setHistory] = useState<{ driverId?: string; name: string; ids: string[]; field?: string } | null>(null);
   const [loadDriver, setLoadDriver] = useState<{ id: string; name: string } | null>(null);
   const [destinationError, setDestinationError] = useState("");
-  const viewIds = view === "all" ? null : view === "my" ? myIds : savedViews.find(v => v.id === view)?.dispatcherIds ?? [];
-  function selectView(id: string) { setView(id); setDispatcher("all"); }
   const drivers = (board?.drivers ?? []).filter(d =>
-    (viewIds === null || viewIds.includes(d.dispatcherId)) &&
-    (dispatcher === "all" || d.dispatcherId === dispatcher) && (status === "all" || entries[d.id]?.status === status) &&
+    (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
+    (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
   const dispatchers = Array.from(new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName])).entries());
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
@@ -79,7 +85,7 @@ export default function DriverBoardPage() {
     group.original += sum.original; group.driver += sum.driver; group.miles += sum.miles;
     groups.set(d.dispatcherId, group);
   }
-  const disabled = !canEdit || loading || leaving;
+  const disabled = !canEdit || loading || leaving || state.actionBusy;
   function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
     return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled} edit={edit} />;
   }
@@ -97,26 +103,29 @@ export default function DriverBoardPage() {
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
-      <select aria-label="Dispatcher filter" value={dispatcher} onChange={event => setDispatcher(event.target.value)} className={`${controlClass} max-w-48`}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-      <select aria-label="Status filter" value={status} onChange={event => setStatus(event.target.value)} className={`${controlClass} max-w-44`}><option value="all">All statuses</option><option value="">No status</option>{statuses.map(s => <option key={s}>{s}</option>)}</select>
-      <BoardViews mode={view} myIds={myIds} saved={savedViews} dispatchers={dispatchers} onSelect={selectView} onSave={(dispatcherIds, name) => {
-        if (!name) { setMyIds(dispatcherIds); selectView("my"); return; }
-        const existing = savedViews.find(v => v.name.toLowerCase() === name.toLowerCase());
-        const next = { id: existing?.id ?? crypto.randomUUID(), name, dispatcherIds };
-        setSavedViews(current => [...current.filter(v => v.id !== next.id), next]); selectView(next.id);
-      }} onDelete={id => { setSavedViews(current => current.filter(v => v.id !== id)); selectView("all"); }} />
+      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} />
+      <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
-      <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : canEdit ? "All changes saved" : "Read only"}</span>
+      <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "All changes saved" : "Read only"}</span>
       {board?.eld.configured && board.eld.lastError && <span className="text-xs text-amber-300">Five ELD refresh failed</span>}
       {canEdit && board?.eld.configured && <button className={buttonClass} onClick={() => void refreshELD()} disabled={loading || saving || dirty || eldRefreshing} title={board.eld.lastSuccessAt ? `Five ELD last refreshed ${locationTime(board.eld.lastSuccessAt)} NY` : "Refresh Five ELD locations"}><MapPin className="h-4 w-4" />{eldRefreshing ? "Refreshing…" : "Refresh locations"}</button>}
       <button className={buttonClass} onClick={reload} disabled={loading || saving}><RefreshCw className="h-4 w-4" />Reload</button>
-      <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "History · shown drivers", ids: drivers.map(d => d.id) })}><History className="h-4 w-4" />History</button></div></div>
+      <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "Status Board history", ids: [] })}><History className="h-4 w-4" />History</button></div></div>
 
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     <div data-scroll-key="driver-board" className="max-h-[72vh] overflow-auto rounded-xl border border-zinc-800" aria-busy={loading}>
-      <table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
+      <table {...spreadsheetGridEvents} onContextMenu={event => {
+        if (event.defaultPrevented) return;
+        const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");
+        const row = cell?.closest<HTMLTableRowElement>("tr[data-driver-id]");
+        const driver = board?.drivers.find(d => d.id === row?.dataset.driverId);
+        const fields = ["currentLoad", "", "", "trailerNumber", "", "", "", "status", "destination", "notes", "eta", "loadPlan", "homeTime"];
+        const field = cell ? fields[cell.cellIndex] : "";
+        if (!driver || !field) return;
+        event.preventDefault(); setHistory({ driverId: driver.id, name: driver.fullName + " · Cell history", ids: [driver.id], field });
+      }} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
         <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
         <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" style={i < 2 ? { left: i === 0 ? 0 : driverColumnOffset } : undefined} className={`${i < 2 ? "sm:sticky sm:z-[21]" : ""} h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 text-left font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
         <tbody>
@@ -154,7 +163,7 @@ export default function DriverBoardPage() {
                 <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1"><span className="min-w-0 truncate">{permissions.includes("fleet.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("fleet.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
-                <td className={cellClass}>{textCell(entry, d.fullName, "trailerNumber", "Trailer", 100)}</td>
+                <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
@@ -175,9 +184,9 @@ export default function DriverBoardPage() {
                     try { await state.changeLoads(d.id, loads, { action: "source", stopKey: otherStop.key }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not switch destination. Reload the board and try again."); }
                   }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Destination", 500)}</td>
-                <td className={cellClass}><button type="button" aria-label={`${d.fullName} · ETA`} title={formatETA(entry.eta, true)} disabled={disabled} className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" aria-haspopup="dialog" aria-expanded={etaEditor?.id === d.id} onClick={event => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor: event.currentTarget })}>{formatETA(entry.eta)}</button></td>
-                <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={loads?.current?.warning || next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
+                <td className={cellClass}><button type="button" aria-label={`${d.fullName} · ETA`} title={formatETA(entry.eta)} disabled={disabled} className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" aria-haspopup="dialog" aria-expanded={etaEditor?.id === d.id} onClick={event => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor: event.currentTarget })}>{formatETA(entry.eta)}</button></td>
+                <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={loads?.current?.warning || next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "homeTime", "Home time", 500)}</td>
               </tr>
             </Fragment>;
@@ -186,9 +195,9 @@ export default function DriverBoardPage() {
         </tbody>
       </table>
     </div>
-    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save after 5 seconds. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
+    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save immediately. Ctrl+Z undoes your last action. Right-click a cell to view its history. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
     {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
-    {history && <BoardHistory driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={state.undo} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
+    {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
   </div>;
 }

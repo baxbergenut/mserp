@@ -158,8 +158,8 @@ export const fetchDriverBoard = (weekStart: string) =>
   apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
-export const fetchDriverBoardHistory = (driverIds: string[], before = 0) =>
-  apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before }));
+export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field = "") =>
+  apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before, field }));
 // The server clamps the optional upcoming cutoff to today in New York; older unfinished plans are returned separately.
 // Includes all weekly match candidates separately from the today-forward queue.
 export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));

@@ -43,10 +43,14 @@ func attachBoardUndoID(ctx context.Context, tx pgx.Tx, entry *DriverBoardEntry) 
 	return err
 }
 
-func (r *DriverBoardRepository) History(ctx context.Context, ids []string, before int64) (DriverBoardHistory, error) {
+func (r *DriverBoardRepository) History(ctx context.Context, ids []string, before int64, fields ...string) (DriverBoardHistory, error) {
 	result := DriverBoardHistory{Items: []DriverBoardEvent{}}
+	field := ""
+	if len(fields) > 0 {
+		field = fields[0]
+	}
 	rows, err := r.pool.Query(ctx, `SELECT id,driver_id,driver_name,actor_id,actor_name,source,undo_of,before_values,after_values,created_at
- FROM driver_board_history WHERE driver_id=ANY($1::uuid[]) AND ($2::bigint=0 OR id<$2) ORDER BY id DESC LIMIT 51`, ids, before)
+ FROM driver_board_history WHERE (coalesce(cardinality($1::uuid[]),0)=0 OR driver_id=ANY($1::uuid[])) AND ($2::bigint=0 OR id<$2) AND ($3::text='' OR after_values ? $3) ORDER BY id DESC LIMIT 51`, ids, before, field)
 	if err != nil {
 		return result, err
 	}
@@ -115,8 +119,8 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	if changed {
 		return entry, ErrDriverBoardConflict
 	}
-	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0)
- FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.Version)
+	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0)
+ FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.TrailerNote, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.Version)
 	if err != nil {
 		return entry, err
 	}

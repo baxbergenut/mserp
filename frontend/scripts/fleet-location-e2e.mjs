@@ -62,5 +62,8 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.unroute('https://tile.openstreetmap.org/**');
   await page.goto(`${base}/driver-board`);
-  await page.getByLabel('Dispatcher filter').selectOption('e4500000-0000-0000-0000-000000000001');
+  await page.getByLabel('Dispatcher filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Clear all', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Board Dispatcher', exact: true }).check();
+  await page.keyboard.press('Escape');
 }

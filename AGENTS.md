@@ -292,6 +292,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Saves run immediately and queue typing during in-flight requests. ETA accepts
+  24-hour time, numeric miles left, or both; legacy dated ETAs display time only.
+  Dispatcher and status dropdowns retain checked selections (intersection),
+  including previous My view selections. Notes precedes ETA. Trailer cells use
+  right-click Add/Edit/Delete note and hover previews with corner markers;
+  replacing the trailer clears its note. Migration 111 stores/audits trailerNote.
+  Right-click editable dispatch cells for driver/column history; the history
+  column filter runs before pagination. Ctrl+Z/Cmd+Z reverses the current page's
+  own actions, grouping consecutive saved keystrokes in one cell edit. Server
+  actor/version/field-history guards protect other users' changes. Reload clears
+  the personal undo stack. Run `test-investors-e2e.mjs --board-only` for real
+  API/database editing, notes, filters, history and undo regression coverage.
   Keep fields on one line with compact rows. Prioritize columns through ETA;
   later fields may extend into horizontal scrolling. Show type codes in round parentheses after
   driver names, with a copy-location map pin. No separate type/location columns or

@@ -14,8 +14,9 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
     INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id) VALUES('${id}','${today}',1,'BROWSER-B',88132);
   `);
   await page.goto(`${base}/driver-board`);
-  await page.getByRole('button', { name: 'All drivers', exact: true }).click();
-  await page.getByLabel('Dispatcher filter').selectOption('all');
+  await page.getByLabel('Dispatcher filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.getByLabel('Search Status Board').fill('Progress Browser');
   const field = name => page.getByLabel(`Progress Browser · ${name}`, { exact: true });
   const advance = field('Advance load');

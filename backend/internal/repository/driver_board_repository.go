@@ -21,6 +21,7 @@ type DriverBoardEntry struct {
 	DriverID           string `json:"driverId"`
 	CurrentLoad        string `json:"currentLoad"`
 	TrailerNumber      string `json:"trailerNumber"`
+	TrailerNote        string `json:"trailerNote"`
 	Status             string `json:"status"`
 	Destination        string `json:"destination"`
 	ETA                string `json:"eta"`
@@ -113,7 +114,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
- coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.status,''),coalesce(b.destination,''),
+ coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),
 	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
@@ -140,7 +141,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var reportedAt *time.Time
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
-			&e.CurrentLoad, &e.TrailerNumber, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
+			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
 			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading)
 		if err != nil {
 			rows.Close()
@@ -314,13 +315,13 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		e.ResolveCurrentLoad = false
 		e.StatusEdited = false
 		var version int
-		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time)
-   SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE $9::int=0
-   ON CONFLICT(driver_id) DO NOTHING RETURNING version`, e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time,trailer_note)
+   SELECT $1,$2,$3,$4,$5,$6,$7,$8,$10 WHERE $9::int=0
+   ON CONFLICT(driver_id) DO NOTHING RETURNING version`, e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version, e.TrailerNote).Scan(&version)
 		if errors.Is(err, pgx.ErrNoRows) && e.Version > 0 {
-			err = tx.QueryRow(ctx, `UPDATE driver_board SET current_load=$2,trailer_number=$3,status=$4,destination=$5,eta=$6,notes=$7,home_time=$8,
+			err = tx.QueryRow(ctx, `UPDATE driver_board SET current_load=$2,trailer_number=$3,status=$4,destination=$5,eta=$6,notes=$7,home_time=$8,trailer_note=$10,
     version=version+1,updated_at=now() WHERE driver_id=$1 AND version=$9 RETURNING version`,
-				e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version).Scan(&version)
+				e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version, e.TrailerNote).Scan(&version)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrDriverBoardConflict

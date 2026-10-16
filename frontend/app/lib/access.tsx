@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import type { ExpenseCategoryAccess } from "./types";
 
+export const CurrentUserIDContext = createContext("");
 export const PermissionsContext = createContext<string[]>([]);
 export const usePermissions = () => useContext(PermissionsContext);
 export const ExpenseCategoryAccessContext = createContext<ExpenseCategoryAccess[]>([]);
