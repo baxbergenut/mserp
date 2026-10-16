@@ -156,7 +156,7 @@ func TestTaskEventsDatabase(t *testing.T) {
 	if err != nil || !strings.Contains(cfg.ConnConfig.Database, "_test") || (cfg.ConnConfig.Host != "localhost" && cfg.ConnConfig.Host != "127.0.0.1") {
 		t.Fatal("disposable local _test database required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	// NOTIFY channels are database-wide, not schema-scoped. Repository tests
 	// running in another package must not look like rollback notifications here.
@@ -184,7 +184,7 @@ func TestTaskEventsDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	for _, channel := range []string{"mserp_tasks", "mserp_driver_board", "mserp_board_presence"} {
+	for _, channel := range []string{"mserp_tasks", "mserp_driver_board", "mserp_board_presence", "mserp_gross_board", "mserp_gross_presence"} {
 		h := newDatabaseEvents(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), channel, "driver_board.read")
 		a, unsubscribe := h.subscribe()
 		defer unsubscribe()

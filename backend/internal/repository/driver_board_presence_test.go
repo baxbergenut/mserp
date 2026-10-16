@@ -15,26 +15,31 @@ import (
 // notification triggers only after those tables have been migrated back in.
 func withoutBoardLiveMigration(t *testing.T, source string) string {
 	t.Helper()
-	body, err := os.ReadFile("../../sql/113_status_board_live.sql")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql"} {
+		body, err := os.ReadFile("../../sql/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = strings.ReplaceAll(source, "\r\n", "\n")
+		normalized := strings.ReplaceAll(string(body), "\r\n", "\n")
+		if !strings.Contains(source, normalized) {
+			t.Fatal("init must contain the exact live-board migration")
+		}
+		source = strings.Replace(source, normalized, "", 1)
 	}
-	source = strings.ReplaceAll(source, "\r\n", "\n")
-	normalized := strings.ReplaceAll(string(body), "\r\n", "\n")
-	if !strings.Contains(source, normalized) {
-		t.Fatal("init must contain the exact live-board migration")
-	}
-	return strings.Replace(source, normalized, "", 1)
+	return source
 }
 
 func applyBoardLiveMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
-	body, err := os.ReadFile("../../sql/113_status_board_live.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = conn.Exec(ctx, string(body)); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql"} {
+		body, err := os.ReadFile("../../sql/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = conn.Exec(ctx, string(body)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

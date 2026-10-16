@@ -282,6 +282,21 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+  Migration 115 adds commit-only notifications and week-scoped, session-owned
+  presence. `/gross-board/events?weekStart=...` pushes grossBoard/peers data
+  directly; normal updates perform no follow-up browser board GET. Snapshot
+  caches are bounded to 16 weeks and keyed by week plus committed revision;
+  projection and session checks remain per subscriber. Presence read/write/delete
+  require board.read and never grant board.write. Cursors identify driver, date,
+  load slot and field (including Daily loads and notes), expire after 30 seconds,
+  heartbeat every 10 seconds and clear on leave. Both boards share
+  `components/boards/useLiveBoard.ts` for stream/presence lifecycle.
+  `liveMerge.ts` retains dirty/saving slots and active day-dialog baselines while
+  other slots refresh immediately. Daily loads applies its original draft versions,
+  so concurrent edits conflict instead of silently overwriting saved changes.
+  Run `node scripts/test-investors-e2e.mjs --gross-live-only` with a disposable
+  MSERP_INVESTOR_TEST_DATABASE_URL for two-user data/presence, week isolation,
+  no extra GET, concurrent typing, modal conflicts, reconnect and latency checks.
   Dispatcher checkboxes share `components/management/BoardFilter.tsx` with Status
   Board and remember multiple selections (legacy single choices still restore).
   Weekly driver RPM appears beneath Driver gross; Rate balance is the final

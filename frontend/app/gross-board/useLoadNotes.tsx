@@ -101,7 +101,7 @@ export function useLoadNotes(entries: GrossBoardEntry[], disabled: boolean, onCh
             onClick={() => place(anchor.current!, "note", entry.slot, true)}>{entry.note?.trim() ? "Edit note" : "Add note"}{eligible.length > 1 ? ` · ${entry.loadNumber} (Load ${entry.slot + 1})` : ""}</button>
           {entry.note?.trim() && <button type="button" role="menuitem" className="block min-h-8 w-full rounded px-2 text-left text-red-300 hover:bg-zinc-800 focus:bg-zinc-800 focus:outline-none"
             onClick={() => { write(entry, ""); close(); }}>Delete note{eligible.length > 1 ? ` · ${entry.loadNumber} (Load ${entry.slot + 1})` : ""}</button>}
-        </div>) : shown.map(entry => <textarea key={entry.slot} aria-label={`Note for ${entry.loadNumber}, load ${entry.slot + 1}`} readOnly={!canEdit} maxLength={5000} rows={4}
+        </div>) : shown.map(entry => <textarea data-gross-driver={entry.driverId} data-gross-date={entry.date} data-gross-slot={entry.slot} data-gross-field="note" key={entry.slot} aria-label={`Note for ${entry.loadNumber}, load ${entry.slot + 1}`} readOnly={!canEdit} maxLength={5000} rows={4}
               value={entry.note ?? ""} placeholder="Add a note…" onChange={event => write(entry, event.target.value)}
               className="block w-full resize-y rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-blue-500" />)}
       </div>, document.body) : null,

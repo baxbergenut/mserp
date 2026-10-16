@@ -15,6 +15,7 @@ import { runEscrowTasksE2E } from './escrow-tasks-e2e.mjs';
 import { runPayrollWorkflowsE2E } from './payroll-workflows-e2e.mjs';
 import { runOffboardingE2E } from './offboarding-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
+import { runGrossBoardLiveE2E } from './gross-board-live-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -112,6 +113,8 @@ try {
     await runExpenseWindowE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--driver-setup-only')) {
     await runDriverSetupE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--gross-live-only')) {
+    await runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetworkLatency});
   } else if (process.argv.includes('--board-only')) {
     await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });
   } else if (process.argv.includes('--teams-only')) {

@@ -467,6 +467,8 @@ export interface DriverBoardHistory { items: DriverBoardEvent[]; nextCursor: num
 export interface BoardPresence {
   clientId: string; userId: string; userName: string; driverId: string; column: string; expiresAt: string;
 }
+export interface GrossBoardCell { driverId: string; weekStart: string; date: string; slot: number; column: string }
+export interface GrossBoardPresence extends GrossBoardCell { clientId: string; userId: string; userName: string; expiresAt: string }
 
 export type DriverDirectoryEntry = Driver & { intakeId?: string };
 

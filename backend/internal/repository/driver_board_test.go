@@ -119,6 +119,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
 			testBoardPresence(t, ctx, pool, repo, fleet)
+			testGrossPresence(t, ctx, pool)
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)

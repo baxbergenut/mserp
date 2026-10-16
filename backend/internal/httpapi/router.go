@@ -188,6 +188,7 @@ func NewRouter(
 	}
 	protected.Get("/driver-board/events", boardEvents.serve(auth, boardPresence))
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
+	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, boardRepo)
 	payRepo := repository.NewDriverPayRepository(pool)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
@@ -202,5 +203,5 @@ func NewRouter(
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
-	return &shutdownRouter{Mux: r, shutdown: func() { events.shutdown(); boardEvents.shutdown(); boardPresence.shutdown() }}
+	return &shutdownRouter{Mux: r, shutdown: func() { events.shutdown(); boardEvents.shutdown(); boardPresence.shutdown(); closeGrossLive() }}
 }

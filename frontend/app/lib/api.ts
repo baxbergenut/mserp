@@ -154,6 +154,20 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
+export const fetchGrossPresence = (weekStart: string) => apiRequest<import("./types").GrossBoardPresence[]>(withQuery("/gross-board/presence", { weekStart }));
+export const updateGrossPresence = (clientId: string, cell: import("./types").GrossBoardCell) => performRequest<void>("/gross-board/presence", { method: "PUT", body: JSON.stringify({ clientId, ...cell }) });
+export const clearGrossPresence = (clientId: string) => performRequest<void>(`/gross-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
+export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossBoard) => void, presence: (peers?: import("./types").GrossBoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
+  const stream = new EventSource(`${API_BASE}${withQuery("/gross-board/events", { weekStart })}`, { withCredentials: true });
+  stream.addEventListener("open", () => connection(true));
+  stream.addEventListener("error", () => connection(false));
+  stream.addEventListener("changed", () => changed());
+  stream.addEventListener("presence", () => presence());
+  stream.addEventListener("grossBoard", event => { try { changed(JSON.parse(event.data)); } catch { changed(); } });
+  stream.addEventListener("peers", event => { try { presence(JSON.parse(event.data)); } catch { presence(); } });
+  stream.addEventListener("unauthorized", () => { stream.close(); connection(false); unauthorized(); });
+  return () => stream.close();
+}
 export const fetchDriverBoard = (weekStart: string) =>
   apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>

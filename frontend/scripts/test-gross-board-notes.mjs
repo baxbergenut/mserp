@@ -30,6 +30,7 @@ try {
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',async route=>{
   const req=route.request(), url=new URL(req.url()),path=url.pathname.replace('/lookups/','/').slice(4);
+  if(path.startsWith('/gross-board/presence')) return route.fulfill(req.method()==='GET'?{json:[]}:{status:204});
   if(req.method()==='PUT') {
    writes++;
    if(rejectSave) return route.fulfill({status:409,json:{error:'another dispatcher changed this load'}});

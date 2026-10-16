@@ -40,20 +40,20 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   return (
-    <td {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    <td data-gross-driver={entry.driverId} data-gross-date={entry.date} data-gross-slot={entry.slot} {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
         <span>Load {entry.slot + 1}</span><div className="flex gap-1">
           {!disabled && onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
           <button type="button" hidden={disabled} disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 }))}><X className="h-3 w-3" /></button>
         </div>
       </div>
-      <div className="relative">{notes.marker}<LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} /></div>{notes.popup}
+      <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} /></div>{notes.popup}
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const valid = validDecimal(entry[field], field === "miles");
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : false;
         const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
         const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
-        return <div key={field} data-grid-cell><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
+        return <div key={field} data-grid-cell data-gross-field={field}><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
           value={entry[field]} displayValue={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
             && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : amountDisplay(entry[field], field !== "miles")} disabled={disabled}

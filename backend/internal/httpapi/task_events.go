@@ -21,23 +21,28 @@ import (
 // one database connection per browser. PostgreSQL notifications contain no record
 // data; authorized subscribers receive shared snapshots over their HTTP streams.
 type taskEvents struct {
-	mu               sync.Mutex
-	clients          map[chan struct{}]struct{}
-	cancel           context.CancelFunc
-	config           *pgx.ConnConfig
-	logger           *slog.Logger
-	stopped          chan struct{}
-	channel          string
-	permission       string
-	revision         uint64
-	snapshot         func(context.Context) ([]byte, error)
-	snapshotEvent    string
-	snapshotMu       sync.Mutex
-	snapshotRevision uint64
-	snapshotBody     []byte
-	snapshotAt       time.Time
-	shutdownContext  context.Context
-	stopSnapshots    context.CancelFunc
+	mu              sync.Mutex
+	clients         map[chan struct{}]struct{}
+	cancel          context.CancelFunc
+	config          *pgx.ConnConfig
+	logger          *slog.Logger
+	stopped         chan struct{}
+	channel         string
+	permission      string
+	revision        uint64
+	snapshot        func(context.Context) ([]byte, error)
+	snapshotEvent   string
+	snapshotKey     func(context.Context) string
+	snapshotMu      sync.Mutex
+	snapshots       map[string]eventSnapshot
+	shutdownContext context.Context
+	stopSnapshots   context.CancelFunc
+}
+
+type eventSnapshot struct {
+	revision uint64
+	body     []byte
+	at       time.Time
 }
 
 func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
@@ -118,7 +123,12 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 	h.mu.Lock()
 	revision := h.revision
 	h.mu.Unlock()
-	if h.snapshotBody == nil || h.snapshotRevision != revision || time.Since(h.snapshotAt) > time.Second {
+	key := ""
+	if h.snapshotKey != nil {
+		key = h.snapshotKey(ctx)
+	}
+	cached := h.snapshots[key]
+	if cached.body == nil || cached.revision != revision || time.Since(cached.at) > time.Second {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		stop := context.AfterFunc(h.shutdownContext, cancel)
 		body, err := h.snapshot(ctx)
@@ -127,12 +137,14 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		if err != nil {
 			return "event: " + fallback + "\ndata: {}\n\n"
 		}
-		h.snapshotBody = body
-		h.snapshotRevision = revision
-		h.snapshotAt = time.Now()
+		if h.snapshots == nil || (len(h.snapshots) >= 16 && cached.body == nil) {
+			h.snapshots = map[string]eventSnapshot{}
+		}
+		cached = eventSnapshot{revision, body, time.Now()}
+		h.snapshots[key] = cached
 	}
-	body := h.snapshotBody
-	if h.snapshotEvent == "board" {
+	body := cached.body
+	if h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard" {
 		// Project per subscriber, never cache a user's projected response.
 		var value any
 		decoder := json.NewDecoder(bytes.NewReader(body))
@@ -141,7 +153,11 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 			return "event: " + fallback + "\ndata: {}\n\n"
 		}
 		session, _ := authSessionFromContext(ctx)
-		projectFields(value, session.User, "/driver-board/events")
+		path := "/driver-board/events"
+		if h.snapshotEvent == "grossBoard" {
+			path = "/gross-board/events"
+		}
+		projectFields(value, session.User, path)
 		body, _ = json.Marshal(value)
 	}
 	return "event: " + h.snapshotEvent + "\ndata: " + string(body) + "\n\n"

@@ -11,6 +11,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
+import { useGrossLive } from "./useGrossLive";
+import { selectedGrossCell } from "./grossCells";
+import { mergeGrossLive } from "./liveMerge";
+import { GrossPresence } from "./GrossPresence";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -68,8 +72,13 @@ export default function GrossBoardPage() {
   const leavingRef = useRef(false);
   useLayoutEffect(() => { leavingRef.current = !!(pendingWeek || pendingLink); }, [pendingWeek, pendingLink]);
   const savedRef = useRef<Record<string, GrossBoardEntry>>({});
+  const changesRef = useRef(changes);
+  const busyKeys = useRef<string[]>([]);
+  const receiveLive = useRef<(value?: GrossBoard) => void>(() => {});
+  const resumeLive = useRef<() => void>(() => {});
+  const live = useGrossLive(week, useCallback((value?: GrossBoard) => receiveLive.current(value), []));
   const dirty = canEdit && Object.keys(changes).length > 0;
-  useLayoutEffect(() => { idleRef.current = !dirty && !saving && !loading; }, [dirty, saving, loading]);
+  useLayoutEffect(() => { idleRef.current = !loading; resumeLive.current(); }, [dirty, saving, loading]);
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
 
   const load = useCallback(async () => {
@@ -87,29 +96,50 @@ export default function GrossBoardPage() {
     return () => { cancelled = true; };
   }, [week]);
 
-  // One board refresh, rather than one lookup per cell. Never replace edits,
-  // even if the user starts and finishes a save while this request is in flight.
+  // Pushes apply directly. Keep each editor's original concurrency token;
+  // GET requests remain available for recovery and explicit reloads.
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
+    let pending = false;
+    let latest: GrossBoard | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const accept = (value: GrossBoard) => {
+      if (cancelled || value.weekStart !== week) return;
+      latest = value;
+      if (!idleRef.current || document.hidden) return;
+      setBoard(current => {
+        const keys = new Set([...Object.keys(changesRef.current), ...busyKeys.current]);
+        const days = new Set(Array.from(document.querySelectorAll<HTMLElement>('[data-gross-editor-day]')).map(e => e.dataset.grossEditorDay!));
+        const cell = document.activeElement?.matches('input,textarea,select') ? selectedGrossCell(document.activeElement) : null;
+        if (cell?.date) {
+          if (cell.slot < 0) days.add(`${cell.driverId}:${cell.date}`);
+          else keys.add(entryKey(cell.driverId,cell.date,cell.slot));
+        }
+        return mergeGrossLive(current,value,keys,days);
+      });
+      setRefreshError("");
+    };
     const refresh = async () => {
       if (!idleRef.current || document.visibilityState !== "visible" || inFlight) return;
-      const revision = activityRef.current;
+      pending = false;
       inFlight = true;
       try {
         const value = await fetchGrossBoard(week);
-        if (!cancelled && idleRef.current && revision === activityRef.current) {
-          setBoard(value); setRefreshError("");
-        }
+        accept(value);
       } catch {
         if (!cancelled) setRefreshError("Automatic load refresh is unavailable. Your edits still autosave; use Reload to retry.");
-      } finally { inFlight = false; }
+      } finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
-    const timer = setInterval(() => { void refresh(); }, 30000);
-    const focus = () => { void refresh(); };
+    const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
+    receiveLive.current = value => value ? accept(value) : schedule();
+    resumeLive.current = () => { if (latest) accept(latest); };
+    const fallback = setInterval(schedule, 30000);
+    const focus = schedule;
     window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", focus);
-    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); };
+    document.addEventListener("focusout", focus);
+    return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
   }, [week]);
 
   useEffect(() => {
@@ -185,49 +215,52 @@ export default function GrossBoardPage() {
     if (!canEdit) return;
     activityRef.current += 1;
     const key = entryKey(driverId, date, slot);
-    setChanges((current) => {
-      const baseline = savedRef.current[key] ?? emptyEntry(driverId, date, slot);
-      const previous = current[key] ?? baseline;
-      const next = update(previous);
-      if (next === previous) return current;
-      const result = { ...current, [key]: next };
-      // A revert during an in-flight save is a new edit; the old saved value
-      // will be replaced by that response, so it must remain queued.
-      if (!(slot > 0 && baseline.version === 0) && !savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
-      return result;
-    });
+    const current = changesRef.current;
+    const baseline = savedRef.current[key] ?? emptyEntry(driverId, date, slot);
+    const previous = current[key] ?? baseline;
+    const next = update(previous);
+    if (next === previous) return;
+    const result = { ...current, [key]: next };
+    // A revert during an in-flight save is a new edit; the old saved value
+    // will be replaced by that response, so it must remain queued.
+    if (!(slot > 0 && baseline.version === 0) && !savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
+    changesRef.current = result;
+    setChanges(result);
     setMessage("");
   }, [canEdit]);
 
   const save = useCallback(async () => {
-    if (!canEdit || savingRef.current || invalid || !dirty || loading) return;
+    if (!canEdit || savingRef.current || invalid || !Object.keys(changesRef.current).length || loading) return;
     savingRef.current = true;
     activityRef.current += 1;
     const saveRevision = activityRef.current;
-    const snapshot = { ...changes };
+    const snapshot = { ...changesRef.current };
+    busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
     try {
       const committed = await saveGrossBoard(week, Object.values(snapshot));
+      committed.forEach(entry => { savedRef.current[entryKey(entry.driverId,entry.date,entry.slot)] = entry; });
+      const remaining = reconcileAutosave(changesRef.current,snapshot,committed);
+      changesRef.current = remaining;
       setBoard((current) => {
         if (!current) return current;
         const entries = Object.fromEntries(current.entries.map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry]));
         committed.forEach((entry) => { entries[entryKey(entry.driverId, entry.date, entry.slot)] = entry; });
         return { ...current, entries: Object.values(entries) };
       });
-      setChanges((current) => reconcileAutosave(current, snapshot, committed));
+      setChanges(remaining);
       setMessage("All changes saved");
-      // Refresh carry and repeated-load metadata after a save, but never
-      // replace the baseline under a newer edit. Skip the refresh when leaving;
-      // the destination loads its own current data.
-      if (activityRef.current === saveRevision && !leavingRef.current) {
+      // The stream refreshes carry and matching metadata. Recover by GET when
+      // disconnected, preserving newer edits and navigation flushes.
+      if (!live.connected && activityRef.current === saveRevision && !leavingRef.current) {
         try {
           const fresh = await fetchGrossBoard(week);
-          if (activityRef.current === saveRevision) { setBoard(fresh); setRefreshError(""); }
+          if (activityRef.current === saveRevision) receiveLive.current(fresh);
         } catch { setRefreshError("Saved. Automatic load refresh is unavailable; use Reload to retry."); }
       }
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
-    finally { activityRef.current += 1; savingRef.current = false; setSaving(false); }
-  }, [canEdit, changes, dirty, invalid, loading, week]);
+    finally { activityRef.current += 1; busyKeys.current = []; savingRef.current = false; setSaving(false); }
+  }, [canEdit, live.connected, invalid, loading, week]);
 
   useEffect(() => {
     if (!dirty || saving || error || invalid || loading) return;
@@ -238,7 +271,7 @@ export default function GrossBoardPage() {
   async function reload() {
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
     activityRef.current += 1;
-    setChanges({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
+    changesRef.current = {}; setChanges({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
   }
 
   return (
@@ -270,6 +303,7 @@ export default function GrossBoardPage() {
         <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={live.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${live.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{live.connected ? "Live" : "Connecting…"}</span>
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{!canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
           <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
         </div></div></div>
@@ -281,7 +315,7 @@ export default function GrossBoardPage() {
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
       {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea>
-        <table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
+        <table {...spreadsheetGridEvents} data-spreadsheet-grid data-gross-board-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
           <thead className="sticky top-0 z-30 bg-zinc-900 text-zinc-300">
             <tr>
@@ -311,17 +345,17 @@ export default function GrossBoardPage() {
                   <td className={`border-b border-zinc-700 px-2 py-2 ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}</td>
                 </tr>}
                 <tr>
-                  <th scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
-                  <td className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
+                  <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
+                  <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Original", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
                   {dayEntries.map((entries, i) => <DaySummaryCell readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
-                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
-                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">
+                  <td data-gross-driver={driver.id} data-gross-field="originalTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
+                  <td data-gross-driver={driver.id} data-gross-field="driverTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">
                     {decimalDisplay(sum.driver, true)}
                     <span className="mt-1 block text-[10px] text-zinc-500" aria-label={`Driver RPM for ${driver.fullName}`}>RPM {rpmDisplay(sum.driver, sum.miles)}</span>
                   </td>
-                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
-                  <td className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
+                  <td data-gross-driver={driver.id} data-gross-field="milesTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
+                  <td data-gross-driver={driver.id} data-gross-field="balance" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
                       <span className="font-mono">{signedMoney(balance)}</span><span className="mt-1 block text-[10px]">{balanceLabel(balance)}</span>
                       {incomplete > 0 && <span className="mt-1 block text-[10px] text-amber-300">{incomplete} incomplete</span>}
@@ -339,6 +373,7 @@ export default function GrossBoardPage() {
           </tr></tfoot>
         </table>
       </BoardScrollArea>}
+      <GrossPresence peers={live.peers} />
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
         opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
         entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}
