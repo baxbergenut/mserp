@@ -161,7 +161,7 @@ func TestWMTSettlementDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			final, e := pay.SettleInvestor(ctx, date, truck, investor.Revision, actor, "", false)
+			final, e := pay.SettleInvestor(ctx, date, truck, investor.Revision, actor, "", false, false)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -186,7 +186,7 @@ func TestWMTSettlementDatabase(t *testing.T) {
 			if e = repo.LinkTransaction(ctx, list.Items[0].ID, driver, truck, list.Items[0].Version, actor); e == nil {
 				t.Fatal("frozen link changed")
 			}
-			if _, e = pay.SettleInvestor(ctx, date, truck, frozen.Revision, actor, "Scale ticket correction", true); e != nil {
+			if _, e = pay.SettleInvestor(ctx, date, truck, frozen.Revision, actor, "Scale ticket correction", true, false); e != nil {
 				t.Fatal(e)
 			}
 			updated, e := pay.InvestorPay(ctx, date)
@@ -424,7 +424,7 @@ func verifyWMTAutoRouting(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		}
 	}
 	// Freeze the automatic owner statement, correct the vendor amount, then reopen.
-	_, err = pay.Settle(ctx, date, ownerDriver, report.Revision, actor, "", false)
+	_, err = pay.Settle(ctx, date, ownerDriver, report.Revision, actor, "", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func verifyWMTAutoRouting(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		}
 	}
 
-	if _, err = pay.Settle(ctx, date, ownerDriver, unchanged.Revision, actor, "Scale correction", true); err != nil {
+	if _, err = pay.Settle(ctx, date, ownerDriver, unchanged.Revision, actor, "Scale correction", true, false); err != nil {
 		t.Fatal(err)
 	}
 }

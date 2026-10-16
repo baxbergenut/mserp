@@ -250,7 +250,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 				t.Fatal("summary ignores carry", payPageCosts(d))
 			}
 			w, _ := chargeWeek("2026-10-12")
-			if _, err := pr.SettleInvestor(ctx, w, truck, r.Revision, actor, "", false); err != nil {
+			if _, err := pr.SettleInvestor(ctx, w, truck, r.Revision, actor, "", false, false); err != nil {
 				t.Fatal(err)
 			}
 			r, d = read("2026-10-12")
@@ -260,7 +260,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 			if _, err := pr.SaveInvestorPay(ctx, d.Edits, actor); err == nil {
 				t.Fatal("edited finalized costs")
 			}
-			if _, err := pr.SettleInvestor(ctx, w, truck, r.Revision, actor, "check carry", true); err != nil {
+			if _, err := pr.SettleInvestor(ctx, w, truck, r.Revision, actor, "check carry", true, false); err != nil {
 				t.Fatal(err)
 			}
 			_, d = read("2026-10-19")

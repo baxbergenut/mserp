@@ -188,7 +188,7 @@ func verifyDriverPayLayovers(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		t.Fatal("later Shop day incorrectly suppressed", err)
 	}
 	report = read()
-	frozen, err := repo.Settle(ctx, week, driver, report.Revision, "", "", false)
+	frozen, err := repo.Settle(ctx, week, driver, report.Revision, "", "", false, false)
 	if err != nil || driverLayoverTotal(frozen.Drivers[0]) != 12525 {
 		t.Fatal("finalize bonus", err)
 	}
@@ -200,7 +200,7 @@ func verifyDriverPayLayovers(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = repo.Save(ctx, saved); err == nil {
 		t.Fatal("finalized removal editable")
 	}
-	reopened, err := repo.Settle(ctx, week, driver, read().Revision, "", "Review layover", true)
+	reopened, err := repo.Settle(ctx, week, driver, read().Revision, "", "Review layover", true, false)
 	if err != nil || driverLayoverTotal(reopened.Drivers[0]) != 5000 {
 		t.Fatal("reopen lost removal or new rate", err)
 	}

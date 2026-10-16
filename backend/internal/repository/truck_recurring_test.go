@@ -207,7 +207,7 @@ func TestTruckRecurringDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "", false); err != nil {
+		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "", false, false); err != nil {
 			t.Fatal("finalize owner fee", err)
 		}
 		if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,status='terminated' WHERE id=$1`, driver.ID); err != nil {
@@ -296,7 +296,7 @@ func TestTruckRecurringDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "Verify ownership changes", true); err != nil {
+		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "Verify ownership changes", true, false); err != nil {
 			t.Fatal(err)
 		}
 		if err = charges.SaveCell(ctx, ChargeCell{DriverID: driver.ID}, actor); err == nil {

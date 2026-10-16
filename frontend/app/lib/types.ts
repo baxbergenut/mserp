@@ -1208,7 +1208,8 @@ export interface ChargeBulk {
 }
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
 
-export interface PayrollSettlement { finalized: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
+export interface PayrollSettlement { finalized: boolean; override?: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
+export interface PayrollSettlementInput { weekStart: string; revision: string; driverId?: string; reason: string; override: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 export interface SettlementEvent { action: string; version: number; actor: string; reason: string; createdAt: string; report: DriverPayDriver }
 

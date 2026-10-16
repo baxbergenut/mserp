@@ -291,7 +291,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			final, e := pr.SettleInvestor(ctx, week, truck, report.Revision, actor, "", false)
+			final, e := pr.SettleInvestor(ctx, week, truck, report.Revision, actor, "", false, false)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -334,7 +334,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if !foundHistory {
 				t.Fatal("finalized statement missing from investor history")
 			}
-			if _, e = pr.SettleInvestor(ctx, week, truck, frozen.Revision, actor, "Correction", true); e != nil {
+			if _, e = pr.SettleInvestor(ctx, week, truck, frozen.Revision, actor, "Correction", true, false); e != nil {
 				t.Fatal(e)
 			}
 			// Corrections retain the expense payment's original destination.
@@ -454,7 +454,7 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if len(r.Issues) != 0 || len(r.Drivers) != 1 || len(r.Drivers[0].Issues) != 1 {
 		t.Fatalf("assignment issue not scoped to truck: %+v", r)
 	}
-	if _, err = pr.SettleInvestor(ctx, week, truck, r.Revision, actor, "", false); err == nil {
+	if _, err = pr.SettleInvestor(ctx, week, truck, r.Revision, actor, "", false, false); err == nil {
 		t.Fatal("finalized unresolved truck")
 	}
 	exec(`UPDATE loads SET truck_unit='TRUCK-A' WHERE id=991`)
@@ -492,7 +492,7 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if len(explicit.Drivers) != 1 || !explicit.Drivers[0].TruckInactive || len(explicit.Drivers[0].Loads) != 1 || explicit.Revision != r.Revision {
 		t.Fatal("inactive historical statement or revision lost")
 	}
-	if _, err = pr.SettleInvestor(ctx, week, "", r.Revision, actor, "", false); err == nil {
+	if _, err = pr.SettleInvestor(ctx, week, "", r.Revision, actor, "", false, false); err == nil {
 		t.Fatal("whole week finalized hidden inactive truck")
 	}
 	exec(`UPDATE trucks SET active=true WHERE id=$1`, truck)

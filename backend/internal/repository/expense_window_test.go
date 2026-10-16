@@ -165,7 +165,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 				settle = pay.SettleInvestor
 			}
 			report := read(week)
-			frozen, err := settle(ctx, week, statement, report.Revision, actor, "", false)
+			frozen, err := settle(ctx, week, statement, report.Revision, actor, "", false, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -176,7 +176,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			if len(card(read(week)).Edits.ExpenseDeductions) != 6 {
 				t.Fatal("finalized snapshot changed")
 			}
-			reopened, err := settle(ctx, week, statement, read(week).Revision, actor, "Review late expense", true)
+			reopened, err := settle(ctx, week, statement, read(week).Revision, actor, "Review late expense", true, false)
 			if err != nil {
 				t.Fatal(err)
 			}

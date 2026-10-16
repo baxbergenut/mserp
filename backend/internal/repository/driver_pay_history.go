@@ -72,6 +72,9 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
 			rows.Close()
 			return Page[DriverPayHistoryRow]{}, err
 		}
+		if d.Settlement != nil {
+			meta.Override = d.Settlement.Override
+		}
 		d.Settlement = &meta
 		frozen[w] = d
 	}

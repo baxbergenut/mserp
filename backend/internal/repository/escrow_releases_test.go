@@ -114,7 +114,7 @@ func verifyEscrowReleases(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	finalized, err := pay.Settle(ctx, week, driver, report.Revision, "", "", false)
+	finalized, err := pay.Settle(ctx, week, driver, report.Revision, "", "", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func verifyEscrowReleases(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		t.Fatal("finalized release edited")
 	}
 	assertCredit(week, "500.00")
-	if _, err = pay.Settle(ctx, week, driver, finalized.Revision, "", "Correct release", true); err != nil {
+	if _, err = pay.Settle(ctx, week, driver, finalized.Revision, "", "Correct release", true, false); err != nil {
 		t.Fatal(err)
 	}
 	if err = repo.SaveRelease(ctx, escrow, input, ""); err != nil {

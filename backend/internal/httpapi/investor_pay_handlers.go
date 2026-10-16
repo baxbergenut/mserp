@@ -174,12 +174,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 	})
 	for _, action := range []string{"finalize", "reopen"} {
 		r.Post("/investor-pay/"+action, func(w http.ResponseWriter, r *http.Request) {
-			var v struct {
-				WeekStart string `json:"weekStart"`
-				DriverID  string `json:"driverId"`
-				Revision  string `json:"revision"`
-				Reason    string `json:"reason"`
-			}
+			var v repository.PayrollSettlementInput
 			if !decode(w, r, &v) {
 				return
 			}
@@ -188,7 +183,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 				writeAPIError(w, 400, "Invalid week or truck")
 				return
 			}
-			result, err := pay.SettleInvestor(r.Context(), week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen")
+			result, err := pay.SettleInvestor(r.Context(), week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override)
 			if err != nil {
 				fail(w, err)
 				return

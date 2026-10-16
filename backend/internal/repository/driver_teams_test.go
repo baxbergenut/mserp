@@ -320,7 +320,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 			t.Fatal("termination should retain a payable shared statement", d)
 		}
 	}
-	finalized, err := pay.Settle(ctx, week, main.ID, report.Revision, actor, "", false)
+	finalized, err := pay.Settle(ctx, week, main.ID, report.Revision, actor, "", false, false)
 	if err != nil {
 		t.Fatal("finalization", err)
 	}
@@ -349,7 +349,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 			t.Fatal("frozen fuel changed")
 		}
 	}
-	if _, err = pay.Settle(ctx, week, main.ID, report.Revision, actor, "Reviewed team deduction", true); err != nil {
+	if _, err = pay.Settle(ctx, week, main.ID, report.Revision, actor, "Reviewed team deduction", true, false); err != nil {
 		t.Fatal("reopen", err)
 	}
 	if _, err = pay.Save(ctx, saved); err == nil {

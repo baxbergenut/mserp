@@ -1,4 +1,5 @@
 import { runDriverSetupE2E } from "./driver-setup-e2e.mjs";
+import { runPayrollOverrideE2E } from "./payroll-override-e2e.mjs";
 import { runUpdatersE2E } from "./updaters-e2e.mjs";
 import { runDriverTeamsE2E } from "./driver-teams-e2e.mjs";
 import { runProfilesE2E } from "./profiles-e2e.mjs";
@@ -95,7 +96,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--expense-window-only')) {
+  if (process.argv.includes('--payroll-override-only')) {
+    await runPayrollOverrideE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--expense-window-only')) {
     await runExpenseWindowE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--driver-setup-only')) {
     await runDriverSetupE2E({ page, base, sql, schema, temp });

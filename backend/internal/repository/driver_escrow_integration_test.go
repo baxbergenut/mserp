@@ -344,14 +344,14 @@ func verifyEscrowCollections(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if err != nil {
 		t.Fatal(err)
 	}
-	final, err := pay.Settle(ctx, week, driver, report.Revision, "", "", false)
+	final, err := pay.Settle(ctx, week, driver, report.Revision, "", "", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, `UPDATE driver_escrow_payments SET amount=0 WHERE escrow_id=$1 AND week_start=$2`, first.ExpenseDeductions[0].ExpenseID, week); err == nil {
 		t.Fatal("database allowed finalized escrow edit")
 	}
-	if _, err = pay.Settle(ctx, week, driver, final.Revision, "", "Correction", true); err != nil {
+	if _, err = pay.Settle(ctx, week, driver, final.Revision, "", "Correction", true, false); err != nil {
 		t.Fatal(err)
 	}
 	balance("partial", "150.75", "2949.25")

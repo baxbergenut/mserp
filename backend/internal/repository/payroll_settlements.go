@@ -14,11 +14,20 @@ import (
 
 type PayrollSettlement struct {
 	Finalized   bool       `json:"finalized"`
+	Override    bool       `json:"override,omitempty"`
 	Version     int        `json:"version"`
 	FinalizedAt time.Time  `json:"finalizedAt"`
 	FinalizedBy string     `json:"finalizedBy"`
 	ReopenedAt  *time.Time `json:"reopenedAt"`
 	Reason      string     `json:"reason"`
+}
+
+type PayrollSettlementInput struct {
+	WeekStart string `json:"weekStart"`
+	DriverID  string `json:"driverId"`
+	Revision  string `json:"revision"`
+	Reason    string `json:"reason"`
+	Override  bool   `json:"override"`
 }
 type SettlementEvent struct {
 	Action    string          `json:"action"`
@@ -52,6 +61,9 @@ func overlayPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayW
 		var frozen DriverPayDriver
 		if err = json.Unmarshal(body, &frozen); err != nil {
 			return report, err
+		}
+		if frozen.Settlement != nil {
+			meta.Override = frozen.Settlement.Override
 		}
 		found := false
 		for i := range report.Drivers {
@@ -95,13 +107,17 @@ func assertPayrollOpen(ctx context.Context, tx pgx.Tx, driver, week string) erro
 
 // The exclusive session lock is acquired before opening the snapshot transaction.
 // Ordinary charge writes take its shared counterpart, retaining per-driver concurrency.
-func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver, revision, actor, reason string, reopen bool) (DriverPayWeek, error) {
+func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver, revision, actor, reason string, reopen, override bool) (DriverPayWeek, error) {
 	empty := DriverPayWeek{}
-	if week.Format(time.DateOnly) > ChargeCurrentWeek() {
+	override = override && !reopen
+	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return empty, chargeInvalid("Future weeks cannot be finalized")
 	}
 	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
 		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
+	}
+	if override {
+		reason = "Finalized with override"
 	}
 	conn, err := r.pool.Acquire(ctx)
 	if err != nil {
@@ -165,11 +181,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
 				return empty, err
 			}
-			if len(d.Issues) > 0 {
+			if !override && len(d.Issues) > 0 {
 				return empty, chargeInvalid("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
 			}
 			for _, load := range d.Loads {
-				if load.Fee == "" || len(load.Issues) > 0 {
+				if !override && (load.Fee == "" || len(load.Issues) > 0) {
 					return empty, chargeInvalid("Resolve the loads needing review for %s before finalizing", d.FullName)
 				}
 			}
@@ -248,16 +264,19 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			}
 			frozen := d
 			frozen.Settlement = nil
+			if override {
+				frozen.Settlement = &PayrollSettlement{Finalized: true, Override: true, Reason: reason}
+			}
 			body, e := json.Marshal(frozen)
 			if e != nil {
 				return empty, e
 			}
-			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid)
-   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=''`, d.ID, report.WeekStart, body, confirmed, actor); err != nil {
+			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by,reason) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid,$6)
+   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=excluded.reason`, d.ID, report.WeekStart, body, confirmed, actor, reason); err != nil {
 				return empty, err
 			}
 			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
- SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,'',report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor); err != nil {
+ SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,$4,report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor, reason); err != nil {
 				return empty, err
 			}
 			delete(pending, d.ID)

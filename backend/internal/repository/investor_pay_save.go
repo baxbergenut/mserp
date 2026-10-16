@@ -91,13 +91,17 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	}
 	return edits, tx.Commit(ctx)
 }
-func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen bool) (DriverPayWeek, error) {
+func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen, override bool) (DriverPayWeek, error) {
 	empty := DriverPayWeek{}
-	if week.Format(time.DateOnly) > ChargeCurrentWeek() {
+	override = override && !reopen
+	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return empty, chargeInvalid("Future weeks cannot be finalized")
 	}
 	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
 		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
+	}
+	if override {
+		reason = "Finalized with override"
 	}
 	conn, err := r.pool.Acquire(ctx)
 	if err != nil {
@@ -129,7 +133,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if revision == "" || revision != report.Revision {
 		return empty, ErrDriverPayConflict
 	}
-	if !reopen && len(report.Issues) > 0 {
+	if !reopen && !override && len(report.Issues) > 0 {
 		return empty, chargeInvalid("Resolve unattributed loads before finalizing Investor Pay")
 	}
 	count := 0
@@ -153,11 +157,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			if err = validateInvestorCostEdits(d, d.Edits); err != nil {
 				return empty, err
 			}
-			if len(d.Issues) > 0 {
+			if !override && len(d.Issues) > 0 {
 				return empty, chargeInvalid("Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
 			}
 			for _, l := range d.Loads {
-				if l.Fee == "" || len(l.Issues) > 0 {
+				if !override && (l.Fee == "" || len(l.Issues) > 0) {
 					return empty, chargeInvalid("Resolve loads needing review for truck %s", d.TruckUnit)
 				}
 			}
@@ -176,7 +180,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			if err = tx.QueryRow(ctx, `SELECT username FROM app_users WHERE id=$1`, actor).Scan(&username); err != nil {
 				return empty, err
 			}
-			d.Settlement = &PayrollSettlement{Finalized: true, Version: d.Edits.Version + 1, FinalizedAt: time.Now(), FinalizedBy: username}
+			d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: time.Now(), FinalizedBy: username}
 			d.Edits.Version++
 			body, e := json.Marshal(d)
 			if e != nil {
@@ -194,7 +198,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		if reopen {
 			action = "reopened"
 		}
-		if err = truckAudit(ctx, tx, d.ID, report.WeekStart, action, actor, map[string]any{"reason": reason, "report": d}); err != nil {
+		if err = truckAudit(ctx, tx, d.ID, report.WeekStart, action, actor, map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d}); err != nil {
 			return empty, err
 		}
 	}

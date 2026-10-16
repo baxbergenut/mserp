@@ -496,6 +496,10 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 			return err
 		}
 		meta.Finalized = true
+		if d.Settlement != nil {
+			meta.Override = d.Settlement.Override
+			meta.Reason = d.Settlement.Reason
+		}
 		d.Settlement = &meta
 		return nil
 	}

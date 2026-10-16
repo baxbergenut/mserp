@@ -167,12 +167,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	for _, action := range []string{"finalize", "reopen"} {
 		reopen := action == "reopen"
 		r.Post("/driver-pay/"+action, func(w http.ResponseWriter, r *http.Request) {
-			var input struct {
-				WeekStart string `json:"weekStart"`
-				DriverID  string `json:"driverId"`
-				Revision  string `json:"revision"`
-				Reason    string `json:"reason"`
-			}
+			var input repository.PayrollSettlementInput
 			if err := decodeJSON(r, &input); err != nil {
 				writeAPIError(w, 400, err.Error())
 				return
@@ -187,7 +182,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 				return
 			}
 			session, _ := authSessionFromContext(r.Context())
-			result, err := repo.Settle(r.Context(), week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen)
+			result, err := repo.Settle(r.Context(), week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override)
 			if err != nil {
 				fail(w, err)
 				return

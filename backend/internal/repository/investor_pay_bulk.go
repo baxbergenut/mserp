@@ -158,6 +158,10 @@ func (v truckPayInputs) applyEdits(d *DriverPayDriver) error {
 		if e := json.Unmarshal(w.report, d); e != nil {
 			return e
 		}
+		if d.Settlement != nil {
+			w.meta.Override = d.Settlement.Override
+			w.meta.Reason = d.Settlement.Reason
+		}
 		d.Settlement = &w.meta
 		return nil
 	}

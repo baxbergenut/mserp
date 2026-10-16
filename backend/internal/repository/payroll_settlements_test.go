@@ -63,10 +63,10 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pay.Settle(ctx, week, ownerDriver, "stale", actor, "", false); !errors.Is(err, ErrDriverPayConflict) {
+	if _, err = pay.Settle(ctx, week, ownerDriver, "stale", actor, "", false, false); !errors.Is(err, ErrDriverPayConflict) {
 		t.Fatal("stale finalization accepted", err)
 	}
-	final, err := pay.Settle(ctx, week, ownerDriver, report.Revision, actor, "", false)
+	final, err := pay.Settle(ctx, week, ownerDriver, report.Revision, actor, "", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,10 +101,10 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err != nil || find(current, ownerDriver).PayRate != oldRate {
 		t.Fatal("finalized snapshot changed with profile", err)
 	}
-	if _, err = pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "", true); err == nil {
+	if _, err = pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "", true, false); err == nil {
 		t.Fatal("reopen without reason accepted")
 	}
-	reopened, err := pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "Correct deduction", true)
+	reopened, err := pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "Correct deduction", true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err != nil {
 		t.Fatal(err)
 	}
-	final, err = pay.Settle(ctx, week, "", current.Revision, actor, "", false)
+	final, err = pay.Settle(ctx, week, "", current.Revision, actor, "", false, false)
 	if err != nil {
 		t.Fatal("whole week finalization", err)
 	}
@@ -151,7 +151,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 			t.Fatal("duplicate installment collection", s.Confirmed)
 		}
 	}
-	opened, err := pay.Settle(ctx, week, "", final.Revision, actor, "Recheck the whole week", true)
+	opened, err := pay.Settle(ctx, week, "", final.Revision, actor, "Recheck the whole week", true, false)
 	if err != nil {
 		t.Fatal("whole week reopen", err)
 	}

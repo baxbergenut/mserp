@@ -1101,6 +1101,17 @@ assignment lookup lists.
   advisory lock; finalization obtains its exclusive session counterpart before
   opening a repeatable-read snapshot. Driver profiles expose editable details,
   weekly pay history, personal balances, other expenses and assignment history.
+  Both Driver Pay and Investor Pay accept explicit `override: true` on finalize,
+  for one statement or the whole week. The shared confirmation dialog previews
+  issues and offers Override and finalize, bypassing future-week and all report,
+  statement and load review checks (including missing fees, counted as zero).
+  Permissions, current revisions, financial locks and ledger validation still
+  apply. Frozen JSON and audit history retain the override and unresolved issues;
+  finalized rows show Finalized* with an accessible Finalized with override label.
+  No migration is needed.
+  `TestPayrollOverrideDatabase` uses `MSERP_DRIVER_CHARGES_TEST_DATABASE_URL`;
+  `node scripts/test-investors-e2e.mjs --payroll-override-only` exercises both
+  real API/browser flows with `MSERP_INVESTOR_TEST_DATABASE_URL` and a /api build.
   Payroll load numbers deep-link to Gross Board by driver ID, service date and
   slot, scrolling to and highlighting that entry directly in the Gross Board.
   Daily loads opens only when the user chooses to edit a multi-load day. The load number
