@@ -39,14 +39,19 @@ func (r *FileRepository) CreateFile(
 	fileName string,
 	contentType string,
 	data []byte,
+	actor ...string,
 ) (StoredFileMetadata, error) {
+	var uploader *string
+	if len(actor) > 0 && actor[0] != "" {
+		uploader = &actor[0]
+	}
 	digest := sha256.Sum256(data)
 	var value StoredFileMetadata
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO files (file_name, content_type, size_bytes, sha256, data)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO files (file_name, content_type, size_bytes, sha256, data, uploaded_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, file_name, content_type, size_bytes, sha256, created_at`,
-		fileName, contentType, len(data), fmt.Sprintf("%x", digest), data,
+		fileName, contentType, len(data), fmt.Sprintf("%x", digest), data, uploader,
 	).Scan(
 		&value.ID, &value.FileName, &value.ContentType, &value.SizeBytes,
 		&value.SHA256, &value.CreatedAt,
@@ -68,4 +73,17 @@ func (r *FileRepository) GetFile(ctx context.Context, id string) (StoredFile, er
 		return StoredFile{}, ErrNotFound
 	}
 	return value, err
+}
+
+func (r *FileRepository) CanAccessFile(ctx context.Context, id string, user AuthUser, kind string) (bool, error) {
+	var allowed bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM files f WHERE f.id=$1 AND (
+ ($2 AND ($5='' OR $5='drivers') AND EXISTS(SELECT 1 FROM drivers d WHERE d.cdl_file_id=f.id)) OR
+ ($3 AND ($5='' OR $5='trucks') AND EXISTS(SELECT 1 FROM trucks t WHERE t.irp_file_id=f.id)) OR
+ ((f.uploaded_by=$4::uuid OR $6) AND NOT EXISTS(SELECT 1 FROM drivers d WHERE d.cdl_file_id=f.id) AND NOT EXISTS(SELECT 1 FROM trucks t WHERE t.irp_file_id=f.id))
+ ))`, id, HasPermission(user, "drivers.read") && HasPermission(user, "drivers.documents.read"), HasPermission(user, "trucks.read") && HasPermission(user, "trucks.documents.read"), user.ID, kind, user.Administrator).Scan(&allowed)
+	return allowed, err
+}
+func (r *FleetRepository) CanAttachFile(ctx context.Context, id string, user AuthUser, kind string) (bool, error) {
+	return NewFileRepository(r.pool).CanAccessFile(ctx, id, user, kind)
 }

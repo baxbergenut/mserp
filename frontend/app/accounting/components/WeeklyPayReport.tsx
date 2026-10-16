@@ -3,28 +3,25 @@ import type { ReactNode } from "react";
 
 import { PageHeader } from "@/app/components/PageHeader";
 
-import { RememberedDetails } from "@/app/components/RememberedDetails";
+
 
 import { useViewState } from "@/app/lib/viewMemory";
 
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Banknote,
   CalendarDays,
-  ChevronDown,
   CircleDollarSign,
   Headset,
-  ReceiptText,
   Route,
-  Search,
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { fetchFinancialDashboard } from "@/app/lib/api";
-import type { FinancialDashboard } from "@/app/lib/types";
+import { fetchDispatcherPay, type DispatcherPayReport } from "@/app/lib/api";
 
-type PayReportKind = "driver" | "dispatcher";
+
+
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -32,16 +29,7 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-const preciseMoney = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
-const number = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 0,
-});
 
 function localDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -62,17 +50,6 @@ function weekLabel(value: string) {
   })}`;
 }
 
-function payPlan(
-  type: "cpm" | "gross_percentage",
-  rate: number,
-  isOwnerOperator: boolean,
-) {
-  return type === "cpm"
-    ? `${preciseMoney.format(rate)} / mile`
-    : `${rate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% ${
-        isOwnerOperator ? "gross share" : "of gross"
-      }`;
-}
 
 function KpiCard({
   label,
@@ -123,179 +100,7 @@ function LoadingReport() {
   );
 }
 
-function DriverPayReport({ dashboard, controls }: { dashboard: FinancialDashboard; controls: ReactNode }) {
-  const [search, setSearch] = useViewState("WeeklyPayReport:search", "");
-  const drivers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return dashboard.drivers;
-    return dashboard.drivers.filter(
-      (driver) =>
-        driver.driverName.toLowerCase().includes(query) ||
-        driver.loadNumbers.some((load) => load.toLowerCase().includes(query)),
-    );
-  }, [dashboard.drivers, search]);
-  const totalSettlements = dashboard.drivers.reduce(
-    (sum, driver) => sum + driver.settlement,
-    0,
-  );
-  const totalContribution = dashboard.drivers.reduce(
-    (sum, driver) => sum + driver.contribution,
-    0,
-  );
-
-  return (
-    <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="Pay / gross shares"
-          value={money.format(dashboard.totals.driverPay)}
-          detail="Before owner-operator deductions"
-          icon={Banknote}
-          tone="text-blue-400"
-        />
-        <KpiCard
-          label="Net settlements"
-          value={money.format(totalSettlements)}
-          detail="After applicable fuel and toll deductions"
-          icon={ReceiptText}
-          tone="text-emerald-400"
-        />
-        <KpiCard
-          label="Company contribution"
-          value={money.format(totalContribution)}
-          detail="After driver-specific pay and company costs"
-          icon={CircleDollarSign}
-          tone={totalContribution >= 0 ? "text-emerald-400" : "text-red-400"}
-        />
-        <KpiCard
-          label="Miles"
-          value={number.format(dashboard.totals.miles)}
-          detail={`${dashboard.totals.loadCount.toLocaleString()} qualified loads`}
-          icon={Route}
-          tone="text-violet-400"
-        />
-      </div>
-      {controls}
-
-      <section className="overflow-hidden rounded-xl border border-zinc-800/60 bg-card">
-        <div className="flex flex-col gap-3 border-b border-zinc-800/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <div>
-            <div className="flex items-center gap-2">
-              <UserRound className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-medium text-zinc-200">Weekly driver pay</h2>
-              <span className="rounded-full bg-zinc-800/70 px-2 py-0.5 text-[10px] font-medium text-zinc-500">
-                {drivers.length}
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] text-zinc-600">
-              Percentage owner-operators pay their fuel and tolls; CPM owner-operators follow the company-paid model.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 focus-within:border-zinc-600">
-            <Search className="h-3.5 w-3.5 text-zinc-600" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Driver or load…"
-              className="w-40 bg-transparent text-[12px] text-zinc-300 outline-none placeholder:text-zinc-700"
-            />
-          </label>
-        </div>
-
-        {drivers.length === 0 ? (
-          <div className="px-5 py-12 text-center text-[12px] text-zinc-600">
-            {search ? "No drivers match this search." : "No driver activity in this week."}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-left text-[12px]">
-              <thead>
-                <tr className="border-b border-zinc-800/50 text-zinc-600">
-                  <th className="px-4 py-3 font-medium sm:px-5">Driver / loads</th>
-                  <th className="px-4 py-3 font-medium">Pay plan</th>
-                  <th className="px-4 py-3 text-right font-medium">Gross</th>
-                  <th className="px-4 py-3 text-right font-medium">Pay / share</th>
-                  <th className="px-4 py-3 text-right font-medium">Fuel</th>
-                  <th className="px-4 py-3 text-right font-medium">Tolls</th>
-                  <th className="px-4 py-3 text-right font-medium">Net settlement</th>
-                  <th className="px-4 py-3 text-right font-medium">Miles</th>
-                  <th className="px-4 py-3 text-right font-medium">RPM</th>
-                  <th className="px-4 py-3 text-right font-medium sm:pr-5">Company contribution</th>
-                </tr>
-              </thead>
-              <tbody>
-                {drivers.map((driver) => (
-                  <tr
-                    key={driver.driverId}
-                    className="border-b border-zinc-900/80 text-zinc-400 transition-colors last:border-0 hover:bg-zinc-800/15"
-                  >
-                    <td className="px-4 py-3 sm:px-5">
-                      <div className="flex items-center gap-2 font-medium text-zinc-200">
-                        <span>{driver.driverName}</span>
-                        {driver.isOwnerOperator && (
-                          <span className="rounded-full border border-blue-500/20 bg-blue-500/5 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-blue-400">
-                            Owner-op
-                          </span>
-                        )}
-                      </div>
-                      <RememberedDetails memoryKey={`driver-loads:${driver.driverName}`} className="group mt-1">
-                        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400">
-                          <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
-                          {driver.loadCount.toLocaleString()} load{driver.loadCount === 1 ? "" : "s"}
-                        </summary>
-                        <div className="mt-2 flex max-w-72 flex-wrap gap-1">
-                          {driver.loadNumbers.map((load) => (
-                            <span
-                              key={load}
-                              className="rounded border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
-                            >
-                              {load}
-                            </span>
-                          ))}
-                        </div>
-                      </RememberedDetails>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500">
-                      {payPlan(driver.payType, driver.payRate, driver.isOwnerOperator)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-zinc-200">{money.format(driver.gross)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">{money.format(driver.pay)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">
-                      <div>{money.format(driver.fuel)}</div>
-                      {driver.deductsExpenses && driver.fuel > 0 && <div className="mt-0.5 text-[9px] text-blue-500">deducted</div>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">
-                      <div>{money.format(driver.tolls)}</div>
-                      {driver.deductsExpenses && driver.tolls > 0 && <div className="mt-0.5 text-[9px] text-blue-500">deducted</div>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-medium tabular-nums text-zinc-200">{money.format(driver.settlement)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">{number.format(driver.miles)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">{preciseMoney.format(driver.revenuePerMile)}</td>
-                    <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums sm:pr-5 ${driver.contribution >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {money.format(driver.contribution)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <RememberedDetails memoryKey="pay-explanation" className="group rounded-xl border border-zinc-800/60 bg-zinc-950/20 px-4 py-3">
-        <summary className="cursor-pointer list-none text-[11px] font-medium text-zinc-400">How driver pay is calculated</summary>
-        <div className="mt-3 grid gap-2 text-[11px] leading-relaxed text-zinc-600 sm:grid-cols-2">
-          <p><span className="text-zinc-400">Driver pay:</span> {dashboard.methodology.driverPay}</p>
-          <p><span className="text-zinc-400">Week:</span> {dashboard.methodology.week}</p>
-          <p><span className="text-zinc-400">Fuel:</span> {dashboard.methodology.fuel}</p>
-          <p><span className="text-zinc-400">Tolls:</span> {dashboard.methodology.tolls}</p>
-        </div>
-      </RememberedDetails>
-    </>
-  );
-}
-
-function DispatcherPayReport({ dashboard, controls }: { dashboard: FinancialDashboard; controls: ReactNode }) {
+function DispatcherPayReport({ dashboard, controls }: { dashboard: DispatcherPayReport; controls: ReactNode }) {
   const configured = dashboard.dispatchers.filter((dispatcher) => dispatcher.pay != null);
   const totalPay = configured.reduce((sum, dispatcher) => sum + (dispatcher.pay ?? 0), 0);
   const totalGross = dashboard.dispatchers.reduce((sum, dispatcher) => sum + dispatcher.gross, 0);
@@ -369,16 +174,16 @@ function DispatcherPayReport({ dashboard, controls }: { dashboard: FinancialDash
   );
 }
 
-export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
+export function WeeklyPayReport() {
   const [weekStart, setWeekStart] = useViewState("WeeklyPayReport:weekStart", "");
   const initialWeek = useRef(weekStart);
-  const [dashboard, setDashboard] = useState<FinancialDashboard | null>(null);
+  const [dashboard, setDashboard] = useState<DispatcherPayReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    fetchFinancialDashboard({ weekStart: initialWeek.current || undefined })
+    fetchDispatcherPay({ weekStart: initialWeek.current || undefined })
       .then((result) => {
         if (cancelled) return;
         setDashboard(result);
@@ -403,7 +208,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
     setWeekStart(value);
     setIsLoading(true);
     try {
-      const result = await fetchFinancialDashboard({ weekStart: value });
+      const result = await fetchDispatcherPay({ weekStart: value });
       setDashboard(result);
       setError("");
     } catch (reason) {
@@ -414,7 +219,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
     }
   };
 
-  const isDriver = kind === "driver";
+  const isDriver = false;
   const controls = <div className="flex flex-wrap items-center gap-2">{dashboard && dashboard.availableWeeks.length > 0 && (
           <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
             <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
@@ -448,7 +253,7 @@ export function WeeklyPayReport({ kind }: { kind: PayReportKind }) {
             <CalendarDays className="h-3.5 w-3.5" />
             {dashboard.period.dateFrom ? `${weekLabel(dashboard.period.dateFrom)} · Monday–Sunday` : "No qualifying report weeks yet"}
           </div>
-          {isDriver ? <DriverPayReport dashboard={dashboard} controls={controls} /> : <DispatcherPayReport dashboard={dashboard} controls={controls} />}
+          <DispatcherPayReport dashboard={dashboard} controls={controls} />
         </div>
       ) : null}
     </div>

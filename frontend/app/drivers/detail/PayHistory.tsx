@@ -2,7 +2,7 @@
 
 import { useViewState } from "@/app/lib/viewMemory";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { fetchDriverPayHistory, fetchSettlementHistory } from "@/app/lib/api";
 import type { DriverPayHistoryRow, PaginatedResponse, SettlementEvent } from "@/app/lib/types";
 import { ErrorBanner, TablePagination } from "@/app/components/management/ManagementUI";

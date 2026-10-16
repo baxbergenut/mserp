@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { fetchDriverTeam } from "@/app/lib/api";
 import type { Driver, DriverTeam } from "@/app/lib/types";
 import { ErrorBanner } from "@/app/components/management/ManagementUI";

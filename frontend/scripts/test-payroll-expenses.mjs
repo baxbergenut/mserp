@@ -44,7 +44,7 @@ try {
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/api/**', async route => {
-      const request = route.request(), path = new URL(request.url()).pathname.slice(4);
+      const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
       if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
       if (path === '/expenses/expense') {
         if (request.method() === 'PUT') {
@@ -69,7 +69,7 @@ try {
       }
       if (path.endsWith('/undo-system')) { driver.loads = beforeSource; return route.fulfill({ status: 204 }); }
       const fixtures = {
-        '/auth/session': { user: { id: 'user', username: 'Test', expenseCategoryAccess:[{categoryId:'category',canView:true,canEdit:writable,canCreate:true}], permissions: ['payroll.read', 'payroll.write', 'payroll.finalize', 'fleet.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' },
+        '/auth/session': { user: { id: 'user', username: 'Test', expenseCategoryAccess:[{categoryId:'category',canView:true,canEdit:writable,canCreate:true}], permissions: ['driver_pay.read','investor_pay.read','dispatcher_pay.read', 'driver_pay.edit','investor_pay.edit', 'driver_pay.finalize','driver_pay.reopen','investor_pay.finalize','investor_pay.reopen', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' },
         '/driver-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/investor-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/tasks/count': { count: 0 },

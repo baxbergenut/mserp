@@ -1,4 +1,5 @@
 "use client";
+import { usePermissions } from "../lib/access";
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
@@ -18,6 +19,7 @@ import { controlClass, TablePagination } from "../components/management/Manageme
 import { LoadsTable } from "./LoadsTable";
 
 export default function LoadsPage() {
+  const canSync=usePermissions().includes("loads.sync");
   const [loads, setLoads] = useState<Load[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useViewState("page:search", "");
@@ -144,6 +146,7 @@ export default function LoadsPage() {
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><button
           type="button"
+          hidden={!canSync}
           onClick={() => void handleSync()}
           disabled={isSyncing}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3.5 py-2 text-[13px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800/70 hover:text-zinc-100 disabled:cursor-wait disabled:opacity-60"

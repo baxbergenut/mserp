@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
@@ -23,7 +23,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
-import { usePermissions, pagePermission } from "@/app/lib/access";
+import { usePermissions, pagePermission, canVisitPage } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
 import { useSidebarCounts } from "./useSidebarCounts";
 
@@ -87,8 +87,8 @@ export function Sidebar() {
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
-          const children = "children" in item ? item.children.filter(child => permissions.includes(pagePermission(child.href)) && (child.href === "/maintenance" ? maintenanceAccess?.canView || maintenanceAccess?.canCreate : child.href === "/fleet/preventative-maintenance" ? maintenanceAccess?.canView : true)) : [];
-          if ("children" in item ? children.length === 0 : pagePermission(item.href) && !permissions.includes(pagePermission(item.href))) return null;
+          const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/maintenance" ? maintenanceAccess?.canView || maintenanceAccess?.canCreate : child.href === "/fleet/preventative-maintenance" ? maintenanceAccess?.canView : true)) : [];
+          if ("children" in item ? children.length === 0 : pagePermission(item.href) && !canVisitPage(permissions,item.href)) return null;
           const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));

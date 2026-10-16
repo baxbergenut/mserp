@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -129,7 +131,20 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		h.snapshotRevision = revision
 		h.snapshotAt = time.Now()
 	}
-	return "event: " + h.snapshotEvent + "\ndata: " + string(h.snapshotBody) + "\n\n"
+	body := h.snapshotBody
+	if h.snapshotEvent == "board" {
+		// Project per subscriber, never cache a user's projected response.
+		var value any
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		if decoder.Decode(&value) != nil {
+			return "event: " + fallback + "\ndata: {}\n\n"
+		}
+		session, _ := authSessionFromContext(ctx)
+		projectFields(value, session.User, "/driver-board/events")
+		body, _ = json.Marshal(value)
+	}
+	return "event: " + h.snapshotEvent + "\ndata: " + string(body) + "\n\n"
 }
 func (h *taskEvents) listen(ctx context.Context) {
 	delay := time.Second
@@ -244,7 +259,7 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 				return
 			}
 			if changed {
-				if !send(h.frame(r.Context(), "changed")) {
+				if !send(h.frame(context.WithValue(r.Context(), authContextKey{}, session), "changed")) {
 					return
 				}
 			} else if presenceChanged {

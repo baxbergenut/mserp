@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { usePermissions, pageActionPermission, canCreateDriver } from "../../lib/access";
 import type { FormEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
@@ -46,7 +48,9 @@ export function ManagementHeader({
   secondaryAction?: ReactNode;
   hideTitle?: boolean;
 }) {
-  const action = actionLabel && onAction ? <button
+  const path=usePathname(); const permissions=usePermissions(); const required=pageActionPermission(path,"create");
+  const allowed=!required || (permissions.includes(required) && (required!=="drivers.create" || canCreateDriver(permissions)));
+  const action = allowed && actionLabel && onAction ? <button
     type="button"
     onClick={onAction}
     className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
@@ -367,15 +371,19 @@ export function StatusBadge({ active }: { active: boolean }) {
 }
 
 export function RowActions({
+  permissionArea,
   onEdit,
   onDelete,
 }: {
+  permissionArea?: string;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
+  const path=usePathname();const permissions=usePermissions();
+  const can=(action:"edit"|"delete")=>{const key=permissionArea?permissionArea+"."+action:pageActionPermission(path,action);return !key||permissions.includes(key);};
   return (
     <div className="flex justify-end gap-1">
-      {onEdit && <button
+      {can("edit") && onEdit && <button
         type="button"
         onClick={onEdit}
         className="rounded-md p-1.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-zinc-200"
@@ -383,7 +391,7 @@ export function RowActions({
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>}
-      {onDelete && <button
+      {can("delete") && onDelete && <button
         type="button"
         onClick={onDelete}
         className="rounded-md p-1.5 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"

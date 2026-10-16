@@ -1,16 +1,17 @@
 "use client";
+import type { DriverOption, InvestorOption } from "@/app/lib/types";
 
 import { useEffect, useState } from "react";
-import { fetchDrivers, fetchInvestors, updateTruck, uploadIRPFile } from "@/app/lib/api";
-import type { Driver, Investor, Truck } from "@/app/lib/types";
+import { fetchDriverOptions, fetchInvestorOptions, updateTruck, uploadIRPFile } from "@/app/lib/api";
+import type { Truck } from "@/app/lib/types";
 import { Modal, ErrorBanner } from "@/app/components/management/ManagementUI";
 import { TruckForm, truckToInput } from "../TruckForm";
 import { renderPDFPages } from "@/app/lib/pdf";
 
 export function TruckEditor({ truck, onClose, onSaved }: { truck: Truck; onClose: () => void; onSaved: (truck: Truck) => void }) {
   const [form, setForm] = useState(() => truckToInput(truck));
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -18,7 +19,7 @@ export function TruckEditor({ truck, onClose, onSaved }: { truck: Truck; onClose
   const [error, setError] = useState("");
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchDrivers(), fetchInvestors()]).then(([d, i]) => {
+    Promise.all([fetchDriverOptions(), fetchInvestorOptions()]).then(([d, i]) => {
       if (!cancelled) { setDrivers(d); setInvestors(i); setLoading(false); }
     }).catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };

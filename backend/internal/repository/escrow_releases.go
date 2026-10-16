@@ -60,6 +60,16 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 	if version != input.EscrowVersion {
 		return ErrEscrowReleaseConflict
 	}
+	if input.Cancelled && input.Version > 0 {
+		var savedWeek, savedAmount string
+		if err = tx.QueryRow(ctx, `SELECT week_start::text,amount::text FROM driver_escrow_releases WHERE id=$1 AND escrow_id=$2 AND version=$3 FOR UPDATE`, input.ID, escrow, input.Version).Scan(&savedWeek, &savedAmount); err != nil {
+			return ErrEscrowReleaseConflict
+		}
+		savedCents, _ := chargeCents(savedAmount)
+		if savedWeek != input.WeekStart || savedCents != amount {
+			return chargeInvalid("Cancellation cannot change the release amount or week")
+		}
+	}
 	if err = assertPayrollOpen(ctx, tx, driver, input.WeekStart); err != nil {
 		return err
 	}

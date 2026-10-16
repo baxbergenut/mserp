@@ -38,8 +38,8 @@ func registerFleetSyncRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	}
 	allowed := func(w http.ResponseWriter, r *http.Request, admin bool) (repository.AuthSession, bool) {
 		s, ok := authSessionFromContext(r.Context())
-		if !ok || !slices.Contains(s.User.Permissions, "fleet.read") || (admin && !s.User.Administrator) {
-			writeAPIError(w, 403, "Fleet read permission is required; reconciliation is restricted to Administrators")
+		if !ok || (!slices.Contains(s.User.Permissions, "trucks.read") || !slices.Contains(s.User.Permissions, "drivers.read")) || (admin && !s.User.Administrator) {
+			writeAPIError(w, 403, "Drivers and Trucks view permissions are required; reconciliation is restricted to Administrators")
 			return s, false
 		}
 		return s, true

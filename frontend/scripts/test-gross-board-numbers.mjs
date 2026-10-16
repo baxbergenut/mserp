@@ -26,7 +26,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const req = route.request(), url = new URL(req.url()), path = url.pathname.slice(4);
+    const req = route.request(), url = new URL(req.url()), path = url.pathname.replace('/lookups/','/').slice(4);
     if (req.method() === 'PUT') {
       const edits = req.postDataJSON().entries;
       if (edits.some(e => fields.some(f => e[f] && !/^-?\d{1,10}(\.\d{1,2})?$/.test(e[f])))) {

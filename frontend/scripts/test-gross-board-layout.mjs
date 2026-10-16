@@ -29,7 +29,7 @@ async function fixtures(page) {
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date('2026-10-16T14:00:00Z'));
   await page.route('**/api/**', async route => {
-    const req = route.request(), url = new URL(req.url()), path = url.pathname.slice(4);
+    const req = route.request(), url = new URL(req.url()), path = url.pathname.replace('/lookups/','/').slice(4);
     if (req.method() === 'PUT' && path === '/gross-board') {
       const committed = req.postDataJSON().entries.map(e => ({ ...e, version: e.version + 1 }));
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -37,7 +37,7 @@ async function fixtures(page) {
       return route.fulfill({ json: committed });
     }
     const data = {
-      '/auth/session': { user: { id: 'layout', username: 'Layout', permissions: ['board.read', 'board.write', 'fleet.read', 'loads.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'layout', username: 'Layout', permissions: ['board.read', 'board.write', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'loads.read'] }, csrfToken: 'fixture' },
       '/gross-board': { weekStart: url.searchParams.get('weekStart') ?? week, drivers, entries, balances: [] },
       '/gross-board/loads': [], '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };

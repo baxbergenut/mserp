@@ -32,7 +32,7 @@ try {
   await page.clock.setFixedTime(new Date('2026-10-13T12:00:00Z'));
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.route('**/api/**', async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.slice(4);
+    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace('/lookups/','/').slice(4);
     if (request.method() === 'PUT') {
       const input = request.postDataJSON();
       const committed = input.entries.map(e => ({ ...e, version: e.version + 1 }));
@@ -42,7 +42,7 @@ try {
       return route.fulfill({ json: committed });
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'grid-user', username: 'Grid Test', theme: 'original', permissions: ['driver_board.read', 'board.read', 'board.write', 'loads.read', 'fleet.read', ...(readOnly ? [] : ['driver_board.write'])] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'grid-user', username: 'Grid Test', theme: 'original', permissions: ['driver_board.read', 'board.read', 'board.write', 'loads.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['driver_board.write'])] }, csrfToken: 'fixture' },
       '/driver-board': { weekStart: week, drivers, entries: statusEntries, grossEntries, loads: Object.fromEntries(drivers.map(d => [d.id, emptyLoads])), eld: { configured: false, unmatched: 0, ambiguous: 0, invalid: 0 } },
       '/gross-board': { weekStart: url.searchParams.get('weekStart') ?? week, drivers, entries: grossEntries, balances: [] },
       '/gross-board/loads': [],

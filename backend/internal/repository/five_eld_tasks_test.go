@@ -116,10 +116,10 @@ func TestFiveELDTruckTasksDatabase(t *testing.T) {
 				t.Fatal("second assignee must share the same task", e)
 			}
 			board := &CustomTaskRepository{pool: pool}
-			if n, e := board.OpenCount(viewer, true); e != nil || n != 1 {
+			if n, e := board.OpenCount(viewer, false, true); e != nil || n != 1 {
 				t.Fatal("shared task count", n, e)
 			}
-			if n, e := board.OpenCount(viewer, false); e != nil || n != 0 {
+			if n, e := board.OpenCount(viewer, true, false); e != nil || n != 0 {
 				t.Fatal("fleet permission boundary", n, e)
 			}
 			exec(`UPDATE system_task_assignments SET assignee_id=$1,assignee_ids=ARRAY[$1::uuid] WHERE kind='five_eld_truck'`, other)

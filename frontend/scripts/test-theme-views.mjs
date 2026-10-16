@@ -23,7 +23,7 @@ try {
   const preferences = { viewer: 'default', teammate: 'default', admin: 'default' };
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const path = new URL(route.request().url()).pathname.slice(4);
+    const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
     if (path === '/auth/session') return route.fulfill({ json: { user: { id: user, username: user, theme: preferences[user], permissions: user === 'admin' ? ['access.manage'] : [] }, csrfToken: 'test' } });
     if (path === '/auth/theme') {
       if (failSave) return route.fulfill({ status: 500, json: { error: 'Could not save theme' } });

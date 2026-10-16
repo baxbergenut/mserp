@@ -1,10 +1,12 @@
 "use client";
+import type { DriverOption, InvestorOption } from "@/app/lib/types";
+import { usePermissions } from "../lib/access";
 
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 
 import { ExternalLink, FileText, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
-import type { Driver, Investor, Truck, TruckInput } from "../lib/types";
+import type { Truck, TruckInput } from "../lib/types";
 import { fileDownloadUrl } from "../lib/api";
 import {
   controlClass,
@@ -57,7 +59,7 @@ export function truckToInput(truck: Truck): TruckInput {
     driverId: truck.driverId,
     active: truck.active,
     notes: truck.notes ?? "",
-    irpFileId: truck.irpFileId,
+    irpFileId: truck.irpFileId ?? null,
   };
 }
 
@@ -73,8 +75,8 @@ export function TruckForm({
   setup = false,
 }: {
   value: TruckInput;
-  drivers: Driver[];
-  investors: Investor[];
+  drivers: DriverOption[];
+  investors: InvestorOption[];
   onChange: (value: TruckInput) => void;
   irpFileName?: string | null;
   isUploadingIRP?: boolean;
@@ -87,9 +89,10 @@ export function TruckForm({
   const numberOrNull = (raw: string) => (raw === "" ? null : Number(raw));
   const today = new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
 
+  const permissions=usePermissions();
   return (
     <div className="space-y-6">
-      {!setup && <FormSection title="IRP cab card">
+      {!setup && permissions.includes("trucks.documents.read") && <fieldset disabled={!permissions.includes("trucks.documents.edit")}><FormSection title="IRP cab card">
         <div className="sm:col-span-2">
           <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/[0.04] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -160,7 +163,7 @@ export function TruckForm({
             )}
           </div>
         </div>
-      </FormSection>}
+      </FormSection></fieldset>}
 
       <FormSection title="Truck profile">
         <Field label="Unit number">
@@ -214,7 +217,7 @@ export function TruckForm({
             {investors.filter((i) => (i.active || i.id === value.ownerId) && (!i.driverId || !drivers.some(d => d.id === i.driverId) || i.id === value.ownerId)).map((i) => (
               <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
             ))}
-            <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
+            <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`} disabled={!investors.some(i=>i.driverId===d.id) && !permissions.includes("investors.create")}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
           </select>
         </Field>
         <Field label="Ownership effective date">

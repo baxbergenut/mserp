@@ -1,8 +1,8 @@
-import type { ExpenseInput, Investor, Truck } from "../lib/types";
+import type { ExpenseInput, InvestorOption, TruckOption } from "../lib/types";
 import { expenseResponsibility } from "./assignments";
 
 export function ExpenseResponsibilitySelect({ value, trucks, owners, onChange, className, label = "Who will cover" }: {
-  value: ExpenseInput; trucks: Truck[]; owners: Investor[]; onChange: (value: ExpenseInput) => void; className: string; label?: string;
+  value: ExpenseInput; trucks: TruckOption[]; owners: InvestorOption[]; onChange: (value: ExpenseInput) => void; className: string; label?: string;
 }) {
   const { truck, owner, privatelyOwned, driverOwnsTruck } = expenseResponsibility(value, trucks, owners);
   const displayedOwner = value.coveredBy === "Truck Owner" && value.ownerId ? owners.find(item => item.id === value.ownerId) : owner;

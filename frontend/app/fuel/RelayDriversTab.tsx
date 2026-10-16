@@ -3,7 +3,7 @@
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { RelayBulkActions } from "./RelayBulkActions";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ExternalLink, Plus, RefreshCw } from "lucide-react";
 import { changeRelayDriver, fetchRelayDrivers, linkRelayRosterDriver, refreshRelayDrivers, verifyRelayDriverOperation } from "../lib/api";
@@ -21,8 +21,12 @@ const compactSelectClass = controlClass.replace("w-full", "w-auto max-w-full");
 
 export function RelayDriversTab() {
   const permissions = usePermissions();
-  const canWrite = permissions.includes("fuel.drivers.write");
-  const canProfile = permissions.includes("fleet.read");
+  const canEdit = permissions.includes("fuel.drivers.edit");
+  const canDelete = permissions.includes("fuel.drivers.delete");
+  const canCreate = permissions.includes("fuel.drivers.create");
+  const canWrite = canEdit || canDelete;
+  const allowed = (kind: string) => kind === "verify" ? permissions.includes("fuel.drivers.recover") : kind === "link" ? permissions.includes("tasks.review") : kind === "add" ? canCreate : kind === "remove" ? canDelete : canEdit;
+  const canProfile = permissions.includes("drivers.read");
   const [data, setData] = useState<RelayDriverList | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(0);
@@ -69,6 +73,7 @@ export function RelayDriversTab() {
     finally { await load(); saving.current = false; setBusy(false); }
   }
   function open(kind: RelayDriverAction | "link", entry?: RelayRosterEntry) {
+    if (!allowed(kind)) return;
     setError(""); setReviewed(false);
     const local = data?.drivers.find(d => d.id === entry?.driverId);
     const relayTruck = entry?.driver.data_fields?.find(field => field.field_name === "Truck #")?.field_value;
@@ -92,7 +97,7 @@ export function RelayDriversTab() {
   const blockedEntry = !!entry && !!data?.operations.some(op => op.relayDriverId === entry.driver.id);
 
   function submit() {
-    if (!dialog) return;
+    if (!dialog || !allowed(dialog.kind)) return;
     if (dialog.kind === "verify") { if (!reviewed) return; void run(() => verifyRelayDriverOperation(dialog.operation.id), "Relay result acknowledged. Review the refreshed roster before making another change."); return; }
     if (dialog.kind === "link") { if (entry && form.driverId) void run(() => linkRelayRosterDriver(entry.driver.id, form.driverId), "Driver linked; unassigned historical fuel transactions updated."); return; }
     if (blockedEntry) { setError("Verify the pending Relay request before making another change."); return; }
@@ -113,12 +118,12 @@ export function RelayDriversTab() {
     {data && !data.configured && <ErrorBanner message="Relay driver management is not configured on the server." />}
     {data?.configured && !data.refreshedAt && <p className="text-[13px] text-zinc-400">Select Refresh Relay to load the current roster, including ELD drivers without a policy.</p>}
     {data?.refreshedAt && <p className="text-[12px] text-zinc-500">Relay checked {new Date(data.refreshedAt).toLocaleString()}{now - Date.parse(data.refreshedAt) > 300000 ? " · Refresh Relay for the latest portal changes." : ""}</p>}
-    {data?.operations.map(op => <div key={op.id} role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {op.action}: {items.find(e => e.driver.id === op.relayDriverId)?.driverName || data.drivers.find(d => d.id === op.driverId)?.name || op.relayDriverId || "driver"}. Verify the result in Relay before retrying.</span>{canWrite && <button className="ui-button" disabled={busy || now - Date.parse(op.createdAt) < 120000} onClick={() => { setError(""); setReviewed(false); setDialog({ kind: "verify", operation: op }); }}>Review result</button>}</div>)}
+    {data?.operations.map(op => <div key={op.id} role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {op.action}: {items.find(e => e.driver.id === op.relayDriverId)?.driverName || data.drivers.find(d => d.id === op.driverId)?.name || op.relayDriverId || "driver"}. Verify the result in Relay before retrying.</span>{permissions.includes("fuel.drivers.recover") && <button className="ui-button" disabled={busy || now - Date.parse(op.createdAt) < 120000} onClick={() => { setError(""); setReviewed(false); setDialog({ kind: "verify", operation: op }); }}>Review result</button>}</div>)}
     <div className="flex flex-wrap items-center gap-2">
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search driver, phone or Relay ID" />
 
 
-    <div className="ml-auto flex flex-wrap gap-2"><a href={portal} target="_blank" rel="noreferrer" className="ui-button"><ExternalLink className="h-4 w-4" />Relay portal</a><button className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshRelayDrivers, "Relay roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh Relay</button>{canWrite && <button className="ui-button ui-button-primary" disabled={busy || !data?.configured || !data.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add driver</button>}</div></div>
+    <div className="ml-auto flex flex-wrap gap-2"><a href={portal} target="_blank" rel="noreferrer" className="ui-button"><ExternalLink className="h-4 w-4" />Relay portal</a><button hidden={!permissions.includes("fuel.drivers.sync")} className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshRelayDrivers, "Relay roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh Relay</button>{canCreate && <button className="ui-button ui-button-primary" disabled={busy || !data?.configured || !data.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add driver</button>}</div></div>
     {canWrite && data && <RelayBulkActions data={data} entries={items.filter(e=>selected.includes(e.driver.id) && !e.pending)} onBusy={value=>{saving.current=value;setBusy(value);if(value)generation.current++}} onClear={()=>setSelected([])} onComplete={async ids=>{setSelected(current=>current.filter(id=>!ids.includes(id)));await load()}} />}
     <TableShell><table className="w-full min-w-[920px] text-left text-[13px]">
       <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{canWrite && <th className="px-3"><input type="checkbox" aria-label="Select drivers on this page" disabled={busy} checked={shown.some(e=>!e.pending) && shown.filter(e=>!e.pending).every(e=>selected.includes(e.driver.id))} onChange={event=>setSelected(current=>event.target.checked?Array.from(new Set([...current,...shown.filter(e=>!e.pending).map(e=>e.driver.id)])):current.filter(id=>!shown.some(e=>e.driver.id===id)))} /></th>}{["Driver", "Phone", "Policy", "Policy status", "Relay Driver ID", "Actions"].map(label => <th key={label} className="h-8 px-3 font-medium">{label === "Driver" ? <ColumnFilter label="Driver" active={!!status}><select aria-label="Driver status" className={compactSelectClass} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>{[["", "All drivers"], ["attention", "Needs attention"], ["terminated", "Terminated in Relay"], ["unlinked", "Unlinked"], ["no_policy", "No policy"], ["enabled", "Policy enabled"], ["disabled", "Policy disabled"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></ColumnFilter> : label === "Policy" ? <ColumnFilter label="Policy" active={!!policy}><select aria-label="Policy filter" className={compactSelectClass} value={policy} onChange={e => { setPolicy(e.target.value); setPage(1); }}><option value="">All policies</option>{data?.policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></ColumnFilter> : label}</th>)}</tr></thead>
@@ -129,7 +134,7 @@ export function RelayDriversTab() {
         <td className="px-3 py-1.5">{e.assignment?.policy_name || "—"}</td>
         <td className="whitespace-nowrap px-3 py-1.5"><span className={e.pending ? "text-amber-400" : e.assignment?.enabled ? "text-emerald-400" : "text-zinc-500"}>{e.pending ? "Unconfirmed" : e.assignment ? e.assignment.enabled ? "Enabled" : "Disabled" : "No policy"}</span></td>
         <td className="px-3 py-1.5 font-mono text-[12px] text-zinc-400" title={`API ID: ${e.driver.id}`}>{e.driver.integration_id || e.driver.id}</td>
-        <td className="px-3 py-1.5"><div className="flex justify-end gap-2">{!e.driverId && data?.canLink && <button className="ui-button" disabled={busy || e.pending} onClick={() => open("link", e)}>Link driver</button>}{canWrite && <select aria-label={`Actions for ${nameOf(e)}`} value="" disabled={busy || e.pending} className={compactSelectClass} onChange={event => { if (event.target.value) open(event.target.value as RelayDriverAction, e); }}><option value="">Manage…</option><option value="edit">Edit driver</option><option value="assign">Assign policy</option>{e.assignment && <><option value={e.assignment.enabled ? "disable" : "enable"}>{e.assignment.enabled ? "Disable policy" : "Enable policy"}</option><option value="unassign">Unassign policy</option></>}<option value="remove">Remove driver</option></select>}</div></td>
+        <td className="px-3 py-1.5"><div className="flex justify-end gap-2">{!e.driverId && data?.canLink && <button className="ui-button" disabled={busy || e.pending} onClick={() => open("link", e)}>Link driver</button>}{canWrite && <select aria-label={`Actions for ${nameOf(e)}`} value="" disabled={busy || e.pending} className={compactSelectClass} onChange={event => { if (event.target.value) open(event.target.value as RelayDriverAction, e); }}><option value="">Manage…</option>{canEdit && <><option value="edit">Edit driver</option><option value="assign">Assign policy</option>{e.assignment && <><option value={e.assignment.enabled ? "disable" : "enable"}>{e.assignment.enabled ? "Disable policy" : "Enable policy"}</option><option value="unassign">Unassign policy</option></>}</>}{canDelete && <option value="remove">Remove driver</option>}</select>}</div></td>
       </tr>)}</>}</tbody>
     </table></TableShell>
     <TablePagination page={currentPage} pageSize={pageSize} totalItems={filtered.length} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />

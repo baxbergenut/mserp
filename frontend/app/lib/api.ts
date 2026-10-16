@@ -245,6 +245,32 @@ export const syncFuelTransactions = () =>
   apiRequest<SyncFuelResult>("/jobs/sync-fuel", { method: "POST" });
 
 const reads = new ReadRequests();
+let accessGeneration = 0;
+let accessFingerprint = "";
+let currentPermissions: string[] = [];
+export class APIError extends Error {
+  constructor(message: string, public status: number, public code: string) { super(message); this.name = "APIError"; }
+}
+export function resetAccessRequests() { accessGeneration++; reads.clear(true); }
+function acceptSession(session: AuthSession) {
+  const fingerprint = JSON.stringify([session.user.id, session.user.accessRevision, session.user.permissions, session.user.expenseCategoryAccess]);
+  if (fingerprint !== accessFingerprint) {
+    resetAccessRequests(); accessFingerprint = fingerprint; currentPermissions = session.user.permissions;
+  }
+}
+function profilePayload(path: string, body: BodyInit | null | undefined) {
+  if (typeof body !== "string" || !/^\/(drivers|trucks|dispatchers)(\/[^/]+)?$/.test(path)) return body;
+  const data = JSON.parse(body) as Record<string, unknown>;
+  const omit = (permission: string, fields: string[]) => { if (!currentPermissions.includes(permission)) for (const key of fields) delete data[key]; };
+  if (path.startsWith("/drivers")) {
+    omit("driver_compensation.edit", ["payType", "payRate"]);
+    omit("drivers.private.edit", ["address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"]);
+    omit("drivers.documents.edit", ["cdlFileId"]); omit(path === "/drivers" ? "escrow.create" : "escrow.edit", ["escrowAmount"]);
+  }
+  if (path.startsWith("/trucks")) omit("trucks.documents.edit", ["irpFileId"]);
+  if (path.startsWith("/dispatchers")) omit("dispatcher_compensation.edit", ["payPercentage"]);
+  return JSON.stringify(data);
+}
 function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if ((init?.method ?? "GET").toUpperCase() === "GET" && !init?.headers) {
     return reads.read(path, signal => performRequest<T>(path, { ...init, signal }), init?.signal);
@@ -258,12 +284,14 @@ function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 }
 async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
+	const generation = accessGeneration;
 	const method = (init?.method ?? "GET").toUpperCase();
 	const needsCSRF = !["GET", "HEAD", "OPTIONS"].includes(method);
 	const response = await fetch(`${API_BASE}${path}`, {
 		cache: "no-store",
 		credentials: "include",
 		...init,
+    body: profilePayload(path, init?.body),
     headers: {
       ...(typeof init?.body === "string"
         ? { "Content-Type": "application/json" }
@@ -271,6 +299,9 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 		...(needsCSRF && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
 		...init?.headers,
     },
+  }).catch(error => {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw new APIError("Could not reach the server. Check your connection and try again.", 0, "network_error");
   });
 
 	if (!response.ok) {
@@ -283,19 +314,25 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 			const next = `${window.location.pathname}${window.location.search}`;
 			window.location.assign(`/login?next=${encodeURIComponent(next)}`);
 		}
-    throw new Error(
+    if (response.status === 403 && body?.code === "permission_denied" && typeof window !== "undefined") window.dispatchEvent(new Event("mserp:access-invalidated"));
+    throw new APIError(
       body?.error ??
         `Request failed (${response.status} ${response.statusText})`,
+      response.status, body?.code ?? "request_failed",
     );
   }
 
+  if (generation !== accessGeneration && !path.startsWith("/auth/")) throw new APIError("Access changed; refresh this view", 403, "access_changed");
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  const value = await response.json();
+  if (generation !== accessGeneration && !path.startsWith("/auth/")) throw new APIError("Access changed; refresh this view", 403, "access_changed");
+  return value as T;
 }
 
 export async function fetchAuthSession(): Promise<AuthSession> {
 	const session = await apiRequest<AuthSession>("/auth/session");
 	csrfToken = session.csrfToken;
+	acceptSession(session);
 	return session;
 }
 
@@ -305,6 +342,7 @@ export async function login(email: string, password: string, trustDevice = false
 		body: JSON.stringify({ email, password, trustDevice }),
 	});
 	csrfToken = session.csrfToken;
+	acceptSession(session);
 	return session;
 }
 
@@ -601,3 +639,11 @@ export const captureFleetScopeSnapshot = () => apiRequest<void>("/fleetscope-syn
 export const reviewFleetScopeRecord = (input: import("./types").FleetScopeReview) => apiRequest<void>("/fleetscope-sync/review", { method: "POST", body: JSON.stringify(input) });
 export const fleetScopeSyncAction = (action: "assignments" | "activate" | "pause" | "resume", input: { snapshotId: string; sourceRevision: number; version: number }) => apiRequest<void>(`/fleetscope-sync/${action}`, { method: "POST", body: JSON.stringify(input) });
 export const fleetScopeOperationAction = (id: string, action: "retry" | "supersede") => apiRequest<void>(`/fleetscope-sync/operations/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });
+
+export const fetchDriverOptions=()=>apiRequest<import("./types").DriverOption[]>("/lookups/drivers");
+export const fetchTruckOptions=()=>apiRequest<import("./types").TruckOption[]>("/lookups/trucks");
+export const fetchDispatcherOptions=()=>apiRequest<import("./types").DispatcherOption[]>("/lookups/dispatchers");
+export const fetchUpdaterOptions=()=>apiRequest<import("./types").UpdaterOption[]>("/lookups/updaters");
+export const fetchInvestorOptions=()=>apiRequest<import("./types").InvestorOption[]>("/lookups/investors");
+export type DispatcherPayReport=Pick<FinancialDashboard,"period"|"availableWeeks"|"dispatchers">;
+export const fetchDispatcherPay=(query:{weekStart?:string})=>apiRequest<DispatcherPayReport>(withQuery("/dispatcher-pay",query));

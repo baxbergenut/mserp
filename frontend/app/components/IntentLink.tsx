@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 

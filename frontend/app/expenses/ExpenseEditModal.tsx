@@ -1,9 +1,10 @@
 "use client";
+import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { useEffect, useState } from "react";
-import { fetchExpense, fetchExpensesPage, fetchMaintenancePage, fetchDrivers, fetchTrucks, fetchInvestors, updateExpense } from "@/app/lib/api";
-import { useExpenseCategoryAccess, usePermissions } from "@/app/lib/access";
+import { fetchExpense, fetchExpensesPage, fetchMaintenancePage, fetchDriverOptions, fetchTruckOptions, fetchInvestorOptions, updateExpense } from "@/app/lib/api";
+import { useExpenseCategoryAccess } from "@/app/lib/access";
 import type { Driver, Expense, ExpenseInput, ExpensePage, Investor, Truck } from "@/app/lib/types";
 import { ErrorBanner, Modal } from "@/app/components/management/ManagementUI";
 import { ExpenseForm, expenseToInput } from "./ExpenseForm";
@@ -11,17 +12,17 @@ import { applyExpenseCategoryRules } from "./catalog";
 
 export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => Promise<void> }) {
   const access = useExpenseCategoryAccess();
-  const permissions = usePermissions();
-  const [data, setData] = useState<{ expense: Expense; options: ExpensePage["options"]; drivers: Driver[]; trucks: Truck[]; owners: Investor[] } | null>(null);
+
+  const [data, setData] = useState<{ expense: Expense; options: ExpensePage["options"]; drivers: DriverOption[]; trucks: TruckOption[]; owners: InvestorOption[] } | null>(null);
   const [form, setForm] = useState<ExpenseInput | null>(null);
   const [maintenanceId,setMaintenanceId]=useState<string | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const canEdit = !!data && access.some(a => a.categoryId === data.expense.categoryId && a.canEdit);
-  const fleet = permissions.includes("fleet.read");
+  const fleet = true;
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchExpense(id), fetchExpensesPage({ page: 1, pageSize: 1 }), fleet ? fetchDrivers() : Promise.resolve([]), fleet ? fetchTrucks() : Promise.resolve([]), fleet ? fetchInvestors() : Promise.resolve([])])
+    Promise.all([fetchExpense(id), fetchExpensesPage({ page: 1, pageSize: 1 }), fleet ? fetchDriverOptions() : Promise.resolve([]), fleet ? fetchTruckOptions() : Promise.resolve([]), fleet ? fetchInvestorOptions() : Promise.resolve([])])
       .then(([expense, page, drivers, trucks, owners]) => {
         if (cancelled) return;
         // Preserve saved assignments when the user cannot browse the fleet directory.

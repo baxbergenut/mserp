@@ -99,6 +99,11 @@ func verifyEscrowReleases(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	input.Version = b.Releases[0].Version
 	input.EscrowVersion = b.Version
 	input.Cancelled = true
+	forged := input
+	forged.Amount = "1.00"
+	if err := repo.SaveRelease(ctx, escrow, forged, ""); err == nil {
+		t.Fatal("cancellation changed the amount")
+	}
 	if err := repo.SaveRelease(ctx, escrow, input, ""); err != nil {
 		t.Fatal(err)
 	}

@@ -20,10 +20,10 @@ try {
   const errors = [], extensionRequests = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const path = new URL(route.request().url()).pathname.slice(4);
+    const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
     if (path.includes('-extension')) extensionRequests.push(path);
     const fixture = {
-      '/auth/session': { user: { id: 'admin', username: 'Test Admin', theme: 'default', permissions: ['fleet.read', 'fleet.write', 'access.manage'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'admin', username: 'Test Admin', theme: 'default', permissions: ['drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'drivers.create','drivers.edit','drivers.delete','trucks.create','trucks.edit','trucks.delete','dispatchers.create','dispatchers.edit','dispatchers.delete','updaters.create','updaters.edit','updaters.delete','investors.create','investors.edit','drivers.private.read','drivers.private.edit','driver_compensation.read','driver_compensation.edit','dispatcher_compensation.read','dispatcher_compensation.edit','escrow.read','escrow.create','escrow.edit','escrow.delete', 'access.manage'] }, csrfToken: 'fixture' },
       [`/dispatchers/${id}`]: { id, fullName: 'Test Dispatcher', active: true, email: 'dispatcher@example.test', extension: 105, mainUpdaterId: null, afterHoursUpdaterId: null, payPercentage: null },
       '/dispatchers': { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 },
       '/drivers': [], '/updaters': [{ id, fullName: 'Roy', shift: 'main', extension: 106, version: 1, dispatcherNames: [] }],

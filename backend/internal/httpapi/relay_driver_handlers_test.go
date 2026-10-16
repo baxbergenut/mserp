@@ -7,9 +7,9 @@ import (
 
 func TestRelayDriverPermissions(t *testing.T) {
 	for _, v := range []struct{ method, path, permission string }{
-		{"GET", "/relay-drivers", "fuel.read"}, {"POST", "/relay-drivers/refresh", "fuel.read"},
-		{"POST", "/relay-drivers/change", "fuel.drivers.write"}, {"POST", "/relay-drivers/dr_one/link", "tasks.write"},
-		{"POST", "/relay-drivers/operations/id/verify", "fuel.drivers.write"},
+		{"GET", "/relay-drivers", "fuel.read"}, {"POST", "/relay-drivers/refresh", "fuel.drivers.sync"},
+		{"POST", "/relay-drivers/change", "authenticated"}, {"POST", "/relay-drivers/dr_one/link", "tasks.review"},
+		{"POST", "/relay-drivers/operations/id/verify", "fuel.drivers.recover"},
 	} {
 		if got := routePermission(v.method, v.path); got != v.permission {
 			t.Fatalf("%s: got %s", v.path, got)

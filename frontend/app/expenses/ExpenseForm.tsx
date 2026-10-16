@@ -1,4 +1,5 @@
 "use client";
+import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
 
 import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { expenseAssignment } from "./assignments";
@@ -6,7 +7,7 @@ import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown"
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
-import type { Driver, Expense, ExpensePage, ExpenseInput, Investor, Truck } from "../lib/types";
+import type { Expense, ExpensePage, ExpenseInput } from "../lib/types";
 import {
   controlClass,
   Field,
@@ -69,9 +70,9 @@ export function ExpenseForm({
   options: ExpensePage["options"];
   originalCategory?: { id: string; name: string };
   allowedCategoryIds: string[];
-  drivers: Driver[];
-  trucks: Truck[];
-  owners: Investor[];
+  drivers: DriverOption[];
+  trucks: TruckOption[];
+  owners: InvestorOption[];
   onChange: (value: ExpenseInput) => void;
 }) {
   const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);

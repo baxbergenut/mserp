@@ -1,4 +1,5 @@
 "use client";
+import { usePermissions } from "../lib/access";
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
@@ -56,6 +57,7 @@ function routeLabel(toll: Toll) {
 }
 
 export default function TollsPage() {
+  const canSync=usePermissions().includes("tolls.sync");
   const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "prepass" | "trucks">("page:activeTab", "overview");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [tolls, setTolls] = useState<Toll[]>([]);
@@ -110,7 +112,7 @@ export default function TollsPage() {
   const hasFilters = Boolean(search || unit || agency || postFrom || postTo);
 
   const handleSync = async () => {
-    if (isSyncing) return;
+    if (!canSync || isSyncing) return;
     setIsSyncing(true);
     setMessage(null);
     try {
@@ -140,7 +142,7 @@ export default function TollsPage() {
     setPage(1);
   };
 
-  const syncAction = (<ManagementHeader hideTitle
+  const syncAction = (canSync && <ManagementHeader hideTitle
         icon={Receipt}
         title="Tolls"
 

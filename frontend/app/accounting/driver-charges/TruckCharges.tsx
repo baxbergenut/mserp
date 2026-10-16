@@ -1,14 +1,15 @@
 "use client";
+import type { TruckOption, InvestorOption } from "@/app/lib/types";
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import type { ReactNode } from "react";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { History } from "lucide-react";
 import { usePermissions } from "@/app/lib/access";
 import { useEffect, useMemo, useState } from "react";
-import { fetchTruckCharges, fetchTrucks, fetchInvestors, saveTruckCharge, saveTruckCharges, saveTruckTerm } from "@/app/lib/api";
-import type { ChargeData, Investor, Truck, TruckChargeBulkResult, TruckChargeData, TruckChargePhase, TruckTerm } from "@/app/lib/types";
+import { fetchTruckCharges, fetchTruckOptions, fetchInvestorOptions, saveTruckCharge, saveTruckCharges, saveTruckTerm } from "@/app/lib/api";
+import type { ChargeData, TruckChargeBulkResult, TruckChargeData, TruckChargePhase, TruckTerm } from "@/app/lib/types";
 import { useViewState } from "@/app/lib/viewMemory";
 import { Modal, Field, controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";
 import { payButtonClass } from "../driver-pay/DriverCard";
@@ -17,13 +18,14 @@ import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import EffectiveWeekPicker from "./EffectiveWeekPicker";
 
 export function TruckCharges({ charges, onChanged, onCountChange, actions }: { actions?: ReactNode; charges: ChargeData; onCountChange: (count: number) => void; onChanged: () => Promise<void> }) {
-  const canWrite = usePermissions().includes("charges.write");
+  const permissions=usePermissions();
+ const canWrite=permissions.includes("charges.edit"),canTerms=permissions.includes("investor_terms.edit"),canReadTerms=permissions.includes("investor_terms.read");
   const [archived, setArchived] = useViewState("truckCharges:archived", false);
   const [typeFilter, setTypeFilter] = useViewState("truckCharges:typeFilter", "");
   const [data, setData] = useState<TruckChargeData | null>(null);
   const [loadedWeek, setLoadedWeek] = useState("");
-  const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [investors, setInvestors] = useState<Investor[]>([]);
+  const [trucks, setTrucks] = useState<TruckOption[]>([]);
+  const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [rememberedWeek, setWeek] = useViewState("truckCharges:week", charges.currentWeek);
   const week = validChargeWeek(rememberedWeek) ? rememberedWeek : charges.currentWeek;
   const [inclusion, setInclusion] = useViewState("truckCharges:inclusion", "all");
@@ -34,19 +36,19 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   const [term, setTerm] = useState<TruckTerm | null>(null);
   const [phase, setPhase] = useState<TruckChargePhase | null>(null);
   async function reload() {
-    const [d, t, i] = await Promise.all([fetchTruckCharges(week), fetchTrucks(), fetchInvestors()]);
+    const [d, t, i] = await Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]);
     setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week);
   }
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchTruckCharges(week), fetchTrucks(), fetchInvestors()]).then(([d, t, i]) => { if (!cancelled) { setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week); } }).catch(e => { if (!cancelled) setError(e.message); });
+    Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]).then(([d, t, i]) => { if (!cancelled) { setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week); } }).catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [week]);
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
       if (busy || term || phase || document.visibilityState === "hidden") return;
-      Promise.all([fetchTruckCharges(week), fetchTrucks(), fetchInvestors()]).then(([d, t, i]) => {
+      Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]).then(([d, t, i]) => {
         if (!cancelled) { setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week); }
       }).catch(e => { if (!cancelled) setError(e.message); });
     };
@@ -56,7 +58,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   }, [week, busy, term, phase]);
   async function run(action: () => Promise<void>) { setBusy(true); setError(""); setFailures([]); try { await action(); await reload(); await onChanged(); setTerm(null); setPhase(null); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save truck charges"); try { await reload(); await onChanged(); } catch { /* Keep the original save error visible. */ } } finally { setBusy(false); } }
   async function saveCells(updates: TruckChargePhase[]) {
-    if (!data || busy || !updates.length) return;
+    if (!canWrite || !data || busy || !updates.length) return;
     const previous = data;
     const key = (v: TruckChargePhase | TruckChargeBulkResult) => `${v.truckId}:${v.typeId}:${v.weekStart}`;
     const apply = (values: TruckChargePhase[]) => {
@@ -118,7 +120,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
     {!!failures.length && <ul aria-label="Truck charges that could not be saved" className="max-h-48 overflow-y-auto text-xs text-red-300">{failures.map(f => <li key={`${f.truckId}:${f.typeId}:${f.weekStart}`}>Truck {trucks.find(t => t.id === f.truckId)?.unitNumber ?? f.truckId}: {f.error}</li>)}</ul>}
     <div className="overflow-x-auto"><div className="flex min-w-max items-center gap-2"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} /><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button><div className="ml-auto">{actions}</div></div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a valid Monday.</p>}
-    {!data || loadedWeek !== week ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", "Settlement"].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label === "Truck" ? <ColumnFilter label="Truck" active={!!effectiveType || inclusion !== "all" || archived}><label className="block space-y-1">Charge type<select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label className="block space-y-1">Inclusion<select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select></label><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label></ColumnFilter> : label}</th>)}{types.map(type => {
+    {!data || loadedWeek !== week ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", ...(canReadTerms ? ["Settlement"] : [])].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label === "Truck" ? <ColumnFilter label="Truck" active={!!effectiveType || inclusion !== "all" || archived}><label className="block space-y-1">Charge type<select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label className="block space-y-1">Inclusion<select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select></label><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label></ColumnFilter> : label}</th>)}{types.map(type => {
       const targets = visible;
       const included = targets.filter(t => phaseIndex.current.get(`${t.id}:${type.id}`)?.included).length;
       const scope = search || inclusion !== "all" ? "visible trucks" : "all trucks";
@@ -134,12 +136,12 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         void saveCells(updates);
       }} />{scope}</label>}</th>;
     })}</tr></thead><tbody>{visible.map(t => {
-      const applicable = data.terms.filter(v => v.truckId === t.id && v.weekStart <= week).at(-1);
-      const exactTerm = data.terms.find(v => v.truckId === t.id && v.weekStart === week);
+      const applicable = (data.terms ?? []).filter(v => v.truckId === t.id && v.weekStart <= week).at(-1);
+      const exactTerm = (data.terms ?? []).find(v => v.truckId === t.id && v.weekStart === week);
       const ownerId = t.ownerId;
       const termsMismatch = !!applicable && applicable.ownerId !== ownerId;
       const ownTruck = !!t.driverId && investors.find(i => i.id === ownerId)?.driverId === t.driverId;
-      return <tr key={t.id} className="group h-8"><th scope="row" className="sticky left-0 z-10 h-8 whitespace-nowrap border-b border-r border-zinc-800 bg-zinc-950 px-3 py-0 font-medium"><Link className="text-blue-400" href={`/investors/detail?id=${ownerId}`}>{investors.find(i => i.id === ownerId)?.fullName ?? t.ownerName}</Link></th><td className="h-8 border-b border-zinc-800 px-3 py-0"><Link className="text-blue-400" href={`/trucks/detail?id=${t.id}`}>{t.unitNumber}</Link>{!t.active && <span className="ml-2 text-zinc-500">Inactive</span>}</td><td className="h-8 border-b border-zinc-800 px-3 py-0">{t.driverId ? <Link className="text-blue-400" href={`/drivers/detail?id=${t.driverId}`}>{t.driverName}</Link> : "Unassigned"}</td><td className="h-8 border-b border-zinc-800 px-3 py-0">{ownTruck && !applicable ? <span className="text-zinc-400" title="Truck fees appear on the owner’s Driver Pay statement">Driver tariff</span> : <button className={termsMismatch ? "text-amber-400" : "text-blue-400"} title={termsMismatch ? `Agreement names ${investors.find(i => i.id === applicable.ownerId)?.fullName ?? "a previous owner"}; review terms for ${t.ownerName}` : undefined} disabled={busy || !canWrite || !validWeek} onClick={() => { setError(""); setTerm({ truckId: t.id, ownerId, weekStart: week, sharePercent: applicable?.sharePercent ?? "", version: exactTerm?.version ?? 0 }); }}>{termsMismatch ? "Review terms" : applicable ? `${applicable.sharePercent}%` : "Set terms"}</button>}</td>{types.map(type => {
+      return <tr key={t.id} className="group h-8"><th scope="row" className="sticky left-0 z-10 h-8 whitespace-nowrap border-b border-r border-zinc-800 bg-zinc-950 px-3 py-0 font-medium"><Link className="text-blue-400" href={`/investors/detail?id=${ownerId}`}>{investors.find(i => i.id === ownerId)?.fullName ?? t.ownerName}</Link></th><td className="h-8 border-b border-zinc-800 px-3 py-0"><Link className="text-blue-400" href={`/trucks/detail?id=${t.id}`}>{t.unitNumber}</Link>{!t.active && <span className="ml-2 text-zinc-500">Inactive</span>}</td><td className="h-8 border-b border-zinc-800 px-3 py-0">{t.driverId ? <Link className="text-blue-400" href={`/drivers/detail?id=${t.driverId}`}>{t.driverName}</Link> : "Unassigned"}</td>{canReadTerms && <td className="h-8 border-b border-zinc-800 px-3 py-0">{ownTruck && !applicable ? <span className="text-zinc-400" title="Truck fees appear on the owner’s Driver Pay statement">Driver tariff</span> : <button className={termsMismatch ? "text-amber-400" : "text-blue-400"} title={termsMismatch ? `Agreement names ${investors.find(i => i.id === applicable.ownerId)?.fullName ?? "a previous owner"}; review terms for ${t.ownerName}` : undefined} hidden={!canReadTerms} disabled={busy || !canTerms || !validWeek} onClick={() => { setError(""); setTerm({ truckId: t.id, ownerId, weekStart: week, sharePercent: applicable?.sharePercent ?? "", version: exactTerm?.version ?? 0 }); }}>{termsMismatch ? "Review terms" : applicable ? `${applicable.sharePercent}%` : "Set terms"}</button>}</td>}{types.map(type => {
         const current = phaseIndex.current.get(`${t.id}:${type.id}`);
         const exact = phaseIndex.exact.get(`${t.id}:${type.id}`);
         const value = { truckId: t.id, typeId: type.id, weekStart: week, amount: current?.amount ?? type.amount, included: current?.included ?? false, version: exact?.version ?? 0, typeVersion: type.version };
@@ -148,7 +150,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         return <td key={type.id} className="h-8 border-b border-zinc-800 px-3 py-0"><div className="flex h-[31px] items-center gap-3"><input aria-label={`${t.unitNumber}, ${type.name}`} type="checkbox" className="h-4 w-4 accent-blue-500" checked={value.included} disabled={disabled || (type.archived && !value.included)} onChange={e => void saveCells([{ ...value, included: e.target.checked }])} />{options.length > 1 ? <select aria-label={`${t.unitNumber}, ${type.name} amount`} className={`${controlClass} !h-7 !w-28 !py-0 font-mono`} value={value.amount} disabled={disabled || !value.included || type.archived} onChange={e => void saveCells([{ ...value, amount: e.target.value }])}>{options.map(a => <option key={a} value={a}>{money(a)}{!type.amounts.includes(a) ? " (existing)" : ""}</option>)}</select> : <span className={`min-w-20 font-mono ${value.included ? "text-zinc-200" : "text-zinc-600"}`}>{money(value.amount)}</span>}{current && <button type="button" aria-label={`${t.unitNumber}, ${type.name} history`} title="Schedule / history" disabled={busy} onClick={() => { setError(""); setPhase(value); }} className="rounded p-1 text-zinc-500 hover:text-blue-300"><History size={14} /></button>}</div></td>;
       })}</tr>;
     })}</tbody></table>{!visible.length && <p className="p-8 text-center text-sm text-zinc-500">No trucks match this view.</p>}</div>}
-    {term && <Modal title={`Truck ${trucks.find(t => t.id === term.truckId)?.unitNumber} · settlement terms`} description={`Effective ${term.weekStart}`} isSaving={busy} submitLabel="Save terms" onClose={() => setTerm(null)} onSubmit={e => { e.preventDefault(); void run(() => saveTruckTerm(term)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<Field label="Investor"><select required className={controlClass} value={term.ownerId} onChange={e => setTerm({ ...term, ownerId: e.target.value })}>{investors.filter(i => !i.isCompany && (i.active || i.id === term.ownerId)).map(i => <option key={i.id} value={i.id}>{i.fullName}</option>)}</select></Field><Field label="Investor share of driver gross (%)"><input required type="number" min="0.0001" max="100" step="0.0001" value={term.sharePercent} onChange={e => setTerm({ ...term, sharePercent: e.target.value })} className={controlClass} /></Field></div></Modal>}
-    {phase && <Modal title={`Truck ${truck?.unitNumber} · ${types.find(t => t.id === phase.typeId)?.name}`} description={`Effective ${phase.weekStart}`} isSaving={busy || !canWrite} submitLabel="Save truck fee" onClose={() => setPhase(null)} onSubmit={e => { e.preventDefault(); void run(() => saveTruckCharge(phase)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<div className="space-y-1 text-xs text-zinc-400">{data?.phases.filter(p => p.truckId === phase.truckId && p.typeId === phase.typeId).map(p => <p key={p.weekStart}>{p.weekStart} · {money(p.amount)} · {p.included ? "Included" : "Paused"}</p>)}</div><label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={phase.included} onChange={e => setPhase({ ...phase, included: e.target.checked })} />Apply this recurring fee</label><Field label="Weekly amount"><select className={controlClass} value={phase.amount} onChange={e => setPhase({ ...phase, amount: e.target.value })}>{Array.from(new Set([...(types.find(t => t.id === phase.typeId)?.amounts ?? []), phase.amount])).map(a => <option key={a} value={a}>{money(a)}</option>)}</select></Field></div></Modal>}
+    {term && <Modal title={`Truck ${trucks.find(t => t.id === term.truckId)?.unitNumber} · settlement terms`} description={`Effective ${term.weekStart}`} isSaving={busy} submitLabel="Save terms" onClose={() => setTerm(null)} onSubmit={e => { e.preventDefault(); if(canTerms)void run(() => saveTruckTerm(term)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<Field label="Investor"><select required className={controlClass} value={term.ownerId} onChange={e => setTerm({ ...term, ownerId: e.target.value })}>{investors.filter(i => !i.isCompany && (i.active || i.id === term.ownerId)).map(i => <option key={i.id} value={i.id}>{i.fullName}</option>)}</select></Field><Field label="Investor share of driver gross (%)"><input required type="number" min="0.0001" max="100" step="0.0001" value={term.sharePercent} onChange={e => setTerm({ ...term, sharePercent: e.target.value })} className={controlClass} /></Field></div></Modal>}
+    {phase && <Modal title={`Truck ${truck?.unitNumber} · ${types.find(t => t.id === phase.typeId)?.name}`} description={`Effective ${phase.weekStart}`} isSaving={busy} hideSubmit={!canWrite} cancelLabel={canWrite ? "Cancel" : "Close"} submitLabel="Save truck fee" onClose={() => setPhase(null)} onSubmit={e => { e.preventDefault(); if (canWrite) void run(() => saveTruckCharge(phase)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<div className="space-y-1 text-xs text-zinc-400">{data?.phases.filter(p => p.truckId === phase.truckId && p.typeId === phase.typeId).map(p => <p key={p.weekStart}>{p.weekStart} · {money(p.amount)} · {p.included ? "Included" : "Paused"}</p>)}</div><label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={phase.included} disabled={!canWrite} onChange={e => { if (canWrite) setPhase({ ...phase, included: e.target.checked }); }} />Apply this recurring fee</label><Field label="Weekly amount"><select className={controlClass} value={phase.amount} disabled={!canWrite} onChange={e => { if (canWrite) setPhase({ ...phase, amount: e.target.value }); }}>{Array.from(new Set([...(types.find(t => t.id === phase.typeId)?.amounts ?? []), phase.amount])).map(a => <option key={a} value={a}>{money(a)}</option>)}</select></Field></div></Modal>}
   </div>;
 }

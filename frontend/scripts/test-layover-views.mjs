@@ -27,7 +27,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.slice(4);
+    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace('/lookups/','/').slice(4);
     if (path === '/settings/driver-pay') {
       if (request.method() === 'PUT') {
         const input = request.postDataJSON();
@@ -48,7 +48,7 @@ try {
       await route.fulfill({ json: { weekStart: selectedWeek, revision: 'fixture', drivers: selectedWeek === week ? [driver] : [] } }); return;
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['access.manage', 'payroll.read', 'payroll.write', 'fleet.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['access.manage', 'driver_pay.read','investor_pay.read','dispatcher_pay.read', 'driver_pay.edit','investor_pay.edit', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'] }, csrfToken: 'fixture' },
       '/settings/access': { users: [], roles: [], permissions: [], expenseCategories: [] },
       '/sidebar-counts': {}, '/tasks/count': { count: 0 },
     };

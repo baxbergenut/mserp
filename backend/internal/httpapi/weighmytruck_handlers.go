@@ -71,7 +71,7 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 	})
 	r.Put("/weighmytruck/billing", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
-		if !slices.Contains(session.User.Permissions, "payroll.write") {
+		if !slices.Contains(session.User.Permissions, "driver_pay.edit") {
 			writeAPIError(w, 403, "Payroll write permission is required to change the payer")
 			return
 		}
@@ -88,8 +88,8 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 	})
 	r.Put("/weighmytruck/transactions/{id}/link", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
-		if !slices.Contains(session.User.Permissions, "payroll.write") || !slices.Contains(session.User.Permissions, "fleet.read") {
-			writeAPIError(w, 403, "Payroll write and fleet read permissions are required")
+		if !slices.Contains(session.User.Permissions, "driver_pay.edit") || !slices.Contains(session.User.Permissions, "drivers.read") {
+			writeAPIError(w, 403, "Driver Pay Edit and Drivers View permissions are required")
 			return
 		}
 		var in struct {
@@ -109,11 +109,22 @@ func registerWeighMyTruckRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 	})
 	r.Post("/weighmytruck/change", func(w http.ResponseWriter, r *http.Request) {
 		var in repository.WMTChange
-		if decodeJSON(r, &in) != nil || in.Version < 0 || (in.Add && !isUUID(in.DriverID)) || (!in.Add && !isUUID(in.MembershipID)) || (in.MembershipID != "" && !isUUID(in.MembershipID)) {
+		if decodeJSON(r, &in) != nil {
 			writeAPIError(w, 400, "Invalid WeighMyTruck change")
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
+		action := "remove"
+		if in.Add {
+			action = "add"
+		}
+		if !authorizeVendorAction(w, r, "weighmytruck", action) {
+			return
+		}
+		if in.Version < 0 || (in.Add && !isUUID(in.DriverID)) || (!in.Add && !isUUID(in.MembershipID)) || (in.MembershipID != "" && !isUUID(in.MembershipID)) {
+			writeAPIError(w, 400, "Invalid WeighMyTruck change")
+			return
+		}
 		if err := repo.Change(r.Context(), in, session.User.ID); err != nil {
 			writeError(w, err)
 			return

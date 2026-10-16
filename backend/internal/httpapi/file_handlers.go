@@ -164,7 +164,8 @@ func (handler fileHandler) storeDocument(
 	label string,
 	upload uploadedDocument,
 ) (repository.StoredFileMetadata, bool) {
-	storedFile, err := handler.repo.CreateFile(r.Context(), upload.fileName, upload.contentType, upload.data)
+	session, _ := authSessionFromContext(r.Context())
+	storedFile, err := handler.repo.CreateFile(r.Context(), upload.fileName, upload.contentType, upload.data, session.User.ID)
 	if err != nil {
 		handler.logger.Error("store document", "document", label, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "the "+label+" could not be stored")
@@ -176,6 +177,16 @@ func (handler fileHandler) storeDocument(
 func (handler fileHandler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	allowed, accessErr := handler.repo.CanAccessFile(r.Context(), id, session.User, "")
+	if accessErr != nil {
+		writeAPIError(w, 500, "Could not verify document access")
+		return
+	}
+	if !allowed {
+		permissionDenied(w)
 		return
 	}
 	file, err := handler.repo.GetFile(r.Context(), id)

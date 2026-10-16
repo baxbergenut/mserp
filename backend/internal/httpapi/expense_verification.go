@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"mserp/internal/repository"
@@ -13,7 +12,7 @@ func expenseVerificationRole(user repository.AuthUser) string {
 	if user.Administrator {
 		return "admin"
 	}
-	if strings.EqualFold(strings.TrimSpace(user.RoleName), "Accountant") {
+	if repository.HasPermission(user, "expenses.accounting.verify") {
 		return "accountant"
 	}
 	return ""
@@ -27,7 +26,7 @@ func (handler expenseHandler) verifyExpense(w http.ResponseWriter, r *http.Reque
 	session, _ := authSessionFromContext(r.Context())
 	role := expenseVerificationRole(session.User)
 	if role == "" {
-		writeAPIError(w, http.StatusForbidden, "only Accountants and Administrators can verify expenses")
+		writeAPIError(w, http.StatusForbidden, "Accounting verification permission or Administrator access is required")
 		return
 	}
 	var request struct {

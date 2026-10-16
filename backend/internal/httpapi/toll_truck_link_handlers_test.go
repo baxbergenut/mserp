@@ -6,7 +6,7 @@ import (
 )
 
 func TestPrePassTruckLinkPermissions(t *testing.T) {
-	for _, v := range []struct{ method, path, want string }{{http.MethodGet, "/tolls/truck-links", "tolls.read"}, {http.MethodPost, "/tolls/truck-links/preview", "tolls.link"}, {http.MethodPost, "/tolls/truck-links", "tolls.link"}, {http.MethodPost, "/tolls/truck-links/id/undo", "tolls.link"}, {http.MethodPost, "/relay-drivers/bulk", "fuel.drivers.write"}} {
+	for _, v := range []struct{ method, path, want string }{{http.MethodGet, "/tolls/truck-links", "tolls.read"}, {http.MethodPost, "/tolls/truck-links/preview", "tolls.link"}, {http.MethodPost, "/tolls/truck-links", "tolls.link"}, {http.MethodPost, "/tolls/truck-links/id/undo", "tolls.link"}, {http.MethodPost, "/relay-drivers/bulk", "authenticated"}} {
 		if got := routePermission(v.method, v.path); got != v.want {
 			t.Errorf("%s %s = %q, want %q", v.method, v.path, got, v.want)
 		}

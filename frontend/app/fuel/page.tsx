@@ -1,4 +1,5 @@
 "use client";
+import { usePermissions } from "../lib/access";
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
@@ -6,7 +7,7 @@ import { PageHeader } from "@/app/components/PageHeader";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -98,6 +99,7 @@ function productSummary(transaction: FuelTransaction) {
 }
 
 export default function FuelPage() {
+  const canSync=usePermissions().includes("fuel.sync");
   const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "drivers">("page:activeTab", "overview");
   useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "drivers") setActiveTab("drivers"); }, [setActiveTab]);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
@@ -187,7 +189,7 @@ export default function FuelPage() {
     setPage(1);
   };
 
-  const syncAction = (<button
+  const syncAction = (canSync && <button
           type="button"
           onClick={() => void handleSync()}
           disabled={isSyncing}

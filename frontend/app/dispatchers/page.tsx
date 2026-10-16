@@ -1,8 +1,10 @@
 "use client";
+import type { DriverOption, UpdaterOption } from "@/app/lib/types";
+import { usePermissions } from "../lib/access";
 
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { UpdaterPanel } from "./UpdaterPanel";
-import { fetchUpdaters } from "../lib/api";
+import { fetchUpdaters, fetchUpdaterOptions } from "../lib/api";
 import { formatPhone } from "../lib/phone";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -13,10 +15,10 @@ import {
   createDispatcher,
   deleteDispatcher,
   fetchDispatchersPage,
-  fetchDrivers,
+  fetchDriverOptions,
   updateDispatcher,
 } from "../lib/api";
-import type { Dispatcher, DispatcherInput, Driver, Updater } from "../lib/types";
+import type { Dispatcher, DispatcherInput, Updater } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -38,9 +40,12 @@ import {
 } from "./DispatcherForm";
 
 export default function DispatchersPage() {
+  const permissions = usePermissions();
+ const canDispatchers=permissions.includes("dispatchers.read"),canUpdaters=permissions.includes("updaters.read");
   const [dispatchers, setDispatchers] = useState<Dispatcher[]>([]);
   const [updaters, setUpdaters] = useState<Updater[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [updaterChoices, setUpdaterChoices] = useState<UpdaterOption[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
@@ -58,10 +63,11 @@ export default function DispatchersPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dispatcherPage, updaterRows] = await Promise.all([fetchDispatchersPage({
+      const [dispatcherPage, updaterRows, updaterOptions] = await Promise.all([canDispatchers ? fetchDispatchersPage({
         page, pageSize, search: debouncedSearch,
-      }), fetchUpdaters()]);
+      }) : Promise.resolve({items:[],page:1,total:0,totalPages:1}), canUpdaters ? fetchUpdaters() : Promise.resolve([]), canDispatchers && !canUpdaters ? fetchUpdaterOptions() : Promise.resolve([])]);
       setUpdaters(updaterRows);
+      setUpdaterChoices([...updaterRows, ...updaterOptions]);
       setDispatchers(dispatcherPage.items);
       setPage(dispatcherPage.page);
       setTotal(dispatcherPage.total);
@@ -72,7 +78,7 @@ export default function DispatchersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, page, pageSize]);
+  }, [setPage, debouncedSearch, page, pageSize,canDispatchers,canUpdaters]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -80,9 +86,10 @@ export default function DispatchersPage() {
   }, [loadData]);
 
   const openCreate = async () => {
+ if(!permissions.includes("dispatchers.create"))return;
     setError("");
     try {
-      const rows = await fetchDrivers();
+      const rows = await fetchDriverOptions();
       setDrivers(rows);
       setForm({ ...emptyDispatcherInput, driverIds: [] });
       setEditing(null);
@@ -92,9 +99,10 @@ export default function DispatchersPage() {
   };
 
   const openEdit = async (dispatcher: Dispatcher) => {
+ if(!permissions.includes("dispatchers.edit"))return;
     setError("");
     try {
-      const rows = await fetchDrivers();
+      const rows = await fetchDriverOptions();
       setDrivers(rows);
       setForm(dispatcherToInput(dispatcher, rows));
       setEditing(dispatcher);
@@ -104,6 +112,7 @@ export default function DispatchersPage() {
   };
 
   const save = async () => {
+    if (!permissions.includes(editing ? "dispatchers.edit" : "dispatchers.create")) return;
     setIsSaving(true);
     setError("");
     try {
@@ -119,7 +128,7 @@ export default function DispatchersPage() {
   };
 
   const remove = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !permissions.includes("dispatchers.delete")) return;
     setIsDeleting(true);
     setError("");
     try {
@@ -147,7 +156,7 @@ export default function DispatchersPage() {
         onAction={() => void openCreate()}
       /></div></div>
 
-      <TableShell>
+      {canDispatchers && <TableShell>
         {isLoading ? <LoadingTable columns={8} /> : dispatchers.length === 0 ? (
           <EmptyState message={search ? "No dispatchers match your search." : "No dispatchers yet. Add your first dispatcher to get started."} />
         ) : (
@@ -156,7 +165,7 @@ export default function DispatchersPage() {
               <th className="px-4 py-3 font-medium">Dispatcher</th>
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Main updater</th><th className="px-4 py-3 font-medium">After hours updater</th>
-              <th className="px-4 py-3 font-medium">Commission</th>
+              {permissions.includes("dispatcher_compensation.read") && <th className="px-4 py-3 font-medium">Commission</th>}
               <th className="px-4 py-3 font-medium">Drivers</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -165,8 +174,8 @@ export default function DispatchersPage() {
               <tr key={dispatcher.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
                 <td className="px-4 py-3 font-medium text-zinc-200"><Link href={`/dispatchers/detail?id=${dispatcher.id}`}>{dispatcher.fullName}</Link>{dispatcher.extension == null ? "" : ` (${dispatcher.extension})`}</td>
                 <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(dispatcher.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-600">{dispatcher.email ?? "No email"}</div></td>
-                {[dispatcher.mainUpdaterId, dispatcher.afterHoursUpdaterId].map((id, index) => { const updater = updaters.find(u => u.id === id); return <td key={index} className="px-4 py-3 text-zinc-400">{updater ? `${updater.fullName}${updater.extension == null ? "" : ` (${updater.extension})`}` : "—"}</td>; })}
-                <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">{dispatcher.payPercentage === null ? "—" : `${dispatcher.payPercentage.toFixed(2)}%`}</td>
+                {[dispatcher.mainUpdaterId, dispatcher.afterHoursUpdaterId].map((id, index) => { const updater = updaterChoices.find(u => u.id === id); return <td key={index} className="px-4 py-3 text-zinc-400">{updater ? `${updater.fullName}${updater.extension == null ? "" : ` (${updater.extension})`}` : "—"}</td>; })}
+                {permissions.includes("dispatcher_compensation.read") && <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">{dispatcher.payPercentage == null ? "—" : `${dispatcher.payPercentage.toFixed(2)}%`}</td>}
                 <td className="px-4 py-3"><span className="rounded-full bg-zinc-800/60 px-2 py-1 text-[11px] text-zinc-400">{dispatcher.driverCount} {dispatcher.driverCount === 1 ? "driver" : "drivers"}</span></td>
                 <td className="px-4 py-3"><StatusBadge active={dispatcher.active} /></td>
                 <td className="px-4 py-3"><RowActions onEdit={() => void openEdit(dispatcher)} onDelete={() => setPendingDelete(dispatcher)} /></td>
@@ -174,8 +183,8 @@ export default function DispatchersPage() {
             ))}</tbody>
           </table>
         )}
-      </TableShell>
-      {!isLoading && (
+      </TableShell>}
+      {canDispatchers && !isLoading && (
         <TablePagination
           page={page}
           pageSize={pageSize}
@@ -186,7 +195,7 @@ export default function DispatchersPage() {
         />
       )}
 
-      {!isLoading && <UpdaterPanel updaters={updaters} onChanged={loadData} />}
+      {!isLoading && canUpdaters && <UpdaterPanel updaters={updaters} onChanged={loadData} />}
 
       {editing !== undefined && (
         <Modal
@@ -202,7 +211,7 @@ export default function DispatchersPage() {
             value={form}
             onChange={setForm}
             drivers={drivers}
-            updaters={updaters}
+            updaters={updaterChoices}
             dispatcherId={editing?.id ?? null}
           />
         </Modal>

@@ -35,7 +35,7 @@ func registerTaskBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		result, err := repo.Board(r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), status, slices.Contains(session.User.Permissions, "fleet.read"))
+		result, err := repo.Board(r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), status, slices.Contains(session.User.Permissions, "drivers.read"), slices.Contains(session.User.Permissions, "trucks.read"))
 		if err != nil {
 			fail(w, err)
 			return
@@ -45,7 +45,7 @@ func registerTaskBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	})
 	r.Get("/tasks/count", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
-		count, err := repo.OpenCount(r.Context(), slices.Contains(session.User.Permissions, "fleet.read"))
+		count, err := repo.OpenCount(r.Context(), slices.Contains(session.User.Permissions, "drivers.read"), slices.Contains(session.User.Permissions, "trucks.read"))
 		if err != nil {
 			fail(w, err)
 			return

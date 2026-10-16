@@ -110,7 +110,7 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			defer pool.Close()
 			repo := repository.NewAuthRepository(pool)
 			var roleID string
-			if e = admin.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES('Task team',ARRAY['tasks.read','tasks.write','fleet.read','fleet.write','access.manage']) RETURNING id::text`).Scan(&roleID); e != nil {
+			if e = admin.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES('Task team',ARRAY['tasks.read','tasks.create','tasks.edit','tasks.delete','tasks.review','drivers.read','drivers.private.read','drivers.create','trucks.read','trucks.create','access.manage']) RETURNING id::text`).Scan(&roleID); e != nil {
 				t.Fatal(e)
 			}
 			users := map[string]string{}
@@ -332,12 +332,12 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			}
 			exec(`UPDATE app_users SET role_id=$2 WHERE id=$1`, users["assigner"], otherRole)
 			taskRepo := repository.NewCustomTaskRepository(pool)
-			currentBoard, e := taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true)
+			currentBoard, e := taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true, true)
 			if e != nil || currentBoard.Total != 0 {
 				t.Fatal("former role member retains task", currentBoard, e)
 			}
 			exec(`UPDATE app_users SET role_id=$2 WHERE id=$1`, users["assigner"], roleID)
-			currentBoard, e = taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true)
+			currentBoard, e = taskRepo.Board(repository.WithTaskViewer(ctx, users["assigner"], false), repository.Pagination{Page: 1, PageSize: 25}, "Role maintenance test", "open", true, true)
 			if e != nil || currentBoard.Total != 1 {
 				t.Fatal("new role member missing task", currentBoard, e)
 			}

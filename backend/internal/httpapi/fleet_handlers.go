@@ -116,6 +116,7 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	preserveFields        []string
 	NewTruck              *truckRequest                    `json:"newTruck"`
 	NewTruckOwnedByDriver bool                             `json:"newTruckOwnedByDriver"`
 	Services              []repository.DriverServiceIntent `json:"services"`
@@ -252,7 +253,8 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("driver ownership requires a new truck")
 	}
 	return repository.DriverInput{
-		NewTruck: newTruck, NewTruckOwnedByDriver: request.NewTruckOwnedByDriver,
+		PreserveFields: request.preserveFields,
+		NewTruck:       newTruck, NewTruckOwnedByDriver: request.NewTruckOwnedByDriver,
 		IsTeamDriver: request.IsTeamDriver, TeamVersion: request.TeamVersion, TeamMainDriverID: request.TeamMainDriverID, TeamMainVersion: request.TeamMainVersion,
 		Status: request.Status, TerminationDate: terminationDate,
 		AssignmentWeek:  request.AssignmentWeek,
@@ -273,6 +275,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	preserveFields           []string
 	OwnershipEffectiveDate   string  `json:"ownershipEffectiveDate"`
 	ExpectedOwnershipVersion string  `json:"expectedOwnershipVersion"`
 	OwnerDriverID            *string `json:"ownerDriverId"`
@@ -346,6 +349,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
+		PreserveFields:           request.preserveFields,
 		OwnershipEffectiveDate:   request.OwnershipEffectiveDate,
 		ExpectedOwnershipVersion: request.ExpectedOwnershipVersion,
 		AssignmentWeek:           request.AssignmentWeek,
@@ -361,6 +365,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 }
 
 type dispatcherRequest struct {
+	preserveFields []string
 	Extension      json.RawMessage                `json:"extension"`
 	Updaters       *repository.UpdaterAssignments `json:"updaters"`
 	AssignmentWeek string                         `json:"assignmentWeek"`
@@ -413,7 +418,8 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 		driverIDs = append(driverIDs, id)
 	}
 	return repository.DispatcherInput{
-		Extension: extension, ExtensionSet: len(request.Extension) > 0, Updaters: request.Updaters,
+		PreserveFields: request.preserveFields,
+		Extension:      extension, ExtensionSet: len(request.Extension) > 0, Updaters: request.Updaters,
 		AssignmentWeek: request.AssignmentWeek,
 		FullName:       request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
 		PayPercentage: request.PayPercentage, DriverIDs: driverIDs,
@@ -453,13 +459,25 @@ func (handler fleetHandler) createDriver(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if request.NewTruck != nil && !handler.authorizeTruckEffects(w, r, *request.NewTruck) {
+		return
+	}
+	if request.NewTruck != nil && !handler.authorizeAttachment(w, r, request.NewTruck.IRPFileID, "trucks") {
+		return
+	}
+	if !authorizeDriverSetup(w, r, request) {
+		return
+	}
+	if !slices.Contains(request.preserveFields, "cdlFileId") && !handler.authorizeAttachment(w, r, request.CDLFileID, "drivers") {
+		return
+	}
 	input, err := request.validate()
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if input.IsTeamDriver != nil && *input.IsTeamDriver && !slices.Contains(session.User.Permissions, "payroll.write") {
+	if input.IsTeamDriver != nil && *input.IsTeamDriver && !slices.Contains(session.User.Permissions, "driver_pay.edit") {
 		writeAPIError(w, 403, "Payroll write permission is required to set up a team driver")
 		return
 	}
@@ -481,9 +499,16 @@ func (handler fleetHandler) updateDriver(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	currentProfile, readErr := handler.repo.GetDriver(r.Context(), id)
+	if readErr != nil {
+		handler.writeError(w, readErr)
+		return
+	}
 	var request driverRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if !decodeProtectedProfile(w, r, &request, currentProfile, "drivers") {
+		return
+	}
+	if !slices.Contains(request.preserveFields, "cdlFileId") && !handler.authorizeAttachment(w, r, request.CDLFileID, "drivers") {
 		return
 	}
 	input, err := request.validate()
@@ -492,7 +517,10 @@ func (handler fleetHandler) updateDriver(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if input.IsTeamDriver != nil && !slices.Contains(session.User.Permissions, "payroll.write") {
+	if input.IsTeamDriver != nil && !*input.IsTeamDriver && currentProfile.TeamRole != "team" {
+		input.IsTeamDriver = nil
+	}
+	if input.IsTeamDriver != nil && !slices.Contains(session.User.Permissions, "driver_pay.edit") {
 		current, readErr := handler.repo.GetDriver(r.Context(), id)
 		if readErr != nil {
 			handler.writeError(w, readErr)
@@ -562,8 +590,13 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 
 func (handler fleetHandler) createTruck(w http.ResponseWriter, r *http.Request) {
 	var request truckRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if !decodeProtectedProfile(w, r, &request, nil, "trucks") {
+		return
+	}
+	if !handler.authorizeTruckEffects(w, r, request) {
+		return
+	}
+	if !slices.Contains(request.preserveFields, "irpFileId") && !handler.authorizeAttachment(w, r, request.IRPFileID, "trucks") {
 		return
 	}
 	input, err := request.validate()
@@ -584,9 +617,19 @@ func (handler fleetHandler) updateTruck(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	currentProfile, readErr := handler.repo.GetTruck(r.Context(), id)
+	if readErr != nil {
+		handler.writeError(w, readErr)
+		return
+	}
 	var request truckRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if !decodeProtectedProfile(w, r, &request, currentProfile, "trucks") {
+		return
+	}
+	if !handler.authorizeTruckEffects(w, r, request) {
+		return
+	}
+	if !slices.Contains(request.preserveFields, "irpFileId") && !handler.authorizeAttachment(w, r, request.IRPFileID, "trucks") {
 		return
 	}
 	input, err := request.validate()
@@ -646,8 +689,7 @@ func wantsPagination(r *http.Request) bool {
 
 func (handler fleetHandler) createDispatcher(w http.ResponseWriter, r *http.Request) {
 	var request dispatcherRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if !decodeProtectedProfile(w, r, &request, nil, "dispatchers") {
 		return
 	}
 	input, err := request.validate()
@@ -668,9 +710,13 @@ func (handler fleetHandler) updateDispatcher(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
+	currentProfile, readErr := handler.repo.GetDispatcher(r.Context(), id)
+	if readErr != nil {
+		handler.writeError(w, readErr)
+		return
+	}
 	var request dispatcherRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+	if !decodeProtectedProfile(w, r, &request, currentProfile, "dispatchers") {
 		return
 	}
 	input, err := request.validate()
@@ -764,13 +810,30 @@ func pathID(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	if projector, ok := w.(interface{ ProjectJSON(any) any }); ok && status < 400 {
+		value = projector.ProjectJSON(value)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
 
 func writeAPIError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	code := "request_failed"
+	switch status {
+	case 400:
+		code = "validation_failed"
+	case 401:
+		code = "unauthenticated"
+	case 403:
+		code = "permission_denied"
+	case 409:
+		code = "conflict"
+	}
+	if message == "invalid CSRF token" {
+		code = "csrf_invalid"
+	}
+	writeJSON(w, status, map[string]string{"error": message, "code": code})
 }
 
 func optionalString(value string) *string {

@@ -6,7 +6,7 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  const ids = Object.fromEntries(['full','partial','kept','early','home','vacation'].map(key => [key, randomUUID()]));
  const employee = randomUUID(), outsider = randomUUID(), role = randomUUID(), password = randomBytes(24).toString('hex');
  const run = statement => sql(`SET search_path TO ${schema},public; ${statement}`);
- run(`INSERT INTO app_roles(id,name,permissions) VALUES('${role}','Escrow team',ARRAY['tasks.read','tasks.write','escrow.read','escrow.write']);
+ run(`INSERT INTO app_roles(id,name,permissions) VALUES('${role}','Escrow team',ARRAY['tasks.read','tasks.create','tasks.edit','tasks.delete','tasks.review','escrow.read','escrow.create','escrow.edit','escrow.delete']);
  INSERT INTO app_users(id,username,email,password_hash,role_id) VALUES
  ('${employee}','Nate Test','nate-test@example.com',crypt('${password}',gen_salt('bf')),'${role}'),
  ('${outsider}','Outside Test','outside-test@example.com',crypt('${password}',gen_salt('bf')),'${role}');`);
@@ -19,14 +19,14 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  }
  await page.goto(`${base}/settings`);
  await page.getByRole('button', { name: 'System tasks', exact: true }).click();
- const assignees=page.getByRole('group',{name:'Escrow release assignees'});
- await assignees.getByLabel('Nate Test',{exact:true}).check();
- await assignees.getByLabel('investor-e2e',{exact:true}).check();
+ const assignees=page.getByRole('group',{name:'Escrow release (30 days after termination) assignees'});
+ await assignees.locator('select').first().selectOption({label:'Nate Test'});
+ await assignees.locator('select').first().selectOption({label:'investor-e2e'});
  await page.getByRole('button',{name:'Save Escrow release (30 days after termination) assignment',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('assignment saved');
  await page.reload();
- await expect(assignees.getByLabel('Nate Test',{exact:true})).toBeChecked();
- await expect(assignees.getByLabel('investor-e2e',{exact:true})).toBeChecked();
+ await expect(assignees.getByRole('button',{name:'Remove Nate Test from Escrow release (30 days after termination)',exact:true})).toBeVisible();
+ await expect(assignees.getByRole('button',{name:'Remove investor-e2e from Escrow release (30 days after termination)',exact:true})).toBeVisible();
  const session=await (await page.request.get(`${base}/api/auth/session`)).json();
  const headers={'X-CSRF-Token':session.csrfToken};
  await page.goto(`${base}/accounting/escrow`);

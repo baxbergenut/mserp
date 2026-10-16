@@ -1,16 +1,18 @@
 "use client";
+import { usePermissions } from "@/app/lib/access";
 import { useState } from "react";
 import { saveEscrowOpening } from "@/app/lib/api";
 import type { Escrow } from "@/app/lib/types";
 import { Modal, Field, controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";
 
 export function EscrowOpeningForm({ escrow, onClose, onSaved }: { escrow: Escrow; onClose: () => void; onSaved: () => void }) {
+ const canEdit = usePermissions().includes("escrow.edit");
  const [amount, setAmount] = useState(escrow.openingPaid);
  const [reason, setReason] = useState("");
  const [saving, setSaving] = useState(false);
  const [error, setError] = useState("");
  async function save() {
-  if (saving) return;
+  if (!canEdit || saving) return;
   setSaving(true); setError("");
   try { await saveEscrowOpening(escrow.id, { openingPaid: amount, version: escrow.version, reason }); onSaved(); }
   catch(e) { setError(e instanceof Error ? e.message : "Could not save previously paid amount"); }

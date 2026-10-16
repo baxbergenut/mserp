@@ -45,7 +45,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
-    const path = new URL(route.request().url()).pathname.slice(4);
+    const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
     if (route.request().method() === 'POST' && ['/expenses', '/expenses/bulk'].includes(path)) {
       writes.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: {} }); return;
     }
@@ -70,7 +70,7 @@ try {
     const q = new URL(route.request().url()).searchParams;
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'fleet.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canRead:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canRead:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
       '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: [], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
@@ -277,7 +277,7 @@ try {
   const legacyServices = structuredClone(workRecords[1].services);
   const workWrites = [];
   await page.route('**/api/maintenance**', async route => {
-    const path = new URL(route.request().url()).pathname.slice(4);
+    const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
     if (route.request().method() === 'PUT') {
       const data = route.request().postDataJSON(); workWrites.push(data);
       const i = workRecords.findIndex(r => r.id === data.id);

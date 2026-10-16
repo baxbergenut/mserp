@@ -9,9 +9,9 @@ import (
 
 func (h fleetHandler) fiveELDTruckTask(w http.ResponseWriter, r *http.Request) {
 	session, _ := authSessionFromContext(r.Context())
-	permission := "fleet.read"
+	permission := "trucks.read"
 	if r.Method == http.MethodPost {
-		permission = "fleet.write"
+		permission = "trucks.create"
 	}
 	if !slices.Contains(session.User.Permissions, permission) {
 		writeAPIError(w, 403, "Truck review requires "+permission)
@@ -37,6 +37,12 @@ func (h fleetHandler) fiveELDTruckTask(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 32768)
 	if err := decodeJSON(r, &request); err != nil {
 		writeAPIError(w, 400, err.Error())
+		return
+	}
+	if request.Truck.IRPFileID != nil && (!requireCapabilities(w, r, "trucks.documents.edit") || !h.authorizeAttachment(w, r, request.Truck.IRPFileID, "trucks")) {
+		return
+	}
+	if !h.authorizeTruckEffects(w, r, request.Truck) {
 		return
 	}
 	input, err := request.Truck.validate()

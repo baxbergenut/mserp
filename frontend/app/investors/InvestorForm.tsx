@@ -2,13 +2,13 @@
 
 import { PhoneInput } from "../components/management/PhoneInput";
 
-import type { Driver, InvestorInput } from "../lib/types";
+import type { DriverOption, InvestorInput } from "../lib/types";
 import { controlClass, Field, FormSection, Toggle } from "../components/management/ManagementUI";
 
 export const emptyInvestorInput: InvestorInput = { fullName: "", driverId: null, email: "", phone: "", notes: "", active: true };
 
 export function InvestorForm({ value, onChange, drivers, editing }: {
-  value: InvestorInput; onChange: (value: InvestorInput) => void; drivers: Driver[]; editing: boolean;
+  value: InvestorInput; onChange: (value: InvestorInput) => void; drivers: DriverOption[]; editing: boolean;
 }) {
   const set = <K extends keyof InvestorInput>(key: K, next: InvestorInput[K]) => onChange({ ...value, [key]: next });
   return <div className="space-y-6">

@@ -121,6 +121,9 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 				writeAPIError(w, 400, "Preview the toll link before saving.")
 				return
 			}
+			if !link && !authorizeVendorAction(w, r, "tolls.fleet", in.Action) {
+				return
+			}
 			if err := repo.ChangePrePassFleet(r.Context(), in, session.User.ID); err != nil {
 				fail(w, err)
 				return

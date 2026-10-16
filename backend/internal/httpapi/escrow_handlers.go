@@ -58,6 +58,20 @@ func (h escrowHandler) saveRelease(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "Invalid release request")
 		return
 	}
+	permission := "escrow.edit"
+	if r.Method == http.MethodPost {
+		permission = "escrow.create"
+	}
+	if input.Cancelled {
+		permission = "escrow.delete"
+	}
+	if !requireCapabilities(w, r, permission) {
+		return
+	}
+	if r.Method == http.MethodPost && input.Cancelled {
+		writeAPIError(w, 400, "A new release cannot be cancelled")
+		return
+	}
 	if !isUUID(chi.URLParam(r, "id")) || !isUUID(input.ID) || !validDriverEscrowAmount(input.Amount) ||
 		(r.Method == http.MethodPost && input.Version != 0) ||
 		(r.Method == http.MethodPut && (input.Version < 1 || input.ID != chi.URLParam(r, "releaseID"))) {

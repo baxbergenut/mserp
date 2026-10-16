@@ -13,6 +13,7 @@ const truckCharges = { terms: [], phases: [], eligibleTruckIds: [] };
 const truckWrites = [];
 const termWrites = [];
 let datedOwners = false;
+let readOnly = false;
 let renamedOwner = 'Felix & Den';
 const bulkWrites = [];
 let bulkFailure = '';
@@ -40,7 +41,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
-    const path = url.pathname.slice(4);
+    const path = url.pathname.replace('/lookups/','/').slice(4);
     const saveTruck = input => {
       truckWrites.push(input);
       const existing = truckCharges.phases.find(p => p.truckId === input.truckId && p.typeId === input.typeId && p.weekStart === input.weekStart);
@@ -73,7 +74,7 @@ try {
       await route.fulfill({ status: 204 }); return;
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Test user', permissions: ['charges.read', 'charges.write', 'fleet.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', username: 'Test user', permissions: readOnly ? ['charges.read'] : ['charges.read', 'charges.create','charges.edit','charges.delete','investor_terms.read','investor_terms.edit', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'] }, csrfToken: 'fixture' },
       '/driver-charges': url.searchParams.has('driverId') ? { ...data, schedules: data.schedules.filter(s => s.driverId === url.searchParams.get('driverId')) } : data,
       '/drivers': [driver], '/truck-charges': datedOwners ? { ...truckCharges, owners: trucks.map(t => ({ truckId: t.id, ownerId: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? 'new-owner' : t.ownerId, ownerName: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? renamedOwner : t.ownerName })) } : truckCharges,
       '/trucks': trucks, '/investors': [{ id: 'owner', fullName: 'Truck Owner', active: true }, { id: 'new-owner', fullName: renamedOwner, active: true }],
@@ -207,6 +208,20 @@ try {
   await page.evaluate(()=>sessionStorage.setItem('mserp-navigation-v1:user:/accounting/driver-charges:view:page:tab',JSON.stringify('recurring')));
   await page.goto(base+'/accounting/driver-charges');
   await expect(page.getByRole('tab',{name:'Truck charges',exact:true})).toHaveAttribute('aria-selected','true');
+  const writesBefore = truckWrites.length;
+  readOnly = true;
+  await page.reload();
+  await page.getByRole('button', {name: '201, Admin fee history', exact:true}).click();
+  const history = page.getByRole('dialog');
+  await expect(history.getByRole('checkbox')).toBeDisabled();
+  await expect(history.getByRole('combobox')).toBeDisabled();
+  await expect(history.getByRole('button', {name:'Save truck fee',exact:true})).toHaveCount(0);
+  await history.getByRole('button', {name:'Close',exact:true}).last().click();
+  await expect(history).toHaveCount(0);
+  expect(truckWrites.length).toBe(writesBefore);
+  await page.goto(base+'/accounting/driver-charges?action=installment');
+  await expect(page.getByRole('tab',{name:'Installment plans',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log('Truck charge views passed: no driver recurring tab, all non-company trucks, amounts, selection, inclusion filters, saved views, deletion and narrow layout.');
 } finally {

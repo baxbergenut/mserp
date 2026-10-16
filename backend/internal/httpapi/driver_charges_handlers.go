@@ -83,6 +83,13 @@ func registerDriverChargeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			writeAPIError(w, 400, "Invalid type ID")
 			return
 		}
+		permission := "charges.create"
+		if t.ID != "" {
+			permission = "charges.edit"
+		}
+		if !requireCapabilities(w, r, permission) {
+			return
+		}
 		saved, err := repo.SaveType(r.Context(), t, actor(r))
 		if err != nil {
 			fail(w, err)

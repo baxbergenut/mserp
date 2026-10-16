@@ -66,6 +66,7 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	PreserveFields        []string
 	NewTruck              *TruckInput
 	NewTruckOwnedByDriver bool
 	IsTeamDriver          *bool
@@ -145,6 +146,7 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	PreserveFields           []string
 	OwnershipEffectiveDate   string
 	ExpectedOwnershipVersion string
 	OwnerDriverID            *string
@@ -187,6 +189,7 @@ type Dispatcher struct {
 }
 
 type DispatcherInput struct {
+	PreserveFields []string
 	Extension      *int
 	ExtensionSet   bool
 	Updaters       *UpdaterAssignments
@@ -433,11 +436,11 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	command, err := tx.Exec(ctx, `
 		UPDATE drivers SET
 			full_name = $2, normalized_name = $3, is_owner_operator = $4,
-			pay_type = $5, pay_rate = $6, phone = $7, email = $8,
-			license_number = $9, license_state = $10, license_expires = $11,
-			hire_date = $12, address = $13, city = $14, state = $15,
-			postal_code = $16, emergency_contact = $17, dispatcher_id = $18,
-			active = $19, notes = $20, cdl_file_id = $21, updated_at = now(),
+			pay_type = CASE WHEN 'payType'=ANY($26::text[]) THEN pay_type ELSE $5 END, pay_rate = CASE WHEN 'payRate'=ANY($26::text[]) THEN pay_rate ELSE $6 END, phone = $7, email = $8,
+			license_number = CASE WHEN 'licenseNumber'=ANY($26::text[]) THEN license_number ELSE $9 END, license_state = CASE WHEN 'licenseState'=ANY($26::text[]) THEN license_state ELSE $10 END, license_expires = CASE WHEN 'licenseExpires'=ANY($26::text[]) THEN license_expires ELSE $11 END,
+			hire_date = $12, address = CASE WHEN 'address'=ANY($26::text[]) THEN address ELSE $13 END, city = CASE WHEN 'city'=ANY($26::text[]) THEN city ELSE $14 END, state = CASE WHEN 'state'=ANY($26::text[]) THEN state ELSE $15 END,
+			postal_code = CASE WHEN 'postalCode'=ANY($26::text[]) THEN postal_code ELSE $16 END, emergency_contact = CASE WHEN 'emergencyContact'=ANY($26::text[]) THEN emergency_contact ELSE $17 END, dispatcher_id = $18,
+			active = $19, notes = $20, cdl_file_id = CASE WHEN 'cdlFileId'=ANY($26::text[]) THEN cdl_file_id ELSE $21 END, updated_at = now(),
 			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date),
 			first_name = coalesce($24,first_name), last_name = coalesce($25,last_name)
 		WHERE id = $1`,
@@ -445,7 +448,7 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
-		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName,
+		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName, input.PreserveFields,
 	)
 	if err != nil {
 		return Driver{}, err
@@ -704,13 +707,13 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 			is_company_owned = $9, status = $10, mileage = $11,
 			registration_expires = $12, insurance_expires = $13,
 			last_service_date = $14, next_service_miles = $15, active = $16,
-			notes = $17, irp_file_id = $18, updated_at = now()
+			notes = $17, irp_file_id = CASE WHEN 'irpFileId'=ANY($19::text[]) THEN irp_file_id ELSE $18 END, updated_at = now()
 		WHERE id = $1`,
 		id, unitNumber, input.VIN, input.Year, input.Make, input.Model,
 		input.LicensePlate, input.LicenseState, input.IsCompanyOwned, input.Status,
 		input.Mileage, input.RegistrationExpires, input.InsuranceExpires,
 		input.LastServiceDate, input.NextServiceMiles, input.Active, input.Notes,
-		input.IRPFileID,
+		input.IRPFileID, input.PreserveFields,
 	)
 	if err != nil {
 		return Truck{}, err
@@ -883,11 +886,11 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 	displayName := formatPersonName(input.FullName)
 	command, err := tx.Exec(ctx, `
 		UPDATE dispatchers SET full_name = $2, normalized_name = $3, email = $4,
-			phone = $5, pay_percentage = $6, active = $7, notes = $8,
+			phone = $5, pay_percentage = CASE WHEN 'payPercentage'=ANY($11::text[]) THEN pay_percentage ELSE $6 END, active = $7, notes = $8,
  extension = CASE WHEN $9 THEN $10::int ELSE extension END,
 			updated_at = now()
 		WHERE id = $1`, id, displayName, normalizeName(displayName),
-		input.Email, input.Phone, input.PayPercentage, input.Active, input.Notes, input.ExtensionSet, input.Extension)
+		input.Email, input.Phone, input.PayPercentage, input.Active, input.Notes, input.ExtensionSet, input.Extension, input.PreserveFields)
 	if err != nil {
 		return Dispatcher{}, err
 	}

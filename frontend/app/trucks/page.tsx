@@ -1,24 +1,26 @@
 "use client";
+import type { DriverOption, InvestorOption } from "@/app/lib/types";
+import { usePermissions } from "../lib/access";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { FileText, Truck as TruckIcon } from "lucide-react";
 import {
   createTruck,
   deleteTruck,
   fileDownloadUrl,
-  fetchDrivers,
+  fetchDriverOptions,
   fetchTrucksPage,
-  fetchInvestors,
+  fetchInvestorOptions,
   uploadIRPFile,
   updateTruck,
 } from "../lib/api";
 import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Driver, Investor, Truck, TruckInput, TruckStatus } from "../lib/types";
+import type { Truck, TruckInput, TruckStatus } from "../lib/types";
 import {
   ConfirmDialog,
   EmptyState,
@@ -49,9 +51,10 @@ const STATUS_CLASSES: Record<TruckStatus, string> = {
 };
 
 export default function TrucksPage() {
-  const [investors, setInvestors] = useState<Investor[]>([]);
+  const permissions = usePermissions();
+  const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
@@ -86,7 +89,7 @@ export default function TrucksPage() {
 
   const loadOptions = async () => {
     try {
-      const [drivers, owners] = await Promise.all([fetchDrivers(), fetchInvestors()]);
+      const [drivers, owners] = await Promise.all([fetchDriverOptions(), fetchInvestorOptions()]);
       setDrivers(drivers);
       setInvestors(owners);
       return true;
@@ -102,6 +105,7 @@ export default function TrucksPage() {
   }, [loadData]);
 
   const openCreate = async () => {
+ if(!permissions.includes("trucks.create"))return;
     if (!await loadOptions()) return;
     setForm({ ...emptyTruckInput });
     setIRPFileName(null);
@@ -112,9 +116,10 @@ export default function TrucksPage() {
   useQuickCreate(openCreate);
 
   const openEdit = async (truck: Truck) => {
+ if(!permissions.includes("trucks.edit"))return;
     if (!await loadOptions()) return;
     setForm(truckToInput(truck));
-    setIRPFileName(truck.irpFileName);
+    setIRPFileName(truck.irpFileName ?? null);
     setEditing(truck);
     setError("");
   };
@@ -158,6 +163,7 @@ export default function TrucksPage() {
   };
 
   const save = async () => {
+    if (!permissions.includes(editing ? "trucks.edit" : "trucks.create")) return;
     setIsSaving(true);
     setError("");
     try {
@@ -173,7 +179,7 @@ export default function TrucksPage() {
   };
 
   const remove = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !permissions.includes("trucks.delete")) return;
     setIsDeleting(true);
     setError("");
     try {

@@ -1,4 +1,6 @@
 "use client";
+import type { DriverOption } from "@/app/lib/types";
+import { usePermissions } from "../lib/access";
 
 
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
@@ -7,17 +9,18 @@ import { formatPhone } from "../lib/phone";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import Link from "@/app/components/AccessLink";
 import { Landmark, Pencil } from "lucide-react";
-import { createInvestor, updateInvestor, fetchInvestorsPage, fetchDrivers, fetchInvestors } from "../lib/api";
-import type { Driver, Investor, InvestorInput } from "../lib/types";
+import { createInvestor, updateInvestor, fetchInvestorsPage, fetchDriverOptions, fetchInvestorOptions } from "../lib/api";
+import type { Investor, InvestorInput } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { EmptyState, ErrorBanner, ManagementHeader, ManagementSearch, Modal, StatusBadge, TablePagination, TableShell } from "../components/management/ManagementUI";
 import { emptyInvestorInput, InvestorForm } from "./InvestorForm";
 
 export default function InvestorsPage() {
+  const permissions = usePermissions();
   const [investors, setInvestors] = useState<Investor[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [showCompany, setShowCompany] = useViewState("page:showCompany", false);
   const [page, setPage] = useViewState("page:page", 1);
@@ -41,15 +44,17 @@ export default function InvestorsPage() {
   useEffect(() => { const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer); }, [loadData]);
 
   const open = async (investor: Investor | null) => {
+ if(!permissions.includes(investor ? "investors.edit" : "investors.create"))return;
     setError("");
     try {
-      const [driverRows, owners] = await Promise.all([fetchDrivers(), fetchInvestors()]);
+      const [driverRows, owners] = await Promise.all([fetchDriverOptions(), fetchInvestorOptions()]);
       setDrivers(driverRows.filter((d) => d.id === investor?.driverId || !owners.some((i) => i.driverId === d.id)));
       setForm(investor ? { fullName: investor.fullName, driverId: investor.driverId, email: investor.email ?? "", phone: investor.phone ?? "", notes: investor.notes ?? "", active: investor.active } : { ...emptyInvestorInput });
       setEditing(investor);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Failed to load driver options"); }
   };
   const save = async () => {
+    if (!permissions.includes(editing ? "investors.edit" : "investors.create")) return;
     setIsSaving(true); setError("");
     try {
       if (editing) await updateInvestor(editing.id, form); else await createInvestor(form);
@@ -76,7 +81,7 @@ export default function InvestorsPage() {
             <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(investor.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-500">{investor.email ?? "No email"}</div></td>
             <td className="max-w-xs px-4 py-3"><div className="flex flex-wrap gap-1.5">{investor.trucks.length ? investor.trucks.map((truck) => <Link key={truck.id} href={`/trucks/detail?id=${truck.id}`} className="rounded bg-zinc-800/60 px-2 py-1 font-mono text-[11px] hover:text-blue-400">{truck.unitNumber}</Link>) : <span className="text-zinc-500">No trucks</span>}</div></td>
             <td className="px-4 py-3"><StatusBadge active={investor.active} /></td>
-            <td className="px-4 py-3 text-right">{!investor.isCompany && <button aria-label={`Edit ${investor.fullName}`} onClick={() => void open(investor)} className="rounded-md p-2 text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200"><Pencil className="h-3.5 w-3.5" /></button>}</td>
+            <td className="px-4 py-3 text-right">{permissions.includes("investors.edit") && !investor.isCompany && <button aria-label={`Edit ${investor.fullName}`} onClick={() => void open(investor)} className="rounded-md p-2 text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200"><Pencil className="h-3.5 w-3.5" /></button>}</td>
           </tr>)}</>}</tbody>
         </table>
     </TableShell>

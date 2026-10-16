@@ -58,6 +58,34 @@ func TestLiveSnapshotSharingAndShutdown(t *testing.T) {
 	}
 }
 
+func TestLiveSnapshotProjectsEachSubscriber(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	defer h.shutdown()
+	h.snapshotEvent = "board"
+	h.snapshot = func(context.Context) ([]byte, error) {
+		return []byte(`{"drivers":[{"fullName":"Example","payType":"cpm","payRate":0.5,"address":"Private","cdlFileId":"secret"}],"originalGross":1234.56}`), nil
+	}
+	frame := func(permissions ...string) string {
+		return h.frame(context.WithValue(context.Background(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Permissions: permissions}}), "changed")
+	}
+	viewer := frame("driver_board.read")
+	for _, field := range []string{"payType", "payRate", "address", "cdlFileId"} {
+		if strings.Contains(viewer, field) {
+			t.Fatalf("viewer received %s", field)
+		}
+	}
+	if !strings.Contains(viewer, "1234.56") {
+		t.Fatal("operational amount hidden")
+	}
+	financial := frame("driver_board.read", "driver_compensation.read")
+	if !strings.Contains(financial, "payRate") || strings.Contains(financial, "address") {
+		t.Fatal("incorrect compensation projection")
+	}
+	if strings.Contains(frame("driver_board.read"), "payRate") {
+		t.Fatal("shared cache leaked previous subscriber data")
+	}
+}
+
 func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	board := newDatabaseEvents(nil, logger, "mserp_driver_board", "driver_board.read")

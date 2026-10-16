@@ -119,7 +119,7 @@ func testDriverServices(t *testing.T, ctx context.Context, pool *pgxpool.Pool, a
 	if wmtFake.calls != 1 {
 		t.Fatal("reminder enrolled automatically")
 	}
-	board, err := NewCustomTaskRepository(pool).Board(ctx, Pagination{Page: 1, PageSize: 25}, "Deferred Service", "open", true)
+	board, err := NewCustomTaskRepository(pool).Board(ctx, Pagination{Page: 1, PageSize: 25}, "Deferred Service", "open", true, true)
 	if err != nil || board.Total != 0 {
 		t.Fatalf("future task visible: %+v %v", board, err)
 	}
@@ -127,7 +127,7 @@ func testDriverServices(t *testing.T, ctx context.Context, pool *pgxpool.Pool, a
 	if err = repo.Request(ctx, deferred.ID, actor, DriverServiceIntent{Service: "weighmytruck", Action: "defer", FollowUpOn: ChargeCurrentWeek(), Version: s.Version}); err != nil {
 		t.Fatal(err)
 	}
-	board, err = NewCustomTaskRepository(pool).Board(ctx, Pagination{Page: 1, PageSize: 25}, "Deferred Service", "open", true)
+	board, err = NewCustomTaskRepository(pool).Board(ctx, Pagination{Page: 1, PageSize: 25}, "Deferred Service", "open", true, true)
 	if err != nil || board.Total != 1 || board.Items[0].ServiceDriverID != deferred.ID {
 		t.Fatalf("due task absent: %+v %v", board, err)
 	}

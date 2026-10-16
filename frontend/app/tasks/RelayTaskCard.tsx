@@ -1,11 +1,11 @@
 "use client";
 import { useState } from "react";
 import { formatPhone, normalizePhone } from "../lib/phone";
-import type { Driver, RelayIdentityTask } from "../lib/types";
+import type { DriverOption, RelayIdentityTask } from "../lib/types";
 import { controlClass } from "../components/management/ManagementUI";
 
 export function RelayTaskCard({ task, drivers, disabled, onDecision }: {
-  task: RelayIdentityTask; drivers: Driver[]; disabled: boolean;
+  task: RelayIdentityTask; drivers: DriverOption[]; disabled: boolean;
   onDecision: (driver: { id: string; name: string }, action: "link" | "reject") => void;
 }) {
   const [query, setQuery] = useState("");

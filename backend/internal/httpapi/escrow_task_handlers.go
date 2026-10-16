@@ -26,7 +26,7 @@ func (h escrowHandler) taskDetail(w http.ResponseWriter, r *http.Request) {
 }
 func (h escrowHandler) completeTask(w http.ResponseWriter, r *http.Request) {
 	session, _ := authSessionFromContext(r.Context())
-	if !slices.Contains(session.User.Permissions, "escrow.write") {
+	if !slices.Contains(session.User.Permissions, "escrow.edit") {
 		writeAPIError(w, 403, "Escrow write access is required")
 		return
 	}

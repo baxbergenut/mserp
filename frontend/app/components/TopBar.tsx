@@ -6,7 +6,7 @@ import { Search, Plus, UserRound, X, LogOut, ChevronDown } from "lucide-react";
 import { IntentLink } from "./IntentLink";
 import { PageHeaderSlot } from "./PageHeader";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
-import { useExpenseCategoryAccess, usePermissions, pagePermission } from "@/app/lib/access";
+import { useExpenseCategoryAccess, usePermissions, canCreateDriver, pageActionPermission } from "@/app/lib/access";
 import { fetchDriversPage, fetchTrucksPage, fetchLoadsPage, fetchExpensesPage, fetchMaintenancePage, fetchInvestorsPage, logout } from "@/app/lib/api";
 
 type Result = { label: string; detail: string; href: string };
@@ -18,7 +18,7 @@ export function TopBar({ username }: { username: string }) {
   const permissions = usePermissions();
   const maintenanceAccess = useMaintenanceAccess();
   const expenseCategoryAccess = useExpenseCategoryAccess();
-  const allowedActions = quickActions.filter(a => a.path === "/maintenance" ? maintenanceAccess?.canCreate : a.path === "/expenses" ? expenseCategoryAccess.some(item => item.canCreate) : permissions.includes(pagePermission(a.path).replace(".read", ".write")));
+  const allowedActions = quickActions.filter(a => a.path === "/maintenance" ? maintenanceAccess?.canCreate : a.path === "/expenses" ? expenseCategoryAccess.some(item => item.canCreate) : permissions.includes(pageActionPermission(a.path,"create")) && (a.path!=="/drivers" || canCreateDriver(permissions)));
   const router = useRouter();
   const [menu, setMenu] = useState<"search" | "new" | "account" | null>(null);
   const [createToken, setCreateToken] = useState(0);
@@ -60,7 +60,7 @@ export function TopBar({ username }: { username: string }) {
         { name: "Expenses", request: () => fetchExpensesPage(page, controller.signal).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
       ];
       if (maintenanceAccess?.canView) requests.push({name:"Work orders",request:()=>fetchMaintenancePage(page,controller.signal).then(r=>r.items.map(m=>({label:m.services.map(s=>s.name).join(", "),detail:[m.unitNumber,m.serviceDate,m.vendorName].filter(Boolean).join(" · "),href:`/maintenance?recordId=${m.id}`})))});
-      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "fleet.read", Trucks: "fleet.read", Loads: "loads.read", "Expenses": "expenses.read", "Work orders":"expenses.read", Investors: "fleet.read" } as Record<string, string>)[r.name]));
+      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "drivers.read", Trucks: "trucks.read", Loads: "loads.read", "Expenses": "expenses.read", "Work orders":"expenses.read", Investors: "investors.read" } as Record<string, string>)[r.name]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
       if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ name: allowedRequests[i].name, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
     }, 250);
