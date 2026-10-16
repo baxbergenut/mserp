@@ -25,6 +25,7 @@ import { TrailerCell } from "./TrailerCell";
 import { BoardLoads } from "./BoardLoads";
 import { CurrentLoadInput } from "./CurrentLoadInput";
 import { ETAEditor } from "./ETAEditor";
+import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
@@ -115,7 +116,7 @@ export default function DriverBoardPage() {
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
-    <div data-scroll-key="driver-board" className="max-h-[72vh] overflow-auto rounded-xl border border-zinc-800" aria-busy={loading}>
+    <StatusBoardScrollArea loading={loading} footer={<p className="text-[11px] text-zinc-500">{canEdit ? "Edits save immediately. Ctrl+Z undoes your last action. Right-click a cell to view its history. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>}>
       <table {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
         const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");
@@ -194,8 +195,7 @@ export default function DriverBoardPage() {
           {!loading && drivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Reload to retry." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
-    </div>
-    <p className="text-[11px] text-zinc-500">{canEdit ? "Edits save immediately. Ctrl+Z undoes your last action. Right-click a cell to view its history. " : ""}Dispatch details carry forward; weekly gross and miles come from Gross Board. Truck, phone and dispatcher follow the driver profile.</p>
+    </StatusBoardScrollArea>
     {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}

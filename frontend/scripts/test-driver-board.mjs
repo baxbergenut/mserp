@@ -64,8 +64,10 @@ console.log('Imported stop display checks passed: state abbreviations and ZIP re
 
 assert.deepEqual(parseETA('13:00'), { time: '13:00', miles: '' });
 assert.deepEqual(parseETA('300 mi'), { time: '', miles: '300' });
-assert.equal(formatETA('13:00 · 300 mi'), '13:00 · 300 mi');
+assert.equal(formatETA('13:00 · 300 mi'), '300 mi');
 assert.equal(formatETA('0 mi'), '0 mi');
 assert.equal(parseETA('-300 mi'), null);
 assert.equal(parseETA('25:00'), null);
 assert.equal(parseETA('300.123 mi'), null);
+
+assert.equal(formatETA('13:00 · 300 mi', true), '13:00 · 300 mi');

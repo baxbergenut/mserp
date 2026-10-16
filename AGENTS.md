@@ -301,7 +301,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
   Saves run immediately and queue typing during in-flight requests. ETA accepts
-  24-hour time, numeric miles left, or both; legacy dated ETAs display time only.
+  24-hour time or numeric miles left: entering either clears the other; the
+  last input wins. Legacy dated ETAs display time only, and old combined values
+  display their last stored component (miles), retaining full audit history.
+  StatusBoardScrollArea caps page scrolling at the table header, then routes
+  vertical wheel/touch scrolling into the table; upward scrolling reverses that
+  order. Its viewport sizing follows main and keeps horizontal scrolling local.
+  `node scripts/test-status-board-layout.mjs` checks ETA persistence and wheel,
+  touch, reverse, horizontal and resize behavior with isolated browser fixtures.
   Dispatcher and status dropdowns retain checked selections (intersection),
   including previous My view selections. Notes precedes ETA. Trailer cells use
   right-click Add/Edit/Delete note and hover previews with corner markers;
