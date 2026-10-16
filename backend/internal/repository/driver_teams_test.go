@@ -54,7 +54,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				if !strings.Contains(source, body) {
 					t.Fatal("init must contain the exact team migration")
 				}
-				source = withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1))
+				source = withoutFleetScopeSyncMigration(t, withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1)))
 			}
 			if _, err = admin.Exec(ctx, source); err != nil {
 				t.Fatal(err)
@@ -66,6 +66,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyTruckRecurringMigration(t, ctx, admin)
+				applyFleetScopeSyncMigration(t, ctx, admin)
 			}
 			for _, table := range []string{"driver_teams", "driver_team_events"} {
 				var owner string
@@ -101,8 +102,37 @@ func withoutDriverTeams(t *testing.T, source string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source = withoutTruckRecurringMigration(t, source)
+	source = withoutFleetScopeSyncMigration(t, withoutTruckRecurringMigration(t, source))
 	return strings.Replace(source, strings.ReplaceAll(string(body), "\r\n", "\n"), "", 1)
+}
+
+// Migration 103 installs capture triggers on driver_teams. Legacy fixtures must
+// defer it until migration 078 has recreated that table, just as production does.
+func withoutFleetScopeSyncMigration(t *testing.T, source string) string {
+	t.Helper()
+	body, err := os.ReadFile("../../sql/103_fleetscope_fleet_sync.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized := strings.ReplaceAll(string(body), "\r\n", "\n")
+	if !strings.Contains(source, "CREATE TABLE fleetscope_sync_state") {
+		return source // Some older fixtures end before the integration existed.
+	}
+	if !strings.Contains(source, normalized) {
+		t.Fatal("init must contain the exact FleetScope migration")
+	}
+	return strings.Replace(source, normalized, "", 1)
+}
+
+func applyFleetScopeSyncMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	t.Helper()
+	body, err := os.ReadFile("../../sql/103_fleetscope_fleet_sync.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.Exec(ctx, string(body)); err != nil {
+		t.Fatal(err)
+	}
 }
 func applyDriverTeams(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	defer applyTruckRecurringMigration(t, ctx, conn)

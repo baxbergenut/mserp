@@ -160,6 +160,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyDriverTeams(t, ctx, admin)
+				applyFleetScopeSyncMigration(t, ctx, admin)
 				if _, err = admin.Exec(ctx, string(notesMigration)); err != nil {
 					t.Fatal(err)
 				}
