@@ -464,6 +464,9 @@ export interface DriverBoardEvent {
   source: string; undoOf: number | null; before: Record<string, string>; after: Record<string, string>; createdAt: string;
 }
 export interface DriverBoardHistory { items: DriverBoardEvent[]; nextCursor: number }
+export interface BoardPresence {
+  clientId: string; userId: string; userName: string; driverId: string; column: string; expiresAt: string;
+}
 
 export type DriverDirectoryEntry = Driver & { intakeId?: string };
 

@@ -16,18 +16,24 @@ import (
 )
 
 // One dedicated LISTEN connection per API process with active subscribers, not
-// one database connection per browser. Notifications contain no task data.
+// one database connection per browser. Notifications contain no application data.
 type taskEvents struct {
-	mu      sync.Mutex
-	clients map[chan struct{}]struct{}
-	cancel  context.CancelFunc
-	config  *pgx.ConnConfig
-	logger  *slog.Logger
-	stopped chan struct{}
+	mu         sync.Mutex
+	clients    map[chan struct{}]struct{}
+	cancel     context.CancelFunc
+	config     *pgx.ConnConfig
+	logger     *slog.Logger
+	stopped    chan struct{}
+	channel    string
+	permission string
 }
 
 func newTaskEvents(pool *pgxpool.Pool, logger *slog.Logger) *taskEvents {
-	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{})}
+	return newDatabaseEvents(pool, logger, "mserp_tasks", "tasks.read")
+}
+
+func newDatabaseEvents(pool *pgxpool.Pool, logger *slog.Logger, channel, permission string) *taskEvents {
+	h := &taskEvents{clients: map[chan struct{}]struct{}{}, logger: logger, stopped: make(chan struct{}), channel: channel, permission: permission}
 	if pool != nil {
 		h.config = pool.Config().ConnConfig.Copy()
 	}
@@ -65,6 +71,9 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 	return ch, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		if _, exists := h.clients[ch]; !exists {
+			return
+		}
 		delete(h.clients, ch)
 		if len(h.clients) == 0 {
 			h.cancel()
@@ -89,7 +98,7 @@ func (h *taskEvents) listen(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		h.logger.Warn("task notifications reconnecting", "error", err)
+		h.logger.Warn("database notifications reconnecting", "channel", h.channel, "error", err)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -112,7 +121,7 @@ func (h *taskEvents) receive(ctx context.Context) error {
 		defer c()
 		_ = conn.Close(closeCtx)
 	}()
-	if _, err = conn.Exec(ctx, "LISTEN mserp_tasks"); err != nil {
+	if _, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{h.channel}.Sanitize()); err != nil {
 		return err
 	}
 	// Reconcile anything missed during a connection interruption.
@@ -125,7 +134,7 @@ func (h *taskEvents) receive(ctx context.Context) error {
 	}
 }
 
-func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
+func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
@@ -133,6 +142,12 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 		}
 		changes, unsubscribe := h.subscribe()
 		defer unsubscribe()
+		var presenceChanges chan struct{}
+		if len(presence) > 0 {
+			var closePresence func()
+			presenceChanges, closePresence = presence[0].subscribe()
+			defer closePresence()
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache, no-store")
 		w.Header().Set("X-Accel-Buffering", "no")
@@ -154,12 +169,15 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 		if !send("retry: 5000\nevent: changed\ndata: {}\n\n") {
 			return
 		}
+		if presenceChanges != nil && !send("event: presence\ndata: {}\n\n") {
+			return
+		}
 		heartbeat := time.NewTicker(25 * time.Second)
 		defer heartbeat.Stop()
 		lifetime := time.NewTimer(10 * time.Minute)
 		defer lifetime.Stop()
 		for {
-			changed := false
+			changed, presenceChanged := false, false
 			select {
 			case <-r.Context().Done():
 				return
@@ -170,6 +188,8 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			case <-heartbeat.C:
 			case <-changes:
 				changed = true
+			case <-presenceChanges:
+				presenceChanged = true
 			}
 			// Role changes, disabled accounts and revoked/expired sessions take effect
 			// on this connection too. Every data fetch also performs normal authorization.
@@ -179,12 +199,16 @@ func (h *taskEvents) serve(auth *authHandler) http.HandlerFunc {
 			if err != nil && !errors.Is(err, repository.ErrAuthRecordNotFound) {
 				return
 			}
-			if err != nil || !slices.Contains(session.User.Permissions, "tasks.read") {
+			if err != nil || !slices.Contains(session.User.Permissions, h.permission) {
 				send("event: unauthorized\ndata: {}\n\n")
 				return
 			}
 			if changed {
 				if !send("event: changed\ndata: {}\n\n") {
+					return
+				}
+			} else if presenceChanged {
+				if !send("event: presence\ndata: {}\n\n") {
 					return
 				}
 			} else if !send(": keepalive\n\n") {

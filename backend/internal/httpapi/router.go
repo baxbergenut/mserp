@@ -163,6 +163,9 @@ func NewRouter(
 	registerTaskBoardRoutes(protected, logger, customTaskRepo)
 	events := newTaskEvents(pool, logger)
 	protected.Get("/tasks/events", events.serve(auth))
+	boardEvents := newDatabaseEvents(pool, logger, "mserp_driver_board", "driver_board.read")
+	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
+	protected.Get("/driver-board/events", boardEvents.serve(auth, boardPresence))
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, repository.NewDriverBoardRepository(pool, fiveELDJob != nil))
 	payRepo := repository.NewDriverPayRepository(pool)
@@ -178,5 +181,5 @@ func NewRouter(
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
-	return &shutdownRouter{Mux: r, shutdown: events.shutdown}
+	return &shutdownRouter{Mux: r, shutdown: func() { events.shutdown(); boardEvents.shutdown(); boardPresence.shutdown() }}
 }

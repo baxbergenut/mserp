@@ -7,8 +7,10 @@ import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from 
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { progressStatus, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
+import { useBoardLive } from "./useBoardLive";
+import { selectedBoardCell } from "./boardCells";
 
-export function useDriverBoard(pauseRefresh = false) {
+export function useDriverBoard(lockedDriverId?: string) {
   const canEdit = usePermissions().includes("driver_board.write");
   const router = useRouter();
   const [board, setBoard] = useState<DriverBoard | null>(null);
@@ -23,6 +25,10 @@ export function useDriverBoard(pauseRefresh = false) {
   const activity = useRef(0);
   const savingRef = useRef(false);
   const idle = useRef(false);
+  const refreshWanted = useRef<() => void>(() => {});
+  const busyDrivers = useRef<string[]>([]);
+  const lockedDriver = useRef(lockedDriverId);
+  const live = useBoardLive(useCallback(() => refreshWanted.current(), []));
   const savedRef = useRef<Record<string, DriverBoardEntry>>({});
   const changesRef = useRef(changes);
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
@@ -34,7 +40,11 @@ export function useDriverBoard(pauseRefresh = false) {
   const dirty = Object.keys(changes).length > 0;
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
-  useLayoutEffect(() => { idle.current = !dirty && !saving && !loading && !eldRefreshing && !pauseRefresh; }, [dirty, saving, loading, eldRefreshing, pauseRefresh]);
+  useLayoutEffect(() => {
+    idle.current = !loading && !eldRefreshing;
+    lockedDriver.current = lockedDriverId;
+    refreshWanted.current();
+  }, [dirty, saving, loading, eldRefreshing, lockedDriverId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,26 +55,49 @@ export function useDriverBoard(pauseRefresh = false) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false, inFlight = false;
+    let cancelled = false, inFlight = false, pending = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
       if (!idle.current || document.visibilityState !== "visible" || inFlight) return;
-      const revision = activity.current;
+      pending = false;
       inFlight = true;
       try {
         const value = await fetchDriverBoard(currentChargeWeek());
-        if (!cancelled && idle.current && revision === activity.current) { setBoard(value); setRefreshError(""); }
+        if (!cancelled && idle.current) {
+          const protectedIds = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
+          const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
+          if (focused) protectedIds.add(focused.driverId);
+          if (lockedDriver.current) protectedIds.add(lockedDriver.current);
+          setBoard(current => {
+            if (!current) return value;
+            // Keep the row's concurrency token with its active editor. Other
+            // rows still update immediately, including while a save is pending.
+            const retained = new Set(protectedIds);
+            for (const entry of value.entries) {
+              if ((savedRef.current[entry.driverId]?.version ?? 0) > entry.version) retained.add(entry.driverId);
+            }
+            const previous = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
+            const entries = value.entries.map(e => retained.has(e.driverId) ? previous[e.driverId] ?? e : e);
+            const loads = { ...value.loads };
+            for (const id of retained) if (current.loads[id]) loads[id] = current.loads[id];
+            return { ...value, entries, loads };
+          });
+          setRefreshError("");
+        }
       } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Use Reload to update totals and assignments."); }
-      finally { inFlight = false; }
+      finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
-    const timer = setInterval(() => void refresh(), 30000);
-    const focus = () => void refresh();
+    const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 50); };
+    refreshWanted.current = schedule;
+    const fallback = setInterval(schedule, 30000);
+    const focus = () => schedule();
     window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus);
-    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); };
+    document.addEventListener("focusout", focus);
+    return () => { cancelled = true; refreshWanted.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
   }, []);
 
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {
     activity.current += 1;
-    idle.current = false;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
     const last = draftUndo.current.at(-1);
     if (!last || last.group !== editSession.current.group) draftUndo.current.push({ id, field, before: changesRef.current[id], group: editSession.current.group });
@@ -92,6 +125,7 @@ export function useDriverBoard(pauseRefresh = false) {
     if (savingRef.current || !Object.keys(changesRef.current).length || loading) return;
     savingRef.current = true; activity.current += 1;
     const snapshot = { ...changesRef.current };
+    busyDrivers.current = Object.keys(snapshot);
     const draftActions = draftUndo.current;
     draftUndo.current = [];
     setSaving(true); setError("");
@@ -114,7 +148,7 @@ export function useDriverBoard(pauseRefresh = false) {
       });
       if (loadIds.length) await refreshLoads(loadIds);
     } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
-    finally { activity.current += 1; savingRef.current = false; setSaving(false); }
+    finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
   }, [loading, refreshLoads]);
 
   useEffect(() => {
@@ -173,13 +207,14 @@ export function useDriverBoard(pauseRefresh = false) {
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
     savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true); setActionBusy(true);
+    busyDrivers.current = [driverId];
     try {
       const committed = await undoDriverBoardEvent(eventId, entry, personal);
       savedRef.current[driverId] = committed;
       undoStack.current = undoStack.current.filter(e => e.id !== eventId);
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e) } : current);
       await refreshLoads([driverId]);
-    } finally { activity.current += 1; savingRef.current = false; setSaving(false); setActionBusy(false); }
+    } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }
 
   async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction) {
@@ -187,13 +222,15 @@ export function useDriverBoard(pauseRefresh = false) {
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
     savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true); setActionBusy(true);
+    busyDrivers.current = [driverId];
     try {
       const result = await changeBoardLoads(entry, view, action);
       editSession.current = null;
       if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId, group: ++editSequence.current });
+      savedRef.current[driverId] = result.entry;
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), loads: { ...current.loads, [driverId]: result.loads } } : current);
       return result.loads;
-    } finally { activity.current += 1; savingRef.current = false; setSaving(false); setActionBusy(false); }
+    } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }
 
   useLayoutEffect(() => {
@@ -254,5 +291,5 @@ export function useDriverBoard(pauseRefresh = false) {
   }, [saving, dirty, error]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving, actionBusy, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, leaving: !!pendingLink };
+  return { board, entries, loading, saving, actionBusy, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, ...live, leaving: !!pendingLink };
 }

@@ -83,6 +83,9 @@ func routePermission(method, path string) string {
 			return "loads.read"
 		}
 	case "driver-board":
+		if path == "/driver-board/presence" || strings.HasPrefix(path, "/driver-board/presence/") {
+			return "driver_board.read"
+		}
 		return pair("driver_board")
 	case "gross-board":
 		return pair("board")

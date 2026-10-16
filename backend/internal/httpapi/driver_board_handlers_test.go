@@ -44,4 +44,9 @@ func TestDriverBoardValidation(t *testing.T) {
 	if routePermission("GET", "/driver-board") != "driver_board.read" || routePermission("PUT", "/driver-board") != "driver_board.write" {
 		t.Fatal("driver board must have explicit access controls")
 	}
+	for _, action := range []struct{ method, path string }{{"GET", "/driver-board/events"}, {"GET", "/driver-board/presence"}, {"PUT", "/driver-board/presence"}, {"DELETE", "/driver-board/presence/tab"}} {
+		if routePermission(action.method, action.path) != "driver_board.read" {
+			t.Fatal("presence requires board visibility", action)
+		}
+	}
 }

@@ -301,6 +301,21 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Migration 113 adds commit-only PostgreSQL notifications for board sources and
+  authenticated `/driver-board/events` SSE (data invalidation plus presence).
+  `useBoardLive.ts` publishes a tab's selected cell; session-owned cursors expire
+  after 30 seconds, heartbeat every 10 seconds, and clear on hide/navigation/logout.
+  Presence GET/PUT/DELETE require driver_board.read, including read-only viewers;
+  actor/session identity comes only from the cookie. No session hashes reach clients.
+  Incoming updates preserve dirty, saving and actively edited rows, while refreshing
+  other rows immediately; existing version conflicts still prevent lost writes.
+  `CellPresence.tsx` clips named outlines to visible cells and sticky columns.
+  The shared notification hub in httpapi/task_events.go listens once per channel
+  per API process, reconciles reconnects, rechecks sessions and drains on shutdown.
+  TestDriverBoardDatabase covers fresh/migrated cursor ownership, expiry and revocation;
+  TestTaskEventsDatabase covers both channels and reconnect/rollback behavior.
+  `node scripts/test-investors-e2e.mjs --board-only` includes two-user live updates,
+  cell movement, concurrent typing, reconnect, expiry and navigation cleanup.
   Saves run immediately and queue typing during in-flight requests. ETA accepts
   24-hour time or numeric miles left: entering either clears the other; the
   last input wins. Legacy dated ETAs display time only, and old combined values
