@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
+	"mserp/internal/boardroutes"
 	"mserp/internal/config"
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
@@ -137,9 +138,11 @@ func main() {
 		logger,
 	)
 	var fiveELDJob *jobs.SyncFiveELDJob
+	var fiveELDTelemetry *fiveeld.Client
 	if cfg.FiveELDEnabled {
+		fiveELDTelemetry = fiveeld.NewClient(cfg.FiveELDAPIURL, cfg.FiveELDAPIKey, cfg.FiveELDProviderToken)
 		fiveELDJob = jobs.NewSyncFiveELDJob(
-			fiveeld.NewClient(cfg.FiveELDAPIURL, cfg.FiveELDAPIKey, cfg.FiveELDProviderToken),
+			fiveELDTelemetry,
 			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, logger,
 		)
 	}
@@ -230,6 +233,17 @@ func main() {
 		}})
 	}()
 	schedulerDone := make(chan struct{})
+	boardAutomationDone := make(chan struct{})
+	go func() {
+		defer close(boardAutomationDone)
+		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled)
+		routes := boardroutes.NewClient(cfg.BoardRoutes)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "board-automation", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 40*time.Second)
+			defer cancel()
+			return repo.ReconcileAutomation(bounded, routes, fiveELDTelemetry, cfg.FiveELDUSDOT)
+		}})
+	}()
 	fleetSyncDone := make(chan struct{})
 	go func() {
 		defer close(fleetSyncDone)
@@ -358,5 +372,9 @@ func main() {
 	case <-schedulerDone:
 	case <-shutdownCtx.Done():
 		logger.Warn("scheduled syncs did not stop before shutdown timeout")
+	}
+	select {
+	case <-boardAutomationDone:
+	case <-shutdownCtx.Done():
 	}
 }

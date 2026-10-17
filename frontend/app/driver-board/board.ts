@@ -9,13 +9,20 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   if (!loads) return loads;
   const number = entry.currentLoad.trim().toLowerCase();
   const aligned = !loads.current || loads.current.number.trim().toLowerCase() === number;
-  if (aligned && !entry.resolveCurrentLoad && entry.currentLoad === saved?.currentLoad) return loads;
+  if (aligned && !entry.resolveCurrentLoad && entry.currentLoad === saved?.currentLoad) {
+    if (!entry.statusEdited || entry.status === saved?.status) return loads;
+    const kind = entry.status === "DISPATCHED" ? "pickup" : ["ENROUTE", "RESERVED"].includes(entry.status) ? "delivery" : "";
+    if (!kind) return loads;
+    const stop = loads.current?.stops.find(s => s.type.toLowerCase() === kind && s.location.trim());
+    if (stop?.key === loads.stopKey) return loads;
+    return { ...loads, automation: undefined, destinationSource: !!stop, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
+  }
   const matches = loads.week.filter(p => p.number.trim().toLowerCase() === number);
   const chosen = matches[0];
   const unique = chosen && (matches.length === 1 || (chosen.loadId !== null && matches.every(p => p.loadId === chosen.loadId)));
   const current = unique ? chosen : null;
   const stop = current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
-  return { ...loads, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
+  return { ...loads, automation: undefined, resolutionWarning: undefined, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
 }
 
 // Retain legacy history, while the live board shows a single time or mileage.

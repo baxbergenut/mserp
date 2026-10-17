@@ -273,6 +273,14 @@ tracker or notification system. Do not send messages or schedule recurring jobs.
 
 ## Phase 5 — Five ELD location and freshness (shipped)
 
+Appointment and GPS arrival display now extend the original location-only phase.
+Migration 116 supplies read-only PU/DEL schedules in the existing ETA cell,
+versioned manual arrival corrections and background GPS dwell evidence. Optional
+truck routing remains off until verified activation. These features never advance
+load progress; the later completion-automation exclusions below still apply.
+The current behavior and configuration supersede the original no-ETA display
+description below: see `integrations/STATUS_BOARD_AUTOMATION.md`.
+
 Five ELD was previously TT ELD. Its public documentation describes current
 locations, timestamps, VINs, unit assignments and historical tracking:
 https://fiveeld.com/api-docs/

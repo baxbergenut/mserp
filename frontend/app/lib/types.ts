@@ -443,19 +443,28 @@ export interface SyncFiveELDResult {
   syncedAt: string;
 }
 
-export interface BoardStop { key: string; type: string; location: string; appointment: string }
+export interface BoardSchedule { kind: string; label: string; detail: string; reason?: string; beginAt?: string; endAt?: string }
+export interface BoardAutomation {
+  context: string; appointment?: BoardSchedule; arrived: boolean;
+  arrivalOverride: "auto" | "arrived" | "not_arrived"; observedAt: string; stale: boolean;
+  travelMode: "auto" | "manual"; travelValue: string; reason?: string;
+  requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
+}
+export interface BoardStop { key: string; type: string; location: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule }
 export interface BoardLoad {
   planId: string; date: string; slot: number; number: string; loadId: number | null;
   sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
+  resolutionWarning?: string;
+  automation?: BoardAutomation;
   week: BoardLoad[];
   current: BoardLoad | null; next: BoardLoad[]; earlier: BoardLoad[]; hidden: BoardLoad[]; unavailable: BoardLoad[];
   destinationSource: boolean; sourceDestination: string; stopKey: string;
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual";
+  action: "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "arrival_auto" | "arrival_yes" | "arrival_no" | "travel_auto" | "travel_manual" | "confirm_driver";
   planId?: string; order?: string[]; stopKey?: string;
 }
 

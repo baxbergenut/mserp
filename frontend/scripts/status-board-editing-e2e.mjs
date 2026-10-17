@@ -58,23 +58,23 @@ export async function runStatusBoardEditingE2E({ page, base, id, week }) {
   await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Apply ETA' }).click();
   await saved();
-  await expect(field('ETA')).toHaveText('300 mi');
+  await expect(field('ETA')).toHaveText('300mi');
   expect((await read()).eta).toBe('300 mi');
   await field('ETA').click();
   await page.getByLabel('Arrival time', { exact: true }).fill('13:00');
   await expect(page.getByLabel('Miles left', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Apply ETA' }).click();
   await saved();
-  await expect(field('ETA')).toHaveText('13:00');
+  await expect(field('ETA')).toHaveText('ETA 13:00');
   expect((await read()).eta).toBe('13:00');
   await page.getByRole('heading', { name: 'Status Board', exact: true }).click();
   await page.keyboard.press('Control+z');
   await saved();
-  await expect(field('ETA')).toHaveText('300 mi');
+  await expect(field('ETA')).toHaveText('300mi');
   await page.getByRole('heading', { name: 'Status Board', exact: true }).click();
   await page.keyboard.press('Control+z');
   await saved();
-  await expect(field('ETA')).toHaveText('17:00');
+  await expect(field('ETA')).toHaveText('ETA 17:00');
   const homeTime = (await read()).homeTime;
   for (let index = 0; index < 12; index++) {
     await field('Notes').fill(`Rapid note ${index} `);

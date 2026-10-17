@@ -55,7 +55,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(field('Status')).toHaveValue('DISPATCHED');
-  await expect(field('ETA')).toHaveAttribute('title', '17:00');
+  await expect(field('ETA')).toHaveText('—');
   const destination = page.getByRole('button', { name: 'Board Cpm · Destination from load', exact: true });
   await expect(destination).toHaveText('Richmond, VADEL');
   await destination.click();
@@ -66,7 +66,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await destination.click();
   await expect(destination).toHaveText('Richmond, VADEL');
   await expect(field('Status')).toHaveValue('DISPATCHED');
-  await expect(field('ETA')).toHaveAttribute('title', '17:00');
+  await expect(field('ETA')).toHaveText('—');
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
   await page.screenshot({ path: join(temp, 'status-board-destination-toggle.png'), fullPage: true, animations: 'disabled' });

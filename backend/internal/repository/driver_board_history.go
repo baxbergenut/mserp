@@ -164,5 +164,16 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 			return entry, err
 		}
 	}
+	if _, etaChanged := after["eta"]; etaChanged {
+		views, readErr := readBoardLoads(ctx, tx, []string{driver}, r.loadStartDate(""))
+		if readErr != nil {
+			return entry, readErr
+		}
+		if a := views[driver].Automation; a != nil {
+			if _, err = tx.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,eta_context) VALUES($1,$2) ON CONFLICT(driver_id) DO UPDATE SET eta_context=EXCLUDED.eta_context`, driver, a.Context); err != nil {
+				return entry, err
+			}
+		}
+	}
 	return saved[0], tx.Commit(ctx)
 }

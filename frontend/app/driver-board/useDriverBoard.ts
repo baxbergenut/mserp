@@ -110,7 +110,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     const baseline = savedRef.current[id];
     const next = { ...(current[id] ?? baseline), [field]: value };
     if (field === "trailerNumber" && value !== (current[id] ?? baseline).trailerNumber) next.trailerNote = "";
-    if (field === "currentLoad") { next.destination = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : ""; }
+    if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : ""; }
     if (field === "status") next.statusEdited = true;
     const result = { ...current, [id]: next };
     // While saving, a revert must still be sent after the first write finishes.
@@ -136,7 +136,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     setSaving(true); setError("");
     try {
       const committed = await saveDriverBoard(Object.values(snapshot));
-      const loadIds = committed.filter(e => { const base = savedRef.current[e.driverId]; return !base || base.currentLoad !== e.currentLoad || base.status !== e.status || base.destination !== e.destination || snapshot[e.driverId]?.resolveCurrentLoad; }).map(e => e.driverId);
+      const loadIds = committed.filter(e => { const base = savedRef.current[e.driverId]; return !base || base.currentLoad !== e.currentLoad || base.status !== e.status || base.destination !== e.destination || base.eta !== e.eta || snapshot[e.driverId]?.resolveCurrentLoad; }).map(e => e.driverId);
       // Advance the authoritative refs before releasing the save lock. A new
       // keystroke can arrive before React renders this response.
       committed.forEach(e => { savedRef.current[e.driverId] = e; });

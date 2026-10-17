@@ -77,7 +77,7 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	currentID := v.Next[0].PlanID
 	r := action(BoardLoadAction{Action: "select", PlanID: currentID, StopKey: v.Next[0].Stops[1].Key})
-	if r.Loads.SourceDestination != "Atlanta, GA" || len(r.Loads.Next) != 3 || e.Status != "DISPATCHED" || e.ETA != "Friday" || e.Notes != "Keep my notes" || e.CurrentLoad != "QUEUE-A" {
+	if r.Loads.SourceDestination != "Atlanta, GA" || len(r.Loads.Next) != 3 || e.Status != "DISPATCHED" || e.ETA != "" || e.Notes != "Keep my notes" || e.CurrentLoad != "QUEUE-A" {
 		t.Fatalf("explicit selection damaged fields: %+v", r)
 	}
 	r = action(BoardLoadAction{Action: "source", StopKey: r.Loads.Current.Stops[1].Key})

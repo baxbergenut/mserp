@@ -249,6 +249,20 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Status Board appointment/arrival automation uses migration 116, repository
+  `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
+  DataTruck per-stop schedule fields through import serialization. Appointment
+  text is read-only inside ETA; red @PU/@DEL denotes arrival and red ETA/miles
+  retains manual editing. Notes are never rewritten. Unique imported loads can
+  resolve without Gross Board plans; source-driver conflicts require confirmation.
+  A startup/minute cache-only GPS evaluator never advances progress. Google truck
+  routing is default off and requires explicit access/operations/speed verification
+  plus reviewed per-load/trailer truck profiles. Never substitute car routes.
+  See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
+  dwell/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
+  and `test-status-board-layout.mjs`; database tests use the existing disposable
+  `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`.
+
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
   shell and sidebar; `frontend/app/login/` owns the login page.
   `GET /sidebar-counts` returns permission-scoped red badge counts for terminated

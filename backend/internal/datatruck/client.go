@@ -67,13 +67,26 @@ type Load struct {
 // Keep only the stop details used by payroll; source ordering determines the
 // first pickup and final delivery for multi-stop loads.
 type LoadStop struct {
-	StopType string `json:"stop_type"`
-	Ordering int    `json:"ordering"`
-	Location struct {
-		City    string `json:"city"`
-		State   string `json:"state"`
-		ZipCode string `json:"zip_code"`
-		Address string `json:"address1"`
+	ID                 int    `json:"id"`
+	ScheduleType       string `json:"schedule_type"`
+	ScheduledBeginAt   string `json:"scheduled_begin_at"`
+	ScheduledEndAt     string `json:"scheduled_end_at"`
+	ScheduledBeginDate string `json:"scheduled_begin_date"`
+	ScheduledEndDate   string `json:"scheduled_end_date"`
+	ScheduledBeginTime string `json:"scheduled_begin_time"`
+	ScheduledEndTime   string `json:"scheduled_end_time"`
+	ReadyTimeStartDate string `json:"ready_time_start_date"`
+	ReadyTimeEndDate   string `json:"ready_time_end_date"`
+	Note               string `json:"note"`
+	StopType           string `json:"stop_type"`
+	Ordering           int    `json:"ordering"`
+	Location           struct {
+		Latitude  *FlexibleString `json:"latitude"`
+		Longitude *FlexibleString `json:"longitude"`
+		City      string          `json:"city"`
+		State     string          `json:"state"`
+		ZipCode   string          `json:"zip_code"`
+		Address   string          `json:"address1"`
 	} `json:"location"`
 }
 

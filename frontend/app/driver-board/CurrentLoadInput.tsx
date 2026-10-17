@@ -5,9 +5,10 @@ import { createPortal } from "react-dom";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { addDays, shortDate } from "@/app/gross-board/board";
 
-export function CurrentLoadInput({ value, label, disabled, entries, week, onChange }: {
+export function CurrentLoadInput({ value, label, disabled, entries, week, onChange, warning }: {
   value: string; label: string; disabled: boolean; entries: GrossBoardEntry[]; week: string;
   onChange: (value: string) => void;
+  warning?: string;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -47,7 +48,7 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
   function choose(number: string) { setFocused(false); onChange(number); }
   return <>
     <input ref={input} type="text" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined} aria-activedescendant={open ? `${id}-${selected}` : undefined}
-      aria-label={label} title={value} maxLength={300} disabled={disabled} autoComplete="off" value={value}
+      aria-label={label} aria-invalid={!!warning} title={warning ? `${value} · ${warning}` : value} maxLength={300} disabled={disabled} autoComplete="off" value={value}
       onFocus={() => { setFocused(true); setActive(0); }} onBlur={() => setFocused(false)}
       onChange={event => { setFocused(true); setActive(0); onChange(event.target.value); }}
       onKeyDown={event => {

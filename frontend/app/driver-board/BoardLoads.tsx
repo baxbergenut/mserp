@@ -64,8 +64,10 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   }
   function choose(load: BoardLoad) { setSelect(load); setClear(false); }
   function detail(load: BoardLoad) {
-    return <><p className="mt-1 text-xs text-zinc-500">Gross Board: {load.date} · slot {load.slot + 1}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : " · Unmatched plan"}</p>
+    return <><p className="mt-1 text-xs text-zinc-500">{load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : " · Unmatched plan"}</p>
       {load.warning && <p className="mt-2 text-xs text-amber-300">{load.warning}</p>}
+      {view.current?.loadId === load.loadId && view.automation?.requiresConfirmation && <button disabled={locked} className={`${buttonClass} mt-2 text-amber-300`} onClick={() => void act({ action: "confirm_driver" })}>Confirm this load for this driver</button>}
+      {load.stops.map(s => s.schedule && <p key={`schedule-${s.key}`} className="mt-1 text-[11px] text-zinc-400">{s.type}: {s.schedule.detail || s.schedule.reason}</p>)}
       {load.loadId !== null && <p className="mt-1 text-[11px] text-zinc-500">DataTruck: {load.sourceStatus || "No status"} · last synced {time(load.syncedAt)} NY</p>}
       {load.stops.length > 0 && <ol className="mt-3 space-y-2">{load.stops.map((s, i) => <li key={`${s.key}-${i}`} className={`rounded-md px-2 py-1.5 text-xs ${view.current?.planId === load.planId && view.stopKey === s.key ? "bg-blue-500/15 text-blue-200" : "bg-zinc-900 text-zinc-400"}`}><span className="capitalize">{i + 1}. {s.type || "Stop"}</span> · {compactLoadLocation(s.location) || "Location unavailable"}{s.appointment && <span className="mt-1 block text-[11px] text-zinc-500">Appointment: {time(s.appointment)} NY</span>}</li>)}</ol>}
     </>;
@@ -87,6 +89,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       <header className="flex items-center gap-2 border-b border-zinc-800 p-4"><h2 className="min-w-0 flex-1 truncate font-semibold text-zinc-100">{name} · Loads</h2><button className={buttonClass} onClick={onHistory} disabled={busy}><History className="inline h-3.5 w-3.5" /> History</button><button className={buttonClass} disabled={busy} aria-label="Close loads" onClick={onClose}><X className="h-4 w-4" /></button></header>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {waiting && <p className="text-xs text-amber-300">Wait for board edits to finish saving before changing loads.</p>}
+        {view.resolutionWarning && <p role="status" className="text-xs text-amber-300">{view.resolutionWarning}</p>}
         {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
         <div className="flex items-center justify-end gap-2">{view.customOrder && canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "reset_order" })}>Reset order</button>}<button className={buttonClass} disabled={busy} onClick={() => void refresh()}><RefreshCw className="inline h-3.5 w-3.5" /> Refresh loads</button></div>
         <section className="space-y-2" aria-label="Load sequence">

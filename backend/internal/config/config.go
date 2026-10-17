@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"mserp/internal/boardroutes"
 	"mserp/internal/fleetscope"
 	"mserp/internal/weighmytruck"
 )
 
 type Config struct {
+	BoardRoutes                  boardroutes.Options
 	WeighMyTruck                 weighmytruck.Options
 	FleetScope                   fleetscope.Options
 	BindAddress                  string
@@ -58,6 +60,10 @@ type DailySyncTime struct {
 }
 
 func Load() (Config, error) {
+	boardRoutes, boardRoutesErr := boardroutes.LoadOptions()
+	if boardRoutesErr != nil {
+		return Config{}, boardRoutesErr
+	}
 	newLoadsInterval, err := parseDataTruckInterval("DATATRUCK_NEW_LOADS_INTERVAL", "1m")
 	if err != nil {
 		return Config{}, err
@@ -175,6 +181,9 @@ func Load() (Config, error) {
 	fiveELDProviderToken := strings.TrimSpace(os.Getenv("FIVE_ELD_PROVIDER_TOKEN"))
 	fiveELDUSDOT := strings.TrimSpace(os.Getenv("FIVE_ELD_USDOT"))
 	fiveELDEnabled := fiveELDAPIKey != "" || fiveELDProviderToken != "" || fiveELDUSDOT != ""
+	if boardRoutes.Enabled && !fiveELDEnabled {
+		return Config{}, errors.New("board routes requires Five ELD configuration")
+	}
 	if fiveELDEnabled && (fiveELDAPIKey == "" || fiveELDProviderToken == "" || fiveELDUSDOT == "") {
 		return Config{}, errors.New("FIVE_ELD_API_KEY, FIVE_ELD_PROVIDER_TOKEN and FIVE_ELD_USDOT must all be set")
 	}
@@ -190,6 +199,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
+		BoardRoutes: boardRoutes,
 		WeighMyTruck: weighmytruck.Options{
 			SyncStartDate: envOrDefault("WEIGHMYTRUCK_SYNC_START_DATE", "2026-10-05"),
 			ClientID:      strings.TrimSpace(os.Getenv("WEIGHMYTRUCK_CLIENT_ID")),

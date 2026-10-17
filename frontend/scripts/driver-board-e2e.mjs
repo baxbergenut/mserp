@@ -101,7 +101,13 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByRole('link', { name: 'Board Percent · Call in RingCentral', exact: true })).toHaveCount(0);
   await runFleetLocationE2E({ page, base, sql, schema, temp });
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
+  // The combined appointment/ETA cell is wider and remains locally scrollable.
+  await page.getByLabel('Board Cpm · ETA', { exact: true }).scrollIntoViewIfNeeded();
   await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByLabel('Board Cpm · ETA', { exact: true })).toHaveText('Friday 17:00');
+  await page.getByLabel('Board Cpm · ETA', { exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Existing ETA: Friday 17:00');
+  await page.keyboard.press('Escape');
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await field('Current load').fill('plan-');
@@ -138,9 +144,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(loadDestination).toHaveText('Atlanta, GAPU');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'My view', exact: true })).toHaveCount(0);
-  await expect(field('ETA')).toHaveText('Friday 17:00');
+  await expect(field('ETA')).toHaveText('—');
   await field('ETA').click();
-  await expect(page.getByRole('dialog')).toContainText('Existing ETA: Friday 17:00');
+  await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');
   const popup = page.getByRole('dialog', { name: 'Board Cpm · ETA', exact: true });
   expect((await popup.boundingBox()).width).toBeLessThanOrEqual(300);
   await page.keyboard.press('Escape');
@@ -151,14 +157,14 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(popup).toHaveCount(0);
   await field('ETA').click();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(field('ETA')).toHaveText('Friday 17:00');
+  await expect(field('ETA')).toHaveText('—');
   await field('ETA').click();
   await expect(page.getByLabel('Arrival date', { exact: true })).toHaveCount(0);
   await page.getByLabel('Miles left', { exact: true }).fill('300');
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
-  await expect(field('ETA')).toHaveAttribute('title', '300 mi');
+  await expect(field('ETA')).toHaveText('300mi');
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');
@@ -173,7 +179,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Notes')).toHaveValue('Call before arrival');
-  await expect(field('ETA')).toHaveAttribute('title', '17:00');
+  await expect(field('ETA')).toHaveText('ETA 17:00');
   let profile = await (await page.request.get(`${base}/api/drivers/${id}`)).json();
   expect(profile.city).toBe('Louisville');
   expect(profile).not.toHaveProperty('driverHome');

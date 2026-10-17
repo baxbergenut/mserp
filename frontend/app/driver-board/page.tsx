@@ -17,7 +17,8 @@ import { LocationCell, formatCoordinates } from "./LocationCell";
 import { StatusCell } from "./StatusCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
-import { statuses, statusColor, formatETA, previewCurrentLoad } from "./board";
+import { statuses, statusColor, previewCurrentLoad } from "./board";
+import { ETACell } from "./ETACell";
 import { useDriverBoard } from "./useDriverBoard";
 import { BoardHistory } from "./BoardHistory";
 import { BoardFilter } from "@/app/components/management/BoardFilter";
@@ -31,7 +32,7 @@ import { CellPresence } from "./CellPresence";
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
   ["Original gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
-  ["Destination", 110], ["Notes", 130], ["ETA", 115], ["Next loads", 180], ["Home time", 120],
+  ["Destination", 110], ["Notes", 130], ["ETA", 240], ["Next loads", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -163,7 +164,7 @@ export default function DriverBoardPage() {
                 </td>
               </tr>}
               <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
-                <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
+                <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning || (loads?.automation?.requiresConfirmation ? "Confirm driver assignment in Loads" : undefined)} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1"><span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
@@ -178,7 +179,7 @@ export default function DriverBoardPage() {
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>
-                <td className={cellClass}>{loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
+                <td className={cellClass}>{loads?.automation?.requiresConfirmation ? <button type="button" className="h-8 w-full truncate px-1.5 text-left text-[11px] text-amber-300" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>Review driver mismatch</button> : loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
                   title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
                   className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"
                   onClick={async () => {
@@ -188,7 +189,7 @@ export default function DriverBoardPage() {
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not switch destination. Reload the board and try again."); }
                   }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Destination", 500)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
-                <td className={cellClass}><button type="button" aria-label={`${d.fullName} · ETA`} title={formatETA(entry.eta)} disabled={disabled} className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" aria-haspopup="dialog" aria-expanded={etaEditor?.id === d.id} onClick={event => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor: event.currentTarget })}>{formatETA(entry.eta)}</button></td>
+                <td className={cellClass}><ETACell name={d.fullName} value={entry.eta} automation={loads?.automation} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>
                 <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={loads?.current?.warning || next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "homeTime", "Home time", 500)}</td>
               </tr>
@@ -199,7 +200,7 @@ export default function DriverBoardPage() {
       </table>
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
-    {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {etaEditor && <ETAEditor anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
   </div>;

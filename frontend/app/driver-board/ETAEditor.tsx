@@ -3,13 +3,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { parseETA } from "./board";
+import type { BoardAutomation, BoardLoadAction } from "@/app/lib/types";
 
-export function ETAEditor({ name, value, anchor, onApply, onClose }: {
+export function ETAEditor({ name, value, anchor, onApply, onClose, automation, waiting, onAction }: {
   name: string; value: string; anchor: HTMLButtonElement; onApply: (value: string) => void; onClose: () => void;
+  automation?: BoardAutomation; waiting?: boolean; onAction?: (action: BoardLoadAction) => Promise<void>;
 }) {
   const initial = parseETA(value);
   const [miles, setMiles] = useState(initial?.miles ?? "");
   const [time, setTime] = useState(initial?.miles ? "" : initial?.time ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function act(action: BoardLoadAction) {
+    if (!onAction || busy || waiting) return;
+    setBusy(true); setError("");
+    try { await onAction(action); } catch (err) { setError(err instanceof Error ? err.message : "Could not save correction"); }
+    finally { setBusy(false); }
+  }
   const panel = useRef<HTMLFormElement>(null);
   useLayoutEffect(() => {
     const place = () => {
@@ -49,14 +59,21 @@ export function ETAEditor({ name, value, anchor, onApply, onClose }: {
   }} onSubmit={event => {
     event.preventDefault();
     const next = time || (miles ? `${Number(miles)} mi` : "");
-    if (!next || parseETA(next)) onApply(next);
+    if (!busy && !waiting && (!next || parseETA(next))) onApply(next);
   }}>
     <div className="mb-3 flex items-center justify-between text-xs"><span className="font-medium text-zinc-100">ETA</span><span className="text-zinc-500">New York time</span></div>
+    {automation?.appointment?.label && <p className="mb-2 text-xs text-zinc-300" title={automation.appointment.detail}>{automation.appointment.label} · Automatic appointment</p>}
+    {error && <p role="alert" className="mb-2 text-xs text-red-400">{error}</p>}
+    {automation?.requiresConfirmation && <button type="button" disabled={busy || waiting} className={`${buttonClass} mb-2 text-amber-300`} onClick={() => void act({ action: "confirm_driver" })}>Confirm this load for this driver</button>}
+    {automation?.context && !automation.requiresConfirmation && <label className="mb-3 block text-[11px] text-zinc-400">At stop<select aria-label="At stop" value={automation.arrivalOverride} disabled={busy || waiting} className={inputClass} onChange={e => void act({ action: e.target.value === "arrived" ? "arrival_yes" : e.target.value === "not_arrived" ? "arrival_no" : "arrival_auto" })}><option value="auto">Automatic (GPS)</option><option value="arrived">Arrived</option><option value="not_arrived">Not arrived</option></select></label>}
+    {automation?.routingEnabled && !automation.requiresConfirmation && <label className="mb-3 block text-[11px] text-zinc-400">Travel estimate<select aria-label="Travel estimate" value={automation.travelMode} disabled={busy || waiting} className={inputClass} onChange={e => void act({ action: e.target.value === "auto" ? "travel_auto" : "travel_manual" })}><option value="auto">Automatic</option><option value="manual">Manual</option></select></label>}
+    <fieldset disabled={busy || waiting}>
     {!initial && value && <p className="mb-2 break-words text-xs text-amber-200">Existing ETA: {value}. Enter a time or miles to replace it.</p>}
     <div className="grid grid-cols-[1.1fr_1fr] gap-2">
       <label className="text-[11px] text-zinc-400">Miles left<input type="number" min="0" max="9999999" step="0.01" value={miles} onChange={e => { setMiles(e.target.value); setTime(""); }} className={inputClass} /></label>
       <label className="text-[11px] text-zinc-400">Arrival time<input type="time" step={60} value={time} onChange={e => { setTime(e.target.value); setMiles(""); }} className={inputClass} /></label>
     </div>
     <div className="mt-3 flex items-center gap-1"><button type="button" className={`${buttonClass} mr-auto`} onClick={() => onApply("")}>Clear ETA</button><button type="button" className={buttonClass} onClick={onClose}>Cancel</button><button type="submit" className="rounded bg-blue-600 px-2 py-1.5 text-xs text-white hover:bg-blue-500">Apply ETA</button></div>
+    </fieldset>
   </form>, document.body);
 }

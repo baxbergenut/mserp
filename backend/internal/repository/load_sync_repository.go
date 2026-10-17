@@ -21,6 +21,9 @@ func (r *LoadRepository) OperationalLoadIDs(ctx context.Context, from, until tim
  UNION
  SELECT l.id FROM driver_board_load_state s JOIN drivers d ON d.id=s.driver_id AND d.active
  JOIN loads l ON l.id::text=s.payload->'current'->>'loadId'
+ UNION
+ SELECT l.id FROM driver_board b JOIN drivers d ON d.id=b.driver_id AND d.active
+ JOIN loads l ON lower(btrim(l.load_id))=lower(btrim(b.current_load)) WHERE btrim(b.current_load)<>''
  )
  SELECT l.id FROM loads l WHERE
  (l.pickup_time >= $1 AND l.pickup_time < $2) OR

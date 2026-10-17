@@ -47,7 +47,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
   const eta = page.getByLabel('Scroll Driver 0 · ETA', { exact: true });
-  await expect(eta).toHaveText('300 mi');
+  await expect(eta).toHaveText('300mi');
   await eta.click();
   await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');
   await page.getByLabel('Arrival time', { exact: true }).fill('13:00');
@@ -55,14 +55,14 @@ try {
   await page.getByRole('button', { name: 'Apply ETA' }).click();
   await expect.poll(() => entries[0].eta).toBe('13:00');
   await page.reload();
-  await expect(eta).toHaveText('13:00');
+  await expect(eta).toHaveText('ETA 13:00');
   await eta.click();
   await page.getByLabel('Miles left', { exact: true }).fill('0');
   await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Apply ETA' }).click();
   await expect.poll(() => entries[0].eta).toBe('0 mi');
   await page.reload();
-  await expect(eta).toHaveText('0 mi');
+  await expect(eta).toHaveText('0mi');
   const main = page.getByRole('main'), area = page.locator('[data-scroll-key="driver-board"]');
   const positions = () => page.evaluate(() => {
     const main = document.querySelector('main'), area = document.querySelector('[data-scroll-key="driver-board"]');

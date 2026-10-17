@@ -197,6 +197,9 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	for i := range result.Entries {
 		e := &result.Entries[i]
 		e.Status = boardProgressStatus(e.Status, result.Loads[e.DriverID].Next)
+		if a := result.Loads[e.DriverID].Automation; a != nil && !a.ManualETAValid {
+			e.ETA = ""
+		}
 	}
 	return result, tx.Commit(ctx)
 }
@@ -252,6 +255,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if readErr != nil {
 			return nil, readErr
 		}
+		oldStopKey := loadStateValue.StopKey
 		stateChanged := false
 		if (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) && loadStateValue.Current != nil {
 			loadStateValue.Current = nil
@@ -284,6 +288,12 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 					return nil, err
 				}
 				chosen := matchBoardCurrentLoad(views[e.DriverID].Week, e.CurrentLoad)
+				if chosen == nil && !hasBoardNumber(views[e.DriverID].Week, e.CurrentLoad) {
+					chosen, err = importedBoardLoad(ctx, tx, e.CurrentLoad)
+					if err != nil {
+						return nil, err
+					}
+				}
 				if chosen != nil {
 					loadStateValue.Current = chosen
 					loadStateValue.StopKey = ""
@@ -313,6 +323,24 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			}
 		}
 		e.ResolveCurrentLoad = false
+		if old.CurrentLoad != e.CurrentLoad || old.Destination != e.Destination || oldStopKey != loadStateValue.StopKey {
+			if loadStateValue.AutomationContext != "" || loadStateValue.ArrivalOverride != "" || loadStateValue.TravelMode != "" || (old.CurrentLoad != e.CurrentLoad && loadStateValue.ConfirmedLoadID != nil) {
+				stateChanged = true
+			}
+			if e.ETA == old.ETA {
+				e.ETA = ""
+			}
+			loadStateValue.AutomationContext = ""
+			loadStateValue.ArrivalOverride = ""
+			loadStateValue.TravelMode = ""
+			if old.CurrentLoad != e.CurrentLoad {
+				loadStateValue.ConfirmedLoadID = nil
+			}
+		}
+		if old.ETA != e.ETA && e.ETA != "" {
+			loadStateValue.TravelMode = "manual"
+			stateChanged = true
+		}
 		e.StatusEdited = false
 		var version int
 		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time,trailer_note)
@@ -333,6 +361,17 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if stateChanged {
 			if err = saveLoadState(ctx, tx, e.DriverID, loadStateValue); err != nil {
 				return nil, err
+			}
+		}
+		if len(matchDate) > 0 && (old.ETA != e.ETA || old.CurrentLoad != e.CurrentLoad || stateChanged) {
+			views, readErr := readBoardLoads(ctx, tx, []string{e.DriverID}, matchDate[0])
+			if readErr != nil {
+				return nil, readErr
+			}
+			if a := views[e.DriverID].Automation; a != nil && (old.ETA != e.ETA || old.CurrentLoad != e.CurrentLoad || e.ETA == "") {
+				if _, err = tx.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,eta_context) VALUES($1,$2) ON CONFLICT(driver_id) DO UPDATE SET eta_context=EXCLUDED.eta_context`, e.DriverID, a.Context); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
