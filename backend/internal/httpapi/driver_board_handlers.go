@@ -61,7 +61,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 404, "history event not found")
 			return
 		}
-		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) {
+		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) || errors.Is(err, repository.ErrDriverBoardOrderConflict) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -112,6 +112,36 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		session, _ := authSessionFromContext(r.Context())
 		result, err := repo.ChangeLoads(r.Context(), a, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Post("/driver-board/order", func(w http.ResponseWriter, r *http.Request) {
+		var action repository.DriverBoardOrderAction
+		if err := decodeJSON(r, &action); err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		// Normalize UUID spellings so advisory locks and dispatcher keys agree.
+		for _, id := range []*string{&action.DispatcherID, &action.DriverID, &action.TargetDriverID} {
+			if id == &action.DispatcherID && *id == "" {
+				continue
+			}
+			if !isUUID(*id) {
+				writeAPIError(w, 400, "valid dispatcher and driver ids are required")
+				return
+			}
+			compact := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(*id), "-", ""))
+			*id = compact[:8] + "-" + compact[8:12] + "-" + compact[12:16] + "-" + compact[16:20] + "-" + compact[20:]
+		}
+		if len(action.Revision) != 64 {
+			writeAPIError(w, 400, "a current driver order revision is required")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		result, err := repo.ReorderDrivers(r.Context(), action, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

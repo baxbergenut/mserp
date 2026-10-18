@@ -32,6 +32,7 @@ var routeAccessPolicies = []routeAccess{
 	{"PUT", "/dispatchers/{id}", "dispatchers.edit"},
 	{"GET", "/driver-board", "driver_board.read"},
 	{"PUT", "/driver-board", "driver_board.write"},
+	{"POST", "/driver-board/order", "driver_board.write"},
 	{"GET", "/driver-board/history", "driver_board.read"},
 	{"POST", "/driver-board/history/{id}/undo", "driver_board.write"},
 	{"GET", "/driver-board/loads/{driverId}", "driver_board.read"},

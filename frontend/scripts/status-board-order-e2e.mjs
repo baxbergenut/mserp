@@ -1,0 +1,89 @@
+import { expect } from '@playwright/test';
+import { join } from 'node:path';
+
+export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, headers, temp, week }) {
+  const dispatcher = 'e4500000-0000-0000-0000-000000000071';
+  const ids = [72,73,74,75].map(n => `e4500000-0000-0000-0000-${String(n).padStart(12,'0')}`);
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO dispatchers(id,full_name,normalized_name) VALUES('${dispatcher}','Order Dispatcher','order dispatcher');
+    INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES
+    ('${ids[0]}','Order Alpha','order alpha','cpm',0,'${dispatcher}'),
+    ('${ids[1]}','Order Bravo','order bravo','cpm',0,'${dispatcher}'),
+    ('${ids[2]}','Order Charlie','order charlie','cpm',0,'${dispatcher}'),
+    ('${ids[3]}','Order Other','order other','cpm',0,NULL);
+    INSERT INTO driver_board(driver_id,status,notes) VALUES('${ids[0]}','ENROUTE','Keep dispatch notes'),('${ids[1]}','HOME',''),('${ids[2]}','ENROUTE','');`);
+  const read = async () => (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
+  const group = board => board.drivers.filter(d => d.dispatcherId === dispatcher).map(d => d.id);
+  await page.getByLabel('Dispatcher filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Status filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Search Status Board', { exact: true }).fill('Order ');
+  await viewer.goto(`${base}/driver-board`);
+  await viewer.getByLabel('Search Status Board', { exact: true }).fill('Order ');
+  const order = p => p.locator('tr[data-driver-id]').evaluateAll(rows => rows.map(r => r.dataset.driverId));
+  await expect.poll(() => order(page)).toEqual(ids);
+  await expect(viewer.getByRole('button', { name: 'Move Order Alpha', exact: true })).toHaveCount(0);
+  const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
+  const initial = await read();
+  const action = { dispatcherId: dispatcher, driverId: ids[2], targetDriverId: ids[0], after: false, revision: initial.driverOrderRevisions[dispatcher] };
+  expect((await viewer.request.post(`${base}/api/driver-board/order`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: action })).status()).toBe(403);
+  // A real mouse drag saves, broadcasts and survives reload; no board refetch is needed.
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  await expect(viewer.getByText('Live', { exact: true })).toBeVisible();
+  const reads = [];
+  const track = req => { if (req.method()==='GET' && new URL(req.url()).pathname==='/api/driver-board') reads.push(req.url()); };
+  viewer.on('request',track);
+  await page.getByRole('button', { name: 'Move Order Charlie', exact: true }).dragTo(page.locator(`tr[data-driver-id="${ids[0]}"]`), { targetPosition: { x: 400, y: 3 } });
+  const expected = [ids[2],ids[0],ids[1],ids[3]];
+  await expect.poll(() => order(page)).toEqual(expected);
+  await expect.poll(() => order(viewer)).toEqual(expected);
+  viewer.off('request',track);
+  expect(reads).toEqual([]);
+  await page.reload();
+  await expect.poll(() => order(page)).toEqual(expected);
+  expect(group(await read())).toEqual(expected.slice(0,3));
+  expect((await page.request.post(`${base}/api/driver-board/order`, { headers, data: action })).status()).toBe(409);
+  // Keyboard alternative and both directions of movement.
+  const handle = page.getByRole('button', { name: 'Move Order Charlie', exact: true });
+  await handle.focus(); await page.keyboard.press('ArrowDown');
+  await expect.poll(() => order(page)).toEqual([ids[0],ids[2],ids[1],ids[3]]);
+  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  await handle.focus(); await page.keyboard.press('ArrowDown');
+  await expect.poll(() => order(page)).toEqual(ids);
+  // Hidden Bravo remains in the full order; filtering does not replace the roster.
+  await page.getByLabel('Status filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Clear all', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'ENROUTE', exact: true }).check();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => order(page)).toEqual([ids[0],ids[2]]);
+  await handle.dragTo(page.locator(`tr[data-driver-id="${ids[0]}"]`), { targetPosition: { x: 400, y: 3 } });
+  await expect.poll(async () => group(await read())).toEqual([ids[2],ids[0],ids[1]]);
+  await page.getByLabel('Status filter', { exact: true }).click();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => order(page)).toEqual(expected);
+  // A different dispatcher is never a valid drop target, including direct API calls.
+  let calls=0;
+  const trackWrites=req=>{if(new URL(req.url()).pathname==='/api/driver-board/order')calls++;};
+  page.on('request',trackWrites);
+  await handle.dragTo(page.locator(`tr[data-driver-id="${ids[3]}"]`), { targetPosition: { x: 400, y: 3 } });
+  page.off('request',trackWrites);
+  expect(calls).toBe(0);
+  const latest=await read();
+  expect((await page.request.post(`${base}/api/driver-board/order`, { headers, data: { ...action, targetDriverId: ids[3], revision: latest.driverOrderRevisions[dispatcher] } })).status()).toBe(409);
+  // Failed requests leave the saved order visible and offer recovery.
+  await page.route('**/api/driver-board/order',route=>route.fulfill({status:503,json:{error:'Order save unavailable'}}),{times:1});
+  await handle.focus(); await page.keyboard.press('ArrowDown');
+  const orderAlert = page.getByRole('alert').filter({hasText:'Order save unavailable'});
+  await expect(orderAlert).toBeVisible();
+  await expect.poll(() => order(page)).toEqual(expected);
+  await orderAlert.getByRole('button',{name:'Reload board',exact:true}).click();
+  await expect(orderAlert).toHaveCount(0);
+  expect((await read()).entries.find(e=>e.driverId===ids[0]).notes).toBe('Keep dispatch notes');
+  await page.screenshot({path:join(temp,'status-board-driver-order.png'),fullPage:true});
+  await page.getByLabel('Search Status Board',{exact:true}).fill('');
+  console.log('Status Board row ordering E2E passed: mouse dragging, keyboard moves, reload persistence, two-user live order without refetch, filtered hidden rows, dispatcher boundaries, stale revision, read-only authorization and failed-save recovery.');
+}

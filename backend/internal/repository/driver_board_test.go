@@ -127,6 +127,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testBoardProgress(t, ctx, pool, repo, fleet)
 			testOperationalLoadSync(t, ctx, pool, repo, fleet)
 			testBoardAutomationDatabase(t, ctx, pool, repo, fleet)
+			testDriverBoardOrder(t, ctx, pool, repo, fleet)
 			city := "Louisville"
 			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, City: &city}
 			driver, err := fleet.CreateDriver(ctx, input)

@@ -15,7 +15,7 @@ import (
 // notification triggers only after those tables have been migrated back in.
 func withoutBoardLiveMigration(t *testing.T, source string) string {
 	t.Helper()
-	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql"} {
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -32,7 +32,7 @@ func withoutBoardLiveMigration(t *testing.T, source string) string {
 
 func applyBoardLiveMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
-	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql"} {
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)

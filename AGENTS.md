@@ -349,6 +349,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Migration 118 stores a shared driver order per dispatcher (including Unassigned).
+  Drag the grip beside a driver or focus it and press Up/Down; `POST
+  /driver-board/order` requires driver_board.write and a current roster/order
+  revision. Moves stay within one dispatcher, retain filtered-out drivers, and
+  broadcast the saved order to other viewers through Status Board SSE. New drivers
+  append; departing drivers disappear without changing the saved order. Test with
+  TestDriverBoardDatabase and `test-investors-e2e.mjs --board-only`.
   Loads > Add next load saves an exact number in the audited load-state JSON,
   independently of Gross Board. Manual queue IDs persist across imports; cached
   unique number matches populate the same details and stop/progress controls.

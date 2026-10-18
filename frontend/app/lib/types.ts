@@ -426,12 +426,27 @@ export interface FiveELDBoardSummary {
 }
 
 export interface DriverBoard {
+  driverOrderRevisions: Record<string, string>;
   weekStart: string;
   drivers: DriverBoardDriver[];
   entries: DriverBoardEntry[];
   grossEntries: GrossBoardEntry[];
   loads: Record<string, BoardLoads>;
   eld: FiveELDBoardSummary;
+}
+
+export interface DriverBoardOrderAction {
+  dispatcherId: string;
+  driverId: string;
+  targetDriverId: string;
+  after: boolean;
+  revision: string;
+}
+
+export interface DriverBoardOrder {
+  dispatcherId: string;
+  driverIds: string[];
+  revision: string;
 }
 
 export interface SyncFiveELDResult {

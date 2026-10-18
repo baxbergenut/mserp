@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
+import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { progressStatus, reconcileDriverBoard } from "./board";
@@ -18,6 +18,8 @@ export function useDriverBoard(lockedDriverId?: string) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [orderSaving, setOrderSaving] = useState(false);
+  const orderSavingRef = useRef(false);
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [eldRefreshing, setELDRefreshing] = useState(false);
@@ -119,6 +121,25 @@ export function useDriverBoard(lockedDriverId?: string) {
     setChanges(result);
   }, [canEdit]);
 
+  async function reorderDrivers(driverId: string, targetDriverId: string, after: boolean, revision: string) {
+    if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) return;
+    const driver = board?.drivers.find(d => d.id === driverId);
+    const target = board?.drivers.find(d => d.id === targetDriverId);
+    if (!driver || !target || driverId === targetDriverId || driver.dispatcherId !== target.dispatcherId) return;
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    try {
+      const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision });
+      setBoard(current => {
+        if (!current || current.driverOrderRevisions?.[result.dispatcherId] !== revision) return current;
+        const ranks = new Map(result.driverIds.map((id, i) => [id, i]));
+        const group = current.drivers.filter(d => d.dispatcherId === result.dispatcherId).sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
+        let index = 0;
+        return { ...current, drivers: current.drivers.map(d => d.dispatcherId === result.dispatcherId ? group[index++] : d), driverOrderRevisions: { ...current.driverOrderRevisions, [result.dispatcherId]: result.revision } };
+      });
+    } finally { orderSavingRef.current = false; setOrderSaving(false); }
+  }
+
   const refreshLoads = useCallback(async (ids: string[]) => {
     try {
       const rows = await Promise.all(ids.map(async id => [id, await fetchBoardLoads(id)] as const));
@@ -164,7 +185,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, [dirty, saving, error, loading, save, pendingLink]);
 
   useEffect(() => {
-    if (!dirty && !saving) return;
+    if (!dirty && !saving && !orderSaving) return;
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     const leave = (event: MouseEvent) => {
       const link = (event.target as Element).closest?.("a[href]");
@@ -176,13 +197,13 @@ export function useDriverBoard(lockedDriverId?: string) {
     };
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leave, true);
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
-  }, [dirty, saving]);
+  }, [dirty, saving, orderSaving]);
 
   useEffect(() => {
-    if (!pendingLink || dirty || saving || error || loading) return;
+    if (!pendingLink || dirty || saving || orderSaving || error || loading) return;
     if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
     else window.location.assign(pendingLink);
-  }, [pendingLink, dirty, saving, error, loading, router]);
+  }, [pendingLink, dirty, saving, orderSaving, error, loading, router]);
 
   async function reload() {
     if (savingRef.current) return;
@@ -299,5 +320,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, [saving, dirty, error]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving, actionBusy, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, ...live, leaving: !!pendingLink };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, reorderDrivers, ...live, leaving: !!pendingLink };
 }

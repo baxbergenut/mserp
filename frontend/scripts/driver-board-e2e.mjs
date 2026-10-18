@@ -1,5 +1,6 @@
 import { runStatusBoardEditingE2E } from './status-board-editing-e2e.mjs';
 import { runStatusBoardLiveE2E } from './status-board-live-e2e.mjs';
+import { runStatusBoardOrderE2E } from './status-board-order-e2e.mjs';
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
 import { runStatusBoardLoadsE2E } from './status-board-loads-e2e.mjs';
@@ -311,6 +312,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
     expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'add', number: 'UNAUTHORIZED-NEXT', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
     await runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp, setNetworkLatency });
+    await runStatusBoardOrderE2E({ page, viewer, base, sql, schema, headers, temp, week });
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();

@@ -2,7 +2,7 @@
 
 
 import { Fragment, memo, useContext, useMemo, useState } from "react";
-import { Banknote, CloudCheck, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
+import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
@@ -73,6 +73,10 @@ export default function DriverBoardPage() {
   const [history, setHistory] = useState<{ driverId?: string; name: string; ids: string[]; field?: string } | null>(null);
   const [loadDriver, setLoadDriver] = useState<{ id: string; name: string } | null>(null);
   const [destinationError, setDestinationError] = useState("");
+  const [orderError, setOrderError] = useState("");
+  const [orderNotice, setOrderNotice] = useState("");
+  const [drag, setDrag] = useState<{ id: string; dispatcherId: string; revision: string } | null>(null);
+  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null);
   const drivers = (board?.drivers ?? []).filter(d =>
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
@@ -89,6 +93,14 @@ export default function DriverBoardPage() {
     groups.set(d.dispatcherId, group);
   }
   const disabled = !canEdit || loading || leaving || state.actionBusy;
+  const orderDisabled = disabled || saving || dirty;
+  async function moveDriver(id: string, target: string, after: boolean, revision: string) {
+    setDrag(null); setDrop(null); setOrderError(""); setOrderNotice("");
+    try {
+      await state.reorderDrivers(id, target, after, revision);
+      setOrderNotice("Driver order saved.");
+    } catch (err) { setOrderError(err instanceof Error ? err.message : "Driver order could not be saved. Try again."); }
+  }
   function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
     return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled} edit={edit} />;
   }
@@ -119,6 +131,8 @@ export default function DriverBoardPage() {
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
+    {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}
+    <span role="status" aria-live="polite" className="sr-only">{orderNotice}</span>
     <StatusBoardScrollArea loading={loading}>
       <table {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
@@ -163,9 +177,39 @@ export default function DriverBoardPage() {
                   </div>
                 </td>
               </tr>}
-              <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
+              <tr className={`group bg-zinc-950/20 hover:bg-zinc-800/20 ${drag?.id === d.id ? "opacity-40" : ""} ${drop?.id === d.id ? drop.after ? "[&>td]:shadow-[inset_0_-2px_#3b82f6] [&>th]:shadow-[inset_0_-2px_#3b82f6]" : "[&>td]:shadow-[inset_0_2px_#3b82f6] [&>th]:shadow-[inset_0_2px_#3b82f6]" : ""}`} data-driver-id={d.id}
+                onDragOver={event => {
+                  if (!drag || orderDisabled || drag.id === d.id || drag.dispatcherId !== d.dispatcherId) { setDrop(null); return; }
+                  event.preventDefault(); event.dataTransfer.dropEffect = "move";
+                  const box = event.currentTarget.getBoundingClientRect();
+                  setDrop({ id: d.id, after: event.clientY >= box.top + box.height / 2 });
+                }}
+                onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDrop(null); }}
+                onDrop={event => {
+                  if (!drag || orderDisabled || drag.id === d.id || drag.dispatcherId !== d.dispatcherId) return;
+                  event.preventDefault();
+                  const box = event.currentTarget.getBoundingClientRect();
+                  void moveDriver(drag.id, d.id, event.clientY >= box.top + box.height / 2, drag.revision);
+                }}>
                 <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
-                <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1"><span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
+                <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
+                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag to reorder within this dispatcher, or use Arrow Up / Arrow Down" disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]} draggable={!orderDisabled}
+                    className="flex h-8 shrink-0 cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
+                    onDragStart={event => {
+                      const revision = board?.driverOrderRevisions?.[d.dispatcherId];
+                      if (orderDisabled || !revision) { event.preventDefault(); return; }
+                      event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", d.id);
+                      const row = event.currentTarget.closest("tr"); if (row) event.dataTransfer.setDragImage(row, 120, 16);
+                      setDrag({ id: d.id, dispatcherId: d.dispatcherId, revision }); setOrderNotice("");
+                    }} onDragEnd={() => { setDrag(null); setDrop(null); }}
+                    onKeyDown={event => {
+                      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                      event.preventDefault(); event.stopPropagation();
+                      const target = drivers[i + (event.key === "ArrowUp" ? -1 : 1)];
+                      const revision = board?.driverOrderRevisions?.[d.dispatcherId];
+                      if (target?.dispatcherId === d.dispatcherId && revision && !orderDisabled) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
+                    }}><GripVertical className="h-4 w-4" /></button>}
+                  <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
