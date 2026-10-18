@@ -350,7 +350,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
   Migration 118 stores a shared driver order per dispatcher (including Unassigned).
-  Drag the grip beside a driver or focus it and press Up/Down; `POST
+  Drag the grip beside a driver to preview rows shifting in either direction;
+  dropping saves, and canceling restores the prior order. Focus the grip and press
+  Up/Down for keyboard moves. `POST
   /driver-board/order` requires driver_board.write and a current roster/order
   revision. Moves stay within one dispatcher, retain filtered-out drivers, and
   broadcast the saved order to other viewers through Status Board SSE. New drivers

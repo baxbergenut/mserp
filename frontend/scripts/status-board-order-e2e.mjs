@@ -36,8 +36,29 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   const reads = [];
   const track = req => { if (req.method()==='GET' && new URL(req.url()).pathname==='/api/driver-board') reads.push(req.url()); };
   viewer.on('request',track);
-  await page.getByRole('button', { name: 'Move Order Charlie', exact: true }).dragTo(page.locator(`tr[data-driver-id="${ids[0]}"]`), { targetPosition: { x: 400, y: 3 } });
+  let previewWrites = 0;
+  const trackPreviewWrite = req => { if (new URL(req.url()).pathname === '/api/driver-board/order') previewWrites++; };
+  page.on('request', trackPreviewWrite);
+  const grip = page.getByRole('button', { name: 'Move Order Charlie', exact: true });
+  const start = await grip.boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  const pass = async (id, after) => {
+    const box = await page.locator(`tr[data-driver-id="${id}"]`).boundingBox();
+    await page.mouse.move(box.x + 300, box.y + (after ? box.height - 3 : 3), { steps: 8 });
+  };
+  await pass(ids[0], false);
+  await expect.poll(() => order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
+  expect(group(await read())).toEqual(ids.slice(0,3));
+  await pass(ids[1], true);
+  await expect.poll(() => order(page)).toEqual(ids);
+  await pass(ids[0], false);
+  await expect.poll(() => order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
+  expect(previewWrites).toBe(0);
+  await page.mouse.up();
+  page.off('request', trackPreviewWrite);
   const expected = [ids[2],ids[0],ids[1],ids[3]];
+  await expect.poll(async () => group(await read())).toEqual(expected.slice(0,3));
   await expect.poll(() => order(page)).toEqual(expected);
   await expect.poll(() => order(viewer)).toEqual(expected);
   viewer.off('request',track);
@@ -85,5 +106,5 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   expect((await read()).entries.find(e=>e.driverId===ids[0]).notes).toBe('Keep dispatch notes');
   await page.screenshot({path:join(temp,'status-board-driver-order.png'),fullPage:true});
   await page.getByLabel('Search Status Board',{exact:true}).fill('');
-  console.log('Status Board row ordering E2E passed: mouse dragging, keyboard moves, reload persistence, two-user live order without refetch, filtered hidden rows, dispatcher boundaries, stale revision, read-only authorization and failed-save recovery.');
+  console.log('Status Board row ordering E2E passed: live forward/back drag preview with no early save, mouse drop, keyboard moves, reload persistence, two-user live order without refetch, filtered hidden rows, dispatcher boundaries, stale revision, read-only authorization and failed-save recovery.');
 }

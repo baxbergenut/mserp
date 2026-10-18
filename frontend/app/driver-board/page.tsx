@@ -1,7 +1,7 @@
 "use client";
 
 
-import { Fragment, memo, useContext, useMemo, useState } from "react";
+import { Fragment, memo, useContext, useMemo, useRef, useState } from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
@@ -41,6 +41,8 @@ const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zin
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+type RowDrag = { id: string; dispatcherId: string; revision: string; preview: string[]; targetId: string | null; after: boolean };
+
 const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
   entry: DriverBoardEntry; field: "currentLoad" | "trailerNumber" | "destination" | "notes" | "homeTime";
   label: string; limit: number; disabled: boolean;
@@ -75,12 +77,19 @@ export default function DriverBoardPage() {
   const [destinationError, setDestinationError] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderNotice, setOrderNotice] = useState("");
-  const [drag, setDrag] = useState<{ id: string; dispatcherId: string; revision: string } | null>(null);
-  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null);
+  const [drag, setDrag] = useState<RowDrag | null>(null);
+  const dragRef = useRef<RowDrag | null>(null);
   const drivers = (board?.drivers ?? []).filter(d =>
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
+  const renderedDrivers = drag ? (() => {
+    const rank = new Map(drag.preview.map((id, index) => [id, index]));
+    const group = drivers.filter(d => d.dispatcherId === drag.dispatcherId)
+      .sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+    let index = 0;
+    return drivers.map(d => d.dispatcherId === drag.dispatcherId ? group[index++] : d);
+  })() : drivers;
   const dispatchers = Array.from(new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName])).entries());
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
   const ids = new Set(drivers.map(d => d.id));
@@ -94,8 +103,25 @@ export default function DriverBoardPage() {
   }
   const disabled = !canEdit || loading || leaving || state.actionBusy;
   const orderDisabled = disabled || saving || dirty;
+  function clearDrag() { dragRef.current = null; setDrag(null); }
+  function previewDrag(targetId: string, dispatcherId: string, clientY: number, row: HTMLTableRowElement) {
+    const current = dragRef.current;
+    if (!current || orderDisabled || current.id === targetId || current.dispatcherId !== dispatcherId) return false;
+    const sourceIndex = current.preview.indexOf(current.id);
+    const targetIndex = current.preview.indexOf(targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return false;
+    const midpoint = row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    const downward = sourceIndex < targetIndex;
+    if ((downward && clientY <= midpoint) || (!downward && clientY >= midpoint)) return true;
+    const preview = current.preview.filter(id => id !== current.id);
+    preview.splice(targetIndex, 0, current.id);
+    const next = { ...current, preview, targetId, after: downward };
+    dragRef.current = next;
+    setDrag(next);
+    return true;
+  }
   async function moveDriver(id: string, target: string, after: boolean, revision: string) {
-    setDrag(null); setDrop(null); setOrderError(""); setOrderNotice("");
+    clearDrag(); setOrderError(""); setOrderNotice("");
     try {
       await state.reorderDrivers(id, target, after, revision);
       setOrderNotice("Driver order saved.");
@@ -147,7 +173,7 @@ export default function DriverBoardPage() {
         <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
         <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" style={i < 2 ? { left: i === 0 ? 0 : driverColumnOffset } : undefined} className={`${i < 2 ? "sm:sticky sm:z-[21]" : ""} h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 text-left font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
         <tbody>
-          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : drivers.map((d, i) => {
+          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.map((d, i) => {
             const entry = entries[d.id];
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const group = groups.get(d.dispatcherId)!;
@@ -160,7 +186,7 @@ export default function DriverBoardPage() {
             const destinationBusy = dirty || saving || loading || leaving;
             const next = loads?.next ?? [];
             return <Fragment key={d.id}>
-              {(i === 0 || drivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
+              {(i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
                 <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
                   <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
                     <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
@@ -177,19 +203,18 @@ export default function DriverBoardPage() {
                   </div>
                 </td>
               </tr>}
-              <tr className={`group bg-zinc-950/20 hover:bg-zinc-800/20 ${drag?.id === d.id ? "opacity-40" : ""} ${drop?.id === d.id ? drop.after ? "[&>td]:shadow-[inset_0_-2px_#3b82f6] [&>th]:shadow-[inset_0_-2px_#3b82f6]" : "[&>td]:shadow-[inset_0_2px_#3b82f6] [&>th]:shadow-[inset_0_2px_#3b82f6]" : ""}`} data-driver-id={d.id}
+              <tr className={`group bg-zinc-950/20 hover:bg-zinc-800/20 ${drag?.id === d.id ? "outline outline-2 outline-blue-400" : ""}`} data-driver-id={d.id}
                 onDragOver={event => {
-                  if (!drag || orderDisabled || drag.id === d.id || drag.dispatcherId !== d.dispatcherId) { setDrop(null); return; }
-                  event.preventDefault(); event.dataTransfer.dropEffect = "move";
-                  const box = event.currentTarget.getBoundingClientRect();
-                  setDrop({ id: d.id, after: event.clientY >= box.top + box.height / 2 });
+                  if ((dragRef.current?.id === d.id && !orderDisabled) || previewDrag(d.id, d.dispatcherId, event.clientY, event.currentTarget)) {
+                    event.preventDefault(); event.dataTransfer.dropEffect = "move";
+                  }
                 }}
-                onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDrop(null); }}
                 onDrop={event => {
-                  if (!drag || orderDisabled || drag.id === d.id || drag.dispatcherId !== d.dispatcherId) return;
+                  const current = dragRef.current;
+                  if (!current || orderDisabled || current.dispatcherId !== d.dispatcherId) return;
                   event.preventDefault();
-                  const box = event.currentTarget.getBoundingClientRect();
-                  void moveDriver(drag.id, d.id, event.clientY >= box.top + box.height / 2, drag.revision);
+                  if (current.targetId) void moveDriver(current.id, current.targetId, current.after, current.revision);
+                  else clearDrag();
                 }}>
                 <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
@@ -200,8 +225,9 @@ export default function DriverBoardPage() {
                       if (orderDisabled || !revision) { event.preventDefault(); return; }
                       event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", d.id);
                       const row = event.currentTarget.closest("tr"); if (row) event.dataTransfer.setDragImage(row, 120, 16);
-                      setDrag({ id: d.id, dispatcherId: d.dispatcherId, revision }); setOrderNotice("");
-                    }} onDragEnd={() => { setDrag(null); setDrop(null); }}
+                      const current: RowDrag = { id: d.id, dispatcherId: d.dispatcherId, revision, preview: drivers.filter(row => row.dispatcherId === d.dispatcherId).map(row => row.id), targetId: null, after: false };
+                      dragRef.current = current; setDrag(current); setOrderNotice("");
+                    }} onDragEnd={clearDrag}
                     onKeyDown={event => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault(); event.stopPropagation();
