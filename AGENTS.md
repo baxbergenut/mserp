@@ -264,9 +264,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   invalid profiles never fall back. DataTruck weight is absent in live samples.
   Never substitute car routes.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
-  Stopped-truck automatic miles remain visible during stale GPS/rest periods with
-  last-observation details on hover. Moving trucks show miles above 600 miles
-  remaining, otherwise ETA; moving estimates expire after ten minutes.
+  Stale GPS displays last-known miles with observation time on hover, including
+  a one-time route from cached coordinates when no estimate existed. Reuse the
+  unchanged position's route; never infer stopped/ignition state from staleness.
+  Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
+  moving ETAs become last-known miles after ten minutes.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   dwell/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; database tests use the existing disposable

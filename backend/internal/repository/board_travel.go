@@ -14,16 +14,17 @@ import (
 )
 
 type BoardTravel struct {
-	Enabled      bool      `json:"enabled"`
-	Context      string    `json:"context"`
-	CalculatedAt time.Time `json:"calculatedAt"`
-	AttemptedAt  time.Time `json:"attemptedAt"`
-	ReportedAt   time.Time `json:"reportedAt"`
-	ArrivalAt    time.Time `json:"arrivalAt"`
-	Miles        float64   `json:"miles"`
-	Motion       string    `json:"motion"`
-	Error        string    `json:"error"`
-	Assumptions  string    `json:"assumptions,omitempty"`
+	Enabled           bool      `json:"enabled"`
+	Context           string    `json:"context"`
+	CalculatedAt      time.Time `json:"calculatedAt"`
+	AttemptedAt       time.Time `json:"attemptedAt"`
+	ReportedAt        time.Time `json:"reportedAt"`
+	ArrivalAt         time.Time `json:"arrivalAt"`
+	Miles             float64   `json:"miles"`
+	Motion            string    `json:"motion"`
+	Error             string    `json:"error"`
+	Assumptions       string    `json:"assumptions,omitempty"`
+	LastKnownPosition bool      `json:"lastKnownPosition,omitempty"`
 }
 
 func (t BoardTravel) display(key string, now time.Time) (value, reason string) {
@@ -45,8 +46,17 @@ func (t BoardTravel) display(key string, now time.Time) (value, reason string) {
 		return "", "Automatic estimate unavailable or stale"
 	}
 	stale := now.Sub(t.ReportedAt) > 10*time.Minute || now.Sub(t.CalculatedAt) > 10*time.Minute
-	if stale && t.Motion != "stopped" {
-		return "", "Automatic estimate unavailable or stale"
+	if stale || t.LastKnownPosition {
+		loc, _ := time.LoadLocation("America/New_York")
+		freshness := "GPS data stale"
+		if now.Sub(t.ReportedAt) <= 10*time.Minute {
+			freshness = "Last known position estimate"
+		}
+		reason = "Last known miles remaining · " + freshness + " · last observed " + t.ReportedAt.In(loc).Format("Jan 2, 2006 15:04 MST")
+		if t.Error != "" {
+			reason += " · " + t.Error
+		}
+		return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
 	}
 	reason = t.Error
 	if reason != "" {
@@ -60,13 +70,6 @@ func (t BoardTravel) display(key string, now time.Time) (value, reason string) {
 		loc, _ := time.LoadLocation("America/New_York")
 		return "ETA " + t.ArrivalAt.In(loc).Format("15:04"), reason
 	case "stopped":
-		if stale {
-			loc, _ := time.LoadLocation("America/New_York")
-			reason = "Last known miles remaining · GPS data stale · last observed " + t.ReportedAt.In(loc).Format("Jan 2, 2006 15:04 MST")
-			if t.Error != "" {
-				reason += " · " + t.Error
-			}
-		}
 		return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
 	}
 	return "", "Truck movement is not yet established"
@@ -141,11 +144,12 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		entries[e.DriverID] = e
 	}
 	type target struct {
-		driver DriverBoardDriver
-		view   BoardLoads
-		stop   BoardStop
-		travel BoardTravel
-		vin    string
+		driver    DriverBoardDriver
+		view      BoardLoads
+		stop      BoardStop
+		travel    BoardTravel
+		vin       string
+		lastKnown bool
 	}
 	targets := []target{}
 	for _, d := range board.Drivers {
@@ -201,8 +205,8 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			unavailable = "Selected stop coordinates are unavailable"
 		case d.Location == nil:
 			unavailable = "Truck GPS location is unavailable"
-		case now.Sub(d.Location.ReportedAt) > 10*time.Minute || d.Location.ReportedAt.After(now):
-			unavailable = "Truck GPS location is stale or has an invalid timestamp"
+		case d.Location.ReportedAt.IsZero() || d.Location.ReportedAt.After(now):
+			unavailable = "Truck GPS location has an invalid timestamp"
 		}
 		if unavailable != "" {
 			if t.Context != a.Context {
@@ -218,10 +222,23 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			}
 			continue
 		}
-		if t.Context == a.Context && now.Sub(t.AttemptedAt) < 5*time.Minute {
+		lastKnown := now.Sub(d.Location.ReportedAt) > 10*time.Minute
+		if lastKnown && t.Context == a.Context && !t.CalculatedAt.IsZero() && !t.CalculatedAt.After(now) && !t.ReportedAt.Before(d.Location.ReportedAt) && !t.ReportedAt.After(now) {
+			if _, _, ok := routes.Options.VehicleFor(d.TruckID, *view.Current.LoadID, entries[d.ID].TrailerNumber, now); ok {
+				// Distance from an unchanged old position is reusable throughout rest.
+				if !t.Enabled {
+					t.Enabled = true
+					if err = r.storeBoardTravel(ctx, d.ID, d.TruckID, view.Revision, a.Context, t); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+		}
+		if t.Context == a.Context && now.Sub(t.AttemptedAt) < 5*time.Minute && (lastKnown || !t.LastKnownPosition) {
 			continue
 		}
-		targets = append(targets, target{d, view, stop, t, vin})
+		targets = append(targets, target{d, view, stop, t, vin, lastKnown})
 	}
 	sort.SliceStable(targets, func(i, j int) bool { return targets[i].travel.AttemptedAt.Before(targets[j].travel.AttemptedAt) })
 	for _, job := range targets {
@@ -235,10 +252,18 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		t.Enabled = true
 		t.AttemptedAt = now
+		var point *fiveeld.TrackingPoint
+		motion := t.Motion
 		vehicle, assumptions, ok := routes.Options.VehicleFor(job.driver.TruckID, *job.view.Current.LoadID, entries[job.driver.ID].TrailerNumber, now)
 		if !ok {
 			t.Error = "Reviewed truck/load/trailer routing attributes are missing or expired"
 			t.CalculatedAt = time.Time{}
+		} else if job.lastKnown {
+			// Staleness does not establish stopped/ignition state. Route only distance
+			// from the shared last-known location, retaining its provider timestamp.
+			point = &fiveeld.TrackingPoint{Date: job.driver.Location.ReportedAt}
+			point.Coordinates.Lat = job.driver.Location.Latitude
+			point.Coordinates.Lng = job.driver.Location.Longitude
 		} else if eld == nil {
 			t.Error = "Five ELD tracking unavailable"
 			t.CalculatedAt = time.Time{}
@@ -251,27 +276,28 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				if now.Sub(t.ReportedAt) > 10*time.Minute && previous != "stopped" {
 					previous = ""
 				}
-				motion, p := trackingMotion(points, routes.Options.SpeedUnit, previous)
-				if p == nil {
+				motion, point = trackingMotion(points, routes.Options.SpeedUnit, previous)
+				if point == nil {
 					t.Error = "No fresh tracking points"
-					t.CalculatedAt = time.Time{}
-				} else {
-					estimate, e := routes.Route(ctx, p.Coordinates.Lat, p.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, vehicle)
-					if e != nil {
-						t.Error = e.Error()
-						if errors.Is(e, boardroutes.ErrRouteUnavailable) {
-							t.CalculatedAt = time.Time{}
-						}
-					} else {
-						t.Error = ""
-						t.Motion = motion
-						t.ReportedAt = p.Date
-						t.CalculatedAt = time.Now().UTC()
-						t.ArrivalAt = p.Date.Add(estimate.Duration)
-						t.Miles = float64(estimate.Meters) / 1609.344
-						t.Assumptions = assumptions
-					}
 				}
+			}
+		}
+		if point != nil {
+			estimate, e := routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, vehicle)
+			if e != nil {
+				t.Error = e.Error()
+				if errors.Is(e, boardroutes.ErrRouteUnavailable) {
+					t.CalculatedAt = time.Time{}
+				}
+			} else {
+				t.Error, t.Motion = "", motion
+				t.ReportedAt, t.CalculatedAt = point.Date, time.Now().UTC()
+				t.ArrivalAt = time.Time{}
+				if !job.lastKnown {
+					t.ArrivalAt = point.Date.Add(estimate.Duration)
+				}
+				t.Miles = float64(estimate.Meters) / 1609.344
+				t.Assumptions, t.LastKnownPosition = assumptions, job.lastKnown
 			}
 		}
 		if err = r.storeBoardTravel(ctx, job.driver.ID, job.driver.TruckID, job.view.Revision, a.Context, t); err != nil {

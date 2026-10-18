@@ -96,9 +96,12 @@ Five ELD configuration and an explicitly verified mph/kph speed unit. Flags are
 operator attestations, not an API-access test. No production activation is implied
 by deployment. Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached
 automatic values are disabled by the next worker pass. Manual entry remains usable.
-Matched selections with stale/missing GPS still report routing as enabled and
-explain why an estimate is unavailable. They make no routing calls and queue on
-the next minute pass once GPS becomes usable, without a five-minute retry delay.
+Matched selections with missing/invalid GPS still report routing as enabled and
+explain why an estimate is unavailable. A valid old GPS position can bootstrap
+road miles through the same paced Google worker without querying tracking data.
+Reuse an existing valid distance from that position; do not reroute an unchanged
+resting position on every poll. Fresh telemetry queues on the next minute pass
+without waiting for the old-position route's five-minute interval.
 
 On October 18, 2026, the operator approved a shared estimate profile and confirmed
 Five ELD tracking speeds are mph. `BOARD_ROUTES_STANDARD_SEMI=true` uses assumed
@@ -156,14 +159,18 @@ Stopped requires <=2 mph with movement under 100m for at least three minutes;
 intermediate speeds retain the previous classification. Speed units are normalized
 only after provider verification. Moving displays road miles remaining above 600
 miles, otherwise New York ETA from observation time plus routed duration. Exactly
-600 miles displays ETA; displayed miles round up. Stopped always displays road miles remaining. Stopped-truck
-miles remain visible through stale GPS/rest periods, with the last observation
-time and a stale-data warning on hover, until fresh movement is established or
-the load/stop/truck context changes. A fresh stationary point after a long rest
-does not discard the last stopped state. Moving estimates (ETA or miles) expire after ten minutes;
-unknown movement, missing/invalidated routes or partially ignored restrictions
-suppress output. Temporary errors retain a prior valid moving estimate for at
-most ten minutes, with a hover warning. Results are fenced against the selected load/stop/source revision
+600 miles displays ETA; displayed miles round up. Stopped always displays road
+miles remaining. After ten minutes, show last-known road miles instead of ETA,
+regardless of the last movement classification. Preserve them through stale
+GPS/rest periods, with the provider observation time and stale warning on hover.
+If no route existed when the truck went offline, calculate distance from the
+shared cached location. This never establishes stopped/ignition state, advances
+arrival, or produces an ETA from stale coordinates. New load/stop/truck contexts
+clear the old distance and route to the newly selected stop. A fresh stationary
+point after a long rest does not discard the last stopped state. Unknown fresh
+movement, missing/invalidated routes or partially ignored restrictions suppress
+output. Temporary errors retain a prior valid distance with a hover warning;
+live moving ETAs expire after ten minutes. Results are fenced against the selected load/stop/source revision
 and current truck before committing.
 
 When enabled, blank ETA starts in Automatic mode; existing values stay Manual.

@@ -3,7 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,8 +123,8 @@ func TestTrackingMotion(t *testing.T) {
 	if value, _ := estimate.display("two", now); value != "" {
 		t.Fatal("cross-load ETA")
 	}
-	if value, _ := estimate.display("one", now.Add(11*time.Minute)); value != "" {
-		t.Fatal("stale ETA")
+	if value, _ := estimate.display("one", now.Add(11*time.Minute)); value != "0mi" {
+		t.Fatal("stale ETA did not become last known miles", value)
 	}
 	estimate.Motion = "stopped"
 	estimate.Miles = 133
@@ -160,7 +163,9 @@ func TestBoardTravelDistanceDisplay(t *testing.T) {
 		{"long haul", "moving", 1000, 0, "1000mi"},
 		{"stopped nearby", "stopped", 133, 0, "133mi"},
 		{"unknown movement", "", 1000, 0, ""},
-		{"stale moving miles", "moving", 1000, 11 * time.Minute, ""},
+		{"stale moving miles", "moving", 1000, 11 * time.Minute, "1000mi"},
+		{"stale nearby moving", "moving", 133, 11 * time.Minute, "133mi"},
+		{"stale unknown movement", "", 133, 12 * time.Hour, "133mi"},
 		{"resting long haul", "stopped", 1000, 12 * time.Hour, "1000mi"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -307,18 +312,65 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil || !strings.HasPrefix(result.Loads.Automation.TravelValue, "ETA ") {
 		t.Fatal("automatic estimate projection", err)
 	}
-	// Enabling with stale GPS must expose the reason without making provider calls.
+	// Stale GPS can bootstrap distance without inventing movement or querying ELD.
 	_, err = pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, now.Add(-11*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
-	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, StandardSemi: true})
+	var routeCalls atomic.Int32
+	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		routeCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934,"travelAdvisory":{"routeRestrictionsPartiallyIgnored":false}}]}`))
+	}))
+	defer routeServer.Close()
+	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, StandardSemi: true, SpeedUnit: "mph", RequestsPerMinute: 120})
+	routes.URL = routeServer.URL
+	// No existing route: first enable while the truck is off must still show miles.
+	_, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel='{}' WHERE driver_id=$1`, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")
-	if err != nil || !view.Automation.RoutingEnabled || !strings.Contains(view.Automation.Reason, "GPS location is stale") {
-		t.Fatal("stale GPS hid activation or its reason", err, view.Automation)
+	if err != nil || !view.Automation.RoutingEnabled || view.Automation.TravelValue != "100mi" || !strings.Contains(view.Automation.Reason, "GPS data stale") {
+		t.Fatal("stale GPS did not bootstrap last known miles", err, view.Automation)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.LastKnownPosition || !cached.ArrivalAt.IsZero() || cached.Motion != "" {
+		t.Fatal("stale position invented ETA or movement", err, cached)
+	}
+	calls := routeCalls.Load()
+	if calls == 0 {
+		t.Fatal("last known distance was not routed")
+	}
+	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil || routeCalls.Load() != calls {
+		t.Fatal("unchanged resting position caused another route request", err)
+	}
+	// Fresh moving telemetry replaces the distance immediately, bypassing retry delay.
+	_, err = pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eldServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.Contains(req.URL.Path, "/active-units/") {
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"id": "fixture-truck", "vin": vin}})
+			return
+		}
+		speed := 10.0
+		p := fiveeld.TrackingPoint{Date: now, Speed: &speed}
+		p.Coordinates.Lat, p.Coordinates.Lng = 40.46211, -74.3909193
+		_ = json.NewEncoder(w).Encode([]fiveeld.TrackingPoint{p})
+	}))
+	defer eldServer.Close()
+	eld := fiveeld.NewClientWithHTTPClient(eldServer.URL, "fixture", "fixture", eldServer.Client())
+	if err = repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
+		t.Fatal("fresh movement did not promptly replace last known miles", err, view.Automation)
 	}
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID)
