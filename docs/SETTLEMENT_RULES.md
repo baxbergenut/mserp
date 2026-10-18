@@ -2,27 +2,27 @@
 
 Customer clarification recorded October 8, 2026.
 
-## Original gross, driver gross and dispatch adjustments
+## Total gross, driver gross and dispatch adjustments
 
-Gross Board original gross and driver gross can differ intentionally. Dispatchers
+Gross Board total gross and driver gross can differ intentionally. Dispatchers
 may enter less driver gross on a higher-paying load, preserving a difference
 that can later supplement driver gross on a lower-paying load. This difference
 is money held between load-rate adjustments; it is not automatically company
 profit, dispatcher commission, driver earned pay or investor earnings.
 
-The existing Gross Board balance tracks original gross minus driver gross over
+The existing Gross Board balance tracks total gross minus driver gross over
 time. A positive difference increases the available adjustment balance; a load
-whose driver gross exceeds original gross uses that balance. Do not create an
+whose driver gross exceeds total gross uses that balance. Do not create an
 additional deduction or payout from the difference in either statement.
 
 All percentage-based driver and investor settlement calculations use **Gross
-Board driver gross**. Never substitute original gross. Existing CPM contracts
+Board driver gross**. Never substitute total gross. Existing CPM contracts
 remain miles multiplied by the agreed CPM rate; this clarification does not
 convert a CPM driver to percentage pay. Dispatcher commission and the separate
 financial dashboard are outside this change and should not be treated as the
 source of driver/investor statements.
 
-Example: original gross of $3,000 and driver gross of $2,800 leaves $200 in the
+Example: total gross of $3,000 and driver gross of $2,800 leaves $200 in the
 adjustment balance. If a later $1,500 load is entered at $1,700 driver gross,
 that $200 is used. A percentage settlement uses $2,800 and $1,700 respectively.
 The $200 must not also be booked as an extra settlement deduction or earning.

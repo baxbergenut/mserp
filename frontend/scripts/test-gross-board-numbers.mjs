@@ -59,7 +59,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/gross-board?weekStart=${week}`);
   const amount = (name, date = week) => page.getByLabel(`Number Driver, ${date}, ${name}`, { exact: true });
   const stored = (field, date = week) => entries.find(e => e.date === date && e.slot === 0)?.[field];
-  for (const [name, field] of [['original rate', 'originalRate'], ['driver rate', 'driverRate'], ['miles', 'miles']]) {
+  for (const [name, field] of [['total gross', 'originalRate'], ['driver rate', 'driverRate'], ['miles', 'miles']]) {
     const input = amount(name);
     await input.click();
     await page.keyboard.type('6');
@@ -85,7 +85,7 @@ try {
     await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);
   }
   // Caret editing keeps both its text and position after the save response.
-  const original = amount('original rate');
+  const original = amount('total gross');
   await original.click(); await page.keyboard.press('F2');
   await page.keyboard.press('Home'); await page.keyboard.press('ArrowRight');
   await page.keyboard.type('8');
@@ -94,8 +94,8 @@ try {
   expect(await original.evaluate(el => el.selectionStart)).toBe(2);
   await page.keyboard.type('9'); await expect(original).toHaveValue('6897.12');
   await page.keyboard.press('Enter');
-  // Manual original gross continues to follow into an untouched driver gross.
-  const manual = amount('original rate', '2026-10-13');
+  // Manual total gross continues to follow into an untouched driver gross.
+  const manual = amount('total gross', '2026-10-13');
   await manual.click(); await page.keyboard.type('6');
   await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('6.00');
   const followingDriver = amount('driver rate', '2026-10-13');
@@ -119,7 +119,7 @@ try {
   // Server resolution can win before the browser's 250 ms lookup finishes.
   const loadNumber = amount('load number or status', '2026-10-15');
   await loadNumber.click(); await page.keyboard.type(source.loadNumber);
-  await expect(amount('original rate', '2026-10-15')).toHaveValue('$670.00');
+  await expect(amount('total gross', '2026-10-15')).toHaveValue('$670.00');
   await expect(amount('driver rate', '2026-10-15')).toHaveValue('$670.00');
   // Browser lookup/selection must apply the same default.
   const browserLoad = amount('load number or status', '2026-10-16');
@@ -128,7 +128,7 @@ try {
   // Daily loads use the same decimal guard, including leading-dot input.
   await page.getByRole('button', { name: 'Number Driver, 2026-10-14, load numbers and details', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
-  const dailyOriginal = dialog.getByLabel('Number Driver, 2026-10-14, original rate', { exact: true }).first();
+  const dailyOriginal = dialog.getByLabel('Number Driver, 2026-10-14, total gross', { exact: true }).first();
   const dailyDriver = dialog.getByLabel('Number Driver, 2026-10-14, driver rate', { exact: true }).first();
   await dailyOriginal.click(); await page.keyboard.type('67.0');
   await expect(dailyDriver).toHaveValue('67.0');
@@ -165,9 +165,9 @@ try {
   await expect.poll(() => stored('originalRate')).toBe('3400.50');
   const footer = page.locator('tfoot tr').getByRole('cell');
   await expect(footer.nth(0)).toHaveText('$5,108.00');
-  await expect(footer.nth(1)).toHaveText('$5,027.50');
-  await expect(footer.nth(2)).toHaveText('425.25');
-  await expect(amount('total original rate', '2026-10-14')).toHaveText('$67.00');
+  await expect(footer.nth(3)).toHaveText('$5,027.50');
+  await expect(footer.nth(1)).toHaveText('425.25');
+  await expect(amount('total gross', '2026-10-14')).toHaveText('$67.00');
   await expect(amount('total driver rate', '2026-10-14')).toHaveText('$67.00');
   expect(invalidWrites).toEqual([]);
   expect(errors).toEqual([]);

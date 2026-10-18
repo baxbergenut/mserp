@@ -110,7 +110,7 @@ try {
 
     // Read-only cells select without editing, navigate merged rows, and copy.
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    const sourceCell = page.getByRole('cell', { name: /^Original gross differs/ }).first();
+    const sourceCell = page.getByRole('cell', { name: /^Total gross differs/ }).first();
     await sourceCell.click(); await expect(sourceCell).toBeFocused();
     await page.keyboard.press('Control+c');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$400.00');
@@ -121,14 +121,14 @@ try {
     await page.keyboard.press('ArrowDown');
     await expect(loads.getByRole('cell', { name: '$350.00', exact: true }).nth(1)).toBeFocused();
     await page.keyboard.press('ArrowLeft');
-    await expect(page.getByRole('cell', { name: /^Original gross differs/ }).nth(1)).toBeFocused();
+    await expect(page.getByRole('cell', { name: /^Total gross differs/ }).nth(1)).toBeFocused();
     await region.locator('tr').first().locator('td').first().click();
     await page.keyboard.press('ArrowLeft');
     await expect(loads.getByRole('cell', { name: '$280.00', exact: true }).first()).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(region.locator('tr').first().locator('td').first()).toBeFocused();
     // The menu previews only the selected value, and changes only that value.
-    const gross = page.getByRole('cell', { name: /^Original gross differs/ }).first();
+    const gross = page.getByRole('cell', { name: /^Total gross differs/ }).first();
     await gross.click({ button: 'right' });
     await expect(page.getByRole('menu')).toContainText('$400.00 → $401.00');
     await expect(page.getByRole('menu')).toHaveText('Accept system values$400.00 → $401.00');

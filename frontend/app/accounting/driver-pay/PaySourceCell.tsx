@@ -18,7 +18,7 @@ export function PaySourceCell({ load, field, className, disabled, onAccept }: {
   const canAccept = mismatch && onAccept && load.boardVersion && !disabled;
   const title = source == null ? undefined : `DataTruck: ${source ? decimalDisplay(hundredths(source), money) : "Not available"}`;
   return <td tabIndex={canAccept ? 0 : undefined} className={`${className} ${mismatch ? "text-red-400" : money ? "text-zinc-300" : "text-zinc-400"}`} title={title}
-    aria-label={mismatch ? `${money ? "Original gross" : "Miles"} differs from DataTruck. ${title}` : undefined}
+    aria-label={mismatch ? `${money ? "Total gross" : "Miles"} differs from DataTruck. ${title}` : undefined}
     onContextMenu={event => { if (canAccept) { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); } }}
     onKeyDown={event => { if (canAccept && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left, y: rect.bottom }); } }}>
     {value ? decimalDisplay(hundredths(value), money) : "—"}

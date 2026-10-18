@@ -57,7 +57,7 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
 
   await page.goto(`${base}/accounting/driver-pay?weekStart=${week}&driverId=${driver}`);
-  const gross = page.getByRole('cell', { name: /^Original gross differs from DataTruck/ });
+  const gross = page.getByRole('cell', { name: /^Total gross differs from DataTruck/ });
   await expect(gross).toHaveText('$1,000.00');
   await expect(gross).toHaveAttribute('title', 'DataTruck: $1,200.00');
   await expect(page.getByRole('cell', { name: /^Miles differs from DataTruck/ })).toHaveText('90.00');

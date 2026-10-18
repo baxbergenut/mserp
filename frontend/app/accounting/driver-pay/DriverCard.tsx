@@ -27,7 +27,7 @@ export const tariffLabel = (driver: DriverPayDriver) => {
 };
 const columns = [
   ["Day", 82], ["Load number", 116], ["Pickup date", 94], ["Pickup location", 120],
-  ["Delivery location", 120], ["Original rate", 95], ["Driver gross", 95],
+  ["Delivery location", 120], ["Total gross", 95], ["Driver gross", 95],
   ["Total miles", 78], ["Loaded miles", 78], ["Deadhead miles", 88], ["Driver fee", 92], ["Reimbursements/charges", 215], ["Amount", 95], ["Comments", 36],
 ] as const;
 const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";

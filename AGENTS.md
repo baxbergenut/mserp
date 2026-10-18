@@ -314,8 +314,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   no extra GET, concurrent typing, modal conflicts, reconnect and latency checks.
   Dispatcher checkboxes share `components/management/BoardFilter.tsx` with Status
   Board and remember multiple selections (legacy single choices still restore).
-  Weekly driver RPM appears beneath Driver gross; Rate balance is the final
-  column after Total miles. `BoardScrollArea.tsx` scrolls main until the table is
+  Weekly driver RPM has its own column. After Sunday, columns are Total gross,
+  Total miles, RPM, Driver gross, and Rate balance. Total gross is the shared display
+  name across boards, Daily loads, balance history and payroll; legacy API/storage
+  field names remain compatible. `BoardScrollArea.tsx` scrolls main until the table is
   8px below navigation, then main stops and rows scroll inside the bounded table
   under its native sticky header. Upward scrolling unwinds table rows before
   revealing the controls. Horizontal scrolling and frozen Driver/Truck remain.
@@ -323,11 +325,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   frozen columns, resizing and navigation restoration with fixture APIs.
   Numeric fields preserve typed text and the caret through autosave/refresh,
   reject more than two decimal places, and send only complete decimals to the API.
-  While editing Original gross, a following Driver gross mirrors its exact text;
+  While editing Total gross, a following Driver gross mirrors its exact text;
   load fields show comma separators and gross dollar signs outside editing;
   totals, balances, previews and RPM share two decimal places, without
   changing saved amounts or exact-decimal totals. Editing uses plain numbers.
-  New load matches default blank Driver gross to Original gross on both browser
+  New load matches default blank Driver gross to Total gross on both browser
   selection and server exact-number resolution; explicit amounts, including zero,
   remain intact. `test-gross-board-numbers.mjs` covers delayed formatted saves.
   Status Board, Gross Board (including Daily loads), and payroll share opt-in
@@ -713,7 +715,7 @@ assignment lookup lists.
   shift until unassigned. Updater edits are versioned. Dispatcher profile saves
   atomically include updater assignments; omitted new fields preserve them for
   older clients. Status Board headings show both updaters and known extensions,
-  without requiring fleet.read. Main updaters align right before Original gross;
+  without requiring fleet.read. Main updaters align right before Total gross;
   after-hours updaters start after Status. Shift labels are omitted and gross
   column borders continue through group headings. No updater changes affect commissions or rosters.
   backend/scripts/seed-dispatcher-updaters.sql imports the October 4 TODAY headings
@@ -1138,7 +1140,7 @@ assignment lookup lists.
   not reclassified by migration. Clearing a status retains the entry version.
   Free text remains a plan; a unique exact load number (case-insensitive,
   trimmed) or explicit suggestion selection confirms it. Duplicate business
-  load numbers require explicit selection. Entered original gross and miles
+  load numbers require explicit selection. Entered total gross and miles
   take precedence in the grid, totals and balance; absent entered values fall
   back to the linked load's current `total_pay` and `total_miles`. Source values
   remain available as `systemOriginalRate` and `systemMiles` for comparison.
@@ -1151,7 +1153,7 @@ assignment lookup lists.
   Future weeks never affect an earlier balance. Balances follow driver IDs across
   dispatcher changes; source corrections and historical edits recalculate carry.
   The grid and opening balances are read in one repeatable-read snapshot.
-  Migration 027 preserves entered original rates and miles separately from
+  Migration 027 preserves entered total gross and miles separately from
   current source values. Differences show red and retain both values for
   review; accepting system values resets the comparison only if the source still
   matches the values reviewed. Driver-rate differences are intentional.
@@ -2023,7 +2025,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   rows, complete dispatcher choices and week-wide finalized counts. Legacy reads
   remain complete reports. Whole-week actions fetch/review the full report and
   ignore filters/pages. Unsaved edits retain navigation protections.
-- Both payroll statements show entered/fallback original gross and miles, with
+- Both payroll statements show entered/fallback total gross and miles, with
   DataTruck comparison values and red mismatches. POST /driver-pay/accept-system
   and /investor-pay/accept-system require payroll.write and a driver/date/slot,
   board version, source record ID and reviewed source value. The optional `field`

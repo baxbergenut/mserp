@@ -19,7 +19,7 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
   const auth=await(await page.request.get(base+'/api/auth/session')).json(),headers={'X-CSRF-Token':auth.csrfToken};
   const board=async()=>await(await page.request.get(`${base}/api/gross-board?weekStart=${week}`)).json();
   const entry=async(driver,day=week,slot=0)=>(await board()).entries.find(e=>e.driverId===driver&&e.date===day&&e.slot===slot);
-  const field=(p,name='original rate',day=week,driver='Gross Live A')=>p.getByLabel(`${driver}, ${day}, ${name}`,{exact:true});
+  const field=(p,name='total gross',day=week,driver='Gross Live A')=>p.getByLabel(`${driver}, ${day}, ${name}`,{exact:true});
   const numeric=async locator=>Number((await locator.inputValue()).replace(/[$,]/g,''));
   const fill=async(input,value)=>{await input.focus();await input.fill(value)};
   const saved=()=>expect(page.getByText('All changes saved',{exact:true})).toBeVisible();
@@ -88,10 +88,10 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     }
     // A snapshot for another week must never be reused for this week.
     await viewer.getByRole('button',{name:'Next week',exact:true}).click();
-    await expect(field(viewer,'original rate',add(7))).toBeVisible();
-    await expect(field(viewer,'original rate',add(7))).toHaveValue('');
+    await expect(field(viewer,'total gross',add(7))).toBeVisible();
+    await expect(field(viewer,'total gross',add(7))).toHaveValue('');
     await fill(field(page),'1999');await saved();
-    await expect(field(viewer,'original rate',add(7))).toHaveValue('');
+    await expect(field(viewer,'total gross',add(7))).toHaveValue('');
     await viewer.getByRole('button',{name:'Previous week',exact:true}).click();
     await expect.poll(()=>numeric(field(viewer))).toBe(1999);
     // Presence from Daily loads identifies the exact load slot and field.

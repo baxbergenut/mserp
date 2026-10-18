@@ -29,7 +29,7 @@ import { BoardScrollArea } from "./BoardScrollArea";
 import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 112, 112];
+const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 80, 112, 112];
 const minimumBoardWidth = columnWidths.reduce((sum, width) => sum + width, 0);
 // Match the sticky truck offset to the expanding driver column, including
 // when a narrow viewport scrolls the table at its minimum readable width.
@@ -286,9 +286,9 @@ export default function GrossBoardPage() {
         </div></PageHeader>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard loading={loading} compact label="Original total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
+        <MetricCard loading={loading} compact label="Total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
         <MetricCard loading={loading} compact label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
-        <MetricCard loading={loading} compact label="Original RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
+        <MetricCard loading={loading} compact label="Total gross RPM" value={loading || !board ? "—" : rpmDisplay(summary.original, summary.miles)} icon={Gauge} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -323,7 +323,7 @@ export default function GrossBoardPage() {
               <th className="sticky z-30 border-b border-r border-zinc-700 bg-zinc-900 px-2" style={truckColumnStyle}>Truck</th>
               <th className="border-b border-r border-zinc-700" aria-label="Field" />
               {dates.map((date, i) => <th key={date} className="border-b border-r border-zinc-700 py-2"><div className="font-medium">{weekdays[i]}</div><div className="mt-1 font-mono text-[11px] font-normal text-zinc-500">{shortDate(date)}</div></th>)}
-              {["Original gross", "Driver gross", "Total miles", "Rate balance"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
+              {["Total gross", "Total miles", "RPM", "Driver gross", "Rate balance"].map((title) => <th key={title} className="border-b border-r border-zinc-700 bg-blue-500/5 px-2 font-medium">{title}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -340,21 +340,20 @@ export default function GrossBoardPage() {
                 {groupStart && <tr className="bg-blue-500/10 font-sans text-xs font-medium leading-4" aria-label={`${driver.dispatcherName} totals`}>
                   <th colSpan={10} scope="rowgroup" className="border-b border-zinc-700 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th>
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-blue-200">{decimalDisplay(group.original, true)}</td>
-                  <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.driver, true)}</td>
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.miles)}</td>
+                  <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{rpmDisplay(group.driver, group.miles)}</td>
+                  <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{decimalDisplay(group.driver, true)}</td>
                   <td className={`border-b border-zinc-700 px-2 py-2 ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}</td>
                 </tr>}
                 <tr>
                   <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
-                  <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Original", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
+                  <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Total gross", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
                   {dayEntries.map((entries, i) => <DaySummaryCell readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   <td data-gross-driver={driver.id} data-gross-field="originalTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
-                  <td data-gross-driver={driver.id} data-gross-field="driverTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">
-                    {decimalDisplay(sum.driver, true)}
-                    <span className="mt-1 block text-[10px] text-zinc-500" aria-label={`Driver RPM for ${driver.fullName}`}>RPM {rpmDisplay(sum.driver, sum.miles)}</span>
-                  </td>
                   <td data-gross-driver={driver.id} data-gross-field="milesTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
+                  <td data-gross-driver={driver.id} data-gross-field="rpm" aria-label={`Driver RPM for ${driver.fullName}`} className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{rpmDisplay(sum.driver, sum.miles)}</td>
+                  <td data-gross-driver={driver.id} data-gross-field="driverTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.driver, true)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="balance" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-1">
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
                       <span className="font-mono">{signedMoney(balance)}</span><span className="mt-1 block text-[10px]">{balanceLabel(balance)}</span>
@@ -367,8 +366,10 @@ export default function GrossBoardPage() {
             })}
           </tbody>
           <tfoot><tr className="bg-zinc-900 font-mono text-zinc-200"><th colSpan={10} className="border-t border-zinc-700 p-3 text-left"><span className="sticky left-3">Totals · balance through week end</span></th>
-            {[decimalDisplay(summary.original, true), decimalDisplay(summary.driver, true)].map((value, i) => <td key={i} className="border-t border-zinc-700 px-2 py-3">{value}</td>)}
+            <td className="border-t border-zinc-700 px-2 py-3">{decimalDisplay(summary.original, true)}</td>
             <td className="border-t border-zinc-700 px-2 py-3">{decimalDisplay(summary.miles)}</td>
+            <td className="border-t border-zinc-700 px-2 py-3">{rpmDisplay(summary.driver, summary.miles)}</td>
+            <td className="border-t border-zinc-700 px-2 py-3">{decimalDisplay(summary.driver, true)}</td>
             <td className="border-t border-zinc-700 px-2 py-3">{signedMoney(balanceTotal)}{uncoveredTotal > BigInt(0) && <span className="mt-1 block text-[10px] text-red-300">{decimalDisplay(uncoveredTotal, true)} uncovered</span>}</td>
           </tr></tfoot>
         </table>

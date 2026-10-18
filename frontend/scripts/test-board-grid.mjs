@@ -98,7 +98,7 @@ try {
   await page.setViewportSize({ width: 1800, height: 1000 });
 
   await page.goto(`${base}/gross-board?weekStart=${week}&driverId=driver-0&date=${week}&slot=0`);
-  const amount = (date, field = 'original rate') => page.getByLabel(`Alice Grid, ${date}, ${field}`, { exact: true });
+  const amount = (date, field = 'total gross') => page.getByLabel(`Alice Grid, ${date}, ${field}`, { exact: true });
   const original = amount(week);
   await expect(original).toHaveValue('$400.00');
   await original.click(); await expect(original.locator('..')).toBeFocused();
@@ -113,7 +113,7 @@ try {
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
   await expect(dialog).toBeVisible();
-  const modalAmounts = dialog.getByLabel('Alice Grid, 2026-10-14, original rate', { exact: true });
+  const modalAmounts = dialog.getByLabel('Alice Grid, 2026-10-14, total gross', { exact: true });
   await modalAmounts.first().click(); await page.keyboard.type('222');
   await expect(modalAmounts.first()).toHaveValue('222');
   await page.keyboard.press('ArrowRight'); await expect(modalAmounts.nth(1).locator('..')).toBeFocused();

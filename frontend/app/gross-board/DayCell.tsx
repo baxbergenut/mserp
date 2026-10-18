@@ -53,7 +53,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : false;
         const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
         const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
-        return <div key={field} data-grid-cell data-gross-field={field}><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "original rate" : field === "driverRate" ? "driver rate" : "miles"}`}
+        return <div key={field} data-grid-cell data-gross-field={field}><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "total gross" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
           value={entry[field]} displayValue={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
             && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : amountDisplay(entry[field], field !== "miles")} disabled={disabled}
@@ -73,10 +73,10 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
         <table className="w-full text-left text-sm">
           <thead className="text-zinc-500"><tr><th className="p-2">Field</th><th>Entered</th><th>System</th></tr></thead>
-          <tbody>{[["Original rate", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
-            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Original rate") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Original rate") || "—"}</td></tr>)}</tbody>
+          <tbody>{[["Total gross", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
+            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Total gross") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Total gross") || "—"}</td></tr>)}</tbody>
         </table>
-        <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the original gross and miles with the values shown here.</p>
+        <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the total gross and miles with the values shown here.</p>
         <button hidden={disabled} disabled={disabled} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             originalRate: current.systemOriginalRate ?? "", miles: current.systemMiles ?? "",

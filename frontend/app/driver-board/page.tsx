@@ -31,7 +31,7 @@ import { CellPresence } from "./CellPresence";
 
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
-  ["Original gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
+  ["Total gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
   ["Destination", 110], ["Notes", 130], ["ETA", 180], ["Next loads", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
@@ -97,7 +97,7 @@ export default function DriverBoardPage() {
     <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Status Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span></div></div></PageHeader>
 
     <div className="grid gap-3 sm:grid-cols-3">
-      <MetricCard loading={loading} compact label="Weekly original gross" value={board ? decimalDisplay(summary.original, true) : "—"} icon={Banknote} />
+      <MetricCard loading={loading} compact label="Weekly total gross" value={board ? decimalDisplay(summary.original, true) : "—"} icon={Banknote} />
       <MetricCard loading={loading} compact label="Weekly driver gross" value={board ? decimalDisplay(summary.driver, true) : "—"} icon={Banknote} />
       <MetricCard loading={loading} compact label="Weekly miles" value={board ? decimalDisplay(summary.miles) : "—"} icon={Route} />
     </div>

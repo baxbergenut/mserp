@@ -92,7 +92,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       <input ref={input} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
-        title={status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Original rate and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number or day status"}
+        title={status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number or day status"}
         maxLength={200} value={status?.value ?? entry.loadNumber} disabled={disabled}
         onFocus={(event) => { setFocused(true); setBrowse(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => { setFocused(false); setBrowse(false); }}

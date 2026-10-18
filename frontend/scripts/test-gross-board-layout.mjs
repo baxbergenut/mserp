@@ -53,19 +53,24 @@ try {
   const rows = area.locator('tbody > tr').filter({ has: page.locator('th[scope="row"]') });
   await expect(rows).toHaveCount(14);
   await expect(page.getByText('Green = confirmed load', { exact: false })).toHaveCount(0);
-  expect(await area.getByRole('columnheader').allTextContents()).toEqual(['Driver', 'Truck', '', 'Mon10/12', 'Tue10/13', 'Wed10/14', 'Thu10/15', 'Fri10/16', 'Sat10/17', 'Sun10/18', 'Original gross', 'Driver gross', 'Total miles', 'Rate balance']);
-  await expect(page.getByLabel('Driver RPM for Alice Layout', { exact: true })).toHaveText('RPM $2.57');
-  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('RPM —');
+  expect(await area.getByRole('columnheader').allTextContents()).toEqual(['Driver', 'Truck', '', 'Mon10/12', 'Tue10/13', 'Wed10/14', 'Thu10/15', 'Fri10/16', 'Sat10/17', 'Sun10/18', 'Total gross', 'Total miles', 'RPM', 'Driver gross', 'Rate balance']);
+  await expect(page.getByLabel('Driver RPM for Alice Layout', { exact: true })).toHaveText('$2.57');
+  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('—');
   const alice = rows.filter({ hasText: 'Alice Layout' });
-  await expect(alice.locator('td').nth(10)).toContainText('$1,350.35');
-  await expect(alice.locator('td').nth(11)).toHaveText('525.60');
+  await expect(alice.locator('[data-gross-field=driverTotal]')).toHaveText('$1,350.35');
+  await expect(alice.locator('[data-gross-field=milesTotal]')).toHaveText('525.60');
   await expect(alice.locator('td').last()).toContainText('+$849.65');
   const alpha = area.getByRole('row', { name: 'Alpha totals', exact: true });
-  await expect(alpha.getByRole('cell').nth(2)).toHaveText('525.60');
+  await expect(alpha.getByRole('cell').nth(1)).toHaveText('525.60');
   await expect(alpha.getByRole('cell').last()).toHaveText('+$849.65');
+  await expect(alpha.getByRole('cell').nth(2)).toHaveText('$2.57');
+  await expect(alpha.getByRole('cell').nth(3)).toHaveText('$1,350.35');
   const footer = area.locator('tfoot td');
-  await expect(footer.nth(2)).toHaveText('525.60');
-  await expect(footer.nth(3)).toHaveText('+$949.65');
+  await expect(footer.nth(2)).toHaveText('$3.33');
+  await expect(footer.nth(3)).toHaveText('$1,750.35');
+  await expect(alice.locator('[data-gross-field=driverTotal]')).not.toContainText('RPM');
+  await expect(footer.nth(1)).toHaveText('525.60');
+  await expect(footer.nth(4)).toHaveText('+$949.65');
   await page.getByRole('button', { name: 'Rate balance for Alice Layout', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Alice Layout · Rate balance' })).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
@@ -81,7 +86,7 @@ try {
   const search = page.getByPlaceholder('Search drivers…');
   await search.fill('Alice');
   await expect(rows).toHaveCount(1);
-  await expect(page.getByText('Original total gross', { exact: true }).locator('..').getByText('$2,200.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('Total gross', { exact: true }).first().locator('..').getByText('$2,200.00', { exact: true })).toBeVisible();
   await search.fill('Bob');
   await expect(page.getByText('No drivers match the selected filters.', { exact: true })).toBeVisible();
   await search.fill('');
@@ -98,7 +103,7 @@ try {
   // Editing a single-load day updates the weekly RPM through delayed autosave.
   const bobMiles = page.getByLabel(`Bob Layout, ${week}, miles`, { exact: true });
   await bobMiles.click(); await page.keyboard.type('200'); await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('RPM $2.00');
+  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('$2.00');
   await expect.poll(() => entries.find(e => e.driverId === bobId).miles).toBe('200');
   await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
 
@@ -122,7 +127,7 @@ try {
   await page.mouse.wheel(0, -100);
   await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(firstInner + 100);
   expect(await main.evaluate(el => el.scrollTop)).toBe(pinnedPage);
-  expect(await page.getByText('Original total gross', { exact: true }).evaluate(el => el.getBoundingClientRect().bottom < el.closest('main').getBoundingClientRect().top)).toBe(true);
+  expect(await page.getByText('Total gross', { exact: true }).first().evaluate(el => el.getBoundingClientRect().bottom < el.closest('main').getBoundingClientRect().top)).toBe(true);
   expect(await area.locator('thead').evaluate(el => { const r = el.getBoundingClientRect(); return !!document.elementFromPoint(r.left + 30, r.top + 15)?.closest('thead'); })).toBe(true);
   await page.screenshot({ path: join(tmpdir(), 'mserp-gross-board-layout-scrolled.png') });
   // Going up consumes table scroll before it reveals the cards.
@@ -189,11 +194,11 @@ try {
   await expect.poll(pinDistance).toBeCloseTo(8, 0);
   await area.focus(); await page.keyboard.press('Home');
   await expect.poll(() => main.evaluate(el => el.scrollTop)).toBe(0);
-  await expect(page.getByText('Original total gross', { exact: true })).toBeVisible();
+  await expect(page.getByText('Total gross', { exact: true }).first()).toBeVisible();
   await page.setViewportSize({ width: 1800, height: 1000 });
   await area.evaluate(el => { el.scrollLeft = 0; });
   // Arrow navigation keeps focused fields below the pinned header.
-  const cell = page.getByLabel(`Driver 3, ${week}, original rate`, { exact: true }).locator('..');
+  const cell = page.getByLabel(`Driver 3, ${week}, total gross`, { exact: true }).locator('..');
   await cell.click();
   await cell.evaluate(el => {
     const main = el.closest('main');
