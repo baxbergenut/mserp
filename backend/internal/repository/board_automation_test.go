@@ -177,12 +177,12 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !view.Automation.RequiresConfirmation || view.Automation.Appointment != nil {
-		t.Fatal("driver mismatch accepted")
+	if view.Automation.RequiresConfirmation || view.Automation.Appointment == nil {
+		t.Fatal("source driver change blocked the operational selection")
 	}
-	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "confirm_driver"}, "")
+	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "arrival_yes"}, "")
 	if err != nil || result.Loads.Automation.RequiresConfirmation {
-		t.Fatal("driver confirmation", err)
+		t.Fatal("arrival correction required driver confirmation", err)
 	}
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("missing cached evidence", err)

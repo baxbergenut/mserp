@@ -126,5 +126,30 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_extra_entries SET load_number='NEXT-B-EDIT' WHERE driver_id='${id}' AND service_date='${nextWeek}' AND slot=1;`);
   expect((await page.request.post(`${base}/api/driver-board/loads/${id}`, { headers, data: { action: 'clear', version: entry.version, fromDate: stale.fromDate, revision: stale.revision } })).status()).toBe(409);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  // Typing a unique unplanned load is itself the operational assignment, even
+  // when the imported driver differs. No confirmation or drawer visit is needed.
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO loads(id,load_id,driver_id,status,load_pay,total_pay,raw_payload)
+    VALUES(988019,'DIRECT-DISPATCH',(SELECT id FROM drivers WHERE id<>'${id}' LIMIT 1),'dispatched',0,0,
+      '{"stops":[{"ordering":1,"stop_type":"pickup","schedule_type":"appointment","scheduled_begin_date":"2026-10-19","scheduled_begin_time":"13:00:00","location":{"city":"Dallas","state":"TX"}}]}');
+  `);
+  const notesBefore = await field('Notes').inputValue();
+  await field('Current load').fill('DIRECT-DISPATCH');
+  await field('Current load').press('Tab');
+  await expect(field('Status')).toHaveValue('DISPATCHED');
+  await expect(destination).toHaveText('Dallas, TXPU');
+  await expect(field('ETA')).toHaveText('PU 13:00 MON');
+  await expect(page.getByText('Review driver mismatch', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(field('Notes')).toHaveValue(notesBefore);
+  await page.reload();
+  await expect(destination).toHaveText('Dallas, TXPU');
+  await expect(field('ETA')).toHaveText('PU 13:00 MON');
+  const direct = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
+  expect(direct.current.planId).toBe('');
+  expect(direct.current.sourceDriver).not.toBe(id);
+  expect(direct.current.sourceDriver).toBeTruthy();
+  expect(direct.automation.requiresConfirmation).toBe(false);
+  expect(sql(`SET search_path TO ${schema},public; SELECT count(*) FROM gross_board_entries WHERE load_number='DIRECT-DISPATCH';`).trim()).toMatch(/\b0\b/);
   console.log('Status Board loads E2E passed: explicit selection, multi-stop source, appointments separate from ETA, cross-week queue, reorder/undo, manual override, persistence, source removal and stale-source conflict.');
 }

@@ -254,7 +254,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   DataTruck per-stop schedule fields through import serialization. Appointment
   text is read-only inside ETA; red @PU/@DEL denotes arrival and red ETA/miles
   retains manual editing. Notes are never rewritten. Unique imported loads can
-  resolve without Gross Board plans; source-driver conflicts require confirmation.
+  resolve without Gross Board plans; entering a load is the operational assignment,
+  even when DataTruck lists a different driver, without an extra confirmation.
   A startup/minute cache-only GPS evaluator never advances progress. Google truck
   routing is default off and requires explicit access/operations/speed verification
   plus reviewed per-load/trailer truck profiles. Never substitute car routes.

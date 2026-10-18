@@ -13,8 +13,13 @@ without a Gross Board plan. Ambiguous plan identities remain blocked; no synthet
 plans, assignments, payroll changes, or provider writes are made. The selected
 stop drives Destination, appointment and arrival together. DISPATCHED defaults to
 pickup; ENROUTE/RESERVED default to delivery. The Loads panel selects intermediate
-stops. A source-driver mismatch requires an explicit versioned confirmation in
-Loads or the ETA popup. Missing/ambiguous matches show a review message in Loads.
+stops. Entering a uniquely matched load is the dispatcher's operational assignment,
+even when DataTruck lists another driver: status defaults to DISPATCHED and pickup
+location/appointment display immediately, with no additional confirmation. Existing
+selections also remain usable if DataTruck changes its driver. This does not rewrite
+the imported driver, fleet assignments, or Gross Board. Missing/ambiguous matches
+show a review message in Loads. The legacy requiresConfirmation response stays false
+and confirm_driver action remains accepted for older clients.
 
 Import preserves provider stop IDs, coordinates, local schedule dates/times, UTC
 schedule instants, ready-time fields and notes. Existing imported snapshots acquire

@@ -228,11 +228,10 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		if travel.Enabled && (eta == "" || !a.ManualETAValid) {
 			a.TravelMode = "auto"
 		}
-		if v.Current != nil && v.Current.SourceDriver != "" && v.Current.SourceDriver != id && (s.ConfirmedLoadID == nil || v.Current.LoadID == nil || *s.ConfirmedLoadID != *v.Current.LoadID || s.ConfirmedSourceDriver != v.Current.SourceDriver) {
-			a.RequiresConfirmation = true
-			a.Reason = "DataTruck assigns this load to another driver; confirm the load before automation"
-		}
-		if key != "" && !a.RequiresConfirmation {
+		// The Status Board selection is the dispatcher's operational assignment.
+		// DataTruck's driver may lag behind it; no second confirmation is needed.
+		// Keep requiresConfirmation false for older clients during deployment.
+		if key != "" {
 			a.Appointment = stop.Schedule
 			if evidence.Context == key && telemetrySafe {
 				a.Arrived = evidence.Arrived

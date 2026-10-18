@@ -540,9 +540,6 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		if view.Automation == nil || view.Automation.Context == "" || view.Current == nil {
 			return result, ErrBoardLoadSelection
 		}
-		if view.Automation.RequiresConfirmation && a.Action != "confirm_driver" {
-			return result, ErrBoardLoadSelection
-		}
 		if s.AutomationContext != view.Automation.Context {
 			s.ArrivalOverride = ""
 			s.TravelMode = ""
