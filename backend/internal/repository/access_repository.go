@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -31,13 +32,15 @@ type ExpenseAccessCategory struct {
 	Active bool   `json:"active"`
 }
 type ManagedUser struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	RoleID   string `json:"roleId"`
-	Active   bool   `json:"active"`
-	Password string `json:"password,omitempty"`
-	Version  int    `json:"version"`
+	LastLoginAt *time.Time `json:"lastLoginAt"`
+	Online      bool       `json:"online"`
+	ID          string     `json:"id"`
+	Username    string     `json:"username"`
+	Email       string     `json:"email"`
+	RoleID      string     `json:"roleId"`
+	Active      bool       `json:"active"`
+	Password    string     `json:"password,omitempty"`
+	Version     int        `json:"version"`
 }
 type AccessData struct {
 	Users             []ManagedUser           `json:"users"`
@@ -65,13 +68,15 @@ func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
 		return data, err
 	}
 	categoryRows.Close()
-	rows, err := r.pool.Query(ctx, `SELECT id::text,username,coalesce(email,''),coalesce(role_id::text,''),active,version FROM app_users ORDER BY lower(username),id`)
+	rows, err := r.pool.Query(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),coalesce(u.role_id::text,''),u.active,u.version,a.last_login_at,
+		u.active AND u.role_id IS NOT NULL AND EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.last_seen_at>now()-interval '2 minutes')
+		FROM app_users u LEFT JOIN user_login_activity a ON a.user_id=u.id ORDER BY lower(u.username),u.id`)
 	if err != nil {
 		return data, err
 	}
 	for rows.Next() {
 		var u ManagedUser
-		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version); err != nil {
+		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version, &u.LastLoginAt, &u.Online); err != nil {
 			rows.Close()
 			return data, err
 		}

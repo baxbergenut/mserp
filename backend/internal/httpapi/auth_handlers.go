@@ -23,6 +23,7 @@ import (
 const sessionCookieName = "mserp_session"
 
 type authStore interface {
+	TouchSession(context.Context, string) error
 	SetTheme(context.Context, string, string) error
 	FindUserByEmail(context.Context, string) (repository.AuthUser, error)
 	CreatePasswordSession(context.Context, repository.AuthUser, string, string, time.Time) error
@@ -209,6 +210,11 @@ func (h *authHandler) session(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeAPIError(w, http.StatusUnauthorized, "authentication required")
 		return
+	}
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		if err := h.store.TouchSession(r.Context(), hashToken(cookie.Value)); err != nil {
+			h.logger.Error("record browser session activity", "error", err)
+		}
 	}
 	writeJSON(w, http.StatusOK, h.makeSessionResponse(r.Context(), session.User, session.CSRFToken, session.ExpiresAt))
 }

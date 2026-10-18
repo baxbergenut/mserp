@@ -862,6 +862,14 @@ assignment lookup lists.
   hashes. Trust this device for 30 days extends only that session to a fixed
   30-day lifetime; normal sessions use AUTH_SESSION_TTL. Password/account changes
   and explicit revocation invalidate every session, including remembered ones.
+  Settings > Users shows Online for an active, unexpired session whose browser
+  session heartbeat was seen within two minutes; otherwise it shows last login in
+  New York time, or No login recorded when historical data is unavailable.
+  Migration 117 stores durable successful logins in user_login_activity and adds
+  auth_sessions.last_seen_at. Only GET /auth/session updates presence, using the
+  shell's visible-tab 30-second checks; SSE validation never extends presence.
+  Users refreshes every 30 visible seconds and on focus. Activity does not change
+  account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
   Current role permissions are loaded for every request. Account and role writes
   are versioned and audited without password material; serialized updates retain

@@ -886,6 +886,7 @@ export interface AuthUser {
 export interface ManagedUser {
   id: string; username: string; email: string; roleId: string;
   active: boolean; version: number; password?: string;
+  lastLoginAt?: string | null; online?: boolean;
 }
 export interface AccessRole {
   id: string; name: string; permissions: string[]; expenseCategoryAccess: ExpenseCategoryAccess[]; system: boolean; version: number;

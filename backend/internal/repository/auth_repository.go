@@ -81,7 +81,17 @@ func (r *AuthRepository) CreatePasswordSession(ctx context.Context, u AuthUser, 
 	if _, err = tx.Exec(ctx, `INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) VALUES($1,$2,$3,$4)`, id, hash, csrf, expiry); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `INSERT INTO user_login_activity(user_id,last_login_at) VALUES($1,now()) ON CONFLICT(user_id) DO UPDATE SET last_login_at=EXCLUDED.last_login_at`, id); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// Only the browser's session heartbeat updates presence; background SSE session
+// validation must not keep a closed or hidden browser online.
+func (r *AuthRepository) TouchSession(ctx context.Context, hash string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE auth_sessions SET last_seen_at=now() WHERE token_hash=$1 AND expires_at>now() AND (last_seen_at IS NULL OR last_seen_at<now()-interval '20 seconds')`, hash)
+	return err
 }
 
 func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {

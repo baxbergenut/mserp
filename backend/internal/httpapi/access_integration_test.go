@@ -85,6 +85,17 @@ func TestAccessDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(expenseAccess))
+				activity, e := os.ReadFile("../../sql/117_user_login_activity.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at,created_at) SELECT id,repeat('e',64),repeat('f',43),now()-interval '1 day',now()-interval '2 days' FROM app_users WHERE username='legacy'`)
+				exec(string(activity))
+				var backfilled bool
+				if e = admin.QueryRow(ctx, `SELECT a.last_login_at=s.created_at FROM user_login_activity a JOIN auth_sessions s ON s.user_id=a.user_id`).Scan(&backfilled); e != nil || !backfilled {
+					t.Fatalf("existing login not preserved: %v", e)
+				}
+				exec(`DELETE FROM auth_sessions`)
 				var readerView, writerActions, writerSettings int
 				if e = admin.QueryRow(ctx, `SELECT count(*) FROM role_expense_category_access a JOIN app_roles r ON r.id=a.role_id WHERE r.name='Legacy expense reader' AND a.can_view AND NOT a.can_create AND NOT a.can_edit AND NOT a.can_delete`).Scan(&readerView); e != nil || readerView == 0 {
 					t.Fatalf("legacy expense reader was not migrated: count=%d err=%v", readerView, e)
@@ -176,6 +187,46 @@ func TestAccessDatabase(t *testing.T) {
 			}
 			status(call("GET", "/loads", nil, nil, ""), 401)
 			status(call("GET", "/settings/access", nil, sessionCookie, ""), 200)
+			assertActivity := func(online bool, loginAt *time.Time) *time.Time {
+				t.Helper()
+				activity := call("GET", "/settings/access", nil, sessionCookie, "")
+				status(activity, 200)
+				var data repository.AccessData
+				if e := json.Unmarshal(activity.Body.Bytes(), &data); e != nil {
+					t.Fatal(e)
+				}
+				for _, user := range data.Users {
+					if user.ID != id {
+						continue
+					}
+					if user.Online != online || user.LastLoginAt == nil || (loginAt != nil && !user.LastLoginAt.Equal(*loginAt)) {
+						t.Fatalf("unexpected login activity: %+v", user)
+					}
+					return user.LastLoginAt
+				}
+				t.Fatal("admin missing from users")
+				return nil
+			}
+			// A remembered session alone never means online. Browser checks mark
+			// activity; SSE validation and ordinary API reads do not extend it.
+			loginAt := assertActivity(false, nil)
+			status(call("GET", "/auth/session", nil, sessionCookie, ""), 200)
+			assertActivity(true, loginAt)
+			exec(`UPDATE auth_sessions SET last_seen_at=now()-interval '3 minutes' WHERE user_id=$1`, id)
+			if _, e := repo.FindSessionByTokenHash(ctx, hashToken(sessionCookie.Value)); e != nil {
+				t.Fatal(e)
+			}
+			assertActivity(false, loginAt)
+			status(call("GET", "/auth/session", nil, remembered.Result().Cookies()[0], ""), 200)
+			assertActivity(true, loginAt)
+			status(call("POST", "/auth/logout", nil, remembered.Result().Cookies()[0], session.CSRFToken), 403)
+			var rememberedSession sessionResponse
+			_ = json.Unmarshal(remembered.Body.Bytes(), &rememberedSession)
+			status(call("POST", "/auth/logout", nil, remembered.Result().Cookies()[0], rememberedSession.CSRFToken), 204)
+			assertActivity(false, loginAt)
+			// Keep a second active session for the existing all-device revoke test.
+			remembered = login("admin@example.com", password, true)
+			status(remembered, 200)
 			status(call("POST", "/jobs/sync-loads", nil, sessionCookie, ""), 403)
 			status(call("POST", "/jobs/sync-loads", nil, sessionCookie, session.CSRFToken), 204)
 			status(call("PUT", "/settings/users/"+id, repository.ManagedUser{Username: "Admin", Email: "admin@example.com", RoleID: roleID, Version: 1, Active: false}, sessionCookie, session.CSRFToken), 409)
@@ -267,6 +318,15 @@ func TestAccessDatabase(t *testing.T) {
 			status(call("POST", "/settings/users/"+id+"/revoke", nil, sessionCookie, session.CSRFToken), 204)
 			status(call("GET", "/auth/session", nil, sessionCookie, ""), 401)
 			status(call("GET", "/auth/session", nil, remembered.Result().Cookies()[0], ""), 401)
+			afterRevoke, e := repo.AccessData(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+			for _, user := range afterRevoke.Users {
+				if user.ID == id && (user.Online || user.LastLoginAt == nil) {
+					t.Fatal("revocation must clear presence and retain last login")
+				}
+			}
 			if e = repo.CreatePasswordSession(ctx, beforeRevoke, hashToken("stale-login"), strings.Repeat("c", 43), time.Now().Add(time.Hour)); e != repository.ErrAuthRecordNotFound {
 				t.Fatalf("revocation raced stale login: %v", e)
 			}

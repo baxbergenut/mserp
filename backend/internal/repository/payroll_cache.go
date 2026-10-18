@@ -44,7 +44,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 		// fall back to MVCC invalidation instead of risking an untracked input.
 		query = `SELECT CASE WHEN EXISTS (
  SELECT 1 FROM pg_tables t WHERE t.schemaname=current_schema()
- AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','schema_migrations')
+ AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
  AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
 ) THEN 'snapshot:' || pg_current_snapshot()::text
  ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),'') END

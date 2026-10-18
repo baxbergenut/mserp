@@ -84,6 +84,11 @@ func TestPayrollRevisionCacheDatabase(t *testing.T) {
 	if fresh() != "100" || fills != 1 {
 		t.Fatal("session invalidated financial cache")
 	}
+	// Login history is added after revision tracking and has no financial input.
+	exec(`CREATE TABLE user_login_activity(id int); INSERT INTO user_login_activity VALUES(1)`)
+	if fresh() != "100" || fills != 1 {
+		t.Fatal("login activity invalidated financial cache")
+	}
 	exec(`INSERT INTO custom_tasks VALUES(1); INSERT INTO five_eld_locations VALUES(1)`)
 	if fresh() != "100" || fills != 1 {
 		t.Fatal("unrelated operational commits invalidated payroll")

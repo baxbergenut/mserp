@@ -22,6 +22,8 @@ type fakeAuthStore struct {
 	sessions map[string]repository.AuthSession
 }
 
+func (s *fakeAuthStore) TouchSession(_ context.Context, _ string) error { return nil }
+
 func (s *fakeAuthStore) SetTheme(_ context.Context, userID, theme string) error {
 	if userID != s.user.ID {
 		return repository.ErrAuthRecordNotFound
