@@ -79,6 +79,11 @@ try {
     await page.goto(`${base}/accounting/${investor ? 'investor' : 'driver'}-pay?weekStart=${week}&${investor ? 'truckId' : 'driverId'}=statement`);
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
+    for (const label of ['Fuel', 'Toll']) {
+      const row = region.getByRole('row').filter({ has: page.getByText(label, { exact: true }) });
+      await expect(row.getByText('Left: $0.00', { exact: true })).toBeVisible();
+      await expect(row.getByText(/^Source /)).toHaveCount(0);
+    }
 
     const escrowRow = region.getByRole('row').filter({ has: page.getByText('Escrow', {exact:true}) });
     await expect(escrowRow.getByRole('button')).toHaveCount(0);
@@ -122,6 +127,25 @@ try {
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
     expect(expenseReads.length).toBeGreaterThan(0);
     expect(expenseReads.every(path => path === '/expenses/expense')).toBe(true);
+    // Dated non-paying driver classifications hide empty costs, but historical
+    // balances remain collectable. Investor statements still show truck costs.
+    for (const employmentType of ['company', 'investor_driver']) {
+      driver = { ...driver, employmentType, isOwnerOperator: false, payType: 'gross_percentage', fuelTotal: '0.00', tollTotal: '0.00',
+        edits: { ...driver.edits, fuelOverride: null, tollOverride: null, costs: { fuelDue: '0.00', fuelCarry: '0.00', tollDue: '0.00', tollCarry: '0.00' } } };
+      await page.reload();
+      await expect(region).toBeVisible();
+      await expect(region.getByRole('textbox', { name: 'Grid Test, Fuel, amount', exact: true })).toHaveCount(investor ? 1 : 0);
+      await expect(region.getByRole('textbox', { name: 'Grid Test, Toll, amount', exact: true })).toHaveCount(investor ? 1 : 0);
+    }
+    driver.edits.costs = { fuelDue: '25.00', fuelCarry: '25.00', tollDue: '0.00', tollCarry: '0.00' };
+    driver.edits.fuelOverride = '-10.00';
+    await page.reload();
+    const fuelRow = region.getByRole('row').filter({ has: page.getByText('Fuel', { exact: true }) });
+    await expect(fuelRow.getByRole('textbox')).toHaveValue('-10.00');
+    await expect(fuelRow.getByText('Left: $15.00', { exact: true })).toBeVisible();
+    driver.edits.fuelOverride = null;
+    await page.reload();
+    await expect(fuelRow.getByText('Left: $0.00', { exact: true })).toBeVisible();
     expect(errors).toEqual([]); await page.close();
   }
   console.log('Driver and Investor Pay expense dates, editing, fee boundaries, refresh and view-only access passed.');
