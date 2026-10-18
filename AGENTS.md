@@ -259,6 +259,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   A startup/minute cache-only GPS evaluator never advances progress. Google truck
   routing is default off and requires explicit access/operations/speed verification
   plus reviewed per-load/trailer truck profiles. Never substitute car routes.
+  Stopped-truck automatic miles remain visible during stale GPS/rest periods with
+  last-observation details on hover. Moving trucks show miles above 600 miles
+  remaining, otherwise ETA; moving estimates expire after ten minutes.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   dwell/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; database tests use the existing disposable

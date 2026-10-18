@@ -29,10 +29,14 @@ func (t BoardTravel) display(key string, now time.Time) (string, string) {
 	if !t.Enabled {
 		return "", "Automatic travel estimates are not enabled"
 	}
-	if t.Context != key || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || now.Sub(t.ReportedAt) > 10*time.Minute || t.CalculatedAt.IsZero() || now.Sub(t.CalculatedAt) > 10*time.Minute {
+	if t.Context != key || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || t.CalculatedAt.IsZero() || t.CalculatedAt.After(now) {
 		if t.Error != "" {
 			return "", t.Error
 		}
+		return "", "Automatic estimate unavailable or stale"
+	}
+	stale := now.Sub(t.ReportedAt) > 10*time.Minute || now.Sub(t.CalculatedAt) > 10*time.Minute
+	if stale && t.Motion != "stopped" {
 		return "", "Automatic estimate unavailable or stale"
 	}
 	reason := t.Error
@@ -41,9 +45,19 @@ func (t BoardTravel) display(key string, now time.Time) (string, string) {
 	}
 	switch t.Motion {
 	case "moving":
+		if t.Miles > 600 {
+			return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
+		}
 		loc, _ := time.LoadLocation("America/New_York")
 		return "ETA " + t.ArrivalAt.In(loc).Format("15:04"), reason
 	case "stopped":
+		if stale {
+			loc, _ := time.LoadLocation("America/New_York")
+			reason = "Last known miles remaining · GPS data stale · last observed " + t.ReportedAt.In(loc).Format("Jan 2, 2006 15:04 MST")
+			if t.Error != "" {
+				reason += " · " + t.Error
+			}
+		}
 		return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
 	}
 	return "", "Truck movement is not yet established"
@@ -200,7 +214,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				t.Error = "Five ELD tracking unavailable"
 			} else {
 				previous := t.Motion
-				if now.Sub(t.ReportedAt) > 10*time.Minute {
+				if now.Sub(t.ReportedAt) > 10*time.Minute && previous != "stopped" {
 					previous = ""
 				}
 				motion, p := trackingMotion(points, routes.Options.SpeedUnit, previous)

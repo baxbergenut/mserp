@@ -122,6 +122,54 @@ func TestTrackingMotion(t *testing.T) {
 	if value, _ := estimate.display("one", now.Add(11*time.Minute)); value != "" {
 		t.Fatal("stale ETA")
 	}
+	estimate.Motion = "stopped"
+	estimate.Miles = 133
+	if value, reason := estimate.display("one", now.Add(12*time.Hour)); value != "133mi" || !strings.Contains(reason, "GPS data stale") || !strings.Contains(reason, "last observed") {
+		t.Fatal("resting truck lost last known miles", value, reason)
+	}
+	if value, _ := estimate.display("two", now.Add(12*time.Hour)); value != "" {
+		t.Fatal("stale miles crossed load/stop/truck context")
+	}
+	motion, _ = trackingMotion([]fiveeld.TrackingPoint{{Date: now.Add(time.Hour), Speed: &slow}}, "mph", "stopped")
+	if motion != "stopped" {
+		t.Fatal("resting truck lost last stopped state", motion)
+	}
+	motion, _ = trackingMotion([]fiveeld.TrackingPoint{{Date: now.Add(time.Hour), Speed: &fast}}, "mph", "stopped")
+	if motion != "moving" {
+		t.Fatal("fresh movement did not replace last stopped state", motion)
+	}
+	estimate.CalculatedAt = time.Time{}
+	if value, _ := estimate.display("one", now.Add(12*time.Hour)); value != "" {
+		t.Fatal("invalidated route retained stopped miles")
+	}
+}
+
+func TestBoardTravelDistanceDisplay(t *testing.T) {
+	now := time.Date(2026, 10, 17, 18, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		motion string
+		miles  float64
+		age    time.Duration
+		want   string
+	}{
+		{"below threshold", "moving", 599.99, 0, "ETA 15:00"},
+		{"at threshold", "moving", 600, 0, "ETA 15:00"},
+		{"above threshold", "moving", 600.01, 0, "601mi"},
+		{"long haul", "moving", 1000, 0, "1000mi"},
+		{"stopped nearby", "stopped", 133, 0, "133mi"},
+		{"unknown movement", "", 1000, 0, ""},
+		{"stale moving miles", "moving", 1000, 11 * time.Minute, ""},
+		{"resting long haul", "stopped", 1000, 12 * time.Hour, "1000mi"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			estimate := BoardTravel{Enabled: true, Context: "one", Motion: tc.motion, Miles: tc.miles,
+				CalculatedAt: now, ReportedAt: now, ArrivalAt: now.Add(time.Hour)}
+			if got, _ := estimate.display("one", now.Add(tc.age)); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {

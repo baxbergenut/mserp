@@ -129,11 +129,16 @@ client's roster identity cache; source mileage values are never rewritten.
 Distinct fresh tracking points establish moving at >=5 mph or >=100m movement.
 Stopped requires <=2 mph with movement under 100m for at least three minutes;
 intermediate speeds retain the previous classification. Speed units are normalized
-only after provider verification. Moving displays New York ETA from observation
-time plus routed duration; stopped displays road miles remaining. Unknown movement,
-old telemetry, missing routes or partially ignored restrictions suppress output.
-Temporary errors retain a prior valid estimate for at most ten minutes, with a
-hover warning. Results are fenced against the selected load/stop/source revision
+only after provider verification. Moving displays road miles remaining above 600
+miles, otherwise New York ETA from observation time plus routed duration. Exactly
+600 miles displays ETA; displayed miles round up. Stopped always displays road miles remaining. Stopped-truck
+miles remain visible through stale GPS/rest periods, with the last observation
+time and a stale-data warning on hover, until fresh movement is established or
+the load/stop/truck context changes. A fresh stationary point after a long rest
+does not discard the last stopped state. Moving estimates (ETA or miles) expire after ten minutes;
+unknown movement, missing/invalidated routes or partially ignored restrictions
+suppress output. Temporary errors retain a prior valid moving estimate for at
+most ten minutes, with a hover warning. Results are fenced against the selected load/stop/source revision
 and current truck before committing.
 
 When enabled, blank ETA starts in Automatic mode; existing values stay Manual.
