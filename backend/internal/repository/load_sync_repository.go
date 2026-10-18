@@ -24,6 +24,13 @@ func (r *LoadRepository) OperationalLoadIDs(ctx context.Context, from, until tim
  UNION
  SELECT l.id FROM driver_board b JOIN drivers d ON d.id=b.driver_id AND d.active
  JOIN loads l ON lower(btrim(l.load_id))=lower(btrim(b.current_load)) WHERE btrim(b.current_load)<>''
+ UNION
+ SELECT l.id FROM driver_board_load_state s JOIN drivers d ON d.id=s.driver_id AND d.active
+ CROSS JOIN LATERAL jsonb_array_elements(coalesce(s.payload->'manual','[]'::jsonb)) p
+ JOIN loads l ON lower(btrim(l.load_id))=lower(btrim(p->>'number'))
+ WHERE NOT coalesce(s.payload->'hidden' ? (p->>'planId'),false)
+ AND NOT coalesce(s.payload->'completed' ? ('plan:'||(p->>'planId')),false)
+ AND lower(btrim(l.status)) NOT IN ('delivered','completed','cancelled','canceled')
  )
  SELECT l.id FROM loads l WHERE
  (l.pickup_time >= $1 AND l.pickup_time < $2) OR

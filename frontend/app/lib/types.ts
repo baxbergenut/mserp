@@ -452,6 +452,7 @@ export interface BoardAutomation {
 }
 export interface BoardStop { key: string; type: string; location: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule }
 export interface BoardLoad {
+  manual?: boolean;
   planId: string; date: string; slot: number; number: string; loadId: number | null;
   sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
 }
@@ -464,8 +465,8 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "arrival_auto" | "arrival_yes" | "arrival_no" | "travel_auto" | "travel_manual" | "confirm_driver";
-  planId?: string; order?: string[]; stopKey?: string;
+  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "arrival_auto" | "arrival_yes" | "arrival_no" | "travel_auto" | "travel_manual" | "confirm_driver";
+  number?: string; planId?: string; order?: string[]; stopKey?: string;
 }
 
 export interface DriverBoardEvent {

@@ -23,6 +23,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   const [error, setError] = useState("");
   const [select, setSelect] = useState<BoardLoad | null>(null);
   const [clear, setClear] = useState(false);
+  const [number, setNumber] = useState("");
   const [expanded, setExpanded] = useState<string | null>(initial.current?.planId ?? null);
   const [expandedCurrent, setExpandedCurrent] = useState(initial.current?.planId ?? null);
   const panel = useRef<HTMLElement>(null);
@@ -53,7 +54,14 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   async function act(action: BoardLoadAction) {
     if (locked) return;
     setBusy(true); setError("");
-    try { setView(await onChange(driverId, view, action)); setSelect(null); setClear(false); }
+    try {
+      const updated = await onChange(driverId, view, action);
+      setView(updated); setSelect(null); setClear(false);
+      if (action.action === "add") {
+        setNumber("");
+        setExpanded(updated.next.find(load => load.number.toLowerCase() === action.number?.toLowerCase())?.planId ?? null);
+      }
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Could not save. Reload the board and review its current values."); }
     finally { setBusy(false); }
   }
@@ -64,7 +72,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   }
   function choose(load: BoardLoad) { setSelect(load); setClear(false); }
   function detail(load: BoardLoad) {
-    return <><p className="mt-1 text-xs text-zinc-500">{load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : " · Unmatched plan"}</p>
+    return <><p className="mt-1 text-xs text-zinc-500">{load.manual ? "Manually added next load" : load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : load.manual ? " · Waiting for load details" : " · Unmatched plan"}</p>
       {load.warning && <p className="mt-2 text-xs text-amber-300">{load.warning}</p>}
       {load.stops.map(s => s.schedule && <p key={`schedule-${s.key}`} className="mt-1 text-[11px] text-zinc-400">{s.type}: {s.schedule.detail || s.schedule.reason}</p>)}
       {load.loadId !== null && <p className="mt-1 text-[11px] text-zinc-500">DataTruck: {load.sourceStatus || "No status"} · last synced {time(load.syncedAt)} NY</p>}
@@ -90,6 +98,18 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
         {waiting && <p className="text-xs text-amber-300">Wait for board edits to finish saving before changing loads.</p>}
         {view.resolutionWarning && <p role="status" className="text-xs text-amber-300">{view.resolutionWarning}</p>}
         {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+        {canEdit && <form className="space-y-2" onSubmit={event => {
+          event.preventDefault();
+          const value = number.trim();
+          if (!value || locked) return;
+          const existing = [view.current, ...view.next, ...view.hidden, ...view.unavailable].find(load => load?.number.trim().toLowerCase() === value.toLowerCase());
+          if (existing) { setError("This load is already listed. Use its existing queue entry or restore it from Removed from queue."); return; }
+          void act({ action: "add", number: value });
+        }}>
+          <label htmlFor="next-load-number" className="block text-xs text-zinc-400">Add next load</label>
+          <div className="flex gap-2"><input id="next-load-number" className={`${controlClass} min-w-0 flex-1`} value={number} maxLength={100} disabled={locked} placeholder="Load number" onChange={event => setNumber(event.target.value)} /><button className={buttonClass} disabled={locked || !number.trim()} type="submit">{busy ? "Saving…" : "Add next load"}</button></div>
+          <p className="text-xs text-zinc-500">Enter the exact load number. Details appear automatically when the load is in the system.</p>
+        </form>}
         <div className="flex items-center justify-end gap-2">{view.customOrder && canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "reset_order" })}>Reset order</button>}<button className={buttonClass} disabled={busy} onClick={() => void refresh()}><RefreshCw className="inline h-3.5 w-3.5" /> Refresh loads</button></div>
         <section className="space-y-2" aria-label="Load sequence">
           {view.next.map((load, index) => loadCard(load, "next", index))}

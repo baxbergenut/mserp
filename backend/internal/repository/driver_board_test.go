@@ -122,6 +122,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testGrossPresence(t, ctx, pool)
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
+			testManualNextLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
 			testBoardProgress(t, ctx, pool, repo, fleet)
 			testOperationalLoadSync(t, ctx, pool, repo, fleet)

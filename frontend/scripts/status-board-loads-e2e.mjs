@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
+import { runManualNextLoadsE2E } from './status-board-manual-loads-e2e.mjs';
 
 export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id, week, headers }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -152,4 +153,5 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   expect(direct.automation.requiresConfirmation).toBe(false);
   expect(sql(`SET search_path TO ${schema},public; SELECT count(*) FROM gross_board_entries WHERE load_number='DIRECT-DISPATCH';`).trim()).toMatch(/\b0\b/);
   console.log('Status Board loads E2E passed: explicit selection, multi-stop source, appointments separate from ETA, cross-week queue, reorder/undo, manual override, persistence, source removal and stale-source conflict.');
+  await runManualNextLoadsE2E({ page, base, sql, schema, temp, id });
 }

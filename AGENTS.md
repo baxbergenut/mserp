@@ -349,6 +349,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Loads > Add next load saves an exact number in the audited load-state JSON,
+  independently of Gross Board. Manual queue IDs persist across imports; cached
+  unique number matches populate the same details and stop/progress controls.
+  Unknown/ambiguous numbers stay visible, and manual entries do not age out at
+  midnight. Queue ordering/removal, history, undo and live updates remain shared.
   Migration 113 adds commit-only PostgreSQL notifications for board sources and
   authenticated `/driver-board/events` SSE. Board snapshots and named cursors
   are pushed directly as board/peers frames, avoiding a follow-up browser GET.

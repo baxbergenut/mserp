@@ -28,6 +28,7 @@ type BoardStop struct {
 	Appointment string         `json:"appointment"`
 }
 type BoardLoad struct {
+	Manual       bool        `json:"manual,omitempty"`
 	PlanID       string      `json:"planId"`
 	Date         string      `json:"date"`
 	Slot         int         `json:"slot"`
@@ -40,19 +41,20 @@ type BoardLoad struct {
 	Warning      string      `json:"warning"`
 }
 type boardLoadState struct {
-	AutomationContext     string     `json:"automationContext,omitempty"`
-	ArrivalOverride       string     `json:"arrivalOverride,omitempty"`
-	TravelMode            string     `json:"travelMode,omitempty"`
-	ConfirmedLoadID       *int       `json:"confirmedLoadId,omitempty"`
-	ConfirmedSourceDriver string     `json:"confirmedSourceDriver,omitempty"`
-	Current               *BoardLoad `json:"current"`
-	Order                 []string   `json:"order"`
-	OrderLabels           []string   `json:"orderLabels"`
-	Hidden                []string   `json:"hidden"`
-	DestinationSource     bool       `json:"destinationSource"`
-	DestinationManual     bool       `json:"destinationManual,omitempty"`
-	StopKey               string     `json:"stopKey"`
-	Completed             []string   `json:"completed,omitempty"`
+	Manual                []BoardLoad `json:"manual,omitempty"`
+	AutomationContext     string      `json:"automationContext,omitempty"`
+	ArrivalOverride       string      `json:"arrivalOverride,omitempty"`
+	TravelMode            string      `json:"travelMode,omitempty"`
+	ConfirmedLoadID       *int        `json:"confirmedLoadId,omitempty"`
+	ConfirmedSourceDriver string      `json:"confirmedSourceDriver,omitempty"`
+	Current               *BoardLoad  `json:"current"`
+	Order                 []string    `json:"order"`
+	OrderLabels           []string    `json:"orderLabels"`
+	Hidden                []string    `json:"hidden"`
+	DestinationSource     bool        `json:"destinationSource"`
+	DestinationManual     bool        `json:"destinationManual,omitempty"`
+	StopKey               string      `json:"stopKey"`
+	Completed             []string    `json:"completed,omitempty"`
 }
 
 func boardCompletionKey(p BoardLoad) string {
@@ -127,6 +129,7 @@ type BoardLoads struct {
 	CustomOrder       bool             `json:"customOrder"`
 }
 type BoardLoadAction struct {
+	Number   string   `json:"number"`
 	DriverID string   `json:"driverId"`
 	Version  int      `json:"version"`
 	FromDate string   `json:"fromDate"`
@@ -233,6 +236,9 @@ func terminalLoad(status string) bool {
 func annotateLoad(p *BoardLoad, driver string) {
 	if p.LoadID == nil {
 		p.Warning = "Unmatched plan"
+		if p.Manual {
+			p.Warning = "Load details are not available yet or the number is ambiguous. Details will appear when a unique matching load is in the system."
+		}
 	}
 	if p.SourceDriver != "" && p.SourceDriver != driver {
 		p.Warning = "DataTruck assigns this load to another driver; review the plan"
@@ -351,9 +357,16 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	if err != nil {
 		return nil, err
 	}
+	manualPlans, err := readManualBoardLoads(ctx, tx, states)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		s := states[id]
 		view := result[id]
+		// Manual queue identities survive later imports and Gross Board planning.
+		// Keep the real Gross Board plans in Week, but show each source once in the queue.
+		plans[id] = append(manualPlans[id], plans[id]...)
 		// Unplanned current loads are source lookups, never synthetic plans.
 		if strings.TrimSpace(entries[id].CurrentLoad) != "" && (s.Current == nil || s.Current.PlanID == "") && !hasBoardNumber(plans[id], entries[id].CurrentLoad) {
 			p, e := importedBoardLoad(ctx, tx, entries[id].CurrentLoad)
@@ -377,7 +390,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			}
 		}
 		for _, p := range plans[id] {
-			if p.PlanID != "" && p.Date >= week && p.Date < weekEnd {
+			if !p.Manual && p.PlanID != "" && p.Date >= week && p.Date < weekEnd {
 				view.Week = append(view.Week, p)
 			}
 		}
@@ -444,11 +457,11 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 				seen[*p.LoadID] = true
 			}
-			if completed[boardCompletionKey(p)] || terminalLoad(p.SourceStatus) {
+			if completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || terminalLoad(p.SourceStatus) {
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)
-			} else if p.Date < from {
+			} else if !p.Manual && p.Date < from {
 				view.Earlier = append(view.Earlier, p)
 			} else {
 				view.Next = append(view.Next, p)
@@ -536,6 +549,32 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	switch a.Action {
+	case "add":
+		number := strings.TrimSpace(a.Number)
+		if number == "" || len([]rune(number)) > 100 || strings.ContainsAny(number, "\r\n\t") || len(s.Manual) >= 1000 {
+			return result, ErrBoardLoadSelection
+		}
+		for _, list := range [][]BoardLoad{view.Next, view.Hidden, view.Unavailable, s.Manual} {
+			if hasBoardNumber(list, number) {
+				return result, ErrBoardLoadSelection
+			}
+		}
+		if strings.EqualFold(strings.TrimSpace(e.CurrentLoad), number) || (view.Current != nil && strings.EqualFold(strings.TrimSpace(view.Current.Number), number)) {
+			return result, ErrBoardLoadSelection
+		}
+		var planID string
+		if err = tx.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&planID); err != nil {
+			return result, err
+		}
+		s.Manual = append(s.Manual, BoardLoad{Manual: true, PlanID: planID, Number: number, Stops: []BoardStop{}})
+		// Preserve the visible queue and append the entered load at its end.
+		s.Order, s.OrderLabels = nil, nil
+		for _, p := range view.Next {
+			s.Order = append(s.Order, p.PlanID)
+			s.OrderLabels = append(s.OrderLabels, p.Number)
+		}
+		s.Order = append(s.Order, planID)
+		s.OrderLabels = append(s.OrderLabels, number)
 	case "arrival_auto", "arrival_yes", "arrival_no", "travel_auto", "travel_manual", "confirm_driver":
 		if view.Automation == nil || view.Automation.Context == "" || view.Current == nil {
 			return result, ErrBoardLoadSelection
@@ -599,6 +638,9 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		case "ENROUTE", "RESERVED":
 			if view.Current != nil {
 				s.Completed = append(s.Completed, boardCompletionKey(*view.Current))
+				if view.Current.Manual {
+					s.Completed = append(s.Completed, "plan:"+view.Current.PlanID)
+				}
 			}
 			s.Current = nil
 			e.CurrentLoad, e.Destination, e.Status, e.ETA = "", "", "", ""
@@ -735,7 +777,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		}
 		if a.Action == "restore" {
 			for _, p := range view.Hidden {
-				if p.PlanID == a.PlanID && p.Date >= view.FromDate {
+				if p.PlanID == a.PlanID && (p.Manual || p.Date >= view.FromDate) {
 					next = append(next, p)
 				}
 			}

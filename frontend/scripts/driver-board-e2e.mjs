@@ -306,8 +306,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     await expect(viewer.getByRole('dialog').getByRole('button', { name: /^Undo change/ })).toHaveCount(0);
     await viewer.getByRole('dialog').getByRole('button', { name: 'Loads', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: 'Set current', exact: true })).toHaveCount(0);
+    await expect(viewer.getByRole('dialog').getByRole('textbox', { name: 'Add next load', exact: true })).toHaveCount(0);
     const loads = await (await viewer.request.get(`${base}/api/driver-board/loads/${id}`)).json();
     expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'clear', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
+    expect((await viewer.request.post(`${base}/api/driver-board/loads/${id}`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { action: 'add', number: 'UNAUTHORIZED-NEXT', version: remote.version, revision: loads.revision, fromDate: loads.fromDate } })).status()).toBe(403);
     await runStatusBoardLiveE2E({ page, viewer, base, id, week, headers, sql, schema, temp, setNetworkLatency });
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });

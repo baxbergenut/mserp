@@ -105,6 +105,11 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		a.FromDate = from
+		a.Number = strings.TrimSpace(a.Number)
+		if a.Action == "add" && (a.Number == "" || len([]rune(a.Number)) > 100 || strings.ContainsAny(a.Number, "\r\n\t")) {
+			writeAPIError(w, 400, "load number must contain 1–100 characters on one line")
+			return
+		}
 		session, _ := authSessionFromContext(r.Context())
 		result, err := repo.ChangeLoads(r.Context(), a, session.User.ID)
 		if err != nil {
