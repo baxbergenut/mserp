@@ -185,13 +185,38 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				return err
 			}
 		}
-		if routes == nil || !routes.Options.Enabled || a.Context == "" || a.RequiresConfirmation || !a.TelemetrySafe || d.Location == nil || stop.Latitude == nil || stop.Longitude == nil || now.Sub(d.Location.ReportedAt) > 10*time.Minute || d.Location.ReportedAt.After(now) {
+		if routes == nil || !routes.Options.Enabled || a.Context == "" || a.RequiresConfirmation {
 			continue
 		}
 		var t BoardTravel
 		var vin string
 		if err = conn.QueryRow(ctx, `SELECT travel,coalesce(t.vin,'') FROM driver_board_automation c LEFT JOIN trucks t ON t.id::text=$2 WHERE c.driver_id=$1`, d.ID, d.TruckID).Scan(&t, &vin); err != nil {
 			return err
+		}
+		unavailable := ""
+		switch {
+		case !a.TelemetrySafe:
+			unavailable = "GPS automation requires a unique assigned truck VIN"
+		case stop.Latitude == nil || stop.Longitude == nil:
+			unavailable = "Selected stop coordinates are unavailable"
+		case d.Location == nil:
+			unavailable = "Truck GPS location is unavailable"
+		case now.Sub(d.Location.ReportedAt) > 10*time.Minute || d.Location.ReportedAt.After(now):
+			unavailable = "Truck GPS location is stale or has an invalid timestamp"
+		}
+		if unavailable != "" {
+			if t.Context != a.Context {
+				t = BoardTravel{Context: a.Context}
+			}
+			t.Enabled, t.Error = true, unavailable
+			if !a.TelemetrySafe || stop.Latitude == nil || stop.Longitude == nil {
+				t.CalculatedAt = time.Time{}
+			}
+			// Do not mark this as a route attempt: fresh GPS should queue immediately.
+			if err = r.storeBoardTravel(ctx, d.ID, d.TruckID, view.Revision, a.Context, t); err != nil {
+				return err
+			}
+			continue
 		}
 		if t.Context == a.Context && now.Sub(t.AttemptedAt) < 5*time.Minute {
 			continue

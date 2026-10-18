@@ -307,6 +307,19 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil || !strings.HasPrefix(result.Loads.Automation.TravelValue, "ETA ") {
 		t.Fatal("automatic estimate projection", err)
 	}
+	// Enabling with stale GPS must expose the reason without making provider calls.
+	_, err = pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, now.Add(-11*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, StandardSemi: true})
+	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || !view.Automation.RoutingEnabled || !strings.Contains(view.Automation.Reason, "GPS location is stale") {
+		t.Fatal("stale GPS hid activation or its reason", err, view.Automation)
+	}
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID)
 	_, _ = pool.Exec(ctx, `DELETE FROM trucks WHERE id=$1`, truck.ID)

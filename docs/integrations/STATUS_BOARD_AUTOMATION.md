@@ -96,6 +96,9 @@ Five ELD configuration and an explicitly verified mph/kph speed unit. Flags are
 operator attestations, not an API-access test. No production activation is implied
 by deployment. Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached
 automatic values are disabled by the next worker pass. Manual entry remains usable.
+Matched selections with stale/missing GPS still report routing as enabled and
+explain why an estimate is unavailable. They make no routing calls and queue on
+the next minute pass once GPS becomes usable, without a five-minute retry delay.
 
 On October 18, 2026, the operator approved a shared estimate profile and confirmed
 Five ELD tracking speeds are mph. `BOARD_ROUTES_STANDARD_SEMI=true` uses assumed
