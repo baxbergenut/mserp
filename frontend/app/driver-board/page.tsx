@@ -32,7 +32,7 @@ import { CellPresence } from "./CellPresence";
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
   ["Original gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
-  ["Destination", 110], ["Notes", 130], ["ETA", 240], ["Next loads", 180], ["Home time", 120],
+  ["Destination", 110], ["Notes", 130], ["ETA", 180], ["Next loads", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
