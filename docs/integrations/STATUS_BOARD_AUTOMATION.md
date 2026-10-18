@@ -77,21 +77,43 @@ BOARD_ROUTES_ENABLED=false
 BOARD_ROUTES_API_KEY=...
 BOARD_ROUTES_ACCESS_VERIFIED=true
 BOARD_ROUTES_OPERATIONS_VERIFIED=true
-BOARD_ROUTES_PROFILES_FILE=/etc/mserp/board-route-profiles.json
+BOARD_ROUTES_STANDARD_SEMI=true
+# Optional measured per-truck overrides:
+# BOARD_ROUTES_PROFILES_FILE=/etc/mserp/board-route-profiles.json
 BOARD_ROUTES_REQUESTS_PER_MINUTE=30
 FIVE_ELD_SPEED_VERIFIED=true
 FIVE_ELD_SPEED_UNIT=mph
 ```
 
-Enabling requires all verification flags, key, readable profile file, existing
+`GOOGLE_ROUTING_API_TOKEN` is also accepted when `BOARD_ROUTES_API_KEY` is empty.
+Adding either key alone does not activate the worker; all verification and profile
+requirements below still apply. Keep real keys out of commits, including tracked
+development environment files.
+
+Enabling requires all verification flags, key, a readable profile file or explicit
+standard-semi opt-in, existing
 Five ELD configuration and an explicitly verified mph/kph speed unit. Flags are
 operator attestations, not an API-access test. No production activation is implied
 by deployment. Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached
 automatic values are disabled by the next worker pass. Manual entry remains usable.
 
-The profile file is keyed by local truck UUID. Each entry is reviewed for the
+On October 18, 2026, the operator approved a shared estimate profile and confirmed
+Five ELD tracking speeds are mph. `BOARD_ROUTES_STANDARD_SEMI=true` uses assumed
+dimensions of 13 ft 6 in height, 102 in width, 73 ft overall length and a 53 ft
+trailer, with assumed 80,000 lb combined tractor/trailer/cargo weight. API metric
+values round up. Hazmat restrictions are not modeled. These assumptions appear
+on the ETA/miles hover, including retained stopped estimates. This profile is for
+board travel estimates, not measured vehicle clearance or driver navigation.
+Live DataTruck list/detail samples (including load 8YX9221) did not expose any
+weight field; do not describe the fallback as DataTruck weight or use cargo-only
+weight as combined vehicle weight. No DataTruck refresh requests are added.
+
+The optional profile file is keyed by local truck UUID. Each entry is reviewed for the
 specific imported numeric load record ID, current trailer number, and expiration.
 This prevents using historical dimensions/actual weight for a different load.
+An explicit entry overrides the shared profile; an invalid/expired explicit entry
+suppresses estimates rather than silently falling back. The shared profile follows
+the current context and requires no per-load file updates.
 Values below are illustrative, not fleet defaults:
 
 ```json
@@ -114,7 +136,7 @@ Values below are illustrative, not fleet defaults:
 
 Review actual tractor/trailer dimensions, loaded weight and hazmat restrictions;
 an empty hazmat array explicitly means none. Profiles are loaded at server startup;
-restart after reviewed changes. Missing/expired/mismatched attributes suppress the
+restart after reviewed changes. Missing/expired/mismatched explicit attributes suppress the
 automatic estimate. No profile values are inferred from maintenance or truck color.
 
 The minute worker checks changed contexts immediately on its next pass and

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/boardroutes"
 	"mserp/internal/datatruck"
 	"mserp/internal/fiveeld"
 )
@@ -163,10 +164,14 @@ func TestBoardTravelDistanceDisplay(t *testing.T) {
 		{"resting long haul", "stopped", 1000, 12 * time.Hour, "1000mi"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			estimate := BoardTravel{Enabled: true, Context: "one", Motion: tc.motion, Miles: tc.miles,
+			estimate := BoardTravel{Enabled: true, Context: "one", Motion: tc.motion, Miles: tc.miles, Assumptions: boardroutes.StandardSemiAssumptions,
 				CalculatedAt: now, ReportedAt: now, ArrivalAt: now.Add(time.Hour)}
-			if got, _ := estimate.display("one", now.Add(tc.age)); got != tc.want {
+			got, reason := estimate.display("one", now.Add(tc.age))
+			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			if got != "" && !strings.Contains(reason, boardroutes.StandardSemiAssumptions) {
+				t.Fatal("profile assumptions missing from hover", reason)
 			}
 		})
 	}

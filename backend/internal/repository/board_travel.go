@@ -23,9 +23,18 @@ type BoardTravel struct {
 	Miles        float64   `json:"miles"`
 	Motion       string    `json:"motion"`
 	Error        string    `json:"error"`
+	Assumptions  string    `json:"assumptions,omitempty"`
 }
 
-func (t BoardTravel) display(key string, now time.Time) (string, string) {
+func (t BoardTravel) display(key string, now time.Time) (value, reason string) {
+	defer func() {
+		if value != "" && t.Assumptions != "" {
+			if reason != "" {
+				reason += " · "
+			}
+			reason += t.Assumptions
+		}
+	}()
 	if !t.Enabled {
 		return "", "Automatic travel estimates are not enabled"
 	}
@@ -39,7 +48,7 @@ func (t BoardTravel) display(key string, now time.Time) (string, string) {
 	if stale && t.Motion != "stopped" {
 		return "", "Automatic estimate unavailable or stale"
 	}
-	reason := t.Error
+	reason = t.Error
 	if reason != "" {
 		reason = "Previous estimate (stale refresh): " + reason
 	}
@@ -201,8 +210,8 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		t.Enabled = true
 		t.AttemptedAt = now
-		profile, ok := routes.Options.Profiles[job.driver.TruckID]
-		if !ok || !profile.Valid(*job.view.Current.LoadID, entries[job.driver.ID].TrailerNumber, now) {
+		vehicle, assumptions, ok := routes.Options.VehicleFor(job.driver.TruckID, *job.view.Current.LoadID, entries[job.driver.ID].TrailerNumber, now)
+		if !ok {
 			t.Error = "Reviewed truck/load/trailer routing attributes are missing or expired"
 			t.CalculatedAt = time.Time{}
 		} else if eld == nil {
@@ -222,7 +231,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 					t.Error = "No fresh tracking points"
 					t.CalculatedAt = time.Time{}
 				} else {
-					estimate, e := routes.Route(ctx, p.Coordinates.Lat, p.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, profile.Vehicle)
+					estimate, e := routes.Route(ctx, p.Coordinates.Lat, p.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, vehicle)
 					if e != nil {
 						t.Error = e.Error()
 						if errors.Is(e, boardroutes.ErrRouteUnavailable) {
@@ -235,6 +244,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 						t.CalculatedAt = time.Now().UTC()
 						t.ArrivalAt = p.Date.Add(estimate.Duration)
 						t.Miles = float64(estimate.Meters) / 1609.344
+						t.Assumptions = assumptions
 					}
 				}
 			}

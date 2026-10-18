@@ -38,6 +38,7 @@ type Options struct {
 	APIKey            string
 	SpeedUnit         string
 	Profiles          map[string]Profile
+	StandardSemi      bool
 	RequestsPerMinute int
 }
 
@@ -47,6 +48,9 @@ func LoadOptions() (Options, error) {
 		return o, nil
 	}
 	o.APIKey = strings.TrimSpace(os.Getenv("BOARD_ROUTES_API_KEY"))
+	if o.APIKey == "" {
+		o.APIKey = strings.TrimSpace(os.Getenv("GOOGLE_ROUTING_API_TOKEN"))
+	}
 	o.SpeedUnit = os.Getenv("FIVE_ELD_SPEED_UNIT")
 	if o.APIKey == "" || os.Getenv("BOARD_ROUTES_ACCESS_VERIFIED") != "true" || os.Getenv("BOARD_ROUTES_OPERATIONS_VERIFIED") != "true" || os.Getenv("FIVE_ELD_SPEED_VERIFIED") != "true" || (o.SpeedUnit != "mph" && o.SpeedUnit != "kph") {
 		return o, errors.New("board routes requires key, verified truck access/operations and verified mph/kph speed semantics")
@@ -58,7 +62,12 @@ func LoadOptions() (Options, error) {
 		}
 		o.RequestsPerMinute = n
 	}
-	body, err := os.ReadFile(os.Getenv("BOARD_ROUTES_PROFILES_FILE"))
+	o.StandardSemi = os.Getenv("BOARD_ROUTES_STANDARD_SEMI") == "true"
+	profileFile := strings.TrimSpace(os.Getenv("BOARD_ROUTES_PROFILES_FILE"))
+	if profileFile == "" && o.StandardSemi {
+		return o, nil
+	}
+	body, err := os.ReadFile(profileFile)
 	if err != nil {
 		return o, errors.New("board routes profiles file unavailable")
 	}
@@ -66,6 +75,22 @@ func LoadOptions() (Options, error) {
 		return o, errors.New("invalid board routes profiles JSON")
 	}
 	return o, nil
+}
+
+// StandardSemi is an explicitly enabled estimate profile, not measured fleet data.
+// The operator approved shared dimensions and an 80,000 lb gross-weight fallback.
+const StandardSemiAssumptions = "Assumed semi profile: 13 ft 6 in high, 102 in wide, 73 ft overall, 53 ft trailer, 80,000 lb total weight; hazmat restrictions not modeled"
+
+func (o Options) VehicleFor(truck string, load int, trailer string, now time.Time) (VehicleInfo, string, bool) {
+	if p, ok := o.Profiles[truck]; ok {
+		// An invalid explicit profile must not silently become a generic profile.
+		return p.Vehicle, "", p.Valid(load, trailer, now)
+	}
+	if !o.StandardSemi || load <= 0 {
+		return VehicleInfo{}, "", false
+	}
+	return VehicleInfo{Height: 4115, Width: 2591, Length: 22251, Weight: 36288,
+		TrailerInfo: []TrailerInfo{{Length: 16155}}, HazardousGoods: []string{}}, StandardSemiAssumptions, true
 }
 
 func (p Profile) Valid(load int, trailer string, now time.Time) bool {

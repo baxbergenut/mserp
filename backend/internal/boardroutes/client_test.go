@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -66,5 +68,65 @@ func TestRoutingGates(t *testing.T) {
 	p := Profile{LoadID: 1, Trailer: "A", ValidUntil: time.Now().Add(time.Hour), Vehicle: VehicleInfo{Height: 4000, Length: 22000, Width: 2600, Weight: 30000, TrailerInfo: []TrailerInfo{{Length: 16000}}, HazardousGoods: []string{}}}
 	if !p.Valid(1, "A", time.Now()) || p.Valid(2, "A", time.Now()) || p.Valid(1, "B", time.Now()) || p.Valid(1, "A", time.Now().Add(2*time.Hour)) {
 		t.Fatal("routing profile is not context-bound")
+	}
+}
+
+func TestRoutingAPIKeyAlias(t *testing.T) {
+	profiles := filepath.Join(t.TempDir(), "profiles.json")
+	if err := os.WriteFile(profiles, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"BOARD_ROUTES_ENABLED", "BOARD_ROUTES_ACCESS_VERIFIED", "BOARD_ROUTES_OPERATIONS_VERIFIED", "FIVE_ELD_SPEED_VERIFIED"} {
+		t.Setenv(name, "true")
+	}
+	t.Setenv("FIVE_ELD_SPEED_UNIT", "mph")
+	t.Setenv("BOARD_ROUTES_PROFILES_FILE", profiles)
+	t.Setenv("BOARD_ROUTES_STANDARD_SEMI", "false")
+	t.Setenv("BOARD_ROUTES_REQUESTS_PER_MINUTE", "30")
+	t.Setenv("BOARD_ROUTES_API_KEY", "")
+	t.Setenv("GOOGLE_ROUTING_API_TOKEN", " alias-test-key ")
+	o, err := LoadOptions()
+	if err != nil || o.APIKey != "alias-test-key" {
+		t.Fatal("routing token alias not loaded")
+	}
+	t.Setenv("BOARD_ROUTES_API_KEY", "primary-test-key")
+	o, err = LoadOptions()
+	if err != nil || o.APIKey != "primary-test-key" {
+		t.Fatal("primary routing key did not take precedence")
+	}
+	t.Setenv("BOARD_ROUTES_PROFILES_FILE", "")
+	if _, err = LoadOptions(); err == nil {
+		t.Fatal("missing profiles accepted without opt-in")
+	}
+	t.Setenv("BOARD_ROUTES_STANDARD_SEMI", "true")
+	o, err = LoadOptions()
+	if err != nil || !o.StandardSemi {
+		t.Fatal("standard semi opt-in failed", err)
+	}
+}
+
+func TestStandardSemiProfile(t *testing.T) {
+	now := time.Now()
+	o := Options{}
+	if _, _, ok := o.VehicleFor("truck", 1, "trailer", now); ok {
+		t.Fatal("standard profile enabled implicitly")
+	}
+	o.StandardSemi = true
+	v, assumptions, ok := o.VehicleFor("truck", 1, "trailer", now)
+	if !ok || v.Weight != 36288 || v.Height != 4115 || len(v.TrailerInfo) != 1 || assumptions != StandardSemiAssumptions {
+		t.Fatal("missing approved profile or disclosure")
+	}
+	if _, _, ok := o.VehicleFor("truck", 0, "trailer", now); ok {
+		t.Fatal("unresolved load used standard profile")
+	}
+	o.Profiles = map[string]Profile{"truck": {LoadID: 2}}
+	if _, _, ok := o.VehicleFor("truck", 1, "trailer", now); ok {
+		t.Fatal("invalid explicit profile fell back to standard")
+	}
+	p := Profile{LoadID: 1, Trailer: "trailer", ValidUntil: now.Add(time.Hour), Vehicle: v}
+	o.Profiles["truck"] = p
+	got, assumptions, ok := o.VehicleFor("truck", 1, "trailer", now)
+	if !ok || got.Weight != v.Weight || assumptions != "" {
+		t.Fatal("valid explicit profile did not take precedence")
 	}
 }
