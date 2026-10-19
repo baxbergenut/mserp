@@ -35,6 +35,12 @@ type TruckChargeData struct {
 	Owners           []TruckChargeOwner `json:"owners,omitempty"`
 	Terms            []TruckTerm        `json:"terms"`
 	Phases           []TruckChargePhase `json:"phases"`
+	LockedCharges    []TruckChargeLock  `json:"lockedCharges"`
+}
+
+type TruckChargeLock struct {
+	TruckID string `json:"truckId"`
+	TypeID  string `json:"typeId"`
 }
 
 // Ownership comes from the fleet history, independently of settlement agreements.
@@ -139,6 +145,28 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 		}
 	}
 	d.Terms, d.Phases = terms, phases
+	if err = rows.Err(); err != nil {
+		return d, err
+	}
+	rows.Close()
+	// Use the same affected-period check as writes, including later finalized
+	// statements, so selecting all can omit protected cells before saving.
+	d.LockedCharges = []TruckChargeLock{}
+	rows, err = r.pool.Query(ctx, `SELECT input.truck_id::text,input.type_id::text
+ FROM (SELECT t.id AS truck_id,c.id AS type_id,$2::date AS week_start,'charge'::text AS kind
+ FROM trucks t CROSS JOIN driver_charge_types c WHERE t.id=ANY($1::uuid[])) input
+ WHERE `+truckPeriodClosedSQL, d.EligibleTruckIDs, week)
+	if err != nil {
+		return d, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var locked TruckChargeLock
+		if err = rows.Scan(&locked.TruckID, &locked.TypeID); err != nil {
+			return d, err
+		}
+		d.LockedCharges = append(d.LockedCharges, locked)
+	}
 	return d, rows.Err()
 }
 
@@ -171,14 +199,18 @@ func lockTruckAccounting(ctx context.Context, tx pgx.Tx) error {
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
 	return err
 }
+
+const truckPeriodClosedSQL = `EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=input.truck_id AND w.finalized AND w.week_start >= input.week_start
+ AND w.week_start < coalesce((SELECT min(week_start) FROM truck_settlement_terms WHERE truck_id=input.truck_id AND week_start>input.week_start AND input.kind='terms'),
+ (SELECT min(week_start) FROM truck_charge_phases WHERE truck_id=input.truck_id AND type_id=input.type_id AND week_start>input.week_start AND input.kind='charge'),'2101-01-01'::date))
+ OR EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND s.week_start >= input.week_start AND
+ (EXISTS(SELECT 1 FROM truck_settlement_terms t JOIN investors i ON i.id=t.owner_id WHERE t.truck_id=input.truck_id AND i.driver_id=s.driver_id)
+ OR EXISTS(SELECT 1 FROM truck_ownership_history h JOIN investors i ON i.id=h.owner_id WHERE h.truck_id=input.truck_id AND i.driver_id=s.driver_id)))`
+
 func protectTruckPeriod(ctx context.Context, tx pgx.Tx, truck, week, kind, typeID string) error {
 	var closed bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=$1 AND w.finalized AND w.week_start >= $2::date
- AND w.week_start < coalesce((SELECT min(week_start) FROM truck_settlement_terms WHERE truck_id=$1 AND week_start>$2::date AND $3='terms'),
- (SELECT min(week_start) FROM truck_charge_phases WHERE truck_id=$1 AND type_id=nullif($4,'')::uuid AND week_start>$2::date AND $3='charge'),'2101-01-01'::date))
- OR EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND s.week_start >= $2::date AND
- (EXISTS(SELECT 1 FROM truck_settlement_terms t JOIN investors i ON i.id=t.owner_id WHERE t.truck_id=$1 AND i.driver_id=s.driver_id)
- OR EXISTS(SELECT 1 FROM truck_ownership_history h JOIN investors i ON i.id=h.owner_id WHERE h.truck_id=$1 AND i.driver_id=s.driver_id)))`, truck, week, kind, typeID).Scan(&closed)
+	err := tx.QueryRow(ctx, `SELECT `+truckPeriodClosedSQL+`
+ FROM (SELECT $1::uuid AS truck_id,$2::date AS week_start,$3::text AS kind,nullif($4,'')::uuid AS type_id) input`, truck, week, kind, typeID).Scan(&closed)
 	if err != nil {
 		return err
 	}

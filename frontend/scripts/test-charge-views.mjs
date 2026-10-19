@@ -9,7 +9,7 @@ const week = '2026-10-05';
 const driver = { id: 'driver', fullName: 'Test Driver', active: true, driverType: 'Company', phone: '' };
 const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00'], archived: false, version: 1, eligibility: 'calendar', rules: [] };
 let trucks = [];
-const truckCharges = { terms: [], phases: [], eligibleTruckIds: [] };
+const truckCharges = { terms: [], phases: [], eligibleTruckIds: [], lockedCharges: [] };
 const truckWrites = [];
 const termWrites = [];
 let datedOwners = false;
@@ -104,14 +104,20 @@ try {
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   expect(truckWrites.at(-1).amount).toBe('75.00');
   const trucksAll = page.getByRole('checkbox', { name: 'Admin fee: select all trucks', exact: true });
+  // A mixed selection selects the remaining trucks rather than clearing it.
+  await trucksAll.click();
+  await expect(truckCheck).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await trucksAll.click();
   await expect(truckCheck).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await trucksAll.click();
   await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  expect(bulkWrites).toHaveLength(1);
-  expect(bulkWrites[0]).toHaveLength(3);
+  expect(bulkWrites).toHaveLength(3);
+  expect(bulkWrites[0]).toHaveLength(2);
+  expect(bulkWrites[2]).toHaveLength(3);
   // The entire selection paints before the server responds. A rejected
   // middle truck is restored while later trucks still save.
   holdBulk = true;
@@ -130,13 +136,49 @@ try {
   await expect(truckCheck).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'INACTIVE, Admin fee', exact: true })).not.toBeChecked();
-  expect(bulkWrites).toHaveLength(2);
+  expect(bulkWrites).toHaveLength(4);
   bulkFailure = '';
-  await trucksAll.click(); // Clear remaining included truck.
-  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  await trucksAll.click(); // Select all again after the partial failure.
+  await trucksAll.click(); // Select remaining trucks after the partial failure.
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(page.getByRole('list', { name: 'Truck charges that could not be saved' })).toHaveCount(0);
+
+  // Finalized cells are omitted from writes and from the header's checked state,
+  // regardless of whether the frozen charge is included or excluded.
+  truckCharges.lockedCharges = [{ truckId: 'truck-b', typeId: 'fee' }];
+  truckCharges.phases = truckCharges.phases.map(p => ({ ...p, included: false }));
+  await page.reload();
+  const frozenCheck = page.getByRole('checkbox', { name: '202, Admin fee', exact: true });
+  await expect(frozenCheck).toBeDisabled();
+  await expect(page.getByLabel('202, Admin fee amount', { exact: true })).toBeDisabled();
+  await expect(page.getByText('(1 finalized skipped)', { exact: true })).toBeVisible();
+  const beforeFrozen = truckWrites.length;
+  await trucksAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(trucksAll).toBeChecked();
+  await expect(frozenCheck).not.toBeChecked();
+  expect(truckWrites.slice(beforeFrozen).map(v => v.truckId).sort()).toEqual(['inactive-truck', 'truck-a']);
+  await trucksAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(frozenCheck).not.toBeChecked();
+  truckCharges.phases = truckCharges.phases.map(p => p.truckId === 'truck-b' ? { ...p, included: true } : p);
+  await page.reload();
+  await trucksAll.click();
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(truckCheck).toBeChecked();
+  await expect(frozenCheck).toBeChecked();
+  expect(truckWrites.slice(beforeFrozen).some(v => v.truckId === 'truck-b')).toBe(false);
+  await page.getByRole('button', { name: '202, Admin fee history', exact: true }).click();
+  const frozenHistory = page.getByRole('dialog');
+  await expect(frozenHistory.getByRole('checkbox')).toBeDisabled();
+  await expect(frozenHistory.getByRole('combobox')).toBeDisabled();
+  await expect(frozenHistory.getByRole('button', { name: 'Save truck fee', exact: true })).toHaveCount(0);
+  await frozenHistory.getByRole('button', { name: 'Close', exact: true }).last().click();
+  // Other charge types on the same truck remain independently selectable.
+  await expect(page.getByRole('checkbox', { name: '202, Other fee 0', exact: true })).toBeEnabled();
+  await page.getByLabel('Search trucks').fill('202');
+  await expect(page.getByRole('checkbox', { name: 'Admin fee: select visible trucks', exact: true })).toBeDisabled();
+  await page.getByLabel('Search trucks').fill('');
+  truckCharges.lockedCharges = [];
   await page.reload();
   await expect(truckCheck).toBeChecked();
   await expect(page.getByLabel('201, Admin fee amount', { exact: true })).toHaveValue('75.00');

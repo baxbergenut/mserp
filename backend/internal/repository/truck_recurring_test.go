@@ -380,3 +380,96 @@ func TestTruckRecurringDatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestTruckRecurringFinalizedSelectionDatabase(t *testing.T) {
+	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string) {
+		charges := NewDriverChargeRepository(pool)
+		fleet := NewFleetRepository(pool)
+		week := ChargeCurrentWeek()
+		date, _ := chargeWeek(week)
+		nextWeek := date.AddDate(0, 0, 7).Format("2006-01-02")
+		previousWeek := date.AddDate(0, 0, -7).Format("2006-01-02")
+		driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Frozen owner", PayType: "cpm", Active: true, AssignmentWeek: week})
+		if err != nil {
+			t.Fatal(err)
+		}
+		driverTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "FROZEN-DRIVER", OwnerDriverID: &driver.ID, Active: true, Status: "available"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var owner string
+		if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Selection owner') RETURNING id::text`).Scan(&owner); err != nil {
+			t.Fatal(err)
+		}
+		investorTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "FROZEN-INVESTOR", OwnerID: &owner, Active: true, Status: "available", OwnershipEffectiveDate: previousWeek})
+		if err != nil {
+			t.Fatal(err)
+		}
+		openTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "OPEN-TRUCK", OwnerID: &owner, Active: true, Status: "available"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		typ, err := charges.SaveType(ctx, ChargeType{Name: "Selection fee", Direction: "charge", Amounts: []string{"50"}}, actor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A later phase bounds the affected investor period, independently per type.
+		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: investorTruck.ID, TypeID: typ.ID, WeekStart: nextWeek, Amount: "50", TypeVersion: typ.Version}, actor); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,$2,'{"frozen":"driver"}')`, driver.ID, week); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,report,finalized) VALUES($1,$2,$3,'{}','{"frozen":"investor"}',true)`, investorTruck.ID, week, owner); err != nil {
+			t.Fatal(err)
+		}
+		management, err := charges.TruckChargesForWeek(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		locked := map[string]bool{}
+		for _, v := range management.LockedCharges {
+			if v.TypeID == typ.ID {
+				locked[v.TruckID] = true
+			}
+		}
+		if !locked[driverTruck.ID] || !locked[investorTruck.ID] || locked[openTruck.ID] {
+			t.Fatalf("wrong finalized selection locks: %+v", management.LockedCharges)
+		}
+		updates := []TruckChargePhase{}
+		for _, truck := range []string{driverTruck.ID, openTruck.ID, investorTruck.ID} {
+			updates = append(updates, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: week, Amount: "50", Included: true, TypeVersion: typ.Version})
+		}
+		// Even a stale browser that sends locked trucks cannot change them or
+		// prevent the open truck in the middle of the selection from saving.
+		results, err := charges.SaveTruckCharges(ctx, updates, actor)
+		if err != nil || len(results) != 3 || results[0].Error == "" || results[1].Error != "" || results[2].Error == "" {
+			t.Fatalf("finalized selection results: %+v %v", results, err)
+		}
+		var unchanged bool
+		if err = pool.QueryRow(ctx, `SELECT
+ (SELECT report='{"frozen":"driver"}'::jsonb AND finalized AND version=1 FROM payroll_settlements WHERE driver_id=$1 AND week_start=$4::date)
+ AND (SELECT report='{"frozen":"investor"}'::jsonb AND finalized AND version=1 FROM investor_pay_weeks WHERE truck_id=$2 AND week_start=$4::date)
+ AND NOT EXISTS(SELECT 1 FROM truck_charge_phases WHERE truck_id=ANY($3::uuid[]) AND week_start=$4::date)
+ AND NOT EXISTS(SELECT 1 FROM truck_settlement_events WHERE truck_id=ANY($3::uuid[]) AND week_start=$4::date)`, driver.ID, investorTruck.ID, []string{driverTruck.ID, investorTruck.ID}, week).Scan(&unchanged); err != nil || !unchanged {
+			t.Fatal("finalized statements or charge sources changed", unchanged, err)
+		}
+		// A week before the frozen investor week remains protected until a
+		// subsequent phase cuts off its effect. Later weeks are editable.
+		for _, selected := range []string{previousWeek, nextWeek} {
+			management, err = charges.TruckChargesForWeek(ctx, selected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			isLocked := false
+			for _, v := range management.LockedCharges {
+				if v.TruckID == investorTruck.ID && v.TypeID == typ.ID {
+					isLocked = true
+				}
+			}
+			if isLocked != (selected == previousWeek) {
+				t.Fatalf("wrong period lock for %s: %+v", selected, management.LockedCharges)
+			}
+		}
+	})
+}

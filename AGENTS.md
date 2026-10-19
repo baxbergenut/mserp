@@ -357,6 +357,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   non-company truck, driver installment plans, and shared charge types. The Truck
   charges tab defaults open; per-charge counts and Included/Excluded truck filters
   show membership for the selected effective week. There is no driver recurring tab.
+  Truck-charge reads include per-truck/type finalized-period locks. Select all
+  changes only unlocked visible cells and selects the remainder of a mixed
+  selection; locked fees stay read-only and retain their inclusion and amount.
+  Writes recheck the same period guard under the financial lock.
 - `frontend/app/accounting/escrow/`: standalone escrow directory, payment status
   filters, collection history and the new-driver default; shared table in Driver
   details. `escrow_repository.go` and `escrow_handlers.go` own its API.
