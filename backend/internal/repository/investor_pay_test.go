@@ -150,6 +150,11 @@ func TestInvestorPayDatabase(t *testing.T) {
 			pr := NewDriverPayRepository(pool)
 			term := TruckTerm{TruckID: truck, OwnerID: investor, WeekStart: "2026-01-05", SharePercent: "88"}
 			ownTruck := mustID(`INSERT INTO trucks(unit_number,owner_id) VALUES('OWNER-TRUCK',$1) RETURNING id`, investor)
+			// This fixture's assignments and recurring fees begin in January;
+			// establish ownership then as well, rather than on the test-run date.
+			if _, e = pool.Exec(ctx, `UPDATE truck_ownership_history SET assigned_at='2026-01-01',start_known=true WHERE truck_id=ANY($1::uuid[])`, []string{truck, ownTruck}); e != nil {
+				t.Fatal(e)
+			}
 			if _, e = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01')`, ownTruck, owner); e != nil {
 				t.Fatal(e)
 			}
