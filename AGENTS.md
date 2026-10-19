@@ -277,9 +277,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   checkboxes; physical opening counts (including zero) precede issuance. Truck
   details expose permission-gated Equipment summaries. The PrePass tab reuses
   existing cached rosters and vendor safeguards, without a local tag-notes UI;
-  historical imported notes remain stored for audit. Separate `samsara-gateways`
-  and `samsara-cameras` tabs show linked devices (`samsara` opens gateways for
-  old bookmarks). Inventory phone displays reuse the shared phone formatter;
+  historical imported notes remain stored for audit. Migration 121 unifies
+  `dashcams` with controlled Samsara/FiveELD brands, adds `phones`, and keeps
+  `samsara-gateways` separate. Only Samsara dashcams link gateways. Legacy camera
+  bookmarks redirect; unclassified Other devices stay stored outside normal UI.
+  Truck Equipment shows linked serialized devices only; old hardware checklists
+  are archived. Device installation requires a direct/inherited truck, enforced
+  by API and deferred DB trigger. Gateway moves reset camera verification in the
+  same transaction. Statuses use controlled codes, capitalized colored badges.
+  Supplies is a versioned presence checkbox matrix grouped by recorded company
+  ownership, including inactive trucks. Stock/units/history UI is deferred;
+  audits and ledger APIs remain stored, and checking presence never moves stock.
+  Inventory phone displays reuse the shared phone formatter;
   carrier status appears on AT&T lines rather than next to tablet numbers.
   Stored trailers have no dispatch/Status Board or
   FleetScope assignment synchronization. Imports require Administrator plus

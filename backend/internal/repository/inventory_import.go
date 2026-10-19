@@ -150,6 +150,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 	}
 	indexes := map[string]int{}
 	add := func(collection string, d InventoryFields, source string, issues []string) string {
+		d = inventoryImportedFields(collection, d)
 		key := inventoryImportKey(collection, d)
 		if collection == "equipment" && d.TruckID == "" {
 			key += ":" + source
@@ -261,6 +262,8 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 				deviceType := "other"
 				if strings.EqualFold(inventoryCell(row, typeCol), "Tablet") {
 					deviceType = "tablet"
+				} else if strings.Contains(strings.ToLower(inventoryCell(row, typeCol)), "phone") || strings.HasPrefix(strings.ToLower(inventoryCell(row, modelCol)), "iphone") {
+					deviceType = "phone"
 				}
 				assetID := ""
 				issues := []string{}
@@ -327,7 +330,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 				for _, item := range []struct {
 					column int
 					name   string
-				}{{1, "MC Sticker"}, {2, "IFTA Sticker"}, {3, "PrePass"}, {4, "Samsara DashCam"}, {5, "TT DashCam"}, {6, "PT-30/Protrux"}, {8, "Tablet"}, {12, "Chains"}, {13, "Extinguisher"}} {
+				}{{1, "MC Sticker"}, {2, "IFTA Sticker"}, {12, "Chains"}, {13, "Extinguisher"}} {
 					value := strings.ToUpper(inventoryCell(row, item.column))
 					state := "unknown"
 					if value == "TRUE" {
@@ -360,10 +363,19 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 	}
 	// Surface duplicate assignments across different identifiers before commit.
 	assignments := map[string]int{}
+	previewAssets := map[string]InventoryRecord{}
+	for _, row := range result.Rows {
+		if row.Collection == "assets" {
+			previewAssets[row.Record.ID] = row.Record
+		}
+	}
 	for index := range result.Rows {
 		item := &result.Rows[index]
 		if item.Collection == "" {
 			continue
+		}
+		if item.Collection == "assets" && item.Record.Data.GatewayID != "" && previewAssets[item.Record.Data.GatewayID].Data.TruckID == "" {
+			item.Record.Data.EquipmentState = "unknown"
 		}
 		if e := validateInventory(item.Collection, item.Record); e != nil {
 			item.Issues = append(item.Issues, e.Error())

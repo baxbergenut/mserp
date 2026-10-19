@@ -100,6 +100,9 @@ func TestInventoryValidation(t *testing.T) {
 }
 
 func withInventoryDatabase(t *testing.T, check func(*testing.T, context.Context, *pgxpool.Pool, InventoryActor)) {
+	withInventoryDatabaseSeed(t, nil, check)
+}
+func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Context, *pgx.Conn), check func(*testing.T, context.Context, *pgxpool.Pool, InventoryActor)) {
 	t.Helper()
 	dsn := os.Getenv("MSERP_INVENTORY_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -127,6 +130,10 @@ func withInventoryDatabase(t *testing.T, check func(*testing.T, context.Context,
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseMigration, err := os.ReadFile("../../sql/121_inventory_base.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("inventory_%d", time.Now().UnixNano())
@@ -144,11 +151,16 @@ func withInventoryDatabase(t *testing.T, check func(*testing.T, context.Context,
 			} else {
 				normalized := strings.ReplaceAll(string(source), "\r\n", "\n")
 				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
+				baseBody := strings.ReplaceAll(string(baseMigration), "\r\n", "\n")
 				if !strings.Contains(normalized, body) {
 					t.Fatal("init schema must contain the exact migration")
 				}
-				exec(strings.Replace(normalized, body, "", 1))
+				exec(strings.Replace(strings.Replace(normalized, baseBody, "", 1), body, "", 1))
 				exec(string(migration))
+				if seed != nil {
+					seed(t, ctx, admin)
+				}
+				exec(string(baseMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT ALL ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			testCfg := cfg.Copy()
@@ -213,7 +225,7 @@ func TestInventoryDatabase(t *testing.T) {
 			t.Fatal("two active tablets assigned to same truck")
 		}
 		gateway := save("assets", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, DeviceType: "samsara_gateway", Serial: "GATEWAY-001", TruckID: truck}})
-		camera := save("assets", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, DeviceType: "samsara_camera", Serial: "CAMERA-001", GatewayID: gateway.ID}})
+		camera := save("assets", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, DeviceType: "dashcam", Brand: "Samsara", Serial: "CAMERA-001", GatewayID: gateway.ID}})
 		gateway.Data.Active = false
 		gateway.Data.TruckID = ""
 		if _, e := repo.Save(ctx, "assets", InventorySave{RequestID: inventoryID(), Record: gateway}, actor); e == nil {
@@ -225,6 +237,7 @@ func TestInventoryDatabase(t *testing.T) {
 		}
 		line := save("lines", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, WirelessNumber: "9049217936", AssetID: tablet.ID}})
 		tablet.Data.TruckID = ""
+		tablet.Data.EquipmentState = "unknown"
 		tablet = save("assets", tablet)
 		replacement := save("assets", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, DeviceType: "tablet", IMEI: "000000000000003", TruckID: truck}})
 		line.Data.AssetID = replacement.ID
@@ -388,7 +401,7 @@ func TestInventoryImportDatabase(t *testing.T) {
 			if len(item.Issues) > 0 {
 				unresolved++
 			}
-			if item.Record.Data.Serial == "G3BV-N92-E5K" || item.Record.Data.DeviceType == "samsara_camera" || item.Collection == "equipment" && item.Record.Data.TruckID == "" {
+			if item.Record.Data.Serial == "G3BV-N92-E5K" || item.Record.Data.DeviceType == "dashcam" || item.Collection == "equipment" && item.Record.Data.TruckID == "" {
 				item.Decision = "exclude"
 				item.Reason = "Unresolved identity excluded for review"
 			}

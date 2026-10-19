@@ -1,8 +1,8 @@
 # Fleet inventory and stored trailers
 
 Fleet > Inventory replaces operational equipment worksheets. Its tabs are
-directly addressable, for example `/fleet/inventory?tab=tablets`, `samsara-gateways`, `samsara-cameras`,
-`devices`, `supplies`, `lines`, `equipment`, `transponders`, `history`, `locations`
+directly addressable, for example `/fleet/inventory?tab=tablets`, `phones`, `dashcams`,
+`samsara-gateways`, `supplies`, `lines`, `equipment`, `transponders`, `locations`
 and the Administrator-only `imports` workflow. Fleet > Trailers is a separate
 directory at `/fleet/trailers` for stored/unused company trailers. Operational
 Schneider/JB Hunt trailer text on Status Board remains independent.
@@ -10,12 +10,21 @@ Schneider/JB Hunt trailer text on Status Board remains independent.
 Each directory keeps search, filters, refresh and add controls in one desktop
 toolbar, wrapping on smaller screens. Tablet columns show make/model, IMEI and
 the linked wireless number without a redundant device type or gateway column.
-Samsara gateways and dashcams have separate directories, with linked dashcam and
-linked gateway columns respectively; old `tab=samsara` bookmarks open gateways.
+Dashcams share one directory with a controlled Samsara/FiveELD brand selector;
+FiveELD replaces the old TT camera name. Samsara gateways have their own directory
+and link Samsara dashcams to trucks. FiveELD devices never link to Samsara gateways.
+Old `tab=samsara` bookmarks open gateways; `samsara-cameras` opens Dashcams filtered
+to Samsara. The old `devices` bookmark opens Dashcams. Other devices is removed.
+Five identifiable imported phones are reclassified without changing their IMEIs,
+line relationships or make/model. Four unclassified serial-only devices remain
+stored for fleet review and are excluded from normal device/equipment directories.
 Phone displays use the shared `+1 (AAA) BBB-CCCC` formatter in tablet and carrier
 lists, details and truck summaries. The tablet number column shows only the
 number; carrier status remains in AT&T lines. Gateway forms omit blank IMEI,
-make and model fields; existing source values remain editable and are preserved.
+make, model and internal asset label fields. Existing source metadata is preserved.
+Truck Equipment lists linked inventory devices only; legacy hardware checkbox
+observations are archived with an audit entry. History and stock management UI
+are deferred; stored audits and the ledger remain intact.
 The import review remains available at `/fleet/inventory?tab=imports` for
 authorized administrators, without a Migration review button in daily inventory.
 
@@ -51,7 +60,11 @@ checklists and DOT inspections are outside this feature.
 
 ## Storage and API
 
-Migration `119_fleet_inventory.sql` is also included verbatim in `init.sql`.
+Migrations `119_fleet_inventory.sql` and `121_inventory_base.sql` are also included
+verbatim in `init.sql`. Migration 121 normalizes device types/statuses, classifies
+phones, archives redundant hardware checklists and adds database installation
+and status guards. It preserves source wording in notes and full before/after
+records in the audit. It changes no truck identity, ownership or stock balance.
 Dedicated tables store assets, lines, locations, supplies, equipment observations,
 stored trailers, local transponder notes, import batches, record history and stock
 movements. Category-specific descriptive fields are sparse JSONB; relational
@@ -85,6 +98,32 @@ use the application's standard limit. The TypeScript contract is re-exported
 from `app/lib/types.ts`; API helpers live in `app/lib/api.ts`.
 
 ## Stock and equipment
+
+The current Supplies UI is a presence checklist, with all trucks grouped by
+recorded Company Trucks / Other Trucks ownership and one column per active supply.
+There are no quantity, unit, issue, return or history controls. Existing units
+and ledger APIs remain stored for a future stock workflow. Checkbox changes save
+versioned truck observations only and never create stock movements. Stable supply
+links preserve imported observations when a supply is renamed.
+
+Checked green means Verified Present, a yellow mixed checkbox means Reported
+Present, and unchecked red means Unknown or Missing (distinguished on hover and
+by an accessible description). Checking physically confirms presence with the
+actor/time; clearing a verified box records Missing. Source FALSE/blank checkboxes
+remain Unknown rather than inventing absence. Existing annual IFTA sent/attached
+flags and unknown dates are preserved.
+
+All device/carrier/condition/installation statuses use controlled codes and
+professionally capitalized labels. Unknown/Missing are red, Reported Present is
+amber, and Verified Installed is green. Devices require a direct truck or a
+linked gateway with a truck before Reported Present/Verified Installed is allowed.
+The API and a deferred database constraint enforce this. Storage/custodian
+devices display Not Installed; devices with no holder display Unassigned.
+Assignment edits reset installation to Unknown. Moving a gateway also resets
+its linked dashcam verification atomically; inherited custody never verifies a
+new installation. Device operational status and physical installation are separate.
+
+The following ledger rules describe the retained API, not the current UI:
 
 The initial location is Main storage. Add other named storage locations before
 moving stock there. Holders are `location:<UUID>`, `truck:<UUID>` or

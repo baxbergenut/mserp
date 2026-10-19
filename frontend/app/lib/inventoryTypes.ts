@@ -1,6 +1,6 @@
 export type InventoryCollection = "assets" | "lines" | "locations" | "supplies" | "equipment" | "trailers" | "transponder-notes";
 export interface InventoryFields {
-  name?: string; deviceType?: string; imei?: string; serial?: string; assetLabel?: string;
+  name?: string; deviceType?: string; brand?: string; imei?: string; serial?: string; assetLabel?: string;
   make?: string; model?: string; condition?: string; status?: string; ownership?: string;
   truckId?: string; locationId?: string; custodian?: string; gatewayId?: string; assetId?: string;
   wirelessNumber?: string; carrier?: string; iccid?: string; plan?: string; activationDate?: string;

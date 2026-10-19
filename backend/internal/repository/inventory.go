@@ -31,6 +31,7 @@ func inventoryInvalid(message string) error       { return &InventoryValidationE
 type InventoryFields struct {
 	Name                string `json:"name,omitempty"`
 	DeviceType          string `json:"deviceType,omitempty"`
+	Brand               string `json:"brand,omitempty"`
 	IMEI                string `json:"imei,omitempty"`
 	Serial              string `json:"serial,omitempty"`
 	AssetLabel          string `json:"assetLabel,omitempty"`
@@ -217,8 +218,17 @@ func validateInventory(collection string, v InventoryRecord) error {
 		return inventoryInvalid("Unknown condition")
 	}
 	if collection == "assets" {
-		if !slices.Contains([]string{"tablet", "samsara_gateway", "samsara_camera", "tt_camera", "pt30", "other"}, d.DeviceType) {
+		if !slices.Contains([]string{"tablet", "phone", "samsara_gateway", "dashcam", "pt30", "other"}, d.DeviceType) {
 			return inventoryInvalid("Choose a device type")
+		}
+		if d.DeviceType == "dashcam" && !slices.Contains([]string{"Samsara", "FiveELD"}, d.Brand) {
+			return inventoryInvalid("Choose Samsara or FiveELD as the dashcam brand")
+		}
+		if d.DeviceType != "dashcam" && d.Brand != "" {
+			return inventoryInvalid("Brand is only used for dashcams; use Make for tablets and phones")
+		}
+		if d.Status != "" && !slices.Contains(inventoryAssetStatuses, d.Status) {
+			return inventoryInvalid("Choose a standard device status")
 		}
 		if d.IMEI != "" && !inventoryIMEI.MatchString(d.IMEI) {
 			return inventoryInvalid("IMEI must contain exactly 15 digits; review the source instead of guessing")
@@ -238,14 +248,20 @@ func validateInventory(collection string, v InventoryRecord) error {
 		if holders > 1 {
 			return inventoryInvalid("Choose one truck, custodian, location, or linked gateway")
 		}
-		if d.GatewayID != "" && d.DeviceType != "samsara_camera" {
+		if d.GatewayID != "" && (d.DeviceType != "dashcam" || d.Brand != "Samsara") {
 			return inventoryInvalid("Only a Samsara camera can link to a gateway")
+		}
+		if d.TruckID == "" && d.GatewayID == "" && (d.EquipmentState == "reported_present" || d.EquipmentState == "verified_installed") {
+			return inventoryInvalid("Assign a truck before recording device installation")
 		}
 		if (d.Condition == "retired" || d.Condition == "lost" || !d.Active) && (d.TruckID != "" || d.GatewayID != "") {
 			return inventoryInvalid("Release truck/gateway assignments before losing or archiving a device")
 		}
 	}
 	if collection == "lines" {
+		if d.Status != "" && !slices.Contains(inventoryLineStatuses, d.Status) {
+			return inventoryInvalid("Choose a standard carrier status")
+		}
 		if !inventoryPhone.MatchString(d.WirelessNumber) {
 			return inventoryInvalid("Wireless number must contain ten digits")
 		}
@@ -286,6 +302,9 @@ func validateInventory(collection string, v InventoryRecord) error {
 		}
 	}
 	if collection == "trailers" {
+		if d.Status != "" && !slices.Contains([]string{"stored_unused", "needs_review", "ready", "repair", "retired"}, d.Status) {
+			return inventoryInvalid("Choose a standard trailer availability")
+		}
 		if d.UnitNumber == "" || d.UnitNumber != strings.TrimSpace(d.UnitNumber) || len(d.UnitNumber) > 50 {
 			return inventoryInvalid("Enter a trailer unit number")
 		}
@@ -359,6 +378,9 @@ func (r *InventoryRepository) Save(ctx context.Context, collection string, input
 }
 
 func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v InventoryRecord, actor InventoryActor, requestID, hash string, importing bool) (InventoryRecord, error) {
+	if importing {
+		v.Data = inventoryImportedFields(collection, v.Data)
+	}
 	if err := validateInventory(collection, v); err != nil {
 		return v, err
 	}
@@ -397,6 +419,13 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		if gateway.ID == v.ID || gateway.Data.DeviceType != "samsara_gateway" || !gateway.Data.Active || gateway.Data.Condition == "lost" || gateway.Data.Condition == "retired" {
 			return v, inventoryInvalid("Select an active Samsara gateway")
 		}
+		if gateway.Data.TruckID == "" && (v.Data.EquipmentState == "reported_present" || v.Data.EquipmentState == "verified_installed") {
+			if importing {
+				v.Data.EquipmentState, v.Data.VerifiedAt, v.Data.VerifiedBy = "unknown", "", ""
+			} else {
+				return v, inventoryInvalid("Assign the linked gateway to a truck before recording dashcam installation")
+			}
+		}
 	}
 	if collection == "assets" && exists {
 		var linked bool
@@ -410,8 +439,8 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 	}
 	if v.Data.AssetID != "" {
 		asset, e := inventoryReadTx(ctx, tx, "assets", v.Data.AssetID)
-		if e != nil || !asset.Data.Active || !slices.Contains([]string{"tablet", "other"}, asset.Data.DeviceType) {
-			return v, inventoryInvalid("Select an active tablet or phone/other device")
+		if e != nil || !asset.Data.Active || !slices.Contains([]string{"tablet", "phone"}, asset.Data.DeviceType) {
+			return v, inventoryInvalid("Select an active tablet or phone")
 		}
 	}
 	if v.Data.LocationID != "" {
@@ -483,6 +512,9 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		before = old
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO inventory_events(id,request_hash,collection,record_id,action,before_data,after_data,actor_id,actor_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, requestID, hash, collection, v.ID, action, before, v, actor.ID, actor.Name)
+	if err == nil && collection == "assets" && exists && old.Data.DeviceType == "samsara_gateway" && old.Data.TruckID != v.Data.TruckID {
+		err = inventoryResetLinkedDashcams(ctx, tx, v.ID, actor)
+	}
 	return v, err
 }
 
