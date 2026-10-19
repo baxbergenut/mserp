@@ -412,6 +412,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
+  Driver status choices/order/colors follow Driver Board > TODAY!J4 (gid 1851742271),
+  separately from load/Gross Board day statuses. Migration 122 adds the sheet
+  choices; legacy saved statuses and undo history remain valid without inferred
+  replacements, but are not offered for new selection. ACCIDENT is trimmed.
   Migration 118 stores a shared driver order per dispatcher (including Unassigned).
   Drag the grip beside a driver to move the actual row vertically within its
   dispatcher; neighboring rows animate into place, with reduced-motion support.

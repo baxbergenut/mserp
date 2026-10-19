@@ -48,25 +48,25 @@ export function formatETA(value: string, full = false) {
   return (eta.miles ? eta.miles + " mi" : eta.time) || "—";
 }
 
-export const statuses = ["ENROUTE", "DISPATCHED", "RESERVED", "HOME", "VACATION", "SHOP", "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD", "LOAD CANCELLED", "REJECTED"];
+// Driver Board > TODAY!J4 validation order; distinct from load/day statuses.
+// Trim the source's accidental trailing space on ACCIDENT.
+export const statuses = ["READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT"];
 export function statusColor(status: string) {
   // Exact TODAY sheet fills (Driver Board, gid 1851742271, column J).
-  // Use dark labels for readable contrast on the sheet's bright backgrounds.
   switch (status) {
+    case "READY": return "bg-black text-white";
+    case "REST": return "bg-[#d9d9d9] text-black";
+    case "COVERED": return "bg-[#ffff00] text-black";
     case "ENROUTE": return "bg-[#3d85c6] text-black";
-    case "DISPATCHED": return "bg-[#fbbc04] text-black";
+    case "DISPATCHED": return "bg-[#fbbc04] text-white";
     case "RESERVED": return "bg-[#b7e1cd] text-black";
-    case "HOME": return "bg-[#ff0000] text-black";
+    case "HOME": case "HOME (YARD)": return "bg-[#ff0000] text-black";
     case "VACATION": return "bg-[#e06666] text-black";
-    case "SHOP": return "bg-[#ff9900] text-black";
-    case "LEFT": return "bg-white text-black";
+    case "SHOP": return "bg-[#ff9900] text-white";
+    case "STOP": return "bg-[#990000] text-black";
   }
-  // Retain the existing palette for statuses without an equivalent sheet rule.
-  if (["ENROUTE", "DEADHEAD"].includes(status)) return "bg-blue-500/15 text-blue-300";
-  if (["DISPATCHED", "SHOP", "LATE DEL"].includes(status)) return "bg-amber-500/15 text-amber-300";
-  if (["RESERVED", "NEW DRIVER"].includes(status)) return "bg-emerald-500/15 text-emerald-300";
-  if (["HOME", "VACATION", "RESET"].includes(status)) return "bg-violet-500/15 text-violet-300";
-  if (["STUCK", "TRUCK ISSUE", "REJECTED", "LOAD CANCELLED"].includes(status)) return "bg-red-500/15 text-red-300";
+  // The remaining sheet choices have white cells with black text.
+  if (statuses.includes(status)) return "bg-white text-black";
   return "text-zinc-400";
 }
 

@@ -46,6 +46,41 @@ async function setup(page) {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
+  const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];
+  const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
+  expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
+  const colors = { READY: [0, 0, 0], REST: [217, 217, 217], COVERED: [255, 255, 0], DISPATCHED: [251, 188, 4], ENROUTE: [61, 133, 198], RESERVED: [183, 225, 205], VACATION: [224, 102, 102], HOME: [255, 0, 0], SHOP: [255, 153, 0], STOP: [153, 0, 0], 'HOME (YARD)': [255, 0, 0] };
+  for (const value of sheetStatuses) {
+    // Existing progress behavior derives RESERVED from an actual next load.
+    if (value === 'RESERVED' || value === 'VACATION') {
+      loads.next = value === 'RESERVED' ? [{ planId: 'next', number: 'NEXT', loadId: null, stops: [] }] : [];
+      await page.reload();
+    }
+    await status.selectOption(value);
+    await expect.poll(() => entries[0].status).toBe(value);
+    const cell = status.locator('xpath=ancestor::td');
+    await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);
+    await expect(cell).toHaveCSS('color', ['READY', 'DISPATCHED', 'SHOP'].includes(value) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)');
+  }
+  await page.reload();
+  await expect(status).toHaveValue('ACCIDENT');
+  await page.getByRole('button', { name: 'Status filter', exact: true }).click();
+  const statusChoices = page.getByRole('group', { name: 'Status choices', exact: true });
+  expect(await statusChoices.locator('label').allTextContents()).toEqual(['No status', ...sheetStatuses]);
+  await statusChoices.getByRole('button', { name: 'Clear all', exact: true }).click();
+  await statusChoices.getByText('ACCIDENT', { exact: true }).click();
+  await expect(page.locator('tr[data-driver-id]')).toHaveCount(1);
+  await statusChoices.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.getByRole('button', { name: 'Status filter', exact: true }).click();
+  await expect(page.locator('tr[data-driver-id]')).toHaveCount(100);
+  // Old values remain visible and disabled, allowing unrelated autosaves.
+  entries[0].status = 'LOAD CANCELLED';
+  await page.reload();
+  await expect(status).toHaveValue('LOAD CANCELLED');
+  await expect(status.locator('option[value="LOAD CANCELLED"]')).toBeDisabled();
+  await status.selectOption('ENROUTE');
+  await expect.poll(() => entries[0].status).toBe('ENROUTE');
+  await page.screenshot({ path: join(tmpdir(), 'mserp-driver-sheet-statuses.png') });
   const eta = page.getByLabel('Scroll Driver 0 · ETA', { exact: true });
   await expect(eta).toHaveText('300mi');
   await eta.click();
@@ -110,5 +145,5 @@ try {
   });
   await expect.poll(() => mobile.locator('[data-scroll-key="driver-board"]').evaluate(e => e.scrollTop)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
-  console.log('Status Board layout passed: mutually exclusive persisted ETA, zero miles, legacy display, page/table wheel handoff, reverse scrolling, bottom containment, horizontal overflow, resize and touch.');
+  console.log('Status Board layout passed: 23 sheet statuses/colors, save/reload/filter, legacy preservation, mutually exclusive persisted ETA, zero miles, legacy display, page/table wheel handoff, reverse scrolling, bottom containment, horizontal overflow, resize and touch.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

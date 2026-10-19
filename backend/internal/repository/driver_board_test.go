@@ -81,6 +81,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				exec(before)
 				exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Legacy','legacy','cpm',0,false)`)
 				exec(string(migration))
+				exec(`INSERT INTO driver_board(driver_id,status,notes) SELECT id,'NO LOAD','Keep legacy status' FROM drivers WHERE normalized_name='legacy'`)
 				exec(string(historyMigration))
 				for _, name := range []string{"047_assignment_effective_week.sql", "048_status_board_loads.sql", "049_dispatcher_updaters.sql", "050_five_eld_locations.sql", "051_five_eld_heading.sql"} {
 					migration, err := os.ReadFile("../../sql/" + name)
@@ -93,6 +94,10 @@ func TestDriverBoardDatabase(t *testing.T) {
 					exec(string(migration))
 				}
 				applyLaterTestMigrations(t, ctx, admin, "051")
+				var legacyStatus string
+				if err := admin.QueryRow(ctx, `SELECT status FROM driver_board WHERE notes='Keep legacy status'`).Scan(&legacyStatus); err != nil || legacyStatus != "NO LOAD" {
+					t.Fatal("migration changed an existing driver status", legacyStatus, err)
+				}
 			} else {
 				exec(string(source))
 			}
@@ -118,6 +123,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			defer pool.Close()
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
+			testDriverBoardSheetStatuses(t, ctx, repo, fleet)
 			testBoardPresence(t, ctx, pool, repo, fleet)
 			testGrossPresence(t, ctx, pool)
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
