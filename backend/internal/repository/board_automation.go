@@ -83,6 +83,7 @@ func boardStopCoordinates(s datatruck.LoadStop) (*float64, *float64) {
 type BoardAutomation struct {
 	Context              string          `json:"context"`
 	Appointment          *BoardSchedule  `json:"appointment,omitempty"`
+	ManualStopTime       string          `json:"manualStopTime"`
 	StopType             string          `json:"stopType,omitempty"`
 	Arrived              bool            `json:"arrived"`
 	ArrivalOverride      string          `json:"arrivalOverride"`
@@ -116,12 +117,13 @@ func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocat
 	if old.Context != key {
 		old = ArrivalEvidence{Context: key}
 	}
-	if location == nil || stop.Latitude == nil || stop.Longitude == nil || !location.ReportedAt.After(old.LastAt) || location.ReportedAt.After(now) || now.Sub(location.ReportedAt) > 10*time.Minute {
+	if location == nil || stop.Latitude == nil || stop.Longitude == nil || location.ReportedAt.IsZero() || location.ReportedAt.Before(old.LastAt) || location.ReportedAt.After(now) {
 		return old
 	}
 	old.LastAt = location.ReportedAt
-	// GPS proximity is straight-line distance to the selected stop, independent of
-	// the optional paced road-routing service. Never infer it from stale points.
+	// Re-evaluate the latest cached point even when its timestamp is unchanged:
+	// an older proximity rule may have recorded a different result for that point.
+	// Staleness is exposed to viewers and never treated as a live observation.
 	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= 1609.344
 	return old
 }
@@ -212,24 +214,20 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		if key != "" {
 			a.Appointment = stop.Schedule
 			a.StopType = stop.Type
+			if v.Current != nil {
+				a.ManualStopTime = s.ManualStopTimes[boardCompletionKey(*v.Current)+"/"+stop.Key]
+				if a.ManualStopTime != "" {
+					prefix := "PU"
+					if stop.Type == "delivery" {
+						prefix = "DEL"
+					}
+					a.Appointment = &BoardSchedule{Kind: "manual", Label: prefix + " " + a.ManualStopTime, Detail: "Manual stop time entered on Status Board"}
+				}
+			}
 			if evidence.Context == key && telemetrySafe {
 				a.Arrived = evidence.Arrived
 				a.ObservedAt = evidence.LastAt
 				a.Stale = evidence.LastAt.IsZero() || time.Since(evidence.LastAt) > 10*time.Minute
-			}
-			if s.AutomationContext == key {
-				if s.ArrivalOverride != "" {
-					a.ArrivalOverride = s.ArrivalOverride
-				}
-				if s.TravelMode != "" {
-					a.TravelMode = s.TravelMode
-				}
-			}
-			if a.ArrivalOverride == "arrived" {
-				a.Arrived = true
-			}
-			if a.ArrivalOverride == "not_arrived" {
-				a.Arrived = false
 			}
 			if a.TravelMode == "auto" && telemetrySafe {
 				a.TravelValue, a.Reason = travel.display(key, time.Now())

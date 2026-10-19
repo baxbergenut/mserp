@@ -106,8 +106,13 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		a.FromDate = from
 		a.Number = strings.TrimSpace(a.Number)
+		a.ManualStopTime = strings.TrimSpace(a.ManualStopTime)
 		if a.Action == "add" && (a.Number == "" || len([]rune(a.Number)) > 100 || strings.ContainsAny(a.Number, "\r\n\t")) {
 			writeAPIError(w, 400, "load number must contain 1–100 characters on one line")
+			return
+		}
+		if a.Action == "stop_time" && (len([]rune(a.ManualStopTime)) > 80 || strings.ContainsAny(a.ManualStopTime, "\r\n\t")) {
+			writeAPIError(w, 400, "manual stop time must be at most 80 characters on one line")
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())

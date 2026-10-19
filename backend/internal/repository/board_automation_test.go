@@ -77,17 +77,24 @@ func TestArrivalEvidence(t *testing.T) {
 	if a.Arrived {
 		t.Fatal("outside point established proximity")
 	}
-	same := evaluateArrival(a, "one", point(a.LastAt, lat), stop, now)
+	same := evaluateArrival(a, "one", point(a.LastAt, outside), stop, now)
 	if same != a {
-		t.Fatal("cached sample advances state")
+		t.Fatal("unchanged cached sample changed state")
+	}
+	legacy := ArrivalEvidence{Context: "one", LastAt: now.Add(-4 * time.Minute)}
+	if updated := evaluateArrival(legacy, "one", point(legacy.LastAt, inside), stop, now); !updated.Arrived {
+		t.Fatal("cached point was not re-evaluated after proximity rule change")
+	}
+	if lastKnown := evaluateArrival(ArrivalEvidence{}, "one", point(now.Add(-30*time.Minute), inside), stop, now); !lastKnown.Arrived || !lastKnown.LastAt.Equal(now.Add(-30*time.Minute)) {
+		t.Fatal("last-known proximity was discarded")
 	}
 	a = evaluateArrival(a, "one", point(now, inside), stop, now)
 	if !a.Arrived {
 		t.Fatal("first fresh point inside one mile did not establish proximity")
 	}
-	stale := evaluateArrival(a, "one", point(now.Add(-time.Hour), lat+1), stop, now)
-	if stale != a {
-		t.Fatal("stale sample changed arrival")
+	outOfOrder := evaluateArrival(a, "one", point(now.Add(-time.Hour), lat+1), stop, now)
+	if outOfOrder != a {
+		t.Fatal("out-of-order sample changed proximity")
 	}
 	a = evaluateArrival(a, "one", point(now.Add(time.Minute), outside), stop, now.Add(time.Minute))
 	if a.Arrived {
@@ -216,12 +223,12 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if view.Current == nil || view.Current.PlanID != "" || view.Automation == nil || view.Automation.Appointment == nil || view.Automation.Appointment.Label != "DEL 24/7 FRI" || view.Automation.StopType != "delivery" {
 		t.Fatalf("unplanned resolution: %+v", view)
 	}
-	result, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: saved[0].Version, Revision: view.Revision, Action: "arrival_yes"}, "")
+	result, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: saved[0].Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: "14:00 SUN"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Loads.Automation.Arrived || result.Entry.Notes != "Keep human notes" {
-		t.Fatal("arrival correction lost", result)
+	if result.Loads.Automation.ManualStopTime != "14:00 SUN" || result.Loads.Automation.Appointment.Label != "DEL 14:00 SUN" || result.Entry.Notes != "Keep human notes" {
+		t.Fatal("manual stop time lost", result)
 	}
 	var count int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM gross_board_entries WHERE driver_id=$1`, d.ID).Scan(&count); err != nil || count != 0 {
@@ -232,8 +239,8 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")
-	if err != nil || !view.Automation.Arrived {
-		t.Fatal("manual arrival did not survive cache refresh", err)
+	if err != nil || view.Automation.ManualStopTime != "14:00 SUN" || view.Automation.Arrived {
+		t.Fatal("manual stop time did not survive cache refresh or arrival changed", err)
 	}
 	_, err = pool.Exec(ctx, `UPDATE loads SET driver_id=(SELECT id FROM drivers WHERE id<>$1 LIMIT 1) WHERE id=99115`, d.ID)
 	if err != nil {
@@ -246,16 +253,27 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if view.Automation.RequiresConfirmation || view.Automation.Appointment == nil {
 		t.Fatal("source driver change blocked the operational selection")
 	}
-	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "arrival_yes"}, "")
-	if err != nil || result.Loads.Automation.RequiresConfirmation {
-		t.Fatal("arrival correction required driver confirmation", err)
+	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: "15:00 SUN"}, "")
+	if err != nil || result.Loads.Automation.RequiresConfirmation || result.Loads.Automation.Appointment.Label != "DEL 15:00 SUN" {
+		t.Fatal("manual stop time required driver confirmation", err)
+	}
+	_, err = pool.Exec(ctx, `UPDATE loads SET raw_payload=jsonb_set(jsonb_set(raw_payload,'{stops,0,scheduled_begin_date}','"2026-10-17"'),'{stops,0,scheduled_end_date}','"2026-10-17"') WHERE id=99115`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.Appointment.Label != "DEL 15:00 SUN" {
+		t.Fatal("DataTruck schedule update replaced manual stop time", err, view.Automation)
 	}
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("missing cached evidence", err)
 	}
-	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: result.Loads.Revision, Action: "arrival_auto"}, "")
+	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: ""}, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if result.Loads.Automation.ManualStopTime != "" || result.Loads.Automation.Appointment.Label != "DEL 24/7 SAT" {
+		t.Fatal("clearing manual stop time did not restore DataTruck schedule", result.Loads.Automation)
 	}
 	var historyBefore, historyAfter int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board_history WHERE driver_id=$1`, d.ID).Scan(&historyBefore); err != nil {
@@ -293,6 +311,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	// An asynchronous estimate from before a human edit must be discarded.
 	entry := result.Entry
 	entry.Notes = "Reviewed notes"
+	entry.ETA = ""
 	saved, err = repo.Save(ctx, []DriverBoardEntry{entry})
 	if err != nil {
 		t.Fatal(err)
@@ -316,9 +335,8 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: saved[0].Version, Revision: view.Revision, Action: "travel_auto"}, "")
-	if err != nil || !strings.HasPrefix(result.Loads.Automation.TravelValue, "ETA ") {
-		t.Fatal("automatic estimate projection", err)
+	if view.Automation.TravelMode != "auto" || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") {
+		t.Fatal("automatic estimate projection", view.Automation)
 	}
 	// Stale GPS can bootstrap distance without inventing movement or querying ELD.
 	_, err = pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, now.Add(-11*time.Minute))

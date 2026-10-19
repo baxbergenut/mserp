@@ -18,8 +18,7 @@ even when DataTruck lists another driver: status defaults to DISPATCHED and pick
 location/appointment display immediately, with no additional confirmation. Existing
 selections also remain usable if DataTruck changes its driver. This does not rewrite
 the imported driver, fleet assignments, or Gross Board. Missing/ambiguous matches
-show a review message in Loads. The legacy requiresConfirmation response stays false
-and confirm_driver action remains accepted for older clients.
+show a review message in Loads. The legacy requiresConfirmation response stays false.
 
 Import preserves provider stop IDs, coordinates, local schedule dates/times, UTC
 schedule instants, ready-time fields and notes. Existing imported snapshots acquire
@@ -40,21 +39,24 @@ Fixture: load 4010927482, delivery stop 101555, local October 16, 2026,
 
 ## Arrival and manual input
 
-The first fresh provider position within one straight-line mile of the selected
-stop shows @PU/@DEL; the first fresh position beyond one mile clears the automatic
-marker. This is a proximity signal, not a claim that the truck reached the dock.
+The latest provider position within one straight-line mile of the selected stop
+shows @PU/@DEL; a newer position beyond one mile clears the automatic marker.
+This is a proximity signal, not a claim that the truck reached the dock.
 It uses the cached GPS coordinates and selected stop coordinates without requiring
-optional road routing. Samples must be no older than ten minutes;
-duplicates/future/out-of-order data cannot advance detection. Stale positions
-preserve only the last-known proximity with a stale hover warning. Automatic
+optional road routing. Future/out-of-order positions are ignored. An unchanged
+cached position is re-evaluated after a rule change, including when the provider
+has not sent a new point. Positions older than ten minutes show only last-known
+proximity, with an amber marker and observation time on hover. Automatic
 proximity requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
-VIN, trailer, load ID, selected stop and facility coordinates scope evidence and corrections.
+VIN, trailer, load ID, selected stop and facility coordinates scope evidence.
 
-Proximity displays a red @PU/@DEL prefix; time/day remains the normal theme color.
+Fresh proximity displays a red @PU/@DEL prefix; stale proximity uses amber.
+While @PU/@DEL is displayed, the ETA cell hides the retained travel estimate,
+which returns when the automatic marker clears.
+Time/day remains the normal theme color.
 For a stop without a recognized provider schedule, the prefix appears alone.
-The ETA popup offers Automatic (GPS), Arrived and Not arrived corrections. Manual
-corrections are versioned/audited through load-state actions. Context changes expire
-them. Schedule-only refresh does not reset GPS proximity. GPS never changes status,
+The ETA popup has no arrival or travel mode dropdown. Old saved mode choices are
+ignored. Schedule-only refresh does not reset GPS proximity. GPS never changes status,
 marks loads completed, or advances stop progress. Last-known proximity becomes stale
 on hover after ten minutes. The ordinary location column retains its existing
 three-hour coloring policy.
@@ -65,6 +67,14 @@ survives rollout and is bound to its current context; a subsequent load/stop/tru
 change invalidates it. The combined cell is copied as one text value. Poll evidence
 is stored separately from personal history/undo and broadcast using the existing
 SSE snapshots. Active drafts retain the existing concurrency protections.
+
+The optional manual pickup/delivery time input starts blank for each selected load
+stop. Saving text replaces the displayed DataTruck appointment label for that stop;
+clearing it restores the source schedule, including subsequent DataTruck updates.
+The original imported schedule remains unchanged. Entries are versioned in the
+load-state JSON and keyed by load and stop; switching stops does not copy a time
+to another stop. The input accepts up to 80 characters on one line so dispatchers
+can enter the local time and day in their own shorthand (for example, `14:00 MON`).
 
 ## Opt-in Google truck routing
 
@@ -176,9 +186,9 @@ output. Temporary errors retain a prior valid distance with a hover warning;
 live moving ETAs expire after ten minutes. Results are fenced against the selected load/stop/source revision
 and current truck before committing.
 
-When enabled, blank ETA starts in Automatic mode; existing values stay Manual.
-The popup can switch modes. Applying a manual value takes precedence; switching
-back to Automatic clears the manual value. These are traffic-aware travel
+When enabled, a blank ETA displays the automatic estimate. Applying a manual
+time or mileage takes precedence; clearing it restores the automatic estimate.
+These are traffic-aware travel
 estimates, excluding driver breaks, remaining HOS, planned stops and loading delays;
 there is no explicit weather-forecast adjustment.
 

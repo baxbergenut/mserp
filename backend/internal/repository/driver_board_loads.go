@@ -41,20 +41,21 @@ type BoardLoad struct {
 	Warning      string      `json:"warning"`
 }
 type boardLoadState struct {
-	Manual                []BoardLoad `json:"manual,omitempty"`
-	AutomationContext     string      `json:"automationContext,omitempty"`
-	ArrivalOverride       string      `json:"arrivalOverride,omitempty"`
-	TravelMode            string      `json:"travelMode,omitempty"`
-	ConfirmedLoadID       *int        `json:"confirmedLoadId,omitempty"`
-	ConfirmedSourceDriver string      `json:"confirmedSourceDriver,omitempty"`
-	Current               *BoardLoad  `json:"current"`
-	Order                 []string    `json:"order"`
-	OrderLabels           []string    `json:"orderLabels"`
-	Hidden                []string    `json:"hidden"`
-	DestinationSource     bool        `json:"destinationSource"`
-	DestinationManual     bool        `json:"destinationManual,omitempty"`
-	StopKey               string      `json:"stopKey"`
-	Completed             []string    `json:"completed,omitempty"`
+	Manual                []BoardLoad       `json:"manual,omitempty"`
+	ManualStopTimes       map[string]string `json:"manualStopTimes,omitempty"`
+	AutomationContext     string            `json:"automationContext,omitempty"`
+	ArrivalOverride       string            `json:"arrivalOverride,omitempty"`
+	TravelMode            string            `json:"travelMode,omitempty"`
+	ConfirmedLoadID       *int              `json:"confirmedLoadId,omitempty"`
+	ConfirmedSourceDriver string            `json:"confirmedSourceDriver,omitempty"`
+	Current               *BoardLoad        `json:"current"`
+	Order                 []string          `json:"order"`
+	OrderLabels           []string          `json:"orderLabels"`
+	Hidden                []string          `json:"hidden"`
+	DestinationSource     bool              `json:"destinationSource"`
+	DestinationManual     bool              `json:"destinationManual,omitempty"`
+	StopKey               string            `json:"stopKey"`
+	Completed             []string          `json:"completed,omitempty"`
 }
 
 func boardCompletionKey(p BoardLoad) string {
@@ -129,15 +130,16 @@ type BoardLoads struct {
 	CustomOrder       bool             `json:"customOrder"`
 }
 type BoardLoadAction struct {
-	Number   string   `json:"number"`
-	DriverID string   `json:"driverId"`
-	Version  int      `json:"version"`
-	FromDate string   `json:"fromDate"`
-	Revision string   `json:"revision"`
-	Action   string   `json:"action"`
-	PlanID   string   `json:"planId"`
-	Order    []string `json:"order"`
-	StopKey  string   `json:"stopKey"`
+	Number         string   `json:"number"`
+	DriverID       string   `json:"driverId"`
+	Version        int      `json:"version"`
+	FromDate       string   `json:"fromDate"`
+	Revision       string   `json:"revision"`
+	Action         string   `json:"action"`
+	PlanID         string   `json:"planId"`
+	Order          []string `json:"order"`
+	StopKey        string   `json:"stopKey"`
+	ManualStopTime string   `json:"manualStopTime"`
 }
 type BoardLoadResult struct {
 	Entry DriverBoardEntry `json:"entry"`
@@ -575,33 +577,28 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		}
 		s.Order = append(s.Order, planID)
 		s.OrderLabels = append(s.OrderLabels, number)
-	case "arrival_auto", "arrival_yes", "arrival_no", "travel_auto", "travel_manual", "confirm_driver":
-		if view.Automation == nil || view.Automation.Context == "" || view.Current == nil {
+	case "stop_time":
+		if view.Current == nil || view.Current.LoadID == nil || !view.DestinationSource || view.StopKey == "" || view.Automation == nil || view.Automation.Context == "" {
 			return result, ErrBoardLoadSelection
 		}
-		if s.AutomationContext != view.Automation.Context {
-			s.ArrivalOverride = ""
-			s.TravelMode = ""
+		found := false
+		for _, stop := range view.Current.Stops {
+			if stop.Key == view.StopKey && (stop.Type == "pickup" || stop.Type == "delivery") {
+				found = true
+				break
+			}
 		}
-		s.AutomationContext = view.Automation.Context
-		s.Current = view.Current
-		s.StopKey = view.StopKey
-		s.DestinationSource = view.DestinationSource
-		switch a.Action {
-		case "arrival_auto":
-			s.ArrivalOverride = "auto"
-		case "arrival_yes":
-			s.ArrivalOverride = "arrived"
-		case "arrival_no":
-			s.ArrivalOverride = "not_arrived"
-		case "travel_auto":
-			s.TravelMode = "auto"
-			e.ETA = ""
-		case "travel_manual":
-			s.TravelMode = "manual"
-		case "confirm_driver":
-			s.ConfirmedLoadID = view.Current.LoadID
-			s.ConfirmedSourceDriver = view.Current.SourceDriver
+		if !found || len([]rune(a.ManualStopTime)) > 80 || strings.ContainsAny(a.ManualStopTime, "\r\n\t") {
+			return result, ErrBoardLoadSelection
+		}
+		if s.ManualStopTimes == nil {
+			s.ManualStopTimes = map[string]string{}
+		}
+		key := boardCompletionKey(*view.Current) + "/" + view.StopKey
+		if value := strings.TrimSpace(a.ManualStopTime); value != "" {
+			s.ManualStopTimes[key] = value
+		} else {
+			delete(s.ManualStopTimes, key)
 		}
 	case "advance":
 		if strings.TrimSpace(e.CurrentLoad) == "" {

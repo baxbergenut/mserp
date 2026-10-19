@@ -12,12 +12,13 @@ export function ETAEditor({ name, value, anchor, onApply, onClose, automation, w
   const initial = parseETA(value);
   const [miles, setMiles] = useState(initial?.miles ?? "");
   const [time, setTime] = useState(initial?.miles ? "" : initial?.time ?? "");
+  const [manualStopTime, setManualStopTime] = useState(automation?.manualStopTime ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function act(action: BoardLoadAction) {
     if (!onAction || busy || waiting) return;
     setBusy(true); setError("");
-    try { await onAction(action); } catch (err) { setError(err instanceof Error ? err.message : "Could not save correction"); }
+    try { await onAction(action); } catch (err) { setError(err instanceof Error ? err.message : "Could not save stop time"); }
     finally { setBusy(false); }
   }
   const panel = useRef<HTMLFormElement>(null);
@@ -62,10 +63,9 @@ export function ETAEditor({ name, value, anchor, onApply, onClose, automation, w
     if (!busy && !waiting && (!next || parseETA(next))) onApply(next);
   }}>
     <div className="mb-3 flex items-center justify-between text-xs"><span className="font-medium text-zinc-100">ETA</span><span className="text-zinc-500">New York time</span></div>
-    {automation?.appointment?.label && <p className="mb-2 text-xs text-zinc-300" title={automation.appointment.detail}>{automation.appointment.label} · Automatic appointment</p>}
+    {automation?.appointment?.label && <p className="mb-2 text-xs text-zinc-300" title={automation.appointment.detail}>{automation.appointment.label} · {automation.appointment.kind === "manual" ? "Manual stop time" : "DataTruck appointment"}</p>}
     {error && <p role="alert" className="mb-2 text-xs text-red-400">{error}</p>}
-    {automation?.context && <label className="mb-3 block text-[11px] text-zinc-400">At stop<select aria-label="At stop" value={automation.arrivalOverride} disabled={busy || waiting} className={inputClass} onChange={e => void act({ action: e.target.value === "arrived" ? "arrival_yes" : e.target.value === "not_arrived" ? "arrival_no" : "arrival_auto" })}><option value="auto">Automatic (GPS)</option><option value="arrived">Arrived</option><option value="not_arrived">Not arrived</option></select></label>}
-    {automation?.routingEnabled && <label className="mb-3 block text-[11px] text-zinc-400">Travel estimate<select aria-label="Travel estimate" value={automation.travelMode} disabled={busy || waiting} className={inputClass} onChange={e => void act({ action: e.target.value === "auto" ? "travel_auto" : "travel_manual" })}><option value="auto">Automatic</option><option value="manual">Manual</option></select></label>}
+    {automation?.context && (automation.stopType === "pickup" || automation.stopType === "delivery") && <div className="mb-3"><label className="block text-[11px] text-zinc-400">Manual {automation.stopType} time<input aria-label={`Manual ${automation.stopType} time`} type="text" maxLength={80} placeholder="e.g. 14:00 MON" value={manualStopTime} disabled={busy || waiting} onChange={e => setManualStopTime(e.target.value)} className={inputClass} /></label><div className="mt-1 flex items-center justify-between"><span className="text-[10px] text-zinc-500">Overrides the DataTruck time for this stop.</span><button type="button" disabled={busy || waiting || !onAction || manualStopTime.trim() === (automation.manualStopTime ?? "")} className="rounded px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800 disabled:text-zinc-600" onClick={() => void act({ action: "stop_time", manualStopTime: manualStopTime.trim() })}>Save time</button></div></div>}
     <fieldset disabled={busy || waiting}>
     {!initial && value && <p className="mb-2 break-words text-xs text-amber-200">Existing ETA: {value}. Enter a time or miles to replace it.</p>}
     <div className="grid grid-cols-[1.1fr_1fr] gap-2">

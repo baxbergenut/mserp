@@ -460,7 +460,7 @@ export interface SyncFiveELDResult {
 
 export interface BoardSchedule { kind: string; label: string; detail: string; reason?: string; beginAt?: string; endAt?: string }
 export interface BoardAutomation {
-  context: string; appointment?: BoardSchedule; stopType?: "pickup" | "delivery"; arrived: boolean;
+  context: string; appointment?: BoardSchedule; manualStopTime: string; stopType?: "pickup" | "delivery"; arrived: boolean;
   arrivalOverride: "auto" | "arrived" | "not_arrived"; observedAt: string; stale: boolean;
   travelMode: "auto" | "manual"; travelValue: string; reason?: string;
   requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
@@ -480,8 +480,8 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "arrival_auto" | "arrival_yes" | "arrival_no" | "travel_auto" | "travel_manual" | "confirm_driver";
-  number?: string; planId?: string; order?: string[]; stopKey?: string;
+  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "stop_time";
+  number?: string; planId?: string; order?: string[]; stopKey?: string; manualStopTime?: string;
 }
 
 export interface DriverBoardEvent {

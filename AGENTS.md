@@ -252,10 +252,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - Status Board appointment/arrival automation uses migration 116, repository
   `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
   DataTruck per-stop schedule fields through import serialization. Appointment
-  text is read-only inside ETA; red @PU/@DEL denotes a fresh GPS position within
-  one straight-line mile of the selected stop (or a manual Arrived correction),
-  including stops without a provider schedule; red ETA/miles
-  retains manual editing. Notes are never rewritten. Unique imported loads can
+  text is read-only inside ETA; @PU/@DEL replaces travel mileage when the last
+  GPS position was within one straight-line mile of the selected stop,
+  including stops without a provider schedule.
+  Fresh automatic markers are red; stale last-known markers are amber with the
+  observation time on hover. ETA is automatic while its entry is blank; a typed
+  time or mileage overrides it until cleared. The ETA popup has a blank optional
+  manual PU/DEL time for the selected load stop, overriding only the displayed
+  DataTruck schedule until cleared. Both former arrival/travel mode dropdowns
+  are removed and legacy mode choices have no effect. Notes are never rewritten. Unique imported loads can
   resolve without Gross Board plans; entering a load is the operational assignment,
   even when DataTruck lists a different driver, without an extra confirmation.
   A startup/minute cache-only GPS evaluator never advances progress. Google truck
