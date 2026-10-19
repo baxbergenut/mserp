@@ -296,12 +296,20 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 			continue
 		} // unrelated side lists
 		v := at(target, 0, col)
+		// The sheet pre-fills company labels on otherwise unused rows. MSERP
+		// does not own this column: preserve literal labels, but still hold
+		// formulas for review, including formulas whose result looks blank.
+		if col == 0 && len(target) > 0 && len(target[0]) > 0 {
+			if label, ok := target[0][0].(string); ok && !strings.HasPrefix(label, "=") {
+				continue
+			}
+		}
 		if v != "" && !((col == accountant || col == accountant-1) && v == "false") {
 			return errors.New("next expense row contains existing data or a formula; retained for review")
 		}
 	}
 	requests := []any{}
-	for _, span := range [][2]int{{0, accountant}, {t.IDColumn, len(cells)}} {
+	for _, span := range [][2]int{{1, accountant}, {t.IDColumn, len(cells)}} {
 		left, right := span[0], span[1]
 		if row > 1 {
 			requests = append(requests, map[string]any{"copyPaste": map[string]any{"source": grid(t.ID, row-1, row, left, right), "destination": grid(t.ID, row, row+1, left, right), "pasteType": "PASTE_FORMAT"}})
@@ -336,7 +344,7 @@ func (c *Client) verifyWritten(ctx context.Context, e Entry, t Tab, row int) err
 	}
 	accountant := len(baseHeaders(t.Compact)) - 1
 	for col, cell := range expected {
-		if col >= accountant && col < t.IDColumn {
+		if col == 0 || (col >= accountant && col < t.IDColumn) {
 			continue
 		}
 		value := cell.(map[string]any)["userEnteredValue"]

@@ -38,11 +38,13 @@ not the bottom of the preformatted grid. Receipt IDs also count as populated row
 It never inserts whole rows or changes the sheet dimensions. If no blank row
 remains, delivery waits for an operator to add blank rows.
 It preserves other rows, side lists, literal leading-zero units, and original total
-amounts without calculating an extra EFS fee. Company stays blank because MSERP no
-longer records that field. The old category label `Maintenance` is used for work
+amounts without calculating an extra EFS fee. The Company column is left untouched
+because MSERP no longer records that field. Existing literal company labels on
+otherwise blank template rows are preserved and do not block delivery; formulas
+still hold the row for review. The old category label `Maintenance` is used for work
 orders. New text is written as literal strings, never interpreted as formulas.
-Only the original entry columns through Manager Verification and the dedicated
-MSERP columns are written. Accounting Verification (O on Maintenance, M on HR/Safety)
+Only the original entry columns after Company through Manager Verification and
+the dedicated MSERP columns are written. Accounting Verification (O on Maintenance, M on HR/Safety)
 is excluded from every value, validation and formatting request; its protection
 and existing blank/unchecked value remain untouched. Side-list columns between
 the entry and MSERP columns are also untouched. Safe spans copy the preceding
@@ -167,5 +169,6 @@ pre-105 schemas, verify application-role ownership, disabled-by-default capture,
 rollback, source-import exclusion, final work-order capture, Safety routing,
 paid-cutoff boundaries, source deletion, committed-only notifications, startup
 recovery, retries without a new save, cancellation, next-used-row placement,
-protected accounting/side-list exclusion, occupied/formula target refusal and
-snapshot/receipt immutability. CI supplies that local database automatically.
+protected company/accounting/side-list exclusion, prefilled company preservation,
+occupied/formula target refusal and snapshot/receipt immutability. CI supplies
+that local database automatically.
