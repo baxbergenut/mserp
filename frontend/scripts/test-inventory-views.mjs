@@ -15,7 +15,7 @@ const data = {
   lines: [record(30, { wirelessNumber: '9049217936', assetId: id(20), carrier: 'AT&T', status: 'Active' })],
   locations: [record(1, { name: 'Main storage' })],
   supplies: [record(11, { name: 'Chains', unit: 'sets', reusable: true }), record(14, { name: 'IFTA Sticker', unit: 'pairs', batchYear: '2026' })],
-  equipment: [], 'transponder-notes': [], balances: [], movements: [],
+  equipment: [], 'transponder-notes': [record(40, { serial: 'OLD-LOCAL-TAG', custodian: 'Legacy warehouse', providerEnvironment: 'production', providerAccount: '123' })], balances: [], movements: [],
 };
 const trailers = [], writes = [], reads = [];
 let readOnly = false, failSave = false;
@@ -74,7 +74,8 @@ try {
   };
   await page.goto(`${origin}/fleet/inventory?tab=tablets`);
   await expect(page.getByRole('cell', { name: '354624630315355', exact: true })).toBeVisible();
-  await expect(page.getByRole('cell', { name: '9049217936 · Active', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '+1 (904) 921-7936', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: /7936.*Active/ })).toHaveCount(0);
   await expect(page.getByRole('columnheader', { name: 'Gateway', exact: true })).toHaveCount(0);
   await expect(page.getByRole('columnheader', { name: 'Tablet number', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
@@ -94,6 +95,8 @@ try {
   await page.getByLabel('Status filter').selectOption('active');
   await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('9049217936');
   await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('+1 (904) 921-7936');
+  await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
   await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('');
   await page.screenshot({ path: join(tmpdir(), 'mserp-inventory-desktop.png'), animations: 'disabled' });
   assert.equal(writes.length, 0, 'opening inventory must not mutate records or contact vendors');
@@ -108,22 +111,46 @@ try {
   const tabletId = writes.at(-1).input.record.id;
   assert.equal(writes.at(-1).input.record.data.imei, '000000000000002', 'IMEI must retain leading zeros');
   await page.getByRole('tab', { name: 'AT&T lines', exact: true }).click();
-  await page.getByRole('row').filter({ hasText: '9049217936' }).getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'Active', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '+1 (904) 921-7936', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog).toHaveAttribute('aria-label', '+1 (904) 921-7936');
+  await expect(dialog.getByText('+1 (904) 921-7936', { exact: true })).toHaveCount(2);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: '+1 (904) 921-7936' }).getByRole('button', { name: 'Edit', exact: true }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Linked tablet / phone').selectOption(tabletId);
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.record.data.assetId, tabletId, 'line replacement must change the link, not copy identifiers');
-  await page.getByRole('tab', { name: 'Samsara', exact: true }).click();
+  assert.equal(writes.at(-1).input.record.data.wirelessNumber, '9049217936', 'display formatting must not change the stored phone');
+  await page.goto(`${origin}/fleet/inventory?tab=samsara`);
+  await expect(page.getByRole('tab', { name: 'Samsara gateways', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('columnheader', { name: 'Gateway serial', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'GATEWAY-022', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CAMERA-022', exact: true })).toHaveCount(0);
+  await expect(page.locator('tbody tr')).toHaveCount(2);
   await expect(page.getByRole('columnheader', { name: 'Tablet number', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Add device', exact: true }).click();
+  await page.getByRole('button', { name: 'Add gateway', exact: true }).click();
   dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Serial', { exact: true })).toBeVisible();
   for (const label of ['IMEI', 'Make', 'Model']) await expect(dialog.getByLabel(label, { exact: true })).toHaveCount(0);
   await dialog.getByLabel('Device type', { exact: true }).selectOption('tablet');
   for (const label of ['IMEI', 'Make', 'Model']) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('row').filter({ hasText: 'CAMERA-022' }).filter({ has: page.getByRole('cell', { name: 'samsara camera', exact: true }) }).getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('tab', { name: 'Samsara dashcams', exact: true }).click();
+  await expect(page).toHaveURL(/tab=samsara-cameras$/);
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('columnheader', { name: 'Dashcam serial', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'GATEWAY-022', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add dashcam', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Device type', { exact: true })).toHaveValue('samsara_camera');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('GATEWAY-022');
+  await expect(page.getByRole('button', { name: 'CAMERA-022', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('');
+  await page.getByRole('row').filter({ hasText: 'CAMERA-022' }).getByRole('button', { name: 'Edit' }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Linked gateway').selectOption(id(23));
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
@@ -166,6 +193,11 @@ try {
   assert.equal(writes.at(-1).input.kind, 'return');
   await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
   await expect(page.getByRole('region', { name: 'PrePass management' })).toContainText('777111222');
+  await expect(page.getByText('Local custody and historical tag notes', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add local notes', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Inventory controls', exact: true })).toHaveCount(0);
+  await expect(page.getByText('OLD-LOCAL-TAG', { exact: true })).toHaveCount(0);
+  assert.equal(data['transponder-notes'].length, 1, 'removing the notes UI must not delete historical records');
   assert.equal(writes.filter(write => write.path.startsWith('/api/prepass')).length, 0, 'shared PrePass view must not call a vendor mutation');
   const readStart = reads.length;
   await page.goto(`${origin}/fleet/trailers`);
@@ -203,5 +235,5 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-inventory-mobile.png'), animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'tables must scroll locally');
   assert.deepEqual(errors, []);
-  console.log('Inventory browser checks passed: compact toolbars, tablet columns/filters, type-specific gateway fields, line replacement, camera linking, IFTA observations, stock issue/return, shared PrePass, trailer conflicts/archive, read-only roles and mobile layout.');
+  console.log('Inventory browser checks passed: consistent phone display/search/details, separate gateway/dashcam directories and links, PrePass without local notes, compact toolbars, tablet/line replacement, IFTA observations, stock issue/return, trailer conflicts/archive, read-only roles and mobile layout.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

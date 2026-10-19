@@ -1,7 +1,7 @@
 # Fleet inventory and stored trailers
 
 Fleet > Inventory replaces operational equipment worksheets. Its tabs are
-directly addressable, for example `/fleet/inventory?tab=tablets`, `samsara`,
+directly addressable, for example `/fleet/inventory?tab=tablets`, `samsara-gateways`, `samsara-cameras`,
 `devices`, `supplies`, `lines`, `equipment`, `transponders`, `history`, `locations`
 and the Administrator-only `imports` workflow. Fleet > Trailers is a separate
 directory at `/fleet/trailers` for stored/unused company trailers. Operational
@@ -10,7 +10,11 @@ Schneider/JB Hunt trailer text on Status Board remains independent.
 Each directory keeps search, filters, refresh and add controls in one desktop
 toolbar, wrapping on smaller screens. Tablet columns show make/model, IMEI and
 the linked wireless number without a redundant device type or gateway column.
-Samsara has separate camera and gateway columns. Gateway forms omit blank IMEI,
+Samsara gateways and dashcams have separate directories, with linked dashcam and
+linked gateway columns respectively; old `tab=samsara` bookmarks open gateways.
+Phone displays use the shared `+1 (AAA) BBB-CCCC` formatter in tablet and carrier
+lists, details and truck summaries. The tablet number column shows only the
+number; carrier status remains in AT&T lines. Gateway forms omit blank IMEI,
 make and model fields; existing source values remain editable and are preserved.
 The import review remains available at `/fleet/inventory?tab=imports` for
 authorized administrators, without a Migration review button in daily inventory.
@@ -26,9 +30,10 @@ not editable truck copies. A camera inherits its truck through its gateway.
 
 PrePass remains the source of its fleet/transponder roster. The shared existing
 UI retains provider permissions, refresh/receipt guards and unresolved-operation
-recovery. Local notes use exact environment + account + transponder tag, including
-historical tags no longer present in the provider roster. These notes never
-change a provider assignment or historical toll link.
+recovery. The Transponders tab shows only this shared provider workspace. Legacy
+local custody/tag notes stay stored for source provenance and audit, without a
+separate notes list or editor in this tab. They never change a provider assignment
+or historical toll link.
 
 The new capabilities are `inventory.read`, `inventory.manage`, `inventory.import`,
 `trailers.read`, and `trailers.manage`. Administrator receives the code-owned

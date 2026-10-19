@@ -269,8 +269,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   protect assignments and nonnegative stock. No stock is inferred from sheet
   checkboxes; physical opening counts (including zero) precede issuance. Truck
   details expose permission-gated Equipment summaries. The PrePass tab reuses
-  existing cached rosters and vendor safeguards; local tag notes never create a
-  second provider roster. Stored trailers have no dispatch/Status Board or
+  existing cached rosters and vendor safeguards, without a local tag-notes UI;
+  historical imported notes remain stored for audit. Separate `samsara-gateways`
+  and `samsara-cameras` tabs show linked devices (`samsara` opens gateways for
+  old bookmarks). Inventory phone displays reuse the shared phone formatter;
+  carrier status appears on AT&T lines rather than next to tablet numbers.
+  Stored trailers have no dispatch/Status Board or
   FleetScope assignment synchronization. Imports require Administrator plus
   `inventory.import`; source snapshots and row outcomes remain private and must
   be reviewed before an atomic commit. No accounting, compliance or vendor writes

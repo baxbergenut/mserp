@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { ErrorBanner, Field, Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { moveInventoryStock, saveInventoryRecord } from "@/app/lib/api";
+import { formatPhone } from "@/app/lib/phone";
 import type { InventoryCollection, InventoryData, InventoryFields, InventoryMovement, InventoryRecord, TruckOption } from "@/app/lib/types";
 
-export const inventoryLabel = (record?: InventoryRecord) => record ? record.data.unitNumber || record.data.name || record.data.assetLabel || record.data.imei || record.data.serial || record.data.wirelessNumber || record.id : "Unrecorded";
-export const readable = (value?: string) => value ? value.replaceAll("_", " ") : "Unknown";
+export const inventoryPhone = (value?: string) => formatPhone(value) || value || "";
+export const inventoryLabel = (record?: InventoryRecord) => record ? record.data.unitNumber || record.data.name || record.data.assetLabel || record.data.imei || record.data.serial || inventoryPhone(record.data.wirelessNumber) || record.id : "Unrecorded";
+export const readable = (value?: string) => value === "samsara_camera" ? "Samsara dashcam" : value === "samsara_gateway" ? "Samsara gateway" : value ? value.replaceAll("_", " ") : "Unknown";
 export const newInventoryRecord = (data: Partial<InventoryFields> = {}): InventoryRecord => ({ id: crypto.randomUUID(), version: 0, data: { active: true, ...data }, updatedAt: "", updatedBy: "" });
 export type InventoryContext = { data: InventoryData; trucks: TruckOption[] };
 type Descriptor = { key: keyof InventoryFields; label: string; options?: string[]; date?: boolean; required?: boolean };
