@@ -132,7 +132,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   processes at most 100 independently and refreshes once. See
   `docs/integrations/RELAY_DRIVERS.md`.
 - PrePass truck mappings use migration 077, `repository/toll_truck_links.go`,
-  `httpapi/toll_truck_link_handlers.go`, and Tolls > PrePass > Needs attention. Group by tag
+  `httpapi/toll_truck_link_handlers.go`, and Tolls > Needs attention. Group by tag
   with exact-unit fallback; never guess equivalent names or strip leading zeros.
   Date-bounded reviewed mappings resolve unlinked tolls and future imports;
   preserve existing links. Preview/save/undo use `tolls.link`; listing uses
@@ -140,7 +140,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   See `docs/integrations/PREPASS_TRUCK_LINKS.md` for dates, audit and validation.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.
-- Tolls > PrePass uses Fleet Management v2 for truck/transponder rosters, reviewed
+- Tolls > Trucks, Transponders and Needs attention use top-level tabs. Fleet
+  rosters refresh daily at the configured fuel sync time when scheduled syncs
+  are enabled. Available devices can be assigned from either roster tab.
+  PrePass uses Fleet Management v2 for truck/transponder rosters, reviewed
   VIN links, add/edit/remove trucks and assignment of available same-account
   transponders. Migration 082 adds environment-scoped snapshots, links and durable
   receipts; `repository/prepass_fleet.go` and `httpapi/prepass_fleet_handlers.go`

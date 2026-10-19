@@ -68,7 +68,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/tolls`);
-  await page.getByRole('button', { name: 'PrePass', exact: true }).click();
+  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
   const region = page.getByRole('region', { name: 'PrePass management' });
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeDisabled();
   assert.equal(writes.length, 0, 'opening tab must not contact vendor: '+JSON.stringify(writes));
@@ -91,7 +91,18 @@ try {
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
   for (const name of ['Account', 'MSERP truck', 'PrePass unit']) await expect(region.getByRole('columnheader', { name, exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Truck linking', exact: true })).toHaveCount(0);
+  await expect(region.getByRole('button', { name: 'Trucks', exact: true })).toHaveCount(0);
+  await expect(region).not.toContainText('PrePass checked');
+  await expect(region).not.toContainText('1 trucks');
   await region.getByRole('button', { name: 'Assign', exact: true }).click();
+  await expect(dialog.getByLabel(/^Truck/)).toHaveValue(vin);
+  await expect(dialog.getByLabel('Available transponder').locator('option')).toHaveCount(2);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Transponders', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Transponders', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await region.getByRole('button', { name: 'Assign to truck', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Assign transponder', exact: true })).toBeDisabled();
+  await dialog.getByLabel(/^Truck/).selectOption(vin);
   const available = dialog.getByLabel('Available transponder');
   await expect(available.locator('option')).toHaveCount(2);
   await available.selectOption('777111222');
@@ -99,6 +110,7 @@ try {
   await dialog.getByLabel('This truck is not enrolled').check();
   await dialog.getByRole('button', { name: 'Assign transponder', exact: true }).click();
   await expect(dialog).toHaveCount(0); assert.equal(writes.at(-1).input.transponderNumber, '777111222');
+  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
   await region.getByRole('button', { name: 'Edit', exact: true }).click();
   await dialog.getByLabel('Plate number', { exact: true }).fill('XYZ789');
   await dialog.getByLabel('This truck is not enrolled').check();
@@ -175,7 +187,7 @@ try {
   await dialog.getByLabel('I checked the outcome in PrePass.').check();
   await dialog.getByRole('button', { name: 'Record reviewed result' }).click(); await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).path, '/api/prepass-fleet/operations/operation-1/verify');
-  await region.getByRole('button', { name: 'Transponders', exact: true }).click();
+  await page.getByRole('button', { name: 'Transponders', exact: true }).click();
   await expect(region.getByRole('cell', { name: '777111222', exact: true })).toBeVisible();
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -186,9 +198,9 @@ try {
   readOnly = true; await page.reload();
   await expect(page.getByRole('region', { name: 'PrePass management' })).toBeVisible();
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toHaveCount(0);
-  await region.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
   for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
-  await region.getByRole('button', { name: 'Needs attention', exact: true }).click();
+  await page.getByRole('button', { name: 'Needs attention', exact: true }).click();
   await expect(region).toContainText('All tolls in this date range are linked to trucks.');
   assert.deepEqual(errors, []); console.log('PrePass browser workflows passed; screenshots saved in OS temp directory.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

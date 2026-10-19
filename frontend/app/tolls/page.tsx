@@ -58,7 +58,8 @@ function routeLabel(toll: Toll) {
 
 export default function TollsPage() {
   const canSync=usePermissions().includes("tolls.sync");
-  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "prepass" | "trucks">("page:activeTab", "overview");
+  const [activeTab, setActiveTab] = useViewState<"overview" | "transactions" | "prepass" | "trucks" | "transponders" | "attention">("page:activeTab", "overview");
+  const fleetView = activeTab === "prepass" ? "trucks" : activeTab;
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [tolls, setTolls] = useState<Toll[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
@@ -183,16 +184,16 @@ export default function TollsPage() {
       )}
 
       <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
-        {(["overview", "transactions", "prepass"] as const).map((tab) => (
-          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={(activeTab === tab || tab === "prepass" && activeTab === "trucks")}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${(activeTab === tab || tab === "prepass" && activeTab === "trucks") ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
+        {(["overview", "transactions", "trucks", "transponders", "attention"] as const).map((tab) => (
+          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={(fleetView === tab)}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${(fleetView === tab) ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
             {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
-            {tab === "overview" ? "Overview" : tab === "prepass" ? "PrePass" : "Transactions"}
+            {tab === "overview" ? "Overview" : tab === "trucks" ? "Trucks" : tab === "transponders" ? "Transponders" : tab === "attention" ? "Needs attention" : "Transactions"}
           </button>
         ))}
       </div>
 
-      {(activeTab === "prepass" || activeTab === "trucks") ? <PrePassFleetTab showAttention={activeTab === "trucks"} /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} actions={syncAction} /> : (
+      {(fleetView === "trucks" || fleetView === "transponders" || fleetView === "attention") ? <PrePassFleetTab key={fleetView} view={fleetView} /> : activeTab === "overview" ? <TollOverview refreshKey={dashboardRefreshKey} actions={syncAction} /> : (
         <>
       {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

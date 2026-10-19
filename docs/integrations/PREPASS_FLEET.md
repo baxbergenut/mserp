@@ -1,7 +1,7 @@
 # PrePass fleet management
 
-Tolls > PrePass manages the PrePass truck roster and available transponders.
-Trucks and Transponders have separate searchable views. The single account is
+Tolls > Trucks, Transponders and Needs attention manage the PrePass truck roster and available transponders.
+Trucks and Transponders have separate searchable top-level tabs. The single account is
 selected internally; no account columns, filters or selection controls are shown.
 A single Truck column links to the local profile when reviewed. Unlinked vehicles
 are flagged. Needs attention contains unlinked toll groups and saved mappings.
@@ -58,7 +58,7 @@ Provider unit/tag changes also flag missing current rules for dated review. No
 start date is invented by a roster refresh, Add, Edit or Assign. Fleet linking
 never changes truck aliases. Inactive local trucks and VIN/plate mismatches remain
 attention warnings. Historical identities absent from the current provider roster
-can still be handled under PrePass > Needs attention.
+can still be handled under Tolls > Needs attention.
 
 Transaction fields include ppDeviceId (PrePass main device ID), deviceNumber
 (transponder/sticker number), vehicleNumber and plateNumber/plateState, but no
@@ -86,7 +86,11 @@ precede the new API. Fresh installations
 include the same tables in `init.sql`. Reuse the existing server-only
 `PREPASS_ENVIRONMENT` and selected production/nonproduction client ID/secret.
 No credentials reach the browser. Rosters, links and receipts are scoped by
-environment; there is no scheduled fleet sync in this version.
+environment. With scheduled syncs enabled, the complete fleet roster refreshes daily
+at SCHEDULED_FUEL_SYNC_TIME in SCHEDULED_SYNCS_TIMEZONE alongside fuel and
+WeighMyTruck. Failed refreshes preserve the last complete roster.
+Available transponders can be assigned from either Trucks or Transponders; both
+use the same reviewed, versioned provider operation.
 
 ## Concurrency and recovery
 

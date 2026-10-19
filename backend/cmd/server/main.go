@@ -258,6 +258,14 @@ func main() {
 			go func() {
 				defer workers.Done()
 				jobs.RunDailyScheduler(ctx, logger, cfg.ScheduledSyncsLocation,
+					jobs.DailyJob{Name: "prepass-fleet", Hour: cfg.ScheduledFuelSyncTime.Hour, Minute: cfg.ScheduledFuelSyncTime.Minute, Run: func(ctx context.Context) error {
+						if cfg.PrePassClientID == "" || cfg.PrePassClientSecret == "" {
+							return nil
+						}
+						bounded, cancel := context.WithTimeout(ctx, 10*time.Minute)
+						defer cancel()
+						return tollRepo.RefreshPrePassFleet(bounded)
+					}},
 					jobs.DailyJob{Name: "weighmytruck", Hour: cfg.ScheduledFuelSyncTime.Hour, Minute: cfg.ScheduledFuelSyncTime.Minute, Run: func(ctx context.Context) error {
 						if !wmtClient.Configured() {
 							return nil
