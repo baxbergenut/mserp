@@ -139,7 +139,7 @@ func TestPrepareRefusesChangedHeaders(t *testing.T) {
 
 func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing.T) {
 	for _, compact := range []bool{false, true} {
-		for _, occupied := range []string{"", "formula", "accounting", "entry-id", "full-tab", "corrupt-readback"} {
+		for _, occupied := range []string{"", "company-label", "formula", "expense-data", "accounting", "entry-id", "full-tab", "corrupt-readback"} {
 			t.Run(fmt.Sprintf("compact=%t/occupied=%s", compact, occupied), func(t *testing.T) {
 				tab := Tab{ID: 7, Title: "Expenses", Rows: 100, IDColumn: 19, Compact: compact}
 				if compact {
@@ -168,8 +168,12 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 				target[accountant-1] = false
 				target[accountant+1] = "unrelated dropdown catalog"
 				switch occupied {
+				case "company-label":
+					target[0] = "MS Express"
 				case "formula":
 					target[0] = `=IF(FALSE,"","")`
+				case "expense-data":
+					target[5] = "concurrent expense"
 				case "accounting":
 					target[accountant] = true
 				case "entry-id":
@@ -193,6 +197,7 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 							values = [][]any{target}
 							if written {
 								values = [][]any{testValues(e, tab)}
+								values[0][0] = target[0] // Company remains owned by the sheet.
 								if occupied == "corrupt-readback" {
 									values[0][2] = ""
 								}
@@ -218,6 +223,9 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 									if raw := fields[name]; raw != nil {
 										var g struct{ StartRowIndex, EndRowIndex, StartColumnIndex, EndColumnIndex int }
 										json.Unmarshal(raw, &g)
+										if g.StartColumnIndex == 0 {
+											t.Error("request touches the sheet's company column", kind, name)
+										}
 										if !(g.EndColumnIndex <= accountant || g.StartColumnIndex >= tab.IDColumn) {
 											t.Error("request touches accounting or side-list columns", kind, name)
 										}
@@ -237,7 +245,7 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 				defer server.Close()
 				c := Client{HTTP: server.Client(), baseURL: server.URL + "/"}
 				err := c.Deliver(context.Background(), e, tab)
-				if occupied == "" {
+				if occupied == "" || occupied == "company-label" {
 					if err != nil || batches != 1 {
 						t.Fatalf("err=%v batches=%d", err, batches)
 					}

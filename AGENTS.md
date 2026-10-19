@@ -233,7 +233,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `EXPENSE_SHEET_CREDENTIALS_FILE` (server-only Google service-account JSON key).
   Immutable transactional snapshots and atomic Google row/metadata receipts
   prevent retry duplicates. It fills the blank row after the latest expense, excluding
-  Accounting Verification and side-list columns from all writes; no row insertion
+  Company, Accounting Verification and side-list columns from all writes; literal
+  prefilled company labels do not block otherwise blank rows. No row insertion
   or dimension changes. Occupied targets and exhausted blank rows hold for review.
   It never mirrors later edits or backfills history.
   While activated, eligible native entries dated before September 28, 2026 are
