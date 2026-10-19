@@ -1018,9 +1018,14 @@ assignment lookup lists.
   driver-wage deduction. Mixed owner/hired-driver weeks use one investor truck
   statement and charge hired labor only. Once an investor truck-week is saved,
   its destination stays Investor Pay during corrections to preserve payments.
-  Unassigned trucks retain calendar fees. No-load owner routing requires a
-  unique full-week historical assignment. Load source units or unique dated
-  assignments for unmatched plans determine truck attribution. Missing matches,
+  Unassigned trucks retain calendar fees. Without investor terms, dated ownership
+  routes recurring fees to the recorded owner's Driver Pay independently of load
+  attribution. Other-driver loads and missing full-week owner assignments show
+  statement review warnings instead of hiding fees; ordinary finalization requires
+  resolving them. Explicit load/no-load eligibility (including insurance rates)
+  remains automatic. Inactive-driver and finalized-snapshot safeguards still apply.
+  Load source units or unique dated assignments for unmatched plans determine
+  truck attribution. Missing matches,
   duplicate system loads, ownership conflicts and unlinked fuel need review.
   Fuel uses confirmed Relay identities, unique source Truck # prompts, diesel
   and DEF items. Fuel truck matching and PrePass import/reconciliation resolve

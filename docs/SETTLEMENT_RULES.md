@@ -51,6 +51,13 @@ weeks retain one investor truck statement and deduct only hired labor. Saved
 investor truck-weeks keep their destination during corrections. This routing
 does not imply that driver and investor statements should be combined.
 
+For a truck owned by a linked driver without investor settlement terms, recurring
+fees stay on the recorded owner's Driver Pay. A load attributed to another driver
+or a missing full-week owner assignment produces a statement review warning; it
+does not remove the fees. Load-based eligibility still chooses the configured
+working/idle insurance rate. The existing inactive-driver and frozen-statement
+rules remain in effect, and ordinary finalization requires resolving review issues.
+
 Truck terms must specify the owner, percentage and effective Monday. No rate is
 assumed. There is no separate inferred company-cut deduction. Missing terms or
 ambiguous attribution require configuration/review, not a fabricated zero.

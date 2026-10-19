@@ -2,13 +2,16 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// An owner driving their own truck uses their existing driver tariff. Truck
-// recurring fees do not require a second investor agreement or an invented rate.
-// Trucks with explicit terms retain the established owner/mixed-week routing.
+// Without investor terms, dated ownership supplies the recurring fee destination,
+// independently of load attribution. Conflicting loads/assignments require review
+// instead of hiding the fees. Explicit terms retain owner/mixed-week routing.
 func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, config TruckChargeData) error {
 	terms := applicableTruckTerms(config, source.WeekStart)
 	needed := false
@@ -59,26 +62,36 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 		if !payrollIncludesTruck(ctx, d.TruckID) {
 			continue
 		}
-		hasLoads, otherDriver := false, false
+		hasLoads := false
+		conflicts := []string{}
 		for _, person := range source.Drivers {
 			for _, load := range person.Loads {
 				if loadMap[person.ID+":"+load.CommentKey].TruckID == d.TruckID {
 					hasLoads = true
-					otherDriver = otherDriver || person.ID != d.ID
+					if person.ID != d.ID {
+						conflicts = append(conflicts, fmt.Sprintf("%s (%s, %s)", person.FullName, load.LoadNumber, load.Date))
+					}
 				}
 			}
-		}
-		if otherDriver || (!hasLoads && !fullWeek) {
-			continue
 		}
 		fees := truckRecurringCharges(config, charges.Types, d.TruckID, source.WeekStart, hasLoads)
 		if len(fees) == 0 {
 			continue
 		}
+		// Ownership supplies the fee destination. Load attribution is reviewed
+		// separately and must never silently remove the owner's recurring fees.
+		if len(conflicts) > 0 {
+			sort.Strings(conflicts)
+			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has loads entered for another driver: %s. Recurring fees remain on the recorded owner's statement; review Gross Board entries and truck settlement terms.", d.TruckUnit, strings.Join(conflicts, "; ")))
+		}
+		if !fullWeek {
+			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has no full-week owner-driver assignment. Recurring fees remain on the recorded owner's statement; review dated truck assignments and settlement terms.", d.TruckUnit))
+		}
 		found := false
 		for index := range source.Drivers {
 			if source.Drivers[index].ID == d.ID {
 				source.Drivers[index].AutoCharges = append(source.Drivers[index].AutoCharges, fees...)
+				source.Drivers[index].Issues = append(source.Drivers[index].Issues, d.Issues...)
 				found = true
 				break
 			}
