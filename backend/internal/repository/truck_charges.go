@@ -110,13 +110,7 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 	d.EligibleTruckIDs = []string{}
 	d.Owners = []TruckChargeOwner{}
 	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
- FROM trucks t JOIN LATERAL (
- SELECT h.owner_id FROM truck_ownership_history h WHERE h.truck_id=t.id
- AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
- AND (NOT h.start_known OR h.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
- AND (h.unassigned_at IS NULL OR h.unassigned_at >= (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
- ORDER BY h.assigned_at DESC,h.id LIMIT 1
- ) ownership ON true JOIN investors i ON i.id=ownership.owner_id
+ FROM trucks t `+truckOwnershipForWeekSQL+`
  LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company ORDER BY t.id`, week)
 	if err != nil {
 		return d, err
@@ -173,9 +167,19 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 // All non-company trucks have truck-based recurring fees.
 const investorTruckEligibility = `NOT i.is_company`
 
-func requireInvestorTruck(ctx context.Context, tx pgx.Tx, truck string) error {
+// Both the directory and writes use ownership at the selected week's end.
+// A later transfer to/from the company must not change historical eligibility.
+const truckOwnershipForWeekSQL = `JOIN LATERAL (
+ SELECT h.owner_id FROM truck_ownership_history h WHERE h.truck_id=t.id
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
+ AND (NOT h.start_known OR h.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at >= (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
+ ORDER BY h.assigned_at DESC,h.id LIMIT 1
+ ) ownership ON true JOIN investors i ON i.id=ownership.owner_id`
+
+func requireInvestorTruck(ctx context.Context, tx pgx.Tx, truck, week string) error {
 	var eligible bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t JOIN investors i ON i.id=t.owner_id WHERE t.id=$1 AND `+investorTruckEligibility+`)`, truck).Scan(&eligible); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t `+truckOwnershipForWeekSQL+` WHERE t.id=$2 AND `+investorTruckEligibility+`)`, week, truck).Scan(&eligible); err != nil {
 		return err
 	}
 	if !eligible {
@@ -238,7 +242,7 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "terms", ""); err != nil {
 		return err
 	}
-	if err = requireInvestorTruck(ctx, tx, v.TruckID); err != nil {
+	if err = requireInvestorTruck(ctx, tx, v.TruckID, v.WeekStart); err != nil {
 		return err
 	}
 	var previousOwner bool
@@ -356,7 +360,7 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor s
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "charge", v.TypeID); err != nil {
 		return err
 	}
-	if err = requireInvestorTruck(ctx, tx, v.TruckID); err != nil {
+	if err = requireInvestorTruck(ctx, tx, v.TruckID, v.WeekStart); err != nil {
 		return err
 	}
 	var options []string

@@ -361,6 +361,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   changes only unlocked visible cells and selects the remainder of a mixed
   selection; locked fees stay read-only and retain their inclusion and amount.
   Writes recheck the same period guard under the financial lock.
+  Eligibility for reads and writes uses ownership at the selected week's end;
+  later company transfers do not block historical non-company truck fees.
 - `frontend/app/accounting/escrow/`: standalone escrow directory, payment status
   filters, collection history and the new-driver default; shared table in Driver
   details. `escrow_repository.go` and `escrow_handlers.go` own its API.
