@@ -35,7 +35,10 @@ func validatePrePassFleetChange(in *repository.PrePassFleetChange, link bool) bo
 	if in.Action != "add" && !prepassRevision.MatchString(in.Revision) {
 		return false
 	}
-	if in.Action == "add" || in.Action == "link" {
+	if in.PlateSource != "" && (in.Action != "edit" || !slices.Contains([]string{"mserp", "prepass"}, in.PlateSource)) {
+		return false
+	}
+	if in.Action == "add" || in.Action == "link" || in.PlateSource != "" {
 		if !isUUID(in.TruckID) || in.TruckUpdatedAt == "" {
 			return false
 		}
@@ -122,6 +125,10 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 				return
 			}
 			if !link && !authorizeVendorAction(w, r, "tolls.fleet", in.Action) {
+				return
+			}
+			if in.PlateSource != "" && !slices.Contains(session.User.Permissions, "trucks.edit") {
+				writeAPIError(w, 403, "Truck edit permission is required to resolve plates in both systems")
 				return
 			}
 			if err := repo.ChangePrePassFleet(r.Context(), in, session.User.ID); err != nil {

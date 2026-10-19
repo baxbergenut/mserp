@@ -172,6 +172,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   keeps its original timestamp through refreshes; switching trucks resets drafts.
   See `docs/integrations/PREPASS_FLEET.md`; tests use disposable
   `MSERP_PREPASS_TEST_DATABASE_URL` and `frontend/scripts/test-prepass-views.mjs`.
+  Trucks > Resolve plate lets users choose the linked MSERP or PrePass plate/state
+  for both records (`edit` with `plateSource`, truck ID and current timestamp).
+  Requires `tolls.fleet.edit` plus `trucks.edit`; exact linked VIN, receipt guards,
+  plate-only provider PATCH and verified read-back protect the local update.
+  Uncertain-result review acknowledges the request without changing local plates.
 - `backend/internal/weighmytruck/`, repository/httpapi `weighmytruck_*` files and
   `frontend/app/weighmytruck/`: server-only OAuth driver enrollment/removal,
   versioned local membership tracking and terminated-driver warnings. Migration

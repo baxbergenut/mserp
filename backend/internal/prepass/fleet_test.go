@@ -75,6 +75,10 @@ func TestFleetWireContract(t *testing.T) {
 					if len(body) != 1 {
 						t.Error("assign overwrites other fields")
 					}
+				} else if body["vehicleNumber"] == nil && body["licensePlate"] != nil {
+					if len(body) != 1 || r.Method != http.MethodPatch {
+						t.Error("plate resolution overwrites unrelated fields")
+					}
 				} else if body["vehicleNumber"] != "003" || body["irp"] == nil {
 					t.Error("bad vehicle body")
 				}
@@ -89,12 +93,12 @@ func TestFleetWireContract(t *testing.T) {
 	if e != nil || len(s.Vehicles) != 1 || len(s.Transponders) != 1 {
 		t.Fatalf("fleet: %+v %v", s, e)
 	}
-	for _, action := range []string{"add", "edit", "remove", "assign"} {
+	for _, action := range []string{"add", "edit", "remove", "assign", "plate"} {
 		if e = c.ChangeVehicle(context.Background(), action, "123", "1XKADP9X8DJ364740", validFleetInput(), "777111222"); e != nil {
 			t.Fatal(e)
 		}
 	}
-	if len(calls) != 6 {
+	if len(calls) != 7 {
 		t.Fatal(calls)
 	}
 }

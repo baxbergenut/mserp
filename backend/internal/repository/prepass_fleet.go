@@ -74,6 +74,7 @@ type PrePassFleetList struct {
 	Operations   []PrePassFleetOperation   `json:"operations"`
 }
 type PrePassFleetChange struct {
+	PlateSource           string               `json:"plateSource,omitempty"`
 	RequestID             string               `json:"requestId"`
 	Action                string               `json:"action"`
 	AccountNumber         string               `json:"accountNumber"`
@@ -169,7 +170,7 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 					e.Warning = "MSERP truck profile is missing its VIN"
 				} else if !strings.EqualFold(strings.TrimSpace(t.VIN), v.VIN) {
 					e.Warning = "Linked truck VIN differs from PrePass"
-				} else if t.Plate != "" && (!strings.EqualFold(t.Plate, v.LicensePlateNumber) || !strings.EqualFold(t.PlateState, v.LicensePlateState)) {
+				} else if !strings.EqualFold(strings.TrimSpace(t.Plate), strings.TrimSpace(v.LicensePlateNumber)) || !strings.EqualFold(strings.TrimSpace(t.PlateState), strings.TrimSpace(v.LicensePlateState)) {
 					e.Warning = "Plate differs from MSERP"
 				}
 			}
@@ -316,6 +317,10 @@ func findPrePassVehicle(s prepass.FleetSnapshot, a, v string) (prepass.Vehicle, 
 }
 
 func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleetChange, actor string) error {
+	resolvePlate := in.PlateSource != ""
+	if resolvePlate && (in.Action != "edit" || !slices.Contains([]string{"mserp", "prepass"}, in.PlateSource)) {
+		return prepassInvalid("Select the MSERP or PrePass plate to use in both systems")
+	}
 	if in.Action == "link" {
 		if err := validateFleetTollLink(in); err != nil {
 			return err
@@ -327,7 +332,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	if in.Action != "link" && !in.FleetServiceConfirmed {
 		return prepassInvalid("Confirm this truck is not enrolled in VPP")
 	}
-	if in.Action == "add" || in.Action == "edit" {
+	if in.Action == "add" || in.Action == "edit" && !resolvePlate {
 		if e := in.Vehicle.Validate(); e != nil {
 			return prepassInvalid(e.Error())
 		}
@@ -386,6 +391,9 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	} else if !exists || prepassRevision(before, linked) != in.Revision {
 		return ErrPrePassFleetConflict
 	}
+	if resolvePlate && (linked == "" || linked != in.TruckID) {
+		return prepassInvalid("Link this PrePass vehicle to the correct MSERP truck before resolving its plate")
+	}
 	if in.Action == "assign" {
 		if before.TransponderNumber != "" {
 			return prepassInvalid("This truck already has a transponder. Replacement and transfer are not supported here yet.")
@@ -394,7 +402,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 			return prepassInvalid("This transponder is no longer available in the selected account")
 		}
 	}
-	if in.Action == "add" || in.Action == "edit" {
+	if in.Action == "add" || in.Action == "edit" && !resolvePlate {
 		for _, v := range snap.Vehicles {
 			if v.AccountNumber == in.AccountNumber && v.VIN != in.VIN && strings.EqualFold(v.VehicleNumber, in.Vehicle.VehicleNumber) {
 				return prepassInvalid("This PrePass unit number is already in use")
@@ -406,6 +414,11 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return err
 	}
 	defer tx.Rollback(context.WithoutCancel(ctx))
+	if resolvePlate {
+		if _, err = r.checkPrePassPlate(ctx, tx, in, before); err != nil {
+			return err
+		}
+	}
 	if in.Action == "link" {
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940); SELECT pg_advisory_xact_lock(730077)`); err != nil {
 			return err
@@ -417,10 +430,19 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 	}
 	raw, _ := json.Marshal(in)
+	var localPlate *prepass.Plate
+	if resolvePlate {
+		localPlate = &prepass.Plate{}
+		if err = tx.QueryRow(ctx, `SELECT coalesce(license_plate,''),coalesce(license_state,'') FROM trucks WHERE id=$1`, in.TruckID).Scan(&localPlate.Number, &localPlate.State); err != nil {
+			return err
+		}
+	}
 	old, _ := json.Marshal(struct {
-		Vehicle prepass.Vehicle
-		TruckID string
-	}{before, linked})
+		Vehicle        prepass.Vehicle
+		TruckID        string
+		TruckUpdatedAt string
+		TruckPlate     *prepass.Plate
+	}{before, linked, in.TruckUpdatedAt, localPlate})
 	if _, err = tx.Exec(ctx, `INSERT INTO prepass_fleet_operations(id,environment,account_number,vin,action,request_hash,request,before_vehicle,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, in.RequestID, r.prepassEnvironment, in.AccountNumber, in.VIN, in.Action, hash, raw, old, actor); err != nil {
 		return err
 	}
@@ -443,13 +465,19 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	}
 	opCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
-	if in.Action == "add" {
+	var plate prepass.Plate
+	if in.Action == "add" || resolvePlate {
 		tx, err = conn.Begin(opCtx)
 		if err != nil {
 			return err
 		}
 		defer tx.Rollback(context.WithoutCancel(ctx))
-		if err = r.checkPrePassTruck(opCtx, tx, in); err != nil {
+		if resolvePlate {
+			plate, err = r.checkPrePassPlate(opCtx, tx, in, before)
+		} else {
+			err = r.checkPrePassTruck(opCtx, tx, in)
+		}
+		if err != nil {
 			_ = tx.Rollback(opCtx)
 			_, saveErr := conn.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='failed',resolved_at=now() WHERE id=$1`, in.RequestID)
 			if saveErr != nil {
@@ -458,9 +486,14 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 			return err
 		}
 	}
-	err = r.prepassFleet.ChangeVehicle(opCtx, in.Action, in.AccountNumber, in.VIN, in.Vehicle, in.TransponderNumber)
+	action, vehicle := in.Action, in.Vehicle
+	if resolvePlate {
+		action = "plate"
+		vehicle = prepass.VehicleInput{LicensePlate: plate}
+	}
+	err = r.prepassFleet.ChangeVehicle(opCtx, action, in.AccountNumber, in.VIN, vehicle, in.TransponderNumber)
 	if err != nil {
-		if in.Action == "add" {
+		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}
 		var upstream *prepass.FleetAPIError
@@ -473,7 +506,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	}
 	after, err := r.fetchPrePassFleet(opCtx)
 	if err != nil {
-		if in.Action == "add" {
+		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}
 		return prepassInvalid("PrePass accepted the change, but it could not be verified. Review the unresolved request before retrying.")
@@ -483,6 +516,9 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	switch in.Action {
 	case "add", "edit":
 		verified = found && actual.Input() == in.Vehicle
+		if resolvePlate {
+			verified = found && actual.Input().LicensePlate == plate
+		}
 	case "remove":
 		verified = !found
 	case "assign":
@@ -497,10 +533,24 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 	}
 	if !verified {
-		if in.Action == "add" {
+		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}
 		return prepassInvalid("PrePass has not yet shown the expected change. Review the unresolved request before retrying.")
+	}
+	if resolvePlate {
+		if _, err = tx.Exec(opCtx, `UPDATE trucks SET license_plate=$2,license_state=$3,updated_at=clock_timestamp() WHERE id=$1`, in.TruckID, plate.Number, plate.State); err != nil {
+			return err
+		}
+		// Keep the local plate, verified roster and receipt in one commit.
+		roster, _ := json.Marshal(after)
+		if _, err = tx.Exec(opCtx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, roster); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID); err != nil {
+			return err
+		}
+		return tx.Commit(opCtx)
 	}
 	if in.Action == "add" {
 		if err = r.writePrePassLink(opCtx, tx, in, actor); err != nil {
@@ -515,6 +565,29 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	}
 	_, err = conn.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID)
 	return err
+}
+
+// Lock the reviewed local identity through read-back. The selected source is
+// derived server-side, so callers cannot smuggle unrelated profile changes.
+func (r *TollRepository) checkPrePassPlate(ctx context.Context, tx pgx.Tx, in PrePassFleetChange, before prepass.Vehicle) (prepass.Plate, error) {
+	var vin, number, state string
+	var updated time.Time
+	err := tx.QueryRow(ctx, `SELECT coalesce(vin,''),coalesce(license_plate,''),coalesce(license_state,''),updated_at FROM trucks WHERE id=$1 FOR UPDATE`, in.TruckID).Scan(&vin, &number, &state, &updated)
+	if err != nil {
+		return prepass.Plate{}, mapNotFound(err)
+	}
+	expected, err := time.Parse(time.RFC3339Nano, in.TruckUpdatedAt)
+	if err != nil || !updated.Equal(expected) || strings.ToUpper(strings.TrimSpace(vin)) != in.VIN {
+		return prepass.Plate{}, ErrPrePassFleetConflict
+	}
+	p := before.Input().LicensePlate
+	if in.PlateSource == "mserp" {
+		p = prepass.Plate{Number: number, State: state}
+	}
+	if err := p.Validate(); err != nil {
+		return p, prepassInvalid(err.Error())
+	}
+	return p, nil
 }
 func (r *TollRepository) checkPrePassTruck(ctx context.Context, tx pgx.Tx, in PrePassFleetChange) error {
 	var vin string

@@ -22,7 +22,7 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost'), p = url.pathname.replace('/lookups/','/');
     if (p.startsWith('/api/')) {
-      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['tolls.link', 'tolls.fleet.create','tolls.fleet.edit','tolls.fleet.delete','tolls.fleet.recover','tolls.fleet.sync'])] }, csrfToken: 'fixture' });
+      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['trucks.edit', 'tolls.link', 'tolls.fleet.create','tolls.fleet.edit','tolls.fleet.delete','tolls.fleet.recover','tolls.fleet.sync'])] }, csrfToken: 'fixture' });
       if (p === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0, tollsFrom: '2026-09-01' });
       if (p === '/api/maintenance/access') return send({ canView: false, canCreate: false, canEdit: false, canDelete: false });
       if (p === '/api/tasks/count') return send({ count: 0 });
@@ -49,7 +49,11 @@ const server = createServer(async (req, res) => {
         let e = data.vehicles.find(e => e.vehicle.vin === input.vin);
         if (input.action === 'link') { e.tollsLinked = true; e.tollFrom = input.tollFrom; e.truckId = input.truckId; e.truckUnit = data.trucks.find(t => t.id === input.truckId).unit; e.warning = ''; }
         if (input.action === 'add') { e = makeEntry({ ...baseVehicle, vin: input.vin }); e.truckId = input.truckId; e.truckUnit = data.trucks.find(t => t.id === input.truckId).unit; e.warning = ''; data.vehicles.push(e); }
-        if (input.action === 'add' || input.action === 'edit') { e.vehicle.vehicleNumber = input.vehicle.vehicleNumber; e.vehicle.licensePlateNumber = input.vehicle.licensePlate.number; }
+        if (input.plateSource) {
+          const t = data.trucks.find(t => t.id === input.truckId);
+          if (input.plateSource === 'mserp') { e.vehicle.licensePlateNumber = t.plate; e.vehicle.licensePlateState = t.plateState; }
+          else { t.plate = e.vehicle.licensePlateNumber; t.plateState = e.vehicle.licensePlateState; }
+        } else if (input.action === 'add' || input.action === 'edit') { e.vehicle.vehicleNumber = input.vehicle.vehicleNumber; e.vehicle.licensePlateNumber = input.vehicle.licensePlate.number; }
         if (input.action === 'assign') { e.vehicle.transponderNumber = input.transponderNumber; const d = data.transponders.find(d => d.transponderNumber === input.transponderNumber); d.vin = e.vehicle.vin; d.vehicleNumber = e.vehicle.vehicleNumber; }
         if (input.action === 'remove') data.vehicles = data.vehicles.filter(e => e.vehicle.vin !== input.vin);
         return send({ saved: true });
@@ -94,6 +98,37 @@ try {
   await expect(region.getByRole('button', { name: 'Trucks', exact: true })).toHaveCount(0);
   await expect(region).not.toContainText('PrePass checked');
   await expect(region).not.toContainText('1 trucks');
+  // Resolve a mismatch using each source, preserving the displayed truck version.
+  data.trucks[0].plate = 'LOCAL12'; data.trucks[0].plateState = 'IN';
+  await region.getByRole('button', { name: 'Refresh PrePass' }).click();
+  await region.getByRole('button', { name: 'Resolve plate', exact: true }).click();
+  await expect(dialog).toContainText('MSERP: LOCAL12 IN');
+  await expect(dialog).toContainText('PrePass: ABC123 OH');
+  await page.screenshot({ path: join(tmpdir(), 'mserp-prepass-resolve-plate.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(tmpdir(), 'mserp-prepass-resolve-plate-mobile.png'), animations: 'disabled' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'plate dialog must fit mobile');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(dialog.getByRole('button', { name: 'Resolve plate', exact: true })).toBeDisabled();
+  await dialog.getByRole('radio', { name: 'MSERP: LOCAL12 IN' }).check();
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button', { name: 'Resolve plate', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  assert.equal(writes.at(-1).input.plateSource, 'mserp');
+  assert.equal(writes.at(-1).input.truckUpdatedAt, stamp);
+  assert.equal(writes.at(-1).input.vehicle, undefined);
+  await expect(region.getByRole('button', { name: 'Resolve plate', exact: true })).toHaveCount(0);
+  data.vehicles[0].vehicle.licensePlateNumber = 'REMOTE1';
+  data.vehicles[0].vehicle.licensePlateState = 'IL';
+  await region.getByRole('button', { name: 'Refresh PrePass' }).click();
+  await region.getByRole('button', { name: 'Resolve plate', exact: true }).click();
+  await dialog.getByRole('radio', { name: 'PrePass: REMOTE1 IL' }).check();
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button', { name: 'Resolve plate', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  assert.equal(writes.at(-1).input.plateSource, 'prepass');
+  assert.equal(data.trucks[0].plate, 'REMOTE1');
+  assert.equal(data.trucks[0].plateState, 'IL');
   await region.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(dialog.getByLabel(/^Truck/)).toHaveValue(vin);
   await expect(dialog.getByLabel('Available transponder').locator('option')).toHaveCount(2);
@@ -199,7 +234,7 @@ try {
   await expect(page.getByRole('region', { name: 'PrePass management' })).toBeVisible();
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Trucks', exact: true }).click();
-  for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
+  for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign', 'Resolve plate']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Needs attention', exact: true }).click();
   await expect(region).toContainText('All tolls in this date range are linked to trucks.');
   assert.deepEqual(errors, []); console.log('PrePass browser workflows passed; screenshots saved in OS temp directory.');

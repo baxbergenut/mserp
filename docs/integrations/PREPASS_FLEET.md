@@ -29,6 +29,20 @@ page reads use the last complete snapshot; failed refreshes retain it.
   only; later fleet refreshes show the confirmed provider details.
 - Edit the provider's unit, plate, weight, registration, VRN and hazmat fields.
   VIN is immutable. Unexposed color/lease fields are omitted from PATCH.
+- Resolve a linked truck's plate discrepancy from Trucks > Resolve plate. Review
+  both plate/state pairs and choose MSERP or PrePass to save that pair to both
+  systems. Requires `tolls.fleet.edit` and `trucks.edit`, with the normal VPP
+  confirmation. Choosing MSERP uses a permanent plate; choosing PrePass preserves
+  its temporary flag. Missing/unsupported chosen plate details must be corrected
+  first. A current matching VIN and reviewed roster link are required.
+  The API uses an `edit` change with `plateSource=mserp|prepass`, `truckId` and
+  `truckUpdatedAt`. Values come from the server's version-checked records; the
+  provider PATCH contains only `licensePlate`. The local row is locked through
+  provider read-back, then its plate, cached roster and confirmed receipt commit
+  together. Receipts retain the prior local plate and selected source. A failed
+  or unconfirmed provider result never confirms a local change. Portal review
+  of an uncertain result only acknowledges it; review the refreshed discrepancy
+  and resolve again if needed. It does not silently overwrite the local profile.
 - Remove a vehicle from PrePass. Its local truck, reviewed link, operation
   history and tolls are retained. Physical transponder returns remain separate.
 - Assign an available transponder to a truck that has none. It must belong to

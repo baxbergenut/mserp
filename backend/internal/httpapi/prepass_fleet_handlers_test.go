@@ -56,3 +56,23 @@ func TestPrePassFleetLinkRequiresStartDate(t *testing.T) {
 		t.Fatal("valid dated link rejected")
 	}
 }
+
+func TestPrePassPlateRequestBoundary(t *testing.T) {
+	in := repository.PrePassFleetChange{RequestID: "00000000-0000-4000-8000-000000000001", Action: "edit", AccountNumber: "123", VIN: "1XKADP9X8DJ364740", Revision: strings.Repeat("a", 64), TruckID: "00000000-0000-4000-8000-000000000002", TruckUpdatedAt: "2026-10-12T12:00:00Z", PlateSource: "mserp", FleetServiceConfirmed: true}
+	if !validatePrePassFleetChange(&in, false) {
+		t.Fatal("valid plate resolution rejected")
+	}
+	in.PlateSource = "custom"
+	if validatePrePassFleetChange(&in, false) {
+		t.Fatal("unreviewed source accepted")
+	}
+	in.PlateSource, in.Action = "prepass", "link"
+	in.TollFrom = "2026-10-12"
+	if validatePrePassFleetChange(&in, true) {
+		t.Fatal("plate mutation accepted through link permission")
+	}
+	in.Action, in.TruckUpdatedAt = "edit", ""
+	if validatePrePassFleetChange(&in, false) {
+		t.Fatal("unversioned local plate accepted")
+	}
+}

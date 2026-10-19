@@ -49,6 +49,10 @@ func (f *prepassFleetFake) ChangeVehicle(_ context.Context, action, account, vin
 			continue
 		}
 		switch action {
+		case "plate":
+			v.TempPlate = in.LicensePlate.Temporary
+			v.LicensePlateNumber = in.LicensePlate.Number
+			v.LicensePlateState = in.LicensePlate.State
 		case "add", "edit":
 			v.VehicleNumber = in.VehicleNumber
 			v.TempPlate = in.LicensePlate.Temporary
@@ -229,6 +233,66 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if list().Vehicles[0].TruckID != truck || fake.calls != 0 {
 				t.Fatal("local link called provider or failed")
 			}
+			t.Run("resolve plates", func(t *testing.T) {
+				makePlate := func(source string) PrePassFleetChange {
+					in := request("edit")
+					in.PlateSource, in.TruckID = source, truck
+					in.TruckUpdatedAt = choice(truck).UpdatedAt.Format(time.RFC3339Nano)
+					in.Vehicle = prepass.VehicleInput{} // No registration fields needed.
+					return in
+				}
+				exec(`UPDATE trucks SET license_plate='LOCAL12',license_state='IN',updated_at=clock_timestamp() WHERE id=$1`, truck)
+				stale := makePlate("mserp")
+				exec(`UPDATE trucks SET updated_at=clock_timestamp() WHERE id=$1`, truck)
+				if !errors.Is(repo.ChangePrePassFleet(ctx, stale, actor), ErrPrePassFleetConflict) || fake.calls != 0 {
+					t.Fatal("stale plate selection reached provider")
+				}
+				wrong := makePlate("prepass")
+				wrong.TruckID = newTruck
+				if repo.ChangePrePassFleet(ctx, wrong, actor) == nil || fake.calls != 0 {
+					t.Fatal("unlinked truck accepted")
+				}
+				in := makePlate("mserp")
+				must(repo.ChangePrePassFleet(ctx, in, actor))
+				must(repo.ChangePrePassFleet(ctx, in, actor))
+				if fake.calls != 1 || fake.snapshot.Vehicles[0].LicensePlateNumber != "LOCAL12" || fake.snapshot.Vehicles[0].LicensePlateState != "IN" || fake.snapshot.Vehicles[0].IRPNumber != "12345" {
+					t.Fatal("MSERP source, unrelated fields or replay incorrect")
+				}
+				if id(`SELECT before_vehicle->'TruckPlate'->>'number' FROM prepass_fleet_operations WHERE id=$1`, in.RequestID) != "LOCAL12" {
+					t.Fatal("missing local plate audit")
+				}
+				fake.snapshot.Vehicles[0].LicensePlateNumber, fake.snapshot.Vehicles[0].LicensePlateState = "VENDOR1", "IL"
+				must(repo.RefreshPrePassFleet(ctx))
+				in = makePlate("prepass")
+				must(repo.ChangePrePassFleet(ctx, in, actor))
+				if choice(truck).Plate != "VENDOR1" || choice(truck).PlateState != "IL" || list().Vehicles[0].Warning == "Plate differs from MSERP" {
+					t.Fatal("PrePass source did not update local profile")
+				}
+				exec(`UPDATE trucks SET license_plate='BAD',updated_at=clock_timestamp() WHERE id=$1`, truck)
+				calls := fake.calls
+				if repo.ChangePrePassFleet(ctx, makePlate("mserp"), actor) == nil || fake.calls != calls {
+					t.Fatal("invalid source plate sent to provider")
+				}
+				exec(`UPDATE trucks SET license_plate='LOCAL99',updated_at=clock_timestamp() WHERE id=$1`, truck)
+				in = makePlate("mserp")
+				fake.ignoreWrite = true
+				if repo.ChangePrePassFleet(ctx, in, actor) == nil || choice(truck).Plate != "LOCAL99" || id(`SELECT state FROM prepass_fleet_operations WHERE id=$1`, in.RequestID) != "pending" {
+					t.Fatal("unverified plate was confirmed")
+				}
+				if repo.ChangePrePassFleet(ctx, in, actor) == nil || fake.calls != calls+1 {
+					t.Fatal("uncertain plate request replayed")
+				}
+				fake.ignoreWrite = false
+				exec(`UPDATE prepass_fleet_operations SET created_at=now()-interval '3 minutes' WHERE id=$1`, in.RequestID)
+				must(repo.VerifyPrePassFleetOperation(ctx, in.RequestID, actor))
+				if choice(truck).Plate != "LOCAL99" {
+					t.Fatal("review silently overwrote local profile")
+				}
+				// Return the fixture to the baseline for existing lifecycle assertions.
+				fake.snapshot.Vehicles[0].LicensePlateNumber, fake.snapshot.Vehicles[0].LicensePlateState = "ABC123", "OH"
+				fake.calls = 0
+				must(repo.RefreshPrePassFleet(ctx))
+			})
 			stale := link
 			stale.RequestID = reqID()
 			if !errors.Is(repo.ChangePrePassFleet(ctx, stale, actor), ErrPrePassFleetConflict) {

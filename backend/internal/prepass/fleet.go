@@ -83,6 +83,14 @@ var iftaNumber = regexp.MustCompile(`^[0-9]{1,16}[A-Za-z]{0,2}$`)
 const stateCodes = " AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY AB BC MB NB NL NS NT ON PE QC SK YT AG BS CH CI CL CM CU DF DU GE GJ HD JA MC MR MX NA NU OA PU QE QI SI SL SO TB TL TM VE YU BN TA "
 
 func ValidState(s string) bool { return len(s) == 2 && strings.Contains(stateCodes, " "+s+" ") }
+func (p *Plate) Validate() error {
+	p.Number = strings.ToUpper(strings.TrimSpace(p.Number))
+	p.State = strings.ToUpper(strings.TrimSpace(p.State))
+	if !ValidState(p.State) || (!p.Temporary || p.Number != "") && !plateNumber.MatchString(p.Number) {
+		return fmt.Errorf("Provide a valid plate state and a 5–9 character plate number (optional for temporary plates)")
+	}
+	return nil
+}
 func (v *VehicleInput) Validate() error {
 	v.VehicleNumber = strings.TrimSpace(v.VehicleNumber)
 	v.LicensePlate.Number = strings.ToUpper(strings.TrimSpace(v.LicensePlate.Number))
@@ -182,6 +190,9 @@ func (c *Client) ChangeVehicle(ctx context.Context, action, account, vin string,
 		}{vin, input}
 	case "edit":
 		q.Set("vin", vin)
+	case "plate":
+		q.Set("vin", vin)
+		body = map[string]Plate{"licensePlate": input.LicensePlate}
 	case "remove":
 		method = http.MethodDelete
 		q.Set("vin", vin)
