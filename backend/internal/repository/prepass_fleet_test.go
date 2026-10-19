@@ -149,6 +149,13 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			} else {
 				exec(string(init))
 			}
+			if mode == "migration" {
+				migration, e := os.ReadFile("../../sql/120_prepass_assignment_queue.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(migration))
+			}
 			// Existing fleet tables need read/row-lock privileges; new tables must already
 			// be owned by the application role via the migration, not a blanket grant.
 			exec(`GRANT SELECT,UPDATE ON trucks TO mserp_app; GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; GRANT INSERT,UPDATE ON tolls,prepass_toll_sync_days TO mserp_app`)
@@ -209,7 +216,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			}
 			request := func(action string) PrePassFleetChange {
 				v := list().Vehicles[0]
-				return PrePassFleetChange{RequestID: reqID(), Action: action, AccountNumber: "123", VIN: vin, Revision: v.Revision, Vehicle: v.Vehicle.Input(), FleetServiceConfirmed: true}
+				return PrePassFleetChange{RequestID: reqID(), Action: action, AccountNumber: "123", VIN: vin, Revision: v.Revision, Vehicle: v.Vehicle.Input()}
 			}
 			must(repo.RefreshPrePassFleet(ctx))
 			l := list()
@@ -332,6 +339,75 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if fake.calls != 2 {
 				t.Fatal("assignment replayed")
 			}
+			t.Run("queued assignments survive restart without replay", func(t *testing.T) {
+				raw, _ := json.Marshal(fake.snapshot)
+				calls := fake.calls
+				var ids []string
+				defer func() {
+					fake.ignoreWrite = false
+					fake.readFailure = false
+					fake.calls = calls
+					_ = json.Unmarshal(raw, &fake.snapshot)
+					exec(`DELETE FROM prepass_fleet_operations WHERE id=ANY($1::uuid[])`, ids)
+					must(repo.RefreshPrePassFleet(ctx))
+				}()
+				fake.ignoreWrite = true // HTTP success acknowledges the vendor queue.
+				var requests []PrePassFleetChange
+				for i, device := range []string{"777111444", "777111555"} {
+					v := fake.snapshot.Vehicles[0]
+					v.VIN = fmt.Sprintf("1XKADP9X8DJ36474%d", i+2)
+					v.VehicleNumber = fmt.Sprintf("Q%d", i)
+					v.TransponderNumber = ""
+					fake.snapshot.Vehicles = append(fake.snapshot.Vehicles, v)
+					fake.snapshot.Transponders = append(fake.snapshot.Transponders, prepass.Transponder{AccountNumber: "123", TransponderNumber: device})
+					must(repo.RefreshPrePassFleet(ctx))
+					in := PrePassFleetChange{RequestID: reqID(), Action: "assign", AccountNumber: "123", VIN: v.VIN, Revision: prepassRevision(v, ""), TransponderNumber: device}
+					ids = append(ids, in.RequestID)
+					requests = append(requests, in)
+					must(repo.ChangePrePassFleet(ctx, in, actor))
+					if id(`SELECT state FROM prepass_fleet_operations WHERE id=$1`, in.RequestID) != "queued" {
+						t.Fatal("accepted assignment was not queued")
+					}
+					must(repo.ChangePrePassFleet(ctx, in, actor))
+					blocked := in
+					blocked.RequestID = reqID()
+					if repo.ChangePrePassFleet(ctx, blocked, actor) == nil {
+						t.Fatal("queued truck/device sent twice")
+					}
+				}
+				if fake.calls != calls+2 {
+					t.Fatal("queued request replayed or blocked an unrelated truck")
+				}
+				restarted := NewTollRepository(pool)
+				restarted.ConfigurePrePassFleet(fake, "production")
+				fake.readFailure = true
+				if restarted.ReconcilePrePassAssignments(ctx) == nil {
+					t.Fatal("failed read accepted")
+				}
+				fake.readFailure = false
+				for _, in := range requests {
+					for i := range fake.snapshot.Vehicles {
+						if fake.snapshot.Vehicles[i].VIN == in.VIN {
+							fake.snapshot.Vehicles[i].TransponderNumber = in.TransponderNumber
+						}
+					}
+				}
+				must(restarted.ReconcilePrePassAssignments(ctx))
+				if id(`SELECT count(*)::text FROM prepass_fleet_operations WHERE id=ANY($1::uuid[]) AND state='queued'`, ids) != "2" {
+					t.Fatal("one-sided roster confirmed an assignment")
+				}
+				for _, in := range requests {
+					for i := range fake.snapshot.Transponders {
+						if fake.snapshot.Transponders[i].TransponderNumber == in.TransponderNumber {
+							fake.snapshot.Transponders[i].VIN = in.VIN
+						}
+					}
+				}
+				must(restarted.ReconcilePrePassAssignments(ctx))
+				if id(`SELECT count(*)::text FROM prepass_fleet_operations WHERE id=ANY($1::uuid[]) AND state='confirmed'`, ids) != "2" || fake.calls != calls+2 {
+					t.Fatal("background confirmation failed or resent mutations")
+				}
+			})
 			testFleetTollLinking(t, ctx, admin, repo, fake, actor, truck, newTruck)
 			checked := list().RefreshedAt
 			fake.readFailure = true
@@ -374,7 +450,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			if len(list().Vehicles) != 0 || id(`SELECT count(*)::text FROM trucks WHERE id=$1`, truck) != "1" || id(`SELECT count(*)::text FROM prepass_fleet_links`) != "1" {
 				t.Fatal("remote removal destroyed local truck/link")
 			}
-			add := PrePassFleetChange{RequestID: reqID(), Action: "add", AccountNumber: "123", VIN: newVIN, TruckID: newTruck, TruckUpdatedAt: choice(newTruck).UpdatedAt.Format(time.RFC3339Nano), Vehicle: edit.Vehicle, FleetServiceConfirmed: true}
+			add := PrePassFleetChange{RequestID: reqID(), Action: "add", AccountNumber: "123", VIN: newVIN, TruckID: newTruck, TruckUpdatedAt: choice(newTruck).UpdatedAt.Format(time.RFC3339Nano), Vehicle: edit.Vehicle}
 			add.Vehicle.VehicleNumber = "004"
 			fake.failure = &prepass.FleetAPIError{Status: 400}
 			if repo.ChangePrePassFleet(ctx, add, actor) == nil {

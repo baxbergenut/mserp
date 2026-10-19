@@ -4,7 +4,7 @@
 import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, LoaderCircle, Plus, RefreshCw } from "lucide-react";
 import { changePrePassFleet, fetchPrePassFleet, previewPrePassFleetLink, refreshPrePassFleet, verifyPrePassFleetOperation } from "../lib/api";
 import { usePermissions } from "../lib/access";
 import { useViewState } from "../lib/viewMemory";
@@ -39,12 +39,17 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
   const [tollFrom, setTollFrom] = useState("");
   const [linkPreview, setLinkPreview] = useState<PrePassTruckPreview | null>(null);
   const saving = useRef(false), generation = useRef(0);
+  const trackedAssignments = useRef(new Set<string>());
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const current = ++generation.current;
     try {
       const result = await fetchPrePassFleet(signal);
-      if (!signal?.aborted && current === generation.current) setData(result);
+      if (!signal?.aborted && current === generation.current) {
+        if (result.operations.some(o => o.state === "confirmed" && trackedAssignments.current.has(o.id))) { setNotice("Transponder assigned."); setError(""); }
+        trackedAssignments.current = new Set(result.operations.filter(o => o.action === "assign" && (o.state === "queued" || o.state === "pending")).map(o => o.id));
+        setData(result);
+      }
       return result;
     } catch (e) { if (!signal?.aborted && current === generation.current) setError(e instanceof Error ? e.message : "Could not load PrePass."); }
     finally { if (!signal?.aborted && current === generation.current) setLoading(false); }
@@ -57,6 +62,13 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
     return () => { controller.abort(); clearTimeout(timer); clearInterval(interval); window.removeEventListener("focus", refresh); };
   }, [load]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 5000); return () => clearTimeout(timer); }, [notice]);
+  const hasWaitingAssignment = data?.operations.some(o => o.action === "assign" && (o.state === "queued" || o.state === "pending"));
+  useEffect(() => {
+    if (!hasWaitingAssignment) return;
+    const controller = new AbortController();
+    const timer = setInterval(() => { if (!saving.current && document.visibilityState === "visible") void load(controller.signal); }, 5000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [hasWaitingAssignment, load]);
   async function run(operation: () => Promise<unknown>, message: string) {
     if (saving.current) return;
     saving.current = true; generation.current++; setBusy(true); setError(""); setNotice("");
@@ -83,10 +95,12 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
   }
   const plateMismatch = (e: PrePassFleetEntry) => { const t = data?.trucks.find(t => t.id === e.truckId); return !!t && (t.plate.trim().toUpperCase() !== e.vehicle.licensePlateNumber.trim().toUpperCase() || t.plateState.trim().toUpperCase() !== e.vehicle.licensePlateState.trim().toUpperCase()); };
   const pending = data?.operations.filter(o => o.state === "pending") ?? [];
+  const assignments = data?.operations.filter(o => o.action === "assign" && (o.state === "pending" || o.state === "queued")) ?? [];
   const locked = busy || pending.length > 0;
+  const rowLocked = (e: PrePassFleetEntry) => locked || assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin);
   const entries = data?.vehicles ?? [];
   const devices = data?.transponders ?? [];
-  const available = devices.filter(d => !d.vin.trim() && !d.vehicleNumber.trim()
+  const available = devices.filter(d => !d.vin.trim() && !d.vehicleNumber.trim() && !assignments.some(o => o.transponderNumber === d.transponderNumber)
     && !devices.some(other => other.transponderNumber === d.transponderNumber && (other.accountNumber !== d.accountNumber || !!other.vin.trim() || !!other.vehicleNumber.trim()))
     && !entries.some(e => e.vehicle.transponderNumber === d.transponderNumber));
   const entry = dialog && "entry" in dialog ? dialog.entry : undefined;
@@ -110,8 +124,7 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
     if (dialog.kind === "add" || dialog.kind === "link") { input.truckId = truckId; input.truckUpdatedAt = selectedTruck?.updatedAt; }
     if (dialog.kind === "add" || dialog.kind === "edit") input.vehicle = vehicle;
     if (dialog.kind === "assign") input.transponderNumber = device;
-    if (dialog.kind !== "link") input.fleetServiceConfirmed = reviewed;
-    else {
+    if (dialog.kind === "link") {
       input.tollFrom = tollFrom;
       if (!linkPreview) {
         saving.current = true; setBusy(true); setError("");
@@ -121,14 +134,14 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
       if (linkPreview.closed) return;
       input.tollRevision = linkPreview.revision;
     }
-    void run(() => changePrePassFleet(input), dialog.kind === "plate" ? plateSource === "prepass" ? "PrePass plate copied to MSERP." : "Plate updated in MSERP and confirmed in PrePass." : dialog.kind === "link" ? "Truck linked. Unlinked tolls and future imports use this truck from the selected date; existing links are unchanged." : "PrePass change confirmed.");
+    void run(() => changePrePassFleet(input), dialog.kind === "assign" ? "Transponder assignment submitted." : dialog.kind === "plate" ? plateSource === "prepass" ? "PrePass plate copied to MSERP." : "Plate updated in MSERP and confirmed in PrePass." : dialog.kind === "link" ? "Truck linked. Unlinked tolls and future imports use this truck from the selected date; existing links are unchanged." : "PrePass change confirmed.");
   }
   const matches = (values: string[]) => values.join(" ").toLowerCase().includes(search.toLowerCase().trim());
   const shownTrucks = entries.filter(e => (!filter || filter === "unlinked" && !e.truckId || filter === "attention" && !!e.warning || filter === "no-device" && !e.vehicle.transponderNumber) && matches([e.truckUnit, e.vehicle.vehicleNumber, e.vehicle.vin, e.vehicle.licensePlateNumber, e.vehicle.transponderNumber]));
   const shownDevices = devices.filter(d => (!filter || filter === "available" && available.includes(d) || filter === "assigned" && !!(d.vin || d.vehicleNumber)) && matches([d.transponderNumber, d.vehicleNumber, d.vin]));
   const count = view === "trucks" ? shownTrucks.length : shownDevices.length;
   const pages = Math.max(1, Math.ceil(count / pageSize)), currentPage = Math.max(1, Math.min(page, pages)), offset = (currentPage - 1) * pageSize;
-  const formBlocked = busy || invalidSavedVIN || (dialog?.kind === "plate" && (!plateSource || !selectedTruck || plateSource === "mserp" && !canWrite)) || (dialog?.kind === "link" && (!tollFrom || !!linkPreview?.closed)) || (dialog?.kind === "verify" ? !reviewed : locked || !account || ((dialog?.kind === "add" || dialog?.kind === "link") && !selectedTruck) || (dialog?.kind === "assign" && (!device || !entry)) || (dialog?.kind !== "link" && !(dialog?.kind === "plate" && plateSource === "prepass") && !reviewed));
+  const formBlocked = busy || invalidSavedVIN || (dialog?.kind === "plate" && (!plateSource || !selectedTruck || plateSource === "mserp" && !canWrite)) || (dialog?.kind === "link" && (!tollFrom || !!linkPreview?.closed)) || (dialog?.kind === "verify" ? !reviewed : locked || !account || ((dialog?.kind === "add" || dialog?.kind === "link") && !selectedTruck) || (dialog?.kind === "assign" && (!device || !entry)));
 
   return <section className="space-y-4" aria-label="PrePass management">
     {data?.environment === "nonproduction" && <p className="text-[12px] text-amber-400">Nonproduction</p>}
@@ -136,7 +149,8 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     {data && !data.configured && <ErrorBanner message="PrePass management is not configured on the server." />}
     {data?.configured && !data.refreshedAt && <p className="text-[13px] text-zinc-400">Select Refresh PrePass to load trucks and transponders.</p>}
-    {pending.map(o => <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {o.action} · VIN {o.vin}. Further changes are paused until the result is reviewed.</span>{canRecover && <button className="ui-button" disabled={busy} onClick={() => { setReviewed(false); setError(""); setDialog({ kind: "verify", operation: o }); }}>Review result</button>}</div>)}
+    {assignments.map(o => <div key={o.id} role="status" className="flex items-center gap-2 rounded-lg border border-blue-500/30 p-3 text-[13px] text-blue-400"><LoaderCircle className="h-4 w-4 shrink-0 animate-spin" /><span>Assigning transponder {o.transponderNumber} to truck {data?.vehicles.find(e => e.vehicle.accountNumber === o.accountNumber && e.vehicle.vin === o.vin)?.truckUnit || data?.vehicles.find(e => e.vehicle.accountNumber === o.accountNumber && e.vehicle.vin === o.vin)?.vehicle.vehicleNumber || o.vin}. Waiting for PrePass to finish processing; this updates automatically.</span></div>)}
+    {pending.filter(o => o.action !== "assign").map(o => <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {o.action} · VIN {o.vin}. Further changes are paused until the result is reviewed.</span>{canRecover && <button className="ui-button" disabled={busy} onClick={() => { setReviewed(false); setError(""); setDialog({ kind: "verify", operation: o }); }}>Review result</button>}</div>)}
     <div className="flex flex-wrap items-center gap-2">
       {view !== "attention" && <>
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search unit, VIN, plate or transponder…" />
@@ -149,18 +163,18 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
       <tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownTrucks.slice(offset, offset + pageSize).map(e => <tr key={`${e.vehicle.accountNumber}:${e.vehicle.vin}`} className="border-b border-zinc-800/60">
         <td className="whitespace-nowrap px-3 py-2">{e.truckId ? canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${e.truckId}`}>{e.truckUnit}</Link> : e.truckUnit : <span>{e.vehicle.vehicleNumber}<span className="ml-2 text-amber-400">Unlinked</span></span>}{e.warning && <span className="ml-2 inline-flex align-middle text-amber-400" title={e.warning}><AlertTriangle aria-label={e.warning} className="h-4 w-4" /></span>}</td>
         <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px]">{e.vehicle.vin}</td><td className="whitespace-nowrap px-3 py-2">{e.vehicle.licensePlateNumber} {e.vehicle.licensePlateState}{e.vehicle.tempPlate ? " · Temp" : ""}</td><td className="px-3 py-2 font-mono">{e.vehicle.transponderNumber || "—"}</td><td className="whitespace-nowrap px-3 py-2">{e.tollsLinked ? `From ${e.tollFrom}` : <span className="text-amber-400">Needs linking</span>}</td>
-        <td className="px-3 py-1"><div className="flex gap-2">{canLink && <button className="ui-button" disabled={locked} onClick={() => open("link", e)}>{e.truckId ? e.tollsLinked ? "Relink" : "Link tolls" : "Link"}</button>}{canResolvePlate && plateMismatch(e) && <button className="ui-button text-amber-400" disabled={locked} onClick={() => open("plate", e)}>Resolve plate</button>}{canWrite && <><button className="ui-button" disabled={locked} onClick={() => open("edit", e)}>Edit</button>{!e.vehicle.transponderNumber && <button className="ui-button" disabled={locked || !available.some(d => d.accountNumber === e.vehicle.accountNumber)} onClick={() => open("assign", e)}>Assign</button>}</>}{canDelete && <button className="ui-button text-red-400" disabled={locked} onClick={() => open("remove", e)}>Remove</button>}</div></td>
+        <td className="px-3 py-1"><div className="flex gap-2">{canLink && <button className="ui-button" disabled={rowLocked(e)} onClick={() => open("link", e)}>{e.truckId ? e.tollsLinked ? "Relink" : "Link tolls" : "Link"}</button>}{canResolvePlate && plateMismatch(e) && <button className="ui-button text-amber-400" disabled={rowLocked(e)} onClick={() => open("plate", e)}>Resolve plate</button>}{canWrite && <><button className="ui-button" disabled={rowLocked(e)} onClick={() => open("edit", e)}>Edit</button>{!e.vehicle.transponderNumber && <button className="ui-button" disabled={rowLocked(e) || !available.some(d => d.accountNumber === e.vehicle.accountNumber)} onClick={() => open("assign", e)}>Assign</button>}</>}{canDelete && <button className="ui-button text-red-400" disabled={rowLocked(e)} onClick={() => open("remove", e)}>Remove</button>}</div></td>
       </tr>)}</tbody>
     </table> : <table className="w-full min-w-[650px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-zinc-500">{["Transponder", "Assignment", "Truck", "VIN", "Actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{(h === "Toll linking" || h === "Assignment") ? <ColumnFilter label={h} active={!!filter}><select aria-label="PrePass status filter" className={selectClass} value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="">All {view}</option>{<><option value="available">Available</option><option value="assigned">Assigned</option></>}</select></ColumnFilter> : h}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownDevices.slice(offset, offset + pageSize).map(d => {
       const linked = entries.find(e => e.vehicle.accountNumber === d.accountNumber && e.vehicle.vin === d.vin);
-      return <tr key={`${d.accountNumber}:${d.transponderNumber}`} className="border-b border-zinc-800/60"><td className="px-3 py-2 font-mono">{d.transponderNumber}</td><td className="px-3 py-2">{available.includes(d) ? "Available" : d.vin || d.vehicleNumber ? "Assigned" : "Needs review"}</td><td className="px-3 py-2">{linked?.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${linked.truckId}`}>{linked.truckUnit}</Link> : linked?.truckUnit || d.vehicleNumber || "—"}</td><td className="px-3 py-2 font-mono text-[12px]">{d.vin || "—"}</td><td className="px-3 py-2">{canWrite && available.includes(d) && <button className="ui-button" disabled={locked || !entries.some(e => e.vehicle.accountNumber === d.accountNumber && !e.vehicle.transponderNumber)} onClick={() => { open("assign", undefined, d.transponderNumber); setAccount(d.accountNumber); }}>Assign to truck</button>}</td></tr>;
+      return <tr key={`${d.accountNumber}:${d.transponderNumber}`} className="border-b border-zinc-800/60"><td className="px-3 py-2 font-mono">{d.transponderNumber}</td><td className="px-3 py-2">{assignments.some(o => o.transponderNumber === d.transponderNumber) ? "Assigning..." : available.includes(d) ? "Available" : d.vin || d.vehicleNumber ? "Assigned" : "Needs review"}</td><td className="px-3 py-2">{linked?.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${linked.truckId}`}>{linked.truckUnit}</Link> : linked?.truckUnit || d.vehicleNumber || "—"}</td><td className="px-3 py-2 font-mono text-[12px]">{d.vin || "—"}</td><td className="px-3 py-2">{canWrite && available.includes(d) && <button className="ui-button" disabled={locked || !entries.some(e => e.vehicle.accountNumber === d.accountNumber && !e.vehicle.transponderNumber && !assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin))} onClick={() => { open("assign", undefined, d.transponderNumber); setAccount(d.accountNumber); }}>Assign to truck</button>}</td></tr>;
     })}</tbody></table>}</TableShell>
     <TablePagination page={currentPage} pageSize={pageSize} totalItems={count} totalPages={pages} onPageChange={setPage} onPageSizeChange={n => { setPageSize(n); setPage(1); }} />
     </>}
-    {!!data?.operations.length && <details className="rounded-lg border border-zinc-800 p-3 text-[12px]"><summary className="cursor-pointer text-zinc-400">Recent changes</summary><ul className="mt-2 space-y-2">{data.operations.map(o => <li key={o.id} className="break-words text-zinc-500">{new Date(o.createdAt).toLocaleString()} · {o.actor} · {o.action} · {o.vin} · {o.state === "pending" ? "Unconfirmed" : o.state === "verified" ? "Reviewed in PrePass" : o.state}</li>)}</ul></details>}
-    {dialog && <Modal title={labels[dialog.kind]} isSaving={busy} submitLabel={dialog.kind === "verify" ? "Record reviewed result" : dialog.kind === "link" && !linkPreview ? "Preview link" : labels[dialog.kind]} submitDisabled={formBlocked} onClose={() => setDialog(null)} onSubmit={submit} wide={dialog.kind === "add" || dialog.kind === "edit"}>
+    {!!data?.operations.length && <details className="rounded-lg border border-zinc-800 p-3 text-[12px]"><summary className="cursor-pointer text-zinc-400">Recent changes</summary><ul className="mt-2 space-y-2">{data.operations.map(o => <li key={o.id} className="break-words text-zinc-500">{new Date(o.createdAt).toLocaleString()} · {o.actor} · {o.action} · {o.vin} · {o.state === "queued" ? "Processing in PrePass" : o.state === "pending" ? "Unconfirmed" : o.state === "verified" ? "Reviewed in PrePass" : o.state}</li>)}</ul></details>}
+    {dialog && <Modal title={labels[dialog.kind]} isSaving={busy} submitLabel={busy && dialog.kind === "assign" ? "Assigning…" : dialog.kind === "verify" ? "Record reviewed result" : dialog.kind === "link" && !linkPreview ? "Preview link" : labels[dialog.kind]} submitDisabled={formBlocked} onClose={() => setDialog(null)} onSubmit={submit} wide={dialog.kind === "add" || dialog.kind === "edit"}>
       {error && <ErrorBanner message={error} />}
-      {dialog.kind === "plate" && entry && selectedTruck && <><p className="text-[13px] text-zinc-400">Choose the correct plate and state. Choosing PrePass copies its plate to MSERP. Choosing MSERP updates the plate in PrePass.</p><fieldset className="space-y-3"><legend className="mb-2 text-[13px]">Plate to use in both systems</legend>{(["mserp", "prepass"] as const).map(source => <label key={source} className="flex items-center gap-3 rounded-lg border border-zinc-700 p-3 text-[13px]"><input type="radio" name="plateSource" value={source} checked={plateSource === source} disabled={busy || source === "mserp" && !canWrite} onChange={() => { setPlateSource(source); setReviewed(false); }} /><span>{source === "mserp" ? `MSERP: ${selectedTruck.plate || "(no plate)"} ${selectedTruck.plateState}` : `PrePass: ${entry.vehicle.licensePlateNumber || "(no plate)"} ${entry.vehicle.licensePlateState}${entry.vehicle.tempPlate ? " · Temporary" : ""}`}</span></label>)}</fieldset><p className="text-[12px] text-zinc-500">Choosing PrePass changes only MSERP and requires no VPP confirmation. Choosing MSERP sends a permanent plate to PrePass and requires confirmation that the truck is not enrolled in VPP.</p></>}
+      {dialog.kind === "plate" && entry && selectedTruck && <><p className="text-[13px] text-zinc-400">Choose the correct plate and state. Choosing PrePass copies its plate to MSERP. Choosing MSERP updates the plate in PrePass.</p><fieldset className="space-y-3"><legend className="mb-2 text-[13px]">Plate to use in both systems</legend>{(["mserp", "prepass"] as const).map(source => <label key={source} className="flex items-center gap-3 rounded-lg border border-zinc-700 p-3 text-[13px]"><input type="radio" name="plateSource" value={source} checked={plateSource === source} disabled={busy || source === "mserp" && !canWrite} onChange={() => { setPlateSource(source); setReviewed(false); }} /><span>{source === "mserp" ? `MSERP: ${selectedTruck.plate || "(no plate)"} ${selectedTruck.plateState}` : `PrePass: ${entry.vehicle.licensePlateNumber || "(no plate)"} ${entry.vehicle.licensePlateState}${entry.vehicle.tempPlate ? " · Temporary" : ""}`}</span></label>)}</fieldset><p className="text-[12px] text-zinc-500">Choosing MSERP sends a permanent plate to PrePass.</p></>}
       {entry && <p className="text-[13px] text-zinc-400">Unit {entry.vehicle.vehicleNumber} · {entry.vehicle.vin}</p>}
       {dialog.kind === "verify" ? <><p className="text-[13px] text-zinc-400">Check this {dialog.operation.action} request for VIN {dialog.operation.vin} in PrePass. Acknowledgment becomes available two minutes after the request and refreshes the roster. It does not resend the action.</p><label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />I checked the outcome in PrePass.</label></> : <>
         {(dialog.kind === "add" || dialog.kind === "link") && <><Field label="Truck"><select className={controlClass} disabled={busy} required value={truckId} onChange={e => { const t = data?.trucks.find(t => t.id === e.target.value); setSelectedTruck(t ?? null); setLinkPreview(null); if (dialog.kind === "add") { setVehicle(prePassVehicleFromTruck(t)); setVIN(t?.vin.trim().toUpperCase() ?? ""); setReviewed(false); } }}><option value="">Select truck</option>{choices.map(t => <option key={t.id} value={t.id}>{t.unit}{dialog.kind === "link" ? ` · ${t.vin}` : ""}{t.active ? "" : " · Inactive"}</option>)}</select></Field>{!choices.length && <p className="text-[13px] text-amber-400">{dialog.kind === "add" ? "No active trucks are available to add." : "No eligible truck with a matching VIN. Check its MSERP profile and existing links."}</p>}</>}
@@ -171,10 +185,9 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
           {linkPreview && <div role="status" className="rounded-lg border border-zinc-800 p-3 text-[13px]"><p>{linkPreview.count} unlinked tolls · ${linkPreview.amount}</p><p className="mt-1 text-zinc-400">Future imports from {tollFrom} will use this truck.</p>{linkPreview.closed && <p className="mt-2 text-amber-400">Affected statements are finalized. Reopen them before linking these tolls.</p>}</div>}
         </>}
         {(dialog.kind === "edit" || dialog.kind === "add" && selectedTruck && !invalidSavedVIN) && <PrePassVehicleFields truck={dialog.kind === "add" ? selectedTruck ?? undefined : undefined} vehicle={vehicle} setVehicle={setVehicle} vin={vin} setVIN={setVIN} />}
-        {dialog.kind === "assign" && <Field label="Truck"><select className={controlClass} required disabled={busy} value={entry?.vehicle.vin ?? ""} onChange={e => { const selected = entries.find(item => item.vehicle.accountNumber === account && item.vehicle.vin === e.target.value); setDialog(current => current && "requestId" in current ? { ...current, entry: selected } : current); setReviewed(false); }}><option value="">Select truck</option>{entries.filter(e => e.vehicle.accountNumber === account && !e.vehicle.transponderNumber).map(e => <option key={e.vehicle.vin} value={e.vehicle.vin}>{e.truckUnit || e.vehicle.vehicleNumber} · {e.vehicle.vin}</option>)}</select></Field>}
-        {dialog.kind === "assign" && <Field label="Available transponder"><select className={controlClass} required value={device} onChange={e => setDevice(e.target.value)}><option value="">Select transponder</option>{available.filter(d => d.accountNumber === account).map(d => <option key={d.transponderNumber}>{d.transponderNumber}</option>)}</select></Field>}
+        {dialog.kind === "assign" && <Field label="Truck"><select className={controlClass} required disabled={busy} value={entry?.vehicle.vin ?? ""} onChange={e => { const selected = entries.find(item => item.vehicle.accountNumber === account && item.vehicle.vin === e.target.value); setDialog(current => current && "requestId" in current ? { ...current, entry: selected } : current); setReviewed(false); }}><option value="">Select truck</option>{entries.filter(e => e.vehicle.accountNumber === account && !e.vehicle.transponderNumber && !assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin)).map(e => <option key={e.vehicle.vin} value={e.vehicle.vin}>{e.truckUnit || e.vehicle.vehicleNumber} · {e.vehicle.vin}</option>)}</select></Field>}
+        {dialog.kind === "assign" && <Field label="Available transponder"><select className={controlClass} required disabled={busy} value={device} onChange={e => setDevice(e.target.value)}><option value="">Select transponder</option>{available.filter(d => d.accountNumber === account).map(d => <option key={d.transponderNumber}>{d.transponderNumber}</option>)}</select></Field>}
         {dialog.kind === "remove" && <p className="text-[13px] text-amber-400">Remove this vehicle from PrePass? This changes its PrePass enrollment. The MSERP truck and historical tolls are retained; physical device returns must be handled separately.</p>}
-        {dialog.kind !== "link" && !(dialog.kind === "plate" && plateSource !== "mserp") && (dialog.kind !== "add" || selectedTruck && !invalidSavedVIN) && <label className="flex items-start gap-2 text-[13px] text-zinc-400"><input className="mt-1" type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />This truck is not enrolled in the Toll Violation Prevention Program (VPP).</label>}
       </>}
     </Modal>}
   </section>;

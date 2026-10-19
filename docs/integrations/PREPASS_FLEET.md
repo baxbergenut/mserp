@@ -21,7 +21,7 @@ page reads use the last complete snapshot; failed refreshes retain it.
   store them; these are never copied from an unrelated vehicle. Saved fields
   remain editable under Review or change other details, alongside optional VRN,
   temporary-plate and hazmat settings. A single authorized account is selected
-  automatically. Changing trucks resets the form and service confirmation.
+  automatically. Changing trucks resets the form.
 - A truck without a saved VIN can supply one for this enrollment. This does not
   modify the local profile, and the VIN must not belong to another local truck.
   A nonempty saved VIN must match; malformed saved VINs require profile correction.
@@ -32,9 +32,9 @@ page reads use the last complete snapshot; failed refreshes retain it.
 - Resolve a linked truck's plate discrepancy from Trucks > Resolve plate. Review
   both plate/state pairs and choose MSERP or PrePass to save that pair to both
   systems. Choosing PrePass copies its freshly read plate/state into MSERP only,
-  requires `trucks.edit`, and never sends a provider write or requires VPP
-  confirmation. Choosing MSERP additionally requires `tolls.fleet.edit` and VPP
-  confirmation, and sends a permanent plate to PrePass. Unsupported MSERP plate
+  requires `trucks.edit`, and never sends a provider write. Choosing MSERP
+  additionally requires `tolls.fleet.edit`, and sends a permanent plate to
+  PrePass. Unsupported MSERP plate
   details must be corrected first. Both paths require `tolls.read`, a current
   matching VIN and a reviewed roster link.
   The API uses an `edit` change with `plateSource=mserp|prepass`, `truckId` and
@@ -52,8 +52,10 @@ page reads use the last complete snapshot; failed refreshes retain it.
   the same account, have no VIN/unit assignment, and appear on no vehicle in
   any account. Availability is checked again immediately before the write.
 
-Provider operations require confirmation that the truck is not enrolled in the
-Toll Violation Prevention Program (VPP), which the documented fleet API excludes.
+The operator confirmed this fleet has no trucks enrolled in the Toll Violation
+Prevention Program (VPP), which the fleet API excludes. No per-operation checkbox
+is required. The legacy `fleetServiceConfirmed` request field is accepted only
+for compatibility with older clients and immutable receipt hashes.
 Trailer plates, device replacement/transfer/unassignment, lost/stolen reporting,
 device orders, account transfers and automatic truck offboarding are outside
 this first version. No unsupported activation/deactivation state is invented.
@@ -107,7 +109,9 @@ environment. With scheduled syncs enabled, the complete fleet roster refreshes d
 at SCHEDULED_FUEL_SYNC_TIME in SCHEDULED_SYNCS_TIMEZONE alongside fuel and
 WeighMyTruck. Failed refreshes preserve the last complete roster.
 Available transponders can be assigned from either Trucks or Transponders; both
-use the same reviewed, versioned provider operation.
+use the same versioned provider operation. Select the truck/device and press
+Assign transponder once. The form shows Assigning while submitting; accepted
+assignments show an automatic processing indicator until the provider finishes.
 
 ## Concurrency and recovery
 
@@ -126,12 +130,29 @@ is recorded as failed. Timeouts, server failures, failed read-back or an unexpec
 read-back result leave the request unconfirmed and block further changes for
 that environment. Confirmed writes require a fresh expected-state read-back.
 
-For an unconfirmed request, inspect its outcome in the PrePass portal, wait at
+Fleet v2 assignment success means the vehicle update was added to a processing
+queue (observed live October 19, 2026), rather than applied immediately. Migration
+120 adds `queued` receipts and unique truck/device reservations. An accepted
+assignment releases the global fence, while further changes to its truck or
+device remain blocked. The API checks the roster once immediately, then a
+startup/15-second server worker reads rosters only while assignments are waiting.
+It never resends an assignment. Both vehicle and transponder rosters must show
+the exact account/VIN/device, without another vehicle/device conflict, before
+the receipt and cached roster confirm atomically. Transient read failures retain
+the queue. Old uncertain assignments can also confirm automatically when both
+rosters agree. The browser polls cached status every five visible seconds while
+waiting; no Review result or acknowledgment is required for assignments. Provider
+processing time is outside MSERP's control. Outstanding assignments are always
+returned alongside recent history, even when older than the latest 50 changes.
+Do not roll back to code without queue reservations while queued receipts exist.
+
+For other unconfirmed operations, inspect the outcome in the PrePass portal, wait at
 least two minutes from request creation, then use Review result and acknowledge
 the outcome. This refreshes the roster and records the reviewer without resending
 the request. Review the refreshed data before making another action; an uncertain
 add may require linking the resulting vehicle manually. A routine refresh alone
-never resolves an uncertain write.
+never resolves those uncertain writes. Refresh can confirm an assignment when
+both rosters agree.
 
 The vendor has no documented conditional-write or idempotency primitive. Portal
 edits between MSERP's preflight read and write cannot be made atomic. Receipts

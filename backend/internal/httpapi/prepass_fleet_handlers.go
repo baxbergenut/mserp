@@ -29,7 +29,7 @@ func validatePrePassFleetChange(in *repository.PrePassFleetChange, link bool) bo
 		if _, err := time.Parse(time.DateOnly, in.TollFrom); err != nil {
 			return false
 		}
-	} else if !slices.Contains([]string{"add", "edit", "remove", "assign"}, in.Action) || !in.FleetServiceConfirmed && in.PlateSource != "prepass" {
+	} else if !slices.Contains([]string{"add", "edit", "remove", "assign"}, in.Action) {
 		return false
 	}
 	if in.Action != "add" && !prepassRevision.MatchString(in.Revision) {

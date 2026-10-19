@@ -55,13 +55,14 @@ type PrePassFleetEntry struct {
 	TollFrom    string          `json:"tollFrom"`
 }
 type PrePassFleetOperation struct {
-	ID            string    `json:"id"`
-	AccountNumber string    `json:"accountNumber"`
-	VIN           string    `json:"vin"`
-	Action        string    `json:"action"`
-	State         string    `json:"state"`
-	Actor         string    `json:"actor"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID                string    `json:"id"`
+	AccountNumber     string    `json:"accountNumber"`
+	VIN               string    `json:"vin"`
+	Action            string    `json:"action"`
+	State             string    `json:"state"`
+	Actor             string    `json:"actor"`
+	CreatedAt         time.Time `json:"createdAt"`
+	TransponderNumber string    `json:"transponderNumber"`
 }
 type PrePassFleetList struct {
 	Configured   bool                      `json:"configured"`
@@ -74,19 +75,20 @@ type PrePassFleetList struct {
 	Operations   []PrePassFleetOperation   `json:"operations"`
 }
 type PrePassFleetChange struct {
-	PlateSource           string               `json:"plateSource,omitempty"`
-	RequestID             string               `json:"requestId"`
-	Action                string               `json:"action"`
-	AccountNumber         string               `json:"accountNumber"`
-	VIN                   string               `json:"vin"`
-	Revision              string               `json:"revision"`
-	TruckID               string               `json:"truckId"`
-	TruckUpdatedAt        string               `json:"truckUpdatedAt"`
-	Vehicle               prepass.VehicleInput `json:"vehicle"`
-	TransponderNumber     string               `json:"transponderNumber"`
-	FleetServiceConfirmed bool                 `json:"fleetServiceConfirmed"`
-	TollFrom              string               `json:"tollFrom"`
-	TollRevision          string               `json:"tollRevision"`
+	PlateSource       string               `json:"plateSource,omitempty"`
+	RequestID         string               `json:"requestId"`
+	Action            string               `json:"action"`
+	AccountNumber     string               `json:"accountNumber"`
+	VIN               string               `json:"vin"`
+	Revision          string               `json:"revision"`
+	TruckID           string               `json:"truckId"`
+	TruckUpdatedAt    string               `json:"truckUpdatedAt"`
+	Vehicle           prepass.VehicleInput `json:"vehicle"`
+	TransponderNumber string               `json:"transponderNumber"`
+	// Legacy receipt field, accepted but no longer required for this non-VPP fleet.
+	FleetServiceConfirmed bool   `json:"fleetServiceConfirmed"`
+	TollFrom              string `json:"tollFrom"`
+	TollRevision          string `json:"tollRevision"`
 }
 
 func fleetHash(v any) string {
@@ -191,14 +193,14 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		}
 		out.Vehicles = append(out.Vehicles, e)
 	}
-	rows, err = r.pool.Query(ctx, `SELECT o.id::text,o.account_number,o.vin,o.action,o.state,coalesce(u.username,'Deleted user'),o.created_at FROM prepass_fleet_operations o LEFT JOIN app_users u ON u.id=o.actor_id WHERE o.environment=$1 ORDER BY (o.state='pending') DESC,o.created_at DESC LIMIT 50`, r.prepassEnvironment)
+	rows, err = r.pool.Query(ctx, `SELECT o.id::text,o.account_number,o.vin,o.action,o.state,coalesce(u.username,'Deleted user'),o.created_at,coalesce(o.request->>'transponderNumber','') FROM prepass_fleet_operations o LEFT JOIN app_users u ON u.id=o.actor_id WHERE o.environment=$1 AND (o.state IN ('pending','queued') OR o.id IN (SELECT id FROM prepass_fleet_operations WHERE environment=$1 ORDER BY created_at DESC LIMIT 50)) ORDER BY (o.state IN ('pending','queued')) DESC,o.created_at DESC`, r.prepassEnvironment)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var o PrePassFleetOperation
-		if err = rows.Scan(&o.ID, &o.AccountNumber, &o.VIN, &o.Action, &o.State, &o.Actor, &o.CreatedAt); err != nil {
+		if err = rows.Scan(&o.ID, &o.AccountNumber, &o.VIN, &o.Action, &o.State, &o.Actor, &o.CreatedAt, &o.TransponderNumber); err != nil {
 			return out, err
 		}
 		out.Operations = append(out.Operations, o)
@@ -288,7 +290,7 @@ func (r *TollRepository) RefreshPrePassFleet(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	return r.savePrePassFleet(ctx, conn, s)
+	return r.savePrePassAssignments(ctx, conn, s)
 }
 func availablePrePassDevice(s prepass.FleetSnapshot, account, number string) bool {
 	found := false
@@ -329,9 +331,6 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	if !slices.Contains([]string{"add", "edit", "remove", "assign", "link"}, in.Action) {
 		return prepassInvalid("Select a supported PrePass action")
 	}
-	if in.Action != "link" && in.PlateSource != "prepass" && !in.FleetServiceConfirmed {
-		return prepassInvalid("Confirm this truck is not enrolled in VPP")
-	}
 	if in.Action == "add" || in.Action == "edit" && !resolvePlate {
 		if e := in.Vehicle.Validate(); e != nil {
 			return prepassInvalid(e.Error())
@@ -349,7 +348,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		if oldHash != hash || oldActor != actor {
 			return ErrPrePassFleetConflict
 		}
-		if state == "confirmed" {
+		if state == "confirmed" || state == "queued" {
 			return nil
 		}
 		return ErrPrePassFleetConflict
@@ -363,6 +362,12 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	}
 	if pending {
 		return ErrPrePassFleetConflict
+	}
+	if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prepass_fleet_operations WHERE environment=$1 AND state='queued' AND ((account_number=$2 AND vin=$3) OR ($4<>'' AND request->>'transponderNumber'=$4)))`, r.prepassEnvironment, in.AccountNumber, in.VIN, in.TransponderNumber).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return prepassInvalid("PrePass is still processing an assignment for this truck or transponder")
 	}
 	snap, err := r.fetchPrePassFleet(ctx)
 	if err != nil {
@@ -448,7 +453,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	}
 	if in.PlateSource == "prepass" {
 		// Accept the freshly read provider value locally. This path never sends
-		// a vendor mutation, so VPP confirmation is irrelevant.
+		// a vendor mutation.
 		if err = r.writePrePassPlateResult(ctx, tx, in, snap, before.Input().LicensePlate); err != nil {
 			return err
 		}
@@ -512,8 +517,18 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 		return err
 	}
+	if in.Action == "assign" {
+		// Fleet v2 acknowledges a processing queue, not an immediate assignment.
+		// Release the global uncertain-write fence, retaining truck/device fences.
+		if _, err = conn.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='queued' WHERE id=$1`, in.RequestID); err != nil {
+			return err
+		}
+	}
 	after, err := r.fetchPrePassFleet(opCtx)
 	if err != nil {
+		if in.Action == "assign" {
+			return nil // The worker reads again; never resend the PATCH.
+		}
 		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}
@@ -530,17 +545,12 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	case "remove":
 		verified = !found
 	case "assign":
-		verified = found && actual.TransponderNumber == in.TransponderNumber
-		if verified {
-			verified = false
-			for _, d := range after.Transponders {
-				if d.AccountNumber == in.AccountNumber && d.TransponderNumber == in.TransponderNumber && strings.EqualFold(d.VIN, in.VIN) {
-					verified = true
-				}
-			}
-		}
+		verified = confirmedPrePassAssignment(after, in.AccountNumber, in.VIN, in.TransponderNumber)
 	}
 	if !verified {
+		if in.Action == "assign" {
+			return r.savePrePassFleet(opCtx, conn, after)
+		}
 		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}

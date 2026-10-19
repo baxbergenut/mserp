@@ -546,7 +546,7 @@ export interface PrePassFleetTruck {
   id: string; unit: string; vin: string; plate: string; plateState: string; active: boolean; updatedAt: string;
 }
 export interface PrePassFleetOperation {
-  id: string; accountNumber: string; vin: string; action: string; state: "pending" | "confirmed" | "failed" | "verified"; actor: string; createdAt: string;
+  id: string; accountNumber: string; vin: string; action: string; state: "pending" | "queued" | "confirmed" | "failed" | "verified"; actor: string; createdAt: string; transponderNumber: string;
 }
 export interface PrePassFleetList {
   configured: boolean; environment: string; refreshedAt: string | null; accounts: string[];
@@ -556,7 +556,7 @@ export interface PrePassFleetChange {
   plateSource?: "mserp" | "prepass";
   requestId: string; action: "add" | "edit" | "remove" | "assign" | "link";
   accountNumber: string; vin: string; revision?: string; truckId?: string; truckUpdatedAt?: string;
-  vehicle?: PrePassVehicleInput; transponderNumber?: string; fleetServiceConfirmed?: boolean;
+  vehicle?: PrePassVehicleInput; transponderNumber?: string;
   tollFrom?: string; tollRevision?: string;
 }
 

@@ -16,7 +16,7 @@ const data = { configured: true, environment: 'production', refreshedAt: null, a
   { id: 'truck-3', unit: 'LONG UNIT 005', vin: '', plate: '', plateState: '', active: true, updatedAt: stamp },
   { id: 'truck-4', unit: '006', vin: 'INVALID', plate: '', plateState: '', active: true, updatedAt: stamp },
 ] };
-const writes = []; let readOnly = false, reject = false, refreshFailure = false, noVendorEdit = false;
+const writes = []; let readOnly = false, reject = false, refreshFailure = false, noVendorEdit = false, finishAssignment;
 const server = createServer(async (req, res) => {
   const send = (body, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   try {
@@ -54,7 +54,10 @@ const server = createServer(async (req, res) => {
           if (input.plateSource === 'mserp') { e.vehicle.licensePlateNumber = t.plate; e.vehicle.licensePlateState = t.plateState; }
           else { t.plate = e.vehicle.licensePlateNumber; t.plateState = e.vehicle.licensePlateState; }
         } else if (input.action === 'add' || input.action === 'edit') { e.vehicle.vehicleNumber = input.vehicle.vehicleNumber; e.vehicle.licensePlateNumber = input.vehicle.licensePlate.number; }
-        if (input.action === 'assign') { e.vehicle.transponderNumber = input.transponderNumber; const d = data.transponders.find(d => d.transponderNumber === input.transponderNumber); d.vin = e.vehicle.vin; d.vehicleNumber = e.vehicle.vehicleNumber; }
+        if (input.action === 'assign') {
+          await new Promise(resolve => { finishAssignment = resolve; });
+          data.operations.push({ id: input.requestId, action: 'assign', vin: input.vin, accountNumber: input.accountNumber, transponderNumber: input.transponderNumber, actor: 'Fleet Reviewer', state: 'queued', createdAt: stamp });
+        }
         if (input.action === 'remove') data.vehicles = data.vehicles.filter(e => e.vehicle.vin !== input.vin);
         return send({ saved: true });
       }
@@ -111,7 +114,6 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(dialog.getByRole('button', { name: 'Resolve plate', exact: true })).toBeDisabled();
   await dialog.getByRole('radio', { name: 'MSERP: LOCAL12 IN' }).check();
-  await dialog.getByRole('checkbox').check();
   await dialog.getByRole('button', { name: 'Resolve plate', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.plateSource, 'mserp');
@@ -134,7 +136,7 @@ try {
   assert.equal(writes.at(-1).input.plateSource, 'prepass');
   assert.equal(data.trucks[0].plate, 'REMOTE1');
   assert.equal(data.trucks[0].plateState, 'IL');
-  assert.equal(writes.at(-1).input.fleetServiceConfirmed, false);
+  assert.equal(writes.at(-1).input.fleetServiceConfirmed, undefined);
   noVendorEdit = false; await page.reload();
   await expect(region).toBeVisible();
   await region.getByRole('button', { name: 'Assign', exact: true }).click();
@@ -149,14 +151,31 @@ try {
   const available = dialog.getByLabel('Available transponder');
   await expect(available.locator('option')).toHaveCount(2);
   await available.selectOption('777111222');
-  await expect(dialog.getByRole('button', { name: 'Assign transponder', exact: true })).toBeDisabled();
-  await dialog.getByLabel('This truck is not enrolled').check();
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Assign transponder', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Assign transponder', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Assigning…', exact: true })).toBeDisabled();
+  await expect(dialog.getByLabel('Available transponder')).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  assert.equal(writes.filter(w => w.input.action === 'assign').length, 1);
+  finishAssignment();
   await expect(dialog).toHaveCount(0); assert.equal(writes.at(-1).input.transponderNumber, '777111222');
+  await expect(region).toContainText('Waiting for PrePass to finish processing');
+  await expect(region.getByRole('button', { name: 'Review result', exact: true })).toHaveCount(0);
+  await expect(region.getByRole('cell', { name: 'Assigning...', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await expect(region.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+  await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeEnabled();
+  data.vehicles[0].vehicle.transponderNumber = '777111222';
+  data.transponders[0].vin = vin; data.transponders[0].vehicleNumber = '003';
+  data.operations[0].state = 'confirmed';
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(region).not.toContainText('Waiting for PrePass to finish processing');
+  await expect(region).toContainText('Transponder assigned.');
+  assert.equal(writes.filter(w => w.input.action === 'assign').length, 1);
   await page.getByRole('button', { name: 'Trucks', exact: true }).click();
   await region.getByRole('button', { name: 'Edit', exact: true }).click();
   await dialog.getByLabel('Plate number', { exact: true }).fill('XYZ789');
-  await dialog.getByLabel('This truck is not enrolled').check();
   reject = true; await dialog.getByRole('button', { name: 'Edit PrePass truck', exact: true }).click();
   await expect(dialog).toContainText('PrePass changed'); await expect(dialog.getByLabel('Plate number', { exact: true })).toHaveValue('XYZ789');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -174,7 +193,6 @@ try {
   await expect(dialog.getByLabel('Plate state', { exact: true })).toBeVisible();
   await dialog.getByLabel(/^VIN/).fill('1XKADP9X8DJ364742');
   await dialog.getByLabel('IRP account number').fill('11111');
-  await dialog.getByLabel('This truck is not enrolled').check();
   await dialog.getByLabel(/^Truck/).selectOption('truck-2');
   await expect(dialog.getByLabel(/^VIN/)).toHaveCount(0);
   await expect(dialog.getByLabel(/^PrePass unit number/)).not.toBeVisible();
@@ -183,7 +201,6 @@ try {
   await expect(dialog.getByLabel('Saved truck details')).toContainText(newVin);
   await expect(dialog.getByLabel('IRP account number')).toHaveValue('');
   await expect(dialog.getByLabel('Declared weight (lb)')).toHaveValue('');
-  await expect(dialog.getByLabel('This truck is not enrolled')).not.toBeChecked();
   data.trucks[1].updatedAt = '2026-10-12T12:01:00Z';
   const refreshedChoice = page.waitForResponse(r => r.url().endsWith('/api/prepass-fleet') && r.request().method() === 'GET');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -191,7 +208,6 @@ try {
   await dialog.getByLabel('Declared weight (lb)').fill('80000');
   await dialog.getByLabel('IRP account number').fill('12345'); await dialog.getByLabel('IRP state').fill('OH');
   await dialog.getByLabel('IFTA account number').fill('67890'); await dialog.getByLabel('IFTA state').fill('OH');
-  await dialog.getByLabel('This truck is not enrolled').check();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(tmpdir(), 'mserp-prepass-add-mobile.png'), animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile form overflow');
@@ -204,7 +220,6 @@ try {
   const newRow = region.getByRole('row').filter({ hasText: newVin });
   await newRow.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(dialog).toContainText('historical tolls are retained');
-  await dialog.getByLabel('This truck is not enrolled').check();
   await dialog.getByRole('button', { name: 'Remove from PrePass', exact: true }).click(); await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.action, 'remove');
   await region.getByRole('button', { name: 'Add truck', exact: true }).click();
@@ -216,7 +231,6 @@ try {
   await dialog.getByLabel('Declared weight (lb)').fill('78000');
   await dialog.getByLabel('IRP account number').fill('12345'); await dialog.getByLabel('IRP state').fill('OH');
   await dialog.getByLabel('IFTA account number').fill('67890'); await dialog.getByLabel('IFTA state').fill('OH');
-  await dialog.getByLabel('This truck is not enrolled').check();
   await dialog.getByRole('button', { name: 'Add truck', exact: true }).click(); await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.vin, '1XKADP9X8DJ364742');
   assert.equal(writes.at(-1).input.vehicle.vehicleNumber, '005');

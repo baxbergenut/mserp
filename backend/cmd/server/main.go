@@ -197,6 +197,11 @@ func main() {
 	}
 
 	serviceAutomationDone := make(chan struct{})
+	prepassAssignmentsDone := make(chan struct{})
+	go func() {
+		defer close(prepassAssignmentsDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "prepass-assignments", Interval: 15 * time.Second, Run: tollRepo.ReconcilePrePassAssignments})
+	}()
 	go func() {
 		defer close(serviceAutomationDone)
 		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "driver-service-setup", Interval: 5 * time.Second, Run: repository.NewDriverServiceRepository(pool, fuelRepo, wmtRepo).Process})
@@ -358,6 +363,10 @@ func main() {
 	}
 	select {
 	case <-serviceAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-prepassAssignmentsDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

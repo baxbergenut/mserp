@@ -151,7 +151,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `tolls.link`, vendor changes/recovery use `tolls.fleet.write`. Existing credentials
   are reused server-side. Cached reads never call the vendor. Writes refresh first,
   check revisions and availability, then commit a receipt before the network call.
-  Unconfirmed writes block further changes until explicit portal review. VPP,
+  Unconfirmed writes block further changes until explicit portal review, except
+  assignments, which reconcile automatically. Migration 120 tracks accepted
+  assignments as queued with truck/device reservations instead of a global pause.
+  A startup/15-second read-only worker confirms matching vehicle/transponder
+  rosters, including older uncertain assignments, without resending mutations.
+  Assignment UI submits once with loading, then displays automatic provider
+  processing status. This fleet has no VPP enrollment; no VPP checkbox is required.
+  VPP,
   trailer plates, device transfers/replacements and ordering are outside this tab.
   Migration 083 and repository/prepass_fleet_tolls.go make fleet linking atomic
   with dated toll mappings: require start date and preview; tag (transaction
@@ -174,8 +181,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `MSERP_PREPASS_TEST_DATABASE_URL` and `frontend/scripts/test-prepass-views.mjs`.
   Trucks > Resolve plate lets users choose the linked MSERP or PrePass plate/state
   for both records (`edit` with `plateSource`, truck ID and current timestamp).
-  PrePass source copies locally with `trucks.edit` and no vendor write or VPP
-  confirmation. MSERP source also requires `tolls.fleet.edit` and VPP confirmation;
+  PrePass source copies locally with `trucks.edit` and no vendor write.
+  MSERP source also requires `tolls.fleet.edit`;
   exact linked VIN, receipt guards, plate-only provider PATCH and verified read-back
   protect the local update.
   Uncertain-result review acknowledges the request without changing local plates.

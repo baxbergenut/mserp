@@ -3191,13 +3191,15 @@ CREATE TABLE prepass_fleet_operations (
  request_hash TEXT NOT NULL,
  request JSONB NOT NULL,
  before_vehicle JSONB,
- state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','confirmed','failed','verified')),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','queued','confirmed','failed','verified')),
  actor_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
  resolved_at TIMESTAMPTZ,
  resolved_by UUID REFERENCES app_users(id) ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX prepass_fleet_pending ON prepass_fleet_operations(environment) WHERE state='pending';
+CREATE UNIQUE INDEX prepass_fleet_queued_vehicle ON prepass_fleet_operations(environment,account_number,vin) WHERE state='queued';
+CREATE UNIQUE INDEX prepass_fleet_queued_device ON prepass_fleet_operations(environment,(request->>'transponderNumber')) WHERE state='queued';
 CREATE INDEX prepass_fleet_operation_history ON prepass_fleet_operations(environment,created_at DESC);
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app') THEN

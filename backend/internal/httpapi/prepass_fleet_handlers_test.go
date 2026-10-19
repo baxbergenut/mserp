@@ -24,8 +24,8 @@ func TestPrePassFleetRequestBoundary(t *testing.T) {
 		t.Fatal("valid request rejected")
 	}
 	in.FleetServiceConfirmed = false
-	if validatePrePassFleetChange(&in, false) {
-		t.Fatal("missing service review accepted")
+	if !validatePrePassFleetChange(&in, false) {
+		t.Fatal("assignment required redundant VPP confirmation")
 	}
 	in.FleetServiceConfirmed = true
 	in.Action = "link"
@@ -63,8 +63,8 @@ func TestPrePassPlateRequestBoundary(t *testing.T) {
 		t.Fatal("valid plate resolution rejected")
 	}
 	in.FleetServiceConfirmed = false
-	if validatePrePassFleetChange(&in, false) {
-		t.Fatal("MSERP source accepted without vendor service confirmation")
+	if !validatePrePassFleetChange(&in, false) {
+		t.Fatal("MSERP source required redundant VPP confirmation")
 	}
 	in.PlateSource = "prepass"
 	if !validatePrePassFleetChange(&in, false) {
