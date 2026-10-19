@@ -40,19 +40,22 @@ Fixture: load 4010927482, delivery stop 101555, local October 16, 2026,
 
 ## Arrival and manual input
 
-Two increasing provider positions inside 150m, spanning at least three minutes,
-establish arrival. Two consecutive positions outside 300m remove automatic arrival.
-The intermediate band breaks candidate sequences. Samples must be no older than
-ten minutes; duplicates/future/out-of-order data cannot advance detection. Long
-gaps reset candidate continuity, preserving only last-known arrival. Arrival
-requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
+The first fresh provider position within one straight-line mile of the selected
+stop shows @PU/@DEL; the first fresh position beyond one mile clears the automatic
+marker. This is a proximity signal, not a claim that the truck reached the dock.
+It uses the cached GPS coordinates and selected stop coordinates without requiring
+optional road routing. Samples must be no older than ten minutes;
+duplicates/future/out-of-order data cannot advance detection. Stale positions
+preserve only the last-known proximity with a stale hover warning. Automatic
+proximity requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
 VIN, trailer, load ID, selected stop and facility coordinates scope evidence and corrections.
 
-Arrival displays a red @PU/@DEL prefix; time/day remains the normal theme color.
+Proximity displays a red @PU/@DEL prefix; time/day remains the normal theme color.
+For a stop without a recognized provider schedule, the prefix appears alone.
 The ETA popup offers Automatic (GPS), Arrived and Not arrived corrections. Manual
 corrections are versioned/audited through load-state actions. Context changes expire
-them. Schedule-only refresh does not reset GPS dwell. GPS never changes status,
-marks loads completed, or advances stop progress. Last-known arrivals become stale
+them. Schedule-only refresh does not reset GPS proximity. GPS never changes status,
+marks loads completed, or advances stop progress. Last-known proximity becomes stale
 on hover after ten minutes. The ordinary location column retains its existing
 three-hour coloring policy.
 

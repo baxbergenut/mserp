@@ -252,7 +252,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - Status Board appointment/arrival automation uses migration 116, repository
   `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
   DataTruck per-stop schedule fields through import serialization. Appointment
-  text is read-only inside ETA; red @PU/@DEL denotes arrival and red ETA/miles
+  text is read-only inside ETA; red @PU/@DEL denotes a fresh GPS position within
+  one straight-line mile of the selected stop (or a manual Arrived correction),
+  including stops without a provider schedule; red ETA/miles
   retains manual editing. Notes are never rewritten. Unique imported loads can
   resolve without Gross Board plans; entering a load is the operational assignment,
   even when DataTruck lists a different driver, without an extra confirmation.
@@ -270,7 +272,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
   moving ETAs become last-known miles after ten minutes.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
-  dwell/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
+  proximity/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; database tests use the existing disposable
   `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`.
 

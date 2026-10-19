@@ -4,7 +4,8 @@ import type { BoardAutomation } from "@/app/lib/types";
 import { parseETA } from "./board";
 
 export function appointmentCellText(value: string, automation?: BoardAutomation) {
-  const schedule = automation?.appointment?.label ?? "";
+  const stop = automation?.stopType === "pickup" ? "PU" : automation?.stopType === "delivery" ? "DEL" : "";
+  const schedule = automation?.appointment?.label || (automation?.arrived ? stop : "");
   const prefix = schedule && automation?.arrived ? "@" : "";
   const manual = parseETA(value);
   const travel = automation?.travelMode === "auto" ? automation.travelValue :
@@ -19,7 +20,8 @@ export function ETACell({ name, value, automation, disabled, expanded, onOpen }:
   const text = appointmentCellText(value, automation);
   const parts = text.schedule.split(" ");
   const observed = automation?.observedAt && !automation.observedAt.startsWith("0001") ? new Date(automation.observedAt).toLocaleString("en-US", { timeZone: "America/New_York" }) + " NY" : "No arrival observation";
-  const title = [automation?.appointment?.detail, "ETA uses New York time", automation?.arrived ? `Arrival: ${automation.arrivalOverride === "auto" ? "GPS" : "manual"} · ${observed}${automation.stale && automation.arrivalOverride === "auto" ? " · stale" : ""}` : "", automation?.reason].filter(Boolean).join("\n");
+  const arrival = automation?.arrivalOverride === "auto" ? `Within 1 mile of selected stop (straight-line GPS) · ${observed}${automation.stale ? " · last known, GPS stale" : ""}` : "Marked at stop manually";
+  const title = [automation?.appointment?.detail, "ETA uses New York time", automation?.arrived ? arrival : "", automation?.reason].filter(Boolean).join("\n");
   return <button type="button" data-grid-action aria-label={`${name} · ETA`} title={title} disabled={disabled}
     className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
     aria-haspopup="dialog" aria-expanded={expanded} onClick={event => onOpen(event.currentTarget)}>

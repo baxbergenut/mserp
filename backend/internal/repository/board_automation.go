@@ -83,6 +83,7 @@ func boardStopCoordinates(s datatruck.LoadStop) (*float64, *float64) {
 type BoardAutomation struct {
 	Context              string          `json:"context"`
 	Appointment          *BoardSchedule  `json:"appointment,omitempty"`
+	StopType             string          `json:"stopType,omitempty"`
 	Arrived              bool            `json:"arrived"`
 	ArrivalOverride      string          `json:"arrivalOverride"`
 	ObservedAt           time.Time       `json:"observedAt"`
@@ -98,11 +99,9 @@ type BoardAutomation struct {
 }
 
 type ArrivalEvidence struct {
-	Context      string    `json:"context"`
-	Arrived      bool      `json:"arrived"`
-	LastAt       time.Time `json:"lastAt"`
-	InsideSince  time.Time `json:"insideSince"`
-	OutsideCount int       `json:"outsideCount"`
+	Context string    `json:"context"`
+	Arrived bool      `json:"arrived"`
+	LastAt  time.Time `json:"lastAt"`
 }
 
 func distanceMeters(a, b, c, d float64) float64 {
@@ -120,31 +119,10 @@ func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocat
 	if location == nil || stop.Latitude == nil || stop.Longitude == nil || !location.ReportedAt.After(old.LastAt) || location.ReportedAt.After(now) || now.Sub(location.ReportedAt) > 10*time.Minute {
 		return old
 	}
-	// A gap breaks dwell/departure continuity, but preserves last-known arrival.
-	if !old.LastAt.IsZero() && location.ReportedAt.Sub(old.LastAt) > 10*time.Minute {
-		old.InsideSince = time.Time{}
-		old.OutsideCount = 0
-	}
 	old.LastAt = location.ReportedAt
-	distance := distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude)
-	switch {
-	case distance <= 150:
-		old.OutsideCount = 0
-		if old.InsideSince.IsZero() {
-			old.InsideSince = location.ReportedAt
-		} else if location.ReportedAt.Sub(old.InsideSince) >= 3*time.Minute {
-			old.Arrived = true
-		}
-	case distance > 300:
-		old.InsideSince = time.Time{}
-		old.OutsideCount++
-		if old.OutsideCount >= 2 {
-			old.Arrived = false
-		}
-	default:
-		old.InsideSince = time.Time{}
-		old.OutsideCount = 0
-	}
+	// GPS proximity is straight-line distance to the selected stop, independent of
+	// the optional paced road-routing service. Never infer it from stale points.
+	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= 1609.344
 	return old
 }
 
@@ -233,6 +211,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		// Keep requiresConfirmation false for older clients during deployment.
 		if key != "" {
 			a.Appointment = stop.Schedule
+			a.StopType = stop.Type
 			if evidence.Context == key && telemetrySafe {
 				a.Arrived = evidence.Arrived
 				a.ObservedAt = evidence.LastAt

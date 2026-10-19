@@ -19,7 +19,7 @@ let entry = { driverId: 'driver', currentLoad: '4010927482', status: 'ENROUTE', 
 const schedule = { kind: 'window', label: 'DEL 24/7 FRI', detail: '2026-10-16 08:00 – 23:59 (facility local time)' };
 const stop = { key: 'stop', type: 'delivery', location: 'South River, NJ', appointment: '', schedule };
 const load = { planId: '', loadId: 65341, number: entry.currentLoad, stops: [stop], warning: '', date: '', slot: 0 };
-const loads = { current: load, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: true, sourceDestination: stop.location, stopKey: stop.key, revision: 'fixture', fromDate: '2026-10-17', automation: { context: 'context', appointment: schedule, arrived: true, arrivalOverride: 'auto', observedAt: new Date().toISOString(), stale: false, travelMode: 'manual', travelValue: '', requiresConfirmation: false, routingEnabled: false, manualETAValid: true } };
+const loads = { current: load, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: true, sourceDestination: stop.location, stopKey: stop.key, revision: 'fixture', fromDate: '2026-10-17', automation: { context: 'context', appointment: schedule, stopType: 'delivery', arrived: true, arrivalOverride: 'auto', observedAt: new Date().toISOString(), stale: false, travelMode: 'manual', travelValue: '', requiresConfirmation: false, routingEnabled: false, manualETAValid: true } };
 let readOnly = false;
 await page.route('**/api/**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname.slice(4);
@@ -56,8 +56,18 @@ try {
   await expect.poll(() => entry.eta).toBe('133 mi');
   await expect(cell).toHaveText('DEL 24/7 FRI 133mi');
   expect(entry.notes).toBe('Human notes stay');
+  stop.type = 'pickup'; loads.automation.stopType = 'pickup'; loads.automation.appointment = null;
+  loads.automation.arrived = true; loads.automation.arrivalOverride = 'auto';
+  await page.reload();
+  await expect(cell).toHaveText('@PU 133mi');
+  await expect(cell).toHaveAttribute('title', /Within 1 mile of selected stop/);
+  await cell.click();
+  await page.getByLabel('At stop', { exact: true }).selectOption('not_arrived');
+  await expect(cell).toHaveText('133mi');
+  await page.getByLabel('At stop', { exact: true }).selectOption('arrived');
+  await expect(cell).toHaveText('@PU 133mi');
   readOnly = true; await page.reload();
   await expect(cell).toBeDisabled();
   expect(errors).toEqual([]);
-  console.log('Appointment board passed: read-only schedule, red arrival/travel, combined copy, correction, manual mileage, notes and read-only permissions.');
+  console.log('Appointment board passed: read-only schedule, red proximity/travel, scheduleless @PU, combined copy, correction, manual mileage, notes and read-only permissions.');
 } finally { await browser.close(); await new Promise(done => server.close(done)); }
