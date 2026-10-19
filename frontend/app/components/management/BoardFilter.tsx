@@ -4,10 +4,9 @@ import { useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 // null means all, [] deliberately means none; new choices join only All.
-export function BoardFilter({ label, options, selected, onChange, optionColor }: {
+export function BoardFilter({ label, options, selected, onChange }: {
   label: string; options: [string, string][]; selected: string[] | null;
   onChange: (value: string[] | null) => void;
-  optionColor?: (value: string) => string;
 }) {
   const plural = label === "Status" ? "Statuses" : `${label}s`;
   const id = useId();
@@ -34,7 +33,7 @@ export function BoardFilter({ label, options, selected, onChange, optionColor }:
         <input type="checkbox" checked={selected === null || selected.includes(value)} onChange={event => {
           const current = selected ?? options.map(([key]) => key);
           onChange(event.target.checked ? [...current, value] : current.filter(key => key !== value));
-        }} />{optionColor && value && <span aria-hidden="true" className={`h-3 w-3 shrink-0 rounded-sm border border-current/20 ${optionColor(value)}`} />}{name}
+        }} />{name}
       </label>)}
     </div>
   </>;

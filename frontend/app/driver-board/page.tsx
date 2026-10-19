@@ -121,7 +121,7 @@ export default function DriverBoardPage() {
 
 
       <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} />
-      <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} optionColor={statusColor} />
+      <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "All changes saved" : "Read only"}</span>

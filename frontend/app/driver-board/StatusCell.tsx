@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { statuses, statusColor } from "./board";
+import { statuses } from "./board";
 
 export function StatusCell({ name, value, disabled, canAdvance, onChange, onAdvance }: {
   name: string; value: string; disabled: boolean; canAdvance: boolean;
@@ -16,8 +16,8 @@ export function StatusCell({ name, value, disabled, canAdvance, onChange, onAdva
       <select aria-label={`${name} · Status`} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
         <option value="" className="bg-zinc-900 text-zinc-200">—</option>
-        {value && !statuses.includes(value) && <option value={value} disabled>{value} (previous)</option>}
-        {statuses.map(status => <option key={status} className={statusColor(status)}>{status}</option>)}
+        {value && !statuses.includes(value) && <option value={value} className="bg-zinc-900 text-zinc-200" disabled>{value} (previous)</option>}
+        {statuses.map(status => <option key={status} className="bg-zinc-900 text-zinc-200">{status}</option>)}
       </select>
     </span>
   </div>;
