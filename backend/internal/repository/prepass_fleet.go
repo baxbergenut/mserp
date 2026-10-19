@@ -329,7 +329,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	if !slices.Contains([]string{"add", "edit", "remove", "assign", "link"}, in.Action) {
 		return prepassInvalid("Select a supported PrePass action")
 	}
-	if in.Action != "link" && !in.FleetServiceConfirmed {
+	if in.Action != "link" && in.PlateSource != "prepass" && !in.FleetServiceConfirmed {
 		return prepassInvalid("Confirm this truck is not enrolled in VPP")
 	}
 	if in.Action == "add" || in.Action == "edit" && !resolvePlate {
@@ -446,6 +446,14 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	if _, err = tx.Exec(ctx, `INSERT INTO prepass_fleet_operations(id,environment,account_number,vin,action,request_hash,request,before_vehicle,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, in.RequestID, r.prepassEnvironment, in.AccountNumber, in.VIN, in.Action, hash, raw, old, actor); err != nil {
 		return err
 	}
+	if in.PlateSource == "prepass" {
+		// Accept the freshly read provider value locally. This path never sends
+		// a vendor mutation, so VPP confirmation is irrelevant.
+		if err = r.writePrePassPlateResult(ctx, tx, in, snap, before.Input().LicensePlate); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 	if in.Action == "link" {
 		if err = r.writeFleetTollLink(ctx, tx, in, before, actor); err != nil {
 			return err
@@ -539,15 +547,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return prepassInvalid("PrePass has not yet shown the expected change. Review the unresolved request before retrying.")
 	}
 	if resolvePlate {
-		if _, err = tx.Exec(opCtx, `UPDATE trucks SET license_plate=$2,license_state=$3,updated_at=clock_timestamp() WHERE id=$1`, in.TruckID, plate.Number, plate.State); err != nil {
-			return err
-		}
-		// Keep the local plate, verified roster and receipt in one commit.
-		roster, _ := json.Marshal(after)
-		if _, err = tx.Exec(opCtx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, roster); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID); err != nil {
+		if err = r.writePrePassPlateResult(opCtx, tx, in, after, plate); err != nil {
 			return err
 		}
 		return tx.Commit(opCtx)
@@ -567,6 +567,19 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 	return err
 }
 
+func (r *TollRepository) writePrePassPlateResult(ctx context.Context, tx pgx.Tx, in PrePassFleetChange, snapshot prepass.FleetSnapshot, plate prepass.Plate) error {
+	if _, err := tx.Exec(ctx, `UPDATE trucks SET license_plate=$2,license_state=$3,updated_at=clock_timestamp() WHERE id=$1`, in.TruckID, plate.Number, plate.State); err != nil {
+		return err
+	}
+	// Keep the local plate, verified roster and receipt in one commit.
+	roster, _ := json.Marshal(snapshot)
+	if _, err := tx.Exec(ctx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, roster); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID)
+	return err
+}
+
 // Lock the reviewed local identity through read-back. The selected source is
 // derived server-side, so callers cannot smuggle unrelated profile changes.
 func (r *TollRepository) checkPrePassPlate(ctx context.Context, tx pgx.Tx, in PrePassFleetChange, before prepass.Vehicle) (prepass.Plate, error) {
@@ -581,9 +594,10 @@ func (r *TollRepository) checkPrePassPlate(ctx context.Context, tx pgx.Tx, in Pr
 		return prepass.Plate{}, ErrPrePassFleetConflict
 	}
 	p := before.Input().LicensePlate
-	if in.PlateSource == "mserp" {
-		p = prepass.Plate{Number: number, State: state}
+	if in.PlateSource == "prepass" {
+		return p, nil
 	}
+	p = prepass.Plate{Number: number, State: state}
 	if err := p.Validate(); err != nil {
 		return p, prepassInvalid(err.Error())
 	}

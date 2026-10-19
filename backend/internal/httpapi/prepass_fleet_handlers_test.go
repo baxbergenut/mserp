@@ -62,6 +62,14 @@ func TestPrePassPlateRequestBoundary(t *testing.T) {
 	if !validatePrePassFleetChange(&in, false) {
 		t.Fatal("valid plate resolution rejected")
 	}
+	in.FleetServiceConfirmed = false
+	if validatePrePassFleetChange(&in, false) {
+		t.Fatal("MSERP source accepted without vendor service confirmation")
+	}
+	in.PlateSource = "prepass"
+	if !validatePrePassFleetChange(&in, false) {
+		t.Fatal("local PrePass plate acceptance required VPP confirmation")
+	}
 	in.PlateSource = "custom"
 	if validatePrePassFleetChange(&in, false) {
 		t.Fatal("unreviewed source accepted")

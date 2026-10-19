@@ -31,15 +31,18 @@ page reads use the last complete snapshot; failed refreshes retain it.
   VIN is immutable. Unexposed color/lease fields are omitted from PATCH.
 - Resolve a linked truck's plate discrepancy from Trucks > Resolve plate. Review
   both plate/state pairs and choose MSERP or PrePass to save that pair to both
-  systems. Requires `tolls.fleet.edit` and `trucks.edit`, with the normal VPP
-  confirmation. Choosing MSERP uses a permanent plate; choosing PrePass preserves
-  its temporary flag. Missing/unsupported chosen plate details must be corrected
-  first. A current matching VIN and reviewed roster link are required.
+  systems. Choosing PrePass copies its freshly read plate/state into MSERP only,
+  requires `trucks.edit`, and never sends a provider write or requires VPP
+  confirmation. Choosing MSERP additionally requires `tolls.fleet.edit` and VPP
+  confirmation, and sends a permanent plate to PrePass. Unsupported MSERP plate
+  details must be corrected first. Both paths require `tolls.read`, a current
+  matching VIN and a reviewed roster link.
   The API uses an `edit` change with `plateSource=mserp|prepass`, `truckId` and
   `truckUpdatedAt`. Values come from the server's version-checked records; the
-  provider PATCH contains only `licensePlate`. The local row is locked through
-  provider read-back, then its plate, cached roster and confirmed receipt commit
-  together. Receipts retain the prior local plate and selected source. A failed
+  provider PATCH for the MSERP source contains only `licensePlate`. The local row
+  is locked through the update (and provider read-back when writing PrePass), then
+  its plate, cached roster and confirmed receipt commit together. Receipts retain
+  the prior local plate and selected source. A failed
   or unconfirmed provider result never confirms a local change. Portal review
   of an uncertain result only acknowledges it; review the refreshed discrepancy
   and resolve again if needed. It does not silently overwrite the local profile.

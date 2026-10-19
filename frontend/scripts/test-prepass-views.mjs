@@ -16,13 +16,13 @@ const data = { configured: true, environment: 'production', refreshedAt: null, a
   { id: 'truck-3', unit: 'LONG UNIT 005', vin: '', plate: '', plateState: '', active: true, updatedAt: stamp },
   { id: 'truck-4', unit: '006', vin: 'INVALID', plate: '', plateState: '', active: true, updatedAt: stamp },
 ] };
-const writes = []; let readOnly = false, reject = false, refreshFailure = false;
+const writes = []; let readOnly = false, reject = false, refreshFailure = false, noVendorEdit = false;
 const server = createServer(async (req, res) => {
   const send = (body, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   try {
     const url = new URL(req.url, 'http://localhost'), p = url.pathname.replace('/lookups/','/');
     if (p.startsWith('/api/')) {
-      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['trucks.edit', 'tolls.link', 'tolls.fleet.create','tolls.fleet.edit','tolls.fleet.delete','tolls.fleet.recover','tolls.fleet.sync'])] }, csrfToken: 'fixture' });
+      if (p === '/api/auth/session') return send({ user: { id: 'test-user', username: 'Fleet Reviewer', theme: 'default', permissions: ['tolls.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['trucks.edit', 'tolls.link', 'tolls.fleet.create',...(noVendorEdit ? [] : ['tolls.fleet.edit']),'tolls.fleet.delete','tolls.fleet.recover','tolls.fleet.sync'])] }, csrfToken: 'fixture' });
       if (p === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0, tollsFrom: '2026-09-01' });
       if (p === '/api/maintenance/access') return send({ canView: false, canCreate: false, canEdit: false, canDelete: false });
       if (p === '/api/tasks/count') return send({ count: 0 });
@@ -118,17 +118,25 @@ try {
   assert.equal(writes.at(-1).input.truckUpdatedAt, stamp);
   assert.equal(writes.at(-1).input.vehicle, undefined);
   await expect(region.getByRole('button', { name: 'Resolve plate', exact: true })).toHaveCount(0);
+  noVendorEdit = true;
   data.vehicles[0].vehicle.licensePlateNumber = 'REMOTE1';
   data.vehicles[0].vehicle.licensePlateState = 'IL';
+  await page.reload();
+  await expect(region).toBeVisible();
   await region.getByRole('button', { name: 'Refresh PrePass' }).click();
   await region.getByRole('button', { name: 'Resolve plate', exact: true }).click();
+  await expect(dialog.getByRole('radio', { name: 'MSERP: LOCAL12 IN' })).toBeDisabled();
   await dialog.getByRole('radio', { name: 'PrePass: REMOTE1 IL' }).check();
-  await dialog.getByRole('checkbox').check();
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Resolve plate', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Resolve plate', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.plateSource, 'prepass');
   assert.equal(data.trucks[0].plate, 'REMOTE1');
   assert.equal(data.trucks[0].plateState, 'IL');
+  assert.equal(writes.at(-1).input.fleetServiceConfirmed, false);
+  noVendorEdit = false; await page.reload();
+  await expect(region).toBeVisible();
   await region.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(dialog.getByLabel(/^Truck/)).toHaveValue(vin);
   await expect(dialog.getByLabel('Available transponder').locator('option')).toHaveCount(2);

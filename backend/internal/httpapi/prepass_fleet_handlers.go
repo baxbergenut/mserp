@@ -29,7 +29,7 @@ func validatePrePassFleetChange(in *repository.PrePassFleetChange, link bool) bo
 		if _, err := time.Parse(time.DateOnly, in.TollFrom); err != nil {
 			return false
 		}
-	} else if !slices.Contains([]string{"add", "edit", "remove", "assign"}, in.Action) || !in.FleetServiceConfirmed {
+	} else if !slices.Contains([]string{"add", "edit", "remove", "assign"}, in.Action) || !in.FleetServiceConfirmed && in.PlateSource != "prepass" {
 		return false
 	}
 	if in.Action != "add" && !prepassRevision.MatchString(in.Revision) {
@@ -124,7 +124,7 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 				writeAPIError(w, 400, "Preview the toll link before saving.")
 				return
 			}
-			if !link && !authorizeVendorAction(w, r, "tolls.fleet", in.Action) {
+			if !link && in.PlateSource != "prepass" && !authorizeVendorAction(w, r, "tolls.fleet", in.Action) {
 				return
 			}
 			if in.PlateSource != "" && !slices.Contains(session.User.Permissions, "trucks.edit") {

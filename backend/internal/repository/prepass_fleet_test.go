@@ -264,7 +264,15 @@ func TestPrePassFleetDatabase(t *testing.T) {
 				fake.snapshot.Vehicles[0].LicensePlateNumber, fake.snapshot.Vehicles[0].LicensePlateState = "VENDOR1", "IL"
 				must(repo.RefreshPrePassFleet(ctx))
 				in = makePlate("prepass")
+				in.FleetServiceConfirmed = false
+				// Even a provider write rejection must not affect a local acceptance.
+				fake.failure = &prepass.FleetAPIError{Status: 403}
 				must(repo.ChangePrePassFleet(ctx, in, actor))
+				must(repo.ChangePrePassFleet(ctx, in, actor))
+				fake.failure = nil
+				if fake.calls != 1 {
+					t.Fatal("copying PrePass plate sent a vendor mutation")
+				}
 				if choice(truck).Plate != "VENDOR1" || choice(truck).PlateState != "IL" || list().Vehicles[0].Warning == "Plate differs from MSERP" {
 					t.Fatal("PrePass source did not update local profile")
 				}
