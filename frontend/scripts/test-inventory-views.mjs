@@ -62,9 +62,40 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const origin = `http://127.0.0.1:${server.address().port}`;
+  const expectSingleToolbarRow = async () => {
+    const controls = page.getByRole('group', { name: 'Inventory controls', exact: true });
+    const boxes = await controls.locator('input, select, button').evaluateAll(elements => elements.map(element => {
+      const bounds = element.getBoundingClientRect();
+      return { center: bounds.y + bounds.height / 2, width: bounds.width };
+    }));
+    assert.ok(boxes.length >= 4, 'toolbar must include search, filters and actions');
+    assert.ok(Math.max(...boxes.map(box => box.center)) - Math.min(...boxes.map(box => box.center)) < 3, 'search, filters and actions must share one desktop row');
+    assert.ok(boxes.every(box => box.width > 30), 'toolbar controls must remain usable');
+  };
   await page.goto(`${origin}/fleet/inventory?tab=tablets`);
   await expect(page.getByRole('cell', { name: '354624630315355', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: '9049217936 · Active', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Gateway', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'Tablet number', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Migration review', exact: true })).toHaveCount(0);
+  await expectSingleToolbarRow();
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await expectSingleToolbarRow();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.getByLabel('Assignment filter').selectOption('unassigned');
+  await expect(page.getByRole('cell', { name: 'No matching records.', exact: true })).toBeVisible();
+  await page.getByLabel('Assignment filter').selectOption('');
+  await page.getByLabel('Location filter').selectOption(id(1));
+  await expect(page.getByRole('cell', { name: 'No matching records.', exact: true })).toHaveAttribute('colspan', '6');
+  await page.getByLabel('Location filter').selectOption('');
+  await page.getByLabel('Status filter').selectOption('good');
+  await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
+  await page.getByLabel('Status filter').selectOption('active');
+  await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('9049217936');
+  await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Search identifier, number, truck or notes…').fill('');
+  await page.screenshot({ path: join(tmpdir(), 'mserp-inventory-desktop.png'), animations: 'disabled' });
   assert.equal(writes.length, 0, 'opening inventory must not mutate records or contact vendors');
   await page.getByRole('button', { name: 'Add device', exact: true }).click();
   let dialog = page.getByRole('dialog');
@@ -84,6 +115,14 @@ try {
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.record.data.assetId, tabletId, 'line replacement must change the link, not copy identifiers');
   await page.getByRole('tab', { name: 'Samsara', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'Tablet number', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add device', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Serial', { exact: true })).toBeVisible();
+  for (const label of ['IMEI', 'Make', 'Model']) await expect(dialog.getByLabel(label, { exact: true })).toHaveCount(0);
+  await dialog.getByLabel('Device type', { exact: true }).selectOption('tablet');
+  for (const label of ['IMEI', 'Make', 'Model']) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('row').filter({ hasText: 'CAMERA-022' }).filter({ has: page.getByRole('cell', { name: 'samsara camera', exact: true }) }).getByRole('button', { name: 'Edit' }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Linked gateway').selectOption(id(23));
@@ -91,6 +130,7 @@ try {
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.record.data.gatewayId, id(23));
   await page.getByRole('tab', { name: 'Truck equipment', exact: true }).click();
+  await expectSingleToolbarRow();
   await page.getByRole('button', { name: 'Add equipment', exact: true }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Supply batch (optional)').selectOption(id(14));
@@ -129,6 +169,8 @@ try {
   assert.equal(writes.filter(write => write.path.startsWith('/api/prepass')).length, 0, 'shared PrePass view must not call a vendor mutation');
   const readStart = reads.length;
   await page.goto(`${origin}/fleet/trailers`);
+  await expect(page.getByRole('button', { name: 'Add trailer' })).toBeVisible();
+  await expectSingleToolbarRow();
   await page.getByRole('button', { name: 'Add trailer' }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Unit number', { exact: true }).fill('MS003');
@@ -161,5 +203,5 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-inventory-mobile.png'), animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'tables must scroll locally');
   assert.deepEqual(errors, []);
-  console.log('Inventory browser checks passed: tablets, line replacement, camera linking, IFTA observations, stock issue/return, shared PrePass, trailer conflicts/archive, read-only roles and mobile layout.');
+  console.log('Inventory browser checks passed: compact toolbars, tablet columns/filters, type-specific gateway fields, line replacement, camera linking, IFTA observations, stock issue/return, shared PrePass, trailer conflicts/archive, read-only roles and mobile layout.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

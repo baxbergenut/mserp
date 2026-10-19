@@ -7,6 +7,14 @@ and the Administrator-only `imports` workflow. Fleet > Trailers is a separate
 directory at `/fleet/trailers` for stored/unused company trailers. Operational
 Schneider/JB Hunt trailer text on Status Board remains independent.
 
+Each directory keeps search, filters, refresh and add controls in one desktop
+toolbar, wrapping on smaller screens. Tablet columns show make/model, IMEI and
+the linked wireless number without a redundant device type or gateway column.
+Samsara has separate camera and gateway columns. Gateway forms omit blank IMEI,
+make and model fields; existing source values remain editable and are preserved.
+The import review remains available at `/fleet/inventory?tab=imports` for
+authorized administrators, without a Migration review button in daily inventory.
+
 ## Authority and access
 
 MSERP owns local inventory and custody after reviewed cutover. Samsara/AT&T
