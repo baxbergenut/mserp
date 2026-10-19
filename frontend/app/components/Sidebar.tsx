@@ -36,6 +36,8 @@ const NAV_ITEMS = [
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/weighmytruck", label: "Scale", icon: Scale },
   { href: "/fleet", label: "Fleet", icon: Truck, children: [
+    { href: "/fleet/inventory", label: "Inventory", icon: Package },
+    { href: "/fleet/trailers", label: "Trailers", icon: Truck },
     { href: "/maintenance", label: "Work orders", icon: Wrench },
     { href: "/fleet/preventative-maintenance", label: "Preventative maintenance", icon: CalendarRange },
   ] },

@@ -16,8 +16,9 @@ import { AssignmentHistory } from "@/app/drivers/detail/AssignmentHistory";
 import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
+import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
-const tabs = ["Overview", "Work orders", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Equipment", "Work orders", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -35,7 +36,7 @@ export default function TruckDetailPage() {
   const expenseCategoryAccess = useExpenseCategoryAccess();
   const maintenanceAccess = useMaintenanceAccess();
   const expenseTabsVisible = expenseCategoryAccess.some(a=>a.canView);
-  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Expenses" || expenseTabsVisible) && (name !== "Work orders" || maintenanceAccess?.canView));
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Equipment" || permissions.includes("inventory.read")) && (name !== "Expenses" || expenseTabsVisible) && (name !== "Work orders" || maintenanceAccess?.canView));
   const tab=visibleTabs.includes(candidateTab)?candidateTab:"Overview";
   useEffect(() => {
     if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
@@ -75,6 +76,7 @@ export default function TruckDetailPage() {
       {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
+      {tab === "Equipment" && permissions.includes("inventory.read") && <InventoryWorkspace truckId={truck.id} />}
       {editing && <TruckEditor truck={truck} onClose={() => setEditing(false)} onSaved={value => { setTruck(value); setEditing(false); }} />}
     </>}
   </div>;

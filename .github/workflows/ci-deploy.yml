@@ -66,6 +66,7 @@ jobs:
         env:
           MSERP_RELAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_PREPASS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+          MSERP_INVENTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_WMT_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_DRIVER_BOARD_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
           MSERP_ACCESS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
@@ -149,6 +150,11 @@ jobs:
         if: inputs.full_browser_tests == true
         working-directory: frontend
         run: node scripts/test-dispatcher-views.mjs
+
+      - name: Verify fleet inventory and stored trailers in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-inventory-views.mjs
 
       - name: Verify investor flows in Chromium
         if: inputs.full_browser_tests == true

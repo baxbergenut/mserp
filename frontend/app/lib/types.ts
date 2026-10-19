@@ -268,6 +268,7 @@ export interface ChartDataPoint {
 
 export type EmploymentType = "company" | "owner_operator" | "investor_driver" | "unassigned";
 export type PayType = "cpm" | "gross_percentage";
+export type { InventoryFields, InventoryRecord, InventoryCollection, InventoryData, InventoryMovement, InventoryBalance, InventoryEvent, InventorySnapshot, InventoryImport, InventoryImportRow } from "./inventoryTypes";
 export type TruckStatus =
   | "available"
   | "assigned"

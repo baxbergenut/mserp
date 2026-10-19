@@ -13,6 +13,11 @@ type Permission struct {
 
 // Code-owned capabilities. Unknown keys and incomplete prerequisites never grant access.
 var Permissions = []Permission{
+	{Key: "inventory.read", Label: "View Inventory", Group: "Inventory", Action: "read", Requires: []string{}},
+	{Key: "inventory.manage", Label: "Manage Inventory", Group: "Inventory", Action: "edit", Requires: []string{"inventory.read"}},
+	{Key: "inventory.import", Label: "Review and Import Inventory (Administrator)", Group: "Inventory", Action: "create", Requires: []string{"inventory.read", "inventory.manage", "trailers.manage", "trucks.read", "tolls.read"}, Sensitive: true},
+	{Key: "trailers.read", Label: "View Stored Trailers", Group: "Trailers", Action: "read", Requires: []string{}},
+	{Key: "trailers.manage", Label: "Manage Stored Trailers", Group: "Trailers", Action: "edit", Requires: []string{"trailers.read"}},
 	{Key: "drivers.read", Label: "View Drivers", Group: "Drivers", Action: "read", Requires: []string{}, Sensitive: false},
 	{Key: "drivers.create", Label: "Add Drivers", Group: "Drivers", Action: "create", Requires: []string{"drivers.read"}, Sensitive: false},
 	{Key: "drivers.edit", Label: "Edit Drivers", Group: "Drivers", Action: "edit", Requires: []string{"drivers.read"}, Sensitive: false},

@@ -1,4 +1,14 @@
 import { expensePayload } from "./expenseCosts";
+import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";
+export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory", { signal });
+export const fetchTrailers = (signal?: AbortSignal) => apiRequest<InventoryRecord[]>("/trailers", { signal });
+export const saveInventoryRecord = (collection: InventoryCollection, record: InventoryRecord, requestId: string) => apiRequest<InventoryRecord>(collection === "trailers" ? `/trailers/${record.id}` : `/inventory/${collection}/${record.id}`, { method: "PUT", body: JSON.stringify({ requestId, record }) });
+export const fetchInventoryHistory = (collection = "", id = "") => apiRequest<InventoryEvent[]>(collection === "trailers" ? `/trailers/${encodeURIComponent(id)}/history` : `/inventory/history?${new URLSearchParams({ collection, id })}`);
+export const moveInventoryStock = (movement: InventoryMovement) => apiRequest<void>("/inventory/movements", { method: "POST", body: JSON.stringify(movement) });
+export const fetchInventoryImports = () => apiRequest<InventoryImport[]>("/inventory/imports");
+export const previewInventoryImport = (snapshot: InventorySnapshot) => apiRequest<InventoryImport>("/inventory/imports/preview", { method: "POST", body: JSON.stringify(snapshot) });
+export const reviewInventoryImport = (batch: InventoryImport) => apiRequest<InventoryImport>(`/inventory/imports/${batch.id}`, { method: "PUT", body: JSON.stringify({ version: batch.version, rows: batch.rows }) });
+export const commitInventoryImport = (batch: InventoryImport) => apiRequest<InventoryImport>(`/inventory/imports/${batch.id}/commit`, { method: "POST", body: JSON.stringify({ version: batch.version }) });
 import { expandBoard } from "./compactBoard";
 import type { PrePassFleetChange, PrePassFleetList } from "./types";
 export const fetchPrePassFleet = (signal?: AbortSignal) => apiRequest<PrePassFleetList>("/prepass-fleet", { signal });

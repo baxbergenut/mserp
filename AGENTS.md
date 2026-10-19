@@ -253,6 +253,25 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Fleet > Inventory (`/fleet/inventory?tab=tablets`) and Fleet > Trailers
+  (`/fleet/trailers`) use migration 119, repository `inventory.go` /
+  `inventory_import.go` and `httpapi/inventory_handlers.go`. Inventory tracks
+  devices, separate carrier lines, camera/gateway links, locations, annual sticker
+  batches, truck observations and an append-only stock ledger. Versioned edits,
+  idempotent movement IDs, foreign keys and a short inventory transaction lock
+  protect assignments and nonnegative stock. No stock is inferred from sheet
+  checkboxes; physical opening counts (including zero) precede issuance. Truck
+  details expose permission-gated Equipment summaries. The PrePass tab reuses
+  existing cached rosters and vendor safeguards; local tag notes never create a
+  second provider roster. Stored trailers have no dispatch/Status Board or
+  FleetScope assignment synchronization. Imports require Administrator plus
+  `inventory.import`; source snapshots and row outcomes remain private and must
+  be reviewed before an atomic commit. No accounting, compliance or vendor writes
+  occur on deployment/import. See `docs/FLEET_INVENTORY.md` for snapshot preparation,
+  review, cutover and maintenance-baseline reconciliation. Database tests use
+  disposable `MSERP_INVENTORY_TEST_DATABASE_URL`; browser checks use a `/api` build
+  and `node scripts/test-inventory-views.mjs`.
+
 - Status Board appointment/arrival automation uses migration 116, repository
   `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
   DataTruck per-stop schedule fields through import serialization. Appointment

@@ -14,6 +14,8 @@ export const ExpenseCategoryAccessContext = createContext<ExpenseCategoryAccess[
 export const useExpenseCategoryAccess = () => useContext(ExpenseCategoryAccessContext);
 
 export function pagePermission(path: string): string {
+  if (path.startsWith("/fleet/inventory")) return "inventory.read";
+  if (path.startsWith("/fleet/trailers")) return "trailers.read";
   if (path === "/settings") return "";
   if (path === "/weighmytruck") return "weighmytruck.read";
   if (path.startsWith("/settings/")) return "access.manage";
@@ -29,7 +31,7 @@ export function pagePermission(path: string): string {
 }
 
 export function firstAllowedPage(permissions: string[]): string {
-  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/trucks", "/dispatchers", "/investors", "/accounting/investor-pay", "/accounting/dispatcher-pay", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => canVisitPage(permissions,p)) ?? "/access-denied";
+  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/trucks", "/fleet/inventory", "/fleet/trailers", "/dispatchers", "/investors", "/accounting/investor-pay", "/accounting/dispatcher-pay", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => canVisitPage(permissions,p)) ?? "/access-denied";
 }
 
 export function canVisitPage(permissions: string[], path: string) { if(path === "/dispatchers") return permissions.includes("dispatchers.read") || permissions.includes("updaters.read"); const required=pagePermission(path); return !required || permissions.includes(required); }
