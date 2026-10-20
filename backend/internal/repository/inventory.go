@@ -37,6 +37,12 @@ type InventoryFields struct {
 	AssetLabel          string `json:"assetLabel,omitempty"`
 	Make                string `json:"make,omitempty"`
 	Model               string `json:"model,omitempty"`
+	ModelNumber         string `json:"modelNumber"`
+	StorageGB           string `json:"storageGb"`
+	Color               string `json:"color"`
+	CaseColor           string `json:"caseColor"`
+	OriginalModel       string `json:"originalModel,omitempty"`
+	CustodianID         string `json:"custodianId"`
 	Condition           string `json:"condition,omitempty"`
 	Status              string `json:"status,omitempty"`
 	Ownership           string `json:"ownership,omitempty"`
@@ -91,14 +97,16 @@ type InventorySave struct {
 }
 type InventoryActor struct{ ID, Name string }
 type InventoryEvent struct {
-	ID         string          `json:"id"`
-	Collection string          `json:"collection"`
-	RecordID   string          `json:"recordId"`
-	Action     string          `json:"action"`
-	Before     json.RawMessage `json:"before"`
-	After      json.RawMessage `json:"after"`
-	Actor      string          `json:"actor"`
-	CreatedAt  time.Time       `json:"createdAt"`
+	Reason        string          `json:"reason,omitempty"`
+	EffectiveDate string          `json:"effectiveDate,omitempty"`
+	ID            string          `json:"id"`
+	Collection    string          `json:"collection"`
+	RecordID      string          `json:"recordId"`
+	Action        string          `json:"action"`
+	Before        json.RawMessage `json:"before"`
+	After         json.RawMessage `json:"after"`
+	Actor         string          `json:"actor"`
+	CreatedAt     time.Time       `json:"createdAt"`
 }
 type InventoryRepository struct{ pool *pgxpool.Pool }
 
@@ -107,7 +115,8 @@ func NewInventoryRepository(pool *pgxpool.Pool) *InventoryRepository {
 }
 
 var inventoryTables = map[string]string{
-	"assets": "inventory_assets", "lines": "inventory_lines", "locations": "inventory_locations",
+	"custodians": "inventory_custodians",
+	"assets":     "inventory_assets", "lines": "inventory_lines", "locations": "inventory_locations",
 	"supplies": "inventory_supplies", "equipment": "inventory_equipment", "trailers": "fleet_trailers", "transponder-notes": "inventory_transponder_notes",
 }
 var inventoryUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -159,14 +168,14 @@ func (r *InventoryRepository) List(ctx context.Context, collection string) ([]In
 }
 func (r *InventoryRepository) History(ctx context.Context, collection, id string) ([]InventoryEvent, error) {
 	result := []InventoryEvent{}
-	rows, err := r.pool.Query(ctx, `SELECT id::text,collection,record_id::text,action,before_data,after_data,actor_name,created_at FROM inventory_events WHERE ($1='' OR collection=$1) AND ($2='' OR record_id::text=$2) ORDER BY created_at DESC,id DESC LIMIT 500`, collection, id)
+	rows, err := r.pool.Query(ctx, `SELECT id::text,collection,record_id::text,action,before_data,after_data,actor_name,created_at,reason,coalesce(effective_date::text,'') FROM inventory_events WHERE ($1='' OR collection=$1) AND ($2='' OR record_id::text=$2) ORDER BY created_at DESC,id DESC LIMIT 500`, collection, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var e InventoryEvent
-		if err = rows.Scan(&e.ID, &e.Collection, &e.RecordID, &e.Action, &e.Before, &e.After, &e.Actor, &e.CreatedAt); err != nil {
+		if err = rows.Scan(&e.ID, &e.Collection, &e.RecordID, &e.Action, &e.Before, &e.After, &e.Actor, &e.CreatedAt, &e.Reason, &e.EffectiveDate); err != nil {
 			return nil, err
 		}
 		result = append(result, e)
@@ -185,7 +194,7 @@ func validateInventory(collection string, v InventoryRecord) error {
 		return inventoryInvalid("Inventory record is too large")
 	}
 	d := v.Data
-	for _, s := range []string{d.TruckID, d.LocationID, d.GatewayID, d.AssetID, d.SupplyID} {
+	for _, s := range []string{d.TruckID, d.LocationID, d.GatewayID, d.AssetID, d.SupplyID, d.CustodianID} {
 		if s != "" && !inventoryUUID.MatchString(s) {
 			return inventoryInvalid("Select a valid linked record")
 		}
@@ -218,6 +227,9 @@ func validateInventory(collection string, v InventoryRecord) error {
 		return inventoryInvalid("Unknown condition")
 	}
 	if collection == "assets" {
+		if err := validateInventoryDetails(d); err != nil {
+			return err
+		}
 		if !slices.Contains([]string{"tablet", "phone", "samsara_gateway", "dashcam", "pt30", "other"}, d.DeviceType) {
 			return inventoryInvalid("Choose a device type")
 		}
@@ -240,7 +252,7 @@ func validateInventory(collection string, v InventoryRecord) error {
 			return inventoryInvalid("Unknown ownership type")
 		}
 		holders := 0
-		for _, s := range []string{d.TruckID, d.LocationID, d.Custodian, d.GatewayID} {
+		for _, s := range []string{d.TruckID, d.LocationID, d.Custodian, d.CustodianID, d.GatewayID} {
 			if s != "" {
 				holders++
 			}
@@ -254,7 +266,7 @@ func validateInventory(collection string, v InventoryRecord) error {
 		if d.TruckID == "" && d.GatewayID == "" && (d.EquipmentState == "reported_present" || d.EquipmentState == "verified_installed") {
 			return inventoryInvalid("Assign a truck before recording device installation")
 		}
-		if (d.Condition == "retired" || d.Condition == "lost" || !d.Active) && (d.TruckID != "" || d.GatewayID != "") {
+		if inventoryUnavailable(d) && (d.TruckID != "" || d.GatewayID != "") {
 			return inventoryInvalid("Release truck/gateway assignments before losing or archiving a device")
 		}
 	}
@@ -274,7 +286,7 @@ func validateInventory(collection string, v InventoryRecord) error {
 			return inventoryInvalid("Contract end precedes its start")
 		}
 	}
-	if collection == "supplies" || collection == "locations" || collection == "equipment" {
+	if collection == "supplies" || collection == "locations" || collection == "equipment" || collection == "custodians" {
 		if d.Name == "" {
 			return inventoryInvalid("A name is required")
 		}
@@ -378,6 +390,10 @@ func (r *InventoryRepository) Save(ctx context.Context, collection string, input
 }
 
 func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v InventoryRecord, actor InventoryActor, requestID, hash string, importing bool) (InventoryRecord, error) {
+	return inventorySaveTxFrom(ctx, tx, collection, v, actor, requestID, hash, importing, nil, false)
+}
+
+func inventorySaveTxFrom(ctx context.Context, tx pgx.Tx, collection string, v InventoryRecord, actor InventoryActor, requestID, hash string, importing bool, prior *InventoryRecord, verify bool) (InventoryRecord, error) {
 	if importing {
 		v.Data = inventoryImportedFields(collection, v.Data)
 	}
@@ -385,6 +401,9 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		return v, err
 	}
 	old, err := inventoryReadTx(ctx, tx, collection, v.ID)
+	if prior != nil && err == nil {
+		old = *prior
+	}
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return v, err
@@ -394,6 +413,16 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 	}
 	if !importing {
 		v.Data.Source = old.Data.Source
+		v.Data.OriginalModel = old.Data.OriginalModel
+		if collection == "assets" && exists && old.Data.Model != v.Data.Model && v.Data.OriginalModel == "" {
+			v.Data.OriginalModel = old.Data.Model
+		}
+	}
+	if v.Data.CustodianID != "" {
+		var active bool
+		if e := tx.QueryRow(ctx, `SELECT coalesce((data->>'active')::boolean,true) FROM inventory_custodians WHERE id=$1`, v.Data.CustodianID).Scan(&active); e != nil || !active {
+			return v, inventoryInvalid("Select an active custodian")
+		}
 	}
 	// Verification identity/time are always server-owned. Imported observations
 	// are only reported/unknown and never manufacture a physical verification.
@@ -403,7 +432,7 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		if importing {
 			return v, inventoryInvalid("Imported observations cannot establish verified installation")
 		}
-		if old.Data.EquipmentState != "verified_installed" || old.Data.TruckID != v.Data.TruckID || old.Data.GatewayID != v.Data.GatewayID || old.Data.Custodian != v.Data.Custodian || old.Data.LocationID != v.Data.LocationID {
+		if verify || old.Data.EquipmentState != "verified_installed" || old.Data.TruckID != v.Data.TruckID || old.Data.GatewayID != v.Data.GatewayID || old.Data.Custodian != v.Data.Custodian || old.Data.CustodianID != v.Data.CustodianID || old.Data.LocationID != v.Data.LocationID {
 			v.Data.VerifiedAt = time.Now().UTC().Format(time.RFC3339)
 			v.Data.VerifiedBy = actor.Name
 		}
@@ -416,7 +445,7 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		if e != nil {
 			return v, inventoryInvalid("Linked gateway was not found")
 		}
-		if gateway.ID == v.ID || gateway.Data.DeviceType != "samsara_gateway" || !gateway.Data.Active || gateway.Data.Condition == "lost" || gateway.Data.Condition == "retired" {
+		if gateway.ID == v.ID || gateway.Data.DeviceType != "samsara_gateway" || inventoryUnavailable(gateway.Data) {
 			return v, inventoryInvalid("Select an active Samsara gateway")
 		}
 		if gateway.Data.TruckID == "" && (v.Data.EquipmentState == "reported_present" || v.Data.EquipmentState == "verified_installed") {
@@ -433,13 +462,13 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		if err != nil {
 			return v, err
 		}
-		if linked && (!v.Data.Active || v.Data.Condition == "lost" || v.Data.Condition == "retired" || old.Data.DeviceType != v.Data.DeviceType) {
+		if linked && (inventoryUnavailable(v.Data) || old.Data.DeviceType != v.Data.DeviceType) {
 			return v, inventoryInvalid("Release linked cameras and service lines before archiving, losing, or changing this device type")
 		}
 	}
 	if v.Data.AssetID != "" {
 		asset, e := inventoryReadTx(ctx, tx, "assets", v.Data.AssetID)
-		if e != nil || !asset.Data.Active || !slices.Contains([]string{"tablet", "phone"}, asset.Data.DeviceType) {
+		if e != nil || inventoryUnavailable(asset.Data) || !slices.Contains([]string{"tablet", "phone"}, asset.Data.DeviceType) {
 			return v, inventoryInvalid("Select an active tablet or phone")
 		}
 	}
@@ -488,6 +517,15 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 			return v, inventoryInvalid("Resolve remaining storage and issued stock before archiving this supply item")
 		}
 	}
+	if collection == "custodians" && !v.Data.Active && exists {
+		var used bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inventory_assets WHERE custodian_id=$1)`, v.ID).Scan(&used); err != nil {
+			return v, err
+		}
+		if used {
+			return v, inventoryInvalid("Transfer this custodian's devices before archiving")
+		}
+	}
 	v.Version++
 	v.UpdatedAt = time.Now().UTC()
 	v.UpdatedBy = actor.Name
@@ -504,14 +542,14 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		action = "create"
 	} else if old.Data.Active && !v.Data.Active {
 		action = "archive"
-	} else if old.Data.TruckID != v.Data.TruckID || old.Data.Custodian != v.Data.Custodian || old.Data.LocationID != v.Data.LocationID || old.Data.GatewayID != v.Data.GatewayID || old.Data.AssetID != v.Data.AssetID {
+	} else if old.Data.TruckID != v.Data.TruckID || old.Data.Custodian != v.Data.Custodian || old.Data.CustodianID != v.Data.CustodianID || old.Data.LocationID != v.Data.LocationID || old.Data.GatewayID != v.Data.GatewayID || old.Data.AssetID != v.Data.AssetID {
 		action = "transfer"
 	}
 	var before any
 	if exists {
 		before = old
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO inventory_events(id,request_hash,collection,record_id,action,before_data,after_data,actor_id,actor_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, requestID, hash, collection, v.ID, action, before, v, actor.ID, actor.Name)
+	_, err = tx.Exec(ctx, `INSERT INTO inventory_events(id,request_hash,collection,record_id,action,before_data,after_data,actor_id,actor_name,reason,effective_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,coalesce(current_setting('app.inventory_reason',true),''),nullif(current_setting('app.inventory_date',true),'')::date)`, requestID, hash, collection, v.ID, action, before, v, actor.ID, actor.Name)
 	if err == nil && collection == "assets" && exists && old.Data.DeviceType == "samsara_gateway" && old.Data.TruckID != v.Data.TruckID {
 		err = inventoryResetLinkedDashcams(ctx, tx, v.ID, actor)
 	}

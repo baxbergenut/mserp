@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var inventoryAssetStatuses = []string{"unknown", "active", "inactive", "sold", "total_loss"}
+var inventoryAssetStatuses = []string{"unknown", "active", "inactive", "spare", "retired", "lost", "sold", "total_loss"}
 var inventoryLineStatuses = []string{"unknown", "active", "suspended", "cancelled", "pending"}
 
 // Only imports accept provider wording; ordinary writes use the controlled codes.

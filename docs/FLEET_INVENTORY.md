@@ -23,8 +23,8 @@ lists, details and truck summaries. The tablet number column shows only the
 number; carrier status remains in AT&T lines. Gateway forms omit blank IMEI,
 make, model and internal asset label fields. Existing source metadata is preserved.
 Truck Equipment lists linked inventory devices only; legacy hardware checkbox
-observations are archived with an audit entry. History and stock management UI
-are deferred; stored audits and the ledger remain intact.
+observations are archived with an audit entry. History is available on demand in record details. Stock management UI remains
+deferred; the ledger remains intact.
 The import review remains available at `/fleet/inventory?tab=imports` for
 authorized administrators, without a Migration review button in daily inventory.
 
@@ -107,14 +107,14 @@ versioned truck observations only and never create stock movements. Stable suppl
 links preserve imported observations when a supply is renamed.
 
 Checked green means Verified Present, a yellow mixed checkbox means Reported
-Present, and unchecked red means Unknown or Missing (distinguished on hover and
-by an accessible description). Checking physically confirms presence with the
+Present. Unknown uses a gray empty checkbox; Missing has a red checkbox and
+a visible label. Checking physically confirms presence with the
 actor/time; clearing a verified box records Missing. Source FALSE/blank checkboxes
 remain Unknown rather than inventing absence. Existing annual IFTA sent/attached
 flags and unknown dates are preserved.
 
 All device/carrier/condition/installation statuses use controlled codes and
-professionally capitalized labels. Unknown/Missing are red, Reported Present is
+professionally capitalized labels. Unknown is neutral gray, Missing is red, and Reported Present is
 amber, and Verified Installed is green. Devices require a direct truck or a
 linked gateway with a truck before Reported Present/Verified Installed is allowed.
 The API and a deferred database constraint enforce this. Storage/custodian
@@ -238,3 +238,70 @@ Verify release SHA, readiness, authenticated directory reads and restricted-role
 responses before starting migration review. On rollback retain the additive
 tables and immutable history; roll forward to a corrected release. Never drop
 the inventory tables after staff has started recording work.
+
+## Inventory management (migration 123)
+
+Device identity now has optional modelNumber, storageGb (whole GB, 1–65536), color
+and caseColor fields. Graphite and Mocha remain distinct manufacturer colors.
+The editor's Organize device details preview extracts only explicit terminal
+model-number/capacity/color tokens. Applying the preview edits the draft; Save
+retains the original model description and an audited before/after record. No
+production descriptions or assignments are rewritten on deployment. Legacy
+writes that omit these attributes cannot erase them; current writes use explicit
+empty strings to clear optional values. IMEI/serial/phone strings never change.
+
+Locations & People provides versioned locations and a managed custodians
+directory. Assets reference custodianId by UUID. Carrier User Label and legacy
+free-text custodians remain source information; they are never converted to
+person identities automatically. Custodians with assigned assets cannot archive.
+
+Lifecycle, condition, custody, installation and record archive state are
+independent filters in the existing ColumnFilter table headers. Filter/sort
+preferences persist per tab in session storage. Available to Assign is derived:
+an active record with Good condition, Active/Spare lifecycle, known storage or
+person custody, and no gateway/truck assignment. Unknown custody is not stock.
+Needs Attention exposes unclassified devices, custody/verification gaps,
+incompatible lifecycle links, active carrier lines without usable hardware,
+carrier source dates older than 180 days or unknown, and undated IFTA observations.
+Carrier dates are source freshness, not proof of current billing or connectivity.
+Review never automatically cancels lines or infers a sticker year.
+
+Record details provide Identity, Assignment, Source, linked service line, and an
+on-demand History tab. History distinguishes migration normalization and shows
+actor, timestamp, before/after values and operation reason/effective date.
+Supplies distinguish gray unknown checkboxes from explicitly labeled Missing;
+each supply header filters presence. Existing IFTA sent/attached flags appear
+separately and unknown dates remain unknown. Presence never moves stock.
+
+Additional API:
+
+- GET /inventory/directory: category-specific server search, natural sorting,
+  filters and pagination (25/50/100). Returns selected full records plus lighter
+  reference context from a consistent read-only snapshot. Full records are
+  loaded before an editor/operation opens and retained separately from directory
+  refreshes.
+- GET /inventory?includeStock=0: explicit full editor/review context without
+  stock aggregation or movement history. The legacy response remains available.
+- PUT /inventory/custodians/{id}: existing versioned/idempotent record contract.
+- POST /inventory/operations: inventory.manage plus trucks.read; requestId,
+  reason, effectiveDate, changes (1–25 existing asset/line/observation records),
+  expectedLinks by device UUID, and optional verify.
+
+Transfer/return/replacement operations use one locked transaction and immutable
+receipt. The complete reviewed related-record membership and every changed
+version are fenced. Relationships are released only inside the transaction;
+final record saves preserve original audit snapshots. Failure rolls everything
+back. Exact retries return the original result; changed request bytes conflict.
+Replacement explicitly selects the old device destination and optional line
+transfer; gateway replacements move reviewed cameras and reset installation.
+Sold/lost/retired/total-loss devices cannot gain operational relationships.
+Existing incompatible source links remain for review rather than being silently
+released by a migration. Database guards enforce future writes too.
+
+TestInventoryManagementDatabase, TestInventoryGatewayReplacementDatabase and
+TestInventoryDirectoryPagingDatabase cover fresh/incremental storage, old-writer
+preservation, explicit clearing, rollback, replay, version/link conflicts, source
+retention, custody, lifecycle and pagination. test-inventory-views.mjs covers
+minimal header filters, persistence, draft-only normalization, lazy history,
+replacement failure/retry, line transfer, physical verification, review visibility,
+read-only roles and responsive layout.

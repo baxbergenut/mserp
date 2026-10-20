@@ -1,6 +1,8 @@
 import { expensePayload } from "./expenseCosts";
 import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";
-export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory", { signal });
+export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory?includeStock=0", { signal });
+export const fetchInventoryDirectory = (query: URLSearchParams, signal?: AbortSignal) => apiRequest<{records:InventoryRecord[];context:Partial<InventoryData>;total:number;page:number;pageSize:number}>("/inventory/directory?"+query, {signal});
+export const applyInventoryOperation = (operation: import("./inventoryTypes").InventoryOperation) => apiRequest<import("./inventoryTypes").InventoryChange[]>("/inventory/operations", { method: "POST", body: JSON.stringify(operation) });
 export const fetchTrailers = (signal?: AbortSignal) => apiRequest<InventoryRecord[]>("/trailers", { signal });
 export const saveInventoryRecord = (collection: InventoryCollection, record: InventoryRecord, requestId: string) => apiRequest<InventoryRecord>(collection === "trailers" ? `/trailers/${record.id}` : `/inventory/${collection}/${record.id}`, { method: "PUT", body: JSON.stringify({ requestId, record }) });
 export const fetchInventoryHistory = (collection = "", id = "") => apiRequest<InventoryEvent[]>(collection === "trailers" ? `/trailers/${encodeURIComponent(id)}/history` : `/inventory/history?${new URLSearchParams({ collection, id })}`);

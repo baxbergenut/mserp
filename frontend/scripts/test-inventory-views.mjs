@@ -21,7 +21,7 @@ const data = {
     record(22, { deviceType: 'dashcam', brand: 'Samsara', serial: 'CAMERA-022', gatewayId: id(21), equipmentState: 'reported_present' }),
     record(23, { deviceType: 'samsara_gateway', serial: 'GATEWAY-023', truckId: id(101) }),
     record(24, { deviceType: 'dashcam', brand: 'FiveELD', imei: '000000000000024', truckId: id(101), condition: 'good', equipmentState: 'verified_installed', verifiedAt: stamp, verifiedBy: 'Fleet Reviewer' }),
-    record(25, { deviceType: 'phone', imei: '000000000000025', make: 'Apple', model: 'iPhone 15 Pro', custodian: 'Fleet Staff', condition: 'good', equipmentState: 'unknown' }),
+    record(25, { deviceType: 'phone', imei: '000000000000025', make: 'Apple', model: 'iPhone 15 Pro', custodian: 'Fleet Staff', condition: 'good', status: 'spare', equipmentState: 'unknown' }),
     record(26, { deviceType: 'other', serial: 'UNCLASSIFIED-DEVICE', truckId: id(100) }),
     record(28, { deviceType: 'samsara_gateway', serial: 'GATEWAY-STORAGE', equipmentState: 'unknown' }),
   ],
@@ -29,7 +29,7 @@ const data = {
     record(30, { wirelessNumber: '9049217936', assetId: id(20), carrier: 'AT&T', status: 'active' }),
     record(31, { wirelessNumber: '9045550100', assetId: id(25), carrier: 'AT&T', status: 'active' }),
   ],
-  locations: [record(1, { name: 'Main Storage' })],
+  locations: [record(1, { name: 'Main Storage' })], custodians: [record(2, { name: 'Inventory Staff' })],
   supplies: [
     record(11, { name: 'Chains', unit: 'sets', reusable: true }),
     record(12, { name: 'Extinguisher', unit: 'units', reusable: true }),
@@ -43,13 +43,13 @@ const data = {
   ],
   'transponder-notes': [record(50, { serial: 'OLD-LOCAL-TAG' })], balances: [], movements: [],
 };
-const trailers = [], writes = [], reads = [];
+const trailers = [], writes = [], reads = [], history = []; const operations = new Map();
 let readOnly = false, failSave = false, truckAccess = true;
 const prepass = { configured: true, environment: 'production', refreshedAt: stamp, accounts: ['123'], vehicles: [], transponders: [{ accountNumber: '123', transponderNumber: '777111222', vehicleNumber: '', vin: '', vrn: '', costCenter: '' }], operations: [], trucks: [] };
 const server = createServer(async (request, response) => {
   const send = (body, code = 200) => { response.writeHead(code, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); };
   try {
-    const path = new URL(request.url, 'http://localhost').pathname;
+    const requestURL = new URL(request.url, 'http://localhost'); const path = requestURL.pathname;
     if (path.startsWith('/api/')) {
       if (request.method === 'GET') reads.push(path);
       if (path === '/api/auth/session') return send({ user: { id: id(500), username: 'Fleet Reviewer', theme: 'default', permissions: ['inventory.read', 'trailers.read', 'tolls.read', ...(truckAccess ? ['trucks.read'] : []), ...(readOnly ? [] : ['inventory.manage', 'trailers.manage', 'inventory.import'])] }, csrfToken: 'fixture' });
@@ -58,14 +58,37 @@ const server = createServer(async (request, response) => {
       if (path === '/api/maintenance/access') return send({ canView: false, canCreate: false });
       if (path === '/api/lookups/trucks') return send(trucks);
       if (path === '/api/inventory' && request.method === 'GET') return send(data);
+      if (path === '/api/inventory/directory') {
+        const q=requestURL.searchParams, collection=q.get('collection');
+        const custody=record=>{const d=record.data.gatewayId?data.assets.find(a=>a.id===record.data.gatewayId)?.data||{}:record.data;return d.truckId?'truck':d.locationId?'storage':d.custodianId||d.custodian?'person':'unknown';};
+        const holder=record=>record.data.gatewayId?data.assets.find(a=>a.id===record.data.gatewayId)?.data||{}:record.data;
+        let records=data[collection].filter(record=>{
+          const d=record.data,h=holder(record),search=(q.get('search')||'').toLowerCase();
+          if(collection==='assets'&&(q.get('deviceType')==='equipment'?(!h.truckId||d.deviceType==='other'):d.deviceType!==q.get('deviceType')))return false;
+          if(q.get('active')==='record:active'&&!d.active||q.get('active')==='record:archived'&&d.active)return false;
+          if(q.get('custody')&&custody(record)!==q.get('custody'))return false;
+          if(q.get('brand')&&d.brand!==q.get('brand'))return false;
+          if(q.get('condition')&&(d.condition||'unknown')!==q.get('condition'))return false;
+          if(q.get('lifecycle')&&(d.status||'unknown')!==q.get('lifecycle'))return false;
+          const line=data.lines.find(l=>l.data.assetId===record.id),number=line?.data.wirelessNumber||d.wirelessNumber||'';
+          return !search||JSON.stringify(d).toLowerCase().includes(search)||number.includes(search.replace(/[^0-9]/g,'').replace(/^1(?=\d{10}$)/,''));
+        });
+        const total=records.length,size=+(q.get('pageSize')||25),page=Math.max(1,Math.min(+(q.get('page')||1),Math.ceil(total/size)||1));
+        return send({records:records.slice((page-1)*size,page*size),context:data,total,page,pageSize:size});
+      }
       if (path === '/api/trailers' && request.method === 'GET') return send(trailers);
       if (path === '/api/prepass-fleet') return send(prepass);
       if (path === '/api/inventory/imports') return send([]);
-      if (path.includes('/history')) return send([]);
+      if (path.includes('/history')) return send(history.filter(e=>e.recordId===requestURL.searchParams.get('id')));
       let raw = ''; for await (const chunk of request) raw += chunk;
       const input = raw ? JSON.parse(raw) : {};
       writes.push({ path, input });
       if (failSave) { failSave = false; return send({ error: 'Inventory changed; reload and review' }, 409); }
+      if (path === '/api/inventory/operations') {
+        const prior=operations.get(input.requestId);if(prior)return send(prior);
+        for(const change of input.changes){const current=data[change.collection].find(r=>r.id===change.record.id);if(!current||current.version!==change.record.version)return send({error:'Inventory changed; reload and review'},409);}
+        const result=input.changes.map(change=>{const rows=data[change.collection],index=rows.findIndex(r=>r.id===change.record.id),before=rows[index];const saved={...change.record,data:{...change.record.data},version:before.version+1,updatedAt:stamp,updatedBy:'Fleet Reviewer'};if(saved.data.equipmentState==='verified_installed'){saved.data.verifiedAt=stamp;saved.data.verifiedBy='Fleet Reviewer';}else{delete saved.data.verifiedAt;delete saved.data.verifiedBy;} rows[index]=saved;history.unshift({id:crypto.randomUUID(),collection:change.collection,recordId:saved.id,action:'transfer',before,after:saved,actor:'Fleet Reviewer',createdAt:stamp,reason:input.reason,effectiveDate:input.effectiveDate});return {...change,record:saved};});operations.set(input.requestId,result);return send(result);
+      }
       if (request.method === 'PUT') {
         const collection = path.startsWith('/api/trailers/') ? 'trailers' : path.split('/')[3];
         const target = collection === 'trailers' ? trailers : data[collection];
@@ -74,6 +97,8 @@ const server = createServer(async (request, response) => {
         const saved = { ...input.record, data: { ...input.record.data }, version: input.record.version + 1, updatedAt: stamp, updatedBy: 'Fleet Reviewer' };
         if (saved.data.equipmentState === 'verified_installed') { saved.data.verifiedAt = stamp; saved.data.verifiedBy = 'Fleet Reviewer'; }
         else { delete saved.data.verifiedAt; delete saved.data.verifiedBy; }
+        const before=index<0?null:target[index];if(collection==='assets'&&before?.data.model!==saved.data.model)saved.data.originalModel=before?.data.originalModel||before?.data.model||'';
+        history.unshift({id:crypto.randomUUID(),collection,recordId:saved.id,action:before?'edit':'create',before,after:saved,actor:'Fleet Reviewer',createdAt:stamp});
         if (index < 0) target.push(saved); else target[index] = saved;
         return send(saved);
       }
@@ -87,14 +112,17 @@ const server = createServer(async (request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
+let failurePage;
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  failurePage=page;
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const origin = 'http://127.0.0.1:' + server.address().port;
+  const setFilter=async(header,label,value)=>{await page.getByRole('button',{name:'Filter '+header,exact:true}).click();await page.getByLabel(label,{exact:true}).selectOption(value);await page.keyboard.press('Escape');};
   const search = () => page.getByPlaceholder('Search identifier, number, truck or notes…');
   const toolbarAligned = async () => {
     const centers = await page.getByRole('group', { name: 'Inventory controls', exact: true }).locator('input, select, button').evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return rect.y + rect.height / 2; }));
-    assert.ok(centers.length >= 4);
+    assert.ok(centers.length >= 3);
     assert.ok(Math.max(...centers) - Math.min(...centers) < 3, 'desktop toolbar must stay on one row');
   };
   const tab = name => page.getByRole('tab', { name, exact: true }).click();
@@ -107,16 +135,16 @@ try {
   for (const name of ['Other devices', 'Other Devices', 'History', 'Samsara dashcams']) await expect(page.getByRole('tab', { name, exact: true })).toHaveCount(0);
   for (const name of ['Stock movement', 'Migration review']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
   await toolbarAligned(); await page.setViewportSize({ width: 1366, height: 900 }); await toolbarAligned(); await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.getByLabel('Assignment Filter').selectOption('unassigned');
+  await setFilter('Truck / Custody','Assignment Filter','unknown');
   await expect(page.getByRole('cell', { name: 'No matching records.', exact: true })).toHaveAttribute('colspan', '7');
-  await page.getByLabel('Assignment Filter').selectOption('');
+  await setFilter('Truck / Custody','Assignment Filter','');
   await search().fill('+1 (904) 921-7936'); await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible(); await search().fill('');
   assert.equal(writes.length, 0);
   await page.getByRole('button', { name: 'Add Tablet', exact: true }).click();
   let dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Installation Status').locator('option[value="verified_installed"]')).toHaveJSProperty('disabled', true);
   await expect(dialog.getByLabel('Installation Status').locator('option[value="reported_present"]')).toHaveJSProperty('disabled', true);
-  assert.equal(await dialog.getByLabel('Operational Status').evaluate(element => element.tagName), 'SELECT');
+  assert.equal(await dialog.getByLabel('Lifecycle').evaluate(element => element.tagName), 'SELECT');
   await dialog.getByLabel('IMEI', { exact: true }).fill('000000000000002');
   await dialog.getByLabel('Make', { exact: true }).fill('Samsung');
   await dialog.getByLabel('Assign Device To').selectOption('truckId');
@@ -149,9 +177,9 @@ try {
   await expect(page.getByRole('cell', { name: '000000000000024', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'CAMERA-022', exact: true })).toBeVisible();
   await toolbarAligned(); await page.setViewportSize({ width: 1366, height: 900 }); await toolbarAligned(); await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.getByLabel('Brand Filter').selectOption('FiveELD');
+  await setFilter('Brand','Brand Filter','FiveELD');
   await expect(page.getByRole('cell', { name: 'CAMERA-022', exact: true })).toHaveCount(0);
-  await page.getByLabel('Brand Filter').selectOption('');
+  await setFilter('Brand','Brand Filter','');
   await page.getByRole('button', { name: 'Add Dashcam', exact: true }).click();
   dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Device Type')).toHaveValue('dashcam');
@@ -222,7 +250,7 @@ try {
   await expect(dialog.getByLabel('Reusable', { exact: true })).toHaveCount(0);
   await dialog.getByLabel('Supply Name').fill('Safety Vest');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click(); await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole('columnheader', { name: 'Safety Vest', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Filter Safety Vest', exact: true })).toHaveCount(2);
   assert.equal(writes.filter(write => write.path.includes('/movements')).length, 0);
   assert.equal(reads.filter(path => path.includes('/history')).length, 0);
   assert.equal(data.equipment.find(item => item.id === id(42)).data.sent, true, 'existing IFTA source flags must remain');
@@ -234,6 +262,70 @@ try {
   await expect(company.getByRole('link', { name: '061', exact: true })).toHaveCount(0);
   await page.getByLabel('Truck Status Filter').selectOption('all');
 
+  // Structured attributes are reviewed before saving; filters survive tab switches.
+  await tab('Tablets');
+  await page.getByRole('button',{name:'Add Tablet',exact:true}).click();dialog=page.getByRole('dialog');
+  await dialog.getByLabel('IMEI',{exact:true}).fill('000000000000004');
+  await dialog.getByLabel('Make',{exact:true}).fill('Samsung');
+  await dialog.getByLabel('Model',{exact:true}).fill('Galaxy Tab A7 Lite SM-T227U 32GB Gray');
+  await dialog.getByLabel('Lifecycle',{exact:true}).selectOption('spare');
+  await dialog.getByLabel('Condition',{exact:true}).selectOption('good');
+  await dialog.getByLabel('Assign Device To').selectOption('locationId');
+  await dialog.getByLabel('Storage Location',{exact:true}).selectOption(id(1));
+  await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  const spareId=writes.at(-1).input.record.id;
+  let spareRow=page.getByRole('row').filter({hasText:'000000000000004'});
+  await spareRow.getByRole('button',{name:'Edit',exact:true}).click();dialog=page.getByRole('dialog');
+  const beforePreview=writes.length;
+  await dialog.getByRole('button',{name:'Organize device details',exact:true}).click();
+  await expect(dialog.getByText('SM-T227U',{exact:true})).toBeVisible();
+  assert.equal(writes.length,beforePreview,'preview must not save');
+  await dialog.getByRole('button',{name:'Use these details',exact:true}).click();
+  await expect(dialog.getByLabel('Device Color')).toHaveValue('Gray');
+  await expect(dialog.getByLabel('Storage (GB)')).toHaveValue('32');
+  await dialog.getByLabel('Case Color').fill('Blue');
+  await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  assert.equal(data.assets.find(a=>a.id===spareId).data.originalModel,'Galaxy Tab A7 Lite SM-T227U 32GB Gray');
+  await search().fill('000000000000004');await expect(page.getByRole('cell',{name:'000000000000004',exact:true})).toBeVisible();
+  await tab('Phones');await tab('Tablets');await expect(search()).toHaveValue('000000000000004');
+  await search().fill('');
+  const historyReads=reads.filter(p=>p.includes('/history')).length;
+  spareRow=page.getByRole('row').filter({hasText:'000000000000004'});
+  await spareRow.getByRole('button').first().click();dialog=page.getByRole('dialog');
+  assert.equal(reads.filter(p=>p.includes('/history')).length,historyReads);
+  await dialog.getByRole('button',{name:'History',exact:true}).click();
+  await expect(dialog.getByText(/Original Description:/).first()).toBeVisible();
+  await dialog.getByRole('button',{name:'Close',exact:true}).last().click();
+  // Atomic replacement retains the draft after failure and explicitly moves its line.
+  await page.getByLabel('Actions for 000000000000002',{exact:true}).selectOption('replace');dialog=page.getByRole('dialog');
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByLabel('Replacement device',{exact:true}).selectOption(spareId);
+  await dialog.getByLabel('Select destination',{exact:true}).selectOption(id(1));
+  await dialog.getByLabel('Reason',{exact:true}).fill('Replace damaged tablet');
+  failSave=true;await dialog.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(dialog).toContainText('Inventory changed; reload and review');
+  assert.equal(data.lines.find(l=>l.id===id(30)).data.assetId,tabletId);
+  await expect(dialog.getByLabel('Reason',{exact:true})).toHaveValue('Replace damaged tablet');
+  await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  assert.equal(data.lines.find(l=>l.id===id(30)).data.assetId,spareId);
+  assert.equal(data.assets.find(a=>a.id===spareId).data.truckId,id(101));
+  assert.equal(data.assets.find(a=>a.id===tabletId).data.locationId,id(1));
+  assert.equal(data.assets.find(a=>a.id===spareId).data.equipmentState,'unknown');
+  await page.getByLabel('Actions for 000000000000004',{exact:true}).selectOption('verify');dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Reason',{exact:true}).fill('Physically checked on truck');
+  await dialog.getByRole('button',{name:'Verify',exact:true}).click();await expect(dialog).toHaveCount(0);
+  assert.equal(data.assets.find(a=>a.id===spareId).data.equipmentState,'verified_installed');
+  // Review retains unclassified hardware and unknown-year observations.
+  data.equipment.push(record(43,{name:'IFTA Sticker',truckId:id(100),equipmentState:'reported_present'}));
+  await tab('Needs Attention');await expect(page.locator('tbody').getByText('Unclassified device',{exact:false}).first()).toBeVisible();
+  await page.getByRole('row').filter({hasText:'UNCLASSIFIED-DEVICE'}).getByRole('button',{name:'Review',exact:true}).click();dialog=page.getByRole('dialog');
+  await expect(dialog.getByLabel('Device Type')).toHaveValue('other');
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(page.getByRole('button',{name:'022 · IFTA Sticker · Year unknown',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'022 · IFTA Sticker · Year unknown',exact:true}).click();dialog=page.getByRole('dialog');
+  await expect(dialog).toContainText('Reported Present');await dialog.getByRole('button',{name:'Close',exact:true}).last().click();
+  await page.screenshot({path:join(tmpdir(),'mserp-inventory-attention-desktop.png'),animations:'disabled'});
+  await tab('Tablets');await expect(page.getByRole('cell',{name:'000000000000004',exact:true})).toBeVisible();await expect(page.getByRole('status',{name:'Loading…'})).toHaveCount(0);await page.screenshot({path:join(tmpdir(),'mserp-inventory-directory-desktop.png'),animations:'disabled'});
   await tab('Transponders');
   await expect(page.getByRole('region', { name: 'PrePass management' })).toContainText('777111222');
   await expect(page.getByRole('button', { name: 'Add local notes', exact: true })).toHaveCount(0);
@@ -252,7 +344,7 @@ try {
   await page.getByRole('row').filter({ hasText: 'MS003' }).getByRole('button', { name: 'Edit', exact: true }).click();
   dialog = page.getByRole('dialog'); await dialog.getByLabel('Active', { exact: true }).uncheck();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click(); await expect(dialog).toHaveCount(0);
-  await page.getByLabel('Status Filter').selectOption('record:archived');
+  await setFilter('Unit','Status Filter','record:archived');
   await expect(page.getByRole('button', { name: /MS003/ })).toBeVisible();
 
   readOnly = true;
@@ -272,5 +364,5 @@ try {
   await expect(page.getByText('Truck access is required to view the supplies checklist.', { exact: true })).toBeVisible();
   assert.equal(reads.slice(readStart).includes('/api/lookups/trucks'), false);
   assert.deepEqual(errors, []);
-  console.log('Inventory base browser checks passed: phones, unified dashcams/brands, controlled statuses/colors, assignment installation rules, device-only truck equipment, company/other supplies checkboxes, conflicts, no stock/history UI, PrePass, trailers, read-only/access guards and mobile layout.');
-} finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  console.log('Inventory base browser checks passed: phones, unified dashcams/brands, controlled statuses/colors, assignment installation rules, device-only truck equipment, company/other supplies checkboxes, structured details, lazy history, atomic replacement/retry, verification, needs attention, conflicts, no stock UI, PrePass, trailers, read-only/access guards and mobile layout.');
+} catch(error) { if(failurePage){await failurePage.screenshot({path:join(tmpdir(),'inventory-browser-failure.png')});console.error((await failurePage.locator('[role=dialog]').allTextContents()).join('\n'));} throw error; } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
