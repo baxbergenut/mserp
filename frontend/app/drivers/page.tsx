@@ -84,6 +84,7 @@ function DriversContent() {
   const [savedDriver, setSavedDriver] = useState<Driver | null>(null);
   const saveLatch = useRef(false);
   const [intake, setIntake] = useState<DriverIntake | null>(null);
+  const openedSetupID = useRef<string | null>(null);
   const [existingDrivers, setExistingDrivers] = useState<DriverOption[]>([]);
   const [linkDriverID, setLinkDriverID] = useState("");
   const requestSequence = useRef(0);
@@ -181,12 +182,18 @@ function DriversContent() {
     setSeparateConfirmed(false); setServiceChoices([]); setSavedDriver(null);
     setEditing(null);
     setError("");
+    return true;
   }, [loadLookups, permissions]);
 
   useEffect(() => {
-    if (!setupID) return;
+    if (!setupID) { openedSetupID.current = null; return; }
+    // Session refreshes replace permissions and openIntake. Initialize a setup
+    // link only once so those refreshes cannot overwrite the user's draft.
+    if (openedSetupID.current === setupID) return;
     let active = true;
-    void fetchDriverIntakeById(setupID).then((hire) => { if (active) openIntake(hire); })
+    void fetchDriverIntakeById(setupID).then((hire) => {
+      if (active && openIntake(hire)) openedSetupID.current = setupID;
+    })
       .catch(() => { if (active) setError("This setup task is no longer available. It may already be completed."); });
     return () => { active = false; };
   }, [setupID, openIntake]);

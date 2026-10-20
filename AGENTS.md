@@ -2212,6 +2212,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Guided driver setup (migration 080)
 
+- Initialize each `?setup=` intake link once per navigation. Routine session
+  refreshes replace permission objects every 30 seconds and on focus/visibility;
+  they must never reinitialize the open form or clear its draft/service choices.
 - Manual Add and FleetScope setup use `drivers/DriverSetup.tsx`: information,
   assignments (pay and escrow), optional new-truck details, services, and finalize
   (start date/status). New truck is the solo default; existing/unassigned and team
