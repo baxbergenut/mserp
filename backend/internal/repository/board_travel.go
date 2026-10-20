@@ -68,7 +68,7 @@ func (t BoardTravel) display(key string, now time.Time) (value, reason string) {
 			return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
 		}
 		loc, _ := time.LoadLocation("America/New_York")
-		return "ETA " + t.ArrivalAt.In(loc).Format("15:04"), reason
+		return "ETA " + t.ArrivalAt.Round(15*time.Minute).In(loc).Format("15:04"), reason
 	case "stopped":
 		return fmt.Sprintf("%.0fmi", math.Ceil(t.Miles)), reason
 	}

@@ -477,6 +477,7 @@ export interface BoardAutomation {
   context: string; appointment?: BoardSchedule; manualStopTime: string; stopType?: "pickup" | "delivery"; arrived: boolean;
   arrivalOverride: "auto" | "arrived" | "not_arrived"; observedAt: string; stale: boolean;
   travelMode: "auto" | "manual"; travelValue: string; reason?: string;
+  travelStale?: boolean; travelArrivalAt?: string;
   requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
 }
 export interface BoardStop { key: string; type: string; location: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule }

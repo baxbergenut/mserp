@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
+import { createRequire } from 'node:module';
 const source = fs.readFileSync(new URL('../app/driver-board/board.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
 const { reconcileDriverBoard, parseETA, formatETA, previewCurrentLoad, progressStatus, isOldLocation } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
@@ -71,3 +72,25 @@ assert.equal(parseETA('25:00'), null);
 assert.equal(parseETA('300.123 mi'), null);
 
 assert.equal(formatETA('13:00 · 300 mi', true), '13:00 · 300 mi');
+
+const etaSource = fs.readFileSync(new URL('../app/driver-board/eta.ts', import.meta.url), 'utf8');
+const etaJS = ts.transpileModule(etaSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
+const etaModule = { exports: {} }, require = createRequire(import.meta.url);
+new Function('require', 'module', 'exports', etaJS)(name => name === './board' ? { parseETA } : require(name), etaModule, etaModule.exports);
+const { roundETAClock, facilityETATitle } = etaModule.exports;
+for (const [value, want] of [['10:07', '10:00'], ['10:08', '10:15'], ['10:22', '10:15'], ['10:23', '10:30'], ['10:38', '10:45'], ['10:53', '11:00'], ['23:59', '00:00']]) assert.equal(roundETAClock(value), want);
+const chicago = { latitude: 41.8781, longitude: -87.6298 };
+const phoenix = { latitude: 33.4484, longitude: -112.074 };
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-10-21T04:59:00Z' }, chicago), 'ETA Oct 21, 00:00 CDT');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-01-20T17:08:00Z' }, chicago), 'ETA Jan 20, 11:15 CST');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-07-20T17:08:00Z' }, phoenix), 'ETA Jul 20, 10:15 MST');
+assert.equal(facilityETATitle('13:08', {}, chicago, new Date('2026-10-20T16:00:00Z')), 'ETA Oct 20, 12:15 CDT');
+assert.equal(facilityETATitle('2026-10-20T23:59', {}, chicago), 'ETA Oct 20, 23:00 CDT');
+assert.equal(facilityETATitle('13:08', {}, chicago, new Date('2026-01-20T16:00:00Z')), 'ETA Jan 20, 12:15 CST');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-03-08T07:08:00Z' }, chicago), 'ETA Mar 8, 01:15 CST');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-11-01T07:08:00Z' }, chicago), 'ETA Nov 1, 01:15 CST');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-10-20T17:00:00Z', travelStale: true }, chicago), '');
+assert.equal(facilityETATitle('133 mi', {}, chicago), '');
+assert.equal(facilityETATitle('', { travelArrivalAt: 'invalid' }, chicago), '');
+assert.equal(facilityETATitle('', { travelArrivalAt: '2026-10-20T17:00:00Z' }, {}), '');
+console.log('ETA rounding and facility timezones passed: quarter hours, midnight, manual times, DST, Arizona and stale/missing estimates.');

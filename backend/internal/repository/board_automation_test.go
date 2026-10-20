@@ -197,6 +197,24 @@ func TestBoardTravelDistanceDisplay(t *testing.T) {
 	}
 }
 
+func TestBoardTravelETARounding(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct{ arrival, want string }{
+		{"2026-10-20T14:07:29Z", "ETA 10:00"},
+		{"2026-10-20T14:07:30Z", "ETA 10:15"},
+		{"2026-10-20T14:22:30Z", "ETA 10:30"},
+		{"2026-10-20T14:37:30Z", "ETA 10:45"},
+		{"2026-10-20T14:52:30Z", "ETA 11:00"},
+		{"2026-10-21T03:59:00Z", "ETA 00:00"},
+	} {
+		arrival, _ := time.Parse(time.RFC3339, tc.arrival)
+		travel := BoardTravel{Enabled: true, Context: "one", Motion: "moving", CalculatedAt: now, ReportedAt: now, ArrivalAt: arrival}
+		if got, _ := travel.display("one", now); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.arrival, got, tc.want)
+		}
+	}
+}
+
 func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {
 	t.Helper()
 	d, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Automation Driver", PayType: "cpm", PayRate: 0.6, Active: true})

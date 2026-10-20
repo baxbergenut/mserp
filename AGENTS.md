@@ -305,8 +305,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   text is read-only inside ETA; @PU/@DEL replaces travel mileage when the last
   GPS position was within five straight-line miles of the selected stop,
   including stops without a provider schedule.
-  Fresh automatic markers are red; stale last-known markers are amber with the
-  observation time on hover. ETA is automatic while its entry is blank; a typed
+  Fresh automatic markers are red; stale last-known markers are amber.
+  ETA is automatic while its entry is blank; a typed
   time or mileage overrides it until cleared. The ETA popup has a blank optional
   manual PU/DEL time for the selected load stop, overriding only the displayed
   DataTruck schedule until cleared. Both former arrival/travel mode dropdowns
@@ -317,17 +317,21 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   routing is default off and requires explicit access/operations/speed verification
   plus reviewed per-load/trailer truck profiles or explicit
   `BOARD_ROUTES_STANDARD_SEMI=true` (operator-approved shared dimensions, assumed
-  80,000 lb gross; disclose assumptions on hover, hazmat not modeled). Explicit
+  80,000 lb gross; assumptions retained server-side, hazmat not modeled). Explicit
   invalid profiles never fall back. DataTruck weight is absent in live samples.
   Never substitute car routes.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
-  Stale GPS displays last-known miles with observation time on hover, including
+  Stale GPS displays amber last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
   moving ETAs become last-known miles after ten minutes.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
-  proximity/freshness rules and rollout. Browser checks: `test-board-appointments.mjs`
+  proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
+  cell hover shows only facility-local ETA (offline coordinate timezone lookup).
+  Live travel is red; stale miles are amber. Routing assumptions remain server
+  diagnostics. Load cards expose a rightmost read-only-compatible copy-number icon.
+  Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; database tests use the existing disposable
   `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`.
 

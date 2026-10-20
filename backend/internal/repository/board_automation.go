@@ -91,6 +91,8 @@ type BoardAutomation struct {
 	Stale                bool            `json:"stale"`
 	TravelMode           string          `json:"travelMode"`
 	TravelValue          string          `json:"travelValue"`
+	TravelStale          bool            `json:"travelStale"`
+	TravelArrivalAt      string          `json:"travelArrivalAt,omitempty"`
 	Reason               string          `json:"reason,omitempty"`
 	RequiresConfirmation bool            `json:"requiresConfirmation"`
 	RoutingEnabled       bool            `json:"routingEnabled"`
@@ -232,7 +234,12 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 				a.Stale = evidence.LastAt.IsZero() || time.Since(evidence.LastAt) > 10*time.Minute
 			}
 			if a.TravelMode == "auto" && telemetrySafe {
-				a.TravelValue, a.Reason = travel.display(key, time.Now())
+				now := time.Now()
+				a.TravelValue, a.Reason = travel.display(key, now)
+				a.TravelStale = travel.LastKnownPosition || now.Sub(travel.ReportedAt) > 10*time.Minute || now.Sub(travel.CalculatedAt) > 10*time.Minute
+				if a.TravelValue != "" && !a.TravelStale && travel.Motion == "moving" && !travel.ArrivalAt.IsZero() {
+					a.TravelArrivalAt = travel.ArrivalAt.Round(15 * time.Minute).Format(time.RFC3339)
+				}
 			}
 		} else if a.Reason == "" {
 			a.Reason = "Select a matched load stop and assigned truck"

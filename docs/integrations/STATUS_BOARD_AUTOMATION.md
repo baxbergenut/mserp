@@ -28,7 +28,7 @@ remain refresh candidates. Source refresh never advances the current load.
 Read-only appointment text shares the ETA cell with editable travel information.
 The provider's explicit `appointment` type displays the local start time;
 `window` displays 24/7 under the team's shorthand convention. Full local window
-boundaries are preserved on hover and in Loads. Live read-only sampling confirmed
+boundaries are preserved in Loads and the ETA editor. Live read-only sampling confirmed
 `appointment` with a start date/time and null ends, plus `window` with both ends.
 All-day ranges returned as `window` use the same formatting. Unknown provider
 enums, incomplete/reversed windows and lone legacy timestamps do not produce an
@@ -46,7 +46,7 @@ It uses the cached GPS coordinates and selected stop coordinates without requiri
 optional road routing. Future/out-of-order positions are ignored. An unchanged
 cached position is re-evaluated after a rule change, including when the provider
 has not sent a new point. Positions older than ten minutes show only last-known
-proximity, with an amber marker and observation time on hover. Automatic
+proximity, with an amber marker. Automatic
 proximity requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
 VIN, trailer, load ID, selected stop and facility coordinates scope evidence.
 
@@ -58,15 +58,26 @@ For a stop without a recognized provider schedule, the prefix appears alone.
 The ETA popup has no arrival or travel mode dropdown. Old saved mode choices are
 ignored. Schedule-only refresh does not reset GPS proximity. GPS never changes status,
 marks loads completed, or advances stop progress. Last-known proximity becomes stale
-on hover after ten minutes. The ordinary location column retains its existing
+after ten minutes. The ordinary location column retains its existing
 three-hour coloring policy.
 
-ETA uses New York time. Manual times display red `ETA HH:mm`, mileage red `133mi`.
+ETA uses New York time in the cell, rounded to the nearest 15 minutes (ties round
+forward). Manual times use the same display rounding without changing saved input.
+The hover shows only the rounded ETA in the selected facility's local timezone,
+resolved offline from stop coordinates with tz-lookup; it includes the local date
+and timezone abbreviation. No appointment, GPS diagnostic or routing-profile notes
+appear in the cell hover. Missing facility coordinates or a valid ETA leave the
+hover empty. Stale GPS retains mileage only, without presenting an old ETA.
+Manual times/mileage and live automatic travel display red; stale automatic
+mileage displays amber, matching stale @PU/@DEL. The API exposes travelStale and
+travelArrivalAt separately from arrival-proximity evidence.
 Entering either clears the other. Notes are never rewritten. Existing manual ETA
 survives rollout and is bound to its current context; a subsequent load/stop/truck
 change invalidates it. The combined cell is copied as one text value. Poll evidence
 is stored separately from personal history/undo and broadcast using the existing
 SSE snapshots. Active drafts retain the existing concurrency protections.
+Each load card has a rightmost copy-number icon, available to read-only viewers
+without opening the card or changing the load selection.
 
 The optional manual pickup/delivery time input starts blank for each selected load
 stop. Saving text replaces the displayed DataTruck appointment label for that stop;
@@ -120,8 +131,8 @@ On October 18, 2026, the operator approved a shared estimate profile and confirm
 Five ELD tracking speeds are mph. `BOARD_ROUTES_STANDARD_SEMI=true` uses assumed
 dimensions of 13 ft 6 in height, 102 in width, 73 ft overall length and a 53 ft
 trailer, with assumed 80,000 lb combined tractor/trailer/cargo weight. API metric
-values round up. Hazmat restrictions are not modeled. These assumptions appear
-on the ETA/miles hover, including retained stopped estimates. This profile is for
+values round up. Hazmat restrictions are not modeled. These assumptions remain
+in the server cache/diagnostics rather than the ETA/miles hover. This profile is for
 board travel estimates, not measured vehicle clearance or driver navigation.
 Live DataTruck list/detail samples (including load 8YX9221) did not expose any
 weight field; do not describe the fallback as DataTruck weight or use cargo-only

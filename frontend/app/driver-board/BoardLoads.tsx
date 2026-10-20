@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDown, ArrowUp, History, RefreshCw, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Copy, History, RefreshCw, X } from "lucide-react";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { fetchBoardLoads } from "@/app/lib/api";
 import type { BoardLoad, BoardLoads as Loads, BoardLoadAction } from "@/app/lib/types";
@@ -10,6 +10,21 @@ import { controlClass } from "@/app/components/management/ManagementUI";
 
 const buttonClass = "rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40";
 const time = (value: string) => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown";
+
+function CopyLoadNumber({ number }: { number: string }) {
+  const [feedback, setFeedback] = useState("");
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => setFeedback(""), 2000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+  return <button type="button" aria-label={`Copy load number ${number}`} title={feedback || "Copy load number"}
+    className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-blue-500"
+    onClick={() => {
+      if (!navigator.clipboard) { setFeedback("Copy failed"); return; }
+      navigator.clipboard.writeText(number).then(() => setFeedback("Copied"), () => setFeedback("Copy failed"));
+    }}>{feedback === "Copied" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}<span className="sr-only" role="status">{feedback}</span></button>;
+}
 
 export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange, onClose, onHistory }: {
   driverId: string; name: string; initial: Loads; canEdit: boolean; waiting: boolean;
@@ -83,9 +98,9 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     const open = expanded === load.planId;
     const current = kind === "current";
     return <article key={load.planId} className={`rounded-lg border ${current ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-800"}`}>
-      <button type="button" aria-label={`${load.number}${current ? " · Current load" : ""}`} aria-expanded={open}
-        className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/60"
-        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null ? "text-red-300" : ""}`}>{load.number}</span>{current && <span className="shrink-0 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-blue-200">Current</span>}</button>
+      <div className="flex items-center"><button type="button" aria-label={`${load.number}${current ? " · Current load" : ""}`} aria-expanded={open}
+        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/60"
+        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null ? "text-red-300" : ""}`}>{load.number}</span>{current && <span className="shrink-0 rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-blue-200">Current</span>}</button><CopyLoadNumber number={load.number} /></div>
       {open && <div className="border-t border-zinc-800 px-3 pb-3">{detail(load)}
         {current ? <><label className="mt-3 block text-xs text-zinc-400">Destination source<select aria-label="Current load destination source" disabled={locked} value={view.destinationSource ? view.stopKey : ""} onChange={e => void act(e.target.value ? { action: "source", stopKey: e.target.value } : { action: "manual" })} className={`${controlClass} mt-1`}><option value="">Manual destination</option>{load.stops.filter(s => s.location).map((s, i) => <option key={`${s.key}-${i}`} value={s.key}>{s.type} · {compactLoadLocation(s.location)}</option>)}</select></label>
           {canEdit && <button className={`${buttonClass} mt-3`} disabled={locked} onClick={() => { setClear(true); setSelect(null); }}>Clear current selection</button>}</> : canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button><button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>{kind === "next" && <><button aria-label={`Move ${load.number} up`} className={buttonClass} disabled={locked || index === 0} onClick={() => move(index, -1)}><ArrowUp className="h-3 w-3" /></button><button aria-label={`Move ${load.number} down`} className={buttonClass} disabled={locked || index === view.next.length - 1} onClick={() => move(index, 1)}><ArrowDown className="h-3 w-3" /></button></>}</div>}</div>}
