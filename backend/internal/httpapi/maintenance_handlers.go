@@ -41,6 +41,7 @@ func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Lo
 	r.Get("/maintenance/reports", h.reports)
 	r.Get("/maintenance/due", h.due)
 	r.Get("/maintenance/preventative", h.preventative)
+	r.Put("/maintenance/preventative/{id}", h.pmBaseline)
 	r.Post("/maintenance/vendors", h.vendor)
 	r.Put("/maintenance/vendors/{id}", h.vendor)
 	r.Put("/maintenance/types/{code}", h.serviceType)

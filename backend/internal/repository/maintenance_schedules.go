@@ -33,6 +33,7 @@ type MaintenanceSchedule struct {
 	Version       int     `json:"version"`
 }
 type MaintenanceDue struct {
+	CycleID           *string              `json:"-"`
 	CurrentReportedAt *time.Time           `json:"currentReportedAt"`
 	LastRecordID      *string              `json:"lastRecordId"`
 	TruckID           string               `json:"truckId"`
@@ -102,6 +103,13 @@ func (r *MaintenanceRepository) SaveReading(ctx context.Context, in MaintenanceR
 	if err := checkMaintenanceReading(ctx, tx, truck, date, in.Mileage, "", in.ID); err != nil {
 		return in, err
 	}
+	var conflictsPM bool
+	if err := tx.QueryRow(ctx, `SELECT coalesce((m.service_date<=$2 AND m.odometer>$3) OR (m.service_date>=$2 AND m.odometer<$3),false) FROM trucks t `+maintenancePMJoin+` WHERE t.id=$1`, truck, date, in.Mileage).Scan(&conflictsPM); err != nil {
+		return in, err
+	}
+	if conflictsPM {
+		return in, fmt.Errorf("%w: odometer conflicts with the last PM; review its date and service odometer first", ErrMaintenanceInvalid)
+	}
 	var row pgx.Row
 	if in.ID == "" {
 		row = tx.QueryRow(ctx, `INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,$2,$3,'manual',$4) RETURNING id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at`, truck, date, in.Mileage, in.ActorName)
@@ -165,12 +173,10 @@ func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.Query(ctx, `SELECT t.id,t.unit_number,'pm',m.id::text,m.service_date::text,m.odometer,
+	rows, err := q.Query(ctx, `SELECT t.id,t.unit_number,'pm',m.id::text,m.cycle_id::text,m.service_date::text,m.odometer,
  r.reading_date::text,r.mileage,r.reported_at
  FROM trucks t
- LEFT JOIN LATERAL (SELECT v.id,v.service_date,v.odometer FROM maintenance_records v
- WHERE v.truck_id=t.id AND v.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode' IN ('pm','oil'))
- ORDER BY v.service_date DESC,v.created_at DESC,v.id DESC LIMIT 1) m ON true
+ `+maintenancePMJoin+`
  `+maintenanceCurrentReadingJoin+` WHERE ($1='' AND t.active OR t.id=NULLIF($1,'')::uuid) ORDER BY t.unit_number,t.id`, truck)
 	if err != nil {
 		return nil, err
@@ -179,7 +185,7 @@ func maintenanceDue(ctx context.Context, q chargeQuery, truck string, today time
 	items := []MaintenanceDue{}
 	for rows.Next() {
 		var v MaintenanceDue
-		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastRecordID, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles, &v.CurrentReportedAt); err != nil {
+		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.ServiceCode, &v.LastRecordID, &v.CycleID, &v.LastDate, &v.LastMiles, &v.CurrentDate, &v.CurrentMiles, &v.CurrentReportedAt); err != nil {
 			return nil, err
 		}
 		for _, s := range schedules {

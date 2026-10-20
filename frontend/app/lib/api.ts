@@ -651,7 +651,7 @@ export const fetchMaintenanceHistory = (id: string) => apiRequest<import("./type
 export const fetchMaintenanceReports = (query: MaintenanceQuery) => apiRequest<import("./types").MaintenanceReport>(withQuery("/maintenance/reports",query));
 export const fetchMaintenanceDue = (truckId?: string) => apiRequest<import("./types").MaintenanceDue[]>(withQuery("/maintenance/due",{truckId}));
 export const fetchMaintenanceReadings = (truckId?: string) => apiRequest<import("./types").MaintenanceReading[]>(withQuery("/maintenance/readings",{truckId}));
-export const saveMaintenanceReading = (input: import("./types").MaintenanceReading) => apiRequest<import("./types").MaintenanceReading>(input.id ? `/maintenance/readings/${input.id}` : "/maintenance/readings",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
+export const saveMaintenanceReading = (input: import("./types").MaintenanceReading) => apiRequest<import("./types").MaintenanceReading>(input.id ? `/maintenance/readings/${input.id}` : "/maintenance/readings",{method:input.id ? "PUT":"POST",body:JSON.stringify({truckId:input.truckId,date:input.date,mileage:input.mileage,version:input.version})});
 export const saveMaintenanceSchedule = (input: import("./types").MaintenanceSchedule) => apiRequest<import("./types").MaintenanceSchedule>(input.id ? `/maintenance/schedules/${input.id}` : "/maintenance/schedules",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
 export const saveMaintenanceVendor = (input: import("./types").MaintenanceVendor) => apiRequest<import("./types").MaintenanceVendor>(input.id ? `/maintenance/vendors/${input.id}` : "/maintenance/vendors",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
 export const saveMaintenanceType = (input: import("./types").MaintenanceType) => apiRequest<import("./types").MaintenanceType>(`/maintenance/types/${input.code}`,{method:"PUT",body:JSON.stringify(input)});
@@ -675,3 +675,5 @@ export const fetchUpdaterOptions=()=>apiRequest<import("./types").UpdaterOption[
 export const fetchInvestorOptions=()=>apiRequest<import("./types").InvestorOption[]>("/lookups/investors");
 export type DispatcherPayReport=Pick<FinancialDashboard,"period"|"availableWeeks"|"dispatchers">;
 export const fetchDispatcherPay=(query:{weekStart?:string})=>apiRequest<DispatcherPayReport>(withQuery("/dispatcher-pay",query));
+
+export const saveMaintenancePM = (input: Pick<import("./types").PreventativeTruck, "truckId" | "lastDate" | "lastMiles" | "recordId" | "recordVersion" | "baselineVersion">) => apiRequest<void>(`/maintenance/preventative/${input.truckId}`, {method:"PUT",body:JSON.stringify(input)});

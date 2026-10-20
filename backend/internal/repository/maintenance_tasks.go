@@ -57,8 +57,8 @@ func (r *MaintenanceRepository) RefreshMaintenanceTasks(ctx context.Context, tod
 		old, exists := open[key]
 		delete(open, key)
 		baseline := ""
-		if d.LastRecordID != nil {
-			baseline = *d.LastRecordID
+		if d.CycleID != nil {
+			baseline = *d.CycleID
 		}
 		// Retain the mileage that established this reminder across telemetry outages.
 		// It belongs only to this completion cycle and is never a service reading.

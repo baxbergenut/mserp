@@ -7,6 +7,8 @@ import (
 
 // Both legacy completion tags identify the same PM service cycle.
 type PreventativeTruck struct {
+	RecordVersion     int        `json:"recordVersion"`
+	BaselineVersion   int        `json:"baselineVersion"`
 	CurrentReportedAt *time.Time `json:"currentReportedAt"`
 	CurrentSource     string     `json:"currentSource"`
 	NextMiles         *int       `json:"nextMiles"`
@@ -40,9 +42,9 @@ func (r *MaintenanceRepository) Preventative(ctx context.Context, search string,
 	}
 	p := Pagination{Page: page, PageSize: size}.Normalize(count)
 	rows, err := r.pool.Query(ctx, `SELECT t.id,t.unit_number,t.active,m.id,m.service_date::text,m.odometer,r.mileage,r.reading_date::text,
- coalesce(m.oil_type,''),r.reported_at,coalesce(r.source,'')
+ coalesce(m.oil_type,''),r.reported_at,coalesce(r.source,''),m.record_version,m.baseline_version
  FROM trucks t
- LEFT JOIN LATERAL (SELECT * FROM maintenance_records v WHERE v.truck_id=t.id AND v.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode' IN ('pm','oil')) ORDER BY v.service_date DESC,v.created_at DESC,v.id DESC LIMIT 1) m ON true
+ `+maintenancePMJoin+`
  `+maintenanceCurrentReadingJoin+`
  `+filter+` ORDER BY t.unit_number,t.id LIMIT $3 OFFSET $4`, inactive, search, p.PageSize, p.Offset())
 	if err != nil {
@@ -52,7 +54,7 @@ func (r *MaintenanceRepository) Preventative(ctx context.Context, search string,
 	result := PreventativePage{Items: []PreventativeTruck{}, Total: count, Page: p.Page, PageSize: p.PageSize, TotalPages: max(1, (count+p.PageSize-1)/p.PageSize)}
 	for rows.Next() {
 		var v PreventativeTruck
-		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.Active, &v.RecordID, &v.LastDate, &v.LastMiles, &v.CurrentMiles, &v.CurrentDate, &v.OilType, &v.CurrentReportedAt, &v.CurrentSource); err != nil {
+		if err := rows.Scan(&v.TruckID, &v.UnitNumber, &v.Active, &v.RecordID, &v.LastDate, &v.LastMiles, &v.CurrentMiles, &v.CurrentDate, &v.OilType, &v.CurrentReportedAt, &v.CurrentSource, &v.RecordVersion, &v.BaselineVersion); err != nil {
 			return result, err
 		}
 		result.Items = append(result.Items, v)

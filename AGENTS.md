@@ -507,7 +507,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   maintenance (`/fleet/preventative-maintenance`). Migration 099 stores oil grades
   and seeds 300 sourced US vendor locations (docs/data/maintenance-vendors-us.json).
   The preventative API lists each truck with its latest completed PM Service visit
-  and latest dated reading. PM and legacy oil completions reset the same schedule;
+  and latest dated reading. Migration 126 adds audited, versioned manual last-PM
+  dates/service odometers through PUT /maintenance/preventative/{truckId} and
+  compact table editors requiring Maintenance Edit. Work orders/invoices remain
+  unchanged; a new/changed latest completed PM supersedes the operational baseline.
+  Due services and reminders share the same baseline; current odometers use the
+  existing dated reading API and chronology guards.
+  PM and legacy oil completions reset the same schedule;
   one table has no service tabs, vendor, service cost or last-service-note columns. Migration 102 adds durable Five ELD mileage snapshots: the minute
   worker polls active exact-unique VINs on a five-minute cadence (three concurrent,
   forty-second budget), independently of browsing and schedules. GETs use cache

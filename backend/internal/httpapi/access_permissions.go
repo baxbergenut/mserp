@@ -160,6 +160,7 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/maintenance/odometer", "authenticated"},
 	{"GET", "/maintenance/options", "authenticated"},
 	{"GET", "/maintenance/preventative", "authenticated"},
+	{"PUT", "/maintenance/preventative/{id}", "authenticated"},
 	{"GET", "/maintenance/readings", "authenticated"},
 	{"POST", "/maintenance/readings", "authenticated"},
 	{"PUT", "/maintenance/readings/{id}", "authenticated"},

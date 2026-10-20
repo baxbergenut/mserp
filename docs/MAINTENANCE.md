@@ -71,6 +71,15 @@ are preserved. Older service dates never receive today's reading. Missing, stale
 ambiguous or unavailable telemetry leaves manual entry available. The GET is
 authorized by Maintenance View/Create/Edit and reads only the background cache.
 The manual odometer-history panel has been removed from Settings.
+Preventative maintenance offers Maintenance Edit users a pencil beside Last PM
+and clickable service/current odometers. Last PM edits save an audited operational
+baseline, including a nullable service odometer, without changing work orders or
+invoices. Baseline and latest-work-order versions reject stale edits. Due services
+and system reminders share this baseline; a new or changed latest completed PM
+work order supersedes it. Current odometers use the existing dated manual-reading
+workflow and cannot conflict with saved chronology or the effective PM baseline.
+Migration 126 adds maintenance_pm_baselines; PUT /maintenance/preventative/{truckId}
+requires Maintenance Edit and records the session actor.
 
 Due services refresh on focus and every 30 visible seconds. A startup/minute worker also creates PM Service system tasks for upcoming, due and overdue services. See the assignment and lifecycle rules below.
 Reports aggregate exact service amounts by reporting type, truck, vendor and period,

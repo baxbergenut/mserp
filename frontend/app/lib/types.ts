@@ -1359,7 +1359,7 @@ export interface DriverServiceSetup {
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
 
-export interface PreventativeTruck { currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; oilType: string; }
+export interface PreventativeTruck { recordVersion: number; baselineVersion: number; currentReportedAt: string | null; currentSource: string; nextMiles: number | null; remainingMiles: number | null; nextDate: string | null; status: MaintenanceDue["status"]; reason: string; truckId: string; unitNumber: string; active: boolean; recordId: string | null; lastDate: string | null; lastMiles: number | null; currentMiles: number | null; currentDate: string | null; oilType: string; }
 export type FleetScopeOwnership = { kind: "company" | "driver" | "investor"; mserpOwnerId: string; displayName: string; mserpOwnerDriverId: string | null; effectiveDate: string | null };
 export type FleetScopeTruckProjection = { mserpTruckId: string; unitNumber: string; vin: string | null; year: number | null; make: string | null; model: string | null; licensePlate: string | null; licenseState: string | null; operationalActive: boolean; operationalStatus: string; ownership: FleetScopeOwnership };
 export type FleetScopeProvisioning = { color: string; truckClass: string; gvwrLbs: number };
