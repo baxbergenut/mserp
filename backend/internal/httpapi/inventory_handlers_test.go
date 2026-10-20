@@ -16,7 +16,6 @@ import (
 func TestInventoryRoutePermissions(t *testing.T) {
 	tests := []struct{ method, path, permission string }{
 		{"GET", "/inventory", "inventory.read"}, {"GET", "/inventory/history", "inventory.read"},
-		{"GET", "/inventory/directory", "inventory.read"}, {"POST", "/inventory/operations", "inventory.manage"},
 		{"PUT", "/inventory/assets/019a0000-0000-4000-8000-000000000001", "inventory.manage"},
 		{"POST", "/inventory/movements", "inventory.manage"},
 		{"GET", "/inventory/imports", "inventory.import"}, {"POST", "/inventory/imports/preview", "inventory.import"},

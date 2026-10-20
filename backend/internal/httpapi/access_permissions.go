@@ -11,11 +11,9 @@ type routeAccess struct{ method, path, permission string }
 // Every registered authenticated route has an explicit policy, including handler-owned checks.
 var routeAccessPolicies = []routeAccess{
 	{"GET", "/inventory", "inventory.read"},
-	{"GET", "/inventory/directory", "inventory.read"},
 	{"GET", "/inventory/history", "inventory.read"},
 	{"PUT", "/inventory/{collection}/{id}", "inventory.manage"},
 	{"POST", "/inventory/movements", "inventory.manage"},
-	{"POST", "/inventory/operations", "inventory.manage"},
 	{"GET", "/inventory/imports", "inventory.import"},
 	{"POST", "/inventory/imports/preview", "inventory.import"},
 	{"PUT", "/inventory/imports/{id}", "inventory.import"},

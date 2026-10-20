@@ -2,7 +2,7 @@ import type { InventoryData, InventoryFields, InventoryRecord } from "@/app/lib/
 
 export const presenceStates = ["unknown", "reported_present", "verified_installed", "missing"];
 export const conditionStates = ["unknown", "good", "damaged", "repair", "lost", "retired"];
-export const deviceStates = ["unknown", "active", "spare", "inactive", "lost", "retired", "sold", "total_loss"];
+export const deviceStates = ["unknown", "active", "inactive", "sold", "total_loss"];
 export const carrierStates = ["unknown", "active", "suspended", "cancelled", "pending"];
 const labels: Record<string, string> = {
   unknown: "Unknown", reported_present: "Reported Present", verified_installed: "Verified Installed",
@@ -19,8 +19,7 @@ export function effectiveTruck(record: InventoryRecord, data: InventoryData): st
 export function installationState(record: InventoryRecord, data: InventoryData): string {
   if (record.data.equipmentState === "missing") return "missing";
   if (effectiveTruck(record, data)) return record.data.equipmentState || "unknown";
-  const parent = data.assets.find(asset => asset.id === record.data.gatewayId);
-  return record.data.custodian || record.data.custodianId || record.data.locationId || parent?.data.custodianId || parent?.data.custodian || parent?.data.locationId ? "not_installed" : "unassigned";
+  return record.data.custodian || record.data.locationId ? "not_installed" : "unassigned";
 }
 export function StatusBadge({ value = "unknown", label }: { value?: string; label?: string }) {
   value = value || "unknown";
@@ -28,7 +27,7 @@ export function StatusBadge({ value = "unknown", label }: { value?: string; labe
     ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
     : ["reported_present", "repair", "pending", "suspended", "needs_review"].includes(value)
       ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
-      : ["missing", "lost", "damaged", "total_loss", "cancelled"].includes(value)
+      : ["unknown", "missing", "lost", "damaged", "total_loss", "cancelled"].includes(value)
         ? "border-red-500/25 bg-red-500/10 text-red-400"
         : "border-zinc-700 bg-zinc-800/40 text-zinc-400";
   return <span className={"inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-medium " + color}>{label || readable(value)}</span>;

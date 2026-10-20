@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -22,11 +21,9 @@ type inventoryHandler struct {
 func registerInventoryRoutes(router chi.Router, logger *slog.Logger, repo *repository.InventoryRepository) {
 	h := inventoryHandler{repo, logger}
 	router.Get("/inventory", h.list)
-	router.Get("/inventory/directory", h.directory)
 	router.Put("/inventory/{collection}/{id}", h.save)
 	router.Get("/inventory/history", h.history)
 	router.Post("/inventory/movements", h.move)
-	router.Post("/inventory/operations", h.operation)
 	router.Get("/trailers", h.trailers)
 	router.Put("/trailers/{id}", h.saveTrailer)
 	router.Get("/trailers/{id}/history", h.trailerHistory)
@@ -58,7 +55,7 @@ func (h inventoryHandler) fail(w http.ResponseWriter, err error) {
 }
 func (h inventoryHandler) list(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{}
-	collections := []string{"assets", "lines", "locations", "supplies", "equipment", "custodians"}
+	collections := []string{"assets", "lines", "locations", "supplies", "equipment"}
 	session, _ := authSessionFromContext(r.Context())
 	if repository.HasPermission(session.User, "tolls.read") {
 		collections = append(collections, "transponder-notes")
@@ -70,10 +67,6 @@ func (h inventoryHandler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		result[collection] = records
-	}
-	if r.URL.Query().Get("includeStock") == "0" {
-		writeJSON(w, 200, result)
-		return
 	}
 	balances, err := h.repo.Stock(r.Context())
 	if err != nil {
@@ -99,36 +92,6 @@ func (h inventoryHandler) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.saveCollection(w, r, collection)
-}
-func (h inventoryHandler) operation(w http.ResponseWriter, r *http.Request) {
-	var input repository.InventoryOperation
-	if err := decodeJSON(r, &input); err != nil {
-		writeAPIError(w, 400, "Invalid inventory operation")
-		return
-	}
-	// Existing assignments can also be released by the operation. Require truck
-	// access for the whole workflow, rather than checking only new destinations.
-	if !requireCapabilities(w, r, "trucks.read") {
-		return
-	}
-	result, err := h.repo.ApplyOperation(r.Context(), input, inventoryActor(r))
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
-	writeJSON(w, 200, result)
-}
-func (h inventoryHandler) directory(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	page, _ := strconv.Atoi(q.Get("page"))
-	size, _ := strconv.Atoi(q.Get("pageSize"))
-	session, _ := authSessionFromContext(r.Context())
-	result, err := h.repo.Directory(r.Context(), repository.InventoryDirectoryQuery{Collection: q.Get("collection"), DeviceType: q.Get("deviceType"), TruckID: q.Get("truckId"), Search: q.Get("search"), Active: q.Get("active"), Condition: q.Get("condition"), Lifecycle: q.Get("lifecycle"), Presence: q.Get("presence"), Custody: q.Get("custody"), Location: q.Get("location"), Brand: q.Get("brand"), Sort: q.Get("sort"), Direction: q.Get("direction"), Page: page, PageSize: size, CanTrucks: repository.HasPermission(session.User, "trucks.read")})
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
-	writeJSON(w, 200, result)
 }
 func (h inventoryHandler) saveTrailer(w http.ResponseWriter, r *http.Request) {
 	h.saveCollection(w, r, "trailers")

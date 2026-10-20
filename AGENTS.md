@@ -286,7 +286,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   by API and deferred DB trigger. Gateway moves reset camera verification in the
   same transaction. Statuses use controlled codes, capitalized colored badges.
   Supplies is a versioned presence checkbox matrix grouped by recorded company
-  ownership, including inactive trucks. Stock and units UI is deferred;
+  ownership, including inactive trucks. Stock/units/history UI is deferred;
   audits and ledger APIs remain stored, and checking presence never moves stock.
   Inventory phone displays reuse the shared phone formatter;
   carrier status appears on AT&T lines rather than next to tablet numbers.
@@ -298,18 +298,6 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   review, cutover and maintenance-baseline reconciliation. Database tests use
   disposable `MSERP_INVENTORY_TEST_DATABASE_URL`; browser checks use a `/api` build
   and `node scripts/test-inventory-views.mjs`.
-
-- Inventory management migration 123 adds model number, storage capacity, device/
-  case color, preserved original descriptions and managed custodian UUIDs. Header
-  filters and per-tab preferences use existing app controls; Needs Attention
-  exposes unresolved devices, carrier links and undated supply observations.
-  Record history is loaded on demand. Directory reads use server filtering and
-  pagination; full editor snapshots stay separate from lighter directory context.
-  POST /inventory/operations requires inventory.manage plus trucks.read and saves
-  reviewed transfers/replacements atomically with version and related-link fences,
-  reasons, effective dates and immutable receipts. Unavailable devices cannot gain
-  operational links; existing conflicts require review. Migration does not infer
-  custody, stock counts, sticker years or provider status. See docs/FLEET_INVENTORY.md.
 
 - Status Board appointment/arrival automation uses migration 116, repository
   `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve

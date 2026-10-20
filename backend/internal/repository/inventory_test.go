@@ -134,10 +134,6 @@ func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Conte
 	if err != nil {
 		t.Fatal(err)
 	}
-	managementMigration, err := os.ReadFile("../../sql/123_inventory_management.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("inventory_%d", time.Now().UnixNano())
@@ -156,11 +152,6 @@ func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Conte
 				normalized := strings.ReplaceAll(string(source), "\r\n", "\n")
 				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 				baseBody := strings.ReplaceAll(string(baseMigration), "\r\n", "\n")
-				managementBody := strings.ReplaceAll(string(managementMigration), "\r\n", "\n")
-				if !strings.Contains(normalized, managementBody) {
-					t.Fatal("init schema must contain management migration")
-				}
-				normalized = strings.Replace(normalized, managementBody, "", 1)
 				if !strings.Contains(normalized, body) {
 					t.Fatal("init schema must contain the exact migration")
 				}
@@ -170,7 +161,6 @@ func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Conte
 					seed(t, ctx, admin)
 				}
 				exec(string(baseMigration))
-				exec(string(managementMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT ALL ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			testCfg := cfg.Copy()
