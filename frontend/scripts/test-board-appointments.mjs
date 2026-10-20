@@ -46,7 +46,25 @@ await page.route('**/api/**', async route => {
 });
 try {
   const base = `http://127.0.0.1:${server.address().port}`;
+  const pickup = { kind: 'appointment', label: 'PU 14:00 WED', detail: '2026-10-21 14:00:00 (facility local time)' };
+  const nextLoad = { ...load, planId: 'next-1', number: 'NEXT-ONE', stops: [{ ...stop, key: 'next-pu', type: 'pickup', schedule: pickup }] };
+  loads.next = [nextLoad, { ...nextLoad, planId: 'next-2', number: 'NEXT-TWO' }, { ...nextLoad, planId: 'next-3', number: 'NEXT-THREE' }];
   await page.goto(base + '/driver-board');
+  const nextCell = page.getByRole('button', { name: 'Appointment Driver · Next load', exact: true });
+  await expect(page.getByRole('columnheader', { name: 'Next load', exact: true })).toHaveCount(1);
+  await expect(nextCell).toHaveText('NEXT-ONEPU 14:00 WED');
+  await expect(nextCell).toHaveAttribute('title', `NEXT-ONE · ${pickup.detail}`);
+  const [numberBox, pickupBox] = await Promise.all([nextCell.locator('span').first().boundingBox(), nextCell.locator('span').last().boundingBox()]);
+  expect(pickupBox.x).toBeGreaterThan(numberBox.x + numberBox.width);
+  nextLoad.stops[0].schedule = { kind: 'window', label: 'PU 24/7 THU', detail: '2026-10-22 00:00 – 23:59 (facility local time)' };
+  await page.reload();
+  await expect(nextCell).toHaveText('NEXT-ONEPU 24/7 THU');
+  nextLoad.stops = [{ ...stop, type: 'delivery' }];
+  await page.reload();
+  await expect(nextCell).toHaveText('NEXT-ONE');
+  loads.next = [];
+  await page.reload();
+  await expect(nextCell).toHaveText('—');
   const cell = page.getByRole('button', { name: 'Appointment Driver · ETA', exact: true });
   await expect(cell).toHaveText('DEL 24/7 FRI ETA 13:00');
   await expect(cell).toHaveAttribute('title', 'ETA Oct 20, 12:00 CDT');
@@ -98,7 +116,7 @@ try {
   await expect(page.getByLabel('Manual pickup time', { exact: true })).toBeEmpty();
   readOnly = true; await page.reload();
   await expect(cell).toBeDisabled();
-  await page.getByRole('button', { name: 'Appointment Driver · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Appointment Driver · Next load', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Appointment Driver · Loads', exact: true });
   const expand = dialog.getByRole('button', { name: '4010927482 · Current load', exact: true });
   await expand.click();

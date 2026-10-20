@@ -12,7 +12,7 @@ export async function runManualNextLoadsE2E({ page, base, sql, schema, temp, id 
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   const search = page.getByLabel('Search Status Board', { exact: true });
   await search.fill('Manual Queue Driver');
-  await page.getByRole('button', { name: 'Manual Queue Driver · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Manual Queue Driver · Next load', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Manual Queue Driver · Loads', exact: true });
   const input = panel.getByRole('textbox', { name: 'Add next load', exact: true });
   const add = panel.getByRole('button', { name: 'Add next load', exact: true });
@@ -35,7 +35,7 @@ export async function runManualNextLoadsE2E({ page, base, sql, schema, temp, id 
   await expect(input).toHaveValue('manual-late');
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Manual Queue Driver · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Manual Queue Driver · Next load', exact: true }).click();
   await card('MANUAL-LATE').getByRole('button', { name: 'MANUAL-LATE', exact: true }).click();
   await expect(card('MANUAL-LATE')).toContainText('Waiting for load details');
   // A real import invalidation hydrates the open panel through the live board.

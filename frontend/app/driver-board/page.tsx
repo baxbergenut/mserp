@@ -33,7 +33,7 @@ import { useDriverRowDrag } from "./useDriverRowDrag";
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
   ["Total gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
-  ["Destination", 110], ["Notes", 130], ["ETA", 180], ["Next loads", 180], ["Home time", 120],
+  ["Destination", 110], ["Notes", 130], ["ETA", 180], ["Next load", 180], ["Home time", 120],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -168,7 +168,8 @@ export default function DriverBoardPage() {
             const oppositeType = stopType === "pickup" ? "delivery" : stopType === "delivery" ? "pickup" : "";
             const otherStop = oppositeType ? loads?.current?.stops.find(s => s.type.toLowerCase() === oppositeType && s.location.trim()) : undefined;
             const destinationBusy = dirty || saving || loading || leaving;
-            const next = loads?.next ?? [];
+            const next = loads?.next[0];
+            const nextPickup = next?.stops.find(stop => stop.type.toLowerCase() === "pickup")?.schedule;
             return <Fragment key={d.id}>
               {(i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
                 <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
@@ -228,7 +229,7 @@ export default function DriverBoardPage() {
                   }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Destination", 500)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}><ETACell name={d.fullName} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>
-                <td className={cellClass}><button aria-label={`${d.fullName} · Next loads`} title={loads?.current?.warning || next.map(p => p.number).join(" → ") || "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px]" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next.length ? <>{next.slice(0, 2).map((load, index) => <Fragment key={load.planId}>{index > 0 && " → "}<span className={load.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{load.number}</span></Fragment>)}{next.length > 2 && <span className="text-zinc-300 group-hover:text-blue-200">{` (+${next.length - 2})`}</span>}</> : "—"}</button></td>
+                <td className={cellClass}><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <><span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}</span>{nextPickup?.label && <span className="ml-2">{nextPickup.label}</span>}</> : "—"}</button></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "homeTime", "Home time", 500)}</td>
               </tr>
             </Fragment>;

@@ -227,7 +227,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   expect(profileEvent.actorId).toBe(session.user.id);
   expect(profileEvent.before.notes).toBe('Call before arrival');
   expect(history.items.some(e => e.after.currentLoad === 'LOAD 8841')).toBe(true);
-  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'History', exact: true }).click();
   let panel = page.getByRole('dialog', { name: 'Board Cpm · History', exact: true });
   await expect(panel.getByText('Saved before navigation', { exact: true })).toBeVisible();
@@ -302,7 +302,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     await expect(viewer.getByLabel('Saved board view')).toHaveCount(0);
     expect((await viewer.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).status()).toBe(200);
     expect((await viewer.request.post(`${base}/api/driver-board/history/${history.items[0].id}/undo`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { driverId: id, version: remote.version } })).status()).toBe(403);
-    await viewer.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+    await viewer.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
     await viewer.getByRole('dialog').getByRole('button', { name: 'History', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: /^Undo change/ })).toHaveCount(0);
     await viewer.getByRole('dialog').getByRole('button', { name: 'Loads', exact: true }).click();

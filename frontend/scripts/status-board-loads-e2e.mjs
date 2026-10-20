@@ -34,9 +34,9 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   expect(defaultLoads.next.every(load => load.date >= today)).toBe(true);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await expect(field('Current load')).toHaveValue('LOAD 8841');
-  await expect(field('Next loads').getByText('TODAY-PLAN', { exact: true })).toHaveClass(/text-red-300/);
+  await expect(field('Next load').getByText('TODAY-PLAN', { exact: true })).toHaveClass(/text-red-300/);
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
-  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
   await panel.getByRole('button', { name: 'Refresh loads', exact: true }).click();
   const card = number => panel.getByRole('article').filter({ hasText: number });
@@ -82,7 +82,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await page.getByRole('button', { name: 'Reload board', exact: true }).click();
   await expect(destination).toHaveText('Richmond, VADEL');
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
-  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   const plan = card('PLAN-101');
   await plan.getByRole('button', { name: 'PLAN-101', exact: true }).click();
   await plan.getByRole('button', { name: 'Remove from queue', exact: true }).click();
@@ -109,7 +109,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(field('Destination')).toHaveValue('Richmond, Virginia, 23219');
   await field('Destination').fill('Manual destination');
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
-  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Boston, MA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
@@ -119,7 +119,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect(field('Current load')).toHaveValue('SOURCE-A');
-  await page.getByRole('button', { name: 'Board Cpm · Next loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await expect(panel.getByText('Current plan was removed, replaced or reassigned in Gross Board; review it', { exact: true })).toBeVisible();
   const stale = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
   const board = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();

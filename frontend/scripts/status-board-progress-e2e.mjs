@@ -46,7 +46,7 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   await expect(field('Current load')).toHaveValue('BROWSER-B');
   await expect(field('Status')).toHaveValue('DISPATCHED');
   await expect(location).toHaveText('Boston, MAPU');
-  await expect(field('Next loads')).toHaveText('—');
+  await expect(field('Next load')).toHaveText('—');
   await advance.dblclick(); await saved();
   await expect(field('Current load')).toHaveValue('BROWSER-B');
   await expect(field('Status')).toHaveValue('ENROUTE');

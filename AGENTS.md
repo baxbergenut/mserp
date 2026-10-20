@@ -442,6 +442,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   a current order/roster revision; new groups append, absent groups disappear, and
   saved changes broadcast through Status Board SSE. The filter remains shared with
   Gross Board, but ordering is enabled only on Status Board.
+  Status Board's Next load column shows only the first queued load, with its first
+  pickup stop's source schedule label beside the number using the ETA PU format.
+  Clicking the cell still opens the full queue; missing schedules stay blank.
   Loads > Add next load saves an exact number in the audited load-state JSON,
   independently of Gross Board. Manual queue IDs persist across imports; cached
   unique number matches populate the same details and stop/progress controls.
