@@ -9,6 +9,11 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
   edit: (id: string, field: keyof DriverBoardEntry, value: string) => void;
   onHistory: () => void;
 }) {
+  // Driver Board spreadsheet, TODAY trailer column (effective displayed colors).
+  const trailer = entry.trailerNumber.trimStart().toUpperCase();
+  const trailerColor = trailer.startsWith("HMKD") ? "bg-[#d9ead3] text-black"
+    : trailer.startsWith("JBHZ") ? "bg-[#fff2cc] text-black"
+    : trailer.startsWith("TA") ? "bg-[#ff9900] text-black" : "";
   const cell = useRef<HTMLTableCellElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -39,13 +44,13 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
   }, [isOpen]);
   useEffect(() => { if (open?.focus) popup.current?.querySelector<HTMLElement>(open.kind === "menu" ? "button" : "textarea")?.focus({ preventScroll: true }); }, [open?.kind, open?.focus]);
   const menuButton = "block min-h-8 w-full rounded px-2 text-left hover:bg-zinc-800 focus:bg-zinc-800 focus:outline-none";
-  return <td ref={cell} className="relative overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80"
+  return <td ref={cell} className={`relative overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80 ${trailerColor}`}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); show("menu", true); }}
     onKeyDown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); event.stopPropagation(); show("menu", true); } }}
     onMouseEnter={() => { cancel(); if (!open && entry.trailerNote?.trim() && entry.trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>
     <input type="text" aria-label={`${name} · Trailer`} title={entry.trailerNumber} maxLength={100} disabled={disabled} value={entry.trailerNumber}
       onChange={event => edit(entry.driverId, "trailerNumber", event.target.value)}
-      className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />
+      className={`block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 ${trailerColor ? "text-inherit focus:bg-black/10" : "text-zinc-200 focus:bg-zinc-800"}`} />
     {entry.trailerNumber.trim() && entry.trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}
     {open && createPortal(<div ref={popup} data-grid-ignore data-board-undo data-board-driver={entry.driverId} role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Trailer actions" : "Trailer note"}
       style={{ left: open.left, top: open.top, width: "min(300px, calc(100vw - 16px))" }}
