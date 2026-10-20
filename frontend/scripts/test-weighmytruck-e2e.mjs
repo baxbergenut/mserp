@@ -67,6 +67,31 @@ try {
   await page.getByRole('button', { name: 'Add driver', exact: true }).click();
   await expect(picker.locator('option')).toHaveText(['Select driver', 'Available Driver']);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // A failed removal exposes recovery; verification itself sends no vendor call.
+  await expect(page.getByRole('button', { name: 'Review membership', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Remove Terminated Driver', exact: true }).click();
+  const terminated = page.getByRole('row').filter({ hasText: 'Terminated Driver' });
+  await expect(terminated.getByRole('button', { name: 'Remove Terminated Driver', exact: true })).toBeDisabled();
+  await terminated.getByRole('button', { name: 'Review membership', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('driver2@example.com');
+  await expect(page.getByRole('button', { name: 'Save verification', exact: true })).toBeDisabled();
+  await page.getByLabel('Verified membership', { exact: true }).selectOption('enrolled');
+  await expect(page.getByRole('button', { name: 'Save verification', exact: true })).toBeDisabled();
+  await page.getByLabel('Verification note', { exact: true }).fill('Confirmed still enrolled on fleet roster');
+  await page.screenshot({ path: join(tmpdir(), 'mserp-weighmytruck-recovery.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Save verification', exact: true }).dblclick();
+  await expect(page.getByRole('status')).toHaveText('Membership confirmed. Removal is available again.');
+  await expect(terminated.getByRole('button', { name: 'Remove Terminated Driver', exact: true })).toBeEnabled();
+  await terminated.getByRole('button', { name: 'Remove Terminated Driver', exact: true }).click();
+  await terminated.getByRole('button', { name: 'Review membership', exact: true }).click();
+  await page.getByLabel('Verified membership', { exact: true }).selectOption('removed');
+  await page.getByLabel('Verification note', { exact: true }).fill('Confirmed already removed from fleet roster');
+  await page.getByRole('button', { name: 'Save verification', exact: true }).dblclick();
+  await expect(page.getByRole('status')).toHaveText('Terminated Driver confirmed removed from WeighMyTruck.');
+  await expect(terminated).toHaveCount(0);
+  await page.reload();
+  await expect(terminated).toHaveCount(0);
+  await expect(page.locator('tbody tr')).toHaveCount(2);
   await expect(page.getByRole('row').filter({ hasText: 'Added Driver' }).locator('td').nth(4)).toHaveText('Driver');
   await expect(page.getByRole('button', { name: /^(Company|Driver|Truck investor)$/ })).toHaveCount(0);
   await expect(page.getByLabel('Charge to', { exact: true })).toHaveCount(0);
@@ -103,5 +128,5 @@ try {
   await expect(page.getByRole('heading', { name: 'WeighMyTruck', exact: true })).toBeVisible();
   await page.screenshot({ path: join(tmpdir(), 'mserp-weighmytruck-mobile.png'), fullPage: true });
   if (errors.length || external.length) throw new Error(JSON.stringify({ errors, external }));
-  console.log('WeighMyTruck browser E2E passed: added-only roster, active-driver picker, add/remove, double-click, timed notices, attention sorting, reload, search and narrow layout; no external browser calls.');
+  console.log('WeighMyTruck browser E2E passed: added-only roster, active-driver picker, add/remove, HTTP 400 removal recovery, confirmed enrollment/removal, double-click, timed notices, attention sorting, reload, search and narrow layout; no external browser calls.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

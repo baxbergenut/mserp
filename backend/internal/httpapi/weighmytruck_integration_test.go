@@ -106,6 +106,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			var response atomic.Int32
 			response.Store(200)
 			var removedEmail string
+			var rejectTerminatedRemoval atomic.Bool
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/token" {
 					w.Write([]byte(`{"access_token":"fixture-token","expires_in":3600}`))
@@ -132,6 +133,10 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 				if strings.HasSuffix(r.URL.Path, "RemoveDriver") {
 					if json.NewDecoder(r.Body).Decode(&removedEmail) != nil {
 						t.Error("invalid removal shape")
+					}
+					if rejectTerminatedRemoval.Load() && removedEmail == "driver2@example.com" {
+						w.WriteHeader(http.StatusBadRequest)
+						return
 					}
 				}
 				w.WriteHeader(int(response.Load()))
@@ -238,6 +243,35 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 				t.Fatal("auth failure changed membership")
 			}
 			response.Store(200)
+			// A generic HTTP 400 does not prove removal; explicit verification
+			// clears the review without replaying a provider request.
+			response.Store(400)
+			change(find(ids[2]), false, 502)
+			removal := find(ids[2])
+			if removal.State != "review" || !removal.Enrolled || !removal.CanVerify {
+				t.Fatal("rejected removal is not available for review")
+			}
+			before = calls.Load()
+			change(removal, false, 409)
+			verify, _ = json.Marshal(repository.WMTVerification{Version: removal.Version, Enrolled: false, Reason: "Confirmed account absent from fleet roster"})
+			permissions = []string{"weighmytruck.read", "weighmytruck.delete"}
+			request("POST", "/weighmytruck/"+removal.ID+"/verify", string(verify), "fixture-csrf", 403)
+			permissions = []string{"weighmytruck.read", "weighmytruck.create", "weighmytruck.delete", "weighmytruck.link", "weighmytruck.recover"}
+			request("POST", "/weighmytruck/"+removal.ID+"/verify", string(verify), "fixture-csrf", 200)
+			request("POST", "/weighmytruck/"+removal.ID+"/verify", string(verify), "fixture-csrf", 409)
+			if got := find(ids[2]); got.Enrolled || got.State != "confirmed" || got.Version != removal.Version+1 {
+				t.Fatal("verified removal did not clear stuck membership")
+			}
+			if calls.Load() != before {
+				t.Fatal("recovery called the provider")
+			}
+			var audited bool
+			if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM weighmytruck_events WHERE membership_id=$1 AND actor_id='tester' AND action='verified_removed' AND detail='Confirmed account absent from fleet roster')`, removal.ID).Scan(&audited); err != nil || !audited {
+				t.Fatal("missing removal verification audit", err)
+			}
+			// Retain an enrolled terminated fixture for browser removal/recovery.
+			execute(`UPDATE weighmytruck_memberships SET enrolled=true WHERE driver_id=$1`, ids[2])
+			response.Store(200)
 			// Crash recovery stays blocked until the bounded network operation has expired.
 			execute(`UPDATE weighmytruck_memberships SET state='pending' WHERE driver_id=$1`, ids[1])
 			pending := find(ids[1])
@@ -249,7 +283,7 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			execute(`UPDATE weighmytruck_memberships SET updated_at=now()-interval '3 minutes' WHERE driver_id=$1`, ids[1])
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
-				permissions = append(permissions, "driver_pay.read", "driver_pay.edit", "drivers.read")
+				permissions = append(permissions, "driver_pay.read", "driver_pay.edit", "drivers.read", "investor_pay.read", "weighmytruck.sync")
 				request("PUT", "/weighmytruck/billing", fmt.Sprintf(`{"driverId":%q,"weekStart":%q,"payer":"company","version":0}`, ids[0], repository.ChargeCurrentWeek()), "fixture-csrf", 400)
 				execute(`GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 				execute(`INSERT INTO investors(id,full_name,driver_id) VALUES('07400000-0000-0000-0000-000000000002','Added Driver',$1)`, ids[0])
@@ -271,6 +305,8 @@ func TestWeighMyTruckDatabase(t *testing.T) {
  ('Former Driver','former driver','former@example.com','5551230083','cpm',0,'terminated',current_date)`)
 				server := httptest.NewServer(router)
 				defer server.Close()
+				rejectTerminatedRemoval.Store(true)
+				beforeBrowser := calls.Load()
 				cmd := exec.Command("node", "../../../frontend/scripts/test-weighmytruck-e2e.mjs")
 				cmd.Env = append(os.Environ(), "MSERP_WMT_TEST_API="+server.URL)
 				out, e := cmd.CombinedOutput()
@@ -278,6 +314,9 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 					t.Fatalf("browser: %v\n%s", e, out)
 				}
 				t.Log(string(out))
+				if calls.Load() != beforeBrowser+4 {
+					t.Fatal("browser recovery replayed a provider mutation")
+				}
 			}
 		})
 	}

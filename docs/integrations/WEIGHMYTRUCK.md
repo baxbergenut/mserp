@@ -62,8 +62,13 @@ Add driver opens a picker of active drivers not already added; removal stays on
 each row. Success notices disappear after five seconds. There is no Membership
 column, membership filter or routine Verify action. Pending/uncertain additions
 remain visible as error notices without appearing as confirmed added drivers.
-Administrative recovery for external changes or uncertain operations retains
-the versioned verification API; normal users do not need a website-login workflow.
+Failed or interrupted changes expose Review membership to users with
+`weighmytruck.recover`, including unresolved additions. After checking the saved
+email on the fleet website, select Already removed from fleet or Still enrolled
+in fleet and enter a verification note. This uses the versioned, audited local
+verification API without sending a provider mutation. Confirming removal clears
+the row; confirming enrollment makes Remove available again. Fresh pending
+requests remain locked for two minutes. An HTTP 400 alone never proves removal.
 
 ## Scale transactions and statements (migration 074)
 

@@ -197,8 +197,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   names. Rows use compact status labels with warning details on icon hover.
   Add driver selects an active unadded driver; success notices clear after
   five seconds. No Membership column/filter or routine Verify action is shown.
-  Uncertain additions remain visible as notices; administrative recovery retains
-  the versioned verification API.
+  Uncertain additions remain visible as notices. Failed/stale changes expose
+  Review membership with weighmytruck.recover: explicitly confirm the saved email's
+  fleet-roster membership with a note through the versioned, audited verification
+  API. Removed clears the row; enrolled re-enables Remove. Generic HTTP 400 is not
+  proof of removal, and pending changes stay locked for two minutes.
   `weighmytruck.read/write` protect routes. Server config is WEIGHMYTRUCK_CLIENT_ID,
   WEIGHMYTRUCK_CLIENT_SECRET, WEIGHMYTRUCK_TOKEN_URL, WEIGHMYTRUCK_SCOPE,
   WEIGHMYTRUCK_API_URL and WEIGHMYTRUCK_COMPANY_NAME. No browser vendor calls.

@@ -3,7 +3,7 @@
 import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, LoaderCircle, Plus, RefreshCw, Scale } from "lucide-react";
-import { changeWeighMyTruck, fetchWeighMyTruck, linkWeighMyTruck } from "../lib/api";
+import { changeWeighMyTruck, fetchWeighMyTruck, linkWeighMyTruck, verifyWeighMyTruck } from "../lib/api";
 import { usePermissions } from "../lib/access";
 import { useViewState } from "../lib/viewMemory";
 import { formatPhone } from "../lib/phone";
@@ -19,6 +19,7 @@ export default function WeighMyTruckPage() {
   const canWrite = permissions.includes("weighmytruck.create");
   const canDelete = permissions.includes("weighmytruck.delete");
   const canLink = permissions.includes("weighmytruck.link");
+  const canRecover = permissions.includes("weighmytruck.recover");
   const canViewProfile = permissions.includes("drivers.read");
   const [data, setData] = useState<WeighMyTruckList | null>(null);
   const [error, setError] = useState("");
@@ -30,8 +31,15 @@ export default function WeighMyTruckPage() {
   const [search, setSearch] = useViewState("wmt:search", "");
   const [page, setPage] = useViewState("wmt:page", 1);
   const [pageSize, setPageSize] = useViewState("wmt:pageSize", 25);
-  const [dialog, setDialog] = useState<{ kind: "add" } | { kind: "link"; entry: WeighMyTruckEntry } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "add" } | { kind: "link" | "recover"; entry: WeighMyTruckEntry } | null>(null);
   const [driverId, setDriverId] = useState("");
+  const [verifiedMembership, setVerifiedMembership] = useState("");
+  const [verificationReason, setVerificationReason] = useState("");
+
+  function reviewMembership(entry: WeighMyTruckEntry) {
+    setVerifiedMembership(""); setVerificationReason(""); setError("");
+    setDialog({ kind: "recover", entry });
+  }
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const revision = ++generation.current;
@@ -84,7 +92,7 @@ export default function WeighMyTruckPage() {
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     {data && (!data.configured || !data.initialized) && <ErrorBanner message={!data.configured ? "WeighMyTruck is not configured on the server." : "Import the existing fleet roster before adding or removing drivers."} />}
     {data?.requests?.map(q => <ErrorBanner key={q.driverId} message={`${q.name}: ${q.error || "WeighMyTruck enrollment queued."}`} />)}
-    {unresolvedAdds.map(entry => <ErrorBanner key={entry.id} message={`${entry.name}: ${entry.warning || "The add request has not completed. Refresh for the result."}`} />)}
+    {unresolvedAdds.map(entry => <div key={entry.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><ErrorBanner message={`${entry.name}: ${entry.warning || "The add request has not completed. Refresh for the result."}`} /></div>{canRecover && entry.canVerify && <button className="ui-button shrink-0" disabled={!!busy} onClick={() => reviewMembership(entry)}>Review membership</button>}</div>)}
     <div className="flex flex-wrap items-center gap-2">
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search drivers, email or code" />
     <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader hideTitle icon={Scale} title="WeighMyTruck" count={tab === "drivers" ? enrolledCount : undefined} secondaryAction={tab === "drivers" && <>
@@ -98,8 +106,9 @@ export default function WeighMyTruckPage() {
         </td>
         <td className="px-3 py-1.5 text-zinc-400">{entry.email || "—"}</td><td className="whitespace-nowrap px-3 py-1.5 text-zinc-400">{formatPhone(entry.phone) || "—"}</td><td className="px-3 py-1.5 text-zinc-400">{entry.driverCode || "—"}</td>
         <td className="px-3 py-1.5 text-zinc-300" title="Automatically determined by truck ownership">{entry.payer === "driver" ? "Driver" : entry.payer === "investor" ? "Truck investor" : entry.payer === "company" ? "Company" : "Needs review"}</td>
-        <td className="px-3 py-1.5">{(canDelete || canLink) && <div className="flex justify-end gap-2">
+        <td className="px-3 py-1.5">{(canDelete || canLink || canRecover) && <div className="flex justify-end gap-2">
           {canLink && !entry.driverId && entry.state === "confirmed" && <button className="ui-button" disabled={!!busy} onClick={() => { setDriverId(""); setDialog({ entry, kind: "link" }); }}>Link driver</button>}
+          {canRecover && entry.canVerify && <button className="ui-button" disabled={!!busy} onClick={() => reviewMembership(entry)}>Review membership</button>}
           {canDelete && <button className="ui-button text-red-400" aria-label={`Remove ${entry.name}`} disabled={!!busy || !data?.configured || !data.initialized || entry.state !== "confirmed"} onClick={() => void mutate("weighmytruck.delete", entry, () => changeWeighMyTruck(entry, false), `${entry.name} removed from WeighMyTruck.`)}>
             {busy === entry.id && <LoaderCircle className="h-4 w-4 animate-spin" />}Remove
           </button>}
@@ -108,9 +117,12 @@ export default function WeighMyTruckPage() {
     </table>}</TableShell>
     <TablePagination page={currentPage} pageSize={pageSize} totalItems={shown.length} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={v => { setPageSize(v); setPage(1); }} />
     </>}
-    {dialog && <Modal title={dialog.kind === "add" ? "Add driver to WeighMyTruck" : `Link driver: ${dialog.entry.name}`} isSaving={!!busy} submitLabel={dialog.kind === "add" ? "Add" : "Save"} onClose={() => setDialog(null)} onSubmit={event => {
+    {dialog && <Modal title={dialog.kind === "add" ? "Add driver to WeighMyTruck" : dialog.kind === "recover" ? `Review membership: ${dialog.entry.name}` : `Link driver: ${dialog.entry.name}`} isSaving={!!busy} submitLabel={dialog.kind === "add" ? "Add" : dialog.kind === "recover" ? "Save verification" : "Save"} submitDisabled={dialog.kind === "recover" && (!verifiedMembership || !verificationReason.trim())} onClose={() => setDialog(null)} onSubmit={event => {
       event.preventDefault();
-      if (dialog.kind === "link") void mutate("weighmytruck.link", dialog.entry, () => linkWeighMyTruck(dialog.entry, driverId), "Driver linked.");
+      if (dialog.kind === "recover") {
+        if (!dialog.entry.canVerify || !verifiedMembership || !verificationReason.trim()) return;
+        void mutate("weighmytruck.recover", dialog.entry, () => verifyWeighMyTruck(dialog.entry, verifiedMembership === "enrolled", verificationReason.trim()), verifiedMembership === "enrolled" ? "Membership confirmed. Removal is available again." : `${dialog.entry.name} confirmed removed from WeighMyTruck.`);
+      } else if (dialog.kind === "link") void mutate("weighmytruck.link", dialog.entry, () => linkWeighMyTruck(dialog.entry, driverId), "Driver linked.");
       else {
         const entry = available.find(e => e.driverId === driverId);
         if (!entry || entry.state !== "confirmed" || entry.addBlockReason) { setError(entry?.addBlockReason || "Select an available active driver."); return; }
@@ -118,7 +130,14 @@ export default function WeighMyTruckPage() {
       }
     }}>
       {error && <ErrorBanner message={error} />}
-      {dialog.kind === "link" ? <label className="block space-y-2 text-[13px]">MSERP driver<select required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}><option value="">Select driver</option>{items.filter(e => e.driverId && !e.id).map(e => <option key={e.driverId} value={e.driverId}>{e.name} · {e.driverStatus}</option>)}</select></label> : <div className="space-y-3">
+      {dialog.kind === "recover" ? <div className="space-y-3 text-[13px]">
+        <p className="text-zinc-400">Check the WeighMyTruck fleet roster for <span className="text-zinc-200">{dialog.entry.email}</span>, then record the result. This updates MSERP tracking only.</p>
+        {dialog.entry.warning && <p className="text-amber-400">{dialog.entry.warning}</p>}
+        <label className="block space-y-2">Verified membership<select aria-label="Verified membership" required className={controlClass} value={verifiedMembership} onChange={e => setVerifiedMembership(e.target.value)}>
+          <option value="">Select verified result</option><option value="removed">Already removed from fleet</option><option value="enrolled">Still enrolled in fleet</option>
+        </select></label>
+        <label className="block space-y-2">Verification note<textarea aria-label="Verification note" required maxLength={1000} className={controlClass} value={verificationReason} onChange={e => setVerificationReason(e.target.value)} placeholder="Describe what you confirmed on the fleet roster" /></label>
+      </div> : dialog.kind === "link" ? <label className="block space-y-2 text-[13px]">MSERP driver<select required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}><option value="">Select driver</option>{items.filter(e => e.driverId && !e.id).map(e => <option key={e.driverId} value={e.driverId}>{e.name} · {e.driverStatus}</option>)}</select></label> : <div className="space-y-3">
         <label className="block space-y-2 text-[13px]">Active driver<select aria-label="Active driver" required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}>
           <option value="">Select driver</option>{available.map(entry => <option key={entry.driverId} value={entry.driverId} disabled={!!entry.addBlockReason || entry.state !== "confirmed"}>{entry.name}{entry.addBlockReason ? ` — ${entry.addBlockReason}` : entry.state !== "confirmed" ? " — Change pending" : ""}</option>)}
         </select></label>
