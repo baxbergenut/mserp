@@ -303,7 +303,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
   DataTruck per-stop schedule fields through import serialization. Appointment
   text is read-only inside ETA; @PU/@DEL replaces travel mileage when the last
-  GPS position was within one straight-line mile of the selected stop,
+  GPS position was within five straight-line miles of the selected stop,
   including stops without a provider schedule.
   Fresh automatic markers are red; stale last-known markers are amber with the
   observation time on hover. ETA is automatic while its entry is blank; a typed
@@ -428,6 +428,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   broadcast the saved order to other viewers through Status Board SSE. New drivers
   append; departing drivers disappear without changing the saved order. Test with
   TestDriverBoardDatabase and `test-investors-e2e.mjs --board-only`.
+  Migration 125 stores one shared dispatcher-group order, including Unassigned.
+  Drag the grip in the Status Board Dispatcher filter to preview animated, bounded
+  moves; the board groups update after drop and save. Up/Down moves also work from
+  the grip. `POST /driver-board/dispatcher-order` requires driver_board.write and
+  a current order/roster revision; new groups append, absent groups disappear, and
+  saved changes broadcast through Status Board SSE. The filter remains shared with
+  Gross Board, but ordering is enabled only on Status Board.
   Loads > Add next load saves an exact number in the audited load-state JSON,
   independently of Gross Board. Manual queue IDs persist across imports; cached
   unique number matches populate the same details and stop/progress controls.

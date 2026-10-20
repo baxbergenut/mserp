@@ -105,6 +105,8 @@ type ArrivalEvidence struct {
 	LastAt  time.Time `json:"lastAt"`
 }
 
+const boardArrivalRadiusMeters = 5 * 1609.344
+
 func distanceMeters(a, b, c, d float64) float64 {
 	const rad = math.Pi / 180
 	x := math.Sin((c - a) * rad / 2)
@@ -124,7 +126,7 @@ func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocat
 	// Re-evaluate the latest cached point even when its timestamp is unchanged:
 	// an older proximity rule may have recorded a different result for that point.
 	// Staleness is exposed to viewers and never treated as a live observation.
-	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= 1609.344
+	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= boardArrivalRadiusMeters
 	return old
 }
 

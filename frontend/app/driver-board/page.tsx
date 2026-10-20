@@ -103,6 +103,14 @@ export default function DriverBoardPage() {
       return true;
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Driver order could not be saved. Try again."); return false; }
   }
+  async function moveDispatcher(id: string, target: string, after: boolean) {
+    setOrderError(""); setOrderNotice("");
+    try {
+      await state.reorderDispatchers(id, target, after, board?.dispatcherOrderRevision ?? "");
+      setOrderNotice("Dispatcher order saved.");
+      return true;
+    } catch (err) { setOrderError(err instanceof Error ? err.message : "Dispatcher order could not be saved. Try again."); return false; }
+  }
   function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
     return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled} edit={edit} />;
   }
@@ -120,7 +128,7 @@ export default function DriverBoardPage() {
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
-      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} />
+      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled} />
       <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>

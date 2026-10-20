@@ -159,6 +159,35 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		writeJSON(w, 200, result)
 	})
+	r.Post("/driver-board/dispatcher-order", func(w http.ResponseWriter, r *http.Request) {
+		var action repository.DispatcherBoardOrderAction
+		if err := decodeJSON(r, &action); err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		for _, id := range []*string{&action.DispatcherID, &action.TargetDispatcherID} {
+			if *id == "" {
+				continue
+			}
+			if !isUUID(*id) {
+				writeAPIError(w, 400, "valid dispatcher ids are required")
+				return
+			}
+			compact := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(*id), "-", ""))
+			*id = compact[:8] + "-" + compact[8:12] + "-" + compact[12:16] + "-" + compact[16:20] + "-" + compact[20:]
+		}
+		if len(action.Revision) != 64 {
+			writeAPIError(w, 400, "a current dispatcher order revision is required")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		result, err := repo.ReorderDispatchers(r.Context(), action, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
 	r.Get("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {

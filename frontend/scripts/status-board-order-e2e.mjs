@@ -174,6 +174,24 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await cdp.detach();
   await page.emulateMedia({reducedMotion:'no-preference'});
   expect((await read()).entries.find(e=>e.driverId===ids[0]).notes).toBe('Keep dispatch notes');
+  // Dispatcher groups preview inside the filter; the shared board order changes on drop.
+  await page.getByLabel('Dispatcher filter', {exact:true}).click();
+  const dispatcherGrip = page.getByRole('button', {name:'Move Order Dispatcher',exact:true});
+  const unassignedGrip = page.getByRole('button', {name:'Move Unassigned',exact:true});
+  const beforeDispatcherOrder = (await read()).drivers.map(d=>d.dispatcherId);
+  const from = await dispatcherGrip.boundingBox(), to = await unassignedGrip.boundingBox();
+  await page.mouse.move(from.x+from.width/2,from.y+from.height/2);
+  await page.mouse.down();
+  await page.mouse.move(from.x+from.width/2,to.y+to.height+20,{steps:8});
+  await expect.poll(async()=>{
+    const a=await dispatcherGrip.boundingBox(), b=await unassignedGrip.boundingBox();
+    return a.y>b.y;
+  }).toBe(true);
+  expect((await read()).drivers.map(d=>d.dispatcherId)).toEqual(beforeDispatcherOrder);
+  await page.mouse.up();
+  await expect.poll(async()=> (await read()).drivers.map(d=>d.dispatcherId).indexOf('') < (await read()).drivers.map(d=>d.dispatcherId).indexOf(dispatcher)).toBe(true);
+  await expect.poll(()=>order(viewer)).toEqual([ids[3],ids[0],ids[1],ids[2]]);
+  await page.keyboard.press('Escape');
   await page.screenshot({path:join(temp,'status-board-driver-order.png'),fullPage:true});
   await page.getByLabel('Search Status Board',{exact:true}).fill('');
   console.log('Status Board row ordering E2E passed: bounded pointer drag with no native ghost, animated neighbors, forward/back preview, delayed-save continuity, Escape, failed-drag rollback, keyboard moves, reload persistence, two-user live order without refetch, filtered hidden rows, dispatcher boundaries, stale revision and read-only authorization.');

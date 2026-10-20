@@ -47,6 +47,9 @@ func TestDriverBoardValidation(t *testing.T) {
 	if routePermission("POST", "/driver-board/order") != "driver_board.write" {
 		t.Fatal("driver ordering requires board write permission")
 	}
+	if routePermission("POST", "/driver-board/dispatcher-order") != "driver_board.write" {
+		t.Fatal("dispatcher ordering requires board write permission")
+	}
 	for _, action := range []struct{ method, path string }{{"GET", "/driver-board/events"}, {"GET", "/driver-board/presence"}, {"PUT", "/driver-board/presence"}, {"DELETE", "/driver-board/presence/tab"}} {
 		if routePermission(action.method, action.path) != "driver_board.read" {
 			t.Fatal("presence requires board visibility", action)

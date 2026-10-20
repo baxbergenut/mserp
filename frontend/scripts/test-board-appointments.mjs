@@ -74,7 +74,7 @@ try {
   await page.reload();
   await expect(cell).toHaveText('@PU');
   await expect(cell.locator('span').first()).toHaveClass(/text-amber-400/);
-  await expect(cell).toHaveAttribute('title', /Last known within 1 mile of selected stop.*GPS stale/);
+  await expect(cell).toHaveAttribute('title', /Last known within 5 miles of selected stop.*GPS stale/);
   await cell.click();
   await expect(page.getByLabel('Manual pickup time', { exact: true })).toBeEmpty();
   readOnly = true; await page.reload();

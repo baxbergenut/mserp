@@ -66,13 +66,14 @@ type FiveELDBoardSummary struct {
 }
 
 type DriverBoard struct {
-	DriverOrderRevisions map[string]string     `json:"driverOrderRevisions"`
-	WeekStart            string                `json:"weekStart"`
-	Drivers              []DriverBoardDriver   `json:"drivers"`
-	Entries              []DriverBoardEntry    `json:"entries"`
-	GrossEntries         []GrossBoardEntry     `json:"grossEntries"`
-	Loads                map[string]BoardLoads `json:"loads"`
-	ELD                  FiveELDBoardSummary   `json:"eld"`
+	DriverOrderRevisions    map[string]string     `json:"driverOrderRevisions"`
+	DispatcherOrderRevision string                `json:"dispatcherOrderRevision"`
+	WeekStart               string                `json:"weekStart"`
+	Drivers                 []DriverBoardDriver   `json:"drivers"`
+	Entries                 []DriverBoardEntry    `json:"entries"`
+	GrossEntries            []GrossBoardEntry     `json:"grossEntries"`
+	Loads                   map[string]BoardLoads `json:"loads"`
+	ELD                     FiveELDBoardSummary   `json:"eld"`
 }
 
 type DriverBoardRepository struct {
@@ -163,6 +164,9 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	if err = applyBoardDriverOrder(ctx, tx, &result); err != nil {
+		return result, err
+	}
+	if err = applyBoardDispatcherOrder(ctx, tx, &result); err != nil {
 		return result, err
 	}
 	// Use the same exact load resolution and entered/source precedence as Gross Board.

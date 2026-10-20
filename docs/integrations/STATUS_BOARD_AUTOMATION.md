@@ -39,8 +39,8 @@ Fixture: load 4010927482, delivery stop 101555, local October 16, 2026,
 
 ## Arrival and manual input
 
-The latest provider position within one straight-line mile of the selected stop
-shows @PU/@DEL; a newer position beyond one mile clears the automatic marker.
+The latest provider position within five straight-line miles of the selected stop
+shows @PU/@DEL; a newer position beyond five miles clears the automatic marker.
 This is a proximity signal, not a claim that the truck reached the dock.
 It uses the cached GPS coordinates and selected stop coordinates without requiring
 optional road routing. Future/out-of-order positions are ignored. An unchanged

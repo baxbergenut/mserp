@@ -20,7 +20,7 @@ export function ETACell({ name, value, automation, disabled, expanded, onOpen }:
   const text = appointmentCellText(value, automation);
   const parts = text.schedule.split(" ");
   const observed = automation?.observedAt && !automation.observedAt.startsWith("0001") ? new Date(automation.observedAt).toLocaleString("en-US", { timeZone: "America/New_York" }) + " NY" : "No arrival observation";
-  const arrival = automation?.arrivalOverride === "auto" ? `${automation.stale ? "Last known within" : "Within"} 1 mile of selected stop (straight-line GPS) · ${observed}${automation.stale ? " · GPS stale" : ""}` : "Marked at stop manually";
+  const arrival = automation?.arrivalOverride === "auto" ? `${automation.stale ? "Last known within" : "Within"} 5 miles of selected stop (straight-line GPS) · ${observed}${automation.stale ? " · GPS stale" : ""}` : "Marked at stop manually";
   const title = [automation?.appointment?.detail, "ETA uses New York time", automation?.arrived ? arrival : "", automation?.reason].filter(Boolean).join("\n");
   return <button type="button" data-grid-action aria-label={`${name} · ETA`} title={title} disabled={disabled}
     className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"

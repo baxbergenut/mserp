@@ -68,10 +68,10 @@ func TestArrivalEvidence(t *testing.T) {
 	point := func(at time.Time, lat float64) *DriverBoardLocation {
 		return &DriverBoardLocation{Latitude: lat, Longitude: lng, ReportedAt: at}
 	}
-	// Just inside and outside one straight-line mile, without a second sample.
-	inside, outside := lat+0.014, lat+0.015
-	if distanceMeters(lat, lng, inside, lng) >= 1609.344 || distanceMeters(lat, lng, outside, lng) <= 1609.344 {
-		t.Fatal("test coordinates do not straddle one mile")
+	// Just inside and outside five straight-line miles, without a second sample.
+	inside, outside := lat+0.072, lat+0.073
+	if distanceMeters(lat, lng, inside, lng) >= boardArrivalRadiusMeters || distanceMeters(lat, lng, outside, lng) <= boardArrivalRadiusMeters {
+		t.Fatal("test coordinates do not straddle five miles")
 	}
 	a := evaluateArrival(ArrivalEvidence{}, "one", point(now.Add(-4*time.Minute), outside), stop, now)
 	if a.Arrived {
@@ -90,7 +90,7 @@ func TestArrivalEvidence(t *testing.T) {
 	}
 	a = evaluateArrival(a, "one", point(now, inside), stop, now)
 	if !a.Arrived {
-		t.Fatal("first fresh point inside one mile did not establish proximity")
+		t.Fatal("first fresh point inside five miles did not establish proximity")
 	}
 	outOfOrder := evaluateArrival(a, "one", point(now.Add(-time.Hour), lat+1), stop, now)
 	if outOfOrder != a {
@@ -98,11 +98,11 @@ func TestArrivalEvidence(t *testing.T) {
 	}
 	a = evaluateArrival(a, "one", point(now.Add(time.Minute), outside), stop, now.Add(time.Minute))
 	if a.Arrived {
-		t.Fatal("first fresh point outside one mile did not clear proximity")
+		t.Fatal("first fresh point outside five miles did not clear proximity")
 	}
 	a = evaluateArrival(a, "one", point(now.Add(2*time.Minute), inside), stop, now.Add(2*time.Minute))
 	if !a.Arrived {
-		t.Fatal("returning within one mile did not restore proximity")
+		t.Fatal("returning within five miles did not restore proximity")
 	}
 	a = evaluateArrival(a, "two", nil, stop, now)
 	if a.Context != "two" || !a.LastAt.IsZero() {
@@ -280,7 +280,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	_, err = pool.Exec(ctx, `INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at) VALUES($1,40.47811,-74.3909193,$2,now())`, vin, now.Add(-4*time.Minute))
+	_, err = pool.Exec(ctx, `INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at) VALUES($1,40.55211,-74.3909193,$2,now())`, vin, now.Add(-4*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -184,6 +184,8 @@ export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>
   apiRequest<import("./types").DriverBoardOrder>("/driver-board/order", { method: "POST", body: JSON.stringify(action) });
+export const reorderBoardDispatchers = (action: import("./types").DispatcherBoardOrderAction) =>
+  apiRequest<import("./types").DispatcherBoardOrder>("/driver-board/dispatcher-order", { method: "POST", body: JSON.stringify(action) });
 export const fetchBoardPresence = () => apiRequest<import("./types").BoardPresence[]>("/driver-board/presence");
 export const updateBoardPresence = (clientId: string, driverId: string, column: string) =>
   performRequest<void>("/driver-board/presence", { method: "PUT", body: JSON.stringify({ clientId, driverId, column }) });
