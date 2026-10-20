@@ -1,0 +1,134 @@
+// Real API/database verification. Uses only the isolated local review environment.
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { chromium, expect } from '@playwright/test';
+
+const access = JSON.parse(await readFile(process.env.MSERP_REVIEW_ACCESS_FILE, 'utf8'));
+if (!['localhost', '127.0.0.1'].includes(new URL(access.base).hostname) || !/^review_[a-f0-9]+$/.test(access.schema)) throw new Error('Isolated local review required');
+const browser = await chromium.launch();
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors = [], extracted = [], created = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith('/extract')) extracted.push(path);
+    if (request.method() === 'POST' && path === '/api/expenses') created.push(request);
+  });
+  await page.goto(access.base + '/login');
+  await page.getByLabel('Email or existing username').fill(access.email);
+  await page.getByLabel('Password', { exact: true }).fill(access.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL(url => !url.pathname.startsWith('/login'));
+  const session = await (await page.request.get(access.base + '/api/auth/session')).json();
+  const headers = { Origin: access.base, 'X-CSRF-Token': session.csrfToken };
+  const api = async (method, path, data) => {
+    const response = await page.request[method](access.base + '/api' + path, { headers, data });
+    const text = await response.text();
+    expect(response.ok(), text).toBe(true);
+    return text ? JSON.parse(text) : null;
+  };
+  const expensePage = await api('get', '/expenses?pageSize=1');
+  const category = expensePage.options.settings.find(setting => setting.kind === 'category' && setting.name === 'Other');
+  const file = { name: 'supporting-invoice.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic supporting invoice without AI') };
+  const note = 'Manual receipt test ' + Date.now();
+  await page.goto(access.base + '/expenses');
+  await page.getByRole('button', { name: 'Add entry', exact: true }).click();
+  await page.getByLabel('Category', { exact: true }).selectOption(category.id);
+  await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles({ name: 'unsupported.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('unsupported') });
+  await expect(page.getByRole('dialog').getByText('Choose a nonempty PDF, TXT, PNG, JPEG or WEBP up to 20 MB.', { exact: true })).toBeVisible();
+  await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
+  await page.getByRole('button', { name: 'Remove receipt / invoice', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(tmpdir(), 'mserp-expense-receipt-upload.png') });
+  await expect(page.getByText(file.name, { exact: true })).toBeVisible();
+  // Changing between the two entry types must preserve the selected supporting file.
+  await page.getByLabel('Category', { exact: true }).selectOption(expensePage.options.workOrdersCategoryId);
+  await expect(page.getByRole('dialog', { name: 'Add work order', exact: true })).toBeVisible();
+  await expect(page.getByText(file.name, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Change expense category', exact: true }).click();
+  await page.getByLabel('Category', { exact: true }).selectOption(category.id);
+  await expect(page.getByText(file.name, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove receipt / invoice', exact: true }).click();
+  await expect(page.getByText(file.name, { exact: true })).toHaveCount(0);
+  await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
+  await page.getByLabel('Description', { exact: true }).fill(note);
+  await page.getByLabel('Amount', { exact: true }).fill('12.50');
+  await page.getByLabel('Expense type', { exact: true }).selectOption('__custom');
+  await page.getByLabel('Expense type custom', { exact: true }).fill('Supporting material');
+  await page.route('**/api/expenses/*/documents', route => route.request().method() === 'POST'
+    ? route.fulfill({ status: 503, json: { error: 'Synthetic upload failure' } }) : route.continue(), { times: 1 });
+  await page.getByRole('button', { name: 'Create entry', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText(/Entry saved. Receipt upload failed:/)).toBeVisible();
+  expect(created).toHaveLength(1);
+  await expect(page.getByLabel('Amount', { exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry receipt upload', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(created).toHaveLength(1);
+  const entries = await api('get', '/expenses?search=' + encodeURIComponent(note));
+  expect(entries.items).toHaveLength(1);
+  const saved = entries.items[0];
+  const docs = await api('get', '/expenses/' + saved.id + '/documents');
+  expect(docs).toHaveLength(1);
+  const receipt = await page.request.get(access.base + '/api/expenses/documents/' + docs[0].id);
+  expect(await receipt.body()).toEqual(file.buffer);
+  expect(receipt.headers()['cache-control']).toContain('no-store');
+  const retry = await page.request.post(access.base + '/api/expenses/' + saved.id + '/documents', { headers, multipart: { file } });
+  expect((await retry.json()).id).toBe(docs[0].id);
+  await page.getByRole('row').filter({ hasText: note }).click();
+  await expect(page.getByRole('link', { name: file.name, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.goto(access.base + '/maintenance');
+  const options = await api('get', '/maintenance/options');
+  await page.getByRole('button', { name: 'Add work order', exact: true }).click();
+  await page.getByLabel('Maintenance truck', { exact: true }).selectOption(options.trucks.find(truck => truck.active).id);
+  await page.getByLabel('Service type', { exact: true }).selectOption('other');
+  await page.getByLabel('Work order description', { exact: true }).fill(note + ' work order');
+  await page.getByLabel('Maintenance amount', { exact: true }).fill('25.00');
+  await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
+  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const visits = await api('get', '/maintenance?search=' + encodeURIComponent(note + ' work order'));
+  expect(visits.items).toHaveLength(1);
+  const visit = await api('get', '/maintenance/' + visits.items[0].id);
+  expect(visit.documents).toHaveLength(1);
+  const workReceipt = await page.request.get(access.base + '/api/maintenance/documents/' + visit.documents[0].id);
+  expect(await workReceipt.body()).toEqual(file.buffer);
+  expect(extracted).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Add work order', exact: true }).click();
+  await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
+  await page.getByRole('button', { name: 'Remove receipt / invoice', exact: true }).scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-receipt-mobile.png') });
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // Category view permits downloads, while upload requires edit or ownership plus create.
+  const suffix = Date.now();
+  const makeUser = async (kind, categoryAccess) => {
+    const name = `Receipt ${kind} ${suffix}`;
+    await api('post', '/settings/roles', { name, permissions: [], expenseCategoryAccess: categoryAccess });
+    const role = (await api('get', '/settings/access')).roles.find(role => role.name === name);
+    const email = `receipt-${kind}-${suffix}@example.test`, password = 'Synthetic-only-' + suffix;
+    await api('post', '/settings/users', { username: name, email, password, roleId: role.id, active: true });
+    const context = await browser.newContext();
+    await context.request.post(access.base + '/api/auth/login', { headers: { Origin: access.base }, data: { email, password } });
+    const session = await (await context.request.get(access.base + '/api/auth/session')).json();
+    return { context, headers: { Origin: access.base, 'X-CSRF-Token': session.csrfToken } };
+  };
+  const reader = await makeUser('reader', [{ categoryId: category.id, canView: true, canCreate: false, canEdit: false, canDelete: false }]);
+  expect((await reader.context.request.get(access.base + '/api/expenses/documents/' + docs[0].id)).status()).toBe(200);
+  expect((await reader.context.request.post(access.base + '/api/expenses/' + saved.id + '/documents', { headers: reader.headers, multipart: { file } })).status()).toBe(403);
+  const denied = await makeUser('denied', []);
+  expect((await denied.context.request.get(access.base + '/api/expenses/documents/' + docs[0].id)).status()).toBe(403);
+  expect((await denied.context.request.get(access.base + '/api/expenses/' + saved.id + '/documents')).status()).toBe(403);
+  const creator = await makeUser('creator', [{ categoryId: category.id, canView: true, canCreate: true, canEdit: false, canDelete: false }]);
+  expect((await creator.context.request.post(access.base + '/api/expenses/' + saved.id + '/documents', { headers: creator.headers, multipart: { file } })).status()).toBe(403);
+  const own = await creator.context.request.post(access.base + '/api/expenses', { headers: creator.headers, data: { categoryId: category.id, expenseDate: '2026-10-20', amount: '1.00', expenseType: 'Receipt test', description: note, coveredBy: 'Company', paidBy: '', paymentType: '' } });
+  expect(own.status()).toBe(201);
+  expect((await creator.context.request.post(access.base + '/api/expenses/' + (await own.json()).id + '/documents', { headers: creator.headers, multipart: { file } })).status()).toBe(200);
+  await Promise.all([reader.context.close(), denied.context.close(), creator.context.close()]);
+  expect(errors).toEqual([]);
+  console.log('Receipt uploads passed: manual expense/work-order files, saved download bytes, no AI calls, category switches, validation/removal, duplicate-safe retries and permission boundaries.');
+} finally { await browser.close(); }

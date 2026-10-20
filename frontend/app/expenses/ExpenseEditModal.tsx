@@ -9,6 +9,7 @@ import type { Driver, Expense, ExpenseInput, ExpensePage, Investor, Truck } from
 import { ErrorBanner, Modal } from "@/app/components/management/ManagementUI";
 import { ExpenseForm, expenseToInput } from "./ExpenseForm";
 import { applyExpenseCategoryRules } from "./catalog";
+import { ExpenseDocuments } from "./ExpenseDocuments";
 
 export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => Promise<void> }) {
   const access = useExpenseCategoryAccess();
@@ -47,5 +48,6 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
     {!data && !error && <p role="status" className="text-zinc-500">Loading expense…</p>}
     {maintenanceId && <p className="mb-4 text-xs text-zinc-400">This charge belongs to a service visit. <Link className="text-blue-400" href={`/maintenance?recordId=${maintenanceId}`}>Open work order</Link></p>}
     {data && form && <fieldset disabled={!canEdit || saving || !!maintenanceId}><ExpenseForm value={form} onChange={setForm} options={data.options} originalCategory={{ id: data.expense.categoryId, name: data.expense.category }} allowedCategoryIds={Array.from(new Set([data.expense.categoryId, ...access.filter(a => a.canCreate).map(a => a.categoryId)]))} drivers={data.drivers} trucks={data.trucks} owners={data.owners} /></fieldset>}
+    {data && !maintenanceId && <ExpenseDocuments key={id} id={id} />}
   </Modal>;
 }

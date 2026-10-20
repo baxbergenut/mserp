@@ -767,6 +767,7 @@ export interface MaintenanceType { code: string; name: string; active: boolean; 
 export interface MaintenanceVendor { id: string; name: string; address: string; phone: string; contact: string; active: boolean; version: number; }
 export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
+export type ExpenseDocument = MaintenanceDocument;
 export interface MaintenanceRecord {
   oilType: string;
   id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;

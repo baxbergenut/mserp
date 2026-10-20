@@ -793,6 +793,17 @@ browser bundle.
   All expense settings routes require `expense_settings.manage`.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
+- Expense and work-order modals also offer independent receipt/invoice uploads
+  through `components/ReceiptUpload.tsx`, without AI extraction. Migration 127
+  stores general expense files separately from work-order documents. Expense
+  `GET/POST /expenses/{id}/documents` and `GET /expenses/documents/{id}` enforce
+  category view/edit rights; create-only users may attach to their own entries.
+  Uploads accept nonempty PDF/TXT/PNG/JPEG/WEBP up to 20 MB and deduplicate retries
+  by entry, content hash and filename. Failed uploads retain the saved entry ID
+  for retry without another financial write. AI review retains its source file.
+  Saved receipts appear in expense details. Local fresh/migrated storage tests use
+  `MSERP_EXPENSE_DOCUMENT_TEST_DATABASE_URL`; `test-receipt-uploads-e2e.mjs` uses
+  the isolated review access file for real UI/API uploads and permission checks.
 - Fuel: `GET /fuel-transactions`, `GET /fuel-dashboard`, `POST /jobs/sync-fuel`
 - Relay review: `GET /tasks/relay-identities` (pagination/search),
   `POST /tasks/relay-identities/{id}/review` (`driverId`, `action: link|reject`).

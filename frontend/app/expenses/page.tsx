@@ -14,6 +14,7 @@ import { MaintenanceWorkspace } from "../maintenance/MaintenanceWorkspace";
 import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
+  uploadExpenseDocument,
   deleteExpense,
   fetchExpensesPage,
   fetchMaintenancePage,
@@ -43,6 +44,8 @@ import {
   expenseToInput,
 } from "./ExpenseForm";
 import { ExpenseAIImport } from "./ExpenseAIImport";
+import { ReceiptUpload } from "../components/ReceiptUpload";
+import { ExpenseDocuments } from "./ExpenseDocuments";
 import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
 import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
@@ -128,6 +131,8 @@ export default function ExpensesPage() {
   const [review,setReview]=useState<{entries:{form:ExpenseInput;source:AIExpenseDraft}[];index:number;file:File|null}|null>(null);
   const [workOrder,setWorkOrder]=useState<{key:string;recordId?:string;expense?:ExpenseInput;draft?:AIExpenseDraft;file?:File|null}|null>(null);
   const [aiBusy,setAIBusy]=useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const saveLock=useRef(false);
   const [currentUser, setCurrentUser] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
@@ -192,14 +197,14 @@ export default function ExpensesPage() {
 
   const workCategory=options.workOrdersCategoryId ?? "";
   function showReview(queue: NonNullable<typeof review>,index:number) {
-    const entry=queue.entries[index];setReview({...queue,index});setError("");
+    const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);
     if(workCategory && entry.form.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),draft:{...entry.source,...entry.form},file:queue.file});}
     else {setWorkOrder(null);setForm(entry.form);setEditing(null);}
   }
-  function completeEntry() {setWorkOrder(null);setEditing(undefined);if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
-  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");}
+  function completeEntry() {setWorkOrder(null);setEditing(undefined);setAttachment(null);setPendingUploadId(null);if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
+  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);}
   function changeForm(next:ExpenseInput){
-    if(!editing && workCategory && next.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),...(review ? {draft:{...review.entries[review.index].source,...next},file:review.file} : {expense:next})});}
+    if(!editing && workCategory && next.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),file:attachment,...(review ? {draft:{...review.entries[review.index].source,...next}} : {expense:next})});}
     else setForm(next);
   }
   const hasFilters = Boolean(unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
@@ -207,19 +212,35 @@ export default function ExpensesPage() {
   function openCreate() {
     const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds.find(id=>id!==workCategory) ?? createCategoryIds[0] ?? "";
     const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
-    setReview(null);setError("");setForm(value);
+    setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);
     if(workCategory && categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),expense:value});}else{setWorkOrder(null);setEditing(null);}
   }
   useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
   function openEdit(expense: Expense) {
-    setReview(null);setError("");
+    setReview(null);setError("");setAttachment(null);setPendingUploadId(null);
     if(workCategory && expense.categoryId===workCategory){void fetchMaintenancePage({expenseId:expense.id,pageSize:1}).then(result=>{if(!result.items[0])throw new Error("No work order was found for this charge.");setWorkOrder({key:crypto.randomUUID(),recordId:result.items[0].id});}).catch(e=>setError(e.message));return;}
     setForm(expenseToInput(expense));setEditing(expense);
   }
   async function save() {
     if(saveLock.current || aiBusy)return;
     saveLock.current=true;setIsSaving(true);setError("");
-    try {const input=applyExpenseCategoryRules(form,options.settings);if(editing)await updateExpense(editing.id,input);else await createExpense(input);completeEntry();setVerificationNotice("Saved.");await loadData(false);}
+    try {
+      let id = pendingUploadId;
+      if (!id) {
+        const input = applyExpenseCategoryRules(form, options.settings);
+        const saved = editing ? await updateExpense(editing.id, input) : await createExpense(input);
+        id = saved.id;
+      }
+      if (attachment) {
+        try { await uploadExpenseDocument(id, attachment); }
+        catch (reason) {
+          setPendingUploadId(id);
+          setError(`Entry saved. Receipt upload failed: ${reason instanceof Error ? reason.message : "Try again."}`);
+          await loadData(false); return;
+        }
+      }
+      completeEntry();setVerificationNotice("Saved.");await loadData(false);
+    }
     catch(reason){setError(reason instanceof Error ? reason.message : "Failed to save entry");}
     finally{setIsSaving(false);saveLock.current=false;}
   }
@@ -434,29 +455,31 @@ export default function ExpensesPage() {
           submitDisabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}
           footerStart={editing && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving || aiBusy}
-          submitLabel={editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
+          submitLabel={pendingUploadId ? "Retry receipt upload" : editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
           onClose={closeEntry}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-          {!editing && !review && (
+          {!editing && !review && !pendingUploadId && (
             <div className="mb-5">
               <ExpenseAIImport
                 onError={setError}
                 onBusyChange={setAIBusy}
                 onExtracted={(drafts,file,source) => {
                   const forms=drafts.map(draft=>{const value={...draft,paidBy:currentUser};return value.truckId && !value.driverId && !value.driverName ? expenseAssignment(value,"truck",value.truckId,drivers,trucks,owners) : value.driverId && !value.truckId && !value.unitNumber ? expenseAssignment(value,"driver",value.driverId,drivers,trucks,owners) : defaultExpenseResponsibility(value,trucks,owners);});
-                  showReview({entries:forms.map((form,i)=>({form,source:source[i]})),index:0,file},0);
+                  showReview({entries:forms.map((form,i)=>({form,source:source[i]})),index:0,file:file ?? attachment},0);
                 }}
               />
             </div>
           )}
           {review && <p className="mb-4 text-xs text-zinc-500">Review entry {review.index+1} of {review.entries.length}. Each item is saved separately.</p>}
-          <fieldset disabled={aiBusy || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
+          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
+          <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)} onChange={setAttachment} onError={setError} />
+          {editing && <ExpenseDocuments key={editing.id} id={editing.id} />}
         </Modal>
       )}
 
-      {workOrder && <MaintenanceWorkspace key={workOrder.key} modalOnly recordId={workOrder.recordId} initialExpense={workOrder.expense} initialAIDraft={workOrder.draft} initialAttachment={workOrder.file} reviewHasNext={!!review && review.index+1<review.entries.length} reviewLabel={review ? `Review entry ${review.index+1} of ${review.entries.length}` : undefined} onRecordClose={closeEntry} onComplete={completeEntry} onRecordSaved={()=>void loadData(false)} onUseExpense={workOrder.recordId ? undefined : value=>{setWorkOrder(null);setForm({...value,categoryId:""});setEditing(null);}} />}
+      {workOrder && <MaintenanceWorkspace key={workOrder.key} modalOnly recordId={workOrder.recordId} initialExpense={workOrder.expense} initialAIDraft={workOrder.draft} initialAttachment={workOrder.file} reviewHasNext={!!review && review.index+1<review.entries.length} reviewLabel={review ? `Review entry ${review.index+1} of ${review.entries.length}` : undefined} onRecordClose={closeEntry} onComplete={completeEntry} onRecordSaved={()=>void loadData(false)} onUseExpense={workOrder.recordId ? undefined : (value,file)=>{setWorkOrder(null);setForm({...value,categoryId:""});setAttachment(file ?? null);setEditing(null);}} />}
       {verificationDetails && <Modal title="Verification" isSaving={!!verifying} submitLabel="Done" hideSubmit cancelLabel="Done" onClose={() => setVerificationDetails(null)} onSubmit={event => event.preventDefault()}>
         {error && <ErrorBanner message={error} />}
         <div className="space-y-3">

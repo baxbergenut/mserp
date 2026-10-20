@@ -506,6 +506,12 @@ export const fetchExpensesPage = (query: PageQuery & {
 }, signal?: AbortSignal) => paginatedRequest<ExpensePage>(withQuery("/expenses", query), signal);
 // Expense reads include workOrderDescription for display; writes retain the saved expense description.
 export const fetchExpense = (id: string, signal?: AbortSignal) => apiRequest<Expense>(`/expenses/${id}`, { signal });
+export const fetchExpenseDocuments = (id: string, signal?: AbortSignal) => apiRequest<import("./types").ExpenseDocument[]>(`/expenses/${id}/documents`, { signal });
+export const uploadExpenseDocument = (id: string, file: File) => {
+  const body = new FormData(); body.append("file", file);
+  return apiRequest<import("./types").ExpenseDocument>(`/expenses/${id}/documents`, { method: "POST", body });
+};
+export const expenseDocumentUrl = (id: string) => `${API_BASE}/expenses/documents/${encodeURIComponent(id)}`;
 
 export const createExpense = (input: ExpenseInput) =>
   apiRequest<Expense>("/expenses", {

@@ -26,6 +26,7 @@ settings.push({id:'penalties',name:'Penalties',kind:'category',active:true,drive
 const blankDraft = { company: 'Wrong company', categoryId: 'maintenance', expenseDate: '2026-09-28', truckId: 'investor-truck', driverId: 'hired', unitNumber: '101', driverName: 'Hired Driver', amount: '12.50', paymentType: '', expenseType: 'Repair', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: 'Invented payer' };
 let drafts = [{...blankDraft,costBreakdown:[{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]}];
 const writes = [];
+const receiptUploads = [];
 let entries = [], verificationRole = "admin";
 const verified = [];
 const cancelled = [];
@@ -47,7 +48,11 @@ try {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
     if (route.request().method() === 'POST' && ['/expenses', '/expenses/bulk'].includes(path)) {
-      writes.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: {} }); return;
+      writes.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: { id: 'created-' + writes.length } }); return;
+    }
+    if (path.endsWith('/documents')) {
+      if (route.request().method() === 'POST') receiptUploads.push({ path, body: route.request().postData() });
+      await route.fulfill({ json: route.request().method() === 'GET' ? [] : { id: 'receipt' } }); return;
     }
     if (path.endsWith('/verify')) {
       const id = path.split('/')[2];
@@ -124,6 +129,10 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-expense-modal.png'), fullPage: true });
   await page.getByRole('button', { name: 'Create entry', exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(receiptUploads).toHaveLength(1);
+  expect(receiptUploads[0].path).toBe('/expenses/created-1/documents');
+  expect(receiptUploads[0].body).toContain('receipt.txt');
   expect(writes[0]).not.toHaveProperty('company');
   expect(writes[0].costBreakdown).toEqual([{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]);
   expect(writes[0]).toMatchObject({ coveredBy: 'Truck Owner', ownerId: 'investor', paidBy: 'Entry User' });
@@ -187,20 +196,27 @@ try {
   await page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('button', { name: 'Verify', exact: true }).click();
   await expect(page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('img', { name: 'Administrator: Alex Administrator; Accountant: Entry User' })).toBeVisible();
   await accountantRow.getByRole('button', { name: 'View verification: Accountant: Avery Accountant', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('button', { name: 'View verification: Administrator: Alex Administrator; Accountant: Entry User', exact: true }).click();
   await page.getByRole('button', { name: 'Remove Accountant verification', exact: true }).click();
-  await expect(page.getByText('No active verifications.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await row.getByRole('button', { name: 'View verification: Administrator: Entry User', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Remove Administrator verification', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Administrator verification', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('row', { name: 'Open Repair 3', exact: true }).getByRole('button', { name: /View verification:/ }).click();
   await expect(page.getByRole('button', { name: 'Remove Administrator verification', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
   await expect(page.getByPlaceholder(/Enter an unlinked/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
+  // Filter fixtures are independent of which user's verification was cancelled.
+  entries[1] = { ...entries[1], accountingVerified: false, verifications: [] };
+  entries[2] = { ...entries[2], accountingVerified: true, verifications: [...entries[2].verifications, { id: 'filter-accountant', role: 'accountant', userId: 'user', userName: 'Entry User' }] };
+  await page.reload();
   await page.getByRole('button', { name: 'Filter Verification', exact: true }).click();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('true');
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(2);
