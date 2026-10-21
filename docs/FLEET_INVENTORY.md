@@ -7,7 +7,15 @@ and the Administrator-only `imports` workflow. Fleet > Trailers is a separate
 directory at `/fleet/trailers` for stored/unused company trailers. Operational
 Schneider/JB Hunt trailer text on Status Board remains independent.
 
-Each directory keeps search, filters, refresh and add controls in one desktop
+Fleet navigation lists Trucks, Trailers, then Inventory. Trailers follows the
+Trucks table and profile layout: unit links open `/fleet/trailers/detail?id=...`,
+with vehicle details, registration, availability, condition, storage and notes.
+Search, pagination and the Record column's Active/Inactive/All filter remember
+their state when returning from a profile. Add and Edit share the existing
+versioned trailer editor; `trailers.read` opens both pages and `trailers.manage`
+controls edits. Inactive records remain accessible through their profile links.
+
+Inventory keeps search, filters, refresh and add controls in one desktop
 toolbar, wrapping on smaller screens. Tablet columns show make/model, IMEI and
 the linked wireless number without a redundant device type or gateway column.
 Dashcams share one directory with a controlled Samsara/FiveELD brand selector;

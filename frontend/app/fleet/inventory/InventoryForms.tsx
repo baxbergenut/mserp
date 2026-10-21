@@ -100,7 +100,7 @@ export function InventoryRecordFields({ collection, value, onChange, context }: 
   </div>;
 }
 
-export function InventoryEditor({ collection, record, context, onClose, onSaved }: { collection: InventoryCollection; record: InventoryRecord; context: InventoryContext; onClose: () => void; onSaved: () => void }) {
+export function InventoryEditor({ collection, record, context, onClose, onSaved }: { collection: InventoryCollection; record: InventoryRecord; context: InventoryContext; onClose: () => void; onSaved: (record: InventoryRecord) => void }) {
   const [draft, setDraft] = useState(record.data), [requestId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const label = collection === "assets" ? readable(draft.deviceType) : collection === "equipment" ? "Truck Equipment" : collection === "trailers" ? "Trailer" : collection === "lines" ? "Service Line" : collection === "supplies" ? "Supply" : collection === "locations" ? "Location" : "Transponder Notes";

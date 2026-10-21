@@ -84,7 +84,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
   const previous = trail.at(-2);
   const payTarget = parsed.pathname === "/gross-board" ? parseBoardLoadTarget(parsed.search) : null;
   const back = payTarget?.fromPay ? (previous?.startsWith("/accounting/driver-pay") ? previous : `/accounting/driver-pay?weekStart=${payTarget.week}`)
-    : previous ?? ({ "/drivers/detail": "/drivers", "/trucks/detail": "/trucks" } as Record<string,string>)[parsed.pathname];
+    : previous ?? ({ "/drivers/detail": "/drivers", "/trucks/detail": "/trucks", "/fleet/trailers/detail": "/fleet/trailers" } as Record<string,string>)[parsed.pathname];
   return <ViewMemoryContext.Provider value={scope}><BackHrefContext.Provider value={back}><MarkBackContext.Provider value={markBack}><main ref={mainRef} className="min-w-0 flex-1 overflow-auto">
     <div className="w-full px-4 py-6 sm:px-6 xl:px-8">
       <RestoringViewContext.Provider value={restoringView}><NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}>{children}</NavigationSearchContext.Provider></RestoringViewContext.Provider>

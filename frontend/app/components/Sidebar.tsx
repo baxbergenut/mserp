@@ -36,8 +36,9 @@ const NAV_ITEMS = [
   { href: "/tolls", label: "Tolls", icon: Receipt },
   { href: "/weighmytruck", label: "Scale", icon: Scale },
   { href: "/fleet", label: "Fleet", icon: Truck, children: [
-    { href: "/fleet/inventory", label: "Inventory", icon: Package },
+    { href: "/trucks", label: "Trucks", icon: Truck },
     { href: "/fleet/trailers", label: "Trailers", icon: Truck },
+    { href: "/fleet/inventory", label: "Inventory", icon: Package },
     { href: "/maintenance", label: "Work orders", icon: Wrench },
     { href: "/fleet/preventative-maintenance", label: "Preventative maintenance", icon: CalendarRange },
   ] },
@@ -52,7 +53,6 @@ const NAV_ITEMS = [
   ] },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/investors", label: "Investors", icon: Landmark },
-  { href: "/trucks", label: "Trucks", icon: Truck },
   { href: "/dispatchers", label: "Dispatchers and updaters", icon: Headset },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
@@ -140,7 +140,7 @@ export function Sidebar() {
                 {groupExpanded && (
                   <div className="mt-1 space-y-1 pl-5">
                     {children.map((child) => {
-                      const childActive = pathname === child.href;
+                      const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
                       const ChildIcon = child.icon;
                       return (
                         <Link

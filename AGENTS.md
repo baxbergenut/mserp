@@ -280,8 +280,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 - Fleet > Inventory (`/fleet/inventory?tab=tablets`) and Fleet > Trailers
   (`/fleet/trailers`) use migration 119, repository `inventory.go` /
-  `inventory_import.go` and `httpapi/inventory_handlers.go`. Inventory tracks
-  devices, separate carrier lines, camera/gateway links, locations, annual sticker
+  `inventory_import.go` and `httpapi/inventory_handlers.go`.
+  Fleet navigation starts with Trucks, Trailers, then Inventory. Trailers uses
+  the Trucks directory/table patterns and `/fleet/trailers/detail?id=...` profiles;
+  its shared versioned editor preserves trailer-only read/manage permissions.
+  Inventory tracks devices, separate carrier lines, camera/gateway links, locations, annual sticker
   batches, truck observations and an append-only stock ledger. Versioned edits,
   idempotent movement IDs, foreign keys and a short inventory transaction lock
   protect assignments and nonnegative stock. No stock is inferred from sheet
