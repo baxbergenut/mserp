@@ -71,9 +71,10 @@ func TestExpenseTypeCatalogLive(t *testing.T) {
 		{"flight", "Airline ticket receipt dated 2026-10-21: one-way flight for a driver traveling to recruiting orientation. Fare and taxes total $85.00. Paid cash.", "Transportation"},
 		{"hotel", "Motel receipt dated 2026-10-21: one night of accommodation for a driver attending orientation. Room and taxes total $85.00. Paid cash.", "Hotel"},
 		{"custom", "Receipt dated 2026-10-21: fingerprint collection and fingerprint analysis for a prospective driver's background screening. Total $85.00. Paid cash.", ""},
+		{"translation", "Receipt dated 2026-10-21: certified translation of a prospective driver's birth certificate into English for recruiting records. Total $85.00. Paid cash.", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := client.ExtractExpense(context.Background(), ExpenseInput{Text: tc.text, MessageDate: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"HR": {"Transportation", "Hotel"}}, PaymentMethods: []string{"Cash"}})
+			result, err := client.ExtractExpense(context.Background(), ExpenseInput{Text: tc.text, MessageDate: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"HR": {"Transportation", "Hotel", "Shipping", "MVR", "PSP"}}, PaymentMethods: []string{"Cash"}})
 			if err != nil || len(result.Expenses) != 1 || result.Expenses[0].ExpenseType == nil {
 				t.Fatal("missing classification", err)
 				return
@@ -82,7 +83,7 @@ func TestExpenseTypeCatalogLive(t *testing.T) {
 			if tc.want != "" && kind != tc.want {
 				t.Fatalf("classification %q; want %q", kind, tc.want)
 			}
-			if tc.want == "" && (kind == "" || kind == "Transportation" || kind == "Hotel") {
+			if tc.want == "" && (kind == "" || kind == "Transportation" || kind == "Hotel" || kind == "Shipping" || kind == "MVR" || kind == "PSP") {
 				t.Fatalf("unrelated existing type used instead of custom: %q", kind)
 			}
 		})
@@ -110,7 +111,7 @@ func TestExtractionRejectsFailureWithoutProviderData(t *testing.T) {
 
 func TestExpensePromptAndSchema(t *testing.T) {
 	prompt := expensePrompt(ExpenseInput{Text: "Oil change $125", MessageDate: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"Maintenance": {"Oil change", "Tire issue"}}})
-	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation"} {
+	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation", "NOT Shipping", "custom Document translation"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatal("missing prompt instruction", want)
 		}
