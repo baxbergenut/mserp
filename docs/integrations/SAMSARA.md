@@ -48,10 +48,11 @@ and immediately revalidate after a baseline correction. Superseded source-revisi
 odometers are not reinstated as validation anchors or saved fallback values.
 No offset is invented and no historical service odometer or invoice is rewritten.
 
-The shared location selection feeds Status Board, driver/truck profile maps and
-GPS arrival/travel automation. Provider changes invalidate cached arrival/ETA
-evidence before it can be shown for the new source. Samsara travel uses cached
-mph samples; it does not query Five ELD for a Samsara-selected truck. The shared
+The shared Samsara-first location selection feeds driver/truck profile maps.
+Status Board positions, GPS arrival evidence and ETA/travel automation always use
+Five ELD, with no Samsara fallback. Old Samsara arrival/ETA evidence is hidden on
+read and replaced by the background evaluator. Tracking uses Five ELD samples
+and its configured speed unit. The shared
 mileage selection feeds service programs, due reminders and new Work order
 autofill. `/jobs/sync-eld` refreshes both configured providers under its existing
 permission, retaining successful provider updates on a partial outage. Browser

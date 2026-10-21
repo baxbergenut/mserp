@@ -29,7 +29,18 @@ type FiveELDSyncResult struct {
 
 type FiveELDRepository struct{ pool *pgxpool.Pool }
 
-// All location consumers use the same VIN/ambiguity rules and latest-known cache.
+// Dispatch positions, arrival evidence and ETA always share Five ELD. Samsara
+// remains independent for fleet maps and maintenance odometer selection.
+const statusBoardELDLocationJoinSQL = `
+ LEFT JOIN five_eld_sync_state es ON es.singleton
+ LEFT JOIN LATERAL (
+ SELECT f.latitude,f.longitude,f.reported_at,f.provider_truck_number,f.heading,'five_eld'::text AS source
+ FROM five_eld_locations f WHERE f.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
+ AND NOT(f.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+ ) el ON true
+`
+
+// Profile maps use Samsara first, then Five ELD, with shared identity guards.
 const fiveELDLocationJoinSQL = `
  LEFT JOIN five_eld_sync_state es ON es.singleton
  LEFT JOIN LATERAL (

@@ -187,7 +187,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 	rows, err := tx.Query(ctx, `SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(c.travel,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
  (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND (SELECT count(*) FROM trucks other WHERE upper(regexp_replace(other.vin,'[^A-Za-z0-9]','','g'))=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g')))=1),coalesce(el.source,'')
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
- LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+fiveELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids)
+ LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+statusBoardELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return err
 	}

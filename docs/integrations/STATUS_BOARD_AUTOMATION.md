@@ -6,6 +6,11 @@ databases include it in init.sql. The worker runs at startup and every minute,
 independently of the daily sync scheduler; a PostgreSQL advisory lock permits one
 worker across API processes. GETs and browser viewers never call providers.
 
+Status Board locations, proximity and travel estimates always use Five ELD,
+without a Samsara fallback. Fleet profile maps and maintenance odometers keep
+their separate source rules. Old Samsara dispatch evidence is hidden immediately
+and recomputed by the worker from Five ELD.
+
 ## Appointments and destinations
 
 Current load resolves a unique exact imported DataTruck number, including loads

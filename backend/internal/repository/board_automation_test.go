@@ -416,8 +416,8 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
 		t.Fatal("fresh movement did not promptly replace last known miles", err, view.Automation)
 	}
-	// An older Samsara observation has priority, invalidates Five ELD evidence
-	// immediately, and routes from cached mph samples without calling Five ELD.
+	// Samsara never replaces dispatch GPS, even with a point near the stop.
+	arrivedBeforeSamsara := view.Automation.Arrived
 	_, err = pool.Exec(ctx, `INSERT INTO samsara_telemetry(vin,vehicle_id,unit_number,latitude,longitude,speed_mph,gps_at,fetched_at) VALUES($1,'automation-samsara','Samsara',40.55211,-74.3909193,6,$2,$3)`, vin, now.Add(-time.Minute), now)
 	if err != nil {
 		t.Fatal(err)
@@ -427,23 +427,41 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")
-	if err != nil || view.Automation.Arrived || view.Automation.TravelValue != "" {
-		t.Fatal("previous provider evidence remained visible", view.Automation, err)
+	if err != nil || view.Automation.Arrived != arrivedBeforeSamsara || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") {
+		t.Fatal("Samsara changed Five ELD dispatch evidence", view.Automation, err)
 	}
-	routes.Options.SpeedUnit = "kph"
-	calls = routeCalls.Load()
-	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil {
+	// A deployment must hide old Samsara arrival/route evidence immediately,
+	// then recompute it from Five ELD without waiting for its former retry fence.
+	_, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{source}','"samsara"'),evidence=jsonb_set(evidence,'{source}','"samsara"') WHERE driver_id=$1`, d.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")
-	if err != nil || view.Automation.Arrived || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
-		t.Fatal("Samsara priority/mph routing failed", view.Automation, err)
+	if err != nil || view.Automation.TravelValue != "" || view.Automation.Arrived {
+		t.Fatal("Samsara cache remained visible", view.Automation, err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.Source != "samsara" {
+	calls = routeCalls.Load()
+	if err = repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.Arrived != arrivedBeforeSamsara || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
+		t.Fatal("Five ELD routing did not replace Samsara cache", view.Automation, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.Source != "five_eld" {
 		t.Fatal("routing used another provider", cached, err)
 	}
-	_, _ = pool.Exec(ctx, `DELETE FROM samsara_telemetry WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
+	board, err := repo.Get(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, driver := range board.Drivers {
+		if driver.ID == d.ID && driver.Location != nil {
+			t.Fatal("missing Five ELD fell back to Samsara", driver.Location)
+		}
+	}
+	_, _ = pool.Exec(ctx, `DELETE FROM samsara_telemetry WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID)
 	_, _ = pool.Exec(ctx, `DELETE FROM trucks WHERE id=$1`, truck.ID)
 	_, _ = pool.Exec(ctx, `DELETE FROM loads WHERE id=99115`)

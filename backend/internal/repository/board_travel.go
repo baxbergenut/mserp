@@ -265,19 +265,11 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			point = &fiveeld.TrackingPoint{Date: job.driver.Location.ReportedAt}
 			point.Coordinates.Lat = job.driver.Location.Latitude
 			point.Coordinates.Lng = job.driver.Location.Longitude
-		} else if eld == nil && job.driver.Location.Source != "samsara" {
+		} else if eld == nil {
 			t.Error = "Telematics tracking unavailable"
 			t.CalculatedAt = time.Time{}
 		} else {
-			var points []fiveeld.TrackingPoint
-			var e error
-			speedUnit := routes.Options.SpeedUnit
-			if job.driver.Location.Source == "samsara" {
-				points, e = r.samsaraTracking(ctx, job.vin, now)
-				speedUnit = "mph"
-			} else {
-				points, e = eld.RecentTracking(ctx, usdot, job.vin, now)
-			}
+			points, e := eld.RecentTracking(ctx, usdot, job.vin, now)
 			if e != nil {
 				t.Error = "Telematics tracking unavailable"
 			} else {
@@ -285,7 +277,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				if now.Sub(t.ReportedAt) > 10*time.Minute && previous != "stopped" {
 					previous = ""
 				}
-				motion, point = trackingMotion(points, speedUnit, previous)
+				motion, point = trackingMotion(points, routes.Options.SpeedUnit, previous)
 				if point == nil {
 					t.Error = "No fresh tracking points"
 				}

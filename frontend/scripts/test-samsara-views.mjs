@@ -26,7 +26,7 @@ try{
  await row.getByRole('button',{name:'Record service',exact:true}).click();await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('500000');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.goto(access.base+'/maintenance');await page.getByRole('button',{name:'Add work order',exact:true}).click();await page.getByLabel('Maintenance truck',{exact:true}).selectOption(fixture.ownTruck);
  await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('500000');await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveAttribute('title',/Samsara/);await page.getByRole('button',{name:'Cancel',exact:true}).click();
- await page.goto(access.base+'/driver-board');const marker=page.getByRole('button',{name:'Morgan Hayes · Copy current location',exact:true});await expect(marker).toHaveAttribute('title',/Samsara updated/);
+ await page.goto(access.base+'/driver-board');const marker=page.getByRole('button',{name:'Morgan Hayes · Copy current location',exact:true});await expect(marker).toHaveAttribute('title',/Five ELD updated/);
  await page.goto(access.base+'/trucks/detail?id='+fixture.ownTruck);await expect(page.getByRole('button',{name:'Truck 101 · Copy current location',exact:true})).toHaveAttribute('title',/Samsara updated/);
  // Availability is independent for each field: missing GPS falls back while
  // Samsara remains authoritative for the odometer.

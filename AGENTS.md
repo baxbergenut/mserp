@@ -2406,8 +2406,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   `SAMSARA_SYNC_INTERVAL` configure a startup/minute worker. No provider writes.
 - Exact VINs match only one local truck. Duplicate Samsara VINs resolve only to
   one attached gateway; multiple gateways or duplicate IDs/stats stay ambiguous.
-  Shared location/mileage readers cover boards, maps, service programs, reminders
-  and autofill. Odometers prefer fresh plausible Samsara, then validated fresh
+  Fleet maps remain Samsara-first. Status Board GPS, arrivals and ETA use Five ELD
+  exclusively through statusBoardELDLocationJoinSQL, with no Samsara fallback;
+  invalidate old Samsara route/evidence before display. Odometers prefer fresh plausible Samsara, then validated fresh
   Five ELD; `maintenance_odometer_checks.go` rejects backwards/implausible mileage
   against reviewed service/manual history, effective baselines and accepted samples.
   Read-time guards exclude legacy bad caches; rejected imports preserve last good
