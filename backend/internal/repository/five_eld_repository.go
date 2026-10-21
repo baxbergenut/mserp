@@ -32,8 +32,17 @@ type FiveELDRepository struct{ pool *pgxpool.Pool }
 // All location consumers use the same VIN/ambiguity rules and latest-known cache.
 const fiveELDLocationJoinSQL = `
  LEFT JOIN five_eld_sync_state es ON es.singleton
- LEFT JOIN five_eld_locations el ON el.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
- AND NOT (el.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+ LEFT JOIN LATERAL (
+ SELECT latitude,longitude,reported_at,provider_truck_number,heading,source FROM (
+ SELECT c.latitude,c.longitude,c.gps_at AS reported_at,c.unit_number AS provider_truck_number,c.heading,'samsara'::text AS source,0 AS priority
+ FROM samsara_telemetry c WHERE c.available AND c.vin=upper(btrim(t.vin)) AND c.gps_at<=now()
+ AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ UNION ALL
+ SELECT f.latitude,f.longitude,f.reported_at,f.provider_truck_number,f.heading,'five_eld'::text,1
+ FROM five_eld_locations f WHERE f.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
+ AND NOT(f.vin=ANY(coalesce(es.ambiguous_vins,'{}'::text[])))
+ ) candidates ORDER BY priority LIMIT 1
+ ) el ON true
 `
 
 type FleetLocation struct {
@@ -44,13 +53,13 @@ type FleetLocation struct {
 
 func (r *FleetRepository) TruckLocation(ctx context.Context, id string) (FleetLocation, error) {
 	return scanFleetLocation(r.pool.QueryRow(ctx, `SELECT coalesce(t.id::text,''),coalesce(t.unit_number,''),
- el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
+ el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source
  FROM trucks t `+fiveELDLocationJoinSQL+` WHERE t.id=$1`, id))
 }
 
 func (r *FleetRepository) DriverTruckLocation(ctx context.Context, id string) (FleetLocation, error) {
 	return scanFleetLocation(r.pool.QueryRow(ctx, `SELECT coalesce(t.id::text,''),coalesce(t.unit_number,''),
- el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
+ el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source
  FROM drivers d
  LEFT JOIN truck_driver_assignments a ON a.driver_id=payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date) AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id `+fiveELDLocationJoinSQL+` WHERE d.id=$1`, id))
@@ -60,13 +69,13 @@ func scanFleetLocation(row rowScanner) (FleetLocation, error) {
 	var value FleetLocation
 	var latitude, longitude, heading *float64
 	var reportedAt *time.Time
-	var providerTruckNumber *string
-	err := row.Scan(&value.TruckID, &value.TruckUnit, &latitude, &longitude, &reportedAt, &providerTruckNumber, &heading)
+	var providerTruckNumber, source *string
+	err := row.Scan(&value.TruckID, &value.TruckUnit, &latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &source)
 	if err != nil {
 		return value, mapNotFound(err)
 	}
 	if latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
-		value.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading, ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber}
+		value.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading, ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Source: pmRecordID(source)}
 	}
 	return value, nil
 }
@@ -144,8 +153,10 @@ func (r *FiveELDRepository) RecordFailure(ctx context.Context, attemptedAt time.
 
 func fiveELDSyncSummary(ctx context.Context, tx pgx.Tx) (FiveELDBoardSummary, error) {
 	var value FiveELDBoardSummary
-	err := tx.QueryRow(ctx, `SELECT last_attempt_at,last_success_at,last_error,cardinality(unmatched_vins),cardinality(ambiguous_vins),invalid_unit_count
- FROM five_eld_sync_state WHERE singleton`).Scan(&value.LastAttemptAt, &value.LastSuccessAt, &value.LastError,
+	err := tx.QueryRow(ctx, `SELECT max(last_attempt_at),max(last_success_at),coalesce(string_agg(nullif(last_error,''),' / '),''),coalesce(sum(unmatched),0),coalesce(sum(ambiguous),0),coalesce(sum(invalid),0) FROM (
+ SELECT last_attempt_at,last_success_at,last_error,cardinality(unmatched_vins) AS unmatched,cardinality(ambiguous_vins) AS ambiguous,invalid_unit_count AS invalid FROM five_eld_sync_state WHERE singleton
+ UNION ALL SELECT last_attempt_at,last_success_at,last_error,0,cardinality(ambiguous_vins),invalid_count FROM samsara_sync_state WHERE singleton
+ ) providers`).Scan(&value.LastAttemptAt, &value.LastSuccessAt, &value.LastError,
 		&value.Unmatched, &value.Ambiguous, &value.Invalid)
 	if err == pgx.ErrNoRows {
 		return value, nil

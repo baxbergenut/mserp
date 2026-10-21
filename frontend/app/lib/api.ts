@@ -644,7 +644,7 @@ export const completeFiveELDTruckReview = (id: string, version: number, truck: T
 
 export type MaintenanceQuery = { truckId?: string; vendorId?: string; typeCode?: string; status?: string; search?: string; dateFrom?: string; dateTo?: string; expenseId?: string; page?: number; pageSize?: number };
 export const fetchMaintenanceOptions = () => apiRequest<import("./types").MaintenanceOptions>("/maintenance/options");
-export const fetchMaintenanceOdometer = (truckId: string, signal?: AbortSignal) => apiRequest<{reading: {mileage: number; reportedAt: string} | null; message: string}>(withQuery("/maintenance/odometer",{truckId}),{signal});
+export const fetchMaintenanceOdometer = (truckId: string, signal?: AbortSignal) => apiRequest<{reading: {mileage: number; reportedAt: string; source?: "samsara" | "five_eld"} | null; message: string}>(withQuery("/maintenance/odometer",{truckId}),{signal});
 export const fetchMaintenancePage = (query: MaintenanceQuery, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").MaintenanceRecord>>(withQuery("/maintenance",query),{signal});
 export const fetchMaintenance = (id: string) => apiRequest<import("./types").MaintenanceRecord>(`/maintenance/${id}`);
 export const saveMaintenance = (input: import("./types").MaintenanceInput) => {

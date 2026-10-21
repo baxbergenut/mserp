@@ -10,6 +10,7 @@ type MaintenanceTelemetryTruck struct {
 	VIN     string
 }
 type MaintenanceTelemetry struct {
+	Source     string    `json:"source"`
 	Mileage    int       `json:"mileage"`
 	ReportedAt time.Time `json:"reportedAt"`
 }
@@ -45,7 +46,12 @@ func (r *MaintenanceRepository) StoreMaintenanceTelemetry(ctx context.Context, t
 }
 func (r *MaintenanceRepository) CachedMaintenanceOdometer(ctx context.Context, truck string) (*MaintenanceTelemetry, error) {
 	var value MaintenanceTelemetry
-	err := r.pool.QueryRow(ctx, `SELECT c.mileage,c.reported_at FROM maintenance_telemetry c JOIN trucks t ON t.id=c.truck_id AND upper(btrim(t.vin))=c.vin WHERE t.id=$1 AND c.reported_at<=now() AND c.reported_at>=now()-interval '1 hour' AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1`, truck).Scan(&value.Mileage, &value.ReportedAt)
+	err := r.pool.QueryRow(ctx, `SELECT mileage,reported_at,source FROM (
+ SELECT c.mileage,c.odometer_at AS reported_at,'samsara'::text AS source,0 AS priority
+ FROM samsara_telemetry c JOIN trucks t ON c.vin=upper(btrim(t.vin)) WHERE t.id=$1 AND c.available AND c.odometer_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ UNION ALL SELECT c.mileage,c.reported_at,'five_eld'::text,1 FROM maintenance_telemetry c JOIN trucks t ON t.id=c.truck_id AND upper(btrim(t.vin))=c.vin WHERE t.id=$1 AND c.reported_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ ORDER BY priority LIMIT 1
+ ) preferred WHERE reported_at>=now()-interval '1 hour'`, truck).Scan(&value.Mileage, &value.ReportedAt, &value.Source)
 	if err != nil {
 		if mapNotFound(err) == ErrNotFound {
 			return nil, nil
@@ -57,7 +63,8 @@ func (r *MaintenanceRepository) CachedMaintenanceOdometer(ctx context.Context, t
 
 const maintenanceCurrentReadingJoin = ` LEFT JOIN LATERAL (
  SELECT mileage,reading_date,reported_at,source FROM (
- SELECT o.mileage,o.reading_date,NULL::timestamptz AS reported_at,o.source FROM maintenance_odometer_readings o WHERE o.truck_id=t.id AND o.active
- UNION ALL SELECT c.mileage,(c.reported_at AT TIME ZONE 'America/New_York')::date,c.reported_at,'five_eld' FROM maintenance_telemetry c WHERE c.truck_id=t.id AND c.vin=upper(btrim(t.vin)) AND c.reported_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
- ) observed ORDER BY reading_date DESC,mileage DESC,reported_at DESC NULLS LAST LIMIT 1
+ SELECT o.mileage,o.reading_date,NULL::timestamptz AS reported_at,o.source,1 AS priority FROM maintenance_odometer_readings o WHERE o.truck_id=t.id AND o.active
+ UNION ALL SELECT c.mileage,(c.reported_at AT TIME ZONE 'America/New_York')::date,c.reported_at,'five_eld',1 FROM maintenance_telemetry c WHERE c.truck_id=t.id AND c.vin=upper(btrim(t.vin)) AND c.reported_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ UNION ALL SELECT c.mileage,(c.odometer_at AT TIME ZONE 'America/New_York')::date,c.odometer_at,'samsara',0 FROM samsara_telemetry c WHERE c.available AND c.vin=upper(btrim(t.vin)) AND c.odometer_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ ) observed ORDER BY priority,reading_date DESC,mileage DESC,reported_at DESC NULLS LAST LIMIT 1
  ) r ON true `

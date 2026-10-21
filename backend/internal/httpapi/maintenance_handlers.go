@@ -24,10 +24,10 @@ type maintenanceHandler struct {
 	expenses  *repository.ExpenseRepository
 	logger    *slog.Logger
 	extractor openai.ExpenseExtractor
-	eld       *jobs.SyncFiveELDJob
+	eld       jobs.LocationRefresher
 }
 
-func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, expenses *repository.ExpenseRepository, extractor openai.ExpenseExtractor, eld *jobs.SyncFiveELDJob) {
+func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, expenses *repository.ExpenseRepository, extractor openai.ExpenseExtractor, eld jobs.LocationRefresher) {
 	h := maintenanceHandler{repo: repository.NewMaintenanceRepository(pool), expenses: expenses, logger: logger, extractor: extractor, eld: eld}
 	r.Get("/maintenance/programs", h.programs)
 	r.Post("/maintenance/programs", h.programSave)

@@ -48,6 +48,7 @@ type DriverBoardDriver struct {
 }
 
 type DriverBoardLocation struct {
+	Source              string    `json:"source"`
 	Heading             *float64  `json:"heading"`
 	Latitude            float64   `json:"latitude"`
 	Longitude           float64   `json:"longitude"`
@@ -118,7 +119,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -138,13 +139,13 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		var e DriverBoardEntry
 		var pay string
 		var owner, investor, own bool
-		var providerTruckNumber *string
+		var providerTruckNumber, locationSource *string
 		var latitude, longitude, heading *float64
 		var reportedAt *time.Time
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource)
 		if err != nil {
 			rows.Close()
 			return result, err
@@ -152,7 +153,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		d.DriverType = driverBoardType(pay, owner, investor, own)
 		if latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
 			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading,
-				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber}
+				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Source: pmRecordID(locationSource)}
 		}
 		e.DriverID = d.ID
 		result.Drivers = append(result.Drivers, d)

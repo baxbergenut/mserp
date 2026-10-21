@@ -27,7 +27,7 @@ func (h maintenanceHandler) odometer(w http.ResponseWriter, r *http.Request) {
 	}
 	message := ""
 	if reading == nil {
-		message = "Waiting for a recent background Five ELD reading."
+		message = "Waiting for a recent background telematics reading."
 	}
 	writeJSON(w, 200, map[string]any{"reading": reading, "message": message})
 }

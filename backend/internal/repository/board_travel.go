@@ -14,6 +14,7 @@ import (
 )
 
 type BoardTravel struct {
+	Source            string    `json:"source,omitempty"`
 	Enabled           bool      `json:"enabled"`
 	Context           string    `json:"context"`
 	CalculatedAt      time.Time `json:"calculatedAt"`
@@ -223,7 +224,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			continue
 		}
 		lastKnown := now.Sub(d.Location.ReportedAt) > 10*time.Minute
-		if lastKnown && t.Context == a.Context && !t.CalculatedAt.IsZero() && !t.CalculatedAt.After(now) && !t.ReportedAt.Before(d.Location.ReportedAt) && !t.ReportedAt.After(now) {
+		if lastKnown && sameTelemetrySource(t.Source, d.Location.Source) && t.Context == a.Context && !t.CalculatedAt.IsZero() && !t.CalculatedAt.After(now) && !t.ReportedAt.Before(d.Location.ReportedAt) && !t.ReportedAt.After(now) {
 			if _, _, ok := routes.Options.VehicleFor(d.TruckID, *view.Current.LoadID, entries[d.ID].TrailerNumber, now); ok {
 				// Distance from an unchanged old position is reusable throughout rest.
 				if !t.Enabled {
@@ -235,7 +236,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				continue
 			}
 		}
-		if t.Context == a.Context && now.Sub(t.AttemptedAt) < 5*time.Minute && (lastKnown || !t.LastKnownPosition) {
+		if sameTelemetrySource(t.Source, d.Location.Source) && t.Context == a.Context && now.Sub(t.AttemptedAt) < 5*time.Minute && (lastKnown || !t.LastKnownPosition) {
 			continue
 		}
 		targets = append(targets, target{d, view, stop, t, vin, lastKnown})
@@ -247,8 +248,8 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		a := job.view.Automation
 		t := job.travel
-		if t.Context != a.Context {
-			t = BoardTravel{Context: a.Context}
+		if t.Context != a.Context || !sameTelemetrySource(t.Source, job.driver.Location.Source) {
+			t = BoardTravel{Context: a.Context, Source: job.driver.Location.Source}
 		}
 		t.Enabled = true
 		t.AttemptedAt = now
@@ -264,19 +265,27 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			point = &fiveeld.TrackingPoint{Date: job.driver.Location.ReportedAt}
 			point.Coordinates.Lat = job.driver.Location.Latitude
 			point.Coordinates.Lng = job.driver.Location.Longitude
-		} else if eld == nil {
-			t.Error = "Five ELD tracking unavailable"
+		} else if eld == nil && job.driver.Location.Source != "samsara" {
+			t.Error = "Telematics tracking unavailable"
 			t.CalculatedAt = time.Time{}
 		} else {
-			points, e := eld.RecentTracking(ctx, usdot, job.vin, now)
+			var points []fiveeld.TrackingPoint
+			var e error
+			speedUnit := routes.Options.SpeedUnit
+			if job.driver.Location.Source == "samsara" {
+				points, e = r.samsaraTracking(ctx, job.vin, now)
+				speedUnit = "mph"
+			} else {
+				points, e = eld.RecentTracking(ctx, usdot, job.vin, now)
+			}
 			if e != nil {
-				t.Error = "Five ELD tracking unavailable"
+				t.Error = "Telematics tracking unavailable"
 			} else {
 				previous := t.Motion
 				if now.Sub(t.ReportedAt) > 10*time.Minute && previous != "stopped" {
 					previous = ""
 				}
-				motion, point = trackingMotion(points, routes.Options.SpeedUnit, previous)
+				motion, point = trackingMotion(points, speedUnit, previous)
 				if point == nil {
 					t.Error = "No fresh tracking points"
 				}

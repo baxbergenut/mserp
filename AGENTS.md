@@ -2397,3 +2397,18 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   and replaces Administrator-only program creation/settings/assignee checks.
   Work order category View/Edit is still required. Maintenance options exposes
   canManagePrograms; route policies and handler checks enforce the capability.
+
+### Samsara-first telematics (131)
+
+- `internal/samsara`, `jobs/sync_samsara.go`, and repository `samsara_repository.go`
+  read complete paginated vehicle/stat snapshots into separate caches. Server-only
+  `SAMSARA_API_TOKEN`, optional `SAMSARA_API_VERSION`, `SAMSARA_API_URL` and
+  `SAMSARA_SYNC_INTERVAL` configure a startup/minute worker. No provider writes.
+- Exact unique VINs select Samsara per field before Five ELD/manual current data.
+  Shared location/mileage readers cover boards, maps, service programs, reminders
+  and autofill. GPS and odometer fall back independently only when unavailable;
+  preserve provider timestamps/staleness and original one-hour autofill guard.
+  Source changes invalidate arrival/ETA evidence; Samsara samples use mph.
+- Keep read-only review servers' Samsara token empty. Run TestSamsaraDatabase,
+  TestDriverBoardDatabase, TestMaintenanceDatabase and test-samsara-views.mjs.
+  See docs/integrations/SAMSARA.md for matching, configuration and live proof.

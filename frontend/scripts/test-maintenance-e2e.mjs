@@ -159,11 +159,10 @@ try {
  expect(new URL(page.url()).pathname).toBe('/fleet/service-programs');
  await expect(page.getByLabel('Custom oil type',{exact:true})).toHaveValue('20W-50');
  await page.getByRole('button',{name:'Close',exact:true}).click();
- await page.getByRole('button',{name:'Update last service for '+truck.unitNumber+' Oil change 20k',exact:true}).click();
- await page.getByLabel('Program service date',{exact:true}).fill('2026-09-30');
- await page.getByLabel('Program service odometer',{exact:true}).fill('99500');
- await page.getByRole('button',{name:'Save baseline',exact:true}).click();
- await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/^Update last service/})).toHaveCount(0);
+ const member=(await api('get','/maintenance/programs/00000000-0000-4000-8000-000000000020/trucks')).find(t=>t.truckId===truck.id);
+ await api('put','/maintenance/programs/00000000-0000-4000-8000-000000000020/trucks/'+truck.id+'/baseline',{memberVersion:member.memberVersion,recordId:member.lastRecordId,recordVersion:member.recordVersion,baselineVersion:member.baselineVersion,lastDate:'2026-09-30',lastMiles:99500});
+ await page.reload();await page.getByPlaceholder('Search trucks or programs…').fill(truck.unitNumber);
  await expect(page.locator('tbody')).toContainText('2026-09-30');
  await expect(page.locator('tbody')).toContainText('99,500');
  const corrected=(await api('get','/maintenance/preventative?search='+encodeURIComponent(truck.unitNumber))).items.find(t=>t.truckId===truck.id);

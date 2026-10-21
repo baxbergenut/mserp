@@ -416,6 +416,33 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
 		t.Fatal("fresh movement did not promptly replace last known miles", err, view.Automation)
 	}
+	// An older Samsara observation has priority, invalidates Five ELD evidence
+	// immediately, and routes from cached mph samples without calling Five ELD.
+	_, err = pool.Exec(ctx, `INSERT INTO samsara_telemetry(vin,vehicle_id,unit_number,latitude,longitude,speed_mph,gps_at,fetched_at) VALUES($1,'automation-samsara','Samsara',40.55211,-74.3909193,6,$2,$3)`, vin, now.Add(-time.Minute), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = pool.Exec(ctx, `INSERT INTO samsara_tracking(vin,reported_at,latitude,longitude,speed_mph) VALUES($1,$2,40.55211,-74.3909193,6)`, vin, now.Add(-time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.Arrived || view.Automation.TravelValue != "" {
+		t.Fatal("previous provider evidence remained visible", view.Automation, err)
+	}
+	routes.Options.SpeedUnit = "kph"
+	calls = routeCalls.Load()
+	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.Arrived || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || routeCalls.Load() <= calls {
+		t.Fatal("Samsara priority/mph routing failed", view.Automation, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.Source != "samsara" {
+		t.Fatal("routing used another provider", cached, err)
+	}
+	_, _ = pool.Exec(ctx, `DELETE FROM samsara_telemetry WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	_, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID)
 	_, _ = pool.Exec(ctx, `DELETE FROM trucks WHERE id=$1`, truck.ID)

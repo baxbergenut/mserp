@@ -102,6 +102,7 @@ type BoardAutomation struct {
 }
 
 type ArrivalEvidence struct {
+	Source  string    `json:"source,omitempty"`
 	Context string    `json:"context"`
 	Arrived bool      `json:"arrived"`
 	LastAt  time.Time `json:"lastAt"`
@@ -118,18 +119,29 @@ func distanceMeters(a, b, c, d float64) float64 {
 }
 
 func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocation, stop BoardStop, now time.Time) ArrivalEvidence {
-	if old.Context != key {
+	if old.Context != key || (location != nil && !sameTelemetrySource(old.Source, location.Source)) {
 		old = ArrivalEvidence{Context: key}
 	}
 	if location == nil || stop.Latitude == nil || stop.Longitude == nil || location.ReportedAt.IsZero() || location.ReportedAt.Before(old.LastAt) || location.ReportedAt.After(now) {
 		return old
 	}
 	old.LastAt = location.ReportedAt
+	old.Source = location.Source
 	// Re-evaluate the latest cached point even when its timestamp is unchanged:
 	// an older proximity rule may have recorded a different result for that point.
 	// Staleness is exposed to viewers and never treated as a live observation.
 	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= boardArrivalRadiusMeters
 	return old
+}
+
+func sameTelemetrySource(a, b string) bool {
+	if a == "" {
+		a = "five_eld"
+	}
+	if b == "" {
+		b = "five_eld"
+	}
+	return a == b
 }
 
 func boardAutomationContext(load *BoardLoad, stop *BoardStop, truck string) string {
@@ -173,19 +185,19 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		ids = append(ids, id)
 	}
 	rows, err := tx.Query(ctx, `SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(c.travel,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
- (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND (SELECT count(*) FROM trucks other WHERE upper(regexp_replace(other.vin,'[^A-Za-z0-9]','','g'))=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g')))=1)
+ (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND (SELECT count(*) FROM trucks other WHERE upper(regexp_replace(other.vin,'[^A-Za-z0-9]','','g'))=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g')))=1),coalesce(el.source,'')
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
- LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=ANY($1::uuid[])`, ids)
+ LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+fiveELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, truck, etaContext, eta string
+		var id, truck, etaContext, eta, telemetrySource string
 		var evidence ArrivalEvidence
 		var travel BoardTravel
 		var telemetrySafe bool
-		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe); err != nil {
+		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe, &telemetrySource); err != nil {
 			return err
 		}
 		v := views[id]
@@ -228,12 +240,12 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 					a.Appointment = &BoardSchedule{Kind: "manual", Label: prefix + " " + a.ManualStopTime, Detail: "Manual stop time entered on Status Board"}
 				}
 			}
-			if evidence.Context == key && telemetrySafe {
+			if evidence.Context == key && telemetrySafe && sameTelemetrySource(evidence.Source, telemetrySource) {
 				a.Arrived = evidence.Arrived
 				a.ObservedAt = evidence.LastAt
 				a.Stale = evidence.LastAt.IsZero() || time.Since(evidence.LastAt) > 10*time.Minute
 			}
-			if a.TravelMode == "auto" && telemetrySafe {
+			if a.TravelMode == "auto" && telemetrySafe && sameTelemetrySource(travel.Source, telemetrySource) {
 				now := time.Now()
 				a.TravelValue, a.Reason = travel.display(key, now)
 				a.TravelStale = travel.LastKnownPosition || now.Sub(travel.ReportedAt) > 10*time.Minute || now.Sub(travel.CalculatedAt) > 10*time.Minute

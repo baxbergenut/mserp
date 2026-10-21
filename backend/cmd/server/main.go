@@ -28,6 +28,7 @@ import (
 	"mserp/internal/prepass"
 	"mserp/internal/relay"
 	"mserp/internal/repository"
+	"mserp/internal/samsara"
 	"mserp/internal/weighmytruck"
 )
 
@@ -148,6 +149,32 @@ func main() {
 			repository.NewFiveELDRepository(pool), cfg.FiveELDUSDOT, logger,
 		)
 	}
+	var samsaraJob *jobs.SyncSamsaraJob
+	var locationRefresher jobs.LocationRefresher
+	if fiveELDJob != nil {
+		locationRefresher = fiveELDJob
+	}
+	if cfg.Samsara.Token != "" {
+		samsaraJob = jobs.NewSyncSamsaraJob(samsara.NewClient(cfg.Samsara.URL, cfg.Samsara.Token, cfg.Samsara.Version), repository.NewSamsaraRepository(pool))
+		combined := &jobs.TelemetryRefreshJob{Samsara: samsaraJob, Logger: logger}
+		if fiveELDJob != nil {
+			combined.FiveELD = fiveELDJob
+		}
+		locationRefresher = combined
+	}
+	samsaraDone := make(chan struct{})
+	go func() {
+		defer close(samsaraDone)
+		if samsaraJob == nil {
+			return
+		}
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "samsara", Interval: cfg.Samsara.Interval, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 45*time.Second)
+			defer cancel()
+			_, err := samsaraJob.Run(bounded)
+			return err
+		}})
+	}()
 	expenseExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
 	router := httpapi.NewRouter(
 		logger,
@@ -167,7 +194,7 @@ func main() {
 		customTaskRepo,
 		cabCardExtractor,
 		expenseExtractor,
-		fiveELDJob,
+		locationRefresher,
 		wmtClient,
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,
@@ -248,7 +275,7 @@ func main() {
 	boardAutomationDone := make(chan struct{})
 	go func() {
 		defer close(boardAutomationDone)
-		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled)
+		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled || cfg.Samsara.Token != "")
 		routes := boardroutes.NewClient(cfg.BoardRoutes)
 		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "board-automation", Interval: time.Minute, Run: func(runCtx context.Context) error {
 			bounded, cancel := context.WithTimeout(runCtx, 40*time.Second)
@@ -390,6 +417,10 @@ func main() {
 	}
 	select {
 	case <-maintenanceTasksDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-samsaraDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

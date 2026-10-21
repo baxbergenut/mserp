@@ -403,6 +403,7 @@ export interface DriverBoardDriver {
 }
 
 export interface DriverBoardLocation {
+  source?: "samsara" | "five_eld";
   heading: number | null;
   latitude: number;
   longitude: number;

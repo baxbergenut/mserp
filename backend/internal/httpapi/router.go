@@ -44,7 +44,7 @@ func NewRouter(
 	customTaskRepo *repository.CustomTaskRepository,
 	documentExtractor groq.DocumentExtractor,
 	expenseExtractor openai.ExpenseExtractor,
-	fiveELDJob *jobs.SyncFiveELDJob,
+	fiveELDJob jobs.LocationRefresher,
 	wmtClient repository.WMTProvider,
 	authOptions AuthOptions,
 	fleetScopeOptions ...fleetscope.Options,
@@ -96,17 +96,17 @@ func NewRouter(
 	})
 	protected.Post("/jobs/sync-eld", func(w http.ResponseWriter, r *http.Request) {
 		if fiveELDJob == nil {
-			writeAPIError(w, http.StatusServiceUnavailable, "Five ELD integration is not configured")
+			writeAPIError(w, http.StatusServiceUnavailable, "Telematics is not configured")
 			return
 		}
 		result, err := fiveELDJob.Run(r.Context())
-		if errors.Is(err, jobs.ErrFiveELDSyncInProgress) {
+		if errors.Is(err, jobs.ErrFiveELDSyncInProgress) || errors.Is(err, jobs.ErrTelemetrySyncInProgress) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
 		if err != nil {
-			logger.Error("sync Five ELD failed", "error", err)
-			writeAPIError(w, http.StatusBadGateway, "Five ELD location refresh failed")
+			logger.Error("sync telematics failed", "error", err)
+			writeAPIError(w, http.StatusBadGateway, "Telematics refresh failed")
 			return
 		}
 		writeJSON(w, http.StatusOK, result)

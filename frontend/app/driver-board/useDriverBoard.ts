@@ -238,7 +238,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       await syncFiveELD();
       setBoard(await fetchDriverBoard(currentChargeWeek()));
     } catch (err) {
-      setRefreshError(err instanceof Error ? err.message : "Five ELD locations could not be refreshed.");
+      setRefreshError(err instanceof Error ? err.message : "Telematics locations could not be refreshed.");
     } finally {
       activity.current += 1; setELDRefreshing(false);
     }
