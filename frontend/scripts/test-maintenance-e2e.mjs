@@ -151,7 +151,7 @@ try {
  await expect(page.locator('tbody')).toContainText(truck.unitNumber);
  expect(pmSummary.lastDate).toBe(saved.serviceDate);
  expect(pmSummary).not.toHaveProperty('vendorName');expect(pmSummary).not.toHaveProperty('cost');expect(pmSummary).not.toHaveProperty('notes');
- await expect(page.getByRole('columnheader')).toHaveText(['Truck','Last service','Service odometer','Current odometer','Miles since service',/^Status/,'Actions']);
+ await expect(page.getByRole('columnheader')).toHaveText(['Truck','Last service','Service odometer','Current odometer','Miles since service','Actions']);
  await expect(page.locator('tbody')).not.toContainText(vendorName);
  await expect(page.locator('tbody tr').filter({hasText:truck.unitNumber}).first()).toContainText('106,000');
  await page.getByRole('button',{name:saved.serviceDate,exact:true}).click();

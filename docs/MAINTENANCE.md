@@ -340,7 +340,9 @@ is substituted for a last-service date. The truck profile has a Service programs
 tab, with the same data and controls under category permissions.
 
 The tracking table shows Last service, Service odometer, Current odometer,
-**Miles since service = current odometer minus service odometer**, and status.
+**Miles since service = current odometer minus service odometer**, and Actions.
+The Status column/filter is omitted from both program tables; due calculations
+and reminders remain active.
 It does not display miles remaining or the next-due odometer. Calendar due dates
 remain visible where configured. Missing readings/baselines display a blank
 marker; stale readings cannot establish Current. Existing cache-only Five ELD

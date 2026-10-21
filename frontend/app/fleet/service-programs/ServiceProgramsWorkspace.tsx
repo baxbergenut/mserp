@@ -6,7 +6,6 @@ import Link from "@/app/components/AccessLink";
 import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchMaintenanceReadings, fetchProgramTrucks, fetchServicePrograms } from "@/app/lib/api";
 import type { ExpenseCategoryAccess, MaintenanceOptions, MaintenanceReading, ProgramTruck, ServiceProgram } from "@/app/lib/types";
 import { ErrorBanner, ManagementHeader, ManagementSearch, TablePagination, TableShell } from "@/app/components/management/ManagementUI";
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
 import { MaintenanceReadingEditor } from "@/app/maintenance/MaintenanceSettings";
 import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { today } from "@/app/maintenance/maintenance";
@@ -14,14 +13,13 @@ import { AddProgramTrucks, ProgramEditor, ProgramServiceEditor, ProgramTruckEdit
 
 export const programInterval = (p: Pick<ServiceProgram, "intervalMiles" | "intervalDays" | "intervalMonths">) => [p.intervalMiles != null && `${p.intervalMiles.toLocaleString()} miles`, p.intervalDays != null && `${p.intervalDays} days`, p.intervalMonths != null && `${p.intervalMonths} months`].filter(Boolean).join(" / ");
 const number = (n: number | null) => n == null ? "—" : n.toLocaleString();
-const statusLabels: Record<string, string> = { current: "Current", upcoming: "Due soon", due: "Due now", overdue: "Overdue", disabled: "Paused", missing_information: "Needs information" };
 const defaultProgram="00000000-0000-4000-8000-000000000020";
 const emptyProgram = (): ServiceProgram => ({ id: "", name: "", instructions: "", legacyPM: false, intervalMiles: null, intervalDays: null, intervalMonths: null, warningMiles: 1000, warningDays: 14, active: true, useDefaultAssignees: true, assigneeIds: [], assigneeRoleIds: [], version: 0, truckCount: 0, upcomingCount: 0, overdueCount: 0 });
 
 export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const [access, setAccess] = useState<ExpenseCategoryAccess | null>(null), [options, setOptions] = useState<MaintenanceOptions | null>(null);
   const [programs, setPrograms] = useState<ServiceProgram[]>([]), [members, setMembers] = useState<ProgramTruck[]>([]);
-  const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState(""), [status, setStatus] = useState("");
+  const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState("");
   const [page, setPage] = useState(1), [size, setSize] = useState(25), [revision, setRevision] = useState(0);
   const [error, setError] = useState(""), [loading, setLoading] = useState(true), [readingBusy, setReadingBusy] = useState(false);
   const [editing, setEditing] = useState<ServiceProgram | null>(null), [adding, setAdding] = useState(false), [truckSettings, setTruckSettings] = useState<ProgramTruck | null>(null);
@@ -40,8 +38,8 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   }, [access, selected, truckId, revision]);
   useEffect(() => { const update = () => { if (!document.hidden) {setClock(Date.now());setRevision(v => v + 1);} }; const timer = setInterval(update, 30000); window.addEventListener("focus", update); return () => { clearInterval(timer); window.removeEventListener("focus", update); }; }, []);
   const program = programs.find(p => p.id === selected);
-  const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setStatus(""); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.set("program", ""); window.history.replaceState(null, "", url); } };
-  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && (!status || t.status === status) && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
+  const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.set("program", ""); window.history.replaceState(null, "", url); } };
+  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
   const visible = rows.slice((page - 1) * size, page * size);
   const listed = programs.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const editReading = async (t: ProgramTruck) => {
@@ -61,14 +59,14 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
         {!truckId && options?.canManagePrograms && access?.canEdit && <button type="button" className={`ui-button ${program ? "" : "ml-auto"}`} onClick={() => setEditing(program ?? emptyProgram())}>{program ? <Settings className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{program ? "Edit program" : "Add program"}</button>}
       </div>
       {program?.instructions && <p className="max-w-lg truncate text-xs text-zinc-400" title={program.instructions}>{program.instructions}</p>}
-      {!selected && !truckId ? <TableShell><table className="w-full text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-xs text-zinc-500">{["Program", "Interval", "Trucks", "Due soon", "Due / overdue", "Status", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead><tbody>
-        {listed.map(p => <tr key={p.id} className="border-b border-zinc-800/60"><td className="px-3 py-2"><button type="button" className="text-blue-400" onClick={() => chooseProgram(p.id)}>{p.name}</button></td><td className="px-3 py-2">{programInterval(p)}</td><td className="px-3 py-2 tabular-nums">{p.truckCount}</td><td className="px-3 py-2 tabular-nums text-amber-400">{p.upcomingCount || "—"}</td><td className="px-3 py-2 tabular-nums text-red-400">{p.overdueCount || "—"}</td><td className="px-3 py-2 text-xs text-zinc-400">{p.active ? "Active" : "Paused"}</td><td className="px-3 py-2">{options?.canManagePrograms && access?.canEdit && <button type="button" aria-label={`Edit ${p.name}`} className="ui-button" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" /></button>}</td></tr>)}
-        {!listed.length && <tr><td colSpan={7} className="p-8 text-center text-zinc-500">{loading ? "Loading programs…" : "No matching programs."}</td></tr>}
+      {!selected && !truckId ? <TableShell><table className="w-full text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-xs text-zinc-500">{["Program", "Interval", "Trucks", "Due soon", "Due / overdue", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead><tbody>
+        {listed.map(p => <tr key={p.id} className="border-b border-zinc-800/60"><td className="px-3 py-2"><button type="button" className="text-blue-400" onClick={() => chooseProgram(p.id)}>{p.name}</button></td><td className="px-3 py-2">{programInterval(p)}</td><td className="px-3 py-2 tabular-nums">{p.truckCount}</td><td className="px-3 py-2 tabular-nums text-amber-400">{p.upcomingCount || "—"}</td><td className="px-3 py-2 tabular-nums text-red-400">{p.overdueCount || "—"}</td><td className="px-3 py-2">{options?.canManagePrograms && access?.canEdit && <button type="button" aria-label={`Edit ${p.name}`} className="ui-button" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" /></button>}</td></tr>)}
+        {!listed.length && <tr><td colSpan={6} className="p-8 text-center text-zinc-500">{loading ? "Loading programs…" : "No matching programs."}</td></tr>}
       </tbody></table></TableShell> : <>
-        <TableShell><table className="w-full min-w-[850px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-xs text-zinc-500">
+        <TableShell><table className="w-full min-w-[760px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-xs text-zinc-500">
           {!truckId && <th className="px-3 py-2 font-medium">Truck</th>}{!selected && <th className="px-3 py-2 font-medium">Program</th>}
           {["Last service", "Service odometer", "Current odometer", "Miles since service"].map(label => <th key={label} className="px-3 py-2 font-medium">{label}</th>)}
-          <th className="px-3 py-2 font-medium"><ColumnFilter label="Status" active={!!status}><select aria-label="Filter service status" className="ui-button" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">All statuses</option>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></ColumnFilter></th><th className="px-3 py-2 text-right font-medium">Actions</th>
+          <th className="px-3 py-2 text-right font-medium">Actions</th>
         </tr></thead><tbody>
           {visible.map(t => { const fresh = (t.currentSource === "five_eld" || t.currentSource === "samsara") ? !!t.currentReportedAt && clock - Date.parse(t.currentReportedAt) <= 3600000 : !!t.currentDate && Date.parse(today())-Date.parse(t.currentDate)<=7*86400000; return <tr key={`${t.programId}:${t.truckId}`} data-service-status={t.status} className={`border-b border-zinc-800/60 ${t.status === "due" || t.status === "overdue" ? "bg-red-500/10" : t.status === "upcoming" ? "bg-amber-500/10" : ""}`}>
             {!truckId && <td className="px-3 py-2"><Link className="text-blue-400" href={`/trucks/detail?id=${t.truckId}`}>{t.unitNumber}</Link>{!t.active && <span className="block text-xs text-zinc-500">Inactive</span>}{!t.enrolled && <span className="block text-xs text-zinc-500">Removed</span>}</td>}
@@ -77,10 +75,9 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
             <td className="px-3 py-2 tabular-nums">{number(t.lastMiles)}</td>
             <td className={`px-3 py-2 tabular-nums ${fresh ? "" : "text-zinc-500"}`} title={`${t.currentSource || "Saved reading"} · ${t.currentReportedAt ? new Date(t.currentReportedAt).toLocaleString() : t.currentDate || "Unavailable"}`} data-odometer-fresh={fresh}>{access?.canEdit ? <button type="button" disabled={readingBusy} className="hover:underline" aria-label={`Edit current odometer for ${t.unitNumber}`} onClick={() => void editReading(t)}>{number(t.currentMiles)}</button> : number(t.currentMiles)}</td>
             <td className="px-3 py-2 tabular-nums" data-miles-since-service>{number(t.milesSinceService)}</td>
-            <td className="px-3 py-2 text-xs" title={t.reason}>{statusLabels[t.status]}{t.overrideInterval && <span className="block text-zinc-500">{programInterval(t)}</span>}{t.nextDate && <span className="block text-zinc-500">Due {t.nextDate}</span>}</td>
             <td className="px-3 py-2">{access?.canEdit && <div className="flex items-center justify-end gap-2">{t.enrolled && programs.find(p => p.id === t.programId)?.active && <button type="button" className="ui-button" onClick={() => setService({ truck: t, baseline: false })}>Record service</button>}<button type="button" className="ui-button" aria-label={`Program settings for ${t.unitNumber} ${t.programName}`} onClick={() => setTruckSettings(t)}><Settings className="h-4 w-4" /></button></div>}</td>
           </tr>; })}
-          {!visible.length && <tr><td colSpan={8} className="p-8 text-center text-zinc-500">{loading ? "Loading trucks…" : "No matching assigned trucks."}</td></tr>}
+          {!visible.length && <tr><td colSpan={5 + (!truckId ? 1 : 0) + (!selected ? 1 : 0)} className="p-8 text-center text-zinc-500">{loading ? "Loading trucks…" : "No matching assigned trucks."}</td></tr>}
         </tbody></table></TableShell>
         <TablePagination page={page} pageSize={size} totalItems={rows.length} totalPages={Math.max(1, Math.ceil(rows.length / size))} onPageChange={setPage} onPageSizeChange={v => { setSize(v); setPage(1); }} />
       </>}

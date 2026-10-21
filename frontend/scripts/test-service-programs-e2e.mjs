@@ -45,8 +45,8 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByPlaceholder('Search trucks or programs…').fill(unit);
   const row = page.locator('tbody tr').filter({ has: page.getByRole('link', { name: unit, exact: true }) });
-  await expect(row).toContainText('Needs information');
-  await expect(page.getByRole('columnheader')).toHaveText(['Truck', 'Last service', 'Service odometer', 'Current odometer', 'Miles since service', /^Status/, 'Actions']);
+  await expect(row).toHaveAttribute('data-service-status', 'missing_information');
+  await expect(page.getByRole('columnheader')).toHaveText(['Truck', 'Last service', 'Service odometer', 'Current odometer', 'Miles since service', 'Actions']);
   await expect(page.getByRole('columnheader', { name: /Miles remaining|Next due odometer/ })).toHaveCount(0);
   await expect(row.getByRole('button',{name:/^Update last service/})).toHaveCount(0);
   const actionBounds=await row.getByRole('button',{name:`Program settings for ${unit} ${name}`,exact:true}).boundingBox();
@@ -71,7 +71,7 @@ try {
   await page.getByRole('button', { name: 'Save reading', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(row.locator('[data-miles-since-service]')).toHaveText('49,500');
-  await expect(row).toContainText('Due soon');
+  await expect(row).toHaveAttribute('data-service-status', 'upcoming');
   await api('post', `/maintenance/programs/${oil}/trucks`, { items: [{ truckId: truck, version: 0, active: true, overrideInterval: false, intervalMiles: null, intervalDays: null, intervalMonths: null }] });
   await page.getByLabel('Service program', { exact: true }).selectOption(oil);
   await page.getByPlaceholder('Search trucks or programs…').fill(unit);
@@ -159,7 +159,10 @@ try {
   await page.getByLabel('Repeat every miles', { exact: true }).fill('40000');
   await page.getByRole('button', { name: 'Save truck settings', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(row).toContainText('40,000 miles');
+  await row.getByRole('button', { name: `Program settings for ${unit} ${name}`, exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Use a different interval for this truck', exact: true })).toBeChecked();
+  await expect(page.getByLabel('Repeat every miles', { exact: true })).toHaveValue('40000');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.screenshot({ path: join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE), 'service-programs-desktop.png'), fullPage: true });
   await page.goto(access.base + '/trucks/detail?id=' + truck);
   await page.getByRole('tab', { name: 'Service programs', exact: true }).click();
