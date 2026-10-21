@@ -89,7 +89,15 @@ try {
         const headers = {};
         for (const key of ['cookie', 'content-type', 'x-csrf-token', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
         const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
-        res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return;
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        if (response.headers.get('content-type')?.includes('text/event-stream') && response.body) {
+          res.flushHeaders();
+          const reader=response.body.getReader();
+          res.once('close',()=>{void reader.cancel().catch(()=>{});});
+          while (!res.destroyed) {const {done,value}=await reader.read();if(done)break;res.write(Buffer.from(value));}
+          res.end(); return;
+        }
+        res.end(Buffer.from(await response.arrayBuffer())); return;
       }
       const path = url.pathname === '/' ? '/index.html' : extname(url.pathname) ? url.pathname : `${url.pathname}.html`;
       const file = resolve(output, `.${decodeURIComponent(path)}`);
@@ -97,7 +105,7 @@ try {
       const content = await readFile(file);
       const type = { '.txt': 'text/plain', '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' }[extname(file)] ?? 'application/octet-stream';
       res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' }); res.end(content);
-    } catch { res.writeHead(404); res.end(); }
+    } catch { if(!res.headersSent)res.writeHead(404); res.end(); }
   });
   await new Promise((done, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', done); });
   const access = join(temp, 'review-access.json');

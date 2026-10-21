@@ -2,6 +2,7 @@
 
 
 import { Fragment, memo, useContext, useMemo, useState } from "react";
+import { FleetStatusBadge } from "../components/FleetStatusBadge";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
@@ -205,7 +206,7 @@ export default function DriverBoardPage() {
                       if (target?.dispatcherId === d.dispatcherId && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
-                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
+                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}{d.truckOperatingStatus && d.truckOperatingStatus!=="ready" && <span className="block"><FleetStatusBadge status={d.truckOperatingStatus} /></span>}</td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>

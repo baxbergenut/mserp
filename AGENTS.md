@@ -562,7 +562,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and attach source files to work orders after saving. The configuration category
   UUID stays stable (default display name becomes Work orders); existing financial
   snapshots, approval/payment identities and legacy scope=general reads are kept.
-  New UI entries always include an invoice/charge; imported history keeps unknown costs.
+  New operational work orders can start without an invoice or known cost;
+  imported history keeps unknown costs.
   Work-order entry uses one unframed Service type and the shared expense Add cost
   breakdown. Migration 110 separates invoice cost names from typed services while
   retaining exact totals, historical allocations and PM classification. Existing
@@ -2436,3 +2437,27 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Keep read-only review servers' Samsara token empty. Run TestSamsaraDatabase,
   TestDriverBoardDatabase, TestMaintenanceDatabase and test-samsara-views.mjs.
   See docs/integrations/SAMSARA.md for matching, configuration and live proof.
+
+### Fleet work order lifecycle (132)
+
+- Migration 132 adds workStatus, explicit dispatch holds, planning fields and an
+  immutable final invoice payment confirmation. Tables use In progress,
+  Completed - pending payment, Completed - paid; Canceled keeps canceled/voided
+  records separate. Internal completed is pending payment; closed is paid/no charge.
+  /maintenance/detail?id=... shows three progress steps with service type/dates
+  beside description in Work. Stage-specific columns and server pagination replace
+  Kanban cards; tab changes clear rows from the previous stage. Creation needs no price;
+  creator/time are immutable server snapshots, with no responsible-person field.
+- Any Work orders Edit user may release an order without Administrator/trucks.edit.
+  Effective operatingStatus combines all order holds with manual restrictions;
+  assignment changes preserve restrictions. Active/Inactive and crews stay separate.
+- Status Board shows only Shop/OOS/Hold beside Truck, without repair details.
+  New board/Gross Board loads check holds under the truck lock; existing/historical
+  records remain editable. No external booking integration, automatic date-based
+  release or future downtime reservation is implemented.
+- Final payment uses existing invoice fields and explicit Confirm paid & finish;
+  Save invoice alone does not confirm paid. There is no separate payment endpoint
+  or ledger. Done requires finished work, no own hold, and confirmation or explicit
+  No charge. Confirmed invoice fields are protected. It never issues money or
+  changes expense_payments/payroll recovery; do not infer payment from collections.
+  See docs/MAINTENANCE.md and test-fleet-workflow-e2e.mjs.

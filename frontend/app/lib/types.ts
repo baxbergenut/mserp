@@ -273,7 +273,8 @@ export type TruckStatus =
   | "available"
   | "assigned"
   | "maintenance"
-  | "out_of_service";
+  | "out_of_service"
+ | "hold";
 
 export type DriverStatus = "active" | "vacation" | "home" | "terminated";
 export interface DriverStatusChange {
@@ -386,6 +387,7 @@ export interface DriverBoardEntry {
 }
 
 export interface DriverBoardDriver {
+ truckOperatingStatus?: TruckOperatingStatus | "";
   truckId: string;
   dispatcherExtension?: number | null;
   mainUpdaterName?: string;
@@ -575,7 +577,9 @@ export interface PrePassFleetChange {
   tollFrom?: string; tollRevision?: string;
 }
 
+export type TruckOperatingStatus = "ready" | "shop" | "out_of_service" | "hold";
 export interface Truck {
+ operatingStatus?: TruckOperatingStatus;
   ownerSince?: string | null;
   ownershipVersion?: string;
   ownerId: string;
@@ -771,7 +775,10 @@ export interface MaintenanceVendor { id: string; name: string; address: string; 
 export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
 export type ExpenseDocument = MaintenanceDocument;
-export interface MaintenanceRecord {
+export type WorkOrderStatus = "open" | "scheduled" | "in_progress" | "completed" | "closed" | "canceled" | "needs_review" | "voided";
+export interface MaintenanceWorkflow { workStatus?:WorkOrderStatus; dispatchStatus?:""|Exclude<TruckOperatingStatus,"ready">; waitingOn?:string; scheduledFor?:string|null; expectedReady?:string|null; priority?:"normal"|"high"|"urgent"; noCharge?:boolean; cancelReason?:string; }
+export interface MaintenanceRecord extends MaintenanceWorkflow {
+ paymentConfirmation?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;confirmedBy:string;confirmedAt:string}|null;
   programIds?: string[];
   oilType: string;
   id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;
@@ -781,7 +788,8 @@ export interface MaintenanceRecord {
   createdByName: string; updatedByName: string; createdAt: string; updatedAt: string; voidReason: string;
   expense: Expense | null; documents: MaintenanceDocument[];
 }
-export interface MaintenanceInput {
+export interface MaintenanceInput extends MaintenanceWorkflow {
+ confirmPayment?:boolean;
   programIds?: string[];
   oilType: string;
   legacyPaymentTotal?: string;

@@ -550,6 +550,11 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err != nil {
 		return result, err
 	}
+	if a.Action == "add" || a.Action == "select" || a.Action == "restore" {
+		if err := requireDispatchableTruck(ctx, tx, a.DriverID); err != nil {
+			return result, err
+		}
+	}
 	switch a.Action {
 	case "add":
 		number := strings.TrimSpace(a.Number)
@@ -642,6 +647,9 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 			s.Current = nil
 			e.CurrentLoad, e.Destination, e.Status, e.ETA = "", "", "", ""
 			if len(view.Next) > 0 {
+				if err := requireDispatchableTruck(ctx, tx, a.DriverID); err != nil {
+					return result, err
+				}
 				next := view.Next[0]
 				s.Current = &next
 				e.CurrentLoad, e.Status = next.Number, "DISPATCHED"

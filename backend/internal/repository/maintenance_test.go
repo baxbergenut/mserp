@@ -135,6 +135,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	workflowMigration, err := os.ReadFile("../../sql/132_fleet_workflow.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -152,6 +156,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(odometerMigration), "\r\n", "\n"), "", 1)
 				// Replay task-kind constraints in their original order before the
 				// later DataTruck task category and its inherited assignments.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(workflowMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(typeProgramMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(programMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(dataTruckMigration), "\r\n", "\n"), "", 1)
@@ -197,6 +202,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(programMigration))
 				exec(string(typeProgramMigration))
 				exec(string(odometerMigration))
+				if err != nil {
+					t.Fatal(err)
+				}
+				exec(string(workflowMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -394,6 +403,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal("PM filter must include legacy stored work", legacyPage, err)
 			}
 			testMaintenanceInvoiceDetails(t, ctx, admin, pool)
+			testFleetWorkOrderWorkflow(t, ctx, admin, pool)
 			testServicePrograms(t, ctx, admin, pool)
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)

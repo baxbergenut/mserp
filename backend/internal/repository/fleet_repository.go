@@ -115,6 +115,7 @@ func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSet
 }
 
 type Truck struct {
+	OperatingStatus     string     `json:"operatingStatus"`
 	OwnerSince          *string    `json:"ownerSince"`
 	OwnershipVersion    string     `json:"ownershipVersion"`
 	OwnerID             string     `json:"ownerId"`
@@ -766,7 +767,7 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
 	t.created_at, t.updated_at,
 	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
-	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),'')
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id)
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
@@ -785,7 +786,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 		&value.Notes, &value.IRPFileID, &value.IRPFileName,
 		&value.IRPFileContentType, &value.IRPFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt,
-		&value.OwnerSince, &value.OwnershipVersion,
+		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus,
 	)
 	value.UnitNumber = normalizeTruckUnit(value.UnitNumber)
 	value.DriverName = formatPersonNamePtr(value.DriverName)
@@ -1031,7 +1032,7 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 		return err
 	}
 	_, err := tx.Exec(ctx, `
-		UPDATE trucks SET status = 'assigned', updated_at = now() WHERE id = $1`, truckID)
+		UPDATE trucks SET status = CASE WHEN status IN ('available','assigned') THEN 'assigned' ELSE status END, updated_at = now() WHERE id = $1`, truckID)
 	return err
 }
 

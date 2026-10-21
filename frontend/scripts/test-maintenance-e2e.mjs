@@ -9,6 +9,7 @@ const browser = await chromium.launch();
 try {
  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
  page.setDefaultTimeout(15000);
+ const openRecordedWork=async()=>{const draft={id:crypto.randomUUID(),version:0,truckId:truck.id,status:'completed',workStatus:'completed',serviceDate:new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),location:'shop',notes:'Completed service entry',services:[{typeCode:'other',name:'Other maintenance',amount:null,trackingCode:''}],expense:null};const saved=await api('post','/maintenance',draft);await page.goto(access.base+'/maintenance?recordId='+saved.id);await expect(page.getByRole('dialog')).toBeVisible();await page.getByLabel('Work order invoice',{exact:true}).selectOption('invoice');};
  const vendorName='Synthetic repair shop '+Date.now();
  const errors = []; page.on('pageerror', e => errors.push(e.message));page.on('response',async r=>{if(r.status()>=400&&r.url().includes('/api/maintenance'))console.error(r.status(),r.url(),await r.text());});
  await page.goto(access.base + '/login');
@@ -28,25 +29,18 @@ try {
  expect(options.vendors.some(v=>v.name==="Love's")).toBe(true);
  await page.route('**/api/maintenance/odometer?*',route=>route.fulfill({json:{reading:{mileage:650000,reportedAt:new Date().toISOString()},message:''}}));
  await page.getByRole('button',{name:'Add work order',exact:true}).click();
+ await page.getByText('Fill from invoice or notes',{exact:true}).click();
  expect(await page.getByRole('button',{name:'Analyze',exact:true}).evaluate(b=>parseFloat(getComputedStyle(b).minHeight))).toBeGreaterThanOrEqual(32);
  await expect(page.getByLabel('Maintenance invoice name',{exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Work 1 name',{exact:true})).toHaveCount(0);
  await expect(page.getByText('Does not reset a schedule',{exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Attach maintenance receipt',{exact:true})).toHaveCount(0);
  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
- await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('650000');
- await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveAttribute('title',/Five ELD/);
- await expect(page.getByRole('dialog').getByText(/^Five ELD ·/)).toHaveCount(0);
- await page.getByLabel('Maintenance service date',{exact:true}).fill('2026-10-01');
- await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('');
- await expect(page.getByRole('dialog').getByRole('button',{name:'Add vendor',exact:true})).toHaveCount(0);
- await expect(page.getByRole('dialog').getByRole('checkbox',{name:new RegExp('^Record an invoice / charge')})).toHaveCount(0);
- await expect(page.getByText('The analyzed invoice is saved as the receipt when you save the service.',{exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Maintenance amount',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Maintenance amount',{exact:true})).toHaveCount(0);
  await page.route('**/api/maintenance/extract',route=>route.fulfill({json:{drafts:[{truckId:truck.id,driverId:null,driverName:'',amount:'',costBreakdown:[{name:'Parts',amount:'5'},{name:'Labor',amount:'5'}],expenseDate:'2026-10-01',paymentType:'',referenceNumber:'',description:'Synthetic service note with price missing',expenseType:'Electrical',maintenance:{hasInvoice:false,vendorName:null,vendorAddress:null,vendorPhone:null,vendorContact:null,serviceDate:'2026-10-01',odometer:null,location:'shop',workOrder:null,services:[{typeCode:'electrical',name:'Electrical',amount:'5',trackingCode:''},{typeCode:'brakes',name:'Brakes',amount:'5',trackingCode:''}]}}]}}));
  await page.getByLabel('Maintenance details for AI').fill('Synthetic service note');
  await page.getByRole('button',{name:'Analyze',exact:true}).click();
- await expect(page.getByLabel('Maintenance status',{exact:true})).toHaveValue('needs_review');
+ await expect(page.getByLabel('Service confirmation',{exact:true})).toHaveValue('needs_review');
  await expect(page.getByLabel('Service type',{exact:true})).toHaveValue('');
  await page.getByLabel('Service type',{exact:true}).selectOption('electrical');
  await expect(page.getByLabel('Cost breakdown 1 name custom',{exact:true})).toHaveValue('Parts');
@@ -78,7 +72,7 @@ try {
  await expect(page.getByRole('dialog')).toHaveCount(0);
  options = await api('get', '/maintenance/options');
  const vendor = options.vendors.find(v => v.name === vendorName);
- await page.getByRole('button', { name: 'Add work order', exact: true }).click();
+ await openRecordedWork();
  await page.getByLabel('Maintenance truck', { exact: true }).selectOption(truck.id);
  await page.getByLabel('Maintenance service date', { exact: true }).fill('2026-10-01');
  await page.getByLabel('Maintenance odometer', { exact: true }).fill('100000');
@@ -188,7 +182,8 @@ try {
  await page.unroute('**/api/maintenance/odometer?*');
  await page.goto(access.base + '/trucks/detail?id=' + truck.id);
  await page.getByRole('tab', { name: 'Work orders', exact: true }).click();
- await expect(page.locator('td').getByText(vendorName, { exact: true })).toBeVisible();
+ await page.getByRole('tab',{name:'Completed - pending payment',exact:true}).click();
+ await expect(page.getByRole('table',{name:'Work orders',exact:true}).getByRole('cell',{name:vendorName,exact:true})).toBeVisible();
  await expect(page.getByRole('tab',{name:'Settings',exact:true})).toHaveCount(0);
  await expect(page.getByRole('columnheader',{name:'Maintenance truck',exact:true})).toHaveCount(0);
  await page.goto(access.base + '/maintenance?recordId=' + saved.id);
@@ -202,7 +197,7 @@ try {
  expect(updated.services.map(s=>s.typeCode)).toEqual(saved.services.map(s=>s.typeCode));
  const stale = await page.request.put(access.base + '/api/maintenance/' + saved.id, { headers, data: { id:saved.id,version:saved.version,truckId:saved.truckId,driverId:saved.driverId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:updated.notes,services:saved.services,expense: {updatedAt:saved.expense.updatedAt,categoryId:options.categoryId,expenseDate:saved.expense.expenseDate,amount:saved.expense.baseAmount,baseAmount:saved.expense.baseAmount,expenseType:saved.expense.expenseType,paymentType:saved.expense.paymentType,truckId:saved.truckId,driverId:saved.expense.driverId,ownerId:saved.expense.ownerId,coveredBy:saved.expense.coveredBy,paidBy:saved.expense.paidBy} } });
  expect(stale.status(),await stale.text()).toBe(409);
- expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(2);
+ expect((await api('get', '/maintenance/' + saved.id + '/history')).length).toBe(3);
  // A paid service retains its driver independently of who covers the charge.
  await page.getByRole('tab',{name:'Settings',exact:true}).click();
  await page.getByRole('tab',{name:'Service types',exact:true}).click();
@@ -211,7 +206,7 @@ try {
  await page.getByLabel('Service type name').fill(typeName);
  await page.getByRole('button',{name:'Save type',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
- await page.getByRole('button',{name:'Add work order',exact:true}).click();
+ await openRecordedWork();
  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
  await page.getByLabel('Maintenance driver',{exact:true}).selectOption(options.drivers[0].id);
  await page.getByLabel('Maintenance amount',{exact:true}).fill('65.55');
@@ -221,7 +216,7 @@ try {
  await expect(page.getByRole('dialog')).toHaveCount(0);
  const customVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.services.some(s=>s.name===typeName));
  expect(customVisit.driverId).toBe(options.drivers[0].id);expect(customVisit.expenseId).not.toBeNull();expect(customVisit.expense.baseAmount).toBe('65.55');expect(customVisit.expense.coveredBy).toBe('Company');
- await page.getByRole('button',{name:'Add work order',exact:true}).click();
+ await openRecordedWork();
  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck.id);
  await page.getByLabel('Service type',{exact:true}).selectOption('electrical');
  await page.getByLabel('Maintenance amount',{exact:true}).fill('35.55');
@@ -245,12 +240,12 @@ try {
    expect(drafts[0].maintenance.services.some(s => s.typeCode === 'preventive' && s.trackingCode === 'pm'), format+': '+JSON.stringify(drafts[0].maintenance.services)).toBe(true);
    expect(drafts[0].maintenance.services.some(s => s.trackingCode === 'oil')).toBe(false);
   }
-  await page.getByRole('button', { name: 'Add work order', exact: true }).click();
+  await openRecordedWork();
   await page.getByLabel('Maintenance AI attachment').setInputFiles({name:'synthetic-oil-invoice.txt',mimeType:'text/plain',buffer:Buffer.from(text)});
   await page.getByRole('button', { name: 'Analyze', exact: true }).click();
   await expect(page.getByLabel('Maintenance odometer', { exact: true })).toHaveValue('101000', { timeout: 100000 });
-  await expect(page.getByLabel('Maintenance status', { exact: true })).toHaveValue('needs_review');
-  await page.getByLabel('Maintenance status',{exact:true}).selectOption('completed');
+  await expect(page.getByLabel('Service confirmation', { exact: true })).toHaveValue('needs_review');
+  await page.getByLabel('Service confirmation',{exact:true}).selectOption('completed');
   await page.getByRole('button',{name:'Save work order',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const aiVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.vendorName==='Synthetic repair shop');
@@ -283,7 +278,7 @@ try {
  expect((await limited.request.put(access.base+'/api/maintenance/odometer-sources/'+truck.id,{headers:limitedHeaders,data:{}})).status()).toBe(403);
  await limited.close();
  await page.setViewportSize({ width: 390, height: 844 });
- await page.getByRole('button', { name: 'Add work order', exact: true }).click();
+ await openRecordedWork();
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
  await page.getByRole('button', { name: 'Close', exact: true }).click();
  expect(errors).toEqual([]);

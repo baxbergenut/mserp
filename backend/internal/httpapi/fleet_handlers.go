@@ -325,7 +325,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, errors.New("unit number is required")
 	}
 	validStatus := map[string]bool{
-		"available": true, "assigned": true, "maintenance": true, "out_of_service": true,
+		"available": true, "assigned": true, "maintenance": true, "out_of_service": true, "hold": true,
 	}
 	if !validStatus[request.Status] {
 		return repository.TruckInput{}, errors.New("invalid truck status")

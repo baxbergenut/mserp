@@ -10,15 +10,16 @@ export function serviceWork(code: string, options: MaintenanceOptions, amount: s
   return { typeCode: code, name: options.types.find(t => t.code === code)?.name ?? code, amount, trackingCode: trackingForType(code) };
 }
 export function normalizeMaintenance(value: MaintenanceInput, options: MaintenanceOptions): MaintenanceInput {
+  const workStatus=value.workStatus ?? value.status;
   const services = value.services.map(s => serviceWork(s.typeCode, options, s.amount));
   if (services.length === 1 && value.expense?.amount && value.legacyPaymentTotal !== value.expense.amount) services[0].amount = value.expense.amount;
   const mappedPrograms=services.map(s=>options.types.find(t=>t.code===s.typeCode)?.programId).filter((id):id is string=>!!id);
   const programIds=[...new Set([...(value.programIds??[]),...mappedPrograms])];
-  return { ...value, programIds, oilType: services.some(s => s.typeCode === "preventive") ? value.oilType : "", services, expense: value.expense ? { ...value.expense, driverId: value.driverId, driverName: value.driverName, expenseType: [...new Set(services.map(s => s.name))].join(", ").slice(0, 100), expenseDate: value.serviceDate || value.expense.expenseDate } : null };
+  return { ...value, workStatus,status:workStatus==="completed" || workStatus==="closed" ? "completed" : "needs_review", programIds, oilType: services.some(s => s.typeCode === "preventive") ? value.oilType : "", services, expense: value.expense ? { ...value.expense, driverId: value.driverId, driverName: value.driverName, expenseType: [...new Set(services.map(s => s.name))].join(", ").slice(0, 100), expenseDate: value.serviceDate || value.expense.expenseDate } : null };
 }
 export function emptyMaintenance(options: MaintenanceOptions, truckId?: string): MaintenanceInput {
-  const code = options.types.find(t => t.active && t.code === "preventive")?.code ?? options.types.find(t => t.active)?.code ?? "other";
-  return assignMaintenanceTruck({ oilType: code === "preventive" ? "10W-30" : "", id: crypto.randomUUID(), version: 0, truckId: null, driverId: null, driverName: "", vendorId: null, vendorName: "", vendorAddress: "", vendorPhone: "", vendorContact: "", serviceDate: today(), odometer: null, location: "shop", status: "completed", workOrder: "", notes: "", services: [serviceWork(code, options)], expense: { ...emptyExpenseInput, categoryId: options.categoryId, paidBy: options.currentUser, expenseDate: today(), costBreakdown: [] } }, truckId ?? "", options);
+  const code = options.types.find(t => t.active && t.code === "other")?.code ?? options.types.find(t => t.active)?.code ?? "other";
+  return assignMaintenanceTruck({ oilType: code === "preventive" ? "10W-30" : "", id: crypto.randomUUID(), version: 0, truckId: null, driverId: null, driverName: "", vendorId: null, vendorName: "", vendorAddress: "", vendorPhone: "", vendorContact: "", serviceDate: "", odometer: null, location: "shop", status: "needs_review", workStatus:"open",dispatchStatus:"",waitingOn:"",scheduledFor:null,expectedReady:null,priority:"normal",noCharge:false,cancelReason:"", workOrder: "", notes: "", services: [serviceWork(code, options)], expense: null }, truckId ?? "", options);
 }
 export function assignMaintenanceTruck(value: MaintenanceInput, id: string, options: MaintenanceOptions): MaintenanceInput {
   const truck = options.trucks.find(t => t.id === id);
@@ -27,7 +28,7 @@ export function assignMaintenanceTruck(value: MaintenanceInput, id: string, opti
   return { ...value, odometer: null, savedOwnerName: truck?.ownerName, truckId: id || null, driverId: truck?.driverId ?? null, driverName: truck?.driverName ?? "", expense: value.expense ? { ...value.expense, truckId: id || null, unitNumber: truck?.unitNumber ?? "", driverId: truck?.driverId ?? null, driverName: truck?.driverName ?? "", coveredBy, ownerId: coveredBy === "Truck Owner" ? truck?.ownerId ?? null : null } : null };
 }
 export function maintenanceToInput(record: MaintenanceRecord): MaintenanceInput {
-  return { programIds:record.programIds, oilType: record.oilType || "", savedOwnerName: record.expense?.ownerName ?? undefined, legacyPaymentTotal: record.expense?.baseAmount == null && record.expense?.paymentType?.toLowerCase() === "efs" ? record.expense?.amount ?? undefined : undefined, id: record.id, version: record.version, truckId: record.truckId, driverId: record.driverId ?? record.expense?.driverId ?? null, driverName: record.driverName || record.expense?.driverName || "", vendorId: record.vendorId, vendorName: record.vendorName, vendorAddress: record.vendorAddress, vendorPhone: record.vendorPhone, vendorContact: record.vendorContact, serviceDate: record.serviceDate ?? "", odometer: record.odometer, location: record.location, status: record.status === "completed" ? "completed" : "needs_review", workOrder: record.workOrder, notes: record.notes, services: record.services, expense: record.expense ? expenseToInput(record.expense) : null };
+  return {workStatus:record.workStatus ?? record.status,dispatchStatus:record.dispatchStatus ?? "",waitingOn:record.waitingOn ?? "",scheduledFor:record.scheduledFor,expectedReady:record.expectedReady,priority:record.priority ?? "normal",noCharge:record.noCharge ?? false,cancelReason:record.cancelReason ?? "", programIds:record.programIds, oilType: record.oilType || "", savedOwnerName: record.expense?.ownerName ?? undefined, legacyPaymentTotal: record.expense?.baseAmount == null && record.expense?.paymentType?.toLowerCase() === "efs" ? record.expense?.amount ?? undefined : undefined, id: record.id, version: record.version, truckId: record.truckId, driverId: record.driverId ?? record.expense?.driverId ?? null, driverName: record.driverName || record.expense?.driverName || "", vendorId: record.vendorId, vendorName: record.vendorName, vendorAddress: record.vendorAddress, vendorPhone: record.vendorPhone, vendorContact: record.vendorContact, serviceDate: record.serviceDate ?? "", odometer: record.odometer, location: record.location, status: record.status === "completed" ? "completed" : "needs_review", workOrder: record.workOrder, notes: record.notes, services: record.services, expense: record.expense ? expenseToInput(record.expense) : null };
 }
 export function maintenanceDraft(draft: MaintenanceAIDraft, options: MaintenanceOptions): MaintenanceInput {
   const meta = draft.maintenance;
@@ -39,18 +40,22 @@ export function maintenanceDraft(draft: MaintenanceAIDraft, options: Maintenance
     return serviceWork(code, options, s.amount);
   });
   const vendor = options.vendors.filter(v => v.active && v.name.toLowerCase() === meta?.vendorName?.trim().toLowerCase());
-  let expense = matched.expense!;
+  let expense = maintenanceInvoice(matched,options);
   if (!draft.driverId && draft.driverName.trim() && expense.coveredBy === "Driver") {
     const truck = options.trucks.find(t => t.id === draft.truckId);
     const ownerId = truck?.isCompanyOwned ? null : truck?.ownerId;
     expense = { ...expense, coveredBy: ownerId ? "Truck Owner" : "Company", ownerId: ownerId ?? null };
   }
-  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? (draft.driverName.trim() ? null : matched.driverId), driverName: draft.driverName.trim() || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...expense, applicantId:draft.applicantId ?? null, costBreakdown: draft.costBreakdown?.length ? draft.costBreakdown : source.filter(s => s.amount !== null).map(s => ({ name: s.name || options.types.find(t => t.code === s.typeCode)?.name || s.typeCode, amount: s.amount! })), amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
+  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? (draft.driverName.trim() ? null : matched.driverId), driverName: draft.driverName.trim() || matched.driverName, workStatus:"needs_review", status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...expense, applicantId:draft.applicantId ?? null, costBreakdown: draft.costBreakdown?.length ? draft.costBreakdown : source.filter(s => s.amount !== null).map(s => ({ name: s.name || options.types.find(t => t.code === s.typeCode)?.name || s.typeCode, amount: s.amount! })), amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
 }
 export function maintenanceError(value: MaintenanceInput): string {
-  if (!value.version && !value.expense) return "Enter the service amount and payment details.";
+  if (!value.truckId && value.workStatus!=="needs_review") return "Select a truck.";
+  if (["open","scheduled","in_progress"].includes(value.workStatus ?? "") && !value.notes.trim()) return "Describe the work needed.";
+  if (value.workStatus==="scheduled" && !value.scheduledFor) return "Enter a scheduled date.";
+  if (value.workStatus==="canceled" && (value.cancelReason?.trim().length ?? 0)<3) return "Enter a cancellation reason.";
+  if (value.workStatus==="closed" && value.dispatchStatus) return "Release the truck hold before finishing the order.";
   if (value.status === "completed" && (!value.truckId || !value.serviceDate)) return "Completed work requires a truck and service date.";
-  if (!value.services.length || value.services.some(s => !s.typeCode) || !value.version && value.services.length !== 1) return "Choose a service type.";
+  if (value.services.some(s => !s.typeCode) || !value.services.length) return "Choose a service type.";
   const priced = value.services.filter(s => s.amount !== null);
   if (priced.length && priced.length !== value.services.length) return "Price every service or leave all costs unallocated.";
   const amount = value.expense?.amount ?? "0";
@@ -63,5 +68,13 @@ export function expenseToMaintenance(value: ExpenseInput, options: MaintenanceOp
  const base=assignMaintenanceTruck(emptyMaintenance(options),value.truckId ?? "",options);
  const code=value.expenseType ? serviceTypeForName(value.expenseType) : base.services[0].typeCode;
  const services=[serviceWork(options.types.some(t=>t.code===code&&t.active)?code:"other",options)];
- return normalizeMaintenance({...base,serviceDate:value.expenseDate,notes:value.description,driverId:value.driverId ?? (value.driverName.trim() ? null : base.driverId),driverName:value.driverName.trim() || base.driverName,services,expense:{...base.expense!,...value,categoryId:options.categoryId}},options);
+ return normalizeMaintenance({...base,workStatus:"completed",status:"completed",serviceDate:value.expenseDate,notes:value.description,driverId:value.driverId ?? (value.driverName.trim() ? null : base.driverId),driverName:value.driverName.trim() || base.driverName,services,expense:{...base.expense!,...value,categoryId:options.categoryId}},options);
 }
+
+export function maintenanceInvoice(value:MaintenanceInput,options:MaintenanceOptions):ExpenseInput {
+ const draft={...emptyExpenseInput,categoryId:options.categoryId,paidBy:options.currentUser,expenseDate:value.serviceDate || today(),description:value.notes,costBreakdown:[]};
+ const assigned=assignMaintenanceTruck({...value,expense:draft},value.truckId ?? "",options);
+ return {...assigned.expense!,driverId:value.driverId,driverName:value.driverName};
+}
+export const workStatusLabels:Record<string,string>={open:"Open",scheduled:"Scheduled",in_progress:"In progress",completed:"Awaiting payment",closed:"Done",canceled:"Canceled",needs_review:"Needs review",voided:"Voided"};
+export const waitingLabels:Record<string,string>={shop:"Shop availability",diagnosis:"Diagnosis",approval:"Estimate approval",parts:"Parts",pickup:"Pickup"};

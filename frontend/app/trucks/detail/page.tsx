@@ -17,6 +17,7 @@ import { ServiceProgramsWorkspace } from "@/app/fleet/service-programs/ServicePr
 import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
+import {operatingStatus} from "@/app/components/FleetStatusBadge";
 import { DataTruckSetup } from "../DataTruckSetup";
 import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
@@ -62,7 +63,7 @@ export default function TruckDetailPage() {
         <dl className="grid grid-cols-1 gap-px border-t border-zinc-800 bg-zinc-800 sm:grid-cols-2 md:grid-cols-4">
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Current driver</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{truck.driverId ? <Link href={`/drivers/detail?id=${truck.driverId}`} className="hover:text-blue-300">{truck.driverName}</Link> : "Unassigned"}</dd></div>
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Truck owner</dt><dd className="mt-1 text-sm font-medium text-zinc-200"><Link href={`/investors/detail?id=${truck.ownerId}`} className="hover:text-blue-300">{truck.ownerName}</Link></dd></div>
-          {[["Status", truck.status.replaceAll("_", " ")], ["Mileage", truck.mileage === null ? "Not recorded" : `${truck.mileage.toLocaleString()} mi`]].map(([label, value]) => <div key={label} className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-sm font-medium capitalize text-zinc-200">{value}</dd></div>)}
+          {[["Status", ({ready:"Ready",shop:"Shop",out_of_service:"OOS",hold:"Hold"})[truck.operatingStatus ?? operatingStatus(truck.status)]], ["Mileage", truck.mileage === null ? "Not recorded" : `${truck.mileage.toLocaleString()} mi`]].map(([label, value]) => <div key={label} className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-sm font-medium capitalize text-zinc-200">{value}</dd></div>)}
         </dl>
       </header>
       <nav className="flex flex-wrap gap-1 border-b border-zinc-800" aria-label="Truck sections">{visibleTabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`border-b-2 px-3 py-3 text-xs font-medium ${tab === name ? "border-blue-500 text-blue-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{name}</button>)}</nav>
@@ -77,7 +78,7 @@ export default function TruckDetailPage() {
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
       {tab === "Service programs" && maintenanceAccess?.canView && <ServiceProgramsWorkspace truckId={truck.id} />}
-      {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
+      {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} onRecordSaved={()=>setAttempt(v=>v+1)} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
       {tab === "Equipment" && permissions.includes("inventory.read") && <InventoryWorkspace truckId={truck.id} />}

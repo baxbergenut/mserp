@@ -292,16 +292,17 @@ export function TruckForm({
             ))}
           </select>
         </Field>
-        <Field label="Status" hint="An assigned driver automatically sets the status to Assigned.">
+        <Field label="Status" hint="Work-order holds also apply until Fleet releases them.">
           <select
             value={value.status}
             onChange={(event) => set("status", event.target.value as TruckInput["status"])}
             className={controlClass}
           >
-            <option value="available">Available</option>
-            {value.driverId !== null && <option value="assigned">Assigned</option>}
-            <option value="maintenance">Maintenance</option>
-            <option value="out_of_service">Out of service</option>
+            <option value="available">Ready</option>
+            {value.driverId !== null && <option value="assigned">Ready (driver assigned)</option>}
+            <option value="maintenance">Shop</option>
+            <option value="out_of_service">OOS</option>
+            <option value="hold">Hold</option>
           </select>
         </Field>
         <Field label="Current mileage">

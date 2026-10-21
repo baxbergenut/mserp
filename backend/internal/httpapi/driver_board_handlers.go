@@ -67,6 +67,10 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 404, "history event not found")
 			return
 		}
+		if errors.Is(err, repository.ErrTruckUnavailable) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
 		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) || errors.Is(err, repository.ErrDriverBoardOrderConflict) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return

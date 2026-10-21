@@ -52,36 +52,50 @@ type MaintenanceDocument struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 type MaintenanceRecord struct {
-	ProgramIDs    []string              `json:"programIds"`
-	OilType       string                `json:"oilType"`
-	ID            string                `json:"id"`
-	ExpenseID     *string               `json:"expenseId"`
-	TruckID       *string               `json:"truckId"`
-	UnitNumber    string                `json:"unitNumber"`
-	DriverID      *string               `json:"driverId"`
-	DriverName    string                `json:"driverName"`
-	VendorID      *string               `json:"vendorId"`
-	VendorName    string                `json:"vendorName"`
-	VendorAddress string                `json:"vendorAddress"`
-	VendorPhone   string                `json:"vendorPhone"`
-	VendorContact string                `json:"vendorContact"`
-	ServiceDate   *string               `json:"serviceDate"`
-	Odometer      *int                  `json:"odometer"`
-	Location      string                `json:"location"`
-	Status        string                `json:"status"`
-	WorkOrder     string                `json:"workOrder"`
-	Notes         string                `json:"notes"`
-	Services      []MaintenanceWork     `json:"services"`
-	Version       int                   `json:"version"`
-	CreatedByName string                `json:"createdByName"`
-	UpdatedByName string                `json:"updatedByName"`
-	CreatedAt     time.Time             `json:"createdAt"`
-	UpdatedAt     time.Time             `json:"updatedAt"`
-	VoidReason    string                `json:"voidReason"`
-	Expense       *Expense              `json:"expense"`
-	Documents     []MaintenanceDocument `json:"documents"`
+	PaymentConfirmation json.RawMessage       `json:"paymentConfirmation"`
+	WorkStatus          string                `json:"workStatus"`
+	DispatchStatus      string                `json:"dispatchStatus"`
+	WaitingOn           string                `json:"waitingOn"`
+	ScheduledFor        *string               `json:"scheduledFor"`
+	ExpectedReady       *string               `json:"expectedReady"`
+	Priority            string                `json:"priority"`
+	NoCharge            bool                  `json:"noCharge"`
+	CancelReason        string                `json:"cancelReason"`
+	ProgramIDs          []string              `json:"programIds"`
+	OilType             string                `json:"oilType"`
+	ID                  string                `json:"id"`
+	ExpenseID           *string               `json:"expenseId"`
+	TruckID             *string               `json:"truckId"`
+	UnitNumber          string                `json:"unitNumber"`
+	DriverID            *string               `json:"driverId"`
+	DriverName          string                `json:"driverName"`
+	VendorID            *string               `json:"vendorId"`
+	VendorName          string                `json:"vendorName"`
+	VendorAddress       string                `json:"vendorAddress"`
+	VendorPhone         string                `json:"vendorPhone"`
+	VendorContact       string                `json:"vendorContact"`
+	ServiceDate         *string               `json:"serviceDate"`
+	Odometer            *int                  `json:"odometer"`
+	Location            string                `json:"location"`
+	Status              string                `json:"status"`
+	WorkOrder           string                `json:"workOrder"`
+	Notes               string                `json:"notes"`
+	Services            []MaintenanceWork     `json:"services"`
+	Version             int                   `json:"version"`
+	CreatedByName       string                `json:"createdByName"`
+	UpdatedByName       string                `json:"updatedByName"`
+	CreatedAt           time.Time             `json:"createdAt"`
+	UpdatedAt           time.Time             `json:"updatedAt"`
+	VoidReason          string                `json:"voidReason"`
+	Expense             *Expense              `json:"expense"`
+	Documents           []MaintenanceDocument `json:"documents"`
 }
 type MaintenanceInput struct {
+	ConfirmPayment                                        bool
+	WorkStatus, DispatchStatus                            *string
+	WaitingOn, Priority, CancelReason                     string
+	ScheduledFor, ExpectedReady                           *string
+	NoCharge                                              bool
 	ProgramIDs                                            []string
 	OilType                                               string
 	ActorID                                               string
@@ -180,11 +194,11 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	return result, err
 }
 
-const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type,coalesce(m.program_ids,CASE WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode' IN ('pm','oil')) THEN ARRAY['00000000-0000-4000-8000-000000000020']::uuid[] ELSE '{}'::uuid[] END)::text[] FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
+const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type,coalesce(m.program_ids,CASE WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode' IN ('pm','oil')) THEN ARRAY['00000000-0000-4000-8000-000000000020']::uuid[] ELSE '{}'::uuid[] END)::text[],coalesce(nullif(m.work_status,''),m.status),m.dispatch_status,m.waiting_on,m.scheduled_for::text,m.expected_ready::text,m.priority,m.no_charge,m.cancel_reason,m.payment_confirmation FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
 
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
-	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType, &m.ProgramIDs)
+	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType, &m.ProgramIDs, &m.WorkStatus, &m.DispatchStatus, &m.WaitingOn, &m.ScheduledFor, &m.ExpectedReady, &m.Priority, &m.NoCharge, &m.CancelReason, &m.PaymentConfirmation)
 	// Present historical aliases with the current terminology without rewriting ledger snapshots.
 	for i := range m.Services {
 		if m.Services[i].TypeCode == "oil" || m.Services[i].TypeCode == "preventive" {
@@ -222,17 +236,21 @@ func (r *MaintenanceRepository) Get(ctx context.Context, id string) (Maintenance
 		}
 		m.Documents = append(m.Documents, d)
 	}
-	return m, rows.Err()
+	if err := rows.Err(); err != nil {
+		return m, err
+	}
+	rows.Close()
+	return m, nil
 }
 func (r *MaintenanceRepository) List(ctx context.Context, q MaintenanceQuery) (MaintenancePage, error) {
-	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE CASE WHEN s->>'typeCode'='oil' THEN 'preventive' ELSE s->>'typeCode' END=$3)) AND ($4='' OR m.status=$4) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
+	where := ` WHERE ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR m.vendor_id=NULLIF($2,'')::uuid) AND ($3='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE CASE WHEN s->>'typeCode'='oil' THEN 'preventive' ELSE s->>'typeCode' END=$3)) AND ($4='' OR coalesce(nullif(m.work_status,''),m.status)=$4 OR ($4='new' AND coalesce(nullif(m.work_status,''),m.status) IN ('open','scheduled','needs_review')) OR ($4='active' AND coalesce(nullif(m.work_status,''),m.status) IN ('open','scheduled','in_progress','needs_review')) OR ($4='settlement' AND (coalesce(nullif(m.work_status,''),m.status)='completed')) OR ($4='archived' AND coalesce(nullif(m.work_status,''),m.status) IN ('canceled','voided')) OR ($4='history' AND coalesce(nullif(m.work_status,''),m.status) IN ('closed','canceled','voided'))) AND ($5='' OR concat_ws(' ',m.vendor_name,t.unit_number,e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$5||'%') AND ($6='' OR coalesce(m.service_date,e.expense_date,(m.created_at AT TIME ZONE 'America/New_York')::date)>=NULLIF($6,'')::date) AND ($7='' OR coalesce(m.service_date,e.expense_date,(m.created_at AT TIME ZONE 'America/New_York')::date)<=NULLIF($7,'')::date) AND ($8='' OR m.expense_id=NULLIF($8,'')::uuid)`
 	args := []any{q.TruckID, q.VendorID, q.TypeCode, q.Status, q.Search, q.From, q.To, q.ExpenseID}
 	var count int
 	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`+where, args...).Scan(&count); err != nil {
 		return MaintenancePage{}, err
 	}
 	p := Pagination{Page: q.Page, PageSize: q.PageSize}.Normalize(count)
-	rows, err := r.pool.Query(ctx, maintenanceSelect+where+` ORDER BY coalesce(m.service_date,e.expense_date) DESC NULLS LAST,m.created_at DESC,m.id LIMIT $9 OFFSET $10`, append(args, p.PageSize, p.Offset())...)
+	rows, err := r.pool.Query(ctx, maintenanceSelect+where+` ORDER BY coalesce(m.service_date,e.expense_date,(m.created_at AT TIME ZONE 'America/New_York')::date) DESC NULLS LAST,m.created_at DESC,m.id LIMIT $9 OFFSET $10`, append(args, p.PageSize, p.Offset())...)
 	if err != nil {
 		return MaintenancePage{}, err
 	}
@@ -303,6 +321,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		}
 	}
 	// Lock the truck to serialize new service readings, manual readings and corrections.
+	if err := validateMaintenanceWorkflow(&in, old); err != nil {
+		return old, err
+	}
 	if in.TruckID != nil {
 		var id string
 		if err := tx.QueryRow(ctx, "SELECT id FROM trucks WHERE id=$1 FOR UPDATE", *in.TruckID).Scan(&id); err != nil {
@@ -441,6 +462,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	} else if expenseID != nil {
 		return old, fmt.Errorf("%w: use Void to remove an unpaid charge", ErrMaintenanceInvalid)
 	}
+	if in.Services == nil {
+		in.Services = []MaintenanceWork{}
+	}
 	services, err := json.Marshal(in.Services)
 	if err != nil {
 		return old, err
@@ -448,12 +472,15 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if in.Version == 0 {
 		_, err = tx.Exec(ctx, `INSERT INTO maintenance_records(id,expense_id,truck_id,vendor_id,vendor_name,vendor_address,vendor_phone,vendor_contact,service_date,odometer,location,status,work_order,notes,services,created_by_name,updated_by_name,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16,NULLIF($17,'')::uuid)`, in.ID, expenseID, in.TruckID, in.VendorID, in.VendorName, in.VendorAddress, in.VendorPhone, in.VendorContact, in.ServiceDate, in.Odometer, in.Location, in.Status, in.WorkOrder, in.Notes, services, in.Actor, in.ActorID)
 	} else {
-		_, err = tx.Exec(ctx, `UPDATE maintenance_records SET expense_id=$2,truck_id=$3,vendor_id=$4,vendor_name=$5,vendor_address=$6,vendor_phone=$7,vendor_contact=$8,service_date=$9,odometer=$10,location=$11,status=$12,work_order=$13,notes=$14,services=$15,updated_by_name=$16,version=version+1,updated_at=now() WHERE id=$1`, in.ID, expenseID, in.TruckID, in.VendorID, in.VendorName, in.VendorAddress, in.VendorPhone, in.VendorContact, in.ServiceDate, in.Odometer, in.Location, in.Status, in.WorkOrder, in.Notes, services, in.Actor)
+		_, err = tx.Exec(ctx, `UPDATE maintenance_records SET expense_id=$2,truck_id=$3,vendor_id=$4,vendor_name=$5,vendor_address=$6,vendor_phone=$7,vendor_contact=$8,service_date=$9,odometer=$10,location=$11,status=$12,work_status='',work_order=$13,notes=$14,services=$15,updated_by_name=$16,version=version+1,updated_at=now() WHERE id=$1`, in.ID, expenseID, in.TruckID, in.VendorID, in.VendorName, in.VendorAddress, in.VendorPhone, in.VendorContact, in.ServiceDate, in.Odometer, in.Location, in.Status, in.WorkOrder, in.Notes, services, in.Actor)
 	}
 	if err != nil {
 		return old, err
 	}
 	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END,oil_type=$5,program_ids=$6 WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber, in.OilType, in.ProgramIDs); err != nil {
+		return old, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE maintenance_records SET work_status=$2,dispatch_status=$3,waiting_on=$4,scheduled_for=$5::date,expected_ready=$6::date,priority=$7,no_charge=$8,cancel_reason=$9 WHERE id=$1`, in.ID, in.WorkStatus, in.DispatchStatus, in.WaitingOn, in.ScheduledFor, in.ExpectedReady, in.Priority, in.NoCharge, in.CancelReason); err != nil {
 		return old, err
 	}
 	if _, err := tx.Exec(ctx, "UPDATE maintenance_odometer_readings SET active=false WHERE record_id=$1", in.ID); err != nil {
@@ -466,6 +493,18 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		_, err = tx.Exec(ctx, `INSERT INTO maintenance_odometer_readings(truck_id,record_id,reading_date,mileage,source,actor_name) VALUES($1,$2,$3,$4,'service',$5) ON CONFLICT(record_id) DO UPDATE SET truck_id=excluded.truck_id,reading_date=excluded.reading_date,mileage=excluded.mileage,active=true,actor_name=excluded.actor_name,version=maintenance_odometer_readings.version+1,updated_at=now()`, in.TruckID, in.ID, in.ServiceDate, in.Odometer, in.Actor)
 		if err != nil {
 			return old, err
+		}
+	}
+	if in.ConfirmPayment && expenseID != nil {
+		if _, err = tx.Exec(ctx, `UPDATE maintenance_records m SET payment_confirmation=jsonb_build_object('expenseId',e.id::text,'amount',e.amount::text,'method',e.payment_type,'reference',coalesce(e.reference_number,''),'paidBy',e.paid_by,'confirmedBy',$2::text,'confirmedAt',now()) FROM expenses e WHERE m.id=$1 AND e.id=m.expense_id AND m.payment_confirmation IS NULL AND length(btrim(coalesce(e.payment_type,'')))>0 AND length(btrim(coalesce(e.paid_by,'')))>0`, in.ID, in.Actor); err != nil {
+			return old, err
+		}
+		var confirmed bool
+		if err = tx.QueryRow(ctx, `SELECT payment_confirmation IS NOT NULL FROM maintenance_records WHERE id=$1`, in.ID).Scan(&confirmed); err != nil {
+			return old, err
+		}
+		if !confirmed {
+			return old, fmt.Errorf("%w: select the payment method and paid by person before confirming payment", ErrMaintenanceInvalid)
 		}
 	}
 	after, err := scanMaintenance(tx.QueryRow(ctx, maintenanceSelect+" WHERE m.id=$1", in.ID))
@@ -520,6 +559,12 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 	if err != nil {
 		return err
 	}
+	if old.DispatchStatus != "" {
+		return fmt.Errorf("%w: release the truck before voiding its work order", ErrMaintenanceInvalid)
+	}
+	if len(old.PaymentConfirmation) > 0 {
+		return fmt.Errorf("%w: an order with confirmed payment cannot be voided", ErrMaintenanceInvalid)
+	}
 	before, _ := json.Marshal(old)
 	var expenseJSON []byte
 	if old.ExpenseID != nil {
@@ -534,7 +579,7 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE maintenance_records SET status='voided',void_reason=$3,voided_expense=$4,expense_id=NULL,version=version+1,updated_by_name=$5,updated_at=now() WHERE id=$1 AND version=$2`, id, version, reason, expenseJSON, actor); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE maintenance_records SET status='voided',work_status='voided',void_reason=$3,voided_expense=$4,expense_id=NULL,version=version+1,updated_by_name=$5,updated_at=now() WHERE id=$1 AND version=$2`, id, version, reason, expenseJSON, actor); err != nil {
 		return err
 	}
 	if old.ExpenseID != nil {
@@ -590,7 +635,7 @@ type MaintenanceReport struct {
 
 func (r *MaintenanceRepository) Reports(ctx context.Context, q MaintenanceQuery) (MaintenanceReport, error) {
 	args := []any{q.TruckID, q.From, q.To, q.VendorID, q.TypeCode, q.Status, q.Search}
-	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE CASE WHEN filter_work->>'typeCode'='oil' THEN 'preventive' ELSE filter_work->>'typeCode' END=$5)) AND ($6='' OR m.status=$6) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
+	where := `m.status<>'voided' AND ($1='' OR m.truck_id=NULLIF($1,'')::uuid) AND ($2='' OR coalesce(m.service_date,e.expense_date,(m.created_at AT TIME ZONE 'America/New_York')::date)>=NULLIF($2,'')::date) AND ($3='' OR coalesce(m.service_date,e.expense_date,(m.created_at AT TIME ZONE 'America/New_York')::date)<=NULLIF($3,'')::date) AND ($4='' OR m.vendor_id=NULLIF($4,'')::uuid) AND ($5='' OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) filter_work WHERE CASE WHEN filter_work->>'typeCode'='oil' THEN 'preventive' ELSE filter_work->>'typeCode' END=$5)) AND ($6='' OR coalesce(nullif(m.work_status,''),m.status)=$6 OR ($6='active' AND coalesce(nullif(m.work_status,''),m.status) IN ('open','scheduled','in_progress','needs_review')) OR ($6='settlement' AND (coalesce(nullif(m.work_status,''),m.status)='completed')) OR ($6='history' AND coalesce(nullif(m.work_status,''),m.status) IN ('closed','canceled','voided'))) AND ($7='' OR concat_ws(' ',m.vendor_name,(SELECT unit_number FROM trucks WHERE id=m.truck_id),e.unit_number,m.source_unit_number,m.work_order,m.notes,m.services::text,e.reference_number) ILIKE '%'||$7||'%')`
 	out := MaintenanceReport{ServiceTypes: []MaintenanceReportRow{}, Trucks: []MaintenanceReportRow{}, Vendors: []MaintenanceReportRow{}, RepeatedWork: []MaintenanceReportRow{}}
 	err := r.pool.QueryRow(ctx, `SELECT coalesce(sum(coalesce(e.base_amount,e.amount)),0)::text,coalesce(sum(e.payment_fee),0)::text,coalesce(sum(coalesce(e.base_amount,e.amount)) FILTER(WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'amount' IS NOT NULL)),0)::text FROM maintenance_records m LEFT JOIN expenses e ON e.id=m.expense_id WHERE `+where, args...).Scan(&out.Total, &out.Fees, &out.Unallocated)
 	if err != nil {

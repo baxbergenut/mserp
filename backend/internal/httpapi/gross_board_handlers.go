@@ -110,6 +110,10 @@ func (request *grossBoardRequest) validate() error {
 
 func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.GrossBoardRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		if errors.Is(err, repository.ErrTruckUnavailable) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
 		if errors.Is(err, repository.ErrGrossBoardConflict) || errors.Is(err, repository.ErrGrossBoardLoad) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return

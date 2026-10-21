@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -271,6 +272,17 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
 			empty := ""
 			e.Note = &empty
+		}
+		if !e.Deleted && e.LoadNumber != "" && e.DayStatus == "" {
+			var previous string
+			if err := tx.QueryRow(ctx, `SELECT coalesce((SELECT load_number FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date AND $3=0 UNION ALL SELECT load_number FROM gross_board_extra_entries WHERE driver_id=$1 AND service_date=$2::date AND slot=$3 AND NOT deleted LIMIT 1),'')`, e.DriverID, e.Date, e.Slot).Scan(&previous); err != nil {
+				return nil, err
+			}
+			if !strings.EqualFold(strings.TrimSpace(previous), strings.TrimSpace(e.LoadNumber)) && e.Date >= boardLoadToday(time.Now()) {
+				if err := requireDispatchableTruck(ctx, tx, e.DriverID); err != nil {
+					return nil, err
+				}
+			}
 		}
 		var loadID *int
 		if e.LoadRecordID != nil {

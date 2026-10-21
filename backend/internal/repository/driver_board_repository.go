@@ -31,6 +31,7 @@ type DriverBoardEntry struct {
 }
 
 type DriverBoardDriver struct {
+	TruckOperatingStatus       string               `json:"truckOperatingStatus"`
 	DispatcherExtension        *int                 `json:"dispatcherExtension"`
 	MainUpdaterName            string               `json:"mainUpdaterName"`
 	MainUpdaterExtension       *int                 `json:"mainUpdaterExtension"`
@@ -119,7 +120,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,coalesce(fleet_truck_operating_status(t.id),'')
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -145,7 +146,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus)
 		if err != nil {
 			rows.Close()
 			return result, err
@@ -263,6 +264,11 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		loadStateValue, _, readErr := loadState(ctx, tx, e.DriverID)
 		if readErr != nil {
 			return nil, readErr
+		}
+		if strings.TrimSpace(e.CurrentLoad) != "" && !strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) {
+			if err := requireDispatchableTruck(ctx, tx, e.DriverID); err != nil {
+				return nil, err
+			}
 		}
 		oldStopKey := loadStateValue.StopKey
 		stateChanged := false

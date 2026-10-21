@@ -205,30 +205,53 @@ func (h maintenanceHandler) due(w http.ResponseWriter, r *http.Request) {
 }
 
 type maintenanceRequest struct {
-	ProgramIDs    []string                     `json:"programIds"`
-	OilType       string                       `json:"oilType"`
-	ID            string                       `json:"id"`
-	Version       int                          `json:"version"`
-	TruckID       *string                      `json:"truckId"`
-	DriverID      *string                      `json:"driverId"`
-	DriverName    string                       `json:"driverName"` // Unlinked source name; linked drivers resolve their canonical name.
-	VendorID      *string                      `json:"vendorId"`
-	VendorName    string                       `json:"vendorName"`
-	VendorAddress string                       `json:"vendorAddress"`
-	VendorPhone   string                       `json:"vendorPhone"`
-	VendorContact string                       `json:"vendorContact"`
-	ServiceDate   string                       `json:"serviceDate"`
-	Odometer      *int                         `json:"odometer"`
-	Location      string                       `json:"location"`
-	Status        string                       `json:"status"`
-	WorkOrder     string                       `json:"workOrder"`
-	Notes         string                       `json:"notes"`
-	Services      []repository.MaintenanceWork `json:"services"`
-	Expense       *expenseRequest              `json:"expense"`
+	ConfirmPayment bool                         `json:"confirmPayment"`
+	WorkStatus     *string                      `json:"workStatus"`
+	DispatchStatus *string                      `json:"dispatchStatus"`
+	WaitingOn      string                       `json:"waitingOn"`
+	ScheduledFor   *string                      `json:"scheduledFor"`
+	ExpectedReady  *string                      `json:"expectedReady"`
+	Priority       string                       `json:"priority"`
+	NoCharge       bool                         `json:"noCharge"`
+	CancelReason   string                       `json:"cancelReason"`
+	ProgramIDs     []string                     `json:"programIds"`
+	OilType        string                       `json:"oilType"`
+	ID             string                       `json:"id"`
+	Version        int                          `json:"version"`
+	TruckID        *string                      `json:"truckId"`
+	DriverID       *string                      `json:"driverId"`
+	DriverName     string                       `json:"driverName"` // Unlinked source name; linked drivers resolve their canonical name.
+	VendorID       *string                      `json:"vendorId"`
+	VendorName     string                       `json:"vendorName"`
+	VendorAddress  string                       `json:"vendorAddress"`
+	VendorPhone    string                       `json:"vendorPhone"`
+	VendorContact  string                       `json:"vendorContact"`
+	ServiceDate    string                       `json:"serviceDate"`
+	Odometer       *int                         `json:"odometer"`
+	Location       string                       `json:"location"`
+	Status         string                       `json:"status"`
+	WorkOrder      string                       `json:"workOrder"`
+	Notes          string                       `json:"notes"`
+	Services       []repository.MaintenanceWork `json:"services"`
+	Expense        *expenseRequest              `json:"expense"`
 }
 
 func (in maintenanceRequest) validate(category string) (repository.MaintenanceInput, error) {
 	out := repository.MaintenanceInput{ProgramIDs: in.ProgramIDs, OilType: repository.NormalizeMaintenanceOilType(in.OilType), ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
+	out.WorkStatus, out.DispatchStatus = in.WorkStatus, in.DispatchStatus
+	out.WaitingOn, out.ScheduledFor, out.ExpectedReady = in.WaitingOn, in.ScheduledFor, in.ExpectedReady
+	out.Priority, out.NoCharge, out.CancelReason = in.Priority, in.NoCharge, strings.TrimSpace(in.CancelReason)
+	out.ConfirmPayment = in.ConfirmPayment
+	for _, date := range []*string{in.ScheduledFor, in.ExpectedReady} {
+		if date != nil {
+			if _, err := time.Parse(time.DateOnly, *date); err != nil {
+				return out, errors.New("enter valid scheduled and expected ready dates")
+			}
+		}
+	}
+	if len(out.CancelReason) > 1000 {
+		return out, errors.New("work order details are too long")
+	}
 	out.DriverID = in.DriverID
 	out.DriverName = strings.TrimSpace(in.DriverName)
 	if len(in.ProgramIDs) > 100 {
@@ -278,7 +301,7 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 	if utf8.RuneCountInString(out.Notes) > 5000 {
 		return out, errors.New("notes must be 5000 characters or fewer")
 	}
-	if len(out.Services) < 1 || len(out.Services) > 100 {
+	if (len(out.Services) < 1 && (out.WorkStatus == nil || *out.WorkStatus == "completed" || *out.WorkStatus == "closed" || in.Expense != nil)) || len(out.Services) > 100 {
 		return out, errors.New("add between 1 and 100 work items")
 	}
 	costs := []repository.ExpenseCostItem{}

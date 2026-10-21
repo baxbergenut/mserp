@@ -20,7 +20,8 @@ import {
 } from "../lib/api";
 import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Truck, TruckInput, TruckStatus } from "../lib/types";
+import {FleetStatusBadge,operatingStatus} from "../components/FleetStatusBadge";
+import type { Truck, TruckInput } from "../lib/types";
 import {
   ConfirmDialog,
   EmptyState,
@@ -36,20 +37,6 @@ import {
 } from "../components/management/ManagementUI";
 import { emptyTruckInput, TruckForm, truckToInput } from "./TruckForm";
 import { DataTruckSetup } from "./DataTruckSetup";
-
-const STATUS_LABELS: Record<TruckStatus, string> = {
-  available: "Available",
-  assigned: "Assigned",
-  maintenance: "Maintenance",
-  out_of_service: "Out of service",
-};
-
-const STATUS_CLASSES: Record<TruckStatus, string> = {
-  available: "bg-emerald-500/10 text-emerald-400",
-  assigned: "bg-blue-500/10 text-blue-400",
-  maintenance: "bg-amber-500/10 text-amber-400",
-  out_of_service: "bg-red-500/10 text-red-400",
-};
 
 export default function TrucksPage() {
   const permissions = usePermissions();
@@ -246,7 +233,7 @@ export default function TrucksPage() {
                     <span className="text-zinc-600">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-medium ${STATUS_CLASSES[truck.status]}`}>{STATUS_LABELS[truck.status]}</span></td>
+                <td className="px-4 py-3"><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady /></td>
                 <td className="px-4 py-3"><StatusBadge active={truck.active} /></td>
                 <td className="px-4 py-3"><RowActions onEdit={() => openEdit(truck)} onDelete={() => setPendingDelete(truck)} /></td>
               </tr>

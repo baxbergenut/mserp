@@ -23,8 +23,8 @@ exclude the configured work-order category. No expense copies are created.
 - A charged visit has exactly one linked expense. Service and financial writes
   commit together; IDs, approvals, payments and existing responsibility routing
   are retained. Driver and owner settlements continue reading the same expense.
-  New UI entries always include the invoice amount and charge; there is no optional
-  invoice checkbox. Historical/imported entries without known costs retain their
+  New work orders can start without an invoice or known cost. An explicit Invoice
+  selection adds the existing linked expense; No charge is a separate confirmation. Historical/imported entries without known costs retain their
   existing financial state. Vendor creation and edits live in Work orders > Settings.
 - New entry uses one Service type and the shared Expenses Add cost breakdown.
   Cost rows have independent names (including custom parts, labor, tax or discounts)
@@ -459,3 +459,66 @@ category View and Edit; viewing/enrollment/recording retain their existing
 category gates. Maintenance options returns canManagePrograms for button access.
 The explicit service_programs.manage route policy protects saves and assignee
 lookups; granting it does not grant access administration or other settings.
+
+## Fleet work order lifecycle (132)
+
+The workspace uses tables under In progress, Completed - pending payment, and
+Completed - paid. Canceled keeps canceled/voided records out of the paid list.
+In progress includes newly created, scheduled and active repairs. Its rows show
+truck/hold, service type, description, shop, planning dates, work stage and creator.
+Pending payment shows service date, invoice amount (unknown stays blank) and
+whether an invoice is entered. Paid shows the confirmed payment amount, method
+and payer; explicitly No charge orders are identified without inventing payment.
+Filtering and pagination stay server-side; tab changes cannot momentarily show
+another stage's rows. There is no Kanban board or work-order summary-card strip.
+
+Rows open /maintenance/detail?id=... with a three-step progress bar. Creation is
+already complete, Work tracks repairs, and Invoice & payment is the final step.
+In Work, service type, service date, scheduled date and expected-ready date sit
+beside the description on wide screens, stacking on narrow screens. New orders
+need only a truck, description and dispatch impact; unknown prices never create
+zero-value expenses. Creator/time are immutable server snapshots shown in the
+ongoing table and details; there is no responsible-person field.
+
+Internal workStatus codes remain compatible: open/scheduled/in_progress/
+needs_review are ongoing, completed means work finished and pending payment,
+and closed means paid or explicitly No charge. Actual service completion alone
+updates service-program history. Cancellation requires a reason; completed service
+cannot be canceled. Planning dates, priority and waiting reason remain optional.
+
+Work orders explicitly select dispatch impact: no restriction, Shop, OOS or Hold.
+The hold survives work completion and cancellation until a Work orders Edit user
+releases it. Administrator and trucks.edit are not required. Multiple orders and
+manual truck restrictions combine; releasing one does not clear another. Changing
+drivers preserves manual restrictions. Active/Inactive and crews stay separate.
+
+Status Board receives only truckOperatingStatus and renders Shop/OOS/Hold beside
+the truck number, without repair reasons or invoice details. Commit-only updates
+refresh the board when a hold changes. New current/queued load assignments and new
+current/future Gross Board loads check the truck under its row lock. Existing
+loads, corrections and historical accounting remain editable. No external booking
+integration or future downtime reservations are implemented. Expected-ready dates
+never release a truck automatically.
+
+Invoice & payment reuses the existing invoice amount, reference, payment method,
+Paid by and Responsibility fields. Saving an invoice alone does not confirm paid.
+Confirm paid & finish explicitly confirms an already made payment and stores an
+immutable confirmation of those invoice fields and the confirming employee/time.
+It never issues money or alters expense_payments/driver-owner recovery. There is
+no separate shop-payment screen, endpoint or ledger. Done requires finished work,
+release of this order's hold and either that confirmation or explicit No charge.
+Confirmed financial fields cannot be silently changed or detached. Other orders'
+holds remain effective after this order is Done.
+
+Historical invoice-backed service remains Awaiting payment until explicitly
+reviewed; no historical payment or closure is inferred. Canceled/voided records
+remain in Canceled; closed orders appear in Completed - paid. Legacy service and
+financial IDs remain compatible, and
+workflow, hold and payment-confirmation changes retain audit history.
+
+Validation: TestMaintenanceDatabase covers fresh/incremental schemas as mserp_app,
+multiple holds, stale edits, dispatch guards, no-price creation, no-charge closure,
+creator immutability and invoice-confirmation guards. The real API/browser
+scripts test-maintenance-e2e.mjs and test-fleet-workflow-e2e.mjs use review-local.mjs
+with an isolated local _test database, including non-administrator Fleet release,
+Shop-only live board display, stage-table separation, details and mobile layouts.
