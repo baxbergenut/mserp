@@ -2174,6 +2174,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   assignment/roster Monday from hireDate; truck and dispatcher assignments share
   that week, and escrow starts on the actual selected date. Existing profile
   assignment edits keep the explicit Assignment starts week control.
+- Profile hire-date corrections atomically move the matching initial roster,
+  truck/dispatcher boundaries and uncollected setup escrow (actual date). Later
+  transfers, reactivation periods, independent escrow dates and truck ownership
+  stay explicit. Conflicting assignments, crossed work/team/payroll periods,
+  finalized statements and collected setup escrow require review before saving.
+  `driver_hire_start.go` records the correction in access_audit; database coverage
+  uses `TestDriverHireStartDatabase` with the assignment-history test database.
 - PATCH /drivers/{id}/status accepts status, updatedAt, assignmentWeek and, for
   termination, terminationDate/chargePauseWeek. It updates status only under the
   managed driver locks, rejects stale profiles, and retains the existing charge
