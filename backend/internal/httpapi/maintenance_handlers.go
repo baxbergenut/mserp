@@ -803,7 +803,7 @@ func (h maintenanceHandler) extract(w http.ResponseWriter, r *http.Request) {
 	for _, item := range result.Expenses {
 		unit := cleanExtractedValue(item.UnitNumber)
 		driver := cleanExtractedValue(item.DriverName)
-		truckID, driverID, err := h.expenses.ResolveExpenseLinks(r.Context(), stringPointer(unit), stringPointer(driver))
+		truckID, driverID, applicantID, err := h.expenses.ResolveExpenseDraftLinks(r.Context(), stringPointer(unit), stringPointer(driver))
 		if err != nil {
 			h.fail(w, err)
 			return
@@ -812,7 +812,7 @@ func (h maintenanceHandler) extract(w http.ResponseWriter, r *http.Request) {
 			grade := repository.NormalizeMaintenanceOilType(*item.Maintenance.OilType)
 			item.Maintenance.OilType = &grade
 		}
-		drafts = append(drafts, map[string]any{"categoryId": cat, "truckId": truckID, "driverId": driverID, "unitNumber": unit, "driverName": driver, "amount": validExtractedAmount(item.Amount), "expenseDate": validExtractedDate(item.ExpenseDate), "paymentType": cleanExtractedValue(item.PaymentType), "expenseType": cleanExtractedValue(item.ExpenseType), "referenceNumber": cleanExtractedValue(item.ReferenceNumber), "description": cleanExtractedValue(item.Description), "coveredBy": defaultExtractedValue(item.CoveredBy, "Company"), "paidBy": cleanExtractedValue(item.PaidBy), "maintenance": item.Maintenance, "costBreakdown": extractedCostBreakdown(item.CostBreakdown), "evidence": item.Evidence})
+		drafts = append(drafts, map[string]any{"categoryId": cat, "truckId": truckID, "driverId": driverID, "applicantId": applicantID, "unitNumber": unit, "driverName": driver, "amount": validExtractedAmount(item.Amount), "expenseDate": validExtractedDate(item.ExpenseDate), "paymentType": cleanExtractedValue(item.PaymentType), "expenseType": cleanExtractedValue(item.ExpenseType), "referenceNumber": cleanExtractedValue(item.ReferenceNumber), "description": cleanExtractedValue(item.Description), "coveredBy": defaultExtractedValue(item.CoveredBy, "Company"), "paidBy": cleanExtractedValue(item.PaidBy), "maintenance": item.Maintenance, "costBreakdown": extractedCostBreakdown(item.CostBreakdown), "evidence": item.Evidence})
 	}
 	writeJSON(w, 200, map[string]any{"drafts": drafts})
 }

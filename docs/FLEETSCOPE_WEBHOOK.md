@@ -9,8 +9,8 @@ Pending hires are outside the managed fleet and settlement calculations.
 
 The Drivers table and Tasks page check for arrivals every 15 seconds while the browser tab
 is visible. Server receipt is immediate; this refresh is only for the open UI.
-There is no fleet synchronization, historical backfill, profile-update
-propagation, or rehire workflow. Termination notifications use the saved source
+The hire notification does not backfill or update driver profiles and has no rehire workflow.
+Applicant identities use the separate versioned snapshot flow below. Termination notifications use the saved source
 identity as described below. Identical normalized driver names remain subject
 to MSERP's existing uniqueness constraint.
 
@@ -180,3 +180,40 @@ The database suite also verifies termination deduplication, both delivery orders
 cancelled setup, inactive assignment/import guards, task-failure rollback and
 charge-pause exceptions as mserp_app. The browser test exercises both inactive
 forms and a signed hire → explicit link → termination → task completion flow.
+
+## Applicant expense identities (migration 134)
+
+POST `/integrations/fleetscope/applicant` accepts signed `applicant.updated`
+snapshots using the existing company pin and webhook secret. The exact payload,
+FleetScope source paths, sender/backfill requirements, and rollout verification
+are in [the applicant sender prompt](FLEETSCOPE_APPLICANT_AGENT_PROMPT.md).
+
+Applicants are stored in `fleetscope_applicants`, outside operational drivers,
+boards, payroll and driver setup tasks. Expense options expose their local ID,
+name and recruiting status only. Users select a driver or applicant; typing searches
+and cannot create an unlinked name. Existing manual entries remain editable.
+AI matches the combined candidate set and leaves ambiguous names for explicit review.
+
+FleetScope applicant IDs differ from driver IDs. A hired applicant snapshot supplies
+both source IDs. Expense reads resolve the applicant through the confirmed
+`fleetscope_driver_identity` created by normal hire completion or explicit reviewed
+linking. This works in either delivery order, preserves the original expense row,
+amount, payment responsibility, receipts and verification, and creates no payroll
+charge. The new driver's Company & other expenses tab includes those costs.
+No existing manual-name expense is matched or merged automatically.
+
+Source snapshots are monotonic by persisted `occurredAt`; stale snapshots are
+acknowledged without rollback. Equal-timestamp conflicting snapshots, reused event
+IDs with different bytes and changed established hired links return 409. Name/status
+updates never mutate operational driver profiles. A source applicant cannot be
+mapped to two hired source drivers, nor may two applicants claim one hired driver.
+
+Deployment enables the receiver only when the existing webhook configuration is
+present. Applicant rows remain empty until FleetScope sends/backfills real snapshots.
+Do not infer completion of that separate sender rollout from receiver deployment.
+
+Validation: `TestFleetScopeDatabase` covers fresh/incremental schema and runtime-role
+identity/history behavior; `test-applicant-expenses-e2e.mjs` runs a signed receipt,
+expense UI save, distinct-ID hire/link and driver-history read in review-local.
+Use the review helper's opt-in `MSERP_REVIEW_FLEETSCOPE_COMPANY_ID` and
+`MSERP_REVIEW_FLEETSCOPE_SECRET` with synthetic credentials only.

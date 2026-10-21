@@ -70,7 +70,16 @@ func fleetScopeWebhook(logger *slog.Logger, store fleetScopeStore, options fleet
 		}
 		hash := sha256.Sum256(body)
 		var result repository.IntakeResult
-		if event.Type == "driver.terminated" {
+		if event.Type == "applicant.updated" {
+			applicants, ok := store.(interface {
+				AcceptFleetScopeApplicant(context.Context, fleetscope.Event, string) (repository.IntakeResult, error)
+			})
+			if !ok {
+				writeAPIError(w, 503, "applicant storage is unavailable")
+				return
+			}
+			result, err = applicants.AcceptFleetScopeApplicant(r.Context(), event, hex.EncodeToString(hash[:]))
+		} else if event.Type == "driver.terminated" {
 			result, err = store.AcceptFleetScopeTermination(r.Context(), event, hex.EncodeToString(hash[:]))
 		} else {
 			result, err = store.AcceptFleetScopeHire(r.Context(), event, hex.EncodeToString(hash[:]))

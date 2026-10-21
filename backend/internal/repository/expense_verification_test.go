@@ -86,7 +86,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				exec(before)
 				exec(`INSERT INTO expenses(company,category_id,category,expense_date,amount,expense_type,manager_verified) SELECT 'MS Express',id,name,'2026-10-12',25,'Legacy check',true FROM expense_settings WHERE kind='category' AND name='Other'`)
 				exec(string(migration))
-				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql", "../../sql/095_expense_cost_breakdown.sql", "../../sql/106_driver_only_penalties.sql"} {
+				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql", "../../sql/095_expense_cost_breakdown.sql", "../../sql/106_driver_only_penalties.sql", "../../sql/103_fleetscope_fleet_sync.sql", "../../sql/134_fleetscope_applicants.sql"} {
 					next, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

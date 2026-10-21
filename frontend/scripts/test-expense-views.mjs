@@ -77,7 +77,7 @@ try {
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canRead:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
-      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
+      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants:[{id:"applicant-001",fullName:"Hiring Applicant",status:"applied"}], settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
     await route.fulfill({ json: fixtures[path] ?? {} });
@@ -276,14 +276,14 @@ try {
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(beforePenalty+1);
   expect(writes.at(-1)).toMatchObject({categoryId:'penalties',coveredBy:'Driver',driverId:'hired',ownerId:null,paymentType:'',paidBy:'',baseAmount:'500.01'});
-  // One editable dropdown supports both manual names and explicit linked selections.
+  // Typing searches only; saving an applicant requires an explicit stored identity.
   await page.getByRole('button',{name:'Add entry',exact:true}).click();
   const driverField = page.getByRole('combobox',{name:'Driver',exact:true});
   await driverField.fill('Company Driver');
   await driverField.press('Tab');
   await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('');
   await driverField.fill('Hiring Applicant');
-  await driverField.press('Escape');
+  await page.getByRole('option',{name:/Hiring Applicant/}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByLabel('Unit number',{exact:true}).selectOption('investor-truck');
   await expect(driverField).toHaveValue('Hiring Applicant');
@@ -297,7 +297,7 @@ try {
   const beforeManual = writes.length;
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(beforeManual+1);
-  expect(writes.at(-1)).toMatchObject({driverId:null,driverName:'Hiring Applicant',truckId:null,unitNumber:'',coveredBy:'Company',paymentType:'Cash'});
+  expect(writes.at(-1)).toMatchObject({applicantId:'applicant-001',driverId:null,driverName:'Hiring Applicant',truckId:null,unitNumber:'',coveredBy:'Company',paymentType:'Cash'});
   entries.push({...blankDraft,...writes.at(-1),id:'applicant-expense',category:'Maintenance',updatedAt:'2026-10-21T12:00:00Z',verifications:[],paymentType:'Old card'});
   await page.reload();
   await page.getByRole('row',{name:'Open Towing',exact:true}).click();
@@ -312,6 +312,7 @@ try {
   await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('company-truck');
   await page.getByRole('button',{name:'Close',exact:true}).click();
   entries.pop();
+  if (process.argv.includes('--expenses-only')) { console.log('Expense form checks passed, including applicant selection and search-only typing.'); await browser.close(); server.close(); process.exit(0); }
   // Descriptions lead the directory; classifications and legacy fallbacks remain visible.
   entries[0].description = 'Replace damaged mirror and inspect mounting';
   entries[1].description = 'Saved invoice text';

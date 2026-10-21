@@ -105,6 +105,9 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 				exec(`INSERT INTO expenses(category_id,category,expense_type,payment_type,paid_by,expense_date,amount) SELECT id,name,'Old custom repair','Legacy card','Legacy payer','2026-09-28',10 FROM expense_settings WHERE kind='category' AND name IN ('Maintenance','Work orders')`)
 			}
 			exec(`GRANT SELECT ON trucks,drivers,truck_driver_assignments,app_users TO mserp_app`)
+			if mode == "migration" {
+				applyExpenseApplicantTestSchema(t, ctx, admin)
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)

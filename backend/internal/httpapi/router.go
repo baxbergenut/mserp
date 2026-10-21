@@ -72,6 +72,7 @@ func NewRouter(
 		fleetScopeOption = fleetScopeOptions[0]
 	}
 	r.Post("/integrations/fleetscope/driver-hired", fleetScopeWebhook(logger, fleetRepo, fleetScopeOption))
+	r.Post("/integrations/fleetscope/applicant", fleetScopeWebhook(logger, fleetRepo, fleetScopeOption, "applicant.updated"))
 	r.Post("/integrations/fleetscope/driver-terminated", fleetScopeWebhook(logger, fleetRepo, fleetScopeOption, "driver.terminated"))
 
 	protected := chi.NewRouter()

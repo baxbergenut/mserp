@@ -806,7 +806,10 @@ export type MaintenanceAIDetails = { oilType: string | null; hasInvoice: boolean
 export interface MaintenanceAIDraft extends AIExpenseDraft { maintenance: MaintenanceAIDetails | null; }
 export interface MaintenanceChange { actorName: string; happenedAt: string; before: MaintenanceRecord | null; after: MaintenanceRecord; }
 
+export interface ExpenseApplicant { id: string; fullName: string; status: "applied" | "hired" | "rejected" | "withdrawn"; }
+
 export interface Expense {
+  applicantId?: string | null;
   costBreakdown?: ExpenseCostItem[];
 	baseAmount?: string | null;
 	paymentFee?: string;
@@ -863,6 +866,7 @@ export interface DriverEscrowSetting {
 }
 
 export interface ExpenseInput {
+  applicantId?: string | null;
   costBreakdown?: ExpenseCostItem[];
 	updatedAt?: string;
  ownerId?: string | null;
@@ -885,6 +889,7 @@ export interface ExpenseInput {
 
 export interface ExpensePage extends PaginatedResponse<Expense> {
   options: {
+    applicants?: ExpenseApplicant[];
     workOrdersCategoryId?: string;
     settings: ExpenseSetting[];
     categories: { id: string; name: string }[];

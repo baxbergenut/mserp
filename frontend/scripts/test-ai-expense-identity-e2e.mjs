@@ -36,6 +36,11 @@ try {
     if (mode === 'expense') {
       await expect(page.getByRole('combobox', {name:'Driver',exact:true})).toHaveValue(name);
       await page.getByRole('button', {name:'Create entry',exact:true}).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByRole('combobox', {name:'Driver',exact:true})).toHaveJSProperty('validationMessage','Select a driver or applicant from the dropdown, or clear the driver field.');
+      await page.getByRole('combobox', {name:'Driver',exact:true}).fill(truck.driverName);
+      await page.getByRole('option', {name:truck.driverName,exact:true}).click();
+      await page.getByRole('button', {name:'Create entry',exact:true}).click();
     } else {
       await expect(page.getByLabel('Maintenance driver', {exact:true})).toHaveValue('');
       await expect(page.getByLabel('Maintenance driver', {exact:true}).locator('option:checked')).toHaveText(name + ' (unlinked)');
@@ -49,10 +54,10 @@ try {
     });
     await expect.poll(() => savedId).toBeTruthy();
     const saved = await api((mode === 'expense' ? '/expenses/' : '/maintenance/') + savedId);
-    expect(saved).toMatchObject({driverId:null,driverName:name,truckId:truck.id});
+    expect(saved).toMatchObject({driverId:mode === 'expense' ? truck.driverId : null,driverName:mode === 'expense' ? truck.driverName : name,truckId:truck.id});
     if (mode !== 'expense') expect(saved.expense).toMatchObject({driverId:null,driverName:name});
     await page.unroute('**/api/expenses/extract');
     await page.unroute('**/api/maintenance/extract');
   }
-  console.log('AI identity browser checks passed: expense, work order and category switch retain unmatched names with a linked truck.');
+  console.log('AI identity browser checks passed: unmatched expense names require selection; work orders and category switches preserve source identity.');
 } finally { await browser.close(); }

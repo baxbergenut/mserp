@@ -122,10 +122,16 @@ func withoutFleetScopeSyncMigration(t *testing.T, source string) string {
 	if !strings.Contains(source, normalized) {
 		t.Fatal("init must contain the exact FleetScope migration")
 	}
+	applicant, err := os.ReadFile("../../sql/134_fleetscope_applicants.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = strings.Replace(source, strings.ReplaceAll(string(applicant), "\r\n", "\n"), "", 1)
 	return strings.Replace(source, normalized, "", 1)
 }
 
 func applyFleetScopeSyncMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
+	defer applyExpenseApplicantTestSchema(t, ctx, conn)
 	t.Helper()
 	body, err := os.ReadFile("../../sql/103_fleetscope_fleet_sync.sql")
 	if err != nil {

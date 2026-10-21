@@ -10,6 +10,22 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestExpensePersonMustBeSelected(t *testing.T) {
+	name, id := "Manual candidate", "00000000-0000-4000-8000-000000000001"
+	input := repository.ExpenseInput{DriverName: &name}
+	if validateExpensePersonSelection(input, nil) == nil {
+		t.Fatal("new manual name accepted")
+	}
+	saved := repository.Expense{DriverName: &name}
+	if err := validateExpensePersonSelection(input, &saved); err != nil {
+		t.Fatal("existing manual name rejected", err)
+	}
+	input.ApplicantID = &id
+	if err := validateExpensePersonSelection(input, nil); err != nil {
+		t.Fatal("applicant selection rejected", err)
+	}
+}
+
 func TestDriverOnlyExpenseRequest(t *testing.T) {
 	driver := "00000000-0000-4000-8000-000000000098"
 	owner := "00000000-0000-4000-8000-000000000097"

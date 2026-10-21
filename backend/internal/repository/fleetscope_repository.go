@@ -20,6 +20,7 @@ var (
 )
 
 type IntakeResult struct {
+	ApplicantID   string `json:"applicantId,omitempty"`
 	Status        string `json:"status"`
 	IntakeID      string `json:"intakeId,omitempty"`
 	TerminationID string `json:"terminationId,omitempty"`

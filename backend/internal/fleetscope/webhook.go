@@ -51,19 +51,27 @@ type Driver struct {
 	LicenseExpires string `json:"licenseExpires,omitempty"`
 }
 
+type Applicant struct {
+	ID            string `json:"id"`
+	FullName      string `json:"fullName"`
+	Status        string `json:"status"`
+	HiredDriverID string `json:"hiredDriverId,omitempty"`
+}
+
 type Event struct {
-	Version         int       `json:"version"`
-	EventID         string    `json:"eventId"`
-	Type            string    `json:"type"`
-	CompanyID       string    `json:"companyId"`
-	OccurredAt      time.Time `json:"occurredAt"`
-	Driver          Driver    `json:"driver"`
-	TerminationDate string    `json:"terminationDate,omitempty"`
+	Applicant       *Applicant `json:"applicant,omitempty"`
+	Version         int        `json:"version"`
+	EventID         string     `json:"eventId"`
+	Type            string     `json:"type"`
+	CompanyID       string     `json:"companyId"`
+	OccurredAt      time.Time  `json:"occurredAt"`
+	Driver          Driver     `json:"driver"`
+	TerminationDate string     `json:"terminationDate,omitempty"`
 }
 
 func (e *Event) Validate() error {
-	if e.Version != 1 || (e.Type != "driver.hired" && e.Type != "driver.terminated") || !uuidPattern.MatchString(e.EventID) ||
-		!uuidPattern.MatchString(e.CompanyID) || !uuidPattern.MatchString(e.Driver.ID) || e.OccurredAt.IsZero() {
+	if e.Version != 1 || (e.Type != "driver.hired" && e.Type != "driver.terminated" && e.Type != "applicant.updated") || !uuidPattern.MatchString(e.EventID) ||
+		!uuidPattern.MatchString(e.CompanyID) || e.OccurredAt.IsZero() {
 		return errors.New("invalid event envelope")
 	}
 	e.CompanyID = strings.ToLower(e.CompanyID)
@@ -78,6 +86,37 @@ func (e *Event) Validate() error {
 		if len(*field) > max || strings.ContainsAny(*field, "\x00\r\n") {
 			return errors.New("invalid driver field")
 		}
+	}
+	if e.Type == "applicant.updated" {
+		a := e.Applicant
+		if a == nil || !uuidPattern.MatchString(a.ID) || e.Driver != (Driver{}) || e.TerminationDate != "" {
+			return errors.New("applicant.updated requires an applicant object only")
+		}
+		a.ID = strings.ToLower(a.ID)
+		a.HiredDriverID = strings.ToLower(a.HiredDriverID)
+		a.FullName = strings.TrimSpace(a.FullName)
+		if len(a.FullName) == 0 || len(a.FullName) > 200 || strings.ContainsAny(a.FullName, "\x00\r\n") {
+			return errors.New("invalid applicant fullName")
+		}
+		switch a.Status {
+		case "applied", "rejected", "withdrawn":
+			if a.HiredDriverID != "" {
+				return errors.New("hiredDriverId requires hired status")
+			}
+		case "hired":
+			if !uuidPattern.MatchString(a.HiredDriverID) {
+				return errors.New("hired status requires hiredDriverId")
+			}
+		default:
+			return errors.New("invalid applicant status")
+		}
+		if e.OccurredAt.After(time.Now().Add(5 * time.Minute)) {
+			return errors.New("occurredAt cannot be in the future")
+		}
+		return nil
+	}
+	if e.Applicant != nil || !uuidPattern.MatchString(e.Driver.ID) {
+		return errors.New("driver lifecycle requires a driver object only")
 	}
 	if e.Type == "driver.terminated" {
 		if e.Driver.FullName == "" {

@@ -21,6 +21,7 @@ export const emptyExpenseInput: ExpenseInput = {
   expenseDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   truckId: null,
   driverId: null,
+  applicantId: null,
   unitNumber: "",
   driverName: "",
   amount: "",
@@ -43,6 +44,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     expenseDate: expense.expenseDate ?? "",
     truckId: expense.truckId,
     driverId: expense.driverId,
+    applicantId: expense.applicantId ?? null,
     unitNumber: expense.unitNumber ?? "",
     driverName: expense.driverName ?? "",
     amount: expense.baseAmount ?? expense.amount ?? "",
@@ -144,7 +146,7 @@ export function ExpenseForm({
 
         </Field>
         <Field label="Driver">
-          <ExpenseDriverSelect value={value} drivers={drivers} trucks={trucks} owners={owners} onChange={change} required={driverOnly} className={controlClass} />
+          <ExpenseDriverSelect value={value} drivers={drivers} applicants={options.applicants} trucks={trucks} owners={owners} onChange={change} required={driverOnly} className={controlClass} />
 
         </Field>
         {driverOnly ? <p className="text-xs text-zinc-400 sm:col-span-2">Charged to the selected driver.</p> : <>

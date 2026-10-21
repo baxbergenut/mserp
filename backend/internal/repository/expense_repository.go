@@ -37,6 +37,7 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
+	ApplicantID          *string               `json:"applicantId"`
 	CostBreakdown        []ExpenseCostItem     `json:"costBreakdown"`
 	BaseAmount           *string               `json:"baseAmount"`
 	PaymentFee           string                `json:"paymentFee"`
@@ -76,6 +77,7 @@ type Expense struct {
 }
 
 type ExpenseInput struct {
+	ApplicantID        *string
 	CostBreakdown      *[]ExpenseCostItem
 	BaseAmount         *string
 	PaymentFee         string
@@ -130,6 +132,7 @@ type ExpenseFilterValues struct {
 }
 
 type ExpenseFilterOptions struct {
+	Applicants           []ExpenseApplicant      `json:"applicants"`
 	WorkOrdersCategoryID string                  `json:"workOrdersCategoryId"`
 	Filters              ExpenseFilterValues     `json:"filters"`
 	Settings             []ExpenseSetting        `json:"settings"`
@@ -168,7 +171,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 	AND ($5::date IS NULL OR e.expense_date >= $5)
 	AND ($6::date IS NULL OR e.expense_date <= $6)
 	AND ($7::uuid IS NULL OR e.truck_id = $7)
-	AND ($8::uuid IS NULL OR e.driver_id = $8)
+	AND ($8::uuid IS NULL OR COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id)) = $8)
  AND ($9::uuid IS NULL OR e.charge_driver_id=$9)
  AND ($10='' OR ($10='non_personal' AND e.charge_driver_id IS DISTINCT FROM $8::uuid))
  AND ($11::boolean IS NULL OR e.accounting_verified=$11)
@@ -190,7 +193,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 			count(*) FILTER (WHERE expense_date IS NULL OR amount IS NULL)
 		FROM expenses e
 		LEFT JOIN trucks t ON t.id = e.truck_id
-		LEFT JOIN drivers d ON d.id = e.driver_id `+where, args...).Scan(
+		LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id)) `+where, args...).Scan(
 		&total, &summary.Amount, &summary.IncompleteCount,
 	); err != nil {
 		return ExpensePage{}, err
@@ -222,13 +225,17 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 	}
 
 	options := ExpenseFilterOptions{Categories: []ExpenseFilterCategory{}}
+	options.Applicants, err = r.ListExpenseApplicants(ctx)
+	if err != nil {
+		return ExpensePage{}, err
+	}
 	if err := r.pool.QueryRow(ctx, `SELECT
  COALESCE(array_agg(DISTINCT COALESCE(d.full_name,e.driver_name) ORDER BY COALESCE(d.full_name,e.driver_name)) FILTER(WHERE COALESCE(d.full_name,e.driver_name,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT COALESCE(t.unit_number,e.unit_number) ORDER BY COALESCE(t.unit_number,e.unit_number)) FILTER(WHERE COALESCE(t.unit_number,e.unit_number,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.payment_type ORDER BY e.payment_type) FILTER(WHERE coalesce(e.payment_type,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.paid_by ORDER BY e.paid_by) FILTER(WHERE coalesce(e.paid_by,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.covered_by ORDER BY e.covered_by) FILTER(WHERE coalesce(e.covered_by,'')<>''),'{}')
- FROM expenses e LEFT JOIN trucks t ON t.id=e.truck_id LEFT JOIN drivers d ON d.id=e.driver_id
+ FROM expenses e LEFT JOIN trucks t ON t.id=e.truck_id LEFT JOIN drivers d ON d.id=COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))
  WHERE e.category_id=ANY($1::uuid[])`, query.VisibleCategoryIDs).Scan(
 		&options.Filters.Drivers, &options.Filters.Trucks, &options.Filters.PaymentTypes, &options.Filters.PaidBy, &options.Filters.CoveredBy,
 	); err != nil {
@@ -361,11 +368,16 @@ func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []Expense
 	return values, nil
 }
 
-func (r *ExpenseRepository) ResolveExpenseLinks(
+func (r *ExpenseRepository) ResolveExpenseLinks(ctx context.Context, unitNumber, driverName *string) (*string, *string, error) {
+	truck, driver, _, err := r.ResolveExpenseDraftLinks(ctx, unitNumber, driverName)
+	return truck, driver, err
+}
+
+func (r *ExpenseRepository) ResolveExpenseDraftLinks(
 	ctx context.Context,
 	unitNumber, driverName *string,
-) (*string, *string, error) {
-	var truckID, driverID *string
+) (*string, *string, *string, error) {
+	var truckID, driverID, applicantID *string
 	driverNameProvided := driverName != nil && normalizeName(*driverName) != ""
 	if unitNumber != nil && normalizeTruckUnit(*unitNumber) != "" {
 		var id string
@@ -376,45 +388,52 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 		if err == nil {
 			truckID = &id
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if driverNameProvided {
-		rows, err := r.pool.Query(ctx, `SELECT id, full_name FROM drivers WHERE active = true`)
+		rows, err := r.pool.Query(ctx, `SELECT id, full_name, false FROM drivers WHERE active = true
+ UNION ALL SELECT id, full_name, true FROM fleetscope_applicants WHERE expense_applicant_driver(id) IS NULL`)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		type candidate struct {
-			id      string
-			quality int
+			id        string
+			quality   int
+			applicant bool
 		}
 		best := candidate{}
 		second := 0
 		for rows.Next() {
 			var id, name string
-			if err := rows.Scan(&id, &name); err != nil {
+			var applicant bool
+			if err := rows.Scan(&id, &name, &applicant); err != nil {
 				rows.Close()
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			quality := relayDriverNameMatchQuality(*driverName, name)
 			if quality > best.quality {
 				second = best.quality
-				best = candidate{id: id, quality: quality}
+				best = candidate{id: id, quality: quality, applicant: applicant}
 			} else if quality > second {
 				second = quality
 			}
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		rows.Close()
 		if best.quality >= 90 && best.quality > second {
-			driverID = &best.id
+			if best.applicant {
+				applicantID = &best.id
+			} else {
+				driverID = &best.id
+			}
 		}
 	}
 
-	// An explicit unmatched or ambiguous name stays manual, even on a linked truck.
+	// An explicit unmatched or ambiguous name requires review, even on a linked truck.
 	if truckID != nil && driverID == nil && !driverNameProvided {
 		var id string
 		err := r.pool.QueryRow(ctx, `
@@ -423,7 +442,7 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 		if err == nil {
 			driverID = &id
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if driverID != nil && truckID == nil {
@@ -434,10 +453,10 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 		if err == nil {
 			truckID = &id
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return truckID, driverID, nil
+	return truckID, driverID, applicantID, nil
 }
 
 type expenseQueryer interface {
@@ -454,18 +473,18 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 		INSERT INTO expenses (
 			category_id, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, manager_verified, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown
+			paid_by, manager_verified, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown, applicant_id
 		) VALUES (
 			$1, (SELECT name FROM expense_settings WHERE id=$1 AND kind='category' AND active), $2, $3, $4,
 			CASE WHEN $3::uuid IS NULL THEN $5 ELSE (SELECT unit_number FROM trucks WHERE id = $3) END,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT full_name FROM drivers WHERE id = $4) END,
-			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17,'')::uuid, NULLIF($18,''), $19::numeric, coalesce(nullif($20,''),'0')::numeric, coalesce($21::jsonb,'[]'::jsonb)
+			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17,'')::uuid, NULLIF($18,''), $19::numeric, coalesce(nullif($20,''),'0')::numeric, coalesce($21::jsonb,'[]'::jsonb), $22
 		) RETURNING id`,
 		input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.ManagerVerified, input.AccountingVerified, input.OwnerID, input.CreatedBy, input.CreatedByName,
-		input.BaseAmount, input.PaymentFee, breakdown,
+		input.BaseAmount, input.PaymentFee, breakdown, input.ApplicantID,
 	).Scan(&id)
 	return id, err
 }
@@ -491,12 +510,12 @@ func updateExpenseRow(ctx context.Context, exec interface {
 			driver_name = CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
 			amount = $8::numeric, payment_type = $9,
 			expense_type = $10, reference_number = $11, description = $12,
-			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown)
+			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown), applicant_id=$20
 		WHERE id = $1 AND ($18::timestamptz IS NULL OR updated_at=$18)`,
 		id, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown,
+		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown, input.ApplicantID,
 	)
 	if err != nil {
 		return err
@@ -522,7 +541,7 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string) error 
 }
 
 const selectExpensesSQL = `
-SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_name,
+SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id)), e.category, e.category_id, e.created_by_name,
 	to_char(date_trunc('week', e.expense_date)::date, 'YYYY-MM-DD'),
 	to_char(e.expense_date, 'YYYY-MM-DD'), COALESCE(t.unit_number, e.unit_number),
 	COALESCE(d.full_name, e.driver_name), e.amount::text, e.payment_type,
@@ -536,10 +555,10 @@ SELECT e.id, e.truck_id, e.driver_id, e.category, e.category_id, e.created_by_na
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text, e.cost_breakdown
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
-LEFT JOIN drivers d ON d.id = e.driver_id`
+LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
 
 func scanExpense(row rowScanner) (Expense, error) {
 	var value Expense
@@ -551,7 +570,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID,
 	)
 	return value, err
 }

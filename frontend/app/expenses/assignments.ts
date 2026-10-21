@@ -20,5 +20,5 @@ export function expenseAssignment(value: ExpenseInput, kind: "driver" | "truck",
   }
   const driver = kind === "driver" ? drivers.find(d => d.id === id) : drivers.find(d => d.id === trucks.find(t => t.id === id)?.driverId);
   const truck = kind === "truck" ? trucks.find(t => t.id === id) : trucks.find(t => t.id === driver?.truckId);
-  return defaultExpenseResponsibility({ ...value, driverId: driver?.id ?? null, driverName: driver?.fullName ?? "", truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);
+  return defaultExpenseResponsibility({ ...value, applicantId: null, driverId: driver?.id ?? null, driverName: driver?.fullName ?? "", truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);
 }

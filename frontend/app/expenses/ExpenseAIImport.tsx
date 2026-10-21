@@ -40,6 +40,7 @@ function toInput(draft: AIExpenseDraft): ExpenseInput {
     expenseDate: draft.expenseDate,
     truckId: draft.truckId,
     driverId: draft.driverId,
+    applicantId: draft.applicantId ?? null,
     unitNumber: draft.unitNumber,
     driverName: draft.driverName,
     amount: draft.amount,

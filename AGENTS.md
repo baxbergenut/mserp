@@ -90,9 +90,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
-  Expense Driver is an editable dropdown: selecting an existing driver retains
-  assignment defaults; typed names stay unlinked and never create drivers or
-  payroll debtors. AI extraction receives active category/type settings, matches
+  Expense Driver is a searchable selection dropdown for hired drivers and synced
+  FleetScope applicants. Typing only filters; new unlinked names cannot be saved.
+  Legacy manual-name expenses retain their historical text. Migration 134 stores
+  applicants separately from the fleet and uses explicit FleetScope applicant-to-hired
+  driver UUIDs plus reviewed local identity links to show prehire expense history.
+  No payroll responsibility is inferred. See docs/FLEETSCOPE_APPLICANT_AGENT_PROMPT.md.
+  AI extraction receives active category/type settings, matches
   expense types by meaning before allowing a custom type, and never substitutes
   a truck's current driver for an explicit unmatched/ambiguous name. Work-order
   drafts and saves preserve the same unlinked source name. Payment methods use

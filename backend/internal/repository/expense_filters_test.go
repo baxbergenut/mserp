@@ -62,6 +62,13 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 					}
 					exec(string(migration))
 				}
+				for _, path := range []string{"103_fleetscope_fleet_sync.sql", "134_fleetscope_applicants.sql"} {
+					data, err := os.ReadFile("../../sql/" + path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					exec(string(data))
+				}
 				var count int
 				if err := admin.QueryRow(ctx, `SELECT count(*) FROM expenses WHERE expense_type='Before migration' AND amount=7`).Scan(&count); err != nil || count != 1 {
 					t.Fatal("migration lost expense", err)

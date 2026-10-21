@@ -22,6 +22,43 @@ type fakeFleetScopeStore struct {
 	err    error
 }
 
+func (s *fakeFleetScopeStore) AcceptFleetScopeApplicant(_ context.Context, _ fleetscope.Event, _ string) (repository.IntakeResult, error) {
+	s.called = true
+	return repository.IntakeResult{Status: "accepted", ApplicantID: "00000000-0000-0000-0000-000000000004"}, s.err
+}
+
+func TestFleetScopeApplicantBoundary(t *testing.T) {
+	options := fleetscope.Options{CompanyID: "00000000-0000-0000-0000-000000000001", Secret: strings.Repeat("s", 32)}
+	body := `{"version":1,"eventId":"00000000-0000-0000-0000-000000000002","companyId":"00000000-0000-0000-0000-000000000001","type":"applicant.updated","occurredAt":"2026-09-28T12:00:00Z","applicant":{"id":"00000000-0000-0000-0000-000000000003","fullName":"Test Applicant","status":"applied"}}`
+	for _, tc := range []struct {
+		name, body string
+		unsigned   bool
+		status     int
+	}{
+		{"valid", body, false, 200},
+		{"unsigned", body, true, 401},
+		{"wrong company", strings.Replace(body, options.CompanyID, "00000000-0000-0000-0000-000000000099", 1), false, 403},
+		{"invalid status", strings.Replace(body, `"status":"applied"`, `"status":"active"`, 1), false, 400},
+		{"extra private data", strings.Replace(body, `"fullName":"Test Applicant"`, `"fullName":"Test Applicant","email":"person@example.test"`, 1), false, 400},
+		{"hire on applicant endpoint", strings.Replace(body, `"applicant.updated"`, `"driver.hired"`, 1), false, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeFleetScopeStore{}
+			req := httptest.NewRequest("POST", "/integrations/fleetscope/applicant", strings.NewReader(tc.body))
+			stamp := strconv.FormatInt(time.Now().Unix(), 10)
+			if !tc.unsigned {
+				req.Header.Set("X-FleetScope-Timestamp", stamp)
+				req.Header.Set("X-FleetScope-Signature", fleetscope.Sign(options.Secret, stamp, []byte(tc.body)))
+			}
+			w := httptest.NewRecorder()
+			fleetScopeWebhook(slog.New(slog.NewTextHandler(io.Discard, nil)), store, options, "applicant.updated")(w, req)
+			if w.Code != tc.status || store.called != (tc.status == 200) {
+				t.Fatalf("status=%d called=%v body=%s", w.Code, store.called, w.Body.String())
+			}
+		})
+	}
+}
+
 func (s *fakeFleetScopeStore) AcceptFleetScopeTermination(_ context.Context, _ fleetscope.Event, _ string) (repository.IntakeResult, error) {
 	s.called = true
 	return repository.IntakeResult{Status: "accepted", TerminationID: "00000000-0000-0000-0000-000000000004"}, s.err

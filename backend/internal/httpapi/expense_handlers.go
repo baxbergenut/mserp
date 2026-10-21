@@ -53,6 +53,7 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
+	ApplicantID   *string                       `json:"applicantId"`
 	CostBreakdown *[]repository.ExpenseCostItem `json:"costBreakdown"`
 	BaseAmount    *string                       `json:"baseAmount"`
 	UpdatedAt     *time.Time                    `json:"updatedAt"`
@@ -103,6 +104,7 @@ func (handler expenseHandler) normalizeExpenseRequest(ctx context.Context, reque
 }
 
 type extractedExpense struct {
+	ApplicantID     *string                      `json:"applicantId"`
 	Maintenance     *openai.MaintenanceDetails   `json:"maintenance,omitempty"`
 	CostBreakdown   []repository.ExpenseCostItem `json:"costBreakdown"`
 	Category        string                       `json:"category"`
@@ -171,6 +173,9 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 	if err := validateOptionalUUID(request.TruckID, "truck id"); err != nil {
 		return repository.ExpenseInput{}, err
 	}
+	if err := validateOptionalUUID(request.ApplicantID, "applicant id"); err != nil {
+		return repository.ExpenseInput{}, err
+	}
 	if err := validateOptionalUUID(request.DriverID, "driver id"); err != nil {
 		return repository.ExpenseInput{}, err
 	}
@@ -209,7 +214,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		BaseAmount:    request.BaseAmount, PaymentFee: fee, UpdatedAt: request.UpdatedAt,
 		OwnerID:    request.OwnerID,
 		CategoryID: request.CategoryID, ExpenseDate: *expenseDate,
-		TruckID: request.TruckID, DriverID: request.DriverID,
+		TruckID: request.TruckID, DriverID: request.DriverID, ApplicantID: request.ApplicantID,
 		UnitNumber: optionalString(request.UnitNumber), DriverName: optionalString(request.DriverName),
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
 		ExpenseType: optionalString(request.ExpenseType), ReferenceNumber: optionalString(request.ReferenceNumber),
@@ -370,6 +375,10 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to add entries in that category")
 		return
 	}
+	if err := validateExpensePersonSelection(input, nil); err != nil {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
 	input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
 	if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, nil); err != nil {
 		handler.writeError(w, err)
@@ -407,6 +416,10 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 		}
 		if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {
 			writeAPIError(w, http.StatusForbidden, "expense "+strconv.Itoa(index+1)+": you do not have permission to add entries in that category")
+			return
+		}
+		if err := validateExpensePersonSelection(input, nil); err != nil {
+			writeAPIError(w, 400, err.Error())
 			return
 		}
 		input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
@@ -547,7 +560,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 	for _, item := range extraction.Expenses {
 		unitNumber := cleanExtractedValue(item.UnitNumber)
 		driverName := cleanExtractedValue(item.DriverName)
-		truckID, driverID, err := handler.repo.ResolveExpenseLinks(r.Context(), stringPointer(unitNumber), stringPointer(driverName))
+		truckID, driverID, applicantID, err := handler.repo.ResolveExpenseDraftLinks(r.Context(), stringPointer(unitNumber), stringPointer(driverName))
 		if err != nil {
 			handler.writeError(w, err)
 			return
@@ -574,7 +587,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		values = append(values, extractedExpense{Maintenance: item.Maintenance,
 			CostBreakdown: extractedCostBreakdown(item.CostBreakdown),
 			Category:      category, CategoryID: categoryNames[strings.ToLower(category)],
-			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID,
+			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID, ApplicantID: applicantID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
 			ReferenceNumber: cleanExtractedValue(item.ReferenceNumber), Description: cleanExtractedValue(item.Description),
@@ -685,6 +698,10 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 	}
 	if input.CategoryID != existing.CategoryID && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to move the entry to that category")
+		return
+	}
+	if err := validateExpensePersonSelection(input, &existing); err != nil {
+		writeAPIError(w, 400, err.Error())
 		return
 	}
 	if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, existing.PaymentType); err != nil {
@@ -839,4 +856,14 @@ func expenseSubmissionDate() time.Time {
 		return time.Now().UTC()
 	}
 	return time.Now().In(zone)
+}
+
+func validateExpensePersonSelection(input repository.ExpenseInput, saved *repository.Expense) error {
+	if input.DriverID != nil || input.ApplicantID != nil || input.DriverName == nil || strings.TrimSpace(*input.DriverName) == "" {
+		return nil
+	}
+	if saved != nil && saved.DriverID == nil && saved.ApplicantID == nil && saved.DriverName != nil && *saved.DriverName == *input.DriverName {
+		return nil
+	}
+	return errors.New("select a driver or applicant from the dropdown, or clear the driver field")
 }
