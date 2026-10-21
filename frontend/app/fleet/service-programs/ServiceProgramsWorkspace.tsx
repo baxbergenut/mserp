@@ -85,7 +85,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
         <TablePagination page={page} pageSize={size} totalItems={rows.length} totalPages={Math.max(1, Math.ceil(rows.length / size))} onPageChange={setPage} onPageSizeChange={v => { setSize(v); setPage(1); }} />
       </>}
     </>}
-    {editing && <ProgramEditor initial={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+    {editing && options && <ProgramEditor initial={editing} options={options} onClose={() => setEditing(null)} onSaved={refresh} />}
     {adding && program && options && <AddProgramTrucks program={program} members={members} options={options} truckId={truckId} onClose={() => setAdding(false)} onSaved={refresh} />}
     {truckSettings && <ProgramTruckEditor truck={truckSettings} onClose={() => setTruckSettings(null)} onSaved={refresh} />}
     {service && serviceProgram && options && <ProgramServiceEditor truck={service.truck} program={serviceProgram} options={options} baseline={service.baseline} onClose={() => setService(null)} onSaved={refresh} />}

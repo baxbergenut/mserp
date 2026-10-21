@@ -2384,3 +2384,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   ?program= opens the full directory. Embedded truck profiles show all programs.
   Live oil-sheet reconciliation uses exact identity and audited versioned APIs,
   preserves invoice history, and never treats undated Current ODO as a reading.
+- Program settings edits the same type links with a multi-select dropdown.
+  serviceTypeCodes and serviceTypeVersions expose linked types and fence changes
+  against both program and affected type revisions. Omitted codes preserve links;
+  [] unlinks all. Program/type changes commit atomically with per-type audit;
+  types linked elsewhere cannot be implicitly reassigned. No new schema is needed.

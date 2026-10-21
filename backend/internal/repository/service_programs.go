@@ -58,23 +58,25 @@ func (r *MaintenanceRepository) ProgramEnrollments(ctx context.Context) ([]Progr
 }
 
 type ServiceProgram struct {
-	ID                  string   `json:"id"`
-	Name                string   `json:"name"`
-	Instructions        string   `json:"instructions"`
-	LegacyPM            bool     `json:"legacyPM"`
-	IntervalMiles       *int     `json:"intervalMiles"`
-	IntervalDays        *int     `json:"intervalDays"`
-	IntervalMonths      *int     `json:"intervalMonths"`
-	WarningMiles        int      `json:"warningMiles"`
-	WarningDays         int      `json:"warningDays"`
-	Active              bool     `json:"active"`
-	UseDefaultAssignees bool     `json:"useDefaultAssignees"`
-	AssigneeIDs         []string `json:"assigneeIds"`
-	AssigneeRoleIDs     []string `json:"assigneeRoleIds"`
-	Version             int      `json:"version"`
-	TruckCount          int      `json:"truckCount"`
-	UpcomingCount       int      `json:"upcomingCount"`
-	OverdueCount        int      `json:"overdueCount"`
+	ServiceTypeCodes    []string       `json:"serviceTypeCodes"`
+	ServiceTypeVersions map[string]int `json:"serviceTypeVersions"`
+	ID                  string         `json:"id"`
+	Name                string         `json:"name"`
+	Instructions        string         `json:"instructions"`
+	LegacyPM            bool           `json:"legacyPM"`
+	IntervalMiles       *int           `json:"intervalMiles"`
+	IntervalDays        *int           `json:"intervalDays"`
+	IntervalMonths      *int           `json:"intervalMonths"`
+	WarningMiles        int            `json:"warningMiles"`
+	WarningDays         int            `json:"warningDays"`
+	Active              bool           `json:"active"`
+	UseDefaultAssignees bool           `json:"useDefaultAssignees"`
+	AssigneeIDs         []string       `json:"assigneeIds"`
+	AssigneeRoleIDs     []string       `json:"assigneeRoleIds"`
+	Version             int            `json:"version"`
+	TruckCount          int            `json:"truckCount"`
+	UpcomingCount       int            `json:"upcomingCount"`
+	OverdueCount        int            `json:"overdueCount"`
 }
 
 type ProgramTruck struct {
@@ -122,7 +124,9 @@ func servicePrograms(ctx context.Context, q chargeQuery) ([]ServiceProgram, erro
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.warning_miles ELSE p.warning_miles END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.warning_days ELSE p.warning_days END,
  p.active AND coalesce(s.enabled,true),p.use_default_assignees,p.assignee_ids::text[],p.assignee_role_ids::text[],p.version,
- (SELECT count(*) FROM service_program_trucks m WHERE m.program_id=p.id AND m.active)
+ (SELECT count(*) FROM service_program_trucks m WHERE m.program_id=p.id AND m.active),
+ ARRAY(SELECT code FROM maintenance_types WHERE program_id=p.id ORDER BY code),
+ coalesce((SELECT jsonb_object_agg(code,version) FROM maintenance_types WHERE program_id=p.id),'{}'::jsonb)
  FROM service_programs p LEFT JOIN maintenance_schedules s ON p.legacy_pm AND s.truck_id IS NULL AND s.service_code='pm' ORDER BY p.legacy_pm DESC,lower(p.name),p.id`)
 	if err != nil {
 		return nil, err
@@ -131,7 +135,7 @@ func servicePrograms(ctx context.Context, q chargeQuery) ([]ServiceProgram, erro
 	result := []ServiceProgram{}
 	for rows.Next() {
 		var p ServiceProgram
-		if err = rows.Scan(&p.ID, &p.Name, &p.Instructions, &p.LegacyPM, &p.IntervalMiles, &p.IntervalDays, &p.IntervalMonths, &p.WarningMiles, &p.WarningDays, &p.Active, &p.UseDefaultAssignees, &p.AssigneeIDs, &p.AssigneeRoleIDs, &p.Version, &p.TruckCount); err != nil {
+		if err = rows.Scan(&p.ID, &p.Name, &p.Instructions, &p.LegacyPM, &p.IntervalMiles, &p.IntervalDays, &p.IntervalMonths, &p.WarningMiles, &p.WarningDays, &p.Active, &p.UseDefaultAssignees, &p.AssigneeIDs, &p.AssigneeRoleIDs, &p.Version, &p.TruckCount, &p.ServiceTypeCodes, &p.ServiceTypeVersions); err != nil {
 			return nil, err
 		}
 		result = append(result, p)
@@ -158,7 +162,7 @@ func (r *MaintenanceRepository) SaveProgram(ctx context.Context, p ServiceProgra
 	defer tx.Rollback(ctx)
 	var before []byte
 	if p.ID != "" {
-		if err = tx.QueryRow(ctx, `SELECT legacy_pm,to_jsonb(p) FROM service_programs p WHERE id=$1 AND version=$2 FOR UPDATE`, p.ID, p.Version).Scan(&p.LegacyPM, &before); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT legacy_pm,to_jsonb(p) FROM service_programs p WHERE id=$1 AND version=$2 FOR NO KEY UPDATE`, p.ID, p.Version).Scan(&p.LegacyPM, &before); err != nil {
 			if err == pgx.ErrNoRows {
 				return p, ErrMaintenanceConflict
 			}
@@ -181,6 +185,9 @@ func (r *MaintenanceRepository) SaveProgram(ctx context.Context, p ServiceProgra
 		p.Version++
 	}
 	if err != nil {
+		return p, err
+	}
+	if err = saveProgramServiceTypes(ctx, tx, &p, actor); err != nil {
 		return p, err
 	}
 	if p.LegacyPM {

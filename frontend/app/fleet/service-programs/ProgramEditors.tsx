@@ -5,6 +5,7 @@ import { fetchProgramAssignees, saveMaintenance, saveProgramBaseline, saveProgra
 import type { MaintenanceOptions, ProgramTruck, ProgramTruckInput, ServiceProgram } from "@/app/lib/types";
 import { controlClass, ErrorBanner, Field, FormSection, ManagementSearch, Modal } from "@/app/components/management/ManagementUI";
 import { today } from "@/app/maintenance/maintenance";
+import { ProgramServiceTypes } from "./ProgramServiceTypes";
 
 const integer = (value: string) => value === "" ? null : Number(value);
 type Intervals = Pick<ServiceProgram, "intervalMiles" | "intervalDays" | "intervalMonths">;
@@ -15,17 +16,20 @@ export function IntervalFields({ value, onChange }: { value: Intervals; onChange
   </>;
 }
 
-export function ProgramEditor({ initial, onClose, onSaved }: { initial: ServiceProgram; onClose: () => void; onSaved: () => Promise<void> }) {
+export function ProgramEditor({ initial, options, onClose, onSaved }: { initial: ServiceProgram; options: MaintenanceOptions; onClose: () => void; onSaved: () => Promise<void> }) {
   const [value, setValue] = useState(initial), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [choices, setChoices] = useState<{ people: { id: string; name: string }[]; roles: { id: string; name: string }[] } | null>(null);
   useEffect(() => { let active = true; fetchProgramAssignees().then(v => { if (active) setChoices(v); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, []);
   return <Modal title={value.id ? "Edit service program" : "Add service program"} isSaving={busy} submitLabel="Save program" onClose={onClose} onSubmit={e => {
     e.preventDefault(); if (busy) return; setBusy(true); setError("");
-    void saveServiceProgram(value).then(onSaved).then(onClose).catch(e => setError(e.message)).finally(() => setBusy(false));
+    const serviceTypeCodes=value.serviceTypeCodes??[];
+    const serviceTypeVersions={...Object.fromEntries(options.types.filter(t=>serviceTypeCodes.includes(t.code)).map(t=>[t.code,t.version])),...initial.serviceTypeVersions};
+    void saveServiceProgram({...value,serviceTypeCodes,serviceTypeVersions}).then(onSaved).then(onClose).catch(e => setError(e.message)).finally(() => setBusy(false));
   }}>
     {error && <ErrorBanner message={error} />}
     <FormSection title="Program">
       <Field label="Name" wide><input aria-label="Program name" autoFocus required maxLength={100} className={controlClass} value={value.name} onChange={e => setValue({ ...value, name: e.target.value })} /></Field>
+      <div className="space-y-1.5 sm:col-span-2"><span className="text-[12px] font-medium text-zinc-400">Service types that reset this program</span><ProgramServiceTypes program={value} options={options} onChange={serviceTypeCodes=>setValue({...value,serviceTypeCodes})} /></div>
       <IntervalFields value={value} onChange={v => setValue({ ...value, ...v })} />
       <Field label="Remind before (miles)"><input aria-label="Program warning miles" className={controlClass} required type="number" min="0" max="2000000000" step="1" value={value.warningMiles} onChange={e => setValue({ ...value, warningMiles: Number(e.target.value) })} /></Field>
       <Field label="Remind before (days)"><input aria-label="Program warning days" className={controlClass} required type="number" min="0" max="36500" step="1" value={value.warningDays} onChange={e => setValue({ ...value, warningDays: Number(e.target.value) })} /></Field>

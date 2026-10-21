@@ -1386,6 +1386,7 @@ export type InvestorOption = Pick<Investor, "id" | "fullName" | "active" | "driv
 export type UpdaterOption = Pick<Updater, "id" | "fullName" | "shift" | "extension">;
 
 export interface ServiceProgram {
+ serviceTypeCodes?:string[]; serviceTypeVersions?:Record<string,number>;
  id:string; name:string; instructions:string; legacyPM:boolean;
  intervalMiles:number|null; intervalDays:number|null; intervalMonths:number|null;
  warningMiles:number; warningDays:number; active:boolean; useDefaultAssignees:boolean;

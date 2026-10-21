@@ -420,3 +420,14 @@ baselines for operational corrections without rewriting invoices. Undated sheet
 Current ODO values are not dated odometer readings. The source snapshot hash,
 changes, missing identities and read-back results are recorded in access_audit
 under oil_sheet_reconciliation; private operational snapshots are not committed.
+
+Program settings also exposes a multi-select dropdown of service types that reset
+the program. This edits the same maintenance_types.program_id links used by the
+type editor; a type can reset one program, while a program can have multiple
+resetting types. Types linked elsewhere show their program and cannot be taken
+implicitly. Program settings and affected type links save in one audited
+transaction, using program and type versions to reject concurrent edits. API
+serviceTypeCodes omitted/null preserves links; [] unlinks all. Reads include
+serviceTypeCodes and serviceTypeVersions for assigned types. Writes include the
+original assigned type versions plus versions of newly selected types. Existing
+work-order completion snapshots and program enrollment remain unchanged.

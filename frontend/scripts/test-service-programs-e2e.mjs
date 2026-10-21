@@ -48,7 +48,7 @@ try {
   await expect(row).toContainText('Needs information');
   await expect(page.getByRole('columnheader')).toHaveText(['Truck', 'Last service', 'Service odometer', 'Current odometer', 'Miles since service', /^Status/, 'Actions']);
   await expect(page.getByRole('columnheader', { name: /Miles remaining|Next due odometer/ })).toHaveCount(0);
-  const p = (await api('get', '/maintenance/programs')).find(p => p.name === name);
+  let p = (await api('get', '/maintenance/programs')).find(p => p.name === name);
   let members = await api('get', `/maintenance/programs/${p.id}/trucks`);
   expect(members).toHaveLength(2); expect(members.every(t => t.lastDate === null)).toBe(true);
   await row.getByRole('button', { name: 'Record service', exact: true }).click();
@@ -93,17 +93,45 @@ try {
   const oilTruck=(await api('get', `/maintenance/programs/${oil}/trucks`)).find(t=>t.truckId===truck);
   const charged=await api('get','/maintenance/'+oilTruck.lastRecordId);
   expect(charged.programIds).toEqual([oil]);expect(charged.expenseId).toBeTruthy();
-  // Configure a different service type through Settings, then let its normal
-  // work order complete the clutch program automatically.
+  // Create a service type, then link it from the program's dropdown.
   await page.getByRole('tab',{name:'Settings',exact:true}).click();
   await page.getByRole('button',{name:'Add service type',exact:true}).click();
   await page.getByLabel('Service type name',{exact:true}).fill('Clutch inspection '+suffix);
-  await page.getByLabel('Service type program',{exact:true}).selectOption(p.id);
   await page.getByRole('button',{name:'Save type',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  const linked=(await api('get','/maintenance/options')).types.find(t=>t.name==='Clutch inspection '+suffix);
+  let linked=(await api('get','/maintenance/options')).types.find(t=>t.name==='Clutch inspection '+suffix);
+  expect(linked.programId).toBeNull();
+  const extra=await api('put','/maintenance/types/reset_extra_'+suffix,{code:'reset_extra_'+suffix,name:'Combined service '+suffix,active:true,version:0});
+  await page.goto(access.base+'/fleet/service-programs?program='+p.id);
+  await page.getByRole('button',{name:'Edit program',exact:true}).click();
+  await page.getByRole('button',{name:'Resetting service types',exact:true}).click();
+  await expect(page.getByRole('checkbox',{name:'Reset with Oil change',exact:true})).toBeDisabled();
+  await page.getByRole('checkbox',{name:'Reset with '+linked.name,exact:true}).check();
+  await page.getByRole('checkbox',{name:'Reset with '+extra.name,exact:true}).check();
+  await page.screenshot({path:join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE),'program-reset-types-desktop.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Resetting service types',exact:true}).click();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE),'program-reset-types-mobile.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Save program',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  linked=(await api('get','/maintenance/options')).types.find(t=>t.code===linked.code);
   expect(linked.programId).toBe(p.id);
-  await page.getByRole('tab',{name:'History',exact:true}).click();
+  p=(await api('get','/maintenance/programs')).find(v=>v.id===p.id);
+  expect(p.serviceTypeCodes.sort()).toEqual([linked.code,extra.code].sort());
+  await page.getByRole('button',{name:'Edit program',exact:true}).click();
+  await page.getByRole('button',{name:'Resetting service types',exact:true}).click();
+  await expect(page.getByRole('checkbox',{name:'Reset with '+linked.name,exact:true})).toBeChecked();
+  await page.getByRole('checkbox',{name:'Reset with '+extra.name,exact:true}).uncheck();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Save program',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect((await api('get','/maintenance/options')).types.find(t=>t.code===extra.code).programId).toBeNull();
+  p=(await api('get','/maintenance/programs')).find(v=>v.id===p.id);
+  await page.goto(access.base+'/maintenance');
   await page.getByRole('button',{name:'Add work order',exact:true}).click();
   await page.getByLabel('Service type',{exact:true}).selectOption(linked.code);
   await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck);
@@ -160,5 +188,5 @@ try {
   await page.goto(access.base + '/fleet/preventative-maintenance');
   await page.waitForURL(u => u.pathname === '/fleet/service-programs' && u.searchParams.get('program') === oil);
   expect(errors).toEqual([]);
-  console.log('Service programs E2E passed: program setup, bulk enrollment, independent completions and automatic service-type resets, exact mileage difference, overrides, stale edits, truck profile, view-only access, legacy redirect and mobile layout.');
+  console.log('Service programs E2E passed: program setup, resetting-type dropdown with multiple selections, unlink and shared settings, bulk enrollment, independent completions and automatic resets, exact mileage difference, overrides, stale edits, truck profile, view-only access, legacy redirect and mobile layout.');
 } finally { await browser.close(); }

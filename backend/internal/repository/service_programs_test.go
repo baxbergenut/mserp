@@ -84,6 +84,8 @@ func testServicePrograms(t *testing.T, ctx context.Context, admin *pgx.Conn, poo
 		t.Fatal("rename lost program link", linkedType, err)
 	}
 	stale := p
+	// Simulate an older program editor that omits the new mapping controls.
+	p.ServiceTypeCodes = nil
 	p.Instructions = "Inspect clutch wear"
 	p, err = repo.SaveProgram(ctx, p, "")
 	if err != nil {
@@ -223,4 +225,71 @@ func testServicePrograms(t *testing.T, ctx context.Context, admin *pgx.Conn, poo
 		t.Fatal(err)
 	}
 	exec(`UPDATE trucks SET active=false WHERE id=ANY($1::uuid[])`, []string{truck, other})
+	testProgramServiceTypeSettings(t, ctx, pool)
+}
+
+func testProgramServiceTypeSettings(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	repo := NewMaintenanceRepository(pool)
+	interval := 25000
+	a, err := repo.SaveType(ctx, MaintenanceType{Code: "reset_a", Name: "Reset A", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := repo.SaveType(ctx, MaintenanceType{Code: "reset_b", Name: "Reset B", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := repo.SaveProgram(ctx, ServiceProgram{Name: "Multiple resetting types", IntervalMiles: &interval, Active: true, ServiceTypeCodes: []string{a.Code, b.Code}, ServiceTypeVersions: map[string]int{a.Code: a.Version, b.Code: b.Version}}, "")
+	if err != nil || len(p.ServiceTypeCodes) != 2 || p.ServiceTypeVersions[a.Code] != a.Version+1 {
+		t.Fatal("program mapping creation", p, err)
+	}
+	// Saving through the type editor invalidates an open program editor too.
+	a.Version = p.ServiceTypeVersions[a.Code]
+	a.Name = "Reset A renamed"
+	a, err = repo.SaveType(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := p
+	stale.Name = "Must roll back"
+	stale.ServiceTypeCodes = []string{}
+	if _, err = repo.SaveProgram(ctx, stale, ""); !errors.Is(err, ErrMaintenanceConflict) {
+		t.Fatal("stale mapping edit accepted", err)
+	}
+	programs, err := repo.Programs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range programs {
+		if current.ID == p.ID {
+			p = current
+		}
+	}
+	if p.Name != "Multiple resetting types" || len(p.ServiceTypeCodes) != 2 {
+		t.Fatal("partial save on conflict", p)
+	}
+	// The same type cannot be silently taken from another program.
+	if _, err = repo.SaveProgram(ctx, ServiceProgram{Name: "Cannot steal", IntervalMiles: &interval, ServiceTypeCodes: []string{a.Code}, ServiceTypeVersions: map[string]int{a.Code: a.Version}}, ""); !errors.Is(err, ErrMaintenanceInvalid) {
+		t.Fatal("mapping stolen", err)
+	}
+	p.ServiceTypeCodes = []string{b.Code}
+	p, err = repo.SaveProgram(ctx, p, "")
+	if err != nil || len(p.ServiceTypeCodes) != 1 || p.ServiceTypeCodes[0] != b.Code {
+		t.Fatal("unlink one resetting type", p, err)
+	}
+	types, err := repo.Types(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range types {
+		if current.Code == a.Code && (current.ProgramID != nil || current.Version != a.Version+1) {
+			t.Fatal("type editor did not reflect program unlink", current)
+		}
+	}
+	p.ServiceTypeCodes = []string{}
+	p, err = repo.SaveProgram(ctx, p, "")
+	if err != nil || len(p.ServiceTypeCodes) != 0 {
+		t.Fatal("clear resetting types", p, err)
+	}
 }
