@@ -1275,7 +1275,9 @@ assignment lookup lists.
 - Gross board plans persist up to 100 load slots per driver and calendar day, separately
   from imported loads and settlement accounting. Active drivers whose known setup/
   reactivation week starts by the selected week and inactive
-  drivers with saved entries through the selected week appear. Gross Board and
+  drivers with nondeleted saved entries in the selected Monday–Sunday week appear.
+  Older entries still contribute to balance history without keeping inactive
+  drivers on later empty weeks. Gross Board and
   unfinalized Driver Pay resolve dispatcher/truck headings from assignment history
   for the selected New York week, never today's links. Weeks start Monday.
   Day statuses are stored separately from load numbers (`day_status`, migration

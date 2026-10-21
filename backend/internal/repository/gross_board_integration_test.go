@@ -118,6 +118,60 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(cancelledMigration)); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("inactive roster uses selected week", func(t *testing.T) {
+		const inactiveDriver = "00000000-0000-0000-0000-000000000002"
+		for _, tc := range []struct {
+			name    string
+			date    string
+			extra   bool
+			deleted bool
+			status  string
+			visible bool
+		}{
+			{name: "no entries"},
+			{name: "previous Sunday", date: "2026-09-27", status: "LEFT"},
+			{name: "selected Monday", date: "2026-09-28", visible: true},
+			{name: "selected Sunday status", date: "2026-10-04", status: "LEFT", visible: true},
+			{name: "following Monday", date: "2026-10-05"},
+			{name: "selected extra slot", date: "2026-09-30", extra: true, visible: true},
+			{name: "deleted extra slot", date: "2026-09-30", extra: true, deleted: true},
+			{name: "previous extra slot", date: "2026-09-27", extra: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				defer func() {
+					for _, table := range []string{"gross_board_entries", "gross_board_extra_entries"} {
+						if _, err := pool.Exec(ctx, "DELETE FROM pg_temp."+table+" WHERE driver_id=$1", inactiveDriver); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}()
+				if tc.date != "" {
+					if tc.extra {
+						_, err = pool.Exec(ctx, `INSERT INTO pg_temp.gross_board_extra_entries(driver_id,service_date,slot,deleted,load_number,day_status)
+ VALUES($1,$2,1,$3,'',$4)`, inactiveDriver, tc.date, tc.deleted, tc.status)
+					} else {
+						_, err = pool.Exec(ctx, `INSERT INTO pg_temp.gross_board_entries(driver_id,service_date,load_number,day_status)
+ VALUES($1,$2,'',$3)`, inactiveDriver, tc.date, tc.status)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				board, err := repo.Get(ctx, week)
+				if err != nil {
+					t.Fatal(err)
+				}
+				visible, activeVisible := false, false
+				for _, driver := range board.Drivers {
+					visible = visible || driver.ID == inactiveDriver
+					activeVisible = activeVisible || driver.Active
+				}
+				if visible != tc.visible || !activeVisible {
+					t.Fatalf("inactive visible=%t, want %t; active visible=%t", visible, tc.visible, activeVisible)
+				}
+			})
+		}
+	})
 	base := GrossBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "l100", OriginalRate: "999", Miles: "999", DriverRate: "1000.10"}
 	if err = repo.Save(ctx, []GrossBoardEntry{base}); err != nil {
 		t.Fatal(err)
