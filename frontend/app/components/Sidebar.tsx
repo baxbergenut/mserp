@@ -40,7 +40,7 @@ const NAV_ITEMS = [
     { href: "/fleet/trailers", label: "Trailers", icon: Truck },
     { href: "/fleet/inventory", label: "Inventory", icon: Package },
     { href: "/maintenance", label: "Work orders", icon: Wrench },
-    { href: "/fleet/preventative-maintenance", label: "Preventative maintenance", icon: CalendarRange },
+    { href: "/fleet/service-programs", label: "Service programs", icon: CalendarRange },
   ] },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
@@ -89,7 +89,7 @@ export function Sidebar() {
       <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
-          const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/maintenance" ? maintenanceAccess?.canView || maintenanceAccess?.canCreate : child.href === "/fleet/preventative-maintenance" ? maintenanceAccess?.canView : true)) : [];
+          const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/maintenance" ? maintenanceAccess?.canView || maintenanceAccess?.canCreate : child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
           if ("children" in item ? children.length === 0 : pagePermission(item.href) && !canVisitPage(permissions,item.href)) return null;
           const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||

@@ -16,6 +16,9 @@ func testMaintenanceManualPM(t *testing.T, ctx context.Context, admin *pgx.Conn,
 	if err := admin.QueryRow(ctx, `INSERT INTO trucks(unit_number) VALUES('MANUAL-PM') RETURNING id::text`).Scan(&truck); err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.SaveProgramTrucks(ctx, OilChangeProgramID, []ProgramTruckInput{{TruckID: truck, Active: true}}, ""); err != nil {
+		t.Fatal(err)
+	}
 	summary := func() PreventativeTruck {
 		t.Helper()
 		page, err := repo.Preventative(ctx, "MANUAL-PM", false, 1, 25)

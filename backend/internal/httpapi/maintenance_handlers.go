@@ -29,6 +29,14 @@ type maintenanceHandler struct {
 
 func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, expenses *repository.ExpenseRepository, extractor openai.ExpenseExtractor, eld *jobs.SyncFiveELDJob) {
 	h := maintenanceHandler{repo: repository.NewMaintenanceRepository(pool), expenses: expenses, logger: logger, extractor: extractor, eld: eld}
+	r.Get("/maintenance/programs", h.programs)
+	r.Post("/maintenance/programs", h.programSave)
+	r.Put("/maintenance/programs/{id}", h.programSave)
+	r.Get("/maintenance/programs/{id}/trucks", h.programTrucks)
+	r.Post("/maintenance/programs/{id}/trucks", h.programTrucksSave)
+	r.Put("/maintenance/programs/{id}/trucks/{truckId}/baseline", h.programBaseline)
+	r.Get("/maintenance/program-trucks", h.programTrucks)
+	r.Get("/maintenance/program-assignees", h.programAssignees)
 	r.Get("/maintenance", h.list)
 	r.Post("/maintenance", h.save)
 	r.Put("/maintenance/{id}", h.save)
@@ -195,6 +203,7 @@ func (h maintenanceHandler) due(w http.ResponseWriter, r *http.Request) {
 }
 
 type maintenanceRequest struct {
+	ProgramIDs    []string                     `json:"programIds"`
 	OilType       string                       `json:"oilType"`
 	ID            string                       `json:"id"`
 	Version       int                          `json:"version"`
@@ -217,8 +226,16 @@ type maintenanceRequest struct {
 }
 
 func (in maintenanceRequest) validate(category string) (repository.MaintenanceInput, error) {
-	out := repository.MaintenanceInput{OilType: repository.NormalizeMaintenanceOilType(in.OilType), ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
+	out := repository.MaintenanceInput{ProgramIDs: in.ProgramIDs, OilType: repository.NormalizeMaintenanceOilType(in.OilType), ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
 	out.DriverID = in.DriverID
+	if len(in.ProgramIDs) > 100 {
+		return out, errors.New("select at most 100 completed programs")
+	}
+	for _, id := range in.ProgramIDs {
+		if !isUUID(id) {
+			return out, errors.New("select valid service programs")
+		}
+	}
 	if !isUUID(in.ID) || in.Version < 0 {
 		return out, errors.New("invalid maintenance identity")
 	}
@@ -440,7 +457,17 @@ func (h maintenanceHandler) options(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "drivers": drivers, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
+	programs, err := h.repo.Programs(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	enrollments, err := h.repo.ProgramEnrollments(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"programs": programs, "programEnrollments": enrollments, "categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "drivers": drivers, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
 }
 func (h maintenanceHandler) vendor(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.allowed(w, r, "edit"); !ok {
@@ -579,7 +606,7 @@ func (h maintenanceHandler) schedule(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "select a valid truck")
 		return
 	}
-	if in.ServiceCode != "pm" || in.WarningDays < 0 || in.WarningMiles < 0 || in.WarningDays > 36500 || in.WarningMiles > 2000000000 || in.IntervalDays != nil && (*in.IntervalDays < 1 || *in.IntervalDays > 36500) || in.IntervalMiles != nil && (*in.IntervalMiles < 1 || *in.IntervalMiles > 2000000000) || in.Enabled && in.IntervalDays == nil && in.IntervalMiles == nil {
+	if in.ServiceCode != "pm" || in.WarningDays < 0 || in.WarningMiles < 0 || in.WarningDays > 36500 || in.WarningMiles > 2000000000 || in.IntervalDays != nil && (*in.IntervalDays < 1 || *in.IntervalDays > 36500) || in.IntervalMiles != nil && (*in.IntervalMiles < 1 || *in.IntervalMiles > 2000000000) || in.IntervalMonths != nil && (*in.IntervalMonths < 1 || *in.IntervalMonths > 1200) || in.IntervalDays != nil && in.IntervalMonths != nil || in.Enabled && in.IntervalDays == nil && in.IntervalMiles == nil && in.IntervalMonths == nil {
 		writeAPIError(w, 400, "set a positive mileage/day interval and nonnegative reminder thresholds")
 		return
 	}

@@ -144,6 +144,11 @@ func TestRelayDriverDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(migration))
+				// This intentionally partial schema exercises pre-maintenance
+				// workflows; include the optional task-board assignment projection.
+				exec(`ALTER TABLE system_task_records ADD COLUMN maintenance_program_id uuid;
+                CREATE TABLE service_programs(id uuid PRIMARY KEY,use_default_assignees boolean NOT NULL DEFAULT true,assignee_ids uuid[] NOT NULL DEFAULT '{}',assignee_role_ids uuid[] NOT NULL DEFAULT '{}')`)
+
 			} else {
 				exec(string(source))
 			}

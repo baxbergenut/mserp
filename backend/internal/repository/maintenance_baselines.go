@@ -11,7 +11,7 @@ import (
 // A changed/new latest completed work order automatically supersedes it.
 const maintenancePMJoin = ` LEFT JOIN LATERAL (
  SELECT v.id,v.version,v.service_date,v.odometer,v.oil_type FROM maintenance_records v
- WHERE v.truck_id=t.id AND v.status='completed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode' IN ('pm','oil'))
+ WHERE v.truck_id=t.id AND v.status='completed' AND ('00000000-0000-4000-8000-000000000020'::uuid=ANY(v.program_ids) OR (v.program_ids IS NULL AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.services) s WHERE s->>'trackingCode' IN ('pm','oil'))))
  ORDER BY v.service_date DESC,v.created_at DESC,v.id DESC LIMIT 1
  ) original_pm ON true
  LEFT JOIN maintenance_pm_baselines baseline_pm ON baseline_pm.truck_id=t.id
@@ -24,6 +24,7 @@ const maintenancePMJoin = ` LEFT JOIN LATERAL (
  ) m ON true `
 
 type MaintenancePMInput struct {
+	MemberVersion   *int    `json:"-"`
 	TruckID         string  `json:"truckId"`
 	LastDate        string  `json:"lastDate"`
 	LastMiles       *int    `json:"lastMiles"`
@@ -48,6 +49,15 @@ func (r *MaintenanceRepository) SavePMBaseline(ctx context.Context, in Maintenan
 	var truck string
 	if err = tx.QueryRow(ctx, "SELECT id FROM trucks WHERE id=$1 FOR UPDATE", in.TruckID).Scan(&truck); err != nil {
 		return mapNotFound(err)
+	}
+	if in.MemberVersion != nil {
+		var version int
+		if err = tx.QueryRow(ctx, `SELECT version FROM service_program_trucks WHERE program_id=$1 AND truck_id=$2`, OilChangeProgramID, truck).Scan(&version); err != nil {
+			return mapNotFound(err)
+		}
+		if version != *in.MemberVersion {
+			return ErrMaintenanceConflict
+		}
 	}
 	var record *string
 	var recordVersion, baselineVersion int

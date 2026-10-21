@@ -51,6 +51,7 @@ type MaintenanceDocument struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 type MaintenanceRecord struct {
+	ProgramIDs    []string              `json:"programIds"`
 	OilType       string                `json:"oilType"`
 	ID            string                `json:"id"`
 	ExpenseID     *string               `json:"expenseId"`
@@ -80,6 +81,7 @@ type MaintenanceRecord struct {
 	Documents     []MaintenanceDocument `json:"documents"`
 }
 type MaintenanceInput struct {
+	ProgramIDs                                            []string
 	OilType                                               string
 	ActorID                                               string
 	ID                                                    string
@@ -176,11 +178,11 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	return result, err
 }
 
-const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
+const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type,coalesce(m.program_ids,CASE WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode' IN ('pm','oil')) THEN ARRAY['00000000-0000-4000-8000-000000000020']::uuid[] ELSE '{}'::uuid[] END)::text[] FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
 
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
-	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType)
+	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType, &m.ProgramIDs)
 	// Present historical aliases with the current terminology without rewriting ledger snapshots.
 	for i := range m.Services {
 		if m.Services[i].TypeCode == "oil" || m.Services[i].TypeCode == "preventive" {
@@ -305,6 +307,37 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 			return old, mapNotFound(err)
 		}
 	}
+
+	legacyPrograms := in.ProgramIDs == nil
+	if legacyPrograms {
+		in.ProgramIDs = []string{}
+		for _, w := range in.Services {
+			if MaintenanceTrackingCode(w.TypeCode) == "pm" {
+				in.ProgramIDs = append(in.ProgramIDs, OilChangeProgramID)
+				break
+			}
+		}
+	}
+	seenPrograms := map[string]bool{}
+	for _, program := range in.ProgramIDs {
+		if seenPrograms[program] {
+			return old, ErrMaintenanceInvalid
+		}
+		seenPrograms[program] = true
+		previous := false
+		for _, id := range old.ProgramIDs {
+			if id == program && pmRecordID(old.TruckID) == pmRecordID(in.TruckID) {
+				previous = true
+			}
+		}
+		var valid bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM service_programs p LEFT JOIN service_program_trucks member ON member.program_id=p.id AND member.truck_id=$2 WHERE p.id=$1 AND ($3 OR (p.active AND member.active)))`, program, in.TruckID, previous || legacyPrograms && program == OilChangeProgramID).Scan(&valid); err != nil {
+			return old, err
+		}
+		if !valid {
+			return old, fmt.Errorf("%w: select programs assigned to this truck", ErrMaintenanceInvalid)
+		}
+	}
 	names := []string{}
 	costs := []ExpenseCostItem{}
 	if len(in.Services) == 1 && in.Expense != nil && in.Expense.BaseAmount != nil {
@@ -405,7 +438,7 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if err != nil {
 		return old, err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END,oil_type=$5 WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber, in.OilType); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE maintenance_records SET driver_id=$2,driver_name=$3,source_unit_number=CASE WHEN $4<>'' THEN $4 ELSE source_unit_number END,oil_type=$5,program_ids=$6 WHERE id=$1", in.ID, in.DriverID, driverName, in.SourceUnitNumber, in.OilType, in.ProgramIDs); err != nil {
 		return old, err
 	}
 	if _, err := tx.Exec(ctx, "UPDATE maintenance_odometer_readings SET active=false WHERE record_id=$1", in.ID); err != nil {

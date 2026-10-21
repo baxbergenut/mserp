@@ -22,15 +22,16 @@ type MaintenanceReading struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 type MaintenanceSchedule struct {
-	ID            string  `json:"id"`
-	TruckID       *string `json:"truckId"`
-	ServiceCode   string  `json:"serviceCode"`
-	IntervalMiles *int    `json:"intervalMiles"`
-	IntervalDays  *int    `json:"intervalDays"`
-	WarningMiles  int     `json:"warningMiles"`
-	WarningDays   int     `json:"warningDays"`
-	Enabled       bool    `json:"enabled"`
-	Version       int     `json:"version"`
+	IntervalMonths *int    `json:"intervalMonths"`
+	ID             string  `json:"id"`
+	TruckID        *string `json:"truckId"`
+	ServiceCode    string  `json:"serviceCode"`
+	IntervalMiles  *int    `json:"intervalMiles"`
+	IntervalDays   *int    `json:"intervalDays"`
+	WarningMiles   int     `json:"warningMiles"`
+	WarningDays    int     `json:"warningDays"`
+	Enabled        bool    `json:"enabled"`
+	Version        int     `json:"version"`
 }
 type MaintenanceDue struct {
 	CycleID           *string              `json:"-"`
@@ -103,6 +104,15 @@ func (r *MaintenanceRepository) SaveReading(ctx context.Context, in MaintenanceR
 	if err := checkMaintenanceReading(ctx, tx, truck, date, in.Mileage, "", in.ID); err != nil {
 		return in, err
 	}
+	programs, err := programTrucks(ctx, tx, "", truck, maintenanceToday())
+	if err != nil {
+		return in, err
+	}
+	for _, v := range programs {
+		if v.LastDate != nil && v.LastMiles != nil && ((*v.LastDate <= in.Date && *v.LastMiles > in.Mileage) || (*v.LastDate >= in.Date && *v.LastMiles < in.Mileage)) {
+			return in, fmt.Errorf("%w: odometer conflicts with the last service for %s", ErrMaintenanceInvalid, v.ProgramName)
+		}
+	}
 	var conflictsPM bool
 	if err := tx.QueryRow(ctx, `SELECT coalesce((m.service_date<=$2 AND m.odometer>$3) OR (m.service_date>=$2 AND m.odometer<$3),false) FROM trucks t `+maintenancePMJoin+` WHERE t.id=$1`, truck, date, in.Mileage).Scan(&conflictsPM); err != nil {
 		return in, err
@@ -133,7 +143,7 @@ func (r *MaintenanceRepository) Schedules(ctx context.Context) ([]MaintenanceSch
 	return maintenanceSchedules(ctx, r.pool)
 }
 func maintenanceSchedules(ctx context.Context, q chargeQuery) ([]MaintenanceSchedule, error) {
-	rows, err := q.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version FROM maintenance_schedules WHERE service_code='pm' ORDER BY truck_id NULLS FIRST,service_code`)
+	rows, err := q.Query(ctx, `SELECT id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version,interval_months FROM maintenance_schedules WHERE service_code='pm' ORDER BY truck_id NULLS FIRST,service_code`)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +151,7 @@ func maintenanceSchedules(ctx context.Context, q chargeQuery) ([]MaintenanceSche
 	items := []MaintenanceSchedule{}
 	for rows.Next() {
 		var v MaintenanceSchedule
-		if err := rows.Scan(&v.ID, &v.TruckID, &v.ServiceCode, &v.IntervalMiles, &v.IntervalDays, &v.WarningMiles, &v.WarningDays, &v.Enabled, &v.Version); err != nil {
+		if err := rows.Scan(&v.ID, &v.TruckID, &v.ServiceCode, &v.IntervalMiles, &v.IntervalDays, &v.WarningMiles, &v.WarningDays, &v.Enabled, &v.Version, &v.IntervalMonths); err != nil {
 			return nil, err
 		}
 		items = append(items, v)
@@ -152,18 +162,36 @@ func (r *MaintenanceRepository) SaveSchedule(ctx context.Context, in Maintenance
 	if in.ServiceCode != "pm" {
 		return in, ErrMaintenanceInvalid
 	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return in, err
+	}
+	defer tx.Rollback(ctx)
+	if in.TruckID == nil {
+		if _, err = tx.Exec(ctx, `SELECT id FROM service_programs WHERE legacy_pm FOR UPDATE`); err != nil {
+			return in, err
+		}
+	}
 	var row pgx.Row
 	if in.ID == "" {
-		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_schedules(truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version`, in.TruckID, in.ServiceCode, in.IntervalMiles, in.IntervalDays, in.WarningMiles, in.WarningDays, in.Enabled)
+		row = tx.QueryRow(ctx, `INSERT INTO maintenance_schedules(truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,interval_months) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version,interval_months`, in.TruckID, in.ServiceCode, in.IntervalMiles, in.IntervalDays, in.WarningMiles, in.WarningDays, in.Enabled, in.IntervalMonths)
 	} else {
-		row = r.pool.QueryRow(ctx, `UPDATE maintenance_schedules SET interval_miles=$2,interval_days=$3,warning_miles=$4,warning_days=$5,enabled=$6,version=version+1 WHERE id=$1 AND version=$7 AND truck_id IS NOT DISTINCT FROM $8::uuid AND service_code=$9 RETURNING id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version`, in.ID, in.IntervalMiles, in.IntervalDays, in.WarningMiles, in.WarningDays, in.Enabled, in.Version, in.TruckID, in.ServiceCode)
+		row = tx.QueryRow(ctx, `UPDATE maintenance_schedules SET interval_miles=$2,interval_days=$3,warning_miles=$4,warning_days=$5,enabled=$6,interval_months=$10,version=version+1 WHERE id=$1 AND version=$7 AND truck_id IS NOT DISTINCT FROM $8::uuid AND service_code=$9 RETURNING id,truck_id,service_code,interval_miles,interval_days,warning_miles,warning_days,enabled,version,interval_months`, in.ID, in.IntervalMiles, in.IntervalDays, in.WarningMiles, in.WarningDays, in.Enabled, in.Version, in.TruckID, in.ServiceCode, in.IntervalMonths)
 	}
 	var v MaintenanceSchedule
-	err := row.Scan(&v.ID, &v.TruckID, &v.ServiceCode, &v.IntervalMiles, &v.IntervalDays, &v.WarningMiles, &v.WarningDays, &v.Enabled, &v.Version)
+	err = row.Scan(&v.ID, &v.TruckID, &v.ServiceCode, &v.IntervalMiles, &v.IntervalDays, &v.WarningMiles, &v.WarningDays, &v.Enabled, &v.Version, &v.IntervalMonths)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrMaintenanceConflict
 	}
-	return v, err
+	if err != nil {
+		return v, err
+	}
+	if in.TruckID == nil {
+		if _, err = tx.Exec(ctx, `UPDATE service_programs SET version=version+1,active=$1 WHERE legacy_pm`, in.Enabled); err != nil {
+			return v, err
+		}
+	}
+	return v, tx.Commit(ctx)
 }
 func (r *MaintenanceRepository) Due(ctx context.Context, truck string, today time.Time) ([]MaintenanceDue, error) {
 	return maintenanceDue(ctx, r.pool, truck, today)
@@ -229,10 +257,16 @@ func calculateMaintenanceDue(v *MaintenanceDue, today time.Time) {
 	overdue := false
 	due := false
 	upcoming := false
-	if s.IntervalDays != nil {
-		date := last.AddDate(0, 0, *s.IntervalDays).Format(time.DateOnly)
+	if s.IntervalDays != nil || s.IntervalMonths != nil {
+		next := last
+		if s.IntervalDays != nil {
+			next = last.AddDate(0, 0, *s.IntervalDays)
+		} else {
+			next = addServiceMonths(last, *s.IntervalMonths)
+		}
+		date := next.Format(time.DateOnly)
 		v.NextDate = &date
-		delta := int(last.AddDate(0, 0, *s.IntervalDays).Sub(today).Hours() / 24)
+		delta := int(next.Sub(today).Hours() / 24)
 		overdue = delta < 0
 		due = delta == 0
 		upcoming = delta <= s.WarningDays
@@ -275,4 +309,11 @@ func calculateMaintenanceDue(v *MaintenanceDue, today time.Time) {
 	default:
 		v.Status = "current"
 	}
+}
+
+// Month intervals clamp to the last valid day, e.g. January 31 + one month.
+func addServiceMonths(day time.Time, months int) time.Time {
+	first := time.Date(day.Year(), day.Month()+time.Month(months), 1, 0, 0, 0, 0, day.Location())
+	end := first.AddDate(0, 1, -1).Day()
+	return first.AddDate(0, 0, min(day.Day(), end)-1)
 }

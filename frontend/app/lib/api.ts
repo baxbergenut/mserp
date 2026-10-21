@@ -685,3 +685,10 @@ export type DispatcherPayReport=Pick<FinancialDashboard,"period"|"availableWeeks
 export const fetchDispatcherPay=(query:{weekStart?:string})=>apiRequest<DispatcherPayReport>(withQuery("/dispatcher-pay",query));
 
 export const saveMaintenancePM = (input: Pick<import("./types").PreventativeTruck, "truckId" | "lastDate" | "lastMiles" | "recordId" | "recordVersion" | "baselineVersion">) => apiRequest<void>(`/maintenance/preventative/${input.truckId}`, {method:"PUT",body:JSON.stringify(input)});
+
+export const fetchServicePrograms=(signal?:AbortSignal)=>apiRequest<import("./types").ServiceProgram[]>("/maintenance/programs",{signal});
+export const saveServiceProgram=(p:import("./types").ServiceProgram)=>apiRequest<import("./types").ServiceProgram>(p.id?`/maintenance/programs/${p.id}`:"/maintenance/programs",{method:p.id?"PUT":"POST",body:JSON.stringify(p)});
+export const fetchProgramTrucks=(program:string,truckId?:string,signal?:AbortSignal)=>apiRequest<import("./types").ProgramTruck[]>(withQuery(program?`/maintenance/programs/${program}/trucks`:"/maintenance/program-trucks",{truckId}),{signal});
+export const saveProgramTrucks=(program:string,items:import("./types").ProgramTruckInput[])=>apiRequest<void>(`/maintenance/programs/${program}/trucks`,{method:"POST",body:JSON.stringify({items})});
+export const saveProgramBaseline=(program:string,truck:import("./types").ProgramTruck,lastDate:string,lastMiles:number|null)=>apiRequest<void>(`/maintenance/programs/${program}/trucks/${truck.truckId}/baseline`,{method:"PUT",body:JSON.stringify({memberVersion:truck.memberVersion,recordId:truck.lastRecordId,recordVersion:truck.recordVersion,baselineVersion:truck.baselineVersion,lastDate,lastMiles})});
+export const fetchProgramAssignees=()=>apiRequest<{people:{id:string;name:string}[];roles:{id:string;name:string}[]}>("/maintenance/program-assignees");

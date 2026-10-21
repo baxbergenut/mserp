@@ -62,6 +62,11 @@ func TestFiveELDTruckTasksDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				exec(string(later))
+				// This intentionally partial schema exercises pre-maintenance
+				// workflows; include the optional task-board assignment projection.
+				exec(`ALTER TABLE system_task_records ADD COLUMN maintenance_program_id uuid;
+                CREATE TABLE service_programs(id uuid PRIMARY KEY,use_default_assignees boolean NOT NULL DEFAULT true,assignee_ids uuid[] NOT NULL DEFAULT '{}',assignee_role_ids uuid[] NOT NULL DEFAULT '{}')`)
+
 			}
 			var actor, other string
 			if err = admin.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('ELD reviewer','$2test') RETURNING id::text`).Scan(&actor); err != nil {

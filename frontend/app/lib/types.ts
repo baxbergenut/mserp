@@ -771,6 +771,7 @@ export interface MaintenanceWork { typeCode: string; name: string; amount: strin
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }
 export type ExpenseDocument = MaintenanceDocument;
 export interface MaintenanceRecord {
+  programIds?: string[];
   oilType: string;
   id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;
   vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string;
@@ -780,6 +781,7 @@ export interface MaintenanceRecord {
   expense: Expense | null; documents: MaintenanceDocument[];
 }
 export interface MaintenanceInput {
+  programIds?: string[];
   oilType: string;
   legacyPaymentTotal?: string;
   savedOwnerName?: string;
@@ -790,8 +792,8 @@ export interface MaintenanceInput {
   workOrder: string; notes: string; services: MaintenanceWork[]; expense: ExpenseInput | null;
 }
 export interface MaintenanceTruck { id: string; unitNumber: string; active: boolean; ownerId: string | null; ownerName: string; ownerDriverId: string | null; isCompanyOwned: boolean; driverId: string | null; driverName: string; }
-export interface MaintenanceOptions { categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
-export interface MaintenanceSchedule { id: string; truckId: string | null; serviceCode: "pm"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
+export interface MaintenanceOptions { programs?: ServiceProgram[]; programEnrollments?: {programId:string;truckId:string}[]; categoryId: string; types: MaintenanceType[]; vendors: MaintenanceVendor[]; schedules: MaintenanceSchedule[]; names: string[]; paymentMethods: string[]; users: string[]; currentUser: string; currentUserId: string; trucks: MaintenanceTruck[]; drivers: {id: string; name: string; active: boolean}[]; administrator: boolean; verificationRole: string; }
+export interface MaintenanceSchedule { intervalMonths?: number | null; id: string; truckId: string | null; serviceCode: "pm"; intervalMiles: number | null; intervalDays: number | null; warningMiles: number; warningDays: number; enabled: boolean; version: number; }
 export interface MaintenanceReading { id: string; truckId: string; recordId: string | null; date: string; mileage: number; source: "manual" | "service"; version: number; actorName: string; updatedAt: string; }
 export interface MaintenanceDue { currentReportedAt: string | null; lastRecordId: string | null; truckId: string; unitNumber: string; serviceCode: "pm"; status: "missing_information" | "disabled" | "overdue" | "due" | "upcoming" | "current"; reason: string; lastDate: string | null; lastMiles: number | null; currentDate: string | null; currentMiles: number | null; nextDate: string | null; nextMiles: number | null; schedule: MaintenanceSchedule | null; }
 export interface MaintenanceReportRow { group: string; amount: string; workItems: number; visits: number; }
@@ -1382,3 +1384,18 @@ export type TruckOption = Pick<Truck, "id" | "unitNumber" | "active" | "status" 
 export type DispatcherOption = Pick<Dispatcher, "id" | "fullName" | "active" | "extension" | "mainUpdaterId" | "afterHoursUpdaterId" | "driverCount">;
 export type InvestorOption = Pick<Investor, "id" | "fullName" | "active" | "driverId" | "isCompany" | "trucks">;
 export type UpdaterOption = Pick<Updater, "id" | "fullName" | "shift" | "extension">;
+
+export interface ServiceProgram {
+ id:string; name:string; instructions:string; legacyPM:boolean;
+ intervalMiles:number|null; intervalDays:number|null; intervalMonths:number|null;
+ warningMiles:number; warningDays:number; active:boolean; useDefaultAssignees:boolean;
+ assigneeIds:string[]; assigneeRoleIds:string[]; version:number;
+ truckCount:number; upcomingCount:number; overdueCount:number;
+}
+export interface ProgramTruck extends MaintenanceDue {
+ programId:string; programName:string; active:boolean; enrolled:boolean;
+ memberVersion:number; recordVersion:number; baselineVersion:number; currentSource:string;
+ milesSinceService:number|null; overrideInterval:boolean;
+ intervalMiles:number|null; intervalDays:number|null; intervalMonths:number|null;
+}
+export type ProgramTruckInput=Pick<ProgramTruck,"truckId"|"overrideInterval"|"intervalMiles"|"intervalDays"|"intervalMonths"> & {version:number;active:boolean};

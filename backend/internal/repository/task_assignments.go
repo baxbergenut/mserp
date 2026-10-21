@@ -67,7 +67,7 @@ type TaskUser struct {
 }
 
 func (r *AuthRepository) SystemTaskAssignments(ctx context.Context) ([]SystemTaskAssignment, error) {
-	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version,assignee_ids::text[],assignee_role_ids::text[] FROM system_task_assignments ORDER BY kind`)
+	rows, err := r.pool.Query(ctx, `SELECT kind,assignee_id::text,version,assignee_ids::text[],assignee_role_ids::text[] FROM system_task_assignments WHERE kind<>'maintenance_program' ORDER BY kind`)
 	if err != nil {
 		return nil, err
 	}

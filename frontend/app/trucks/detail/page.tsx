@@ -13,13 +13,14 @@ import { RelatedExpenses } from "@/app/components/expenses/RelatedExpenses";
 import { TruckLocationPanel } from "@/app/components/fleet/TruckLocationPanel";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { AssignmentHistory } from "@/app/drivers/detail/AssignmentHistory";
+import { ServiceProgramsWorkspace } from "@/app/fleet/service-programs/ServiceProgramsWorkspace";
 import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
 import { DataTruckSetup } from "../DataTruckSetup";
 import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
-const tabs = ["Overview", "Equipment", "Work orders", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Equipment", "Service programs", "Work orders", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -37,7 +38,7 @@ export default function TruckDetailPage() {
   const expenseCategoryAccess = useExpenseCategoryAccess();
   const maintenanceAccess = useMaintenanceAccess();
   const expenseTabsVisible = expenseCategoryAccess.some(a=>a.canView);
-  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Equipment" || permissions.includes("inventory.read")) && (name !== "Expenses" || expenseTabsVisible) && (name !== "Work orders" || maintenanceAccess?.canView));
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Equipment" || permissions.includes("inventory.read")) && (name !== "Expenses" || expenseTabsVisible) && (!["Work orders","Service programs"].includes(name) || maintenanceAccess?.canView));
   const tab=visibleTabs.includes(candidateTab)?candidateTab:"Overview";
   useEffect(() => {
     if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
@@ -75,6 +76,7 @@ export default function TruckDetailPage() {
         </div>
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
+      {tab === "Service programs" && maintenanceAccess?.canView && <ServiceProgramsWorkspace truckId={truck.id} />}
       {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}

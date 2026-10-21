@@ -123,6 +123,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	programMigration, err := os.ReadFile("../../sql/129_service_programs.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -139,6 +143,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if mode == "migration" {
 				// Replay task-kind constraints in their original order before the
 				// later DataTruck task category and its inherited assignments.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(programMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(dataTruckMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(baselineMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(costDetailMigration), "\r\n", "\n"), "", 1)
@@ -179,6 +184,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(costDetailMigration))
 				exec(string(baselineMigration))
 				exec(string(dataTruckMigration))
+				exec(string(programMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -372,6 +378,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal("PM filter must include legacy stored work", legacyPage, err)
 			}
 			testMaintenanceInvoiceDetails(t, ctx, admin, pool)
+			testServicePrograms(t, ctx, admin, pool)
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)
 			}
@@ -403,6 +410,9 @@ func testMaintenanceTaskLifecycle(t *testing.T, ctx context.Context, admin *pgx.
 		t.Fatal(err)
 	}
 	repo := NewMaintenanceRepository(pool)
+	if err := repo.SaveProgramTrucks(ctx, OilChangeProgramID, []ProgramTruckInput{{TruckID: truck, Active: true}}, ""); err != nil {
+		t.Fatal(err)
+	}
 	miles := 100
 	schedule, err := repo.SaveSchedule(ctx, MaintenanceSchedule{TruckID: &truck, ServiceCode: "pm", IntervalMiles: &miles, Enabled: true, WarningMiles: 10})
 	if err != nil {

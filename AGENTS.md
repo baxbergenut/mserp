@@ -2331,3 +2331,33 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Preventative maintenance has one table and one interval setting; vendor, service
   cost and last-service-note fields are removed from its API response and table.
   Work-order invoices retain their normal accounting fields and oil-grade evidence.
+
+
+### Service programs (129)
+
+- Fleet > Service programs (`/fleet/service-programs`) replaces the PM overview;
+  the old Preventative maintenance path redirects to Oil change 20k. Migration
+  129 preserves existing PM coverage, intervals, overrides, baseline/history and
+  reminder assignees. New truck enrollments are explicit. Programs support miles
+  and days/months (first limit reached), warnings, instructions, pause state,
+  per-truck overrides and people/role reminder assignment. Program definitions
+  require Administrator plus Work orders Edit; truck operations require Edit.
+- repository/service_programs.go and httpapi/service_program_handlers.go own
+  versioned program/enrollment/baseline APIs. Work orders explicitly select
+  completed programIds; omitted legacy inputs retain PM tracking. Completion
+  never follows a free-text program name. Costs stay on the existing invoice.
+  Record service creates completed internal work without an invoice. Unknown
+  last service stays unknown; manual baselines never rewrite invoices.
+- Truck profiles share ServiceProgramsWorkspace. The table displays Miles since
+  service (current odometer minus service odometer), without miles remaining or
+  next-due odometer. Status/reminders still use configured intervals. Calendar
+  months clamp to month end. Work-order Settings retains types/vendors; interval
+  configuration lives in programs.
+- maintenance_pm remains the migrated oil task kind; custom programs use
+  maintenance_program. Reminder uniqueness is per truck/program. Task list/count
+  visibility applies effective per-program people/roles or inherited PM defaults.
+  The internal assignment placeholder is excluded from Settings. Preserve the
+  original PM work-order/baseline source fences and stale-telemetry behavior.
+- Run TestMaintenanceDatabase (fresh/migrated as mserp_app),
+  TestServiceProgramCalendar and frontend/scripts/test-service-programs-e2e.mjs
+  against review-local.mjs after a /api build. See docs/MAINTENANCE.md.

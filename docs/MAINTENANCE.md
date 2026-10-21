@@ -1,8 +1,9 @@
 # Maintenance
 
 Fleet > Work orders retains the directory and entry form at `/maintenance`, and
-a Work orders tab on each truck. Fleet > Preventative maintenance lives at
-`/fleet/preventative-maintenance` with one PM Service table. Expenses
+a Work orders tab on each truck. Fleet > Service programs lives at
+`/fleet/service-programs`, with recurring programs and explicit truck assignments.
+The old `/fleet/preventative-maintenance` page redirects to Oil change 20k. Expenses
 includes work-order charges in the same ledger alongside other expenses, with
 category-scoped verification. Explicit legacy `scope=general` API reads still
 exclude the configured work-order category. No expense copies are created.
@@ -308,3 +309,78 @@ not rewritten. Reads display legacy service types as PM Service; edits and impor
 normalize old oil type codes to preventive/pm under the usual financial guards.
 The old serviceCode overview selector is accepted for existing clients, but every
 read returns the unified PM cycle. Schedule writes accept only pm.
+
+
+## Service programs (129)
+
+Fleet > Service programs replaces the former PM-only overview. Migration 129
+creates Oil change 20k, enrolls the existing trucks (including inactive trucks),
+and preserves all existing PM intervals, overrides, manual baselines, historical
+work orders, invoices and reminder assignees. Production's reviewed fleet setting
+was 20,000 miles with a 1,000-mile warning, without truck overrides. New trucks
+are assigned explicitly; creating a truck does not claim service completion.
+
+Administrators with Work orders Edit create/edit programs: name, instructions,
+mileage interval, optional days or calendar months, warning miles/days, active
+state and reminder people/roles. At least one interval is required. Days and
+months are alternative calendar units; mileage and time use whichever comes
+first. Month intervals clamp to the last valid day (January 31 + one month is
+February 28/29). Programs inherit the existing maintenance_pm system-task
+assignees by default; explicit program assignees override that default. Current
+active role membership controls task lists and counts. Empty explicit assignees
+leave visibility to Administrators. Default assignments stay in System tasks;
+program-specific assignments stay on the program.
+
+Work orders View reads programs and truck tracking. Edit assigns/removes trucks
+(in batches up to 500), sets optional per-truck interval overrides, corrects
+versioned baselines and records service. Removed assignments and paused programs
+retain history and resolve open reminders. Reactivating resumes their saved
+service cycle. Unknown baselines remain Missing information. No enrollment date
+is substituted for a last-service date. The truck profile has a Service programs
+tab, with the same data and controls under category permissions.
+
+The tracking table shows Last service, Service odometer, Current odometer,
+**Miles since service = current odometer minus service odometer**, and status.
+It does not display miles remaining or the next-due odometer. Calendar due dates
+remain visible where configured. Missing readings/baselines display a blank
+marker; stale readings cannot establish Current. Existing cache-only Five ELD
+rules and odometer chronology remain authoritative.
+
+Work orders have explicit completed-program checkboxes. One completed visit can
+fulfill several assigned programs; only those programs reset. Needs-review and
+voided visits never reset them. Reporting type and accounting amounts remain
+independent. Older clients/imports omitting programIds retain type-based PM
+behavior. Explicit empty programIds means no program was completed. Historical
+records are interpreted without rewriting their evidence. Record service on a
+program saves a real completed internal work order without an invoice; users
+enter the actual date/odometer and select only completed programs. Normal charged
+work orders retain their existing accounting workflow and one expense identity.
+
+Manual last-service corrections preserve invoices and capture the latest source
+record/version; a changed/new latest completed work order supersedes the baseline.
+Program, enrollment and baseline writes reject stale versions and are audited.
+There is no destructive delete operation. Programs use stable UUID identity.
+The migrated oil program continues using the original PM baseline/schedule tables
+for compatibility. Custom programs use service_program_trucks baselines.
+
+The minute worker maintains one open reminder per truck/program/cycle. The oil
+program retains maintenance_pm task identities; custom programs use the separate
+maintenance_program kind so an older PM worker cannot rewrite their reminders.
+Both kinds inherit the existing default assignees unless a program overrides them.
+The internal maintenance_program assignment row is hidden from Settings because
+its effective assignees come from the program/default configuration.
+
+API: GET/POST /maintenance/programs, PUT /maintenance/programs/{id},
+GET/POST /maintenance/programs/{id}/trucks, PUT
+/maintenance/programs/{id}/trucks/{truckId}/baseline, GET
+/maintenance/program-trucks?truckId=..., and administrator-only GET
+/maintenance/program-assignees. Maintenance options include programs and active
+enrollment identities for work-order completion selection.
+
+Validation: TestMaintenanceDatabase covers fresh and migrated schemas as
+mserp_app, independent/combined completion, baselines, void fallback, reminders,
+role privacy, stale writes and retained history. TestServiceProgramCalendar
+covers end-of-month scheduling. With a /api build and isolated review-local.mjs,
+run node scripts/test-service-programs-e2e.mjs and
+node scripts/test-maintenance-e2e.mjs. Screenshots and credentials stay in the
+private local review directory.
