@@ -384,3 +384,39 @@ covers end-of-month scheduling. With a /api build and isolated review-local.mjs,
 run node scripts/test-service-programs-e2e.mjs and
 node scripts/test-maintenance-e2e.mjs. Screenshots and credentials stay in the
 private local review directory.
+
+
+## Automatic service-type completion (130)
+
+The Service programs page opens Oil change 20k by default. An explicit
+?program= UUID opens another program; ?program= (empty) opens the directory.
+Truck-profile tabs continue showing all of that truck's assigned programs.
+
+Work orders > Settings > Service types has a Completes service program selection.
+Migration 130 renames the preventive reporting type to Oil change and links it
+to the existing Oil change 20k program. Stable codes and historical financial
+snapshots remain unchanged. The hidden retired oil type gets a distinct catalog
+name so its retained unique name does not block the active type's rename.
+
+Saving a work order snapshots the selected service types' linked programs on the
+server. A submitted empty programIds cannot suppress those completions. The
+normal form shows the automatic effect instead of program checkboxes. Other
+reporting types can link to other programs. Existing explicit completions remain
+supported (including combined completed service from a program). Changes to type
+configuration do not reinterpret prior saved completions. Older type editors
+that omit programId preserve an existing link; an explicit empty string clears it.
+Needs-review and voided visits remain excluded. Recording a linked service does
+not enroll its truck: excluded trucks remain excluded, and a later deliberate
+enrollment can use the recorded service history. Program pauses suppress
+reminders without claiming a service did not happen.
+
+The customer requested a one-time reconciliation of Oil change 20k against Fleet
+board > Oil change (spreadsheet 1RcRmMoM4Jyj1OTAMqDFxawHDiPG8oRVEPzbVOZHmJDk,
+gid 1621284305). Use the live sheet as source, exact unit numbers with leading
+zeros, and source/local VIN evidence for identity conflicts. Never substitute
+047(O) for 047: their recorded VINs differ. Remove assignments through the
+versioned program membership API, and use audited source-fenced last-service
+baselines for operational corrections without rewriting invoices. Undated sheet
+Current ODO values are not dated odometer readings. The source snapshot hash,
+changes, missing identities and read-back results are recorded in access_audit
+under oil_sheet_reconciliation; private operational snapshots are not committed.

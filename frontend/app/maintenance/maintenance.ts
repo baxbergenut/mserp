@@ -12,7 +12,8 @@ export function serviceWork(code: string, options: MaintenanceOptions, amount: s
 export function normalizeMaintenance(value: MaintenanceInput, options: MaintenanceOptions): MaintenanceInput {
   const services = value.services.map(s => serviceWork(s.typeCode, options, s.amount));
   if (services.length === 1 && value.expense?.amount && value.legacyPaymentTotal !== value.expense.amount) services[0].amount = value.expense.amount;
-  const programIds=value.programIds ?? (services.some(s=>s.trackingCode==="pm") ? options.programs?.filter(p=>p.legacyPM && p.active && options.programEnrollments?.some(m=>m.programId===p.id && m.truckId===value.truckId)).map(p=>p.id) : []);
+  const mappedPrograms=services.map(s=>options.types.find(t=>t.code===s.typeCode)?.programId).filter((id):id is string=>!!id);
+  const programIds=[...new Set([...(value.programIds??[]),...mappedPrograms])];
   return { ...value, programIds, oilType: services.some(s => s.typeCode === "preventive") ? value.oilType : "", services, expense: value.expense ? { ...value.expense, driverId: value.driverId, driverName: value.driverName, expenseType: [...new Set(services.map(s => s.name))].join(", ").slice(0, 100), expenseDate: value.serviceDate || value.expense.expenseDate } : null };
 }
 export function emptyMaintenance(options: MaintenanceOptions, truckId?: string): MaintenanceInput {

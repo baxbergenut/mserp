@@ -526,6 +526,10 @@ func (h maintenanceHandler) serviceType(w http.ResponseWriter, r *http.Request) 
 	}
 	in.Code = chi.URLParam(r, "code")
 	in.Name = strings.TrimSpace(in.Name)
+	if in.ProgramID != nil && *in.ProgramID != "" && !isUUID(*in.ProgramID) {
+		writeAPIError(w, 400, "select a valid service program")
+		return
+	}
 	if !regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`).MatchString(in.Code) || in.Name == "" || utf8.RuneCountInString(in.Name) > 100 {
 		writeAPIError(w, 400, "use a stable type code and a name up to 100 characters")
 		return

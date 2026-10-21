@@ -2361,3 +2361,21 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Run TestMaintenanceDatabase (fresh/migrated as mserp_app),
   TestServiceProgramCalendar and frontend/scripts/test-service-programs-e2e.mjs
   against review-local.mjs after a /api build. See docs/MAINTENANCE.md.
+
+
+### Automatic service-type program completion (130)
+
+- maintenance_types.program_id links a reporting type to a service program.
+  Oil change (stable code preventive) resets Oil change 20k automatically when
+  a completed work order is recorded. Other types may link to other programs
+  in Work orders Settings. The server snapshots linked program IDs even when a
+  caller sends an empty selection. Type edits do not reinterpret saved history;
+  omitted mapping input preserves it, explicit empty string clears it. Normal
+  work orders display the automatic effect rather than program checkboxes.
+- Recording work never enrolls an excluded truck. Program recording still
+  supports explicit combined completions. Source-only metadata, accounting
+  identity, reviewed/voided exclusions and baseline source fences remain intact.
+- The standalone Service programs page defaults to Oil change 20k; explicit
+  ?program= opens the full directory. Embedded truck profiles show all programs.
+  Live oil-sheet reconciliation uses exact identity and audited versioned APIs,
+  preserves invoice history, and never treats undated Current ODO as a reading.

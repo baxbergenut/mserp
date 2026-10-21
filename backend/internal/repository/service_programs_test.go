@@ -57,6 +57,32 @@ func testServicePrograms(t *testing.T, ctx context.Context, admin *pgx.Conn, poo
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A linked reporting type completes its program without a checkbox, even
+	// for a truck outside the program. Recording work never adds enrollment.
+	linkedType, err := repo.SaveType(ctx, MaintenanceType{Code: "clutch_inspection", Name: "Clutch inspection", Active: true, ProgramID: &p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unassigned, autoID string
+	if err = admin.QueryRow(ctx, `INSERT INTO trucks(unit_number) VALUES('AUTO-UNASSIGNED') RETURNING id::text`).Scan(&unassigned); err != nil {
+		t.Fatal(err)
+	}
+	pool.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&autoID)
+	autoDate, _ := time.Parse(time.DateOnly, "2026-10-01")
+	automatic, err := repo.Save(ctx, MaintenanceInput{ID: autoID, TruckID: &unassigned, ProgramIDs: []string{}, ServiceDate: &autoDate, Status: "completed", Location: "internal", Services: []MaintenanceWork{{TypeCode: linkedType.Code}}, Actor: "Tester"})
+	if err != nil || len(automatic.ProgramIDs) != 1 || automatic.ProgramIDs[0] != p.ID {
+		t.Fatal("type did not complete program", automatic, err)
+	}
+	if values, err := repo.ProgramTrucks(ctx, p.ID, unassigned); err != nil || len(values) != 0 {
+		t.Fatal("work order enrolled an unassigned truck", values, err)
+	}
+	// Older type editors omit the new field; renames preserve the saved link.
+	linkedType.ProgramID = nil
+	linkedType.Name = "Clutch inspection renamed"
+	linkedType, err = repo.SaveType(ctx, linkedType)
+	if err != nil || linkedType.ProgramID == nil || *linkedType.ProgramID != p.ID {
+		t.Fatal("rename lost program link", linkedType, err)
+	}
 	stale := p
 	p.Instructions = "Inspect clutch wear"
 	p, err = repo.SaveProgram(ctx, p, "")

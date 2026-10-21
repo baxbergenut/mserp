@@ -765,7 +765,7 @@ export interface ExpenseVerification {
 
 export interface ExpenseCostItem { name: string; amount: string; }
 
-export interface MaintenanceType { code: string; name: string; active: boolean; version: number; }
+export interface MaintenanceType { programId?:string|null; code: string; name: string; active: boolean; version: number; }
 export interface MaintenanceVendor { id: string; name: string; address: string; phone: string; contact: string; active: boolean; version: number; }
 export interface MaintenanceWork { typeCode: string; name: string; amount: string | null; trackingCode: "" | "pm"; }
 export interface MaintenanceDocument { id: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; }

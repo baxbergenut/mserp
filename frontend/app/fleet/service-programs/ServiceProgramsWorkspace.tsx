@@ -15,19 +15,20 @@ import { AddProgramTrucks, ProgramEditor, ProgramServiceEditor, ProgramTruckEdit
 export const programInterval = (p: Pick<ServiceProgram, "intervalMiles" | "intervalDays" | "intervalMonths">) => [p.intervalMiles != null && `${p.intervalMiles.toLocaleString()} miles`, p.intervalDays != null && `${p.intervalDays} days`, p.intervalMonths != null && `${p.intervalMonths} months`].filter(Boolean).join(" / ");
 const number = (n: number | null) => n == null ? "—" : n.toLocaleString();
 const statusLabels: Record<string, string> = { current: "Current", upcoming: "Due soon", due: "Due now", overdue: "Overdue", disabled: "Paused", missing_information: "Needs information" };
+const defaultProgram="00000000-0000-4000-8000-000000000020";
 const emptyProgram = (): ServiceProgram => ({ id: "", name: "", instructions: "", legacyPM: false, intervalMiles: null, intervalDays: null, intervalMonths: null, warningMiles: 1000, warningDays: 14, active: true, useDefaultAssignees: true, assigneeIds: [], assigneeRoleIds: [], version: 0, truckCount: 0, upcomingCount: 0, overdueCount: 0 });
 
 export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const [access, setAccess] = useState<ExpenseCategoryAccess | null>(null), [options, setOptions] = useState<MaintenanceOptions | null>(null);
   const [programs, setPrograms] = useState<ServiceProgram[]>([]), [members, setMembers] = useState<ProgramTruck[]>([]);
-  const [selected, setSelected] = useState(""), [search, setSearch] = useState(""), [status, setStatus] = useState(""), [inactive, setInactive] = useState(false), [removed, setRemoved] = useState(false);
+  const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState(""), [status, setStatus] = useState(""), [inactive, setInactive] = useState(false), [removed, setRemoved] = useState(false);
   const [page, setPage] = useState(1), [size, setSize] = useState(25), [revision, setRevision] = useState(0);
   const [error, setError] = useState(""), [loading, setLoading] = useState(true), [readingBusy, setReadingBusy] = useState(false);
   const [editing, setEditing] = useState<ServiceProgram | null>(null), [adding, setAdding] = useState(false), [truckSettings, setTruckSettings] = useState<ProgramTruck | null>(null);
   const [service, setService] = useState<{ truck: ProgramTruck; baseline: boolean } | null>(null), [reading, setReading] = useState<MaintenanceReading | null>(null), [recordId, setRecordId] = useState<string | null>(null);
   const [clock,setClock]=useState(()=>Date.now());
   const refresh = async () => { setRevision(v => v + 1); };
-  useEffect(() => { const restore=()=>{if(!truckId)setSelected(new URLSearchParams(window.location.search).get("program")??"");};const timer=setTimeout(restore,0);window.addEventListener("popstate",restore);return()=>{clearTimeout(timer);window.removeEventListener("popstate",restore);}; }, [truckId]);
+  useEffect(() => { const restore=()=>{if(!truckId)setSelected(new URLSearchParams(window.location.search).get("program")??defaultProgram);};const timer=setTimeout(restore,0);window.addEventListener("popstate",restore);return()=>{clearTimeout(timer);window.removeEventListener("popstate",restore);}; }, [truckId]);
   useEffect(() => { let active = true; fetchMaintenanceAccess().then(v => { if (active) setAccess(v); }).catch(e => { if (active) { setError(e.message); setLoading(false); } }); return () => { active = false; }; }, []);
   useEffect(() => {
     if (!access?.canView) return;
@@ -39,7 +40,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   }, [access, selected, truckId, revision]);
   useEffect(() => { const update = () => { if (!document.hidden) {setClock(Date.now());setRevision(v => v + 1);} }; const timer = setInterval(update, 30000); window.addEventListener("focus", update); return () => { clearInterval(timer); window.removeEventListener("focus", update); }; }, []);
   const program = programs.find(p => p.id === selected);
-  const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setStatus(""); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.delete("program"); window.history.replaceState(null, "", url); } };
+  const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setStatus(""); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.set("program", ""); window.history.replaceState(null, "", url); } };
   const rows = members.filter(t => (!selected || t.programId === selected) && (removed || t.enrolled) && (inactive || t.active) && (!status || t.status === status) && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
   const visible = rows.slice((page - 1) * size, page * size);
   const listed = programs.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));

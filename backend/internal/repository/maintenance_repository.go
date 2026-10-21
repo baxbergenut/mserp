@@ -23,10 +23,11 @@ func NewMaintenanceRepository(pool *pgxpool.Pool) *MaintenanceRepository {
 }
 
 type MaintenanceType struct {
-	Code    string `json:"code"`
-	Name    string `json:"name"`
-	Active  bool   `json:"active"`
-	Version int    `json:"version"`
+	ProgramID *string `json:"programId"`
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	Active    bool    `json:"active"`
+	Version   int     `json:"version"`
 }
 type MaintenanceVendor struct {
 	ID      string `json:"id"`
@@ -115,7 +116,7 @@ func (r *MaintenanceRepository) CategoryID(ctx context.Context) (string, error) 
 	return id, err
 }
 func (r *MaintenanceRepository) Types(ctx context.Context) ([]MaintenanceType, error) {
-	rows, err := r.pool.Query(ctx, "SELECT code,name,active,version FROM maintenance_types WHERE code<>'oil' ORDER BY name")
+	rows, err := r.pool.Query(ctx, "SELECT code,name,active,version,program_id::text FROM maintenance_types WHERE code<>'oil' ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func (r *MaintenanceRepository) Types(ctx context.Context) ([]MaintenanceType, e
 	items := []MaintenanceType{}
 	for rows.Next() {
 		var v MaintenanceType
-		if err := rows.Scan(&v.Code, &v.Name, &v.Active, &v.Version); err != nil {
+		if err := rows.Scan(&v.Code, &v.Name, &v.Active, &v.Version, &v.ProgramID); err != nil {
 			return nil, err
 		}
 		items = append(items, v)
@@ -166,12 +167,12 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	}
 	var row pgx.Row
 	if v.Version == 0 {
-		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_types(code,name,active) VALUES($1,$2,$3) RETURNING code,name,active,version`, v.Code, v.Name, v.Active)
+		row = r.pool.QueryRow(ctx, `INSERT INTO maintenance_types(code,name,active,program_id) VALUES($1,$2,$3,NULLIF($4,'')::uuid) RETURNING code,name,active,version,program_id::text`, v.Code, v.Name, v.Active, v.ProgramID)
 	} else {
-		row = r.pool.QueryRow(ctx, `UPDATE maintenance_types SET name=$2,active=$3,version=version+1 WHERE code=$1 AND version=$4 RETURNING code,name,active,version`, v.Code, v.Name, v.Active, v.Version)
+		row = r.pool.QueryRow(ctx, `UPDATE maintenance_types SET name=$2,active=$3,program_id=CASE WHEN $5::text IS NULL THEN program_id ELSE NULLIF($5,'')::uuid END,version=version+1 WHERE code=$1 AND version=$4 RETURNING code,name,active,version,program_id::text`, v.Code, v.Name, v.Active, v.Version, v.ProgramID)
 	}
 	var result MaintenanceType
-	err := row.Scan(&result.Code, &result.Name, &result.Active, &result.Version)
+	err := row.Scan(&result.Code, &result.Name, &result.Active, &result.Version, &result.ProgramID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrMaintenanceConflict
 	}
@@ -187,7 +188,7 @@ func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	for i := range m.Services {
 		if m.Services[i].TypeCode == "oil" || m.Services[i].TypeCode == "preventive" {
 			m.Services[i].TypeCode = "preventive"
-			m.Services[i].Name = "PM Service"
+			m.Services[i].Name = "Oil change"
 			if m.Services[i].TrackingCode == "oil" {
 				m.Services[i].TrackingCode = "pm"
 			}
@@ -308,22 +309,31 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		}
 	}
 
-	legacyPrograms := in.ProgramIDs == nil
-	if legacyPrograms {
-		in.ProgramIDs = []string{}
-		for _, w := range in.Services {
-			if MaintenanceTrackingCode(w.TypeCode) == "pm" {
-				in.ProgramIDs = append(in.ProgramIDs, OilChangeProgramID)
-				break
-			}
+	// Snapshot explicit program completions and the current service-type links.
+	// Linked types always complete their program, including when an older client
+	// submits an empty selection. This never enrolls a truck into a program.
+	explicitPrograms := in.ProgramIDs
+	in.ProgramIDs = []string{}
+	automaticPrograms := map[string]bool{}
+	for _, work := range in.Services {
+		var program *string
+		if err = tx.QueryRow(ctx, `SELECT program_id::text FROM maintenance_types WHERE code=$1`, MaintenanceTypeCode(work.TypeCode)).Scan(&program); err != nil {
+			return old, ErrMaintenanceInvalid
+		}
+		if program != nil && !automaticPrograms[*program] {
+			automaticPrograms[*program] = true
+			in.ProgramIDs = append(in.ProgramIDs, *program)
 		}
 	}
 	seenPrograms := map[string]bool{}
-	for _, program := range in.ProgramIDs {
+	for _, program := range explicitPrograms {
 		if seenPrograms[program] {
 			return old, ErrMaintenanceInvalid
 		}
 		seenPrograms[program] = true
+		if automaticPrograms[program] {
+			continue
+		}
 		previous := false
 		for _, id := range old.ProgramIDs {
 			if id == program && pmRecordID(old.TruckID) == pmRecordID(in.TruckID) {
@@ -331,12 +341,13 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 			}
 		}
 		var valid bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM service_programs p LEFT JOIN service_program_trucks member ON member.program_id=p.id AND member.truck_id=$2 WHERE p.id=$1 AND ($3 OR (p.active AND member.active)))`, program, in.TruckID, previous || legacyPrograms && program == OilChangeProgramID).Scan(&valid); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM service_programs p LEFT JOIN service_program_trucks member ON member.program_id=p.id AND member.truck_id=$2 WHERE p.id=$1 AND ($3 OR (p.active AND member.active)))`, program, in.TruckID, previous).Scan(&valid); err != nil {
 			return old, err
 		}
 		if !valid {
 			return old, fmt.Errorf("%w: select programs assigned to this truck", ErrMaintenanceInvalid)
 		}
+		in.ProgramIDs = append(in.ProgramIDs, program)
 	}
 	names := []string{}
 	costs := []ExpenseCostItem{}

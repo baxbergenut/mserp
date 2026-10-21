@@ -27,6 +27,8 @@ try {
   const api = async (method, path, data) => { const r = await page.request[method](access.base + '/api' + path, { headers, ...(data ? { data } : {}) }); if (!r.ok()) throw Error(path + ': ' + await r.text()); return r.status() === 204 ? null : r.json(); };
   await page.goto(access.base + '/fleet/service-programs');
   await expect(page.getByRole('heading', { name: 'Service programs', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Service program', {exact:true})).toHaveValue(oil);
+  await page.getByLabel('Service program', {exact:true}).selectOption('');
   await expect(page.getByRole('button', { name: 'Oil change 20k', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add program', exact: true }).click();
   await page.getByLabel('Program name', { exact: true }).fill(name);
@@ -75,21 +77,44 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   clutch = (await api('get', `/maintenance/programs/${p.id}/trucks`)).find(t => t.truckId === truck);
   expect(clutch.lastMiles).toBe(100000); expect(clutch.milesSinceService).toBe(49500);
-  // A normal work order can fulfill multiple explicitly selected programs.
+  // An Oil change work order resets only its linked program, with no checkbox.
   await page.goto(access.base + '/maintenance');
   await page.getByRole('button', { name: 'Add work order', exact: true }).click();
   await page.getByLabel('Maintenance truck', { exact: true }).selectOption(truck);
   await page.getByLabel('Maintenance service date', { exact: true }).fill(today);
   await page.getByLabel('Maintenance odometer', { exact: true }).fill('149500');
   await page.getByLabel('Maintenance amount', { exact: true }).fill('250');
-  await page.getByRole('checkbox', { name: 'Completes ' + name, exact: true }).check();
-  await page.getByRole('checkbox', { name: 'Completes Oil change 20k', exact: true }).check();
+  await expect(page.getByText('Updates Oil change 20k automatically when completed.', {exact:true})).toBeVisible();
+  await expect(page.getByRole('checkbox', {name:/^Completes /})).toHaveCount(0);
   await page.getByRole('button', { name: 'Save work order', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   clutch = (await api('get', `/maintenance/programs/${p.id}/trucks`)).find(t => t.truckId === truck);
-  expect(clutch.lastMiles).toBe(149500); expect(clutch.milesSinceService).toBe(0);
-  const charged = await api('get', '/maintenance/' + clutch.lastRecordId);
-  expect(charged.programIds.sort()).toEqual([oil, p.id].sort()); expect(charged.expenseId).toBeTruthy();
+  expect(clutch.lastMiles).toBe(100000); expect(clutch.milesSinceService).toBe(49500);
+  const oilTruck=(await api('get', `/maintenance/programs/${oil}/trucks`)).find(t=>t.truckId===truck);
+  const charged=await api('get','/maintenance/'+oilTruck.lastRecordId);
+  expect(charged.programIds).toEqual([oil]);expect(charged.expenseId).toBeTruthy();
+  // Configure a different service type through Settings, then let its normal
+  // work order complete the clutch program automatically.
+  await page.getByRole('tab',{name:'Settings',exact:true}).click();
+  await page.getByRole('button',{name:'Add service type',exact:true}).click();
+  await page.getByLabel('Service type name',{exact:true}).fill('Clutch inspection '+suffix);
+  await page.getByLabel('Service type program',{exact:true}).selectOption(p.id);
+  await page.getByRole('button',{name:'Save type',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const linked=(await api('get','/maintenance/options')).types.find(t=>t.name==='Clutch inspection '+suffix);
+  expect(linked.programId).toBe(p.id);
+  await page.getByRole('tab',{name:'History',exact:true}).click();
+  await page.getByRole('button',{name:'Add work order',exact:true}).click();
+  await page.getByLabel('Service type',{exact:true}).selectOption(linked.code);
+  await page.getByLabel('Maintenance truck',{exact:true}).selectOption(truck);
+  await page.getByLabel('Maintenance service date',{exact:true}).fill(today);
+  await page.getByLabel('Maintenance odometer',{exact:true}).fill('149500');
+  await page.getByLabel('Maintenance amount',{exact:true}).fill('25');
+  await expect(page.getByText('Updates '+name+' automatically when completed.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Save work order',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  clutch=(await api('get',`/maintenance/programs/${p.id}/trucks`)).find(t=>t.truckId===truck);
+  expect(clutch.lastMiles).toBe(149500);expect(clutch.milesSinceService).toBe(0);
   // A stale program edit must fail without replacing the newer name/settings.
   await api('put', `/maintenance/programs/${p.id}`, { ...p, instructions: 'Updated instructions' });
   expect((await page.request.put(access.base + `/api/maintenance/programs/${p.id}`, { headers, data: p })).status()).toBe(409);
@@ -135,5 +160,5 @@ try {
   await page.goto(access.base + '/fleet/preventative-maintenance');
   await page.waitForURL(u => u.pathname === '/fleet/service-programs' && u.searchParams.get('program') === oil);
   expect(errors).toEqual([]);
-  console.log('Service programs E2E passed: program setup, bulk enrollment, independent and combined completions, exact mileage difference, overrides, stale edits, truck profile, view-only access, legacy redirect and mobile layout.');
+  console.log('Service programs E2E passed: program setup, bulk enrollment, independent completions and automatic service-type resets, exact mileage difference, overrides, stale edits, truck profile, view-only access, legacy redirect and mobile layout.');
 } finally { await browser.close(); }

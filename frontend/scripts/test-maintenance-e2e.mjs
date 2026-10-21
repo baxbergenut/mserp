@@ -21,7 +21,7 @@ try {
  let options = await (await page.request.get(access.base + '/api/maintenance/options')).json();
  expect(options.types.length).toBeGreaterThanOrEqual(10);
  expect(options.types.some(t=>t.code==='oil')).toBe(false);
- expect(options.types.find(t=>t.code==='preventive').name).toBe('PM Service');
+ expect(options.types.find(t=>t.code==='preventive').name).toBe('Oil change');
  const truck = options.trucks.find(t => t.active);
  expect(options.vendors.some(v=>v.name.includes(" — "))).toBe(false);
  expect(options.vendors.length).toBeGreaterThanOrEqual(12);
@@ -136,7 +136,7 @@ try {
  expect(conflict.status()).toBe(400);
  const report = await api('get', '/maintenance/reports?truckId=' + truck.id+'&vendorId='+vendor.id);
  expect(report.total).toBe('120.30'); expect(report.fees).toBe('3.00');
- expect(report.serviceTypes.find(r => r.group === 'PM Service').amount).toBe('120.30');
+ expect(report.serviceTypes.find(r => r.group === 'Oil change').amount).toBe('120.30');
  const pmSummary = (await api('get','/maintenance/preventative?serviceCode=pm&search='+encodeURIComponent(truck.unitNumber))).items.find(t=>t.truckId===truck.id);
  await page.route('**/api/maintenance/odometer?*',route=>route.fulfill({json:{reading:{mileage:650000,reportedAt:new Date().toISOString()},message:''}}));
  await page.goto(access.base+'/fleet/preventative-maintenance');
@@ -247,7 +247,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const aiVisit=(await api('get','/maintenance?truckId='+truck.id)).items.find(v=>v.vendorName==='Synthetic repair shop');
   expect(aiVisit.documents).toHaveLength(1);expect(aiVisit.documents[0].fileName).toBe('synthetic-oil-invoice.txt');
-  expect(aiVisit.expense.expenseDate.slice(0,10)).toBe('2026-10-05');expect(aiVisit.expense.expenseType).toContain('PM Service');
+  expect(aiVisit.expense.expenseDate.slice(0,10)).toBe('2026-10-05');expect(aiVisit.expense.expenseType).toContain('Oil change');
  }
 
  // Category View gives access to history/documents, while operational writes remain separate.

@@ -127,6 +127,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	typeProgramMigration, err := os.ReadFile("../../sql/130_service_type_programs.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -143,6 +147,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if mode == "migration" {
 				// Replay task-kind constraints in their original order before the
 				// later DataTruck task category and its inherited assignments.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(typeProgramMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(programMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(dataTruckMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(baselineMigration), "\r\n", "\n"), "", 1)
@@ -185,6 +190,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(baselineMigration))
 				exec(string(dataTruckMigration))
 				exec(string(programMigration))
+				exec(string(typeProgramMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -249,7 +255,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if summary.RecordID == nil || *summary.RecordID != visit.ID || summary.OilType != "15W-40" || summary.CurrentMiles == nil || *summary.CurrentMiles != odo {
 				t.Fatal("incorrect preventative summary", summary)
 			}
-			if visit.Services[0].TypeCode != "preventive" || visit.Services[0].TrackingCode != "pm" || visit.Services[0].Name != "PM Service" {
+			if visit.Services[0].TypeCode != "preventive" || visit.Services[0].TrackingCode != "pm" || visit.Services[0].Name != "Oil change" {
 				t.Fatal("legacy work must use the PM contract", visit.Services)
 			}
 			var defaults int
@@ -374,7 +380,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				t.Fatal("unconfirmed latest visit replaced completed history", historical, err)
 			}
 			legacyPage, err := repo.List(ctx, MaintenanceQuery{TruckID: truck, TypeCode: "preventive", Status: "completed"})
-			if err != nil || len(legacyPage.Items) != 1 || legacyPage.Items[0].Services[0].TypeCode != "preventive" || legacyPage.Items[0].Services[0].Name != "PM Service" || legacyPage.Items[0].Services[0].TrackingCode != "pm" {
+			if err != nil || len(legacyPage.Items) != 1 || legacyPage.Items[0].Services[0].TypeCode != "preventive" || legacyPage.Items[0].Services[0].Name != "Oil change" || legacyPage.Items[0].Services[0].TrackingCode != "pm" {
 				t.Fatal("PM filter must include legacy stored work", legacyPage, err)
 			}
 			testMaintenanceInvoiceDetails(t, ctx, admin, pool)
