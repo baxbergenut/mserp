@@ -95,8 +95,7 @@ try {
   await page.getByLabel('Unit number', { exact: true }).selectOption('own-truck');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Driver');
   await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver']);
-  await page.getByRole('combobox', { name: 'Driver', exact: true }).click();
-  await page.getByRole('option', { name: 'Company Driver', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Driver', exact: true }).selectOption('company-driver');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Company');
   await page.getByLabel('Unit number', { exact: true }).selectOption('investor-truck');
   await expect(page.getByLabel('Expense type', { exact: true }).locator('option')).toHaveText(['Select expense type',...maintenanceNames,'Custom expense type…']);
@@ -267,28 +266,22 @@ try {
   const beforePenalty=writes.length;
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   expect(writes.length).toBe(beforePenalty); // Browser validation requires the debtor.
-  await page.getByRole('combobox',{name:'Driver',exact:true}).fill('Applicant Name');
-  await page.getByRole('button',{name:'Create entry',exact:true}).click();
-  expect(writes.length).toBe(beforePenalty); // A typed name cannot become a payroll debtor.
-  await page.getByRole('combobox',{name:'Driver',exact:true}).fill('Hired');
-  await page.getByRole('option',{name:'Hired Driver',exact:true}).click();
+  await expect(page.getByLabel('Driver',{exact:true}).locator('option[value^="applicant:"]')).toHaveCount(0);
+  await page.getByRole('combobox',{name:'Driver',exact:true}).selectOption('hired');
   await page.screenshot({path:join(tmpdir(),'mserp-penalty-modal.png'),fullPage:true});
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(beforePenalty+1);
   expect(writes.at(-1)).toMatchObject({categoryId:'penalties',coveredBy:'Driver',driverId:'hired',ownerId:null,paymentType:'',paidBy:'',baseAmount:'500.01'});
-  // Typing searches only; saving an applicant requires an explicit stored identity.
+  // The standard dropdown selects only existing drivers or stored applicants.
   await page.getByRole('button',{name:'Add entry',exact:true}).click();
   const driverField = page.getByRole('combobox',{name:'Driver',exact:true});
-  await driverField.fill('Company Driver');
-  await driverField.press('Tab');
-  await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('');
-  await driverField.fill('Hiring Applicant');
-  await page.getByRole('option',{name:/Hiring Applicant/}).click();
+  await expect(driverField).toHaveJSProperty('tagName','SELECT');
+  await driverField.selectOption('applicant:applicant-001');
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByLabel('Unit number',{exact:true}).selectOption('investor-truck');
-  await expect(driverField).toHaveValue('Hiring Applicant');
+  await expect(driverField).toHaveValue('applicant:applicant-001');
   await page.getByLabel('Unit number',{exact:true}).selectOption('');
-  await expect(driverField).toHaveValue('Hiring Applicant');
+  await expect(driverField).toHaveValue('applicant:applicant-001');
   await expect(page.getByLabel('Who will cover',{exact:true})).toHaveValue('Company');
   await expect(page.getByLabel('Payment method',{exact:true}).locator('option')).toHaveText(['Select payment method','Cash','EFS']);
   await page.getByLabel('Payment method',{exact:true}).selectOption('Cash');
@@ -301,18 +294,15 @@ try {
   entries.push({...blankDraft,...writes.at(-1),id:'applicant-expense',category:'Maintenance',updatedAt:'2026-10-21T12:00:00Z',verifications:[],paymentType:'Old card'});
   await page.reload();
   await page.getByRole('row',{name:'Open Towing',exact:true}).click();
-  await expect(driverField).toHaveValue('Hiring Applicant');
+  await expect(driverField).toHaveValue('applicant:applicant-001');
   await expect(page.getByLabel('Payment method',{exact:true})).toHaveValue('Old card');
   await expect(page.getByLabel('Payment method',{exact:true}).locator('option')).toHaveText(['Select payment method','Old card (saved)','Cash','EFS']);
-  await driverField.fill('Company');
-  await driverField.press('ArrowDown'); // Clear choice.
-  await driverField.press('ArrowDown'); // Matching existing driver.
-  await driverField.press('Enter');
-  await expect(driverField).toHaveValue('Company Driver');
+  await driverField.selectOption('company-driver');
+  await expect(driverField).toHaveValue('company-driver');
   await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('company-truck');
   await page.getByRole('button',{name:'Close',exact:true}).click();
   entries.pop();
-  if (process.argv.includes('--expenses-only')) { console.log('Expense form checks passed, including applicant selection and search-only typing.'); await browser.close(); server.close(); process.exit(0); }
+  if (process.argv.includes('--expenses-only')) { console.log('Expense form checks passed, including native driver and applicant selection.'); await browser.close(); server.close(); process.exit(0); }
   // Descriptions lead the directory; classifications and legacy fallbacks remain visible.
   entries[0].description = 'Replace damaged mirror and inspect mounting';
   entries[1].description = 'Saved invoice text';

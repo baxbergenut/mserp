@@ -34,12 +34,11 @@ try {
     await page.getByRole('button', {name:'Analyze',exact:true}).click();
     if (mode === 'category-switch') await page.getByLabel('Category', {exact:true}).selectOption(options.categoryId);
     if (mode === 'expense') {
-      await expect(page.getByRole('combobox', {name:'Driver',exact:true})).toHaveValue(name);
+      await expect(page.getByRole('combobox', {name:'Driver',exact:true})).toHaveValue('__unlinked');
       await page.getByRole('button', {name:'Create entry',exact:true}).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page.getByRole('combobox', {name:'Driver',exact:true})).toHaveJSProperty('validationMessage','Select a driver or applicant from the dropdown, or clear the driver field.');
-      await page.getByRole('combobox', {name:'Driver',exact:true}).fill(truck.driverName);
-      await page.getByRole('option', {name:truck.driverName,exact:true}).click();
+      await page.getByRole('combobox', {name:'Driver',exact:true}).selectOption(truck.driverId);
       await page.getByRole('button', {name:'Create entry',exact:true}).click();
     } else {
       await expect(page.getByLabel('Maintenance driver', {exact:true})).toHaveValue('');

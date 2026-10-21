@@ -38,9 +38,9 @@ try {
  await page.getByLabel('Expense type',{exact:true}).selectOption('Recruiting');
  await page.getByLabel('Amount',{exact:true}).fill('85.00');
  const field=page.getByRole('combobox',{name:'Driver',exact:true});
- await field.fill('Not in the system');await field.press('Tab');await expect(field).toHaveValue('');
- await field.fill(name);await page.getByRole('option',{name:new RegExp(name)}).click();
- await expect(field).toHaveValue(name);
+ await expect(field).toHaveJSProperty('tagName','SELECT');
+ await field.selectOption('applicant:'+result.applicantId);
+ await expect(field).toHaveValue('applicant:'+result.applicantId);
  await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('');
  const savedResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/expenses'&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Create entry',exact:true}).click();
