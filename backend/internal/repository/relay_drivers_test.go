@@ -131,23 +131,9 @@ func TestRelayDriverDatabase(t *testing.T) {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before)
-				for _, file := range []string{"075_relay_drivers.sql", "076_relay_offboarding.sql", "077_prepass_truck_links.sql", "078_driver_teams.sql", "079_driver_service_setup.sql", "080_driver_address_consolidation.sql", "081_truck_recurring_charges.sql", "082_prepass_fleet.sql", "083_prepass_fleet_toll_links.sql", "104_driver_name_parts.sql", "114_truck_color.sql"} {
-					migration, e := os.ReadFile("../../sql/" + file)
-					if e != nil {
-						t.Fatal(e)
-					}
-					exec(string(migration))
-				}
-				exec(`ALTER TABLE system_task_assignments ADD COLUMN assignee_role_ids uuid[] NOT NULL DEFAULT '{}'; ALTER TABLE system_task_records ADD COLUMN maintenance_truck_id uuid; ALTER TABLE system_task_records ADD COLUMN maintenance_service text NOT NULL DEFAULT ''`)
-				migration, err := os.ReadFile("../../sql/128_datatruck_enrollment.sql")
-				if err != nil {
-					t.Fatal(err)
-				}
-				exec(string(migration))
-				// This intentionally partial schema exercises pre-maintenance
-				// workflows; include the optional task-board assignment projection.
-				exec(`ALTER TABLE system_task_records ADD COLUMN maintenance_program_id uuid;
-                CREATE TABLE service_programs(id uuid PRIMARY KEY,use_default_assignees boolean NOT NULL DEFAULT true,assignee_ids uuid[] NOT NULL DEFAULT '{}',assignee_role_ids uuid[] NOT NULL DEFAULT '{}')`)
+				// Fleet reads include work-order availability, so this upgrade fixture
+				// needs the real later schemas rather than partial maintenance stubs.
+				applyLaterTestMigrations(t, ctx, admin, "074")
 
 			} else {
 				exec(string(source))
