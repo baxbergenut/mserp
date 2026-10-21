@@ -3,8 +3,13 @@ ALTER TABLE driver_service_requests DROP CONSTRAINT driver_service_requests_serv
 ALTER TABLE driver_service_requests ADD CONSTRAINT driver_service_requests_service_check CHECK(service IN ('relay','weighmytruck','datatruck'));
 ALTER TABLE system_task_assignments DROP CONSTRAINT system_task_assignments_kind_check;
 ALTER TABLE system_task_assignments ADD CONSTRAINT system_task_assignments_kind_check CHECK(kind IN ('driver_onboarding','driver_offboarding','relay_review','escrow_release','relay_setup','weighmytruck_setup','datatruck_setup','five_eld_truck','maintenance_pm'));
-INSERT INTO system_task_assignments(kind,assignee_id,assignee_ids,assignee_role_ids)
- SELECT 'datatruck_setup',assignee_id,assignee_ids,assignee_role_ids FROM system_task_assignments WHERE kind='driver_onboarding';
+INSERT INTO system_task_assignments(kind,assignee_id,assignee_ids)
+ SELECT 'datatruck_setup',assignee_id,assignee_ids FROM system_task_assignments WHERE kind='driver_onboarding';
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='system_task_assignments'::regclass AND attname='assignee_role_ids' AND NOT attisdropped) THEN
+  EXECUTE 'UPDATE system_task_assignments d SET assignee_role_ids=s.assignee_role_ids FROM system_task_assignments s WHERE d.kind=''datatruck_setup'' AND s.kind=''driver_onboarding''';
+ END IF;
+END $$;
 CREATE TABLE datatruck_enrollments (
  entity_kind text NOT NULL CHECK(entity_kind IN ('drivers','trucks')),
  entity_id uuid NOT NULL,
