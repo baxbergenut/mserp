@@ -435,3 +435,5 @@ work-order completion snapshots and program enrollment remain unchanged.
 Service rows use Record service to enter completed work; the last-service date
 opens its saved work order. There is no separate last-service pencil. The Actions
 header and row controls align to the table's right edge.
+Record service prefills the truck's current odometer and lets the user change it.
+No available reading leaves the field blank; zero remains a valid reading.

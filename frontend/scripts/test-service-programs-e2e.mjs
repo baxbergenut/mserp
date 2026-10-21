@@ -56,6 +56,7 @@ try {
   let members = await api('get', `/maintenance/programs/${p.id}/trucks`);
   expect(members).toHaveLength(2); expect(members.every(t => t.lastDate === null)).toBe(true);
   await row.getByRole('button', { name: 'Record service', exact: true }).click();
+  await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('');
   await page.getByLabel('Program service date', { exact: true }).fill(yesterday);
   await page.getByLabel('Program service odometer', { exact: true }).fill('100000');
   await page.getByLabel('Program service notes', { exact: true }).fill('Synthetic completed clutch inspection');
@@ -76,7 +77,7 @@ try {
   await page.getByPlaceholder('Search trucks or programs…').fill(unit);
   await row.getByRole('button', { name: 'Record service', exact: true }).click();
   await page.getByLabel('Program service date', { exact: true }).fill(today);
-  await page.getByLabel('Program service odometer', { exact: true }).fill('149500');
+  await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('149500');
   await page.getByRole('button', { name: 'Record service', exact: true }).last().click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   clutch = (await api('get', `/maintenance/programs/${p.id}/trucks`)).find(t => t.truckId === truck);

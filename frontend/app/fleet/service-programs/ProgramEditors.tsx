@@ -71,7 +71,7 @@ export function ProgramTruckEditor({ truck, onClose, onSaved }: { truck: Program
 export function ProgramServiceEditor({ truck, program, options, baseline, onClose, onSaved }: { truck: ProgramTruck; program: ServiceProgram; options: MaintenanceOptions; baseline: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [id] = useState(() => crypto.randomUUID());
   const [date, setDate] = useState(baseline ? truck.lastDate ?? "" : today());
-  const [miles, setMiles] = useState(baseline ? truck.lastMiles?.toString() ?? "" : "");
+  const [miles, setMiles] = useState((baseline ? truck.lastMiles : truck.currentMiles)?.toString() ?? "");
   const [notes, setNotes] = useState("");
   const [programIds, setProgramIds] = useState([program.id]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
