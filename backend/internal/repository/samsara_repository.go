@@ -46,8 +46,21 @@ func (r *SamsaraRepository) Store(ctx context.Context, s samsara.Snapshot, now t
 			gpsAt = &v.GPS.Time
 		}
 		if v.Odometer != nil {
-			miles = &v.Odometer.Miles
-			odoAt = &v.Odometer.Time
+			var truck string
+			if err = tx.QueryRow(ctx, `SELECT coalesce((SELECT id::text FROM trucks WHERE upper(btrim(vin))=$1 AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=$1)=1),'')`, v.VIN).Scan(&truck); err != nil {
+				return err
+			}
+			ok := true
+			if truck != "" {
+				ok, err = acceptMaintenanceTelemetry(ctx, tx, truck, "samsara", v.ID, MaintenanceTelemetry{Mileage: v.Odometer.Miles, ReportedAt: v.Odometer.Time})
+				if err != nil {
+					return err
+				}
+			}
+			if ok {
+				miles = &v.Odometer.Miles
+				odoAt = &v.Odometer.Time
+			}
 		}
 		if _, err = tx.Exec(ctx, `DELETE FROM samsara_tracking WHERE vin=$1 AND EXISTS(SELECT 1 FROM samsara_telemetry WHERE vin=$1 AND vehicle_id<>$2)`, v.VIN, v.ID); err != nil {
 			return err

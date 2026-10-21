@@ -2,6 +2,7 @@ package samsara
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,46 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSnapshotDuplicateVINUsesOnlyUnambiguousAttachedGateway(t *testing.T) {
+	for _, tc := range []struct {
+		name, roster, stats, wantID string
+	}{
+		{"unpaired history", `[{"id":"old","vin":"1M8GDM9AXKP042788","name":"003"},{"id":"current","vin":"1M8GDM9AXKP042788","gateway":{"serial":"GW-003"}}]`, `[{"id":"old"},{"id":"current"}]`, "current"},
+		{"multiple attached gateways", `[{"id":"old","vin":"1M8GDM9AXKP042788","name":"Inactive","gateway":{"serial":"GW-OLD"}},{"id":"current","vin":"1M8GDM9AXKP042788","gateway":{"serial":"GW-003"}}]`, `[{"id":"old"},{"id":"current"}]`, ""},
+		{"no attached gateway", `[{"id":"old","vin":"1M8GDM9AXKP042788"},{"id":"current","vin":"1M8GDM9AXKP042788","gateway":{"serial":" "}}]`, `[{"id":"current"}]`, ""},
+		{"duplicate stats stay ambiguous", `[{"id":"old","vin":"1M8GDM9AXKP042788"},{"id":"current","vin":"1M8GDM9AXKP042788","gateway":{"serial":"GW-003"}}]`, `[{"id":"current"},{"id":"current"}]`, ""},
+		{"duplicate provider IDs stay ambiguous", `[{"id":"current","vin":"1M8GDM9AXKP042788","gateway":{"serial":"GW-003"}},{"id":"current","vin":"1M8GDM9AXKP042789"}]`, `[{"id":"current"}]`, ""},
+		{"gateway attached to conflicting VINs", `[{"id":"one","vin":"1M8GDM9AXKP042788","gateway":{"serial":"GW-003"}},{"id":"two","vin":"1M8GDM9AXKP042789","gateway":{"serial":"GW-003"}}]`, `[{"id":"one"},{"id":"two"}]`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				data := tc.roster
+				if r.URL.Path == "/fleet/vehicles/stats" {
+					data = tc.stats
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": json.RawMessage(data)})
+			}))
+			defer server.Close()
+			s, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantID == "" {
+				if len(s.Ambiguous) == 0 {
+					t.Fatal("ambiguous identity was selected", s)
+				}
+				for _, v := range s.Vehicles {
+					if v.VIN == "1M8GDM9AXKP042788" {
+						t.Fatal("ambiguous VIN included", v)
+					}
+				}
+			} else if len(s.Vehicles) != 1 || s.Vehicles[0].ID != tc.wantID || len(s.Ambiguous) != 0 {
+				t.Fatal("attached gateway was not selected", s)
+			}
+		})
+	}
+}
 
 func TestSnapshotIdentityPaginationAndUnits(t *testing.T) {
 	now := time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)

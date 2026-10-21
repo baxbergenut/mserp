@@ -43,9 +43,12 @@ func NewClient(base, token, version string) *Client {
 }
 
 type rosterVehicle struct {
-	ID   string `json:"id"`
-	VIN  string `json:"vin"`
-	Name string `json:"name"`
+	ID      string `json:"id"`
+	VIN     string `json:"vin"`
+	Name    string `json:"name"`
+	Gateway *struct {
+		Serial string `json:"serial"`
+	} `json:"gateway"`
 }
 type rawGPS struct {
 	Time      string   `json:"time"`
@@ -173,25 +176,45 @@ func (c *Client) Snapshot(ctx context.Context, now time.Time) (Snapshot, error) 
 	now = now.Add(time.Since(started))
 	byVIN := map[string][]rosterVehicle{}
 	idCount := map[string]int{}
+	gatewayCount := map[string]int{}
 	byID := map[string][]rawStats{}
 	for _, v := range roster {
 		v.VIN = strings.ToUpper(strings.TrimSpace(v.VIN))
+		idCount[v.ID]++
+		if v.Gateway != nil {
+			gatewayCount[strings.ToUpper(strings.TrimSpace(v.Gateway.Serial))]++
+		}
 		if v.ID == "" || !vinPattern.MatchString(v.VIN) {
 			result.Invalid++
 			continue
 		}
 		byVIN[v.VIN] = append(byVIN[v.VIN], v)
-		idCount[v.ID]++
 	}
 	for _, s := range stats {
 		byID[s.ID] = append(byID[s.ID], s)
 	}
 	for vin, values := range byVIN {
+		// Samsara retains vehicle records after a gateway is unpaired. Resolve
+		// that history only when exactly one record has an attached gateway.
+		// Names, latest timestamps and the size of an odometer are not identity.
+		if len(values) > 1 {
+			paired := []rosterVehicle{}
+			for _, v := range values {
+				if v.Gateway != nil && strings.TrimSpace(v.Gateway.Serial) != "" {
+					paired = append(paired, v)
+				}
+			}
+			values = paired
+		}
 		if len(values) != 1 || idCount[values[0].ID] != 1 || len(byID[values[0].ID]) > 1 {
 			result.Ambiguous = append(result.Ambiguous, vin)
 			continue
 		}
 		v := values[0]
+		if v.Gateway != nil && strings.TrimSpace(v.Gateway.Serial) != "" && gatewayCount[strings.ToUpper(strings.TrimSpace(v.Gateway.Serial))] != 1 {
+			result.Ambiguous = append(result.Ambiguous, vin)
+			continue
+		}
 		value := Vehicle{ID: v.ID, VIN: vin, Name: v.Name}
 		if entries := byID[v.ID]; len(entries) == 1 {
 			s := entries[0]

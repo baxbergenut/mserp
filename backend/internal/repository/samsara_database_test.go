@@ -82,9 +82,9 @@ func TestSamsaraDatabase(t *testing.T) {
 			if e = admin.QueryRow(ctx, `INSERT INTO trucks(unit_number,vin,active) VALUES('SAMSARA-TEST',$1,true) RETURNING id::text`, vin).Scan(&truck); e != nil {
 				t.Fatal(e)
 			}
-			exec(`INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,(now() AT TIME ZONE 'America/New_York')::date,999999,'manual','Fixture')`, truck)
+			exec(`INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,(now() AT TIME ZONE 'America/New_York')::date,1950,'manual','Fixture')`, truck)
 			m := NewMaintenanceRepository(pool)
-			if e = m.StoreMaintenanceTelemetry(ctx, MaintenanceTelemetryTruck{TruckID: truck, VIN: vin}, &MaintenanceTelemetry{Mileage: 5000, ReportedAt: now}); e != nil {
+			if e = m.StoreMaintenanceTelemetry(ctx, MaintenanceTelemetryTruck{TruckID: truck, VIN: vin}, &MaintenanceTelemetry{Mileage: 2050, ReportedAt: now}); e != nil {
 				t.Fatal(e)
 			}
 			exec(`INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at,provider_truck_number) VALUES($1,41,-76,$2,$2,'ELD')`, vin, now)
@@ -138,7 +138,7 @@ func TestSamsaraDatabase(t *testing.T) {
 				t.Fatal("GPS fallback missing", location, e)
 			}
 			reading, e = m.CachedMaintenanceOdometer(ctx, truck)
-			if e != nil || reading == nil || reading.Source != "five_eld" || reading.Mileage != 5000 {
+			if e != nil || reading == nil || reading.Source != "five_eld" || reading.Mileage != 2050 {
 				t.Fatal("odometer fallback missing", reading, e)
 			}
 			// Provider changes invalidate arrival evidence even if Samsara is older.
@@ -147,6 +147,7 @@ func TestSamsaraDatabase(t *testing.T) {
 			if !evidence.Arrived || evidence.Source != "samsara" || !evidence.LastAt.Equal(old) {
 				t.Fatal("old provider evidence retained", evidence)
 			}
+			testOdometerSourceChecks(t, ctx, admin, pool)
 		})
 	}
 }

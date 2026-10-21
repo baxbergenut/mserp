@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type MaintenanceTelemetryTruck struct {
@@ -34,24 +36,44 @@ func (r *MaintenanceRepository) MaintenanceTelemetryCandidates(ctx context.Conte
 	return items, rows.Err()
 }
 func (r *MaintenanceRepository) StoreMaintenanceTelemetry(ctx context.Context, truck MaintenanceTelemetryTruck, reading *MaintenanceTelemetry) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var id string
+	if err = tx.QueryRow(ctx, `SELECT id FROM trucks WHERE id=$1 AND active AND upper(btrim(vin))=$2 AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=$2)=1 FOR UPDATE`, truck.TruckID, truck.VIN).Scan(&id); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	if reading != nil {
+		ok, err := acceptMaintenanceTelemetry(ctx, tx, truck.TruckID, "five_eld", "", *reading)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			reading = nil
+		}
+	}
 	var miles *int
 	var at *time.Time
 	if reading != nil {
 		miles = &reading.Mileage
 		at = &reading.ReportedAt
 	}
-	_, err := r.pool.Exec(ctx, `INSERT INTO maintenance_telemetry(truck_id,vin,mileage,reported_at) SELECT t.id,$2,$3,$4 FROM trucks t WHERE t.id=$1 AND t.active AND upper(btrim(t.vin))=$2 AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=$2)=1
+	_, err = tx.Exec(ctx, `INSERT INTO maintenance_telemetry(truck_id,vin,mileage,reported_at) SELECT t.id,$2,$3,$4 FROM trucks t WHERE t.id=$1 AND t.active AND upper(btrim(t.vin))=$2 AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=$2)=1
  ON CONFLICT(truck_id) DO UPDATE SET vin=excluded.vin,checked_at=now(),mileage=CASE WHEN maintenance_telemetry.vin<>excluded.vin THEN excluded.mileage WHEN excluded.reported_at>=maintenance_telemetry.reported_at OR maintenance_telemetry.reported_at IS NULL THEN excluded.mileage ELSE maintenance_telemetry.mileage END,reported_at=CASE WHEN maintenance_telemetry.vin<>excluded.vin THEN excluded.reported_at ELSE coalesce(greatest(maintenance_telemetry.reported_at,excluded.reported_at),maintenance_telemetry.reported_at) END`, truck.TruckID, truck.VIN, miles, at)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 func (r *MaintenanceRepository) CachedMaintenanceOdometer(ctx context.Context, truck string) (*MaintenanceTelemetry, error) {
 	var value MaintenanceTelemetry
-	err := r.pool.QueryRow(ctx, `SELECT mileage,reported_at,source FROM (
- SELECT c.mileage,c.odometer_at AS reported_at,'samsara'::text AS source,0 AS priority
- FROM samsara_telemetry c JOIN trucks t ON c.vin=upper(btrim(t.vin)) WHERE t.id=$1 AND c.available AND c.odometer_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
- UNION ALL SELECT c.mileage,c.reported_at,'five_eld'::text,1 FROM maintenance_telemetry c JOIN trucks t ON t.id=c.truck_id AND upper(btrim(t.vin))=c.vin WHERE t.id=$1 AND c.reported_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
- ORDER BY priority LIMIT 1
- ) preferred WHERE reported_at>=now()-interval '1 hour'`, truck).Scan(&value.Mileage, &value.ReportedAt, &value.Source)
+	err := r.pool.QueryRow(ctx, `SELECT c.mileage,c.reported_at,c.source FROM trucks t CROSS JOIN LATERAL (`+maintenanceOdometerCandidatesSQL+`) c
+ WHERE t.id=$1 AND c.reported_at>=now()-interval '1 hour' ORDER BY CASE c.source WHEN 'samsara' THEN 0 ELSE 1 END LIMIT 1`, truck).Scan(&value.Mileage, &value.ReportedAt, &value.Source)
 	if err != nil {
 		if mapNotFound(err) == ErrNotFound {
 			return nil, nil
@@ -61,10 +83,11 @@ func (r *MaintenanceRepository) CachedMaintenanceOdometer(ctx context.Context, t
 	return &value, nil
 }
 
-const maintenanceCurrentReadingJoin = ` LEFT JOIN LATERAL (
+var maintenanceCurrentReadingJoin = ` LEFT JOIN LATERAL (
  SELECT mileage,reading_date,reported_at,source FROM (
- SELECT o.mileage,o.reading_date,NULL::timestamptz AS reported_at,o.source,1 AS priority FROM maintenance_odometer_readings o WHERE o.truck_id=t.id AND o.active
- UNION ALL SELECT c.mileage,(c.reported_at AT TIME ZONE 'America/New_York')::date,c.reported_at,'five_eld',1 FROM maintenance_telemetry c WHERE c.truck_id=t.id AND c.vin=upper(btrim(t.vin)) AND c.reported_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
- UNION ALL SELECT c.mileage,(c.odometer_at AT TIME ZONE 'America/New_York')::date,c.odometer_at,'samsara',0 FROM samsara_telemetry c WHERE c.available AND c.vin=upper(btrim(t.vin)) AND c.odometer_at<=now() AND (SELECT count(*) FROM trucks x WHERE upper(btrim(x.vin))=c.vin)=1
+ SELECT o.mileage,o.reading_date,NULL::timestamptz AS reported_at,o.source,2 AS priority FROM (` + maintenanceOdometerAnchorsSQL + `) o
+ UNION ALL SELECT c.mileage,c.reading_date,c.reported_at,c.source,
+ CASE WHEN c.reported_at<now()-interval '1 hour' THEN 2 WHEN c.source='samsara' THEN 0 ELSE 1 END
+ FROM (` + maintenanceOdometerCandidatesSQL + `) c
  ) observed ORDER BY priority,reading_date DESC,mileage DESC,reported_at DESC NULLS LAST LIMIT 1
  ) r ON true `

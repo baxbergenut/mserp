@@ -21,17 +21,32 @@ independently; an older sample cannot rewind a cache. GPS samples are mph;
 odometer meters convert to rounded miles. Valid ECU odometer wins over a GPS
 odometer; distance-since-gateway-installation is never an odometer substitute.
 
-Matching uses exact trimmed uppercase VIN, unique in both the provider roster and
-MSERP (including inactive local duplicates). Names/unit numbers never establish
-identity, and reading telemetry never creates trucks, ownership or assignments.
+Matching uses exact trimmed uppercase VIN, unique in MSERP (including inactive
+local duplicates). Samsara can retain an unpaired historical vehicle for the same
+VIN: when multiple roster records share a VIN, exactly one attached gateway
+(`gateway.serial`) resolves the current record. Zero or multiple attached gateways,
+duplicate provider IDs/stats, or a gateway serial attached to multiple records stay
+ambiguous. Never choose by name, largest mileage or newest timestamp. Reading
+telemetry never creates trucks, ownership or assignments.
 
-When a valid matched Samsara field exists it takes priority, including over a
-newer Five ELD observation or a manual operational current reading. Missing GPS
-or odometer independently falls back to the existing source. Last-known Samsara
-data retains its provider timestamp and normal stale display; an old provider
-reading is not made fresh by polling. The Work order autofill still requires a
-reading within one hour; stale preferred data is not silently relabelled as live.
-Historical service odometers and invoices are not rewritten.
+GPS and odometer selection are independent. GPS keeps the existing Samsara-first
+rule. Odometers prefer fresh, plausible Samsara, then fresh, plausible Five ELD.
+Saved history and valid last-known telemetry remain available when neither is
+fresh, retaining their original dates and normal stale/missing-information status.
+Work order autofill requires a valid provider observation within one hour.
+
+Both telemetry providers are checked against active manual readings, completed
+work orders and effective program baselines. A candidate cannot precede reviewed
+history, fall below its mileage, or imply over 100 mph continuously (whole-date
+anchors allow the full observation day plus 100 miles of measurement tolerance).
+Five ELD must also agree with an otherwise valid Samsara observation within 100
+miles/hour of elapsed observation time plus 25 miles. Each provider's new sample
+must not rewind or jump beyond that precise-time bound from its last accepted
+valid sample. Rejected updates preserve the last accepted cache value/timestamp;
+GPS still updates independently. Read-time checks also screen legacy bad caches
+and immediately revalidate after a baseline correction. Superseded source-revision
+odometers are not reinstated as validation anchors or saved fallback values.
+No offset is invented and no historical service odometer or invoice is rewritten.
 
 The shared location selection feeds Status Board, driver/truck profile maps and
 GPS arrival/travel automation. Provider changes invalidate cached arrival/ETA

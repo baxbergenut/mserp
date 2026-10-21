@@ -2404,10 +2404,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   read complete paginated vehicle/stat snapshots into separate caches. Server-only
   `SAMSARA_API_TOKEN`, optional `SAMSARA_API_VERSION`, `SAMSARA_API_URL` and
   `SAMSARA_SYNC_INTERVAL` configure a startup/minute worker. No provider writes.
-- Exact unique VINs select Samsara per field before Five ELD/manual current data.
+- Exact VINs match only one local truck. Duplicate Samsara VINs resolve only to
+  one attached gateway; multiple gateways or duplicate IDs/stats stay ambiguous.
   Shared location/mileage readers cover boards, maps, service programs, reminders
-  and autofill. GPS and odometer fall back independently only when unavailable;
-  preserve provider timestamps/staleness and original one-hour autofill guard.
+  and autofill. Odometers prefer fresh plausible Samsara, then validated fresh
+  Five ELD; `maintenance_odometer_checks.go` rejects backwards/implausible mileage
+  against reviewed service/manual history, effective baselines and accepted samples.
+  Read-time guards exclude legacy bad caches; rejected imports preserve last good
+  readings. GPS is independent. Preserve timestamps and one-hour autofill guard.
   Source changes invalidate arrival/ETA evidence; Samsara samples use mph.
 - Keep read-only review servers' Samsara token empty. Run TestSamsaraDatabase,
   TestDriverBoardDatabase, TestMaintenanceDatabase and test-samsara-views.mjs.

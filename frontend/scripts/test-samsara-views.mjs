@@ -7,8 +7,8 @@ if(!['127.0.0.1','localhost'].includes(new URL(access.base).hostname)||!/^review
 const sql=query=>execFileSync(process.env.PSQL_PATH||'psql',['-X','-Atq','-v','ON_ERROR_STOP=1','-d',dsn],{input:`SET search_path TO ${access.schema},public;\n${query}`,encoding:'utf8',windowsHide:true}).trim();
 const vin='1FUJGLDR0NL000101',oil='00000000-0000-4000-8000-000000000020';
 sql(`INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at,provider_truck_number) VALUES('${vin}',41,-76,now()-interval '1 minute',now(),'101');
- INSERT INTO maintenance_telemetry(truck_id,vin,mileage,reported_at) VALUES('${fixture.ownTruck}','${vin}',600000,now()-interval '1 minute');
- INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES('${fixture.ownTruck}',(now() AT TIME ZONE 'America/New_York')::date,700000,'manual','Fixture');
+ INSERT INTO maintenance_telemetry(truck_id,vin,mileage,reported_at) VALUES('${fixture.ownTruck}','${vin}',500005,now()-interval '1 minute');
+ INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES('${fixture.ownTruck}',(now() AT TIME ZONE 'America/New_York')::date,499950,'manual','Fixture');
  INSERT INTO samsara_telemetry(vin,vehicle_id,unit_number,latitude,longitude,heading,gps_at,mileage,odometer_at,fetched_at) VALUES('${vin}','fixture-samsara','101',40,-75,90,now()-interval '5 minutes',500000,now()-interval '5 minutes',now());`);
 const browser=await chromium.launch();
 try{
@@ -35,6 +35,22 @@ try{
  expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading.source).toBe('samsara');
  sql(`UPDATE samsara_telemetry SET available=false WHERE vin='${vin}';`);
  expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading.source).toBe('five_eld');
+ // A fresh but impossible Five ELD value cannot enter a program calculation or
+ // populate a new work order, including a legacy cache from an older release.
+ sql(`UPDATE maintenance_telemetry SET mileage=140159 WHERE truck_id='${fixture.ownTruck}';`);
+ expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading).toBeNull();
+ await page.goto(access.base+'/fleet/service-programs');await page.getByPlaceholder('Search trucks or programs…').fill('101');
+ await expect(row.getByRole('button',{name:'Edit current odometer for 101',exact:true})).toHaveText('499,950');
+ await expect(row.locator('[data-odometer-fresh]')).toHaveAttribute('title',/manual/);
+ await page.goto(access.base+'/maintenance');await page.getByRole('button',{name:'Add work order',exact:true}).click();await page.getByLabel('Maintenance truck',{exact:true}).selectOption(fixture.ownTruck);
+ await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ // Valid fresh fallback outranks stale Samsara, with the original observation
+ // timestamp and independent GPS selection.
+ sql(`UPDATE samsara_telemetry SET available=true,odometer_at=now()-interval '2 hours' WHERE vin='${vin}'; UPDATE maintenance_telemetry SET mileage=500100 WHERE truck_id='${fixture.ownTruck}';`);
+ expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading.source).toBe('five_eld');
+ await page.goto(access.base+'/fleet/service-programs');await page.getByPlaceholder('Search trucks or programs…').fill('101');
+ await expect(row.getByRole('button',{name:'Edit current odometer for 101',exact:true})).toHaveText('500,100');
+ await row.getByRole('button',{name:'Record service',exact:true}).click();await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('500100');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect(errors).toEqual([]);
- console.log('Samsara views passed: priority over newer Five ELD/manual mileage, program and work-order prefill, truck/driver maps, Status Board provider labels, independent GPS/odometer fallback.');
+ console.log('Samsara views passed: valid source priority, program/work-order prefill, maps and board labels, rejected Five ELD legacy cache, manual fallback, fresh validated fallback ahead of stale Samsara.');
 }finally{await browser.close();}
