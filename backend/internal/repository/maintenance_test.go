@@ -139,6 +139,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	historicalMigration, err := os.ReadFile("../../sql/135_historical_work_orders_paid.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -153,6 +157,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(historicalMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(odometerMigration), "\r\n", "\n"), "", 1)
 				// Replay task-kind constraints in their original order before the
 				// later DataTruck task category and its inherited assignments.
@@ -201,11 +206,9 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(dataTruckMigration))
 				exec(string(programMigration))
 				exec(string(typeProgramMigration))
-				exec(string(odometerMigration))
-				if err != nil {
-					t.Fatal(err)
-				}
 				exec(string(workflowMigration))
+				exec(string(odometerMigration))
+				exec(string(historicalMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -408,6 +411,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if err := pool.QueryRow(ctx, "SELECT count(*)::text FROM maintenance_changes WHERE record_id=$1", id).Scan(&amount); err != nil || amount != "3" {
 				t.Fatal("missing void audit", err)
 			}
+			testHistoricalPaidCutover(t, ctx, admin, pool, string(historicalMigration))
 		})
 	}
 }

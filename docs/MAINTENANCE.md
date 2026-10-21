@@ -510,11 +510,20 @@ release of this order's hold and either that confirmation or explicit No charge.
 Confirmed financial fields cannot be silently changed or detached. Other orders'
 holds remain effective after this order is Done.
 
-Historical invoice-backed service remains Awaiting payment until explicitly
-reviewed; no historical payment or closure is inferred. Canceled/voided records
-remain in Canceled; closed orders appear in Completed - paid. Legacy service and
-financial IDs remain compatible, and
-workflow, hold and payment-confirmation changes retain audit history.
+Migration 135 applies the user's explicit confirmation that pre-workflow work was
+paid. A one-time historicalPaid marker covers only blank work_status, no hold,
+completed/needs_review records created before migration 132's ledger activation
+instant. Canceled/voided records and explicit new workflow stages are excluded.
+The marker is immutable and cannot be supplied by clients or added to new rows.
+Those records appear only in Completed - paid, including unresolved imported oil
+history; original service status, truck linkage, dates, odometers and programs
+remain unchanged. Never manufacture a payment transaction, zero/no-charge invoice
+or payment date. Existing invoice method/payer remain visible as recorded, while
+unknown invoice amounts stay unknown. The versioned cutover writes per-record
+before/after audit snapshots. Payroll/owner recovery and expense fields are untouched.
+Historical correction forms preserve service-review status, and historical records
+cannot reopen into active work or place dispatch holds. New orders retain explicit
+payment confirmation. Canceled/voided records remain in Canceled.
 
 Validation: TestMaintenanceDatabase covers fresh/incremental schemas as mserp_app,
 multiple holds, stale edits, dispatch guards, no-price creation, no-charge closure,
@@ -522,3 +531,6 @@ creator immutability and invoice-confirmation guards. The real API/browser
 scripts test-maintenance-e2e.mjs and test-fleet-workflow-e2e.mjs use review-local.mjs
 with an isolated local _test database, including non-administrator Fleet release,
 Shop-only live board display, stage-table separation, details and mobile layouts.
+The historical cutover is also covered by test-historical-work-orders-e2e.mjs
+against a disposable local review schema, including historical payment display,
+unlinked oil history and preservation of new unpaid orders.

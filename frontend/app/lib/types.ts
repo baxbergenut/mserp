@@ -778,6 +778,7 @@ export type ExpenseDocument = MaintenanceDocument;
 export type WorkOrderStatus = "open" | "scheduled" | "in_progress" | "completed" | "closed" | "canceled" | "needs_review" | "voided";
 export interface MaintenanceWorkflow { workStatus?:WorkOrderStatus; dispatchStatus?:""|Exclude<TruckOperatingStatus,"ready">; waitingOn?:string; scheduledFor?:string|null; expectedReady?:string|null; priority?:"normal"|"high"|"urgent"; noCharge?:boolean; cancelReason?:string; }
 export interface MaintenanceRecord extends MaintenanceWorkflow {
+ historicalPaid?:boolean;
  paymentConfirmation?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;confirmedBy:string;confirmedAt:string}|null;
   programIds?: string[];
   oilType: string;

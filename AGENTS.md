@@ -2461,3 +2461,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   No charge. Confirmed invoice fields are protected. It never issues money or
   changes expense_payments/payroll recovery; do not infer payment from collections.
   See docs/MAINTENANCE.md and test-fleet-workflow-e2e.mjs.
+- Migration 135 records the user's explicit historical paid confirmation. Only
+  blank workflow stages without holds, created before migration 132's activation,
+  receive immutable historicalPaid and per-record audits. Effective reads put them
+  in Completed - paid, preserving service/identity review, invoices and payroll
+  recovery. No payment transaction, date, price or No charge is inferred. New
+  orders still require explicit payment confirmation; historical corrections cannot
+  reopen work or place holds. See testHistoricalPaidCutover in maintenance tests.

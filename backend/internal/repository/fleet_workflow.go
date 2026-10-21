@@ -53,6 +53,20 @@ func validateMaintenanceWorkflow(in *MaintenanceInput, old MaintenanceRecord) er
 		in.DispatchStatus = &v
 	}
 	invalid := func(message string) error { return fmt.Errorf("%w: %s", ErrMaintenanceInvalid, message) }
+	if old.HistoricalPaid {
+		if in.ConfirmPayment || *in.DispatchStatus != "" {
+			return invalid("historical paid work cannot create a new payment or truck hold")
+		}
+		switch *in.WorkStatus {
+		case "completed", "needs_review", "closed":
+			// Historical payment classification does not confirm unresolved
+			// service/truck identity. Legacy correction forms retain that status.
+			serviceStatus := in.Status
+			in.WorkStatus = &serviceStatus
+		default:
+			return invalid("historical paid work cannot become an ongoing work order")
+		}
+	}
 	switch *in.WorkStatus {
 	case "open", "scheduled", "in_progress", "canceled", "needs_review":
 		in.Status = "needs_review"
