@@ -23,6 +23,7 @@ const trucks = [
 const maintenanceNames = ['Electrical issue','Towing','PM service','Truck wash','Detailing','Road service','Body work','Leakage','Brake issue','Tire issue','Oil change'];
 const settings = [{ id: 'maintenance', name: 'Maintenance', kind: 'category', active: true }, ...maintenanceNames.map((name,i)=>({id:'name-'+i, name,kind:'name',categoryId:'maintenance',active:true}))];
 settings.push({id:'penalties',name:'Penalties',kind:'category',active:true,driverOnly:true});
+settings.push(...['Cash', 'EFS'].map(name => ({id:'method-'+name,kind:'payment_method',name,active:true})));
 const blankDraft = { company: 'Wrong company', categoryId: 'maintenance', expenseDate: '2026-09-28', truckId: 'investor-truck', driverId: 'hired', unitNumber: '101', driverName: 'Hired Driver', amount: '12.50', paymentType: '', expenseType: 'Repair', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: 'Invented payer' };
 let drafts = [{...blankDraft,costBreakdown:[{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]}];
 const writes = [];
@@ -76,7 +77,7 @@ try {
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canRead: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canRead:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
-      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: [], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
+      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
     await route.fulfill({ json: fixtures[path] ?? {} });
@@ -94,7 +95,8 @@ try {
   await page.getByLabel('Unit number', { exact: true }).selectOption('own-truck');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Driver');
   await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver']);
-  await page.getByLabel('Driver', { exact: true }).selectOption('company-driver');
+  await page.getByRole('combobox', { name: 'Driver', exact: true }).click();
+  await page.getByRole('option', { name: 'Company Driver', exact: true }).click();
   await expect(page.getByLabel('Who will cover')).toHaveValue('Company');
   await page.getByLabel('Unit number', { exact: true }).selectOption('investor-truck');
   await expect(page.getByLabel('Expense type', { exact: true }).locator('option')).toHaveText(['Select expense type',...maintenanceNames,'Custom expense type…']);
@@ -252,7 +254,7 @@ try {
   await page.setViewportSize({width:1280,height:1000});
   await page.getByRole('button',{name:'Add entry',exact:true}).click();
   // Switching away from an EFS expense must discard its hidden payer and fee.
-  await page.getByLabel('Payment method',{exact:true}).fill('EFS');
+  await page.getByLabel('Payment method',{exact:true}).selectOption('EFS');
   await page.getByLabel('Paid by',{exact:true}).selectOption('Other User');
   await page.getByLabel('Category',{exact:true}).selectOption('penalties');
   await expect(page.getByLabel('Payment method',{exact:true})).toHaveCount(0);
@@ -265,11 +267,51 @@ try {
   const beforePenalty=writes.length;
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   expect(writes.length).toBe(beforePenalty); // Browser validation requires the debtor.
-  await page.getByLabel('Driver',{exact:true}).selectOption('hired');
+  await page.getByRole('combobox',{name:'Driver',exact:true}).fill('Applicant Name');
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  expect(writes.length).toBe(beforePenalty); // A typed name cannot become a payroll debtor.
+  await page.getByRole('combobox',{name:'Driver',exact:true}).fill('Hired');
+  await page.getByRole('option',{name:'Hired Driver',exact:true}).click();
   await page.screenshot({path:join(tmpdir(),'mserp-penalty-modal.png'),fullPage:true});
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect.poll(()=>writes.length).toBe(beforePenalty+1);
   expect(writes.at(-1)).toMatchObject({categoryId:'penalties',coveredBy:'Driver',driverId:'hired',ownerId:null,paymentType:'',paidBy:'',baseAmount:'500.01'});
+  // One editable dropdown supports both manual names and explicit linked selections.
+  await page.getByRole('button',{name:'Add entry',exact:true}).click();
+  const driverField = page.getByRole('combobox',{name:'Driver',exact:true});
+  await driverField.fill('Company Driver');
+  await driverField.press('Tab');
+  await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('');
+  await driverField.fill('Hiring Applicant');
+  await driverField.press('Escape');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByLabel('Unit number',{exact:true}).selectOption('investor-truck');
+  await expect(driverField).toHaveValue('Hiring Applicant');
+  await page.getByLabel('Unit number',{exact:true}).selectOption('');
+  await expect(driverField).toHaveValue('Hiring Applicant');
+  await expect(page.getByLabel('Who will cover',{exact:true})).toHaveValue('Company');
+  await expect(page.getByLabel('Payment method',{exact:true}).locator('option')).toHaveText(['Select payment method','Cash','EFS']);
+  await page.getByLabel('Payment method',{exact:true}).selectOption('Cash');
+  await page.getByLabel('Expense type',{exact:true}).selectOption('Towing');
+  await page.getByLabel('Amount',{exact:true}).fill('85');
+  const beforeManual = writes.length;
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  await expect.poll(()=>writes.length).toBe(beforeManual+1);
+  expect(writes.at(-1)).toMatchObject({driverId:null,driverName:'Hiring Applicant',truckId:null,unitNumber:'',coveredBy:'Company',paymentType:'Cash'});
+  entries.push({...blankDraft,...writes.at(-1),id:'applicant-expense',category:'Maintenance',updatedAt:'2026-10-21T12:00:00Z',verifications:[],paymentType:'Old card'});
+  await page.reload();
+  await page.getByRole('row',{name:'Open Towing',exact:true}).click();
+  await expect(driverField).toHaveValue('Hiring Applicant');
+  await expect(page.getByLabel('Payment method',{exact:true})).toHaveValue('Old card');
+  await expect(page.getByLabel('Payment method',{exact:true}).locator('option')).toHaveText(['Select payment method','Old card (saved)','Cash','EFS']);
+  await driverField.fill('Company');
+  await driverField.press('ArrowDown'); // Clear choice.
+  await driverField.press('ArrowDown'); // Matching existing driver.
+  await driverField.press('Enter');
+  await expect(driverField).toHaveValue('Company Driver');
+  await expect(page.getByLabel('Unit number',{exact:true})).toHaveValue('company-truck');
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  entries.pop();
   // Descriptions lead the directory; classifications and legacy fallbacks remain visible.
   entries[0].description = 'Replace damaged mirror and inspect mounting';
   entries[1].description = 'Saved invoice text';

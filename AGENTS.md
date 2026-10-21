@@ -90,6 +90,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
+  Expense Driver is an editable dropdown: selecting an existing driver retains
+  assignment defaults; typed names stay unlinked and never create drivers or
+  payroll debtors. Payment methods use active Expense settings in dropdowns and
+  native expense/bulk/work-order save validation. Existing entries can retain
+  their saved historical method; arbitrary new methods are rejected.
 - `backend/internal/httpapi/gross_board_handlers.go` and
   `backend/internal/repository/gross_board_repository.go`: weekly dispatch plans,
   exact load matching, suggestions, and versioned atomic autosaves.

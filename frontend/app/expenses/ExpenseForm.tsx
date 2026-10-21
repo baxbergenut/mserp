@@ -1,7 +1,8 @@
 "use client";
 import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
 
-import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
+import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
+import { ExpenseDriverSelect } from "./ExpenseDriverSelect";
 import { expenseAssignment } from "./assignments";
 import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
@@ -143,19 +144,7 @@ export function ExpenseForm({
 
         </Field>
         <Field label="Driver">
-          <select aria-label="Driver"
-            required={driverOnly}
-            value={value.driverId ?? ""}
-            onChange={(event) => {
-              change(expenseAssignment(value, "driver", event.target.value, drivers, trucks, owners));
-            }}
-            className={controlClass}
-          >
-            <option value="">{driverOnly ? "Select driver" : "No linked driver"}</option>
-            {drivers.map((driver) => (
-              <option key={driver.id} value={driver.id}>{driver.fullName}</option>
-            ))}
-          </select>
+          <ExpenseDriverSelect value={value} drivers={drivers} trucks={trucks} owners={owners} onChange={change} required={driverOnly} className={controlClass} />
 
         </Field>
         {driverOnly ? <p className="text-xs text-zinc-400 sm:col-span-2">Charged to the selected driver.</p> : <>
@@ -163,17 +152,7 @@ export function ExpenseForm({
           <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={change} className={controlClass} />
         </Field>
         <Field label="Payment method">
-          <input
-            aria-label="Payment method"
-            list="payment-types"
-            value={value.paymentType}
-            onChange={(event) => set("paymentType", event.target.value)}
-            className={controlClass}
-            placeholder="e.g. Card 1456"
-          />
-          <datalist id="payment-types">
-            {options.paymentTypes.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <ExpensePaymentMethodSelect value={value.paymentType} methods={options.paymentTypes} onChange={next => set("paymentType", next)} saved={!!value.updatedAt} className={controlClass} />
         </Field>
         <Field label="Paid by">
           <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />

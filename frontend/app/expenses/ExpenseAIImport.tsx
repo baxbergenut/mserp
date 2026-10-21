@@ -9,7 +9,8 @@ import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
 import { extractExpenses } from "../lib/api";
 import type { AIExpenseDraft, Driver, ExpenseInput, ExpenseSetting, Truck } from "../lib/types";
 import { controlClass } from "../components/management/ManagementUI";
-import { ExpensePayerSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
+import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
+import { ExpenseDriverSelect } from "./ExpenseDriverSelect";
 import { expenseAssignment } from "./assignments";
 import type { Investor } from "../lib/types";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
@@ -190,7 +191,6 @@ export function ExpenseBatchEditor({
 
   return (
     <section className="space-y-3">
-      <datalist id="batch-payment-methods">{settings.filter(item => item.kind === "payment_method" && item.active).map(item => <option key={item.id} value={item.name} />)}</datalist>
       <div>
         <h3 className="text-[13px] font-semibold text-zinc-200">Review {values.length} transactions</h3>
       </div>
@@ -237,20 +237,10 @@ export function ExpenseBatchEditor({
                   </select>
                 </td>
                 <td className="space-y-1 px-2 py-2">
-                  <select
-                    value={value.driverId ?? ""}
-                    required={isDriverOnlyExpense(settings, value.categoryId)}
-                    onChange={(event) => {
-                      update(index, expenseAssignment(value,"driver",event.target.value,drivers,trucks,owners));
-                    }}
-                    className={`${compactControl} min-w-44`}
-                  >
-                    <option value="">No linked driver</option>
-                    {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.fullName}</option>)}
-                  </select>
+                  <ExpenseDriverSelect value={value} drivers={drivers} trucks={trucks} owners={owners} onChange={next => update(index, next)} required={isDriverOnlyExpense(settings, value.categoryId)} label={`Transaction ${index + 1} driver`} className={`${compactControl} min-w-44`} />
                 </td>
                 <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={isDriverOnlyExpense(settings, value.categoryId) ? "" : value.paymentType} /></td>
-                <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <input list="batch-payment-methods" aria-label={`Transaction ${index + 1} payment method`} value={value.paymentType} onChange={(event) => update(index, { paymentType: event.target.value })} className={compactControl} />}</td>
+                <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePaymentMethodSelect label={`Transaction ${index + 1} payment method`} value={value.paymentType} methods={settings.filter(item => item.kind === "payment_method" && item.active).map(item => item.name)} onChange={paymentType => update(index, { paymentType })} className={compactControl} />}</td>
                 <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2">{isDriverOnlyExpense(settings, value.categoryId) ? <span>Driver</span> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} />}</td>
                 <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} />}</td>

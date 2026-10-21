@@ -371,6 +371,10 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
+	if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, nil); err != nil {
+		handler.writeError(w, err)
+		return
+	}
 	value, err := handler.repo.CreateExpense(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -406,6 +410,10 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
+		if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, nil); err != nil {
+			handler.writeError(w, err)
+			return
+		}
 		inputs = append(inputs, input)
 	}
 	values, err := handler.repo.CreateExpenses(r.Context(), inputs)
@@ -679,6 +687,10 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to move the entry to that category")
 		return
 	}
+	if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, existing.PaymentType); err != nil {
+		handler.writeError(w, err)
+		return
+	}
 	value, err := handler.repo.UpdateExpense(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -743,6 +755,10 @@ func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categor
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpensePaymentMethodInvalid) {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrExpenseSettingConflict) {
 		writeAPIError(w, http.StatusConflict, "expense changed; close and reopen it before saving")
 		return

@@ -98,7 +98,7 @@ try {
     await page.getByRole('button',{name:'Open expense Equipment',exact:true}).click();
     let modal=page.getByRole('dialog',{name:'Edit entry'});
     await expect(modal).toBeVisible();
-    await modal.getByLabel('Payment method',{exact:true}).fill('EFS');
+    await modal.getByLabel('Payment method',{exact:true}).selectOption('EFS');
     await modal.getByLabel('Amount',{exact:true}).fill('300');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $3.00 · Total: $303.00');
     await modal.getByLabel('Amount',{exact:true}).fill('500');

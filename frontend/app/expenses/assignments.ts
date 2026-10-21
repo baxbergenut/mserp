@@ -14,6 +14,10 @@ export function defaultExpenseResponsibility(value: ExpenseInput, trucks: TruckO
 }
 
 export function expenseAssignment(value: ExpenseInput, kind: "driver" | "truck", id: string, drivers: DriverOption[], trucks: TruckOption[], owners: InvestorOption[]): ExpenseInput {
+  if (kind === "truck" && !value.driverId && value.driverName.trim()) {
+    const truck = trucks.find(t => t.id === id);
+    return defaultExpenseResponsibility({ ...value, truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);
+  }
   const driver = kind === "driver" ? drivers.find(d => d.id === id) : drivers.find(d => d.id === trucks.find(t => t.id === id)?.driverId);
   const truck = kind === "truck" ? trucks.find(t => t.id === id) : trucks.find(t => t.id === driver?.truckId);
   return defaultExpenseResponsibility({ ...value, driverId: driver?.id ?? null, driverName: driver?.fullName ?? "", truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);

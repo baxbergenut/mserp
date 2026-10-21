@@ -99,7 +99,7 @@ try {
  await page.getByLabel('Cost breakdown 2 name custom', { exact: true }).fill('Labor');
  await page.getByLabel('Cost breakdown 2 amount', { exact: true }).fill('20.19');
  await page.getByLabel('Maintenance amount', { exact: true }).fill('120.30');
- await page.getByLabel('Maintenance payment method', { exact: true }).fill('EFS');
+ await page.getByLabel('Maintenance payment method', { exact: true }).selectOption('EFS');
  await page.getByLabel('Work order description',{exact:true}).fill('Full service note '+ 'with detailed inspection findings. '.repeat(20));
  await page.getByRole('button', { name: 'Save work order', exact: true }).click();
  await expect(page.getByText('Cost breakdown total must exactly equal the entered amount.', { exact: true }).first()).toBeVisible();
@@ -119,6 +119,12 @@ try {
  expect(financial.id).toBe(saved.expenseId);
  expect(financial.workOrderDescription).toBe(saved.notes);
  expect(financial.description).toBe(saved.notes);
+ const invalidPaymentWork = {id:saved.id,version:saved.version,truckId:saved.truckId,driverId:saved.driverId,vendorId:saved.vendorId,vendorName:saved.vendorName,vendorAddress:saved.vendorAddress,vendorPhone:saved.vendorPhone,vendorContact:saved.vendorContact,serviceDate:saved.serviceDate,odometer:saved.odometer,location:saved.location,status:saved.status,workOrder:saved.workOrder,notes:saved.notes,services:saved.services,oilType:saved.oilType,programIds:saved.programIds,expense:{updatedAt:financial.updatedAt,categoryId:options.categoryId,expenseDate:financial.expenseDate,amount:financial.baseAmount,baseAmount:financial.baseAmount,expenseType:financial.expenseType,paymentType:'Unconfigured payment method',truckId:saved.truckId,driverId:financial.driverId,ownerId:financial.ownerId,coveredBy:financial.coveredBy,paidBy:financial.paidBy}};
+ for (const [method,path,data] of [['put','/maintenance/'+saved.id,invalidPaymentWork],['post','/maintenance',{...invalidPaymentWork,id:crypto.randomUUID(),version:0}]]) {
+  const rejected = await page.request[method](access.base+'/api'+path,{headers,data});
+  expect(rejected.status()).toBe(400);
+  expect(await rejected.text()).toContain('select an active payment method from Expense settings');
+ }
  await api('put', '/maintenance/vendors/' + vendor.id, { ...vendor, address: 'Changed directory address' });
  expect((await api('get', '/maintenance/' + saved.id)).vendorAddress).toBe('100 Test Road');
  const attachment = { name: 'synthetic-receipt.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic maintenance receipt') };

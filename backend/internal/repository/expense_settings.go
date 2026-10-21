@@ -11,6 +11,22 @@ import (
 
 var ErrExpenseSettingConflict = errors.New("expense setting changed; reload and try again")
 var ErrExpenseSettingInvalid = errors.New("invalid expense setting")
+var ErrExpensePaymentMethodInvalid = errors.New("select an active payment method from Expense settings")
+
+// Existing entries may retain a historical method, but new selections use the catalog.
+func (r *ExpenseRepository) ValidateExpensePaymentMethod(ctx context.Context, method, saved *string) error {
+	if method == nil || *method == "" || (saved != nil && *method == *saved) {
+		return nil
+	}
+	var allowed bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_settings WHERE kind='payment_method' AND active AND name=$1)`, *method).Scan(&allowed); err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrExpensePaymentMethodInvalid
+	}
+	return nil
+}
 
 type ExpenseSetting struct {
 	ID         string  `json:"id"`

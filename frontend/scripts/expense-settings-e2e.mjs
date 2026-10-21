@@ -78,8 +78,8 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   await expect(page.getByLabel('Expense type custom', { exact: true })).toHaveValue('E2E Custom purchase');
   expect(await names()).toEqual(['E2E Flight', 'E2E Hotel']);
   await page.getByLabel('Amount', { exact: true }).fill('25');
-  await page.getByLabel('Payment method', { exact: true }).fill('E2E Card 1234');
-  expect(await page.locator('#payment-types option').evaluateAll(options => options.map(option => option.value))).toContain('E2E Card 1234');
+  await page.getByLabel('Payment method', { exact: true }).selectOption('E2E Card 1234');
+  expect(await page.getByLabel('Payment method', { exact: true }).locator('option').evaluateAll(options => options.map(option => option.value))).toContain('E2E Card 1234');
   await page.getByRole('button', { name: 'Create entry', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   let settings = await (await page.request.get(`${base}/api/expense-settings`)).json();
@@ -109,7 +109,7 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   await row.getByText('E2E Custom purchase', { exact: true }).click();
   await expect(page.getByLabel('Category', { exact: true }).locator('option:checked')).toHaveText('E2E Trips');
   await expect(page.getByLabel('Payment method', { exact: true })).toHaveValue('E2E Card 1234');
-  expect(await page.locator('#payment-types option').evaluateAll(options => options.map(option => option.value))).not.toContain('E2E Card 1234');
+  expect(await page.getByLabel('Payment method', { exact: true }).locator('option').evaluateAll(options => options.map(option => option.value))).not.toContain('E2E Card 1234');
   await page.getByLabel('Amount', { exact: true }).fill('26');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);

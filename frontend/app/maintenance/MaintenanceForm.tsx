@@ -5,7 +5,7 @@ import { LoaderCircle, Sparkles } from "lucide-react";
 import { extractMaintenance } from "../lib/api";
 import type { MaintenanceInput, MaintenanceOptions } from "../lib/types";
 import { controlClass, Field, FormSection } from "../components/management/ManagementUI";
-import { ExpensePayerSelect } from "../expenses/ExpenseFields";
+import { ExpensePayerSelect, ExpensePaymentMethodSelect } from "../expenses/ExpenseFields";
 import { ExpenseCostBreakdown } from "../expenses/ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "../expenses/ExpenseFeePreview";
 import { assignMaintenanceTruck, maintenanceDraft, normalizeMaintenance, serviceWork, today } from "./maintenance";
@@ -73,7 +73,7 @@ export function MaintenanceForm({ value, options, onChange, odometerMessage }: {
     </FormSection>
     {expense && <FormSection title="Payment">
       <Field label="Invoice / reference number"><input aria-label="Maintenance reference number" className={controlClass} value={expense.referenceNumber} onChange={e => finance("referenceNumber", e.target.value)} /></Field>
-      <Field label="Payment method"><input aria-label="Maintenance payment method" list="maintenance-payment-methods" className={controlClass} value={expense.paymentType} onChange={e => finance("paymentType", e.target.value)} /><datalist id="maintenance-payment-methods">{options.paymentMethods.map(m => <option key={m} value={m} />)}</datalist></Field>
+      <Field label="Payment method"><ExpensePaymentMethodSelect label="Maintenance payment method" value={expense.paymentType} methods={options.paymentMethods} onChange={next => finance("paymentType", next)} saved={value.version > 0} className={controlClass} /></Field>
       <Field label="Paid by"><ExpensePayerSelect value={expense.paidBy} users={options.users} label="Maintenance paid by" onChange={next => finance("paidBy", next)} className={controlClass} /></Field>
       <Field label="Who will cover"><select aria-label="Maintenance responsibility" className={controlClass} value={expense.coveredBy} onChange={e => set("expense", { ...expense, coveredBy: e.target.value, ownerId: e.target.value === "Truck Owner" ? truck?.ownerId ?? null : null })}>{!responsibility.includes(expense.coveredBy) && <option value={expense.coveredBy}>{expense.coveredBy} (saved)</option>}{responsibility.map(v => <option key={v} value={v}>{v}{v === "Truck Owner" ? ` · ${expense.ownerId && expense.ownerId !== truck?.ownerId ? value.savedOwnerName || "Saved owner" : truck?.ownerName || "Saved owner"}` : ""}</option>)}</select></Field>
     </FormSection>}

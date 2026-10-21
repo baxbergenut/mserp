@@ -366,6 +366,25 @@ func (h maintenanceHandler) save(w http.ResponseWriter, r *http.Request) {
 	in.Actor = session.User.Username
 	in.ActorID = session.User.ID
 	if in.Expense != nil {
+		var savedMethod *string
+		if in.Version > 0 {
+			existing, err := h.repo.Get(r.Context(), in.ID)
+			if err != nil {
+				h.fail(w, err)
+				return
+			}
+			if existing.Expense != nil {
+				savedMethod = existing.Expense.PaymentType
+			}
+		}
+		if err := h.expenses.ValidateExpensePaymentMethod(r.Context(), in.Expense.PaymentType, savedMethod); err != nil {
+			if errors.Is(err, repository.ErrExpensePaymentMethodInvalid) {
+				writeAPIError(w, 400, err.Error())
+			} else {
+				h.fail(w, err)
+			}
+			return
+		}
 		in.Expense.CreatedBy = session.User.ID
 		in.Expense.CreatedByName = session.User.Username
 	}

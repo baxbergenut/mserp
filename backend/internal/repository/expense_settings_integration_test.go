@@ -264,8 +264,26 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			method := save("", ExpenseSetting{Kind: "payment_method", Name: "Card 1456", Active: true})
+			if err := repo.ValidateExpensePaymentMethod(ctx, &method.Name, nil); err != nil {
+				t.Fatal("active method rejected", err)
+			}
+			unknownMethod := "Unconfigured payment method"
+			if err := repo.ValidateExpensePaymentMethod(ctx, &unknownMethod, nil); !errors.Is(err, ErrExpensePaymentMethodInvalid) {
+				t.Fatal("unconfigured method accepted", err)
+			}
 			method.Active = false
 			save(method.ID, method)
+			if err := repo.ValidateExpensePaymentMethod(ctx, &method.Name, nil); !errors.Is(err, ErrExpensePaymentMethodInvalid) {
+				t.Fatal("archived method accepted on new expense", err)
+			}
+			for _, methodName := range []string{method.Name, unknownMethod} {
+				if err := repo.ValidateExpensePaymentMethod(ctx, &methodName, &methodName); err != nil {
+					t.Fatal("saved historical method rejected", err)
+				}
+			}
+			if err := repo.ValidateExpensePaymentMethod(ctx, nil, &method.Name); err != nil {
+				t.Fatal("clearing payment method rejected", err)
+			}
 			exec(`INSERT INTO app_users(username,password_hash,active) VALUES('Expense entry user','$2test',true),('Inactive expense user','$2test',false)`)
 			page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{VisibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}, AccessibleCategoryIDs: []string{cat.ID, categories["Maintenance"]}})
 			if err != nil {
