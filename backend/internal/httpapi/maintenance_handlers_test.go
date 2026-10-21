@@ -51,12 +51,16 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 		t.Fatal("unknown history must remain reviewable", err)
 	}
 	paid := base
+	paid.DriverName = "Unmatched Applicant"
 	paid.Services = append([]repository.MaintenanceWork(nil), base.Services...)
 	paid.Services[0].Amount = stringPointer("500.01")
 	paid.Expense = &expenseRequest{ExpenseDate: "2026-10-01", ExpenseType: "Oil change", Amount: "500.01", BaseAmount: stringPointer("500.01"), PaymentType: "EFS"}
 	input, err := paid.validate(testExpenseCategoryID)
 	if err != nil || input.Expense.Amount != "506.01" {
 		t.Fatal("EFS base validation", input, err)
+	}
+	if input.DriverID != nil || input.DriverName != paid.DriverName {
+		t.Fatal("manual name must not infer an identity", input)
 	}
 	details := []repository.ExpenseCostItem{{Name: "Parts", Amount: "300"}, {Name: "Labor", Amount: "200.01"}}
 	paid.Expense.CostBreakdown = &details

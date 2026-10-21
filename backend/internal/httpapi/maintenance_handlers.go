@@ -209,7 +209,7 @@ type maintenanceRequest struct {
 	Version       int                          `json:"version"`
 	TruckID       *string                      `json:"truckId"`
 	DriverID      *string                      `json:"driverId"`
-	DriverName    string                       `json:"driverName"` // Display only; persistence resolves the selected driver's name.
+	DriverName    string                       `json:"driverName"` // Unlinked source name; linked drivers resolve their canonical name.
 	VendorID      *string                      `json:"vendorId"`
 	VendorName    string                       `json:"vendorName"`
 	VendorAddress string                       `json:"vendorAddress"`
@@ -228,6 +228,7 @@ type maintenanceRequest struct {
 func (in maintenanceRequest) validate(category string) (repository.MaintenanceInput, error) {
 	out := repository.MaintenanceInput{ProgramIDs: in.ProgramIDs, OilType: repository.NormalizeMaintenanceOilType(in.OilType), ID: in.ID, Version: in.Version, TruckID: in.TruckID, VendorID: in.VendorID, VendorName: strings.TrimSpace(in.VendorName), VendorAddress: strings.TrimSpace(in.VendorAddress), VendorPhone: strings.TrimSpace(in.VendorPhone), VendorContact: strings.TrimSpace(in.VendorContact), Odometer: in.Odometer, Location: in.Location, Status: in.Status, WorkOrder: strings.TrimSpace(in.WorkOrder), Notes: strings.TrimSpace(in.Notes), Services: in.Services}
 	out.DriverID = in.DriverID
+	out.DriverName = strings.TrimSpace(in.DriverName)
 	if len(in.ProgramIDs) > 100 {
 		return out, errors.New("select at most 100 completed programs")
 	}

@@ -28,6 +28,10 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 					t.Error("wrong structured request")
 				}
 				parts := request["input"].([]any)[0].(map[string]any)["content"].([]any)
+				prompt := parts[0].(map[string]any)["text"].(string)
+				if !strings.Contains(prompt, `"HR":["Transportation","Hotel","Team shuttle"]`) || !strings.Contains(prompt, `"paymentMethods":["Cash"]`) {
+					t.Error("current expense catalog missing from provider request")
+				}
 				if mime != "" {
 					part := parts[1].(map[string]any)
 					want := map[string]string{"image/png": "input_image", "application/pdf": "input_file", "text/plain": "input_text"}[mime]
@@ -45,13 +49,41 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 			defer server.Close()
 			client := NewClient("secret", "gpt-6-luna")
 			client.baseURL = server.URL
-			input := ExpenseInput{Text: "receipt", MIMEType: mime, FileName: "receipt.pdf", MessageDate: time.Now()}
+			input := ExpenseInput{Text: "receipt", MIMEType: mime, FileName: "receipt.pdf", MessageDate: time.Now(), Categories: map[string][]string{"HR": {"Transportation", "Hotel", "Team shuttle"}}, PaymentMethods: []string{"Cash"}}
 			if mime != "" {
 				input.FileData = []byte("receipt")
 			}
 			result, err := client.ExtractExpense(context.Background(), input)
 			if err != nil || !result.IsExpense || len(result.Expenses) != 1 || len(result.Expenses[0].CostBreakdown) != 1 {
 				t.Fatal(result, err)
+			}
+		})
+	}
+}
+
+// Explicit opt-in; classification checks use synthetic source text only.
+func TestExpenseTypeCatalogLive(t *testing.T) {
+	if os.Getenv("MSERP_OPENAI_LIVE_TEST") != "1" {
+		t.Skip("opt-in live OpenAI classification")
+	}
+	client := NewClient(os.Getenv("OPENAI_API_KEY"), "gpt-6-luna")
+	for _, tc := range []struct{ name, text, want string }{
+		{"flight", "Airline ticket receipt dated 2026-10-21: one-way flight for a driver traveling to recruiting orientation. Fare and taxes total $85.00. Paid cash.", "Transportation"},
+		{"hotel", "Motel receipt dated 2026-10-21: one night of accommodation for a driver attending orientation. Room and taxes total $85.00. Paid cash.", "Hotel"},
+		{"custom", "Receipt dated 2026-10-21: fingerprint collection and fingerprint analysis for a prospective driver's background screening. Total $85.00. Paid cash.", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := client.ExtractExpense(context.Background(), ExpenseInput{Text: tc.text, MessageDate: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"HR": {"Transportation", "Hotel"}}, PaymentMethods: []string{"Cash"}})
+			if err != nil || len(result.Expenses) != 1 || result.Expenses[0].ExpenseType == nil {
+				t.Fatal("missing classification", err)
+				return
+			}
+			kind := *result.Expenses[0].ExpenseType
+			if tc.want != "" && kind != tc.want {
+				t.Fatalf("classification %q; want %q", kind, tc.want)
+			}
+			if tc.want == "" && (kind == "" || kind == "Transportation" || kind == "Hotel") {
+				t.Fatalf("unrelated existing type used instead of custom: %q", kind)
 			}
 		})
 	}
@@ -78,7 +110,7 @@ func TestExtractionRejectsFailureWithoutProviderData(t *testing.T) {
 
 func TestExpensePromptAndSchema(t *testing.T) {
 	prompt := expensePrompt(ExpenseInput{Text: "Oil change $125", MessageDate: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"Maintenance": {"Oil change", "Tire issue"}}})
-	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown"} {
+	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatal("missing prompt instruction", want)
 		}

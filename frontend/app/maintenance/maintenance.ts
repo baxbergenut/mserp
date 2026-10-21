@@ -39,7 +39,13 @@ export function maintenanceDraft(draft: MaintenanceAIDraft, options: Maintenance
     return serviceWork(code, options, s.amount);
   });
   const vendor = options.vendors.filter(v => v.active && v.name.toLowerCase() === meta?.vendorName?.trim().toLowerCase());
-  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? matched.driverId, driverName: draft.driverName || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...matched.expense!, costBreakdown: draft.costBreakdown?.length ? draft.costBreakdown : source.filter(s => s.amount !== null).map(s => ({ name: s.name || options.types.find(t => t.code === s.typeCode)?.name || s.typeCode, amount: s.amount! })), amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
+  let expense = matched.expense!;
+  if (!draft.driverId && draft.driverName.trim() && expense.coveredBy === "Driver") {
+    const truck = options.trucks.find(t => t.id === draft.truckId);
+    const ownerId = truck?.isCompanyOwned ? null : truck?.ownerId;
+    expense = { ...expense, coveredBy: ownerId ? "Truck Owner" : "Company", ownerId: ownerId ?? null };
+  }
+  return normalizeMaintenance({ ...matched, oilType: meta?.oilType || (services.some(s => s.typeCode === "preventive") ? "10W-30" : ""), driverId: draft.driverId ?? (draft.driverName.trim() ? null : matched.driverId), driverName: draft.driverName.trim() || matched.driverName, status: "needs_review", serviceDate: meta?.serviceDate ?? "", odometer: meta?.odometer ?? null, location: meta?.location ?? "unknown", vendorId: vendor.length === 1 ? vendor[0].id : null, vendorName: meta?.vendorName ?? "", vendorAddress: meta?.vendorAddress ?? "", vendorPhone: meta?.vendorPhone ?? "", vendorContact: meta?.vendorContact ?? "", workOrder: meta?.workOrder ?? "", notes: draft.description ?? "", services, expense: { ...expense, costBreakdown: draft.costBreakdown?.length ? draft.costBreakdown : source.filter(s => s.amount !== null).map(s => ({ name: s.name || options.types.find(t => t.code === s.typeCode)?.name || s.typeCode, amount: s.amount! })), amount: draft.amount, paymentType: draft.paymentType, referenceNumber: draft.referenceNumber, description: draft.description, expenseDate: draft.expenseDate } }, options);
 }
 export function maintenanceError(value: MaintenanceInput): string {
   if (!value.version && !value.expense) return "Enter the service amount and payment details.";
@@ -57,5 +63,5 @@ export function expenseToMaintenance(value: ExpenseInput, options: MaintenanceOp
  const base=assignMaintenanceTruck(emptyMaintenance(options),value.truckId ?? "",options);
  const code=value.expenseType ? serviceTypeForName(value.expenseType) : base.services[0].typeCode;
  const services=[serviceWork(options.types.some(t=>t.code===code&&t.active)?code:"other",options)];
- return normalizeMaintenance({...base,serviceDate:value.expenseDate,notes:value.description,driverId:value.driverId ?? base.driverId,driverName:value.driverName || base.driverName,services,expense:{...base.expense!,...value,categoryId:options.categoryId}},options);
+ return normalizeMaintenance({...base,serviceDate:value.expenseDate,notes:value.description,driverId:value.driverId ?? (value.driverName.trim() ? null : base.driverId),driverName:value.driverName.trim() || base.driverName,services,expense:{...base.expense!,...value,categoryId:options.categoryId}},options);
 }

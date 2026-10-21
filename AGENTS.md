@@ -92,7 +92,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   validation, and CRUD handlers.
   Expense Driver is an editable dropdown: selecting an existing driver retains
   assignment defaults; typed names stay unlinked and never create drivers or
-  payroll debtors. Payment methods use active Expense settings in dropdowns and
+  payroll debtors. AI extraction receives active category/type settings, matches
+  expense types by meaning before allowing a custom type, and never substitutes
+  a truck's current driver for an explicit unmatched/ambiguous name. Work-order
+  drafts and saves preserve the same unlinked source name. Payment methods use
+  active Expense settings in dropdowns and
   native expense/bulk/work-order save validation. Existing entries can retain
   their saved historical method; arbitrary new methods are rejected.
 - `backend/internal/httpapi/gross_board_handlers.go` and

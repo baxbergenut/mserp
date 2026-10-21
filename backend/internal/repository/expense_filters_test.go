@@ -96,8 +96,32 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 			driver = id(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Filter Driver','filter driver','cpm',0.75) RETURNING id::text`)
 			truck = id(`INSERT INTO trucks(unit_number) VALUES('FILTER-01') RETURNING id::text`)
 			repo := NewExpenseRepository(pool)
+			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id) VALUES($1,$2)`, truck, driver)
+			exec(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Robin Alice Taylor','robin alice taylor','cpm',0.75,true),('Robin Blake Taylor','robin blake taylor','cpm',0.75,true),('Inactive Applicant','inactive applicant','cpm',0.75,false)`)
+			for _, tc := range []struct {
+				name   *string
+				linked bool
+			}{
+				{nil, true}, {payTestString("  "), true}, {payTestString("Filter Driver"), true}, {payTestString("Driver Filter"), true},
+				{payTestString("Unmatched Applicant"), false}, {payTestString("Robin Taylor"), false}, {payTestString("Inactive Applicant"), false},
+			} {
+				resolvedTruck, resolvedDriver, err := repo.ResolveExpenseLinks(ctx, payTestString("FILTER-01"), tc.name)
+				if err != nil || resolvedTruck == nil || *resolvedTruck != truck || (resolvedDriver != nil) != tc.linked || resolvedDriver != nil && *resolvedDriver != driver {
+					t.Fatalf("name %v: truck=%v driver=%v err=%v", tc.name, resolvedTruck, resolvedDriver, err)
+				}
+			}
 			date, _ := time.Parse(time.DateOnly, "2026-10-12")
 			input := ExpenseInput{CategoryID: category, ExpenseDate: date, Amount: "10.25", ExpenseType: payTestString("Filter purchase"), DriverID: &driver, TruckID: &truck, PaymentType: payTestString("Cash"), PaidBy: payTestString("Former Payer"), CoveredBy: payTestString("Company")}
+			manual := input
+			manual.DriverID = nil
+			manual.DriverName = payTestString("Unmatched Applicant")
+			probe, err := repo.CreateExpense(ctx, manual)
+			if err != nil || probe.DriverID != nil || probe.DriverName == nil || *probe.DriverName != *manual.DriverName {
+				t.Fatal("manual source name lost on save", probe, err)
+			}
+			if err := repo.DeleteExpense(ctx, probe.ID); err != nil {
+				t.Fatal(err)
+			}
 			created, err := repo.CreateExpense(ctx, input)
 			if err != nil {
 				t.Fatal("create without company", err)

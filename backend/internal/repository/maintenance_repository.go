@@ -89,6 +89,7 @@ type MaintenanceInput struct {
 	Version                                               int
 	TruckID                                               *string
 	DriverID                                              *string
+	DriverName                                            string
 	SourceUnitNumber                                      string
 	VendorID                                              *string
 	VendorName, VendorAddress, VendorPhone, VendorContact string
@@ -380,7 +381,10 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 			costs = append(costs, ExpenseCostItem{Name: name, Amount: *work.Amount})
 		}
 	}
-	var driverName string
+	driverName := strings.TrimSpace(in.DriverName)
+	if driverName == "" && in.Expense != nil && in.Expense.DriverName != nil {
+		driverName = strings.TrimSpace(*in.Expense.DriverName)
+	}
 	if in.DriverID != nil {
 		if err := tx.QueryRow(ctx, "SELECT full_name FROM drivers WHERE id=$1", in.DriverID).Scan(&driverName); err != nil {
 			return old, mapNotFound(err)

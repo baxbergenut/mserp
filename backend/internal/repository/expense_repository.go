@@ -366,6 +366,7 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 	unitNumber, driverName *string,
 ) (*string, *string, error) {
 	var truckID, driverID *string
+	driverNameProvided := driverName != nil && normalizeName(*driverName) != ""
 	if unitNumber != nil && normalizeTruckUnit(*unitNumber) != "" {
 		var id string
 		err := r.pool.QueryRow(ctx, `
@@ -378,7 +379,7 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 			return nil, nil, err
 		}
 	}
-	if driverName != nil && normalizeName(*driverName) != "" {
+	if driverNameProvided {
 		rows, err := r.pool.Query(ctx, `SELECT id, full_name FROM drivers WHERE active = true`)
 		if err != nil {
 			return nil, nil, err
@@ -413,7 +414,8 @@ func (r *ExpenseRepository) ResolveExpenseLinks(
 		}
 	}
 
-	if truckID != nil && driverID == nil {
+	// An explicit unmatched or ambiguous name stays manual, even on a linked truck.
+	if truckID != nil && driverID == nil && !driverNameProvided {
 		var id string
 		err := r.pool.QueryRow(ctx, `
 			SELECT driver_id FROM truck_driver_assignments
