@@ -487,7 +487,7 @@ func (h maintenanceHandler) options(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"programs": programs, "programEnrollments": enrollments, "categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "drivers": drivers, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
+	writeJSON(w, 200, map[string]any{"canManagePrograms": repository.HasPermission(session.User, "service_programs.manage"), "programs": programs, "programEnrollments": enrollments, "categoryId": cat, "types": types, "vendors": vendors, "schedules": schedules, "names": names, "paymentMethods": methods, "users": users, "currentUser": session.User.Username, "currentUserId": session.User.ID, "trucks": trucks, "drivers": drivers, "administrator": session.User.Administrator, "verificationRole": expenseVerificationRole(session.User)})
 }
 func (h maintenanceHandler) vendor(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.allowed(w, r, "edit"); !ok {

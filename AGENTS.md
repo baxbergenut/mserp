@@ -2393,3 +2393,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   against both program and affected type revisions. Omitted codes preserve links;
   [] unlinks all. Program/type changes commit atomically with per-type audit;
   types linked elsewhere cannot be implicitly reassigned. No new schema is needed.
+- service_programs.manage is configurable under Settings > Roles & permissions
+  and replaces Administrator-only program creation/settings/assignee checks.
+  Work order category View/Edit is still required. Maintenance options exposes
+  canManagePrograms; route policies and handler checks enforce the capability.

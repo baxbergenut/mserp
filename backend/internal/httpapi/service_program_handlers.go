@@ -41,8 +41,8 @@ func (h maintenanceHandler) programSave(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if !session.User.Administrator {
-		writeAPIError(w, 403, "only administrators can manage service programs")
+	if !repository.HasPermission(session.User, "service_programs.manage") {
+		writeAPIError(w, 403, "your role cannot manage service programs")
 		return
 	}
 	var p repository.ServiceProgram
@@ -173,8 +173,8 @@ func (h maintenanceHandler) programAssignees(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if !session.User.Administrator {
-		writeAPIError(w, 403, "only administrators can manage program assignees")
+	if !repository.HasPermission(session.User, "service_programs.manage") {
+		writeAPIError(w, 403, "your role cannot manage service programs")
 		return
 	}
 	people, roles, err := h.repo.ProgramAssignees(r.Context())

@@ -437,3 +437,11 @@ opens its saved work order. There is no separate last-service pencil. The Action
 header and row controls align to the table's right edge.
 Record service prefills the truck's current odometer and lets the user change it.
 No available reading leaves the field blank; zero remains a valid reading.
+
+Settings > Roles & permissions > Service programs > Manage Service programs
+controls program creation/settings and reminder-assignee choices. It replaces
+the Administrator-only restriction. These actions also require Work order
+category View and Edit; viewing/enrollment/recording retain their existing
+category gates. Maintenance options returns canManagePrograms for button access.
+The explicit service_programs.manage route policy protects saves and assignee
+lookups; granting it does not grant access administration or other settings.
