@@ -424,6 +424,9 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if err = lockChargeDrivers(ctx, tx, []string{id}); err != nil {
 		return Driver{}, err
 	}
+	if err = syncDriverHireStart(ctx, tx, id, input.HireDate, input.ChargeActor); err != nil {
+		return Driver{}, err
+	}
 	var wasActive bool
 	if err = tx.QueryRow(ctx, "SELECT active FROM drivers WHERE id=$1", id).Scan(&wasActive); err != nil {
 		return Driver{}, err

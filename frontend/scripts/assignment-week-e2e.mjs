@@ -65,6 +65,40 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await expect(start).toHaveCount(0);
   expect(await getDriver(week)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
   expect(await getDriver(next)).toMatchObject({ dispatcherName: 'Week Cameron', truckUnit: 'WEEK-ONE' });
+
+  // Editing only Hire date must move the original roster/crew and uncollected
+  // setup escrow, without requiring a second assignment edit in another form.
+  const hireDriver = 'e4700000-0000-0000-0000-000000000006';
+  const hireTruck = 'e4700000-0000-0000-0000-000000000007';
+  sql(`BEGIN; SET search_path TO ${schema},public;
+    SELECT set_config('mserp.assignment_week','${previous}',true);
+    INSERT INTO trucks(id,unit_number) VALUES('${hireTruck}','HIRE-DATE');
+    INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date,dispatcher_id)
+      VALUES('${hireDriver}','Hire Date Driver','hire date driver','cpm',0.75,'${previous}','${mark}');
+    INSERT INTO truck_driver_assignments(driver_id,truck_id,assigned_at)
+      VALUES('${hireDriver}','${hireTruck}','${previous}'::timestamp AT TIME ZONE 'America/New_York');
+    INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount)
+      VALUES('${hireDriver}','Hire Date Driver','${previous}',2500);
+    COMMIT;`);
+  await page.goto(`${base}/drivers`);
+  await page.getByPlaceholder('Search drivers…').fill('Hire Date Driver');
+  const hireRow = page.getByRole('row').filter({ hasText: 'Hire Date Driver' });
+  await hireRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Hire date', { exact: true }).fill(week);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  for (const selected of [previous, week]) {
+    for (const resource of ['gross-board', 'driver-pay']) {
+      const response = await page.request.get(`${base}/api/${resource}?weekStart=${selected}`);
+      expect(response.status()).toBe(200);
+      const found = (await response.json()).drivers.find(item => item.id === hireDriver);
+      if (selected === previous) expect(found).toBeUndefined();
+      else {
+        expect(found).toMatchObject({ truckUnit: 'HIRE-DATE', dispatcherName: 'Week Mark' });
+        if (resource === 'driver-pay') expect(found.edits.expenseDeductions).toContainEqual(expect.objectContaining({ source: 'escrow', expenseDate: week, total: '2500.00' }));
+      }
+    }
+  }
   await page.goto(`${base}/driver-board`);
   await expect(page.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
   const nav = page.locator('aside a');
