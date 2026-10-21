@@ -28,11 +28,11 @@ func WithDriverServiceIntents(ctx context.Context, items []DriverServiceIntent, 
 }
 func ValidateDriverServiceIntents(items []DriverServiceIntent) error {
 	seen := map[string]bool{}
-	if len(items) > 2 {
+	if len(items) > 3 {
 		return &DriverServiceError{"Choose each service once."}
 	}
 	for _, in := range items {
-		if (in.Service != "relay" && in.Service != "weighmytruck") || seen[in.Service] || (in.Action != "add" && in.Action != "defer") || in.Version < 0 {
+		if (in.Service != "relay" && in.Service != "weighmytruck" && in.Service != "datatruck") || seen[in.Service] || (in.Action != "add" && in.Action != "defer") || in.Version < 0 {
 			return &DriverServiceError{"Invalid service setup choice."}
 		}
 		seen[in.Service] = true
@@ -71,13 +71,18 @@ func queueDriverServices(ctx context.Context, tx pgx.Tx, driver string) error {
 }
 
 type DriverServiceRepository struct {
-	pool *pgxpool.Pool
-	fuel *FuelRepository
-	wmt  *WeighMyTruckRepository
+	pool      *pgxpool.Pool
+	fuel      *FuelRepository
+	wmt       *WeighMyTruckRepository
+	datatruck *DataTruckRepository
 }
 
-func NewDriverServiceRepository(pool *pgxpool.Pool, fuel *FuelRepository, wmt *WeighMyTruckRepository) *DriverServiceRepository {
-	return &DriverServiceRepository{pool, fuel, wmt}
+func NewDriverServiceRepository(pool *pgxpool.Pool, fuel *FuelRepository, wmt *WeighMyTruckRepository, dt ...*DataTruckRepository) *DriverServiceRepository {
+	r := &DriverServiceRepository{pool: pool, fuel: fuel, wmt: wmt}
+	if len(dt) > 0 {
+		r.datatruck = dt[0]
+	}
+	return r
 }
 
 type DriverServiceState struct {
@@ -110,7 +115,7 @@ func (r *DriverServiceRepository) Status(ctx context.Context, driver string) (Dr
 	if err := r.pool.QueryRow(ctx, `SELECT full_name,status,((now() AT TIME ZONE 'America/New_York')::date+1)::text FROM drivers WHERE id=$1`, driver).Scan(&out.Name, &out.DriverStatus, &out.Tomorrow); err != nil {
 		return out, mapNotFound(err)
 	}
-	for _, service := range []string{"relay", "weighmytruck"} {
+	for _, service := range []string{"relay", "weighmytruck", "datatruck"} {
 		item := DriverServiceState{Service: service, State: "not_requested", Candidates: []RelayRosterEntry{}, Operations: []RelayDriverOperation{}}
 		err := r.pool.QueryRow(ctx, `SELECT state,version,last_error,follow_up_on::text FROM driver_service_requests WHERE driver_id=$1 AND service=$2`, driver, service).Scan(&item.State, &item.Version, &item.Message, &item.FollowUpOn)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -155,6 +160,24 @@ func (r *DriverServiceRepository) Status(ctx context.Context, driver string) (Dr
 				} else if item.State != "running" {
 					item.State = "needs_setup"
 					item.Message = "Account added. Assign or enable a policy to finish fuel setup."
+				}
+			}
+		} else if service == "datatruck" {
+			item.Configured = r.datatruck.Configured()
+			if r.datatruck != nil {
+				status, err := r.datatruck.Status(ctx, "drivers", driver)
+				if err != nil {
+					return out, err
+				}
+				if status.Message != "" {
+					item.Message = status.Message
+				}
+				if status.State == "done" {
+					item.State = "added"
+					item.Message = "Driver added to DataTruck."
+				} else if status.State == "unconfirmed" || status.State == "running" && item.State != "running" {
+					item.State = "unconfirmed"
+					item.Message = "Check the previous enrollment in DataTruck before another request."
 				}
 			}
 		} else {
@@ -321,6 +344,10 @@ func (r *DriverServiceRepository) Process(ctx context.Context) error {
 	return nil
 }
 func serviceEnrollmentError(err error) string {
+	var serviceError *DriverServiceError
+	if errors.As(err, &serviceError) {
+		return err.Error()
+	}
 	var invalid *RelayDriverValidation
 	var wmtInvalid *WMTValidationError
 	var wmtError *weighmytruck.Error
@@ -332,6 +359,12 @@ func serviceEnrollmentError(err error) string {
 	return "The service did not confirm enrollment. Review the account and service status before retrying."
 }
 func (r *DriverServiceRepository) enroll(ctx context.Context, driver, service, actor, requestID string) error {
+	if service == "datatruck" {
+		if r.datatruck == nil {
+			return &DriverServiceError{"DataTruck enrollment is not configured."}
+		}
+		return r.datatruck.Enroll(ctx, "drivers", driver)
+	}
 	if service == "weighmytruck" {
 		if r.wmt == nil {
 			return &WMTValidationError{"WeighMyTruck is not configured."}

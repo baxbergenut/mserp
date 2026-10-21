@@ -6,13 +6,13 @@ import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 
-const writes=[]; const drivers=[]; const setups=new Map(); let readOnly=false;
+const writes=[]; const drivers=[]; const trucks=[]; const truckSetups=new Map(); const setups=new Map(); let readOnly=false;
 let intakeReads=0;
 const pageOf=items=>({items,total:items.length,totalPages:1,page:1,pageSize:25});
 const baseDriver={active:true,status:'active',isOwnerOperator:false,payType:'cpm',payRate:.65,truckId:null,dispatcherId:null,notes:'',updatedAt:new Date().toISOString()};
 const policies=['MS Express Company - ELD','MS Express O/O - ELD','Non ELD Policy'].map((name,i)=>({id:`policy-${i}`,name,eld_enabled:i!==2,limits:[],authorization_prompts:[]}));
 const item=service=>({service,state:'not_requested',requestState:'not_requested',version:0,message:'',followUpOn:'',configured:true,candidates:[],operations:[]});
-const makeSetup=(driver,intents)=>({driverId:driver.id,name:driver.fullName,driverStatus:'active',tomorrow:'2026-10-13',checkedAt:new Date().toISOString(),environment:'production',policies,canLinkRelay:true,items:['relay','weighmytruck'].map(service=>{const i=item(service),choice=intents?.find(v=>v.service===service);return choice?{...i,state:choice.action==='add'?'queued':'deferred',requestState:choice.action==='add'?'queued':'deferred',version:1,followUpOn:choice.followUpOn}:i})});
+const makeSetup=(driver,intents)=>({driverId:driver.id,name:driver.fullName,driverStatus:'active',tomorrow:'2026-10-13',checkedAt:new Date().toISOString(),environment:'production',policies,canLinkRelay:true,items:['relay','weighmytruck','datatruck'].map(service=>{const i=item(service),choice=intents?.find(v=>v.service===service);return choice?{...i,state:choice.action==='add'?'queued':'deferred',requestState:choice.action==='add'?'queued':'deferred',version:1,followUpOn:choice.followUpOn}:i})});
 const entry=(driver)=>({driver:{id:'relay-existing',first_name:'ELD',last_name:'Driver',phone:'+15551234567',data_fields:[]},driverId:driver.id,revision:'a'.repeat(64),assignment:null,suggestions:[],status:'active'});
 const server=createServer(async(req,res)=>{
  try {
@@ -33,7 +33,9 @@ const server=createServer(async(req,res)=>{
    if(p==='/api/driver-directory')return send(pageOf([]));
    if(p==='/api/drivers/setup-defaults')return send({escrowAmount:'2500.00'});
    if(p==='/api/investors')return send([{id:'00000000-0000-0000-0000-000000000001',fullName:'MS Express Inc.',isCompany:true,active:true}]);
-   if(['/api/trucks','/api/dispatchers'].includes(p))return send([]);
+   if(p==='/api/trucks'&&req.method==='GET')return send(pageOf(trucks));
+   if(p==='/api/dispatchers')return send([]);
+   if(/^\/api\/trucks\/[^/]+\/datatruck$/.test(p)&&req.method==='GET')return send(truckSetups.get(p.split('/').at(-2))||{state:'not_requested',message:'',version:0});
    if(p==='/api/driver-charges')return send({schedules:[]});
    if(p.endsWith('/notes'))return send([]);
    if(p.endsWith('/location'))return send({truckId:null,location:null});
@@ -44,6 +46,7 @@ const server=createServer(async(req,res)=>{
    if(p.startsWith('/api/driver-services/')&&req.method==='GET')return send({...setups.get(p.split('/').at(-1)),checkedAt:new Date().toISOString()});
    let body='';for await(const c of req)body+=c;const input=body?JSON.parse(body):{};
    writes.push({path:p,input});
+   if(p==='/api/trucks'&&req.method==='POST'){const truck={...input,id:`truck-${trucks.length+1}`,driverName:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};trucks.push(truck);truckSetups.set(truck.id,{state:input.addToDataTruck?'queued':'not_requested',message:'',version:1});return send(truck);}
    if(p==='/api/drivers'||p==='/api/driver-intake/intake-1/complete'){
     const driver={...baseDriver,...(input.driver||input),id:`driver-${drivers.length+1}`};drivers.push(driver);setups.set(driver.id,makeSetup(driver,input.services));return send(driver);
    }
@@ -93,6 +96,7 @@ try{
  await page.screenshot({animations:"disabled",path:join(tmpdir(),'mserp-setup-truck.png')});
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();
  const draft=dialog.getByRole('region',{name:'Driver services'});
+ await expect(draft.getByRole('button',{name:'Add after saving'}).nth(2)).toHaveAttribute('aria-pressed','true');
  await draft.getByRole('button',{name:'Add after saving'}).nth(0).click();
  await draft.getByRole('button',{name:'Remind me later'}).nth(1).click();
  assert.equal(writes.length,0,`draft must never create vendor writes: ${JSON.stringify(writes)}`);
@@ -109,7 +113,7 @@ try{
  await dialog.getByRole('button',{name:'Create driver',exact:true}).click();
  await expect(dialog).toHaveAttribute('aria-label','Browser Driver saved');
  assert.equal(writes[0].input.newTruck.unitNumber,'SETUP-TRUCK');
- assert.deepEqual(writes[0].input.services.map(i=>[i.service,i.action]),[['relay','add'],['weighmytruck','defer']]);
+ assert.deepEqual(writes[0].input.services.map(i=>[i.service,i.action]),[['datatruck','add'],['relay','add'],['weighmytruck','defer']]);
  await expect(dialog.getByLabel('Relay setup')).toContainText('Waiting to add');
  await expect(dialog.getByLabel('WeighMyTruck setup')).toContainText('Reminder set');
  const setup=setups.get('driver-1'),r=setup.items[0],w=setup.items[1];
@@ -124,7 +128,7 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(dialog.getByLabel('WeighMyTruck setup')).toContainText('Check result',{timeout:10000});
  await expect(dialog.getByRole('button',{name:'Retry enrollment'})).toHaveCount(0);
- await dialog.getByRole('button',{name:'Remind me later',exact:true}).click();await dialog.getByRole('button',{name:'Save reminder',exact:true}).click();
+ await dialog.getByLabel('WeighMyTruck setup').getByRole('button',{name:'Remind me later',exact:true}).click();await dialog.getByRole('button',{name:'Save reminder',exact:true}).click();
  await expect(dialog.getByLabel('WeighMyTruck setup')).toContainText('Follow up');
  await dialog.getByLabel('Verified WeighMyTruck membership').selectOption('added');
  await dialog.getByLabel('I checked the result on the service website.').check();
@@ -165,7 +169,7 @@ try{
  await expect(dialog.getByRole('button',{name:'Add after saving'}).nth(1)).toHaveAttribute('aria-pressed','true');
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();
  await dialog.getByRole('button',{name:'Complete setup',exact:true}).click();await expect(dialog).toHaveAttribute('aria-label','Onboard Browser saved');
- assert.equal(writes.at(-1).path,'/api/driver-intake/intake-1/complete');assert.equal(writes.at(-1).input.services.length,2);assert.equal(writes.at(-1).input.addWeighMyTruck,undefined);
+ assert.equal(writes.at(-1).path,'/api/driver-intake/intake-1/complete');assert.equal(writes.at(-1).input.services.length,3);assert.equal(writes.at(-1).input.addWeighMyTruck,undefined);
  assert.equal(writes.at(-1).input.driver.city,'Louisville');
  assert.equal(writes.at(-1).input.driver.fullName,'Onboard Browser');
  assert.equal(writes.at(-1).input.driver.payRate,0.65);
@@ -187,6 +191,23 @@ try{
  await expect(page.getByLabel('WeighMyTruck setup').getByRole('link',{name:'WeighMyTruck',exact:true})).toHaveAttribute('href','/weighmytruck');
  await expect(page.getByRole('link',{name:/^(Manage WeighMyTruck|Manage Relay|Open Relay)$/})).toHaveCount(0);
  Object.assign(w,{state:'added',requestState:'done'});
+ await page.setViewportSize({width:1440,height:1100});
+ await page.goto(`${base}/trucks`);await page.getByRole('button',{name:'Add truck',exact:true}).click();
+ await expect(dialog.getByRole('checkbox',{name:/Add to DataTruck after saving/})).toBeChecked();
+ await dialog.getByLabel('Unit number',{exact:true}).fill('DT-BROWSER');
+ await page.screenshot({animations:'disabled',path:join(tmpdir(),'mserp-datatruck-truck-modal.png')});
+ await dialog.getByRole('checkbox',{name:/Add to DataTruck after saving/}).uncheck();
+ await dialog.getByRole('button',{name:'Create truck',exact:true}).click();await expect(dialog).toHaveCount(0);
+ assert.equal(writes.at(-1).input.addToDataTruck,false);
+ await page.getByRole('button',{name:'Add truck',exact:true}).click();
+ await expect(dialog.getByRole('checkbox',{name:/Add to DataTruck after saving/})).toBeChecked();
+ await dialog.getByLabel('Unit number',{exact:true}).fill('DT-ENROLL');
+ await dialog.getByRole('button',{name:'Create truck',exact:true}).click();
+ await expect(dialog).toHaveAttribute('aria-label','Truck DT-ENROLL saved');
+ await expect(dialog.getByRole('status')).toContainText('Waiting to add');assert.equal(writes.at(-1).input.addToDataTruck,true);
+ Object.assign(truckSetups.get('truck-2'),{state:'done',version:2});await expect(dialog.getByRole('status')).toContainText('Added',{timeout:10000});
+ await dialog.getByRole('button',{name:'Done',exact:true}).click();
+ await page.goto(`${base}/drivers/detail?id=driver-1&services=1`);
  readOnly=true;await page.reload();await expect(page.getByLabel('WeighMyTruck setup')).toContainText('Added');
  await expect(page.getByRole('button',{name:'Remind me later',exact:true})).toHaveCount(0);
  assert.deepEqual(errors,[]);console.log('Driver service browser checks passed: drafts survive session timer/focus/visibility refreshes, intake navigation, both save flows, policy, uncertainty, reminder, account linking, task resume, read-only and mobile.');

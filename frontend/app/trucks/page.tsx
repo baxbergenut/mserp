@@ -35,6 +35,7 @@ import {
   TableShell,
 } from "../components/management/ManagementUI";
 import { emptyTruckInput, TruckForm, truckToInput } from "./TruckForm";
+import { DataTruckSetup } from "./DataTruckSetup";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   available: "Available",
@@ -66,6 +67,7 @@ export default function TrucksPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Truck | null | undefined>(undefined);
+  const [savedTruck, setSavedTruck] = useState<Truck | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Truck | null>(null);
   const [form, setForm] = useState<TruckInput>(emptyTruckInput);
   const [irpFileName, setIRPFileName] = useState<string | null>(null);
@@ -168,7 +170,7 @@ export default function TrucksPage() {
     setError("");
     try {
       if (editing) await updateTruck(editing.id, form);
-      else await createTruck(form);
+      else { const saved = await createTruck(form); if (form.addToDataTruck) setSavedTruck(saved); }
       setEditing(undefined);
       await loadData();
     } catch (reason) {
@@ -274,6 +276,7 @@ export default function TrucksPage() {
         >
           {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
           <TruckForm
+            creating={!editing}
             investors={investors}
             value={form}
             onChange={setForm}
@@ -286,6 +289,7 @@ export default function TrucksPage() {
         </Modal>
       )}
 
+      {savedTruck && <Modal isSaving={false} title={`Truck ${savedTruck.unitNumber} saved`} submitLabel="Done" onClose={() => setSavedTruck(null)} onSubmit={event => {event.preventDefault();setSavedTruck(null);}}><DataTruckSetup key={savedTruck.id} truckId={savedTruck.id}/></Modal>}
       {pendingDelete && (
         <ConfirmDialog
           title="Delete truck?"

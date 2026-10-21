@@ -607,7 +607,9 @@ export interface Truck {
   updatedAt: string;
 }
 
+export interface DataTruckEnrollment { state: string; message: string; version: number }
 export interface TruckInput {
+  addToDataTruck?: boolean;
   ownershipEffectiveDate?: string;
   expectedOwnershipVersion?: string;
   ownerDriverId?: string | null;
@@ -1033,7 +1035,7 @@ export interface CustomTaskInput {
 }
 
 export interface TaskUser { id: string; name: string }
-export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
+export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup" | "datatruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
   id: string;
@@ -1347,7 +1349,7 @@ export interface PrePassTruckLinkInput { id: string; environment: string; identi
 export interface PrePassTruckPreview { count: number; amount: string; units: string[]; revision: string; closed: boolean }
 export interface RelayBulkResponse { results: { relayDriverId: string; error?: string }[]; warning?: string }
 
-export type DriverService = "relay" | "weighmytruck";
+export type DriverService = "relay" | "weighmytruck" | "datatruck";
 export interface DriverServiceIntent { service: DriverService; action: "add" | "defer"; followUpOn?: string; version?: number }
 export interface DriverServiceState {
   service: DriverService; state: string; requestState: string; version: number; message: string; followUpOn: string; configured: boolean;

@@ -42,7 +42,7 @@ import {
 } from "../components/management/ManagementUI";
 import { usePermissions, canCreateDriver } from "../lib/access";
 import { StatementMenu } from "../accounting/driver-pay/StatementMenu";
-import { DriverServiceCards } from "./DriverServices";
+import { DriverServiceCards, defaultDriverServices } from "./DriverServices";
 import type { DriverServiceIntent } from "../lib/types";
 import { DriverStatusDialog } from "./DriverStatusDialog";
 import { DriverSetup } from "./DriverSetup";
@@ -137,7 +137,7 @@ function DriversContent() {
 
   const openCreate = () => {
  if(!canCreateDriver(permissions))return;
-    setServiceChoices([]); setSavedDriver(null);
+    setServiceChoices(defaultDriverServices()); setSavedDriver(null);
     setIntake(null);
     setLinkDriverID("");
     void loadLookups();
@@ -179,7 +179,7 @@ function DriversContent() {
     }).catch(reason => setError(reason instanceof Error ? reason.message : "Failed to load the escrow default"));
     setIntake(hire);
     setLinkDriverID("");
-    setSeparateConfirmed(false); setServiceChoices([]); setSavedDriver(null);
+    setSeparateConfirmed(false); setServiceChoices(defaultDriverServices()); setSavedDriver(null);
     setEditing(null);
     setError("");
     return true;
@@ -342,7 +342,7 @@ function DriversContent() {
 
       {statusMenu && <StatementMenu {...statusMenu} label="Change driver status" onClose={closeStatusMenu} onSelect={() => setStatusDriver(statusMenu.driver)} />}
       {statusDriver && <DriverStatusDialog driver={statusDriver} onClose={() => setStatusDriver(null)} onSaved={() => { setStatusDriver(null); void loadData(); }} />}
-      {editing === null && <DriverSetup value={form} onChange={next => { setError(""); setForm(next); }} intake={intake} drivers={existingDrivers} trucks={trucks} dispatchers={dispatchers} investors={investors} linkId={linkDriverID} onLink={id => { setLinkDriverID(id); setServiceChoices([]); }} separateConfirmed={separateConfirmed} onConfirmSeparate={setSeparateConfirmed} services={serviceChoices} onServices={setServiceChoices} saving={isSaving} loading={loadingLookups} error={error} onSave={save} onClose={() => { setEditing(undefined); setIntake(null); if (setupID) router.replace("/drivers", { scroll: false }); }} />}
+      {editing === null && <DriverSetup value={form} onChange={next => { setError(""); setForm(next); }} intake={intake} drivers={existingDrivers} trucks={trucks} dispatchers={dispatchers} investors={investors} linkId={linkDriverID} onLink={id => { setLinkDriverID(id); setServiceChoices(defaultDriverServices()); }} separateConfirmed={separateConfirmed} onConfirmSeparate={setSeparateConfirmed} services={serviceChoices} onServices={setServiceChoices} saving={isSaving} loading={loadingLookups} error={error} onSave={save} onClose={() => { setEditing(undefined); setIntake(null); if (setupID) router.replace("/drivers", { scroll: false }); }} />}
       {editing && <Modal title={`Edit ${editing.fullName}`} isSaving={isSaving} submitLabel="Save changes" onClose={() => setEditing(undefined)} onSubmit={event => { event.preventDefault(); void save(); }}>
         {error && <ErrorBanner message={error} />}
         <DriverForm value={form} onChange={setForm} dispatchers={dispatchers} trucks={trucks} editingDriverId={editing.id} />

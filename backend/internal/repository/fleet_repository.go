@@ -14,7 +14,8 @@ import (
 var ErrNotFound = errors.New("record not found")
 
 type FleetRepository struct {
-	pool *pgxpool.Pool
+	pool      *pgxpool.Pool
+	datatruck *DataTruckRepository
 }
 
 func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
@@ -147,6 +148,7 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	AddToDataTruck           bool
 	PreserveFields           []string
 	OwnershipEffectiveDate   string
 	ExpectedOwnershipVersion string
@@ -681,6 +683,9 @@ func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, er
 		}
 	}
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
+		return "", err
+	}
+	if err = queueDataTruckTruck(ctx, tx, id, input.AddToDataTruck); err != nil {
 		return "", err
 	}
 	return id, nil

@@ -275,6 +275,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	AddToDataTruck           bool `json:"addToDataTruck"`
 	preserveFields           []string
 	OwnershipEffectiveDate   string  `json:"ownershipEffectiveDate"`
 	ExpectedOwnershipVersion string  `json:"expectedOwnershipVersion"`
@@ -357,6 +358,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
+		AddToDataTruck:           request.AddToDataTruck,
 		PreserveFields:           request.preserveFields,
 		OwnershipEffectiveDate:   request.OwnershipEffectiveDate,
 		ExpectedOwnershipVersion: request.ExpectedOwnershipVersion,

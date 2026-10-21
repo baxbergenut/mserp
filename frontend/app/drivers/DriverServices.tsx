@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
-import { CheckCircle2, Clock3, Fuel, Scale, Loader2, AlertCircle } from "lucide-react";
+import { CheckCircle2, Clock3, Fuel, Scale, Truck, Loader2, AlertCircle } from "lucide-react";
 import { usePermissions } from "../lib/access";
 import { changeRelayDriver, fetchDriverServices, linkRelayRosterDriver, refreshRelayDrivers, requestDriverService, verifyRelayDriverOperation, verifyWeighMyTruck } from "../lib/api";
 import type { DriverService, DriverServiceIntent, DriverServiceSetup, DriverServiceState } from "../lib/types";
 import { controlClass, ErrorBanner, Field } from "../components/management/ManagementUI";
 
-const names = { relay: "Relay", weighmytruck: "WeighMyTruck" };
-const writePermission = { relay: "fuel.drivers.create", weighmytruck: "weighmytruck.create" };
-const services: DriverService[] = ["relay", "weighmytruck"];
+export const serviceNames = { relay: "Relay", weighmytruck: "WeighMyTruck", datatruck: "DataTruck" };
+const names = serviceNames;
+const writePermission = { relay: "fuel.drivers.create", weighmytruck: "weighmytruck.create", datatruck: "drivers.create" };
+const services: DriverService[] = ["relay", "weighmytruck", "datatruck"];
+export const defaultDriverServices = (): DriverServiceIntent[] => [{service:"datatruck",action:"add"}];
 const button = "ui-button !text-xs aria-pressed:border-blue-500/40 aria-pressed:bg-blue-500/15 aria-pressed:text-blue-300";
 const labels: Record<string, string> = { not_requested: "Not requested", queued: "Waiting to add", running: "Adding…", added: "Added", needs_setup: "Added · policy needed", review: "Needs attention", unconfirmed: "Check result", deferred: "Reminder set", canceled: "Setup canceled" };
 function tomorrowNY() {
@@ -18,9 +20,9 @@ function tomorrowNY() {
   return new Date(Date.parse(`${today}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
 }
 function ServiceTitle({ service, state }: { service: DriverService; state: string }) {
-  const Icon = service === "relay" ? Fuel : Scale;
+  const Icon = service === "relay" ? Fuel : service === "datatruck" ? Truck : Scale;
   const StatusIcon = state === "added" ? CheckCircle2 : ["queued", "running"].includes(state) ? Loader2 : ["review", "unconfirmed", "needs_setup"].includes(state) ? AlertCircle : Clock3;
-  return <div className="flex flex-wrap items-center justify-between gap-2"><h3><Link href={service === "relay" ? "/fuel?tab=drivers" : "/weighmytruck"} target="_blank" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</Link></h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${state === "added" ? "text-emerald-400" : ["review", "unconfirmed", "needs_setup"].includes(state) ? "text-amber-300" : "text-zinc-400"}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
+  return <div className="flex flex-wrap items-center justify-between gap-2"><h3><Link href={service === "relay" ? "/fuel?tab=drivers" : service === "datatruck" ? "https://app.datatruck.io/hr-management/driver/drivers" : "/weighmytruck"} target="_blank" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</Link></h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${state === "added" ? "text-emerald-400" : ["review", "unconfirmed", "needs_setup"].includes(state) ? "text-amber-300" : "text-zinc-400"}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
 }
 
 // Draft selections never call a mutation endpoint. Membership checks are read-only.
@@ -57,7 +59,7 @@ export function DriverServiceChoices({ value, onChange, driverId, disabled }: { 
 
 export function DriverServiceCards({ driverId, allowReminders = false }: { driverId: string; allowReminders?: boolean }) {
   const permissions = usePermissions();
-  const visible = permissions.some(p => ["fuel.read", "fuel.drivers.create", "weighmytruck.read", "weighmytruck.create"].includes(p));
+  const visible = permissions.some(p => ["drivers.read", "fuel.read", "fuel.drivers.create", "weighmytruck.read", "weighmytruck.create"].includes(p));
   return visible ? <SavedDriverServices key={driverId} driverId={driverId} allowReminders={allowReminders} /> : null;
 }
 function SavedDriverServices({ driverId, allowReminders }: { driverId: string; allowReminders: boolean }) {
@@ -121,7 +123,7 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
     {!item.configured && <p className="text-xs text-amber-300">Service connection is not configured.</p>}
     {error && <ErrorBanner message={error} />}
     {item.relay && <p className="break-all text-xs text-zinc-500">Relay ID: {item.relay.driver.id}{item.relay.assignment && <span className="block">{item.relay.assignment.policy_name} · {item.relay.assignment.enabled ? "Enabled" : "Disabled"}</span>}</p>}
-    {["review", "unconfirmed"].includes(item.state) && <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Account with another carrier?</summary><p className="mt-1">Ask the previous carrier to release the account, then retry. This response does not identify the carrier.</p></details>}
+    {item.service !== "datatruck" && ["review", "unconfirmed"].includes(item.state) && <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Account with another carrier?</summary><p className="mt-1">Ask the previous carrier to release the account, then retry. This response does not identify the carrier.</p></details>}
     <fieldset disabled={busy || working} className="space-y-3">
       {writable && !item.relay && !["added", "unconfirmed"].includes(item.state) && <button type="button" className={`${button} ui-button-primary`} disabled={!item.configured || item.candidates.length > 0} onClick={() => void queue("add")}>{item.state === "review" ? "Retry enrollment" : `Add to ${names[item.service]}`}</button>}
       {item.service === "relay" && !item.relay && item.candidates.length > 0 && <div className="space-y-2">
@@ -135,7 +137,7 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
         {policy && (nonELD ? <><Field label="Driver PIN" hint="Required by Non ELD Policy. Leave blank only if already set in Relay."><input type="password" autoComplete="new-password" maxLength={100} className={controlClass} value={pin} onChange={e => setPin(e.target.value)} /></Field><Field label="Truck number" hint="Leave blank to keep the existing Relay value."><input maxLength={100} className={controlClass} value={truck} onChange={e => setTruck(e.target.value)} /></Field></> : <p className="text-xs leading-5 text-zinc-400">Uses the driver’s existing ELD connection. If missing, have the driver log into their ELD app and check the connection in Relay.</p>)}
         <button type="button" className={`${button} ui-button-primary`} disabled={!policyId} onClick={() => void act(() => changeRelayDriver({ requestId: crypto.randomUUID(), action: "assign", relayDriverId: item.relay!.driver.id, revision: item.relay!.revision, policyId, driverPin: nonELD ? pin : "", truckNumber: nonELD ? truck : "" }))}>Assign policy</button>
       </div>}
-      {permissions.includes(item.service === "relay" ? "fuel.drivers.recover" : "weighmytruck.recover") && item.state === "unconfirmed" && <div className="space-y-3">
+      {item.service !== "datatruck" && permissions.includes(item.service === "relay" ? "fuel.drivers.recover" : "weighmytruck.recover") && item.state === "unconfirmed" && <div className="space-y-3">
         <p className="text-xs leading-5 text-amber-300">The previous result is uncertain. Check the service website before recording the result; don’t submit another enrollment yet.</p>
         {item.service === "weighmytruck" && item.membership?.canVerify && <Field label="Verified WeighMyTruck membership"><select className={controlClass} value={membershipResult} onChange={e => { setMembershipResult(e.target.value); setVerifiedKey(""); }}><option value="">Choose what you verified</option><option value="added">Driver is in our company account</option><option value="absent">Driver is not in our company account</option></select></Field>}
         <label className="flex gap-2 text-xs text-zinc-400"><input type="checkbox" checked={verified} onChange={e => setVerifiedKey(e.target.checked ? verificationKey : "")} />I checked the result on the service website.</label>

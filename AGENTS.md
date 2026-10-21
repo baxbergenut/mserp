@@ -115,6 +115,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
   A shared priority request gate paces all attempts at 15/minute; discovery
   takes priority over queued refreshes and 429 cooldowns apply to every caller.
+  Driver Services and new truck forms default DataTruck enrollment on. Migration
+  128, repository `datatruck_enrollment.go` and client `fleet.go` queue requests
+  atomically with native saves, then enroll server-side. `DATATRUCK_MC_ID` is an
+  explicitly verified internal carrier ID. Create POSTs never auto-retry; durable
+  receipts and possible-match checks hold uncertain/duplicate outcomes for review.
+  Truck enrollment status/retry is at `/trucks/{id}/datatruck` and on its profile;
+  driver status uses the existing service cards/tasks. No assignment, lease, owner
+  ID or ELD mapping is inferred. See `docs/integrations/DATATRUCK_ENROLLMENT.md`.
 - `backend/internal/relay/`: Relay Payments fuel transactions and driver/policy client.
   Fuel's third tab, Drivers, uses `repository/relay_drivers.go` and
   `httpapi/relay_driver_handlers.go`; migration 075 stores roster snapshots and

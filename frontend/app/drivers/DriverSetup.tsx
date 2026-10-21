@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 import { Modal, ErrorBanner, Field, controlClass } from "../components/management/ManagementUI";
 import type { DriverInput, DriverIntake, DriverServiceIntent, Investor } from "../lib/types";
 import { DriverForm } from "./DriverForm";
-import { DriverServiceChoices } from "./DriverServices";
+import { DriverServiceChoices, serviceNames } from "./DriverServices";
 import { TruckForm } from "../trucks/TruckForm";
 import { formatPhone } from "../lib/phone";
 
@@ -70,7 +70,7 @@ export function DriverSetup({ value, onChange, intake, drivers, trucks, dispatch
           <dl className="grid grid-cols-2 gap-3 rounded-lg border border-zinc-800 p-4 text-xs">
             <dt className="text-zinc-500">Driver</dt><dd>{existing?.fullName || value.fullName}</dd>
             {!linkId && <><dt className="text-zinc-500">Truck</dt><dd>{value.newTruck ? `${value.newTruck.unitNumber} · New` : trucks.find(t => t.id === value.truckId)?.unitNumber || "Unassigned"}</dd><dt className="text-zinc-500">Mode</dt><dd>{value.isTeamDriver ? "Team driver" : "Solo driver"}</dd>{!value.isTeamDriver && <><dt className="text-zinc-500">Escrow</dt><dd>${value.escrowAmount}</dd></>}</>}
-            <dt className="text-zinc-500">Services</dt><dd>{services.length ? services.map(s => `${s.service === "relay" ? "Relay" : "WeighMyTruck"} · ${s.action === "add" ? "Add" : "Remind later"}`).join(", ") : "Not requested"}</dd>
+            <dt className="text-zinc-500">Services</dt><dd>{services.length ? services.map(s => `${serviceNames[s.service]} · ${s.action === "add" ? "Add" : "Remind later"}`).join(", ") : "Not requested"}</dd>
           </dl>
         </>}
       </fieldset>

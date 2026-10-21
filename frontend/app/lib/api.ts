@@ -1,4 +1,6 @@
 import { expensePayload } from "./expenseCosts";
+export const fetchTruckDataTruck = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DataTruckEnrollment>(`/trucks/${id}/datatruck`, {signal});
+export const retryTruckDataTruck = (id: string, version: number) => apiRequest<void>(`/trucks/${id}/datatruck`, {method:"POST",body:JSON.stringify({version})});
 import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";
 export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory", { signal });
 export const fetchTrailers = (signal?: AbortSignal) => apiRequest<InventoryRecord[]>("/trailers", { signal });

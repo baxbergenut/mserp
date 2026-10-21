@@ -11,6 +11,9 @@ import (
 )
 
 func driverServicePermission(service string) string {
+	if service == "datatruck" {
+		return "drivers.create"
+	}
 	if service == "relay" {
 		return "fuel.drivers.create"
 	}
@@ -58,6 +61,9 @@ func registerDriverServiceRoutes(router chi.Router, logger *slog.Logger, repo *r
 		items := out.Items[:0]
 		for _, item := range out.Items {
 			read := "weighmytruck.read"
+			if item.Service == "datatruck" {
+				read = "drivers.read"
+			}
 			if item.Service == "relay" {
 				read = "fuel.read"
 			}

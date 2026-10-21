@@ -16,6 +16,7 @@ import {
 } from "../components/management/ManagementUI";
 
 export const emptyTruckInput: TruckInput = {
+  addToDataTruck: true,
   ownerId: "00000000-0000-0000-0000-000000000001",
   unitNumber: "",
   vin: "",
@@ -75,6 +76,7 @@ export function TruckForm({
   onUploadIRP,
   onRemoveIRP,
   setup = false,
+  creating = false,
 }: {
   value: TruckInput;
   drivers: DriverOption[];
@@ -85,6 +87,7 @@ export function TruckForm({
   onUploadIRP?: (file: File) => Promise<void>;
   onRemoveIRP?: () => void;
   setup?: boolean;
+  creating?: boolean;
 }) {
   const set = <K extends keyof TruckInput>(key: K, next: TruckInput[K]) =>
     onChange({ ...value, [key]: next, ...(["driverId"].includes(key) ? { assignmentWeek: value.assignmentWeek ?? "" } : {}) });
@@ -94,6 +97,7 @@ export function TruckForm({
   const permissions=usePermissions();
   return (
     <div className="space-y-6">
+      {(setup || creating) && <section aria-label="Truck services"><Toggle checked={value.addToDataTruck ?? true} onChange={checked => set("addToDataTruck", checked)} label="Add to DataTruck after saving" description="Create this truck in DataTruck using the saved truck details." /></section>}
       {!setup && permissions.includes("trucks.documents.read") && <fieldset disabled={!permissions.includes("trucks.documents.edit")}><FormSection title="IRP cab card">
         <div className="sm:col-span-2">
           <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/[0.04] p-4">

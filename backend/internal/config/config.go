@@ -23,6 +23,7 @@ type Config struct {
 	DatabaseURL                  string
 	DataTruckAPIKey              string
 	DataTruckCompanyName         string
+	DataTruckMCID                int
 	DataTruckNewLoadsInterval    time.Duration
 	DataTruckOperationalInterval time.Duration
 	GroqAPIKey                   string
@@ -215,6 +216,7 @@ func Load() (Config, error) {
 		DatabaseURL:                  strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		DataTruckAPIKey:              strings.TrimSpace(os.Getenv("DATATRUCK_API_KEY")),
 		DataTruckCompanyName:         strings.TrimSpace(os.Getenv("DATATRUCK_COMPANY_NAME")),
+		DataTruckMCID:                dataTruckMCID(),
 		GroqAPIKey:                   strings.TrimSpace(os.Getenv("GROQ_API_KEY")),
 		GroqModel:                    envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
 		OpenAIAPIKey:                 strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),

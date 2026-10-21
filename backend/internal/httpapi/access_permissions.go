@@ -226,6 +226,8 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/trucks", "trucks.create"},
 	{"DELETE", "/trucks/{id}", "trucks.delete"},
 	{"GET", "/trucks/{id}", "trucks.read"},
+	{"GET", "/trucks/{id}/datatruck", "trucks.read"},
+	{"POST", "/trucks/{id}/datatruck", "trucks.read"},
 	{"PUT", "/trucks/{id}", "trucks.edit"},
 	{"GET", "/trucks/{id}/assignments", "trucks.read"},
 	{"GET", "/trucks/{id}/location", "trucks.read"},

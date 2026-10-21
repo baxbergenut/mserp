@@ -97,6 +97,8 @@ func main() {
 		return
 	}
 	fleetRepo := repository.NewFleetRepository(pool)
+	dataTruckRepo := repository.NewDataTruckRepository(pool, client, cfg.DataTruckMCID)
+	fleetRepo.ConfigureDataTruck(dataTruckRepo)
 	tollRepo := repository.NewTollRepository(pool)
 	fileRepo := repository.NewFileRepository(pool)
 	fuelRepo := repository.NewFuelRepository(pool)
@@ -197,6 +199,7 @@ func main() {
 	}
 
 	serviceAutomationDone := make(chan struct{})
+	dataTruckAutomationDone := make(chan struct{})
 	prepassAssignmentsDone := make(chan struct{})
 	go func() {
 		defer close(prepassAssignmentsDone)
@@ -204,7 +207,11 @@ func main() {
 	}()
 	go func() {
 		defer close(serviceAutomationDone)
-		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "driver-service-setup", Interval: 5 * time.Second, Run: repository.NewDriverServiceRepository(pool, fuelRepo, wmtRepo).Process})
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "driver-service-setup", Interval: 5 * time.Second, Run: repository.NewDriverServiceRepository(pool, fuelRepo, wmtRepo, dataTruckRepo).Process})
+	}()
+	go func() {
+		defer close(dataTruckAutomationDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "datatruck-truck-setup", Interval: 5 * time.Second, Run: dataTruckRepo.ProcessTrucks})
 	}()
 	wmtAutomationDone := make(chan struct{})
 	relayAutomationDone := make(chan struct{})
@@ -363,6 +370,10 @@ func main() {
 	}
 	select {
 	case <-serviceAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-dataTruckAutomationDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

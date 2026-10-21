@@ -3,6 +3,9 @@
 Migration 079 adds Relay and WeighMyTruck enrollment requests to manual driver
 creation and FleetScope completion. Both guided forms share draft service cards
 in their Driver services step.
+Migration 128 adds DataTruck, selected for Add after saving by default. Its
+configuration, receipts and driver/truck enrollment boundaries are documented in
+`DATATRUCK_ENROLLMENT.md`.
 `Add after saving` and `Remind me later` make no vendor calls before the driver
 transaction commits. The create/completion request carries an optional `services`
 array of `{service: relay|weighmytruck, action: add|defer, followUpOn?: YYYY-MM-DD}`.
