@@ -48,6 +48,10 @@ try {
   await expect(row).toContainText('Needs information');
   await expect(page.getByRole('columnheader')).toHaveText(['Truck', 'Last service', 'Service odometer', 'Current odometer', 'Miles since service', /^Status/, 'Actions']);
   await expect(page.getByRole('columnheader', { name: /Miles remaining|Next due odometer/ })).toHaveCount(0);
+  await expect(row.getByRole('button',{name:/^Update last service/})).toHaveCount(0);
+  const actionBounds=await row.getByRole('button',{name:`Program settings for ${unit} ${name}`,exact:true}).boundingBox();
+  const rowBounds=await row.boundingBox();
+  expect(rowBounds.x+rowBounds.width-actionBounds.x-actionBounds.width).toBeLessThanOrEqual(14);
   let p = (await api('get', '/maintenance/programs')).find(p => p.name === name);
   let members = await api('get', `/maintenance/programs/${p.id}/trucks`);
   expect(members).toHaveLength(2); expect(members.every(t => t.lastDate === null)).toBe(true);

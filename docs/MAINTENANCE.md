@@ -431,3 +431,7 @@ serviceTypeCodes omitted/null preserves links; [] unlinks all. Reads include
 serviceTypeCodes and serviceTypeVersions for assigned types. Writes include the
 original assigned type versions plus versions of newly selected types. Existing
 work-order completion snapshots and program enrollment remain unchanged.
+
+Service rows use Record service to enter completed work; the last-service date
+opens its saved work order. There is no separate last-service pencil. The Actions
+header and row controls align to the table's right edge.
