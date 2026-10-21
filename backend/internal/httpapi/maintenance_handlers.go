@@ -46,6 +46,8 @@ func registerMaintenanceRoutes(r chi.Router, pool *pgxpool.Pool, logger *slog.Lo
 	r.Get("/maintenance/access", h.access)
 	r.Get("/maintenance/options", h.options)
 	r.Get("/maintenance/odometer", h.odometer)
+	r.Get("/maintenance/odometer-sources/{truckId}", h.odometerSources)
+	r.Put("/maintenance/odometer-sources/{truckId}", h.odometerSourceSave)
 	r.Get("/maintenance/reports", h.reports)
 	r.Get("/maintenance/due", h.due)
 	r.Get("/maintenance/preventative", h.preventative)

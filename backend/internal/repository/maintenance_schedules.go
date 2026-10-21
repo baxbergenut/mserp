@@ -11,15 +11,17 @@ import (
 )
 
 type MaintenanceReading struct {
-	ID        string    `json:"id"`
-	TruckID   string    `json:"truckId"`
-	RecordID  *string   `json:"recordId"`
-	Date      string    `json:"date"`
-	Mileage   int       `json:"mileage"`
-	Source    string    `json:"source"`
-	Version   int       `json:"version"`
-	ActorName string    `json:"actorName"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID         string     `json:"id"`
+	TruckID    string     `json:"truckId"`
+	RecordID   *string    `json:"recordId"`
+	Date       string     `json:"date"`
+	Mileage    int        `json:"mileage"`
+	Source     string     `json:"source"`
+	Version    int        `json:"version"`
+	ActorName  string     `json:"actorName"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+	ObservedAt *time.Time `json:"observedAt,omitempty"`
+	Note       string     `json:"note,omitempty"`
 }
 type MaintenanceSchedule struct {
 	IntervalMonths *int    `json:"intervalMonths"`
@@ -63,7 +65,7 @@ func checkMaintenanceReading(ctx context.Context, tx pgx.Tx, truck string, date 
 	return nil
 }
 func (r *MaintenanceRepository) Readings(ctx context.Context, truck string) ([]MaintenanceReading, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at FROM maintenance_odometer_readings WHERE active AND ($1='' OR truck_id=NULLIF($1,'')::uuid) ORDER BY reading_date DESC,updated_at DESC LIMIT 500`, truck)
+	rows, err := r.pool.Query(ctx, `SELECT id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at,observed_at,note FROM maintenance_odometer_readings WHERE active AND ($1='' OR truck_id=NULLIF($1,'')::uuid) ORDER BY reading_date DESC,updated_at DESC LIMIT 500`, truck)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +73,7 @@ func (r *MaintenanceRepository) Readings(ctx context.Context, truck string) ([]M
 	items := []MaintenanceReading{}
 	for rows.Next() {
 		var v MaintenanceReading
-		if err := rows.Scan(&v.ID, &v.TruckID, &v.RecordID, &v.Date, &v.Mileage, &v.Source, &v.Version, &v.ActorName, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.TruckID, &v.RecordID, &v.Date, &v.Mileage, &v.Source, &v.Version, &v.ActorName, &v.UpdatedAt, &v.ObservedAt, &v.Note); err != nil {
 			return nil, err
 		}
 		items = append(items, v)
@@ -120,14 +122,17 @@ func (r *MaintenanceRepository) SaveReading(ctx context.Context, in MaintenanceR
 	if conflictsPM {
 		return in, fmt.Errorf("%w: odometer conflicts with the last PM; review its date and service odometer first", ErrMaintenanceInvalid)
 	}
+	if err = checkManualOdometer(ctx, tx, in); err != nil {
+		return in, err
+	}
 	var row pgx.Row
 	if in.ID == "" {
-		row = tx.QueryRow(ctx, `INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,$2,$3,'manual',$4) RETURNING id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at`, truck, date, in.Mileage, in.ActorName)
+		row = tx.QueryRow(ctx, `INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name,observed_at,note) VALUES($1,$2,$3,'manual',$4,$5,$6) RETURNING id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at,observed_at,note`, truck, date, in.Mileage, in.ActorName, in.ObservedAt, in.Note)
 	} else {
-		row = tx.QueryRow(ctx, `UPDATE maintenance_odometer_readings SET reading_date=$2,mileage=$3,actor_name=$4,version=version+1,updated_at=now() WHERE id=$1 RETURNING id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at`, in.ID, date, in.Mileage, in.ActorName)
+		row = tx.QueryRow(ctx, `UPDATE maintenance_odometer_readings SET reading_date=$2,mileage=$3,actor_name=$4,observed_at=$5,note=$6,version=version+1,updated_at=now() WHERE id=$1 RETURNING id,truck_id,record_id,reading_date::text,mileage,source,version,actor_name,updated_at,observed_at,note`, in.ID, date, in.Mileage, in.ActorName, in.ObservedAt, in.Note)
 	}
 	var v MaintenanceReading
-	if err := row.Scan(&v.ID, &v.TruckID, &v.RecordID, &v.Date, &v.Mileage, &v.Source, &v.Version, &v.ActorName, &v.UpdatedAt); err != nil {
+	if err := row.Scan(&v.ID, &v.TruckID, &v.RecordID, &v.Date, &v.Mileage, &v.Source, &v.Version, &v.ActorName, &v.UpdatedAt, &v.ObservedAt, &v.Note); err != nil {
 		return v, err
 	}
 	after, _ := json.Marshal(v)

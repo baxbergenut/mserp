@@ -38,6 +38,11 @@ func TestSamsaraDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	init := strings.ReplaceAll(string(source), "\r\n", "\n")
+	choiceMigration, err := os.ReadFile("../../sql/133_odometer_source_selection.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	choiceUpgrade := strings.ReplaceAll(string(choiceMigration), "\r\n", "\n")
 	upgrade := strings.ReplaceAll(string(migration), "\r\n", "\n")
 	if !strings.Contains(init, upgrade) {
 		t.Fatal("init/migration mismatch")
@@ -55,8 +60,9 @@ func TestSamsaraDatabase(t *testing.T) {
 			exec("CREATE SCHEMA " + quoted + "; SET search_path TO " + quoted + ",public; GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app")
 			defer admin.Exec(context.Background(), "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE")
 			if mode == "upgrade" {
-				exec(strings.Replace(init, upgrade, "", 1))
+				exec(strings.Replace(strings.Replace(init, choiceUpgrade, "", 1), upgrade, "", 1))
 				exec(upgrade)
+				exec(choiceUpgrade)
 			} else {
 				exec(init)
 			}
@@ -148,6 +154,7 @@ func TestSamsaraDatabase(t *testing.T) {
 				t.Fatal("old provider evidence retained", evidence)
 			}
 			testOdometerSourceChecks(t, ctx, admin, pool)
+			testOdometerSelection(t, ctx, admin, pool)
 		})
 	}
 }

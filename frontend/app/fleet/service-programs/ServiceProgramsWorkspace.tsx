@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { CalendarRange, Pencil, Plus, Settings } from "lucide-react";
 import Link from "@/app/components/AccessLink";
-import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchMaintenanceReadings, fetchProgramTrucks, fetchServicePrograms } from "@/app/lib/api";
-import type { ExpenseCategoryAccess, MaintenanceOptions, MaintenanceReading, ProgramTruck, ServiceProgram } from "@/app/lib/types";
+import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchProgramTrucks, fetchServicePrograms } from "@/app/lib/api";
+import type { ExpenseCategoryAccess, MaintenanceOptions, ProgramTruck, ServiceProgram } from "@/app/lib/types";
 import { ErrorBanner, ManagementHeader, ManagementSearch, TablePagination, TableShell } from "@/app/components/management/ManagementUI";
-import { MaintenanceReadingEditor } from "@/app/maintenance/MaintenanceSettings";
+import { OdometerSourcePicker } from "@/app/maintenance/OdometerSourcePicker";
 import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
 import { today } from "@/app/maintenance/maintenance";
 import { AddProgramTrucks, ProgramEditor, ProgramServiceEditor, ProgramTruckEditor } from "./ProgramEditors";
@@ -21,9 +21,9 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const [programs, setPrograms] = useState<ServiceProgram[]>([]), [members, setMembers] = useState<ProgramTruck[]>([]);
   const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState("");
   const [page, setPage] = useState(1), [size, setSize] = useState(25), [revision, setRevision] = useState(0);
-  const [error, setError] = useState(""), [loading, setLoading] = useState(true), [readingBusy, setReadingBusy] = useState(false);
+  const [error, setError] = useState(""), [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ServiceProgram | null>(null), [adding, setAdding] = useState(false), [truckSettings, setTruckSettings] = useState<ProgramTruck | null>(null);
-  const [service, setService] = useState<{ truck: ProgramTruck; baseline: boolean } | null>(null), [reading, setReading] = useState<MaintenanceReading | null>(null), [recordId, setRecordId] = useState<string | null>(null);
+  const [service, setService] = useState<{ truck: ProgramTruck; baseline: boolean } | null>(null), [readingTruck, setReadingTruck] = useState<string | null>(null), [recordId, setRecordId] = useState<string | null>(null);
   const [clock,setClock]=useState(()=>Date.now());
   const refresh = async () => { setRevision(v => v + 1); };
   useEffect(() => { const restore=()=>{if(!truckId)setSelected(new URLSearchParams(window.location.search).get("program")??defaultProgram);};const timer=setTimeout(restore,0);window.addEventListener("popstate",restore);return()=>{clearTimeout(timer);window.removeEventListener("popstate",restore);}; }, [truckId]);
@@ -42,11 +42,6 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
   const visible = rows.slice((page - 1) * size, page * size);
   const listed = programs.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
-  const editReading = async (t: ProgramTruck) => {
-    setReadingBusy(true); setError("");
-    try { const values = await fetchMaintenanceReadings(t.truckId); setReading(values.find(r => r.source === "manual" && r.date === today()) ?? { id: "", truckId: t.truckId, recordId: null, date: today(), mileage: t.currentMiles ?? 0, source: "manual", version: 0, actorName: "", updatedAt: "" }); }
-    catch (e) { setError((e as Error).message); } finally { setReadingBusy(false); }
-  };
   const serviceProgram = service && programs.find(p => p.id === service.truck.programId);
   return <div className="space-y-4">
     {!truckId && <ManagementHeader title="Service programs" icon={CalendarRange} count={programs.length} />}
@@ -73,7 +68,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
             {!selected && <td className="px-3 py-2"><Link className="text-blue-400" href={`/fleet/service-programs?program=${t.programId}`}>{t.programName}</Link></td>}
             <td className="px-3 py-2">{t.lastRecordId ? <button type="button" className="text-blue-400" onClick={() => setRecordId(t.lastRecordId)}>{t.lastDate || "Unknown date"}</button> : t.lastDate ?? "No recorded service"}</td>
             <td className="px-3 py-2 tabular-nums">{number(t.lastMiles)}</td>
-            <td className={`px-3 py-2 tabular-nums ${fresh ? "" : "text-zinc-500"}`} title={`${t.currentSource || "Saved reading"} · ${t.currentReportedAt ? new Date(t.currentReportedAt).toLocaleString() : t.currentDate || "Unavailable"}`} data-odometer-fresh={fresh}>{access?.canEdit ? <button type="button" disabled={readingBusy} className="hover:underline" aria-label={`Edit current odometer for ${t.unitNumber}`} onClick={() => void editReading(t)}>{number(t.currentMiles)}</button> : number(t.currentMiles)}</td>
+            <td className={`px-3 py-2 tabular-nums ${fresh ? "" : "text-zinc-500"}`} title={`${t.currentSource || "Saved reading"} · ${t.currentReportedAt ? new Date(t.currentReportedAt).toLocaleString() : t.currentDate || "Unavailable"}`} data-odometer-fresh={fresh}><button type="button" className="hover:underline" aria-label={`Odometer sources for ${t.unitNumber}`} onClick={() => setReadingTruck(t.truckId)}>{number(t.currentMiles)}</button></td>
             <td className="px-3 py-2 tabular-nums" data-miles-since-service>{number(t.milesSinceService)}</td>
             <td className="px-3 py-2">{access?.canEdit && <div className="flex items-center justify-end gap-2">{t.enrolled && programs.find(p => p.id === t.programId)?.active && <button type="button" className="ui-button" onClick={() => setService({ truck: t, baseline: false })}>Record service</button>}<button type="button" className="ui-button" aria-label={`Program settings for ${t.unitNumber} ${t.programName}`} onClick={() => setTruckSettings(t)}><Settings className="h-4 w-4" /></button></div>}</td>
           </tr>; })}
@@ -86,7 +81,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
     {adding && program && options && <AddProgramTrucks program={program} members={members} options={options} truckId={truckId} onClose={() => setAdding(false)} onSaved={refresh} />}
     {truckSettings && <ProgramTruckEditor truck={truckSettings} onClose={() => setTruckSettings(null)} onSaved={refresh} />}
     {service && serviceProgram && options && <ProgramServiceEditor truck={service.truck} program={serviceProgram} options={options} baseline={service.baseline} onClose={() => setService(null)} onSaved={refresh} />}
-    {reading && options && <MaintenanceReadingEditor initial={reading} options={options} onClose={() => setReading(null)} onSaved={refresh} />}
+    {readingTruck && options && <OdometerSourcePicker truckId={readingTruck} canEdit={!!access?.canEdit} options={options} onClose={() => setReadingTruck(null)} onSaved={refresh} />}
     {recordId && <MaintenanceWorkspace key={recordId} modalOnly recordId={recordId} onRecordClose={() => setRecordId(null)} onRecordSaved={() => setRevision(v => v + 1)} />}
   </div>;
 }

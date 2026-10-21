@@ -44,10 +44,10 @@ const maintenanceRawSamsaraOdometerSQL = `SELECT s.mileage,s.odometer_at AS repo
 // Five ELD must also agree with an otherwise valid Samsara observation. This
 // catches provider offsets/rollovers even on a truck with no saved service yet.
 func maintenanceFiveELDPlausibleSQL(alias string) string {
-	return maintenanceOdometerPlausibleSQL(alias) + ` AND NOT EXISTS (
+	return maintenanceOdometerPlausibleSQL(alias) + ` AND (EXISTS(SELECT 1 FROM maintenance_odometer_sources choice WHERE choice.truck_id=t.id AND choice.source='five_eld') OR NOT EXISTS (
  SELECT 1 FROM (` + maintenanceRawSamsaraOdometerSQL + `) sam WHERE ` + maintenanceOdometerPlausibleSQL("sam") + ` AND (
  (` + alias + `.reported_at>=sam.reported_at AND ` + alias + `.mileage<sam.mileage)
- OR abs(` + alias + `.mileage::bigint-sam.mileage)>25+100*abs(extract(epoch FROM (` + alias + `.reported_at-sam.reported_at)))/3600))`
+ OR abs(` + alias + `.mileage::bigint-sam.mileage)>25+100*abs(extract(epoch FROM (` + alias + `.reported_at-sam.reported_at)))/3600)))`
 }
 
 // Revalidate on every read, including caches populated before these checks and
@@ -68,8 +68,12 @@ var maintenanceOdometerCandidatesSQL = `
 // or makes an impossible jump. Legacy bad cache values do not block recovery:
 // the previous sample itself must still pass the current reviewed history.
 func acceptMaintenanceTelemetry(ctx context.Context, q chargeQuery, truck, source, providerID string, reading MaintenanceTelemetry) (bool, error) {
+	return checkMaintenanceTelemetry(ctx, q, truck, source, providerID, reading, false)
+}
+
+func checkMaintenanceTelemetry(ctx context.Context, q chargeQuery, truck, source, providerID string, reading MaintenanceTelemetry, explicitChoice bool) (bool, error) {
 	check := maintenanceOdometerPlausibleSQL("candidate")
-	if source == "five_eld" {
+	if source == "five_eld" && !explicitChoice {
 		check = maintenanceFiveELDPlausibleSQL("candidate")
 	}
 	var acceptable bool

@@ -171,9 +171,12 @@ try {
  expect((await page.request.put(access.base+'/api/maintenance/preventative/'+truck.id,{headers,data:{truckId:truck.id,recordId:pmSummary.recordId,recordVersion:pmSummary.recordVersion,baselineVersion:pmSummary.baselineVersion,lastDate:'2026-10-01',lastMiles:100000}})).status()).toBe(409);
  await page.reload();await page.getByPlaceholder('Search trucks or programs…').fill(truck.unitNumber);
  await expect(page.locator('tbody')).toContainText('99,500');
- await page.getByRole('button',{name:'Edit current odometer for '+truck.unitNumber,exact:true}).click();
+ await page.getByRole('button',{name:'Odometer sources for '+truck.unitNumber,exact:true}).click();
+ await page.getByRole('button',{name:'Record manual reading',exact:true}).click();
  await page.getByLabel('Odometer miles',{exact:true}).fill('106100');
+ await page.getByLabel('Odometer reason',{exact:true}).fill('Observed dashboard mileage');
  await page.getByRole('button',{name:'Save reading',exact:true}).click();
+ await page.getByRole('button',{name:'Use source',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('[data-miles-since-service]')).toHaveText('6,600');
  await page.screenshot({path:join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE),'service-program-pm.png'),fullPage:true});
@@ -274,7 +277,10 @@ try {
  const limitedPage=await limited.newPage();await limitedPage.goto(access.base+'/fleet/preventative-maintenance');
  await expect(limitedPage.getByRole('heading',{name:'Service programs',exact:true})).toBeVisible();
  await expect(limitedPage.getByRole('button',{name:/^Update last service for /})).toHaveCount(0);
- await expect(limitedPage.getByRole('button',{name:/^Edit current odometer for /})).toHaveCount(0);
+ await limitedPage.getByRole('button',{name:'Odometer sources for '+truck.unitNumber,exact:true}).click();
+ await expect(limitedPage.getByLabel('Use automatic odometer',{exact:true})).toBeDisabled();
+ await expect(limitedPage.getByRole('button',{name:'Use source',exact:true})).toHaveCount(0);
+ expect((await limited.request.put(access.base+'/api/maintenance/odometer-sources/'+truck.id,{headers:limitedHeaders,data:{}})).status()).toBe(403);
  await limited.close();
  await page.setViewportSize({ width: 390, height: 844 });
  await page.getByRole('button', { name: 'Add work order', exact: true }).click();

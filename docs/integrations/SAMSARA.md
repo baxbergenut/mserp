@@ -29,11 +29,27 @@ duplicate provider IDs/stats, or a gateway serial attached to multiple records s
 ambiguous. Never choose by name, largest mileage or newest timestamp. Reading
 telemetry never creates trucks, ownership or assignments.
 
-GPS and odometer selection are independent. GPS keeps the existing Samsara-first
-rule. Odometers prefer fresh, plausible Samsara, then fresh, plausible Five ELD.
+GPS and odometer selection are independent. Profile maps keep the Samsara-first
+rule; Status Board always uses Five ELD. Automatic maintenance odometers prefer
+fresh, plausible Samsara, then fresh, plausible Five ELD.
 Saved history and valid last-known telemetry remain available when neither is
 fresh, retaining their original dates and normal stale/missing-information status.
-Work order autofill requires a valid provider observation within one hour.
+Work order autofill requires a valid observation within one hour.
+
+Migration 133 retains the latest raw provider odometer and timestamp alongside
+the accepted cache, including rejected points. Clicking Current odometer on a
+service program opens a comparison with timestamps, validation reasons and the
+saved per-truck choice: Automatic, Samsara, Five ELD or Manual. View access permits
+comparison; Maintenance Edit permits versioned source changes and manual entries.
+`GET/PUT /maintenance/odometer-sources/{truckId}` enforces these category grants.
+Explicit choices apply to every service program and work order autofill for the
+truck, never GPS. An unavailable chosen source does not fall back silently.
+Selecting Five ELD can resolve a provider-only disagreement, but never bypasses
+service/manual history or same-provider continuity checks. Automatic still applies
+the cross-provider comparison. Source changes are recorded in access_audit.
+Manual entries retain an observation time and reason in reading history; recording
+one does not select Manual automatically. Manual selection remains until changed,
+with its original observation age; only a recent observation fills a work order.
 
 Both telemetry providers are checked against active manual readings, completed
 work orders and effective program baselines. A candidate cannot precede reviewed

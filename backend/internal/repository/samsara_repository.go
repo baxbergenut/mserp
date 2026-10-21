@@ -67,6 +67,8 @@ func (r *SamsaraRepository) Store(ctx context.Context, s samsara.Snapshot, now t
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO samsara_telemetry(vin,vehicle_id,unit_number,latitude,longitude,heading,speed_mph,gps_at,mileage,odometer_at,fetched_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
  ON CONFLICT(vin) DO UPDATE SET vehicle_id=excluded.vehicle_id,unit_number=excluded.unit_number,available=true,fetched_at=excluded.fetched_at,
+ observed_mileage=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id THEN NULL ELSE samsara_telemetry.observed_mileage END,
+ observed_at=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id THEN NULL ELSE samsara_telemetry.observed_at END,
  latitude=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id OR samsara_telemetry.gps_at IS NULL OR excluded.gps_at>=samsara_telemetry.gps_at THEN excluded.latitude ELSE samsara_telemetry.latitude END,
  longitude=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id OR samsara_telemetry.gps_at IS NULL OR excluded.gps_at>=samsara_telemetry.gps_at THEN excluded.longitude ELSE samsara_telemetry.longitude END,
  heading=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id OR samsara_telemetry.gps_at IS NULL OR excluded.gps_at>=samsara_telemetry.gps_at THEN excluded.heading ELSE samsara_telemetry.heading END,
@@ -76,6 +78,11 @@ func (r *SamsaraRepository) Store(ctx context.Context, s samsara.Snapshot, now t
  odometer_at=CASE WHEN samsara_telemetry.vehicle_id<>excluded.vehicle_id OR samsara_telemetry.odometer_at IS NULL OR excluded.odometer_at>=samsara_telemetry.odometer_at THEN excluded.odometer_at ELSE samsara_telemetry.odometer_at END`, v.VIN, v.ID, v.Name, lat, lng, heading, speed, gpsAt, miles, odoAt, now)
 		if err != nil {
 			return err
+		}
+		if v.Odometer != nil {
+			if _, err = tx.Exec(ctx, `UPDATE samsara_telemetry SET observed_mileage=$2,observed_at=$3 WHERE vin=$1 AND (observed_at IS NULL OR observed_at<=$3)`, v.VIN, v.Odometer.Miles, v.Odometer.Time); err != nil {
+				return err
+			}
 		}
 		if v.GPS != nil {
 			if _, err = tx.Exec(ctx, `INSERT INTO samsara_tracking(vin,reported_at,latitude,longitude,speed_mph) VALUES($1,$2,$3,$4,$5) ON CONFLICT(vin,reported_at) DO NOTHING`, v.VIN, v.GPS.Time, v.GPS.Latitude, v.GPS.Longitude, v.GPS.SpeedMPH); err != nil {

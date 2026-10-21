@@ -131,6 +131,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	odometerMigration, err := os.ReadFile("../../sql/133_odometer_source_selection.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -145,6 +149,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(odometerMigration), "\r\n", "\n"), "", 1)
 				// Replay task-kind constraints in their original order before the
 				// later DataTruck task category and its inherited assignments.
 				sql = strings.Replace(sql, strings.ReplaceAll(string(typeProgramMigration), "\r\n", "\n"), "", 1)
@@ -191,6 +196,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(dataTruckMigration))
 				exec(string(programMigration))
 				exec(string(typeProgramMigration))
+				exec(string(odometerMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -297,7 +303,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if err != nil || unchanged.VendorAddress != "Original address" {
 				t.Fatal("vendor snapshot changed", err)
 			}
-			mileage := 110000
+			mileage := 103000
 			reading, err := repo.SaveReading(ctx, MaintenanceReading{TruckID: truck, Date: "2026-10-14", Mileage: mileage, ActorName: "Operator"})
 			if err == nil {
 				t.Fatal("same-day conflicting mileage accepted", reading)
@@ -312,7 +318,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if _, err := repo.SaveReading(ctx, MaintenanceReading{TruckID: truck, Date: "2026-10-16", Mileage: 100500, ActorName: "Operator"}); err == nil {
 				t.Fatal("manual reading chronology was bypassed")
 			}
-			interval := 5000
+			interval := 1000
 			schedule, err := repo.SaveSchedule(ctx, MaintenanceSchedule{ServiceCode: "pm", IntervalMiles: &interval, Enabled: true, WarningMiles: 1000, WarningDays: 14})
 			if err != nil {
 				t.Fatal(err)

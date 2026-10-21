@@ -21,9 +21,17 @@ try{
  await page.request.post(access.base+`/api/maintenance/programs/${oil}/trucks`,{headers,data:{items:[{truckId:fixture.ownTruck,version:0,active:true,overrideInterval:false,intervalMiles:null,intervalDays:null,intervalMonths:null}]}});
  await page.goto(access.base+'/fleet/service-programs');await page.getByPlaceholder('Search trucks or programs…').fill('101');
  const row=page.locator('tbody tr').filter({has:page.getByRole('link',{name:'101',exact:true})});
- await expect(row.getByRole('button',{name:'Edit current odometer for 101',exact:true})).toHaveText('500,000');
+ await expect(row.getByRole('button',{name:'Odometer sources for 101',exact:true})).toHaveText('500,000');
  await expect(row.locator('[data-odometer-fresh]')).toHaveAttribute('data-odometer-fresh','true');
  await row.getByRole('button',{name:'Record service',exact:true}).click();await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('500000');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await row.getByRole('button',{name:'Odometer sources for 101',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('500,000 mi');await expect(page.getByRole('dialog')).toContainText('500,005 mi');
+ await page.getByLabel('Use Five ELD odometer',{exact:true}).check();await page.getByRole('button',{name:'Use source',exact:true}).click();
+ await expect(row.getByRole('button',{name:'Odometer sources for 101',exact:true})).toHaveText('500,005');
+ expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading.source).toBe('five_eld');
+ await page.reload();await page.getByPlaceholder('Search trucks or programs…').fill('101');
+ await row.getByRole('button',{name:'Odometer sources for 101',exact:true}).click();await expect(page.getByLabel('Use Five ELD odometer',{exact:true})).toBeChecked();
+ await page.getByLabel('Use automatic odometer',{exact:true}).check();await page.getByRole('button',{name:'Use source',exact:true}).click();
  await page.goto(access.base+'/maintenance');await page.getByRole('button',{name:'Add work order',exact:true}).click();await page.getByLabel('Maintenance truck',{exact:true}).selectOption(fixture.ownTruck);
  await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('500000');await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveAttribute('title',/Samsara/);await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.goto(access.base+'/driver-board');const marker=page.getByRole('button',{name:'Morgan Hayes · Copy current location',exact:true});await expect(marker).toHaveAttribute('title',/Five ELD updated/);
@@ -40,8 +48,10 @@ try{
  sql(`UPDATE maintenance_telemetry SET mileage=140159 WHERE truck_id='${fixture.ownTruck}';`);
  expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading).toBeNull();
  await page.goto(access.base+'/fleet/service-programs');await page.getByPlaceholder('Search trucks or programs…').fill('101');
- await expect(row.getByRole('button',{name:'Edit current odometer for 101',exact:true})).toHaveText('499,950');
+ await expect(row.getByRole('button',{name:'Odometer sources for 101',exact:true})).toHaveText('499,950');
  await expect(row.locator('[data-odometer-fresh]')).toHaveAttribute('title',/manual/);
+ await row.getByRole('button',{name:'Odometer sources for 101',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('140,159 mi');await expect(page.getByLabel('Use Five ELD odometer',{exact:true})).toBeDisabled();await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.goto(access.base+'/maintenance');await page.getByRole('button',{name:'Add work order',exact:true}).click();await page.getByLabel('Maintenance truck',{exact:true}).selectOption(fixture.ownTruck);
  await expect(page.getByLabel('Maintenance odometer',{exact:true})).toHaveValue('');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  // Valid fresh fallback outranks stale Samsara, with the original observation
@@ -49,7 +59,7 @@ try{
  sql(`UPDATE samsara_telemetry SET available=true,odometer_at=now()-interval '2 hours' WHERE vin='${vin}'; UPDATE maintenance_telemetry SET mileage=500100 WHERE truck_id='${fixture.ownTruck}';`);
  expect((await api('/maintenance/odometer?truckId='+fixture.ownTruck)).reading.source).toBe('five_eld');
  await page.goto(access.base+'/fleet/service-programs');await page.getByPlaceholder('Search trucks or programs…').fill('101');
- await expect(row.getByRole('button',{name:'Edit current odometer for 101',exact:true})).toHaveText('500,100');
+ await expect(row.getByRole('button',{name:'Odometer sources for 101',exact:true})).toHaveText('500,100');
  await row.getByRole('button',{name:'Record service',exact:true}).click();await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('500100');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect(errors).toEqual([]);
  console.log('Samsara views passed: valid source priority, program/work-order prefill, maps and board labels, rejected Five ELD legacy cache, manual fallback, fresh validated fallback ahead of stale Samsara.');

@@ -644,7 +644,7 @@ export const completeFiveELDTruckReview = (id: string, version: number, truck: T
 
 export type MaintenanceQuery = { truckId?: string; vendorId?: string; typeCode?: string; status?: string; search?: string; dateFrom?: string; dateTo?: string; expenseId?: string; page?: number; pageSize?: number };
 export const fetchMaintenanceOptions = () => apiRequest<import("./types").MaintenanceOptions>("/maintenance/options");
-export const fetchMaintenanceOdometer = (truckId: string, signal?: AbortSignal) => apiRequest<{reading: {mileage: number; reportedAt: string; source?: "samsara" | "five_eld"} | null; message: string}>(withQuery("/maintenance/odometer",{truckId}),{signal});
+export const fetchMaintenanceOdometer = (truckId: string, signal?: AbortSignal) => apiRequest<{reading: {mileage: number; reportedAt: string; source?: "samsara" | "five_eld" | "manual"} | null; message: string}>(withQuery("/maintenance/odometer",{truckId}),{signal});
 export const fetchMaintenancePage = (query: MaintenanceQuery, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").MaintenanceRecord>>(withQuery("/maintenance",query),{signal});
 export const fetchMaintenance = (id: string) => apiRequest<import("./types").MaintenanceRecord>(`/maintenance/${id}`);
 export const saveMaintenance = (input: import("./types").MaintenanceInput) => {
@@ -659,7 +659,9 @@ export const fetchMaintenanceHistory = (id: string) => apiRequest<import("./type
 export const fetchMaintenanceReports = (query: MaintenanceQuery) => apiRequest<import("./types").MaintenanceReport>(withQuery("/maintenance/reports",query));
 export const fetchMaintenanceDue = (truckId?: string) => apiRequest<import("./types").MaintenanceDue[]>(withQuery("/maintenance/due",{truckId}));
 export const fetchMaintenanceReadings = (truckId?: string) => apiRequest<import("./types").MaintenanceReading[]>(withQuery("/maintenance/readings",{truckId}));
-export const saveMaintenanceReading = (input: import("./types").MaintenanceReading) => apiRequest<import("./types").MaintenanceReading>(input.id ? `/maintenance/readings/${input.id}` : "/maintenance/readings",{method:input.id ? "PUT":"POST",body:JSON.stringify({truckId:input.truckId,date:input.date,mileage:input.mileage,version:input.version})});
+export const saveMaintenanceReading = (input: import("./types").MaintenanceReading) => apiRequest<import("./types").MaintenanceReading>(input.id ? `/maintenance/readings/${input.id}` : "/maintenance/readings",{method:input.id ? "PUT":"POST",body:JSON.stringify({truckId:input.truckId,date:input.date,mileage:input.mileage,version:input.version,observedAt:input.observedAt,note:input.note})});
+export const fetchOdometerSources = (truckId: string) => apiRequest<import("./types").OdometerSources>(`/maintenance/odometer-sources/${truckId}`);
+export const saveOdometerSource = (truckId: string, source: import("./types").OdometerSource, version: number) => apiRequest<void>(`/maintenance/odometer-sources/${truckId}`,{method:"PUT",body:JSON.stringify({source,version})});
 export const saveMaintenanceSchedule = (input: import("./types").MaintenanceSchedule) => apiRequest<import("./types").MaintenanceSchedule>(input.id ? `/maintenance/schedules/${input.id}` : "/maintenance/schedules",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
 export const saveMaintenanceVendor = (input: import("./types").MaintenanceVendor) => apiRequest<import("./types").MaintenanceVendor>(input.id ? `/maintenance/vendors/${input.id}` : "/maintenance/vendors",{method:input.id ? "PUT":"POST",body:JSON.stringify(input)});
 export const saveMaintenanceType = (input: import("./types").MaintenanceType) => apiRequest<import("./types").MaintenanceType>(`/maintenance/types/${input.code}`,{method:"PUT",body:JSON.stringify(input)});

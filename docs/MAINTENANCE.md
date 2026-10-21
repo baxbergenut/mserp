@@ -49,6 +49,18 @@ exclude the configured work-order category. No expense copies are created.
 
 ## PM Service and odometers
 
+Current odometer cells open a provider comparison showing Samsara and Five ELD
+mileage, observation times and rejected-reading reasons. Maintenance viewers can
+compare; editors can save Automatic, Samsara, Five ELD or Manual per truck. The
+choice applies across programs and work order autofill, with no silent fallback
+from an explicitly chosen source. Invalid readings remain visible but cannot be
+chosen. Automatic prefers fresh valid Samsara then fresh valid Five ELD.
+Manual observations require a timestamp and reason in this dialog, are checked
+for chronology and implausible mileage, and remain versioned/audited. Recording
+one does not itself change the chosen source. Source changes are also audited.
+Migration 133 stores these choices and raw observations. GPS is independent;
+Status Board always uses Five ELD. See integrations/SAMSARA.md for validation.
+
 PM work and oil replacement reset the same PM Service schedule automatically when
 the visit is confirmed Completed. There is no completion dropdown in the entry form.
 Needs-review entries, estimates and voided visits do not reset a schedule.

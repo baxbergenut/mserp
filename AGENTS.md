@@ -2413,7 +2413,15 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   against reviewed service/manual history, effective baselines and accepted samples.
   Read-time guards exclude legacy bad caches; rejected imports preserve last good
   readings. GPS is independent. Preserve timestamps and one-hour autofill guard.
-  Source changes invalidate arrival/ETA evidence; Samsara samples use mph.
+  Status Board always uses Five ELD for GPS/arrival/ETA. Profile maps remain
+  Samsara-first. Migration 133 adds raw odometer observations and versioned,
+  audited per-truck Automatic/Samsara/Five ELD/Manual maintenance choices at
+  `/maintenance/odometer-sources/{truckId}`. Category View permits comparison;
+  Edit permits source changes/manual observations. Explicit Five ELD resolves
+  provider-only disagreement without bypassing service history or continuity.
+  Explicit unavailable sources do not fall back. Source choice applies across
+  programs and work order autofill, never GPS. Manual observations retain time
+  and reason; recording one alone never pins Manual. See integrations/SAMSARA.md.
 - Keep read-only review servers' Samsara token empty. Run TestSamsaraDatabase,
   TestDriverBoardDatabase, TestMaintenanceDatabase and test-samsara-views.mjs.
   See docs/integrations/SAMSARA.md for matching, configuration and live proof.

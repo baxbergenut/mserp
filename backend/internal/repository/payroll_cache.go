@@ -27,7 +27,7 @@ var payrollUnrelatedTables = []string{
 	"driver_board_dispatcher_order",
 	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
 	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
-	"samsara_telemetry", "samsara_tracking", "samsara_sync_state",
+	"samsara_telemetry", "samsara_tracking", "samsara_sync_state", "maintenance_odometer_sources",
 	"driver_service_requests", "driver_service_events", "profile_notes", "driver_board_presence", "gross_board_presence", "driver_board_automation",
 }
 

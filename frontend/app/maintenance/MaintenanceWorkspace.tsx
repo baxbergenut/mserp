@@ -45,7 +45,7 @@ export function MaintenanceWorkspace({ truckId, embedded = false, modalOnly = fa
     const controller=new AbortController();
     fetchMaintenanceOdometer(visitTruck,controller.signal).then(result=>{
       if(controller.signal.aborted)return;
-      setOdometerMessage(result.reading ? `${result.reading.source==="samsara"?"Samsara":"Five ELD"} · ${new Date(result.reading.reportedAt).toLocaleString()}` : result.message);
+      setOdometerMessage(result.reading ? `${result.reading.source==="samsara"?"Samsara":result.reading.source==="manual"?"Manual":"Five ELD"} · ${new Date(result.reading.reportedAt).toLocaleString()}` : result.message);
       if(result.reading){autoOdometer.current={truckId:visitTruck,mileage:result.reading.mileage};setEditing(current=>current?.id===visitId&&current.truckId===visitTruck&&current.serviceDate===today()&&current.odometer===null ? {...current,odometer:result.reading!.mileage}:current);}
     }).catch(()=>{if(!controller.signal.aborted)setOdometerMessage("Enter the service odometer manually; telematics is unavailable.");});
     return ()=>controller.abort();

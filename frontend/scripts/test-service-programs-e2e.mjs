@@ -13,7 +13,7 @@ const suffix = Date.now(), name = `Clutch check 50k ${suffix}`, unit = `SP-${suf
 const truck = sql(`INSERT INTO trucks(unit_number) VALUES('${unit}') RETURNING id;`);
 sql(`INSERT INTO trucks(unit_number) VALUES('${otherUnit}') RETURNING id;`);
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
+const previousService = new Date(Date.parse(today + 'T12:00:00Z') - 21*86400000).toISOString().slice(0, 10);
 const oil = '00000000-0000-4000-8000-000000000020';
 const browser = await chromium.launch();
 try {
@@ -57,7 +57,7 @@ try {
   expect(members).toHaveLength(2); expect(members.every(t => t.lastDate === null)).toBe(true);
   await row.getByRole('button', { name: 'Record service', exact: true }).click();
   await expect(page.getByLabel('Program service odometer',{exact:true})).toHaveValue('');
-  await page.getByLabel('Program service date', { exact: true }).fill(yesterday);
+  await page.getByLabel('Program service date', { exact: true }).fill(previousService);
   await page.getByLabel('Program service odometer', { exact: true }).fill('100000');
   await page.getByLabel('Program service notes', { exact: true }).fill('Synthetic completed clutch inspection');
   await page.getByRole('button', { name: 'Record service', exact: true }).last().click();
@@ -66,9 +66,12 @@ try {
   let clutch = (await api('get', `/maintenance/programs/${p.id}/trucks`)).find(t => t.truckId === truck);
   const record = await api('get', '/maintenance/' + clutch.lastRecordId);
   expect(record.expenseId).toBe(null); expect(record.programIds).toEqual([p.id]);
-  await row.getByRole('button', { name: 'Edit current odometer for ' + unit, exact: true }).click();
+  await row.getByRole('button', { name: 'Odometer sources for ' + unit, exact: true }).click();
+  await page.getByRole('button',{name:'Record manual reading',exact:true}).click();
   await page.getByLabel('Odometer miles', { exact: true }).fill('149500');
+  await page.getByLabel('Odometer reason',{exact:true}).fill('Observed dashboard mileage');
   await page.getByRole('button', { name: 'Save reading', exact: true }).click();
+  await page.getByRole('button',{name:'Use source',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(row.locator('[data-miles-since-service]')).toHaveText('49,500');
   await expect(row).toHaveAttribute('data-service-status', 'upcoming');
