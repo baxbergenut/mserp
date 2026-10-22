@@ -102,6 +102,15 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			holdBeforeActivation := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status) VALUES($1,'shop') RETURNING id::text`, truck.ID)
+			if e = fleet.ActivateStatuses(ctx, preview.Revision); e == nil {
+				t.Fatal("work-order change escaped activation fence")
+			}
+			exec(`UPDATE maintenance_records SET dispatch_status='' WHERE id=$1`, holdBeforeActivation)
+			preview, e = fleet.PreviewStatuses(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
 			if e = fleet.ActivateStatuses(ctx, "stale"); e == nil {
 				t.Fatal("stale activation accepted")
 			}

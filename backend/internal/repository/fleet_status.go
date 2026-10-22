@@ -214,7 +214,7 @@ type FleetStatusPreview struct {
 func statusPreview(ctx context.Context, tx pgx.Tx) (FleetStatusPreview, error) {
 	var p FleetStatusPreview
 	err := tx.QueryRow(ctx, `SELECT fleet_status_enabled(),coalesce(jsonb_agg(row_data ORDER BY row_data->>'id'),'[]'::jsonb) FROM (
- SELECT jsonb_build_object('id',d.id,'driver',d.full_name,'profile',d.status,'availability',d.availability_status,'board',coalesce(b.status,''),'boardVersion',coalesce(b.version,0),'updatedAt',d.updated_at,'truckId',t.id,'truck',t.unit_number,'truckStatus',t.status,'condition',t.condition_status,'truckVersion',t.status_version,'truckUpdatedAt',t.updated_at) row_data
+ SELECT jsonb_build_object('id',d.id,'driver',d.full_name,'profile',d.status,'availability',d.availability_status,'board',coalesce(b.status,''),'boardVersion',coalesce(b.version,0),'updatedAt',d.updated_at,'truckId',t.id,'truck',t.unit_number,'truckStatus',t.status,'condition',fleet_truck_operating_status(t.id),'truckVersion',t.status_version,'truckUpdatedAt',t.updated_at,'teamVersion',d.team_version,'assignments',coalesce((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.unassigned_at IS NULL),'[]'::jsonb),'workOrderHolds',coalesce((SELECT jsonb_agg(jsonb_build_object('id',m.id,'version',m.version,'status',m.dispatch_status,'updatedAt',m.updated_at) ORDER BY m.id) FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status<>''),'[]'::jsonb)) row_data
  FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id LEFT JOIN trucks t ON t.id=fleet_status_driver_truck(d.id) WHERE d.active) q`).Scan(&p.Enabled, &p.Rows)
 	sum := sha256.Sum256(p.Rows)
 	p.Revision = hex.EncodeToString(sum[:])
