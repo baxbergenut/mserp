@@ -132,7 +132,7 @@ func TestDriverHireStartDatabase(t *testing.T) {
 				if _, err := fleet.UpdateDriver(ctx, d.ID, input); err != nil {
 					t.Fatal(err)
 				}
-				checkDates(t, d.ID, "2026-09-28", "2026-09-30")
+				checkDates(t, d.ID, "2026-09-30", "2026-09-30")
 				before := state(t, d.ID)
 				if _, err := fleet.UpdateDriver(ctx, d.ID, input); err != nil || state(t, d.ID) != before {
 					t.Fatalf("unchanged hire date changed setup: %v", err)
@@ -160,7 +160,7 @@ func TestDriverHireStartDatabase(t *testing.T) {
 				}
 				var correct bool
 				if err := pool.QueryRow(ctx, `SELECT roster_start_week='2026-10-12'
- AND (SELECT bool_and((assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-05' AND NOT start_known) FROM driver_dispatcher_assignments WHERE driver_id=d.id)
+ AND (SELECT bool_and((assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-07' AND NOT start_known) FROM driver_dispatcher_assignments WHERE driver_id=d.id)
  FROM drivers d WHERE id=$1`, d.ID).Scan(&correct); err != nil || !correct {
 					t.Fatalf("unknown history changed: %s %v", state(t, d.ID), err)
 				}
@@ -190,7 +190,7 @@ func TestDriverHireStartDatabase(t *testing.T) {
 				}
 				var count int
 				if err := pool.QueryRow(ctx, `SELECT count(*) FROM truck_driver_assignments WHERE driver_id=$1 AND
- ((truck_id=$2 AND (assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-12' AND (unassigned_at AT TIME ZONE 'America/New_York')::date='2026-10-26')
+ ((truck_id=$2 AND (assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-14' AND (unassigned_at AT TIME ZONE 'America/New_York')::date='2026-10-26')
  OR (truck_id=$3 AND (assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-26' AND unassigned_at IS NULL))`, d.ID, d.TruckID, next.ID).Scan(&count); err != nil || count != 2 {
 					t.Fatalf("later transfer changed: %d %v", count, err)
 				}

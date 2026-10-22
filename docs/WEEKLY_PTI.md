@@ -54,7 +54,7 @@ editing, and no GET endpoint creates or changes a checklist.
 - GET `/weekly-pti/{week}/{truck}/history` returns the latest 200 edits.
 
 `pti.read` requires Drivers and Trucks read access. `pti.edit` requires `pti.read`.
-Migration 139 grants read to existing fleet-profile readers and edit to those who
+Migration 140 grants read to existing fleet-profile readers and edit to those who
 already have Trucks edit. Administrators may adjust the new Weekly PTI capability
 in Settings. History remains readable to PTI readers without editing permission.
 

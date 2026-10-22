@@ -71,7 +71,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	migration, err := os.ReadFile("../../sql/139_weekly_pti.sql")
+	migration, err := os.ReadFile("../../sql/140_weekly_pti.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

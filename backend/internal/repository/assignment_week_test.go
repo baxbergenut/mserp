@@ -81,6 +81,7 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer pool.Close()
+			verifyDailyAssignments(t, ctx, pool)
 			repo := NewFleetRepository(pool)
 			cameron, err := repo.CreateDispatcher(ctx, DispatcherInput{FullName: "Cameron", Active: true})
 			if err != nil {
@@ -172,9 +173,9 @@ func TestAssignmentWeekDatabase(t *testing.T) {
 			// Invalid/crossing boundaries roll the whole profile edit back.
 			input.FullName = "Must Roll Back"
 			input.DispatcherID = &mark.ID
-			input.AssignmentWeek = monday.AddDate(0, 0, -1).Format(time.DateOnly)
+			input.AssignmentWeek = "2026-02-30"
 			if _, err = repo.UpdateDriver(ctx, driver.ID, input); err == nil {
-				t.Fatal("accepted Sunday")
+				t.Fatal("accepted invalid date")
 			}
 			saved, err := repo.GetDriver(ctx, driver.ID)
 			if err != nil || saved.FullName != "Didi" {

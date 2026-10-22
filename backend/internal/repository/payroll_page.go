@@ -70,7 +70,12 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	var fee, payable int64
 	for i := range report.Drivers {
 		d := &report.Drivers[i]
-		names[d.DispatcherID] = d.DispatcherName
+		if len(d.Dispatchers) == 0 {
+			names[d.DispatcherID] = d.DispatcherName
+		}
+		for _, p := range d.Dispatchers {
+			names[p.ID] = p.Name
+		}
 		if !d.TruckInactive {
 			info.Statements++
 			if d.Settlement != nil && d.Settlement.Finalized {
@@ -87,7 +92,11 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		for _, person := range d.TeamDrivers {
 			text += " " + person.Name
 		}
-		if !matches(d.ID, d.DispatcherID, text) {
+		matched := matches(d.ID, d.DispatcherID, text)
+		for _, p := range d.Dispatchers {
+			matched = matched || matches(d.ID, p.ID, text)
+		}
+		if !matched {
 			continue
 		}
 		rows = append(rows, row{d.FullName, d.TruckUnit, d, nil})

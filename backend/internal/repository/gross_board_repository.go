@@ -42,13 +42,14 @@ type GrossBoardEntry struct {
 }
 
 type GrossBoardDriver struct {
-	ID             string `json:"id"`
-	FullName       string `json:"fullName"`
-	TruckID        string `json:"truckId"`
-	TruckUnit      string `json:"truckUnit"`
-	DispatcherID   string `json:"dispatcherId"`
-	DispatcherName string `json:"dispatcherName"`
-	Active         bool   `json:"active"`
+	Assignments    []DailyAssignment `json:"assignments"`
+	ID             string            `json:"id"`
+	FullName       string            `json:"fullName"`
+	TruckID        string            `json:"truckId"`
+	TruckUnit      string            `json:"truckUnit"`
+	DispatcherID   string            `json:"dispatcherId"`
+	DispatcherName string            `json:"dispatcherName"`
+	Active         bool              `json:"active"`
 }
 
 type GrossBoard struct {
@@ -201,6 +202,17 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	rows.Close()
 	if err != nil {
 		return board, err
+	}
+	ids := make([]string, 0, len(board.Drivers))
+	for _, d := range board.Drivers {
+		ids = append(ids, d.ID)
+	}
+	assignments, err := readDailyAssignments(ctx, tx, board.WeekStart, ids)
+	if err != nil {
+		return board, err
+	}
+	for i := range board.Drivers {
+		board.Drivers[i].Assignments = assignments[board.Drivers[i].ID]
 	}
 	return board, tx.Commit(ctx)
 }

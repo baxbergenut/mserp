@@ -111,7 +111,7 @@ func TestExtractionRejectsFailureWithoutProviderData(t *testing.T) {
 
 func TestExpensePromptAndSchema(t *testing.T) {
 	prompt := expensePrompt(ExpenseInput{Text: "Oil change $125", MessageDate: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"Maintenance": {"Oil change", "Tire issue"}}})
-	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation", "NOT Shipping", "custom Document translation"} {
+	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation", "NOT Shipping", "custom Document translation", "Accept partial expense evidence", "Missing price alone is not a reason to reject", "bare driver's license", "Leave amt, pay, paid, and other unsupported fields null"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatal("missing prompt instruction", want)
 		}
@@ -136,6 +136,48 @@ func TestExpensePromptAndSchema(t *testing.T) {
 	}
 	check(expenseSchema())
 	check(maintenanceExtractionSchema(expenseSchema()))
+}
+
+// Explicit opt-in; synthetic reports exercise classification without saving expenses.
+func TestExpenseReportDraftLive(t *testing.T) {
+	if os.Getenv("MSERP_OPENAI_LIVE_TEST") != "1" {
+		t.Skip("opt-in live OpenAI partial report drafts")
+	}
+	client := NewClient(os.Getenv("OPENAI_API_KEY"), "gpt-6-luna")
+	for _, tc := range []struct {
+		name, text, kind string
+	}{
+		{"mvr", "Motor Vehicle Driver Report. Applicant: TEST DRIVER. File#: TEST-MVR-42. Reported: 10/22/2026. StarPoint Screening. Indiana - 3 Years. License status: VALID. No reported records. This report contains no price, invoice total, or payment information.", "MVR"},
+		{"psp", "Pre-Employment Screening Program (PSP) report. Driver: TEST DRIVER. Report number: TEST-PSP-42. Report date: 10/22/2026. No crashes or inspections found. No fee or payment information is included.", "PSP"},
+		{"unrelated_license", "Driver license. Name: TEST DRIVER. License number: TEST-DL-42. Issued: 10/22/2026. Class A. Status: VALID.", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := client.ExtractExpense(context.Background(), ExpenseInput{
+				MIMEType: "text/plain", FileName: tc.name + ".txt", FileData: []byte(tc.text),
+				MessageDate: time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC),
+				Categories:  map[string][]string{"HR": {"MVR", "PSP", "Transportation"}}, PaymentMethods: []string{"Cash"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.kind == "" {
+				if result.IsExpense || len(result.Expenses) != 0 {
+					t.Fatal("unrelated license became an expense draft")
+				}
+				return
+			}
+			if !result.IsExpense || len(result.Expenses) != 1 {
+				t.Fatal("expected one partial report draft")
+			}
+			item := result.Expenses[0]
+			if item.ExpenseType == nil || *item.ExpenseType != tc.kind || item.DriverName == nil || *item.DriverName != "TEST DRIVER" || item.ExpenseDate == nil || *item.ExpenseDate != "2026-10-22" || item.ReferenceNumber == nil || *item.ReferenceNumber != "TEST-"+tc.kind+"-42" {
+				t.Fatalf("report details missing: %+v", item)
+			}
+			if item.Amount != nil || item.PaymentType != nil || item.PaidBy != nil || len(item.CostBreakdown) != 0 {
+				t.Fatalf("invented financial details: %+v", item)
+			}
+		})
+	}
 }
 
 // Explicit opt-in; uses synthetic receipts and never creates ledger records.

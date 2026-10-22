@@ -33,7 +33,15 @@ func syncDriverHireStart(ctx context.Context, tx pgx.Tx, driver string, hire *ti
 	}
 	oldDate := old.Format(time.DateOnly)
 	oldWeek := old.AddDate(0, 0, -(int(old.Weekday())+6)%7).Format(time.DateOnly)
-	newWeek := hire.AddDate(0, 0, -(int(hire.Weekday())+6)%7).Format(time.DateOnly)
+	newWeek := date
+	// Team membership remains weekly; ordinary crew setup uses the actual day.
+	var hasTeam bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM driver_teams WHERE main_driver_id=$1 OR team_driver_id=$1)", driver).Scan(&hasTeam); err != nil {
+		return err
+	}
+	if hasTeam {
+		newWeek = hire.AddDate(0, 0, -(int(hire.Weekday())+6)%7).Format(time.DateOnly)
+	}
 	firstWeek := min(oldWeek, newWeek)
 	if _, err := tx.Exec(ctx, `SELECT assert_assignment_payroll_open($1::uuid,NULL,$2::date)`, driver, firstWeek); err != nil {
 		return err
@@ -59,17 +67,17 @@ func syncDriverHireStart(ctx context.Context, tx pgx.Tx, driver string, hire *ti
 	}
 	rows, err := tx.Query(ctx, `SELECT 'truck',a.id::text,a.truck_id::text,a.unassigned_at
  FROM truck_driver_assignments a WHERE a.driver_id=$1
- AND a.assigned_at=$2::date::timestamp AT TIME ZONE 'America/New_York'
+ AND (a.assigned_at=$2::date::timestamp AT TIME ZONE 'America/New_York' OR a.assigned_at=date_trunc('week',$2::date::timestamp) AT TIME ZONE 'America/New_York')
  AND (a.unassigned_at IS NULL OR a.unassigned_at>a.assigned_at)
  AND NOT EXISTS(SELECT 1 FROM truck_driver_assignments h WHERE h.driver_id=a.driver_id
  AND h.assigned_at<a.assigned_at AND (h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at))
  UNION ALL SELECT 'dispatcher',a.id::text,'',a.unassigned_at
  FROM driver_dispatcher_assignments a WHERE a.driver_id=$1 AND a.start_known
- AND a.assigned_at=$2::date::timestamp AT TIME ZONE 'America/New_York'
+ AND (a.assigned_at=$2::date::timestamp AT TIME ZONE 'America/New_York' OR a.assigned_at=date_trunc('week',$2::date::timestamp) AT TIME ZONE 'America/New_York')
  AND (a.unassigned_at IS NULL OR a.unassigned_at>a.assigned_at)
  AND NOT EXISTS(SELECT 1 FROM driver_dispatcher_assignments h WHERE h.driver_id=a.driver_id
  AND (NOT h.start_known OR h.assigned_at<a.assigned_at)
- AND (h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at))`, driver, oldWeek)
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at))`, driver, oldDate)
 	if err != nil {
 		return err
 	}
@@ -133,7 +141,7 @@ func syncDriverHireStart(ctx context.Context, tx pgx.Tx, driver string, hire *ti
 			return chargeInvalid("Setup escrow already has collections or releases; review its start date in Escrow before changing the hire date")
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE drivers SET roster_start_week=$3::date WHERE id=$1 AND (roster_start_week=$2::date OR roster_start_week IS NULL)`, driver, oldWeek, newWeek); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE drivers SET roster_start_week=$3::date WHERE id=$1 AND (roster_start_week=$2::date OR roster_start_week=date_trunc('week',$2::date::timestamp)::date OR roster_start_week IS NULL)`, driver, oldDate, newWeek); err != nil {
 		return err
 	}
 	for _, b := range boundaries {

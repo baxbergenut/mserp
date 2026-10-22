@@ -1,4 +1,23 @@
-import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
+import type { GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
+
+export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[]) {
+  return drivers.flatMap(driver => {
+    const assignments = driver.assignments?.length ? driver.assignments : dates.map(date => ({ ...driver, date }));
+    const groups = new Map<string, GrossBoardDriver & { dates: string[] }>();
+    for (const assignment of assignments) {
+      const group = groups.get(assignment.dispatcherId) ?? { ...driver, dispatcherId: assignment.dispatcherId,
+        dispatcherName: assignment.dispatcherName, truckId: assignment.truckId, truckUnit: assignment.truckUnit,
+        dates: [] };
+      group.dates.push(assignment.date);
+      if (group.truckId !== assignment.truckId && assignment.truckUnit) {
+        group.truckId = "";
+        group.truckUnit = Array.from(new Set([...group.truckUnit.split(" / ").filter(Boolean), assignment.truckUnit])).join(" / ");
+      }
+      groups.set(assignment.dispatcherId, group);
+    }
+    return [...groups.values()];
+  }).sort((a,b) => a.dispatcherName.localeCompare(b.dispatcherName) || a.dispatcherId.localeCompare(b.dispatcherId) || a.fullName.localeCompare(b.fullName) || a.id.localeCompare(b.id));
+}
 
 export const dayStatuses: { value: Exclude<GrossBoardDayStatus, "">; aliases: string[]; color: string }[] = [
   { value: "SHOP", aliases: ["in shop", "repair", "maintenance"], color: "bg-amber-500/15 text-amber-300" },

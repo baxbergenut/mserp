@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Fleet forms change the current assignment, with an explicit accounting Monday.
-// Older clients omit the week and retain a safe current-week default.
+// The legacy assignmentWeek field now carries an exact New York calendar date.
+// Older clients omit it and retain their current-week default.
 func setAssignmentWeek(ctx context.Context, tx pgx.Tx, week string) error {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
@@ -20,9 +20,8 @@ func setAssignmentWeek(ctx context.Context, tx pgx.Tx, week string) error {
 	if week == "" {
 		week = monday.Format(time.DateOnly)
 	}
-	date, err := time.ParseInLocation(time.DateOnly, week, loc)
-	if err != nil || date.Weekday() != time.Monday {
-		return chargeInvalid("Assignment start must be a Monday")
+	if _, err := assignmentDate(week); err != nil {
+		return err
 	}
 	// Finalization takes the exclusive counterpart before reading its snapshot.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
@@ -34,6 +33,14 @@ func setAssignmentWeek(ctx context.Context, tx pgx.Tx, week string) error {
 	}
 	_, err = tx.Exec(ctx, `SELECT set_config('mserp.assignment_week',$1,true)`, week)
 	return err
+}
+
+func assignmentDate(value string) (time.Time, error) {
+	date, err := time.Parse(time.DateOnly, value)
+	if err != nil || date.Year() < 2000 || date.Year() > 2100 {
+		return time.Time{}, chargeInvalid("Choose an assignment date between 2000 and 2100")
+	}
+	return date, nil
 }
 
 func prepareTruckAssignmentBoundary(ctx context.Context, tx pgx.Tx, column, id string) error {
