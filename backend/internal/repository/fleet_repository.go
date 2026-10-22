@@ -51,6 +51,7 @@ type Driver struct {
 	LicenseState         *string    `json:"licenseState"`
 	LicenseExpires       *time.Time `json:"licenseExpires"`
 	HireDate             *time.Time `json:"hireDate"`
+	DateOfBirth          *time.Time `json:"dateOfBirth"`
 	Address              *string    `json:"address"`
 	City                 *string    `json:"city"`
 	State                *string    `json:"state"`
@@ -71,6 +72,8 @@ type Driver struct {
 }
 
 type DriverInput struct {
+	DateOfBirth           *time.Time
+	DateOfBirthSet        bool
 	StatusVersion         *int
 	PreserveFields        []string
 	NewTruck              *TruckInput
@@ -348,14 +351,14 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 			full_name, normalized_name, is_owner_operator, pay_type, pay_rate,
 			phone, email, license_number, license_state, license_expires, hire_date,
 			address, city, state, postal_code, emergency_contact, dispatcher_id,
-			active, notes, cdl_file_id, status, termination_date, first_name, last_name
+			active, notes, cdl_file_id, status, termination_date, first_name, last_name, date_of_birth
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce(nullif($21,''),'active'), $22, $23, $24
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, coalesce(nullif($21,''),'active'), $22, $23, $24, $25
 		) RETURNING id`,
 		displayName, normalizeName(displayName), false, input.PayType, input.PayRate,
 		input.Phone, input.Email, input.LicenseNumber, input.LicenseState, input.LicenseExpires, input.HireDate,
 		input.Address, input.City, input.State, input.PostalCode, input.EmergencyContact, input.DispatcherID,
-		input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName,
+		input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName, input.DateOfBirth,
 	).Scan(&id)
 	if err != nil {
 		return "", err
@@ -469,13 +472,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 			postal_code = CASE WHEN 'postalCode'=ANY($26::text[]) THEN postal_code ELSE $16 END, emergency_contact = CASE WHEN 'emergencyContact'=ANY($26::text[]) THEN emergency_contact ELSE $17 END, dispatcher_id = $18,
 			active = $19, notes = $20, cdl_file_id = CASE WHEN 'cdlFileId'=ANY($26::text[]) THEN cdl_file_id ELSE $21 END, updated_at = now(),
 			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date),
-			first_name = coalesce($24,first_name), last_name = coalesce($25,last_name)
+			first_name = coalesce($24,first_name), last_name = coalesce($25,last_name),
+			date_of_birth = CASE WHEN 'dateOfBirth'=ANY($26::text[]) OR NOT $28::boolean THEN date_of_birth ELSE $27 END
 		WHERE id = $1`,
 		id, displayName, normalizeName(displayName), false,
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
-		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName, input.PreserveFields,
+		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName, input.PreserveFields, input.DateOfBirth, input.DateOfBirthSet,
 	)
 	if err != nil {
 		return Driver{}, err
@@ -531,7 +535,7 @@ SELECT d.id, d.full_name, d.first_name, d.last_name, (driver_employment_type(d.i
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
 	d.created_at, d.updated_at, d.status, d.termination_date,
 	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week,
- CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(fleet_status_driver_truck(d.id)),'')
+ CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(fleet_status_driver_truck(d.id)),''),d.date_of_birth
 FROM drivers d
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
  p.id::text partner_id,p.full_name partner_name,m.dispatcher_id main_dispatcher_id,dt.start_week::text start_week,
@@ -572,6 +576,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.TeamVersion, &value.TeamTruckID, &value.TeamTruckUnit,
 		&value.TeamStartWeek,
 		&value.EmploymentStatus, &value.AvailabilityStatus, &value.StatusVersion, &value.TruckOperatingStatus,
+		&value.DateOfBirth,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	if value.FirstName == nil {

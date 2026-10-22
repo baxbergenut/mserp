@@ -319,6 +319,7 @@ export interface Driver {
   licenseState?: string | null;
   licenseExpires?: string | null;
   hireDate: string | null;
+	dateOfBirth?: string | null;
   address?: string | null;
   city?: string | null;
   state?: string | null;
@@ -365,6 +366,7 @@ export interface DriverInput {
   licenseState: string;
   licenseExpires: string;
   hireDate: string;
+	dateOfBirth?: string;
   address: string;
   city: string;
   state: string;
@@ -628,7 +630,7 @@ export interface Truck {
   updatedAt: string;
 }
 
-export interface DataTruckEnrollment { state: string; message: string; version: number }
+export interface DataTruckEnrollment { state: string; message: string; version: number; providerId?: number }
 export interface TruckInput {
 	statusVersion?:number;
   addToDataTruck?: boolean;
@@ -1395,6 +1397,8 @@ export interface RelayBulkResponse { results: { relayDriverId: string; error?: s
 export type DriverService = "relay" | "weighmytruck" | "datatruck";
 export interface DriverServiceIntent { service: DriverService; action: "add" | "defer"; followUpOn?: string; version?: number }
 export interface DriverServiceState {
+  dataTruckSyncState?: string; dataTruckSyncMessage?: string;
+  dataTruckId?: number;
   service: DriverService; state: string; requestState: string; version: number; message: string; followUpOn: string; configured: boolean;
   relay?: RelayRosterEntry; membership?: WeighMyTruckEntry; candidates: RelayRosterEntry[]; operations: RelayDriverOperation[];
 }

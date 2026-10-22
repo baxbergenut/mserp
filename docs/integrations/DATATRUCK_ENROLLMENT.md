@@ -1,5 +1,60 @@
 # DataTruck driver and truck enrollment
 
+## Existing identities and profile updates (141)
+
+`datatruck_enrollments.provider_id` stores DataTruck's numeric driver/truck ID
+separately from the local UUID. A tenant/kind/ID unique index prevents duplicate
+links. Existing drivers require reviewed contact evidence; trucks use unique
+exact VINs. Links retain evidence and append-only enrollment events, without
+creating provider accounts or changing assignments. Profiles show the saved ID.
+
+Driver `dateOfBirth` is optional YYYY-MM-DD input under
+`drivers.private.read/edit`. Omitted/null input preserves the date; an explicit
+empty string clears it. The website's roster XLSX export can include Date of
+birth; the documented list response does not return it. Imports retain source
+hashes and before/after dates, preserving differing saved dates for review.
+
+Once linked, changes to confirmed first/last names, email, phone, DOB and license
+number/state/expiration automatically queue `datatruck_driver_updates` with the
+driver save. Initial imports set `mserp.datatruck_import=on` transaction-locally
+and establish baselines afterward, so they never bulk overwrite provider data.
+No other driver fields or truck edits queue updates. Local saves finish
+independently of vendor availability.
+
+The existing five-second DataTruck worker sends PUT `/drivers/update/{id}/`.
+The API requires account, phone, type, employee/dispatch status, main-driver flag,
+carrier and the misspelled `brith_date`. Missing/null DOB was rejected in a
+controlled October 22, 2026 request. The worker preserves the current provider
+type/status and unchanged names/contacts, sends only changed optional license
+fields, and never sends assignment objects. Missing DOB, invalid required
+contacts or unavailable main-driver roles hold for review. The provider offers
+no atomic revision precondition; required provider fields are read before PUT.
+
+Each request and receipt is stored with append-only events. Mutations make one
+HTTP attempt. A successful reply is followed by name/contact read-back;
+DOB/license fields absent from that response retain the acceptance receipt
+rather than a claim of independent verification. Unknown outcomes block later
+updates for that driver and never automatically replay. A newer local edit can
+supersede queued requests and definite rejections. Imports and rolled-back saves
+never queue delivery.
+
+New creations retain returned numeric IDs. Success-only creation receipts resolve
+through later read-only, carrier-scoped unique name/contact checks. Failed and
+uncertain creations are excluded, and POST is never retried. Edits made while
+enrolling are queued once identity becomes available.
+
+Truck/dispatcher assignment changes are outside the documented update contract.
+A user-authorized GET-shaped `assigned_truck` trial returned 200 but changed
+neither roster. Do not infer success from HTTP acceptance or add unverified
+assignment fields. Employment lifecycle and dispatch availability also remain
+outside this profile sync.
+
+Validation adds driver/truck identity uniqueness, private DOB projection and
+preservation, transactional update capture, import suppression, accepted baseline
+read-back, and uncertain no-replay coverage to `TestRelayDriverDatabase`
+(fresh/migrated schemas). `TestDriverUpdateNeverRetries` covers transport;
+`frontend/scripts/test-driver-services-views.mjs` covers DOB and visible IDs.
+
 The driver setup Services step includes DataTruck beside Relay and WeighMyTruck.
 DataTruck's Add after saving choice starts selected for each manual or FleetScope
 setup. Users can change or undo it. New truck forms, including the optional truck

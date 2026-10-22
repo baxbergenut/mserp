@@ -97,6 +97,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 				mustAdmin(prefix)
 				mustAdmin(`INSERT INTO app_roles(name,permissions) VALUES('PTI existing fleet',ARRAY['drivers.read','trucks.read','trucks.edit'])`)
 				mustAdmin(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "140")
 			}
 			mustAdmin(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			app := cfg.Copy()

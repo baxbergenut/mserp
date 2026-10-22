@@ -59,3 +59,24 @@ func TestFleetListRejectsForeignPagination(t *testing.T) {
 		t.Fatal(calls)
 	}
 }
+
+func TestDriverUpdateNeverRetries(t *testing.T) {
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != "PUT" || r.URL.Path != "/drivers/update/3098/" {
+			t.Error("wrong endpoint")
+		}
+		w.WriteHeader(503)
+		w.Write([]byte(`{"detail":"private"}`))
+	}))
+	defer s.Close()
+	c := NewClient("secret", "test")
+	c.baseURL = s.URL
+	c.gate = nil
+	_, err := c.UpdateDriver(context.Background(), 3098, json.RawMessage(`{"brith_date":"1990-01-01"}`))
+	e, ok := err.(*FleetError)
+	if !ok || !e.Uncertain || calls != 1 {
+		t.Fatal("uncertain PUT replayed or not held", calls, err)
+	}
+}

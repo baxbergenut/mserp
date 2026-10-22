@@ -21,9 +21,9 @@ func TestPermissionProjection(t *testing.T) {
 	for _, path := range []string{"/drivers", "/driver-directory", "/drivers/id", "/drivers/id/status"} {
 		t.Run(path, func(t *testing.T) {
 			w := &permissionResponseWriter{ResponseWriter: httptest.NewRecorder(), request: capabilityRequest("GET", path, "", "drivers.read")}
-			payload := map[string]any{"items": []any{map[string]any{"id": "driver", "phone": "555", "payType": "cpm", "payRate": 0.75, "address": "private", "emergencyContact": "private", "licenseNumber": "secret", "cdlFileId": "secret", "cdlFileName": "secret"}}}
+			payload := map[string]any{"items": []any{map[string]any{"id": "driver", "phone": "555", "payType": "cpm", "payRate": 0.75, "address": "private", "emergencyContact": "private", "licenseNumber": "secret", "cdlFileId": "secret", "cdlFileName": "secret", "dateOfBirth": "1990-01-01"}}}
 			raw, _ := json.Marshal(w.ProjectJSON(payload))
-			for _, forbidden := range []string{"payType", "payRate", "address", "emergencyContact", "licenseNumber", "cdlFileId", "cdlFileName"} {
+			for _, forbidden := range []string{"payType", "payRate", "address", "emergencyContact", "licenseNumber", "cdlFileId", "cdlFileName", "dateOfBirth"} {
 				if strings.Contains(string(raw), forbidden) {
 					t.Errorf("leaked %s: %s", forbidden, raw)
 				}
@@ -41,7 +41,7 @@ func TestPermissionProjection(t *testing.T) {
 }
 
 func TestProtectedProfilePresenceAndPreservation(t *testing.T) {
-	for _, body := range []string{`{"payRate":0}`, `{"PayRate":0}`, `{"PAYRATE":0}`, `{"payType":"cpm"}`, `{"address":null}`, `{"cdlFileId":null}`} {
+	for _, body := range []string{`{"payRate":0}`, `{"PayRate":0}`, `{"PAYRATE":0}`, `{"payType":"cpm"}`, `{"address":null}`, `{"cdlFileId":null}`, `{"dateOfBirth":"1990-01-01"}`, `{"DATEOFBIRTH":null}`} {
 		var dst driverRequest
 		w := httptest.NewRecorder()
 		if decodeProtectedProfile(w, capabilityRequest("PUT", "/drivers/id", body, "drivers.edit"), &dst, repository.Driver{}, "drivers") || w.Code != 403 {

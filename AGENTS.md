@@ -1,5 +1,13 @@
 # Clustie Agent Guide
 
+DataTruck migration 141 stores unique tenant-scoped driver/truck IDs and private
+driver DOBs. Verified links establish a baseline; later name/contact/DOB/license
+edits queue durable profile PUTs by default. Imports suppress delivery. Missing
+DOB and unknown outcomes hold for review without replay. Truck/dispatcher
+assignments and lifecycle/dispatch changes are excluded. Success-only creation
+receipts resolve IDs by read-only carrier-scoped checks. See
+`docs/integrations/DATATRUCK_ENROLLMENT.md` for the contract and validation.
+
 Read this file before doing anything else in a new task. Then read the nearest
 nested `AGENTS.md` for the area being changed. Do not scan the entire repository
 for routine work; use the map and targeted searches below first. Update this file

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -75,7 +76,14 @@ func (c *Client) CreateFleetRecord(ctx context.Context, kind string, payload jso
 	}
 	return c.fleetRequest(ctx, http.MethodPost, c.baseURL+"/"+kind+"/create/", payload)
 }
+func (c *Client) UpdateDriver(ctx context.Context, id int64, payload json.RawMessage) (json.RawMessage, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid DataTruck driver ID")
+	}
+	return c.fleetRequest(ctx, http.MethodPut, c.baseURL+"/drivers/update/"+strconv.FormatInt(id, 10)+"/", payload)
+}
 func (c *Client) fleetRequest(ctx context.Context, method, target string, payload []byte) (json.RawMessage, error) {
+	mutation := method != http.MethodGet
 	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
@@ -94,7 +102,7 @@ func (c *Client) fleetRequest(ctx context.Context, method, target string, payloa
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, &FleetError{Uncertain: method == http.MethodPost}
+		return nil, &FleetError{Uncertain: mutation}
 	}
 	defer res.Body.Close()
 	data, readErr := io.ReadAll(io.LimitReader(res.Body, 4<<20))
@@ -103,12 +111,12 @@ func (c *Client) fleetRequest(ctx context.Context, method, target string, payloa
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		definiteRejection := res.StatusCode == 400 || res.StatusCode == 401 || res.StatusCode == 403 || res.StatusCode == 404 || res.StatusCode == 405 || res.StatusCode == 409 || res.StatusCode == 422 || res.StatusCode == 429
-		return nil, &FleetError{Status: res.StatusCode, Uncertain: method == http.MethodPost && !definiteRejection}
+		return nil, &FleetError{Status: res.StatusCode, Uncertain: mutation && !definiteRejection}
 	}
 	if readErr != nil || !json.Valid(data) {
-		return nil, &FleetError{Status: res.StatusCode, Uncertain: method == http.MethodPost}
+		return nil, &FleetError{Status: res.StatusCode, Uncertain: mutation}
 	}
-	if method == http.MethodPost {
+	if mutation {
 		var result struct {
 			ID     int    `json:"id"`
 			Detail string `json:"detail"`
