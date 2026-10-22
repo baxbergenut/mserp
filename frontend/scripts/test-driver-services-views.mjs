@@ -84,6 +84,7 @@ try{
  };
  await dialog.getByLabel('First name',{exact:true}).fill('Browser');
  await dialog.getByLabel('Last name',{exact:true}).fill('Driver');
+ await dialog.getByLabel('Date of birth',{exact:true}).fill('1990-01-24');
  await page.screenshot({animations:"disabled",path:join(tmpdir(),'mserp-setup-information.png')});
  await expect(dialog.locator('input[type=file]')).toHaveCount(0);
  await expect(dialog.getByLabel('Driver home',{exact:true})).toHaveCount(0);
@@ -113,10 +114,15 @@ try{
  await dialog.getByRole('button',{name:'Create driver',exact:true}).click();
  await expect(dialog).toHaveAttribute('aria-label','Browser Driver saved');
  assert.equal(writes[0].input.newTruck.unitNumber,'SETUP-TRUCK');
+ assert.equal(writes[0].input.dateOfBirth,'1990-01-24');
  assert.deepEqual(writes[0].input.services.map(i=>[i.service,i.action]),[['datatruck','add'],['relay','add'],['weighmytruck','defer']]);
  await expect(dialog.getByLabel('Relay setup')).toContainText('Waiting to add');
  await expect(dialog.getByLabel('WeighMyTruck setup')).toContainText('Reminder set');
  const setup=setups.get('driver-1'),r=setup.items[0],w=setup.items[1];
+ Object.assign(setup.items[2],{state:'added',requestState:'done',dataTruckId:3098,dataTruckSyncState:'review',dataTruckSyncMessage:'Record a verified date of birth before syncing this driver to DataTruck.'});
+ await expect(dialog.getByLabel('DataTruck setup')).toContainText('DataTruck ID: 3098',{timeout:10000});
+ await expect(dialog.getByLabel('DataTruck setup')).toContainText('Record a verified date of birth');
+ await expect(dialog.getByLabel('DataTruck setup').getByRole('button',{name:/Add to DataTruck|Retry enrollment/})).toHaveCount(0);
  Object.assign(r,{state:'needs_setup',requestState:'review',relay:entry(drivers[0]),message:'Account added. Assign or enable a policy to finish fuel setup.'});
  await expect(dialog.getByLabel('Relay setup')).toContainText('Added · policy needed',{timeout:10000});
  await dialog.getByLabel('Relay policy').selectOption('policy-2');
@@ -205,7 +211,7 @@ try{
  await dialog.getByRole('button',{name:'Create truck',exact:true}).click();
  await expect(dialog).toHaveAttribute('aria-label','Truck DT-ENROLL saved');
  await expect(dialog.getByRole('status')).toContainText('Waiting to add');assert.equal(writes.at(-1).input.addToDataTruck,true);
- Object.assign(truckSetups.get('truck-2'),{state:'done',version:2});await expect(dialog.getByRole('status')).toContainText('Added',{timeout:10000});
+ Object.assign(truckSetups.get('truck-2'),{state:'done',version:2,providerId:8});await expect(dialog.getByRole('status')).toContainText('Added',{timeout:10000});await expect(dialog).toContainText('DataTruck ID: 8');
  await dialog.getByRole('button',{name:'Done',exact:true}).click();
  await page.goto(`${base}/drivers/detail?id=driver-1&services=1`);
  readOnly=true;await page.reload();await expect(page.getByLabel('WeighMyTruck setup')).toContainText('Added');

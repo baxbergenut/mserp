@@ -18,6 +18,7 @@ export function DataTruckSetup({truckId}:{truckId:string}) {
   <div className="flex items-center justify-between gap-3"><a href="https://app.datatruck.io/fleet-management/main/trucks" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Truck className="h-4 w-4"/>DataTruck</a><span role="status" className={`text-xs ${data?.state==="done"?"text-emerald-400":"text-zinc-400"}`}>{data?labels[data.state]:""}</span></div>
   {error&&<ErrorBanner message={error}/>}
   {data?.message&&<p className="text-xs leading-5 text-zinc-400">{data.message}</p>}
+  {data?.providerId&&<p className="text-xs text-zinc-500">DataTruck ID: {data.providerId}</p>}
   {data?.state==="review"&&permissions.includes("trucks.create")&&<button type="button" className="ui-button !text-xs" disabled={busy} onClick={async()=>{setBusy(true);try{await retryTruckDataTruck(truckId,data.version);await refresh();}catch(e){setError(e instanceof Error?e.message:"Could not retry enrollment.");}finally{setBusy(false);}}}>Retry enrollment</button>}
  </section>;
 }

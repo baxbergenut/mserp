@@ -65,7 +65,7 @@ export function DriverServiceCards({ driverId, allowReminders = false }: { drive
 function SavedDriverServices({ driverId, allowReminders }: { driverId: string; allowReminders: boolean }) {
   const [data, setData] = useState<DriverServiceSetup | null>(null);
   const [error, setError] = useState("");
-  const pollingFast = !data || data.items.some(item => ["queued", "running"].includes(item.requestState));
+  const pollingFast = !data || data.items.some(item => ["queued", "running"].includes(item.requestState) || ["queued", "running"].includes(item.dataTruckSyncState ?? ""));
   const sequence = useRef(0);
   const mounted = useRef(true);
   const refresh = useCallback(async () => {
@@ -119,6 +119,8 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
   return <article aria-label={`${names[item.service]} setup`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
     <ServiceTitle service={item.service} state={item.state} />
     {item.message && <p className="text-xs leading-5 text-zinc-400">{item.message}</p>}
+    {item.dataTruckId && <p className="text-xs text-zinc-500">DataTruck ID: {item.dataTruckId}</p>}
+    {item.dataTruckSyncState && <p className={`text-xs ${["review","unconfirmed"].includes(item.dataTruckSyncState) ? "text-amber-300" : "text-zinc-500"}`}>{item.dataTruckSyncMessage || (({queued:"Profile update queued",running:"Updating profile",accepted:"Profile update accepted",superseded:"Profile unchanged",canceled:"Profile update canceled"} as Record<string,string>)[item.dataTruckSyncState] ?? item.dataTruckSyncState)}</p>}
     {item.requestState === "deferred" && item.state !== "added" && <p className="text-xs text-zinc-400">Follow up {item.followUpOn}. Enrollment will wait for you.</p>}
     {!item.configured && <p className="text-xs text-amber-300">Service connection is not configured.</p>}
     {error && <ErrorBanner message={error} />}

@@ -86,17 +86,20 @@ func NewDriverServiceRepository(pool *pgxpool.Pool, fuel *FuelRepository, wmt *W
 }
 
 type DriverServiceState struct {
-	RequestState string                 `json:"requestState"`
-	Service      string                 `json:"service"`
-	State        string                 `json:"state"`
-	Version      int                    `json:"version"`
-	Message      string                 `json:"message"`
-	FollowUpOn   string                 `json:"followUpOn"`
-	Configured   bool                   `json:"configured"`
-	Relay        *RelayRosterEntry      `json:"relay,omitempty"`
-	Candidates   []RelayRosterEntry     `json:"candidates"`
-	Operations   []RelayDriverOperation `json:"operations"`
-	Membership   *WMTEntry              `json:"membership,omitempty"`
+	DataTruckSyncState   string                 `json:"dataTruckSyncState,omitempty"`
+	DataTruckSyncMessage string                 `json:"dataTruckSyncMessage,omitempty"`
+	DataTruckID          *int64                 `json:"dataTruckId,omitempty"`
+	RequestState         string                 `json:"requestState"`
+	Service              string                 `json:"service"`
+	State                string                 `json:"state"`
+	Version              int                    `json:"version"`
+	Message              string                 `json:"message"`
+	FollowUpOn           string                 `json:"followUpOn"`
+	Configured           bool                   `json:"configured"`
+	Relay                *RelayRosterEntry      `json:"relay,omitempty"`
+	Candidates           []RelayRosterEntry     `json:"candidates"`
+	Operations           []RelayDriverOperation `json:"operations"`
+	Membership           *WMTEntry              `json:"membership,omitempty"`
 }
 type DriverServiceSetup struct {
 	CheckedAt    time.Time            `json:"checkedAt"`
@@ -173,8 +176,14 @@ func (r *DriverServiceRepository) Status(ctx context.Context, driver string) (Dr
 					item.Message = status.Message
 				}
 				if status.State == "done" {
+					item.DataTruckID = status.ProviderID
+					item.DataTruckSyncState = status.SyncState
+					item.DataTruckSyncMessage = status.SyncMessage
 					item.State = "added"
-					item.Message = "Driver added to DataTruck."
+					item.Message = "DataTruck account confirmed."
+					if status.ProviderID == nil {
+						item.Message = "Account confirmed; DataTruck ID awaiting verification."
+					}
 				} else if status.State == "unconfirmed" || status.State == "running" && item.State != "running" {
 					item.State = "unconfirmed"
 					item.Message = "Check the previous enrollment in DataTruck before another request."
@@ -226,6 +235,9 @@ func (r *DriverServiceRepository) Request(ctx context.Context, driver, actor str
 		return &DriverServiceError{"Terminated drivers cannot be enrolled."}
 	}
 	for _, item := range view.Items {
+		if in.Service == "datatruck" && item.Service == in.Service && item.State == "added" {
+			return &DriverServiceError{"This driver already has a confirmed service account."}
+		}
 		if item.Service == in.Service && (item.State == "running" || item.State == "queued" || in.Action == "add" && item.State == "unconfirmed") {
 			return &DriverServiceError{"Review or wait for the existing request before adding again."}
 		}

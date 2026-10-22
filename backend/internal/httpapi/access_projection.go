@@ -80,7 +80,7 @@ func projectExpenseEditAccess(value any, user repository.AuthUser) any {
 	return value
 }
 
-var driverPrivateFields = []string{"address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"}
+var driverPrivateFields = []string{"dateOfBirth", "address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"}
 var driverDocumentFields = []string{"cdlFileId", "cdlFileName", "cdlFileContentType", "cdlFileSizeBytes"}
 var truckDocumentFields = []string{"irpFileId", "irpFileName", "irpFileContentType", "irpFileSizeBytes"}
 
@@ -188,7 +188,7 @@ func decodeProtectedProfile(w http.ResponseWriter, r *http.Request, destination 
 			preserved = append(preserved, key)
 			if raw, ok := saved[key]; ok {
 				// Profile input dates use YYYY-MM-DD; read models contain RFC3339.
-				if key == "licenseExpires" {
+				if key == "licenseExpires" || key == "dateOfBirth" {
 					var date string
 					_ = json.Unmarshal(raw, &date)
 					if len(date) > 10 {

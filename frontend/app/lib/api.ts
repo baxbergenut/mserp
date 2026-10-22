@@ -298,7 +298,7 @@ function profilePayload(path: string, body: BodyInit | null | undefined) {
   const omit = (permission: string, fields: string[]) => { if (!currentPermissions.includes(permission)) for (const key of fields) delete data[key]; };
   if (path.startsWith("/drivers")) {
     omit("driver_compensation.edit", ["payType", "payRate"]);
-    omit("drivers.private.edit", ["address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"]);
+    omit("drivers.private.edit", ["dateOfBirth", "address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"]);
     omit("drivers.documents.edit", ["cdlFileId"]); omit(path === "/drivers" ? "escrow.create" : "escrow.edit", ["escrowAmount"]);
   }
   if (path.startsWith("/trucks")) omit("trucks.documents.edit", ["irpFileId"]);

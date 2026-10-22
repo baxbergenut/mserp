@@ -37,6 +37,7 @@ export const emptyDriverInput: DriverInput = {
   licenseState: "",
   licenseExpires: "",
   hireDate: "",
+	dateOfBirth: "",
   address: "",
   city: "",
   state: "",
@@ -70,6 +71,7 @@ export function driverToInput(driver: Driver): DriverInput {
     licenseState: driver.licenseState ?? "",
     licenseExpires: driver.licenseExpires?.slice(0, 10) ?? "",
     hireDate: driver.hireDate?.slice(0, 10) ?? "",
+	dateOfBirth: driver.dateOfBirth?.slice(0, 10) ?? "",
     address: driver.address ?? "",
     city: driver.city ?? "",
     state: driver.state ?? "",
@@ -182,6 +184,7 @@ export function DriverForm({
       </section>
 
       {permissions.includes("drivers.private.read") && <fieldset disabled={!permissions.includes("drivers.private.edit")}><FormSection title="License and address">
+        <Field label="Date of birth"><input type="date" value={value.dateOfBirth ?? ""} onChange={event => set("dateOfBirth", event.target.value)} className={controlClass} /></Field>
         <Field label="CDL / license number">
           <input
             value={value.licenseNumber}

@@ -125,7 +125,8 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
-	StatusVersion         *int `json:"statusVersion"`
+	DateOfBirth           *string `json:"dateOfBirth"`
+	StatusVersion         *int    `json:"statusVersion"`
 	preserveFields        []string
 	NewTruck              *truckRequest                    `json:"newTruck"`
 	NewTruckOwnedByDriver bool                             `json:"newTruckOwnedByDriver"`
@@ -231,6 +232,16 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 	if err != nil {
 		return repository.DriverInput{}, err
 	}
+	var dateOfBirth *time.Time
+	if request.DateOfBirth != nil {
+		dateOfBirth, err = parseOptionalDate(*request.DateOfBirth, "date of birth")
+		if err != nil {
+			return repository.DriverInput{}, err
+		}
+		if dateOfBirth != nil && (dateOfBirth.Year() < 1900 || dateOfBirth.After(time.Now())) {
+			return repository.DriverInput{}, errors.New("date of birth must be a past date from 1900 onward")
+		}
+	}
 	hireDate, err := parseOptionalDate(request.HireDate, "hire date")
 	if err != nil {
 		return repository.DriverInput{}, err
@@ -263,6 +274,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("driver ownership requires a new truck")
 	}
 	return repository.DriverInput{
+		DateOfBirth: dateOfBirth, DateOfBirthSet: request.DateOfBirth != nil,
 		StatusVersion:  request.StatusVersion,
 		PreserveFields: request.preserveFields,
 		NewTruck:       newTruck, NewTruckOwnedByDriver: request.NewTruckOwnedByDriver,

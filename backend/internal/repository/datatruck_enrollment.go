@@ -17,6 +17,7 @@ type DataTruckProvider interface {
 	Environment() string
 	FleetList(context.Context, string, []map[string]string) ([]map[string]any, error)
 	CreateFleetRecord(context.Context, string, json.RawMessage) (json.RawMessage, error)
+	UpdateDriver(context.Context, int64, json.RawMessage) (json.RawMessage, error)
 }
 type DataTruckRepository struct {
 	pool   *pgxpool.Pool
@@ -39,16 +40,25 @@ func (r *FleetRepository) DataTruckServices() *DataTruckRepository {
 }
 
 type DataTruckEnrollment struct {
-	State   string `json:"state"`
-	Message string `json:"message"`
-	Version int    `json:"version"`
+	SyncState   string `json:"syncState,omitempty"`
+	SyncMessage string `json:"syncMessage,omitempty"`
+	ProviderID  *int64 `json:"providerId,omitempty"`
+	State       string `json:"state"`
+	Message     string `json:"message"`
+	Version     int    `json:"version"`
 }
 
 func (r *DataTruckRepository) Status(ctx context.Context, kind, id string) (DataTruckEnrollment, error) {
 	out := DataTruckEnrollment{State: "not_requested"}
-	err := r.pool.QueryRow(ctx, `SELECT state,last_error,version FROM datatruck_enrollments WHERE entity_kind=$1 AND entity_id=$2`, kind, id).Scan(&out.State, &out.Message, &out.Version)
+	err := r.pool.QueryRow(ctx, `SELECT state,last_error,version,provider_id FROM datatruck_enrollments WHERE entity_kind=$1 AND entity_id=$2`, kind, id).Scan(&out.State, &out.Message, &out.Version, &out.ProviderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
+	}
+	if err == nil && kind == "drivers" {
+		e := r.pool.QueryRow(ctx, `SELECT state,last_error FROM datatruck_driver_updates WHERE driver_id=$1 AND state<>'superseded' ORDER BY (state='unconfirmed') DESC,id DESC LIMIT 1`, id).Scan(&out.SyncState, &out.SyncMessage)
+		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+			err = e
+		}
 	}
 	return out, err
 }
@@ -73,6 +83,9 @@ func (r *DataTruckRepository) RetryTruck(ctx context.Context, id string, version
 	return nil
 }
 func (r *DataTruckRepository) ProcessTrucks(ctx context.Context) error {
+	if err := r.ProcessDriverUpdates(ctx); err != nil {
+		return err
+	}
 	_, err := r.pool.Exec(ctx, `UPDATE datatruck_enrollments SET state=CASE WHEN sent_at IS NULL THEN 'review' ELSE 'unconfirmed' END,last_error='Setup was interrupted. Check DataTruck before retrying.',version=version+1,updated_at=now() WHERE state='running' AND updated_at<now()-interval '10 minutes'`)
 	if err != nil {
 		return err
@@ -185,9 +198,32 @@ func (r *DataTruckRepository) Enroll(ctx context.Context, kind, id string) error
 	}
 	finish, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	_, saveErr := conn.Exec(finish, `UPDATE datatruck_enrollments SET state=$3,last_error=$4,receipt=$5,version=version+1,updated_at=now() WHERE entity_kind=$1 AND entity_id=$2 AND state='running'`, kind, id, state, message, receipt)
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(receipt, &result)
+	var providerID *int64
+	if state == "done" && result.ID > 0 {
+		providerID = &result.ID
+	}
+	var baseline []byte
+	if kind == "drivers" && state == "done" {
+		baseline, _ = json.Marshal(dataTruckCreatedProfile(payload))
+	}
+	_, saveErr := conn.Exec(finish, `UPDATE datatruck_enrollments SET state=$3,last_error=$4,receipt=$5,provider_id=$6,provider_carrier_id=NULLIF($7,0),
+ profile_baseline=coalesce($8,profile_baseline),
+ version=version+1,updated_at=now() WHERE entity_kind=$1 AND entity_id=$2 AND state='running'`, kind, id, state, message, receipt, providerID, r.mcID, baseline)
 	if saveErr != nil {
 		return saveErr
+	}
+	if kind == "drivers" && state == "done" && providerID != nil {
+		_, saveErr = conn.Exec(finish, `INSERT INTO datatruck_driver_updates(driver_id,provider_id,environment,carrier_id,source_snapshot)
+ SELECT d.id,e.provider_id,e.environment,e.provider_carrier_id,datatruck_driver_profile(d) FROM drivers d JOIN datatruck_enrollments e ON e.entity_id=d.id AND e.entity_kind='drivers'
+ WHERE d.id=$1 AND datatruck_driver_profile(d) IS DISTINCT FROM e.profile_baseline
+ AND NOT EXISTS(SELECT 1 FROM datatruck_driver_updates u WHERE u.driver_id=d.id AND u.state IN ('queued','running','unconfirmed'))`, id)
+		if saveErr != nil {
+			return saveErr
+		}
 	}
 	return err
 }
@@ -199,9 +235,9 @@ func (r *DataTruckRepository) payload(ctx context.Context, q chargeQuery, kind, 
 		return []map[string]string{{"column": column, "value": value, "contains": "is"}}
 	}
 	if kind == "drivers" {
-		var first, last, phone, email, license, licenseState, expires, status, employment string
+		var first, last, phone, email, license, licenseState, expires, status, employment, birth string
 		var team bool
-		err := q.QueryRow(ctx, `SELECT coalesce(first_name,''),coalesce(last_name,''),coalesce(phone,''),coalesce(email,''),coalesce(license_number,''),coalesce(license_state,''),coalesce(license_expires::text,''),status,driver_employment_type(id),payroll_driver_at(id,(now() AT TIME ZONE 'America/New_York')::date)<>id FROM drivers WHERE id=$1`, id).Scan(&first, &last, &phone, &email, &license, &licenseState, &expires, &status, &employment, &team)
+		err := q.QueryRow(ctx, `SELECT coalesce(first_name,''),coalesce(last_name,''),coalesce(phone,''),coalesce(email,''),coalesce(license_number,''),coalesce(license_state,''),coalesce(license_expires::text,''),status,driver_employment_type(id),payroll_driver_at(id,(now() AT TIME ZONE 'America/New_York')::date)<>id,coalesce(date_of_birth::text,'') FROM drivers WHERE id=$1`, id).Scan(&first, &last, &phone, &email, &license, &licenseState, &expires, &status, &employment, &team, &birth)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -219,6 +255,9 @@ func (r *DataTruckRepository) payload(ctx context.Context, q chargeQuery, kind, 
 			driverType = "owner_operator"
 		}
 		data := map[string]any{"first_name": first, "last_name": last, "contact_number": "+1" + phone, "driver_type": driverType, "new_employee_status": "active", "status": "available", "mc_number": r.mcID, "is_main": !team}
+		if birth != "" {
+			data["brith_date"] = birth
+		}
 		for k, v := range map[string]string{"email": email, "driver_license": license, "driver_license_state": licenseState, "driver_license_expiration": expires} {
 			if v != "" {
 				data[k] = v
