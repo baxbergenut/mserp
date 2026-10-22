@@ -278,6 +278,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   prefilled company labels do not block otherwise blank rows. No row insertion
   or dimension changes. Occupied targets and exhausted blank rows hold for review.
   It never mirrors later edits or backfills history.
+  Migration 138 adds separately opt-in prospective scale copying via scale_enabled
+  and scale_from_date. Newly inserted WeighMyTruck tickets use Other/Scale in the
+  existing Maintenance sheet, final linked identity and dated payer, with stable
+  site/ticket receipt IDs. No native expense or duplicate payroll charge is created;
+  existing tickets and later corrections never auto-export. Unknown payer stays in review.
   While activated, eligible native entries dated before September 28, 2026 are
   settled on creation; later dates retain normal payment status. The dedicated
   MSERP Paid export column stays separate from verification checkboxes.
