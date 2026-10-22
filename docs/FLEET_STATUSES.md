@@ -43,11 +43,14 @@ individual, and only the main team driver has a dispatch row.
 
 Events retain name/actor/source snapshots and a transaction action ID. No-op
 saves create no events. Baselines explicitly have unknown earlier starts. Driver
-history shows availability and employment, and clips truck condition periods to
-dated solo/team assignments. Operational dispatch events remain stored for audit
-and are excluded from profile history and its filters before pagination. Table and
-timeline views display New York times; recorded time is separate from effective
-time. Existing board edit/undo history remains intact; undo cannot bypass holds.
+history shows only that driver's availability and employment, defaulting to
+availability. Truck condition history appears only on the truck profile.
+Operational dispatch events remain stored for audit and are excluded from
+profile history and its filters before pagination. Tables show Status, Date
+changed, Duration, and Changed by; timelines show the same change date and duration.
+New York times are used, and recorded time stays in row details. Baselines show
+Date unknown rather than inventing a change date. Existing board edit/undo
+history remains intact; undo cannot bypass holds.
 
 Database triggers cover board, profile, assignment, and work-order writers.
 Use `setBoardActor` before taking operational row locks in new repository writers;

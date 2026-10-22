@@ -227,17 +227,21 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if len(history.Items) == 0 {
 				t.Fatal("missing history")
 			}
-			foundTruck := false
 			for _, event := range history.Items {
 				if event.Track == "dispatch" {
 					t.Fatal("profile history includes operational dispatch status", event.Status)
 				}
-				if event.Track == "assigned_truck" {
-					foundTruck = true
+				if event.EntityKind != "driver" || event.EntityID != d.ID || event.Track == "assigned_truck" {
+					t.Fatal("driver history includes another entity's status", event)
 				}
 			}
-			if !foundTruck {
-				t.Fatal("driver cannot see assigned truck history")
+			truckHistory, e := fleet.StatusHistory(ctx, "truck", truck.ID, "condition", "shop", "", "", 1, history.Snapshot)
+			if e != nil || len(truckHistory.Items) == 0 {
+				t.Fatal("truck condition history missing from truck profile", truckHistory, e)
+			}
+			assignedHistory, e := fleet.StatusHistory(ctx, "driver", d.ID, "assigned_truck", "", "", "", 1, history.Snapshot)
+			if e != nil || len(assignedHistory.Items) != 0 || assignedHistory.HasMore {
+				t.Fatal("driver history exposes truck statuses through filters", assignedHistory, e)
 			}
 			if got := scalar(`SELECT count(*)::text FROM fleet_status_history WHERE entity_id=$1 AND track='dispatch'`, d.ID); got == "0" {
 				t.Fatal("operational dispatch audit was lost")

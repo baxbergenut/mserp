@@ -35,15 +35,23 @@ try{
  await page.getByRole('button',{name:'Change condition',exact:true}).click();await page.getByLabel('Truck condition',{exact:true}).selectOption('ready');await page.getByRole('button',{name:'Save status',exact:true}).click();
  expect((await api('get','/drivers/'+driver.id)).availabilityStatus).toBe('family_issue');
  await page.getByRole('tab',{name:'Status history',exact:true}).click();await expect(page.getByRole('table')).toBeVisible();await expect(page.getByRole('table').getByText('Shop',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-table.png'),fullPage:true});
+ expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Duration','Changed by']);
  await page.getByRole('button',{name:'Timeline',exact:true}).click();await expect(page.locator('ol')).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-timeline.png'),fullPage:true});
  await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('tab',{name:'Status history',exact:true}).click();await expect(page.getByRole('table')).toBeVisible();
- expect(await page.getByLabel('History track').locator('option').allTextContents()).toEqual(['All types','Driver availability','Assigned truck','Employment']);
- const statusChoices=await page.getByLabel('Filter status').locator('option').allTextContents();expect(statusChoices).toEqual(expect.arrayContaining(['Home','Vacation']));for(const operational of ['DISPATCHED','ENROUTE','RESERVED'])expect(statusChoices).not.toContain(operational);
- expect((await api('get','/drivers/'+driver.id+'/status-history')).items.every(v=>v.track!=='dispatch')).toBe(true);
- await page.getByLabel('History track').selectOption('assigned_truck');await expect(page.getByRole('table').getByText('Shop',{exact:true}).first()).toBeVisible();
+ await expect(page.getByLabel('History track')).toHaveValue('availability');expect(await page.getByLabel('History track').locator('option').allTextContents()).toEqual(['All types','Driver availability','Employment']);
+ expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Duration','Changed by']);
+ const statusChoices=await page.getByLabel('Filter status').locator('option').allTextContents();expect(statusChoices).toEqual(expect.arrayContaining(['Home','Vacation']));for(const unrelated of ['DISPATCHED','ENROUTE','RESERVED','Ready','Shop','OOS','Hold'])expect(statusChoices).not.toContain(unrelated);
+ expect((await api('get','/drivers/'+driver.id+'/status-history')).items.every(v=>v.entityKind==='driver'&&v.track!=='dispatch')).toBe(true);
+ expect((await api('get','/drivers/'+driver.id+'/status-history?track=assigned_truck')).items).toEqual([]);
+ await page.getByLabel('History track').selectOption('');await expect(page.getByRole('table').getByText('Shop',{exact:true})).toHaveCount(0);await expect(page.getByRole('table').getByText('Ready',{exact:true})).toHaveCount(0);
  await page.getByLabel('History track').selectOption('availability');await expect(page.getByRole('table').getByText('Family issue',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'driver-history-table.png'),fullPage:true});
  await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('active');await page.getByRole('button',{name:'Save status',exact:true}).click();
  await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('READY',{timeout:15000});
+ const personal=await api('get','/drivers/'+driver.id);await api('patch','/drivers/'+driver.id+'/availability',{status:'home',version:personal.statusVersion,reason:'Synthetic availability round trip'});
+ for(const next of ['READY','HOME']){board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);await api('put','/driver-board',{entries:[{...entry,status:next,statusEdited:true}]});}
+ const roundTrip=await api('get','/drivers/'+driver.id+'/status-history?track=availability');expect(roundTrip.items.slice(0,3).map(v=>v.status)).toEqual(['home','active','home']);
+ await page.getByRole('button',{name:'Refresh',exact:true}).click();await expect(page.getByRole('table').locator('tbody tr td:first-child > span').nth(0)).toHaveText('Home');expect((await page.getByRole('table').locator('tbody tr td:first-child > span').allTextContents()).slice(0,3)).toEqual(['Home','Active','Home']);await page.screenshot({path:join(artifacts,'driver-home-active-home.png'),fullPage:true});
+ const afterRoundTrip=await api('get','/drivers/'+driver.id);await api('patch','/drivers/'+driver.id+'/availability',{status:'active',version:afterRoundTrip.statusVersion,reason:'Synthetic test cleanup'});
  const roleName='Status Board only '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['driver_board.read','driver_board.write']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName);const email=randomUUID()+'@example.test';const password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
  const restricted=await browser.newContext();await restricted.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const restrictedSession=await(await restricted.request.get(access.base+'/api/auth/session')).json();const restrictedHeaders={'X-CSRF-Token':restrictedSession.csrfToken,Origin:access.base};
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);
@@ -53,5 +61,5 @@ try{
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);expect((await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
  await api('patch','/trucks/'+truck.id+'/condition',{status:'ready',version:truck.statusVersion,reason:'Synthetic test release'});await restricted.close();
  await live.getByLabel(driver.fullName+' · Status',{exact:true}).selectOption('Left');await expect(live.getByRole('dialog')).toBeVisible();await expect(live.getByLabel('Termination date',{exact:true})).toBeVisible();await live.getByRole('button',{name:'Cancel',exact:true}).click();expect((await api('get','/drivers/'+driver.id)).active).toBe(true);
- expect(errors).toEqual([]);console.log('Fleet status E2E passed: synchronization, history table/timeline, assigned-truck periods, permissions, explicit release and termination. Screenshots: '+artifacts);
+ expect(errors).toEqual([]);console.log('Fleet status E2E passed: synchronization, change-date table/timeline, separate driver/truck histories, Home/Active/Home, permissions, explicit release and termination. Screenshots: '+artifacts);
 }finally{await browser.close();}
