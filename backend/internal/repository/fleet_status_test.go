@@ -315,6 +315,32 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if _, e = pool.Exec(ctx, `DELETE FROM fleet_status_history`); e == nil {
 				t.Fatal("mutable history")
 			}
+			// Intermediate projections within one action never create fake periods.
+			if e = save("READY"); e != nil {
+				t.Fatal(e)
+			}
+			beforeAction := scalar(`SELECT count(*)::text FROM fleet_status_history`)
+			tx, e := pool.Begin(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = setBoardActor(ctx, tx, actor, "profile"); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = tx.Exec(ctx, `UPDATE drivers SET availability_status='rest' WHERE id=$1`, d.ID); e != nil {
+				tx.Rollback(ctx)
+				t.Fatal(e)
+			}
+			if _, e = tx.Exec(ctx, `UPDATE drivers SET availability_status='active' WHERE id=$1`, d.ID); e != nil {
+				tx.Rollback(ctx)
+				t.Fatal(e)
+			}
+			if e = tx.Commit(ctx); e != nil {
+				t.Fatal(e)
+			}
+			if got := scalar(`SELECT count(*)::text FROM fleet_status_history`); got != beforeAction {
+				t.Fatal("intermediate states leaked into committed history", got, beforeAction)
+			}
 		})
 	}
 }

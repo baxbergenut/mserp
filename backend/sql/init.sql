@@ -5648,16 +5648,20 @@ CREATE TABLE fleet_status_history (
  previous_status text NOT NULL, status text NOT NULL, effective_at timestamptz NOT NULL, recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  actor_id text NOT NULL DEFAULT '', actor_name text NOT NULL, source text NOT NULL, source_ref text NOT NULL DEFAULT '',
  related_truck_id uuid, related_truck_name text NOT NULL DEFAULT '', action_id bigint NOT NULL DEFAULT txid_current(),
- baseline boolean NOT NULL DEFAULT false, reason text NOT NULL DEFAULT ''
+ baseline boolean NOT NULL DEFAULT false, reason text NOT NULL DEFAULT '',
+ UNIQUE(entity_kind,entity_id,track,action_id)
 );
 CREATE INDEX fleet_status_history_entity ON fleet_status_history(entity_kind,entity_id,track,effective_at DESC,id DESC);
 CREATE INDEX fleet_status_history_truck ON fleet_status_history(related_truck_id,effective_at);
 CREATE FUNCTION protect_fleet_status_history() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'Status history is append-only' USING ERRCODE='23514'; END $$;
+BEGIN
+ IF OLD.action_id<>txid_current() THEN RAISE EXCEPTION 'Committed status history is append-only' USING ERRCODE='23514'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
+END $$;
 CREATE TRIGGER fleet_status_history_immutable BEFORE UPDATE OR DELETE ON fleet_status_history FOR EACH ROW EXECUTE FUNCTION protect_fleet_status_history();
 
 CREATE FUNCTION fleet_status_enabled() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT enabled FROM fleet_status_control WHERE singleton $$;
-CREATE FUNCTION fleet_status_lock() RETURNS void LANGUAGE sql AS $$ SELECT pg_advisory_xact_lock(137004137) $$;
+CREATE FUNCTION fleet_status_lock() RETURNS void LANGUAGE sql AS $$ SELECT pg_advisory_xact_lock(hashtextextended(current_schema()||':fleet_status',137004137)) $$;
 CREATE FUNCTION fleet_status_statement_lock() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN IF fleet_status_enabled() THEN PERFORM fleet_status_lock(); END IF; RETURN NULL; END $$;
 CREATE TRIGGER fleet_status_lock BEFORE INSERT OR UPDATE OR DELETE ON driver_board FOR EACH STATEMENT EXECUTE FUNCTION fleet_status_statement_lock();
@@ -5694,7 +5698,10 @@ BEGIN
  END IF;
  INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,actor_id,actor_name,source,source_ref,related_truck_id,related_truck_name,baseline,reason)
  VALUES(kind,entity,coalesce(entity_label,''),category,previous,following,effective,actor,author,
- coalesce(nullif(current_setting('mserp.board_source',true),''),'integration'),coalesce(current_setting('mserp.status_source_ref',true),''),truck,coalesce(truck_label,''),initial,coalesce(current_setting('mserp.status_reason',true),''));
+ coalesce(nullif(current_setting('mserp.board_source',true),''),'integration'),coalesce(current_setting('mserp.status_source_ref',true),''),truck,coalesce(truck_label,''),initial,coalesce(current_setting('mserp.status_reason',true),''))
+ ON CONFLICT(entity_kind,entity_id,track,action_id) DO UPDATE SET status=excluded.status,
+ related_truck_id=excluded.related_truck_id,related_truck_name=excluded.related_truck_name;
+ DELETE FROM fleet_status_history WHERE entity_kind=kind AND entity_id=entity AND track=category AND action_id=txid_current() AND previous_status=status AND NOT baseline;
 END $$;
 
 -- Projection writes cannot be mistaken for a fresh user status command.
