@@ -23,7 +23,7 @@ export function WorkOrderDetail() {
   const [error,setError]=useState("");const [notice,setNotice]=useState("");const [busy,setBusy]=useState(false);
   const [attachment,setAttachment]=useState<File|null>(null);const [changes,setChanges]=useState<MaintenanceChange[]|null>(null);
   const [cancelReason,setCancelReason]=useState<string|null>(null);const lock=useRef(false);
-  const access=useExpenseCategoryAccess();const canEdit=!!access.find(a=>a.categoryId===options?.categoryId)?.canEdit;
+  const access=useExpenseCategoryAccess();const canEdit=record?.canEdit ?? !!access.find(a=>a.categoryId===options?.categoryId)?.canEdit;
   useEffect(()=>{let active=true;Promise.all([fetchMaintenance(id),fetchMaintenanceOptions()]).then(([r,o])=>{if(active){setRecord(r);setDraft(maintenanceToInput(r));setOptions(o);setStep(["completed","closed"].includes(r.workStatus ?? r.status)?2:1);setError("");}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
   const dirty=!!record && !!draft && JSON.stringify(draft)!==JSON.stringify(maintenanceToInput(record));
   useEffect(()=>{if(!dirty)return;const before=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue="";};window.addEventListener("beforeunload",before);return()=>window.removeEventListener("beforeunload",before);},[dirty]);

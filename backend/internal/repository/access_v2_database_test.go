@@ -110,6 +110,7 @@ func TestPermissionsV2Migration(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer pool.Close()
+			testExpenseRecordCreatorRoles(t, ctx, pool)
 			var ownerID, otherID, driverID string
 			for i, name := range []string{"File owner", "Other user"} {
 				var id string

@@ -37,6 +37,8 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
+	CreatorRoleID        string                `json:"-"`
+	CanEdit              bool                  `json:"canEdit"`
 	ApplicantID          *string               `json:"applicantId"`
 	CostBreakdown        []ExpenseCostItem     `json:"costBreakdown"`
 	BaseAmount           *string               `json:"baseAmount"`
@@ -555,7 +557,7 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),'')
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
@@ -570,7 +572,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.ManagerVerified, &value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID,
 	)
 	return value, err
 }

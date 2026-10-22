@@ -21,6 +21,7 @@ func (w *permissionResponseWriter) Unwrap() http.ResponseWriter { return w.Respo
 func (w *permissionResponseWriter) Flush()                      { _ = http.NewResponseController(w.ResponseWriter).Flush() }
 func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	s, _ := authSessionFromContext(w.request.Context())
+	value = projectExpenseEditAccess(value, s.User)
 	path := w.request.URL.Path
 	// These endpoints deliberately return their own authorized financial data.
 	if strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || path == "/dispatcher-pay" || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history") || strings.HasSuffix(path, "/settlement-history") {
@@ -38,6 +39,45 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	}
 	projectFields(result, s.User, path)
 	return result
+}
+
+// Capabilities are calculated per request, including after role reassignment.
+// Internal creator role IDs never enter JSON or saved financial snapshots.
+func projectExpenseEditAccess(value any, user repository.AuthUser) any {
+	expense := func(v repository.Expense) repository.Expense {
+		v.CanEdit = repository.CanEditExpenseRecord(user, v.CategoryID, v.CreatorRoleID)
+		return v
+	}
+	maintenance := func(v repository.MaintenanceRecord) repository.MaintenanceRecord {
+		v.CanEdit = repository.CanEditExpenseRecord(user, v.CategoryID, v.CreatorRoleID)
+		if v.Expense != nil {
+			e := expense(*v.Expense)
+			v.Expense = &e
+		}
+		return v
+	}
+	switch v := value.(type) {
+	case repository.Expense:
+		return expense(v)
+	case []repository.Expense:
+		out := append([]repository.Expense{}, v...)
+		for i := range out {
+			out[i] = expense(out[i])
+		}
+		return out
+	case repository.ExpensePage:
+		v.Items = projectExpenseEditAccess(v.Items, user).([]repository.Expense)
+		return v
+	case repository.MaintenanceRecord:
+		return maintenance(v)
+	case repository.MaintenancePage:
+		v.Items = append([]repository.MaintenanceRecord{}, v.Items...)
+		for i := range v.Items {
+			v.Items[i] = maintenance(v.Items[i])
+		}
+		return v
+	}
+	return value
 }
 
 var driverPrivateFields = []string{"address", "city", "state", "postalCode", "emergencyContact", "licenseNumber", "licenseState", "licenseExpires"}

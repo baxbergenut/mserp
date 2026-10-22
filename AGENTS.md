@@ -1044,7 +1044,13 @@ assignment lookup lists.
   Delete rights per category; Administrator implicitly has all rights, including
   for newly created categories. New categories are otherwise unassigned. Creator
   identity is server-recorded for new entries; pre-056 entries have no invented
-  creator. Expense settings management is independent of category access.
+  creator. Add plus View also permits editing expenses/work orders and attaching documents
+  when the recorded creator currently has the same nonempty role ID. Unknown/imported
+  creators do not qualify; category Edit still permits all records. Server per-record
+  canEdit drives forms; deletes, verification, vendors and service settings keep
+  their separate permissions. Expense settings management is independent of category access.
+  Run `frontend/scripts/test-same-role-records-e2e.mjs` against `review-local.mjs`
+  with `MSERP_REVIEW_ACCESS_FILE` for real multi-user API/form checks.
 
 - Migration 064 binds imported loads to indexed `loads.truck_id` foreign keys.
   `loads.id` is already the indexed upstream record identity; the business load

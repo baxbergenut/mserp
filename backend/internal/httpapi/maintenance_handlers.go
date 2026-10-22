@@ -77,6 +77,24 @@ func (h maintenanceHandler) allowed(w http.ResponseWriter, r *http.Request, acti
 	}
 	return id, true
 }
+
+func (h maintenanceHandler) allowedRecordEdit(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return "", false
+	}
+	record, err := h.repo.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, err)
+		return "", false
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if !repository.CanEditExpenseRecord(session.User, record.CategoryID, record.CreatorRoleID) {
+		writeAPIError(w, 403, "your role cannot edit this work order")
+		return "", false
+	}
+	return record.CategoryID, true
+}
 func (h maintenanceHandler) fail(w http.ResponseWriter, err error) {
 	if errors.Is(err, repository.ErrNotFound) {
 		writeAPIError(w, 404, "maintenance record not found")
@@ -356,11 +374,13 @@ func (in maintenanceRequest) validate(category string) (repository.MaintenanceIn
 	return out, nil
 }
 func (h maintenanceHandler) save(w http.ResponseWriter, r *http.Request) {
-	action := "create"
+	var cat string
+	var ok bool
 	if r.Method == "PUT" {
-		action = "edit"
+		cat, ok = h.allowedRecordEdit(w, r)
+	} else {
+		cat, ok = h.allowed(w, r, "create")
 	}
-	cat, ok := h.allowed(w, r, action)
 	if !ok {
 		return
 	}
@@ -685,23 +705,10 @@ func (h maintenanceHandler) upload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cat, err := h.repo.CategoryID(r.Context())
-	if err != nil {
-		h.fail(w, err)
+	if _, ok := h.allowedRecordEdit(w, r); !ok {
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "edit") {
-		own, err := h.repo.OwnedBy(r.Context(), id, session.User.ID)
-		if err != nil {
-			h.fail(w, err)
-			return
-		}
-		if !own || !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, cat, "create") {
-			writeAPIError(w, 403, "your role cannot attach documents to this visit")
-			return
-		}
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 22<<20)
 	if err := r.ParseMultipartForm(2 << 20); err != nil {
 		writeAPIError(w, 400, "invalid maintenance attachment")

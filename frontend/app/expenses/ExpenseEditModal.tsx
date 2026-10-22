@@ -19,7 +19,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
   const [maintenanceId,setMaintenanceId]=useState<string | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const canEdit = !!data && access.some(a => a.categoryId === data.expense.categoryId && a.canEdit);
+  const canEdit = !!data && (data.expense.canEdit ?? access.some(a => a.categoryId === data.expense.categoryId && a.canEdit));
   const fleet = true;
   useEffect(() => {
     let cancelled = false;

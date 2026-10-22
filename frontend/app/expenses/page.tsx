@@ -452,7 +452,7 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
-          submitDisabled={!!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}
+          submitDisabled={!!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))}
           footerStart={editing && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving || aiBusy}
           submitLabel={pendingUploadId ? "Retry receipt upload" : editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
@@ -473,8 +473,8 @@ export default function ExpensesPage() {
             </div>
           )}
           {review && <p className="mb-4 text-xs text-zinc-500">Review entry {review.index+1} of {review.entries.length}. Each item is saved separately.</p>}
-          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
-          <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)} onChange={setAttachment} onError={setError} />
+          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
+          <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))} onChange={setAttachment} onError={setError} />
           {editing && <ExpenseDocuments key={editing.id} id={editing.id} />}
         </Modal>
       )}

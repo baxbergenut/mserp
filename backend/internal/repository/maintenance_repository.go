@@ -52,6 +52,9 @@ type MaintenanceDocument struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 type MaintenanceRecord struct {
+	CreatorRoleID       string                `json:"-"`
+	CategoryID          string                `json:"-"`
+	CanEdit             bool                  `json:"canEdit"`
 	HistoricalPaid      bool                  `json:"historicalPaid"`
 	PaymentConfirmation json.RawMessage       `json:"paymentConfirmation"`
 	WorkStatus          string                `json:"workStatus"`
@@ -195,11 +198,11 @@ func (r *MaintenanceRepository) SaveType(ctx context.Context, v MaintenanceType)
 	return result, err
 }
 
-const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type,coalesce(m.program_ids,CASE WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode' IN ('pm','oil')) THEN ARRAY['00000000-0000-4000-8000-000000000020']::uuid[] ELSE '{}'::uuid[] END)::text[],CASE WHEN m.historical_paid AND m.status<>'voided' THEN 'closed' ELSE coalesce(nullif(m.work_status,''),m.status) END,m.dispatch_status,m.waiting_on,m.scheduled_for::text,m.expected_ready::text,m.priority,m.no_charge,m.cancel_reason,m.payment_confirmation,m.historical_paid FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
+const maintenanceSelect = `SELECT m.id,m.expense_id,m.truck_id,coalesce(t.unit_number,e.unit_number,nullif(m.source_unit_number,''),''),m.vendor_id,m.vendor_name,m.vendor_address,m.vendor_phone,m.vendor_contact,m.service_date::text,m.odometer,m.location,m.status,m.work_order,m.notes,m.services,m.version,m.created_by_name,m.updated_by_name,m.created_at,m.updated_at,m.void_reason,m.driver_id,m.driver_name,m.oil_type,coalesce(m.program_ids,CASE WHEN EXISTS(SELECT 1 FROM jsonb_array_elements(m.services) s WHERE s->>'trackingCode' IN ('pm','oil')) THEN ARRAY['00000000-0000-4000-8000-000000000020']::uuid[] ELSE '{}'::uuid[] END)::text[],CASE WHEN m.historical_paid AND m.status<>'voided' THEN 'closed' ELSE coalesce(nullif(m.work_status,''),m.status) END,m.dispatch_status,m.waiting_on,m.scheduled_for::text,m.expected_ready::text,m.priority,m.no_charge,m.cancel_reason,m.payment_confirmation,m.historical_paid,coalesce((SELECT role_id::text FROM app_users WHERE id=m.created_by),''),(SELECT category_id::text FROM maintenance_configuration) FROM maintenance_records m LEFT JOIN trucks t ON t.id=m.truck_id LEFT JOIN expenses e ON e.id=m.expense_id`
 
 func scanMaintenance(row rowScanner) (MaintenanceRecord, error) {
 	var m MaintenanceRecord
-	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType, &m.ProgramIDs, &m.WorkStatus, &m.DispatchStatus, &m.WaitingOn, &m.ScheduledFor, &m.ExpectedReady, &m.Priority, &m.NoCharge, &m.CancelReason, &m.PaymentConfirmation, &m.HistoricalPaid)
+	err := row.Scan(&m.ID, &m.ExpenseID, &m.TruckID, &m.UnitNumber, &m.VendorID, &m.VendorName, &m.VendorAddress, &m.VendorPhone, &m.VendorContact, &m.ServiceDate, &m.Odometer, &m.Location, &m.Status, &m.WorkOrder, &m.Notes, &m.Services, &m.Version, &m.CreatedByName, &m.UpdatedByName, &m.CreatedAt, &m.UpdatedAt, &m.VoidReason, &m.DriverID, &m.DriverName, &m.OilType, &m.ProgramIDs, &m.WorkStatus, &m.DispatchStatus, &m.WaitingOn, &m.ScheduledFor, &m.ExpectedReady, &m.Priority, &m.NoCharge, &m.CancelReason, &m.PaymentConfirmation, &m.HistoricalPaid, &m.CreatorRoleID, &m.CategoryID)
 	// Present historical aliases with the current terminology without rewriting ledger snapshots.
 	for i := range m.Services {
 		if m.Services[i].TypeCode == "oil" || m.Services[i].TypeCode == "preventive" {

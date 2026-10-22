@@ -692,7 +692,7 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 		handler.writeError(w, err)
 		return
 	}
-	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, existing.CategoryID, "edit") {
+	if !repository.CanEditExpenseRecord(session.User, existing.CategoryID, existing.CreatorRoleID) {
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to edit entries in that category")
 		return
 	}

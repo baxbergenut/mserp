@@ -778,6 +778,7 @@ export type ExpenseDocument = MaintenanceDocument;
 export type WorkOrderStatus = "open" | "scheduled" | "in_progress" | "completed" | "closed" | "canceled" | "needs_review" | "voided";
 export interface MaintenanceWorkflow { workStatus?:WorkOrderStatus; dispatchStatus?:""|Exclude<TruckOperatingStatus,"ready">; waitingOn?:string; scheduledFor?:string|null; expectedReady?:string|null; priority?:"normal"|"high"|"urgent"; noCharge?:boolean; cancelReason?:string; }
 export interface MaintenanceRecord extends MaintenanceWorkflow {
+  canEdit?: boolean;
  historicalPaid?:boolean;
  paymentConfirmation?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;confirmedBy:string;confirmedAt:string}|null;
   programIds?: string[];
@@ -818,6 +819,7 @@ export interface MaintenanceChange { actorName: string; happenedAt: string; befo
 export interface ExpenseApplicant { id: string; fullName: string; status: "applied" | "hired" | "rejected" | "withdrawn"; }
 
 export interface Expense {
+  canEdit?: boolean;
   applicantId?: string | null;
   costBreakdown?: ExpenseCostItem[];
 	baseAmount?: string | null;

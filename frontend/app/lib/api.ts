@@ -507,6 +507,7 @@ export const fetchExpensesPage = (query: PageQuery & {
   driverId?: string;
 }, signal?: AbortSignal) => paginatedRequest<ExpensePage>(withQuery("/expenses", query), signal);
 // Expense reads include workOrderDescription for display; writes retain the saved expense description.
+// Expense and work-order responses include per-record canEdit; input types omit it.
 export const fetchExpense = (id: string, signal?: AbortSignal) => apiRequest<Expense>(`/expenses/${id}`, { signal });
 export const fetchExpenseDocuments = (id: string, signal?: AbortSignal) => apiRequest<import("./types").ExpenseDocument[]>(`/expenses/${id}/documents`, { signal });
 export const uploadExpenseDocument = (id: string, file: File) => {

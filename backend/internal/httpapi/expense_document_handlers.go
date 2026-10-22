@@ -4,6 +4,8 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
+
+	"mserp/internal/repository"
 )
 
 func (h expenseHandler) listDocuments(w http.ResponseWriter, r *http.Request) {
@@ -35,14 +37,14 @@ func (h expenseHandler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	category, creator, err := h.repo.ExpenseDocumentAccess(r.Context(), id)
+	existing, err := h.repo.GetExpense(r.Context(), id)
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, category, "edit") &&
-		!(creator == session.User.ID && hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, category, "create")) {
+	category := existing.CategoryID
+	if !repository.CanEditExpenseRecord(session.User, category, existing.CreatorRoleID) {
 		writeAPIError(w, 403, "your role cannot attach documents to this expense")
 		return
 	}
