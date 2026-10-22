@@ -39,6 +39,7 @@ const NAV_ITEMS = [
     { href: "/trucks", label: "Trucks", icon: Truck },
     { href: "/fleet/trailers", label: "Trailers", icon: Truck },
     { href: "/fleet/inventory", label: "Inventory", icon: Package },
+    { href: "/fleet/weekly-pti", label: "Weekly PTI", icon: ListChecks },
     { href: "/maintenance", label: "Work orders", icon: Wrench },
     { href: "/fleet/service-programs", label: "Service programs", icon: CalendarRange },
   ] },

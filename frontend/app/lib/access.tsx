@@ -14,6 +14,7 @@ export const ExpenseCategoryAccessContext = createContext<ExpenseCategoryAccess[
 export const useExpenseCategoryAccess = () => useContext(ExpenseCategoryAccessContext);
 
 export function pagePermission(path: string): string {
+  if (path.startsWith("/fleet/weekly-pti")) return "pti.read";
   if (path.startsWith("/fleet/inventory")) return "inventory.read";
   if (path.startsWith("/fleet/trailers")) return "trailers.read";
   if (path === "/settings") return "";

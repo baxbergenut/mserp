@@ -1,0 +1,53 @@
+// Synthetic local API/database/UI coverage. Never run against production.
+import {readFile,mkdir} from 'node:fs/promises';
+import {dirname,join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {chromium,expect} from '@playwright/test';
+
+const accessFile=process.env.MSERP_REVIEW_ACCESS_FILE;
+const access=JSON.parse(await readFile(accessFile,'utf8'));
+const database=new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
+if(!['127.0.0.1','localhost'].includes(new URL(access.base).hostname)||!['127.0.0.1','localhost'].includes(database.hostname)||!database.pathname.endsWith('_test')||!/^review_[a-f0-9]+$/.test(access.schema))throw Error('Disposable local review required');
+const sql=input=>execFileSync(process.env.PSQL_PATH||'psql',['-X','-q','-v','ON_ERROR_STOP=1','-d',database.toString()],{input:`SET search_path TO ${access.schema},public;SET ROLE mserp_app;\n${input}`,encoding:'utf8',windowsHide:true});
+sql(`UPDATE trucks SET created_at=now()-interval '30 days';`);
+database.searchParams.set('search_path',access.schema+',public');database.searchParams.set('role','mserp_app');
+const binary=join(dirname(accessFile),process.platform==='win32'?'api.exe':'api');
+const cli=args=>execFileSync(binary,args,{cwd:dirname(accessFile),env:{...process.env,DATABASE_URL:database.toString(),DATATRUCK_API_KEY:'test-disabled',DATATRUCK_COMPANY_NAME:'test',RELAY_API_KEY:'test-disabled',PREPASS_CLIENT_ID:'test-disabled',PREPASS_CLIENT_SECRET:'test-disabled',FRONTEND_ORIGIN:access.base,AUTH_COOKIE_SECURE:'false',SCHEDULED_SYNCS_ENABLED:'false'},encoding:'utf8',windowsHide:true});
+const preview=JSON.parse(cli(['-fleet-status-preview']));if(!preview.enabled)cli(['-fleet-status-activate',preview.revision]);
+const artifacts=join(dirname(accessFile),'weekly-pti');await mkdir(artifacts,{recursive:true});
+const browser=await chromium.launch();
+try{
+ const context=await browser.newContext({viewport:{width:1600,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
+ const session=await(await page.request.get(access.base+'/api/auth/session')).json(),headers={'X-CSRF-Token':session.csrfToken,Origin:access.base};
+ const api=async(method,path,data)=>{const r=await page.request[method](access.base+'/api'+path,{headers,...(data?{data}:{})});if(!r.ok())throw Error(path+': '+r.status()+' '+await r.text());return r.status()===204?null:r.json();};
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date()),monday=new Date(today+'T12:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);const week=monday.toISOString().slice(0,10),path='/weekly-pti?weekStart='+week;
+ const initial=await api('post','/weekly-pti/weeks',{weekStart:week});expect(initial.rows.length).toBeGreaterThanOrEqual(3);expect(initial.rows.filter(r=>r.truckUnit==='102')).toHaveLength(1);
+ let target=initial.rows.find(r=>r.truckUnit==='102');const crewBefore=JSON.stringify(target.crew),conditionBefore=target.condition;
+ if(target.received||target.notes||target.videoUrl)target=await api('patch',`/weekly-pti/${week}/${target.truckId}`,{requestId:randomUUID(),version:target.version,eligibility:target.eligibility,eligibilityReason:target.eligibilityReason,received:false,review:'pending',videoUrl:'',notes:''});
+ await page.goto(access.base+'/fleet/weekly-pti');await expect(page.getByRole('heading',{name:'Weekly PTI',exact:true})).toBeVisible();
+ const row=page.getByRole('row',{name:'Truck 102',exact:true});await expect(row).toBeVisible();
+ await page.getByRole('button',{name:'Edit PTI truck 102',exact:true}).click();await page.getByLabel('Monday eligibility',{exact:true}).selectOption('required');await page.getByLabel('Eligibility reason',{exact:true}).fill('Confirmed Monday roster: active driver and ready truck');await page.getByRole('button',{name:'Save PTI',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(row.getByText('Required',{exact:true})).toBeVisible();
+ await page.getByLabel('Truck 102 video received',{exact:true}).selectOption('yes');await expect(page.getByLabel('Truck 102 review',{exact:true})).toBeEnabled();await page.getByLabel('Truck 102 review',{exact:true}).selectOption('checked');await expect(page.getByLabel('Truck 102 review',{exact:true})).toHaveValue('checked');
+ await page.getByRole('button',{name:'Edit PTI truck 102',exact:true}).click();await page.getByLabel('Video link',{exact:true}).fill('https://example.test/pti/102');await page.getByRole('button',{name:'Save PTI',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByLabel('Truck 102 review',{exact:true})).toHaveValue('pending');await expect(row.getByRole('link',{name:'Open video',exact:true})).toHaveAttribute('href','https://example.test/pti/102');
+ await page.getByLabel('Truck 102 review',{exact:true}).selectOption('issues');await expect(page.getByLabel('Video review',{exact:true})).toHaveValue('issues');await page.getByLabel('PTI notes',{exact:true}).fill('Left marker lamp needs follow-up');await page.getByRole('button',{name:'Save PTI',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByLabel('Truck 102 review',{exact:true})).toHaveValue('issues');
+ target=(await api('get',path)).rows.find(r=>r.truckUnit==='102');expect(target.receivedBy).toBe('Local Review');expect(target.reviewedBy).toBe('Local Review');expect(target.receivedAt).toBeTruthy();expect(target.reviewedAt).toBeTruthy();
+ await page.getByRole('button',{name:'PTI history truck 102',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByText('Video: Received',{exact:true}).first()).toBeVisible();await expect(page.getByText('Review: Checked',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'pti-history.png'),fullPage:true});await page.getByRole('button',{name:'Close',exact:true}).last().click();
+ const body=(row,overrides={})=>({requestId:randomUUID(),version:row.version,eligibility:row.eligibility,eligibilityReason:row.eligibilityReason,received:row.received,review:row.review,videoUrl:row.videoUrl,notes:row.notes,...overrides});
+ const receipt=body(target,{notes:'First concurrent reviewer'}),stale=body(target,{notes:'Second concurrent reviewer'}),writePath=`/weekly-pti/${week}/${target.truckId}`;
+ const concurrent=await Promise.all([page.request.patch(access.base+'/api'+writePath,{headers,data:receipt}),page.request.patch(access.base+'/api'+writePath,{headers,data:stale})]);expect(concurrent.map(r=>r.status()).sort()).toEqual([200,409]);
+ const winner=concurrent[0].status()===200?receipt:stale;await api('patch',writePath,winner);
+ target=(await api('get',path)).rows.find(r=>r.truckUnit==='102');const events=await api('get',writePath+'/history');await api('patch',writePath,body(target));expect((await api('get',writePath+'/history')).length).toBe(events.length);
+ expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,{videoUrl:'javascript:alert(1)'})})).status()).toBe(409);
+ expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,{eligibility:'exempt',eligibilityReason:''})})).status()).toBe(409);
+ const driver=await api('get','/drivers/'+target.crew[0].id);await api('patch','/drivers/'+driver.id+'/availability',{status:'home',version:driver.statusVersion,reason:'Synthetic later availability'});
+ const frozen=(await api('get',path)).rows.find(r=>r.truckUnit==='102');expect(JSON.stringify(frozen.crew)).toBe(crewBefore);expect(frozen.condition).toBe(conditionBefore);expect(frozen.eligibility).toBe('required');
+ const roleName='PTI reader '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['drivers.read','trucks.read','pti.read']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName),email=randomUUID()+'@example.test',password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
+ const reader=await browser.newContext();await reader.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const readerSession=await(await reader.request.get(access.base+'/api/auth/session')).json();const readPage=await reader.newPage();await readPage.goto(access.base+'/fleet/weekly-pti');await expect(readPage.getByRole('row',{name:'Truck 102',exact:true})).toBeVisible();await expect(readPage.getByRole('button',{name:'Edit PTI truck 102',exact:true})).toHaveCount(0);await expect(readPage.getByRole('button',{name:'PTI history truck 102',exact:true})).toBeVisible();
+ expect((await reader.request.patch(access.base+'/api'+writePath,{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:body(target)})).status()).toBe(403);expect((await reader.request.get(access.base+'/api'+writePath+'/history')).status()).toBe(200);await reader.close();
+ const anonymous=await browser.newContext();expect((await anonymous.request.get(access.base+'/api'+path)).status()).toBe(401);await anonymous.close();
+ await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByLabel('Review filter',{exact:true}).selectOption('issues');await expect(row).toBeVisible();await page.getByLabel('Review filter',{exact:true}).selectOption('');await page.screenshot({path:join(artifacts,'weekly-pti.png'),fullPage:true});
+ await page.getByRole('button',{name:'Previous week',exact:true}).click();await expect(page.getByText('No checklist has been created for this week.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Create weekly checklist',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'This week',exact:true}).click();await expect(row).toBeVisible();
+ expect(errors).toEqual([]);console.log('Weekly PTI E2E passed: per-truck checklist, receipt/review, link replacement, issues, history, concurrent saves, retry/no-op, frozen Monday context, week navigation, read-only role and authentication. Screenshots: '+artifacts);
+}finally{await browser.close();}

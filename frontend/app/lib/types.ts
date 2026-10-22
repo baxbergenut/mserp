@@ -1441,3 +1441,13 @@ export interface ProgramTruck extends MaintenanceDue {
  intervalMiles:number|null; intervalDays:number|null; intervalMonths:number|null;
 }
 export type ProgramTruckInput=Pick<ProgramTruck,"truckId"|"overrideInterval"|"intervalMiles"|"intervalDays"|"intervalMonths"> & {version:number;active:boolean};
+export type PTICrew = {id:string;name:string;availability:string;employment:string};
+export type PTIRow = {
+ weekStart:string;truckId:string;truckUnit:string;crew:PTICrew[];condition:string;
+ snapshotEligibility:string;snapshotReason:string;eligibility:"required"|"exempt"|"unknown";eligibilityReason:string;
+ received:boolean;receivedAt:string|null;receivedBy:string;review:"pending"|"checked"|"issues";reviewedAt:string|null;reviewedBy:string;
+ videoUrl:string;notes:string;updatedAt:string|null;updatedBy:string;version:number;
+};
+export type PTIWeek = {weekStart:string;exists:boolean;createdAt:string|null;createdBy:string;lateSnapshot:boolean;rows:PTIRow[]};
+export type PTIChange = Pick<PTIRow,"version"|"eligibility"|"eligibilityReason"|"received"|"review"|"videoUrl"|"notes"> & {requestId:string};
+export type PTIEvent = {id:string;before:PTIRow;after:PTIRow;actorName:string;createdAt:string};
