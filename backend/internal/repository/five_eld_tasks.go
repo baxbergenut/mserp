@@ -77,7 +77,7 @@ func (r *FleetRepository) CompleteFiveELDTruckReview(ctx context.Context, id, ac
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.Exec(ctx, `UPDATE system_task_records SET completed_at=now(),completed_by_name=coalesce((SELECT username FROM app_users WHERE id=$2),''),outcome='Added truck to MSERP',eld_truck_id=$3,eld_version=eld_version+1 WHERE id=$1`, id, actor, truckID)
+	_, err = tx.Exec(ctx, `UPDATE system_task_records SET completed_at=now(),completed_by_name=coalesce((SELECT username FROM app_users WHERE id=$2),''),outcome='Added truck to Clustie',eld_truck_id=$3,eld_version=eld_version+1 WHERE id=$1`, id, actor, truckID)
 	if err != nil {
 		return "", err
 	}

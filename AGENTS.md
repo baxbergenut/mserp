@@ -1,4 +1,4 @@
-# MSERP Agent Guide
+# Clustie Agent Guide
 
 Read this file before doing anything else in a new task. Then read the nearest
 nested `AGENTS.md` for the area being changed. Do not scan the entire repository
@@ -8,7 +8,7 @@ change.
 
 ## What this repository is
 
-MSERP is an internal ERP for MS Express Inc. It has two independently run apps:
+Clustie (formerly MSERP) is an internal ERP for MS Express Inc. It has two independently run apps:
 
 - `backend/`: Go 1.23 HTTP API using chi and pgx/PostgreSQL.
 - `frontend/`: Next.js 16 App Router UI using React 19, TypeScript, Tailwind CSS
@@ -298,6 +298,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   manual incremental migrations for older databases.
 
 ### Frontend
+
+- Product branding is Clustie. `components/BrandLogo.tsx` uses the supplied logo
+  pack artwork in `frontend/public/brand/`, with transparent backgrounds and the
+  symbol in the collapsed sidebar. A CSS alpha mask makes only the wordmark light
+  on dark themes; light themes retain navy, and the symbol/i dot keep their colors. Root metadata,
+  `favicon.ico`, `icon.png`, `apple-icon.png` and `manifest.webmanifest` own browser
+  and home-screen branding. Keep existing MSERP API/wire identifiers, environment
+  variables, cookie/storage/event keys, sheet headers and historical records
+  compatible; MS Express remains the operating company.
 
 - Fleet > Inventory (`/fleet/inventory?tab=tablets`) and Fleet > Trailers
   (`/fleet/trailers`) use migration 119, repository `inventory.go` /

@@ -121,7 +121,7 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
 			e.Warning = "Terminated driver still has, or may have, WeighMyTruck access."
 		}
 		if e.DriverID == "" {
-			e.Warning = "Not linked to an MSERP driver."
+			e.Warning = "Not linked to a Clustie driver."
 			e.AddBlockReason = "Link this account to a driver before adding it again."
 		}
 		if e.State != "confirmed" || lastError != "" {
@@ -202,7 +202,7 @@ func (r *WeighMyTruckRepository) reserve(ctx context.Context, in WMTChange, acto
 			return "", 0, d, err
 		}
 		if duplicate {
-			return "", 0, d, &WMTValidationError{"This email belongs to multiple MSERP drivers. Correct their profiles first."}
+			return "", 0, d, &WMTValidationError{"This email belongs to multiple Clustie drivers. Correct their profiles first."}
 		}
 		if id == "" {
 			if in.Version != 0 {

@@ -1,4 +1,4 @@
-// Browser fixtures only: never contacts PrePass or production MSERP.
+// Browser fixtures only: never contacts PrePass or production Clustie.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -9,7 +9,7 @@ import { chromium, expect } from '@playwright/test';
 const vin = '1XKADP9X8DJ364740', newVin = '1XKADP9X8DJ364741';
 const stamp = '2026-10-12T12:00:00Z';
 const baseVehicle = { accountNumber: '123', costCenter: '', vin, vehicleNumber: '003', tempPlate: false, licensePlateNumber: 'ABC123', licensePlateState: 'OH', declaredWeight: 80000, irpNumber: '12345', irpState: 'OH', iftaNumber: '67890', iftaState: 'OH', transponderNumber: '', vrn: '791', hazmatHauler: false, vehicleImage: '', leasedVehicle: false, leasingCompany: '', leaseExpirationDate: '' };
-const makeEntry = v => ({ vehicle: v, truckId: '', truckUnit: '', tollsLinked: false, tollFrom: '', revision: 'a'.repeat(64), warning: 'Not linked to an MSERP truck', suggestions: ['truck-1'] });
+const makeEntry = v => ({ vehicle: v, truckId: '', truckUnit: '', tollsLinked: false, tollFrom: '', revision: 'a'.repeat(64), warning: 'Not linked to a Clustie truck', suggestions: ['truck-1'] });
 const data = { configured: true, environment: 'production', refreshedAt: null, accounts: [], vehicles: [], transponders: [], operations: [], trucks: [
   { id: 'truck-1', unit: '003', vin, plate: 'ABC123', plateState: 'OH', active: true, updatedAt: stamp },
   { id: 'truck-2', unit: '004', vin: newVin, plate: 'DEF456', plateState: 'OH', active: true, updatedAt: stamp },
@@ -96,7 +96,7 @@ try {
   assert.equal(writes.at(-1).input.tollFrom, '2026-10-02');
   assert.equal(writes.at(-1).input.tollRevision, 'b'.repeat(64));
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
-  for (const name of ['Account', 'MSERP truck', 'PrePass unit']) await expect(region.getByRole('columnheader', { name, exact: true })).toHaveCount(0);
+  for (const name of ['Account', 'Clustie truck', 'PrePass unit']) await expect(region.getByRole('columnheader', { name, exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Truck linking', exact: true })).toHaveCount(0);
   await expect(region.getByRole('button', { name: 'Trucks', exact: true })).toHaveCount(0);
   await expect(region).not.toContainText('PrePass checked');
@@ -105,7 +105,7 @@ try {
   data.trucks[0].plate = 'LOCAL12'; data.trucks[0].plateState = 'IN';
   await region.getByRole('button', { name: 'Refresh PrePass' }).click();
   await region.getByRole('button', { name: 'Resolve plate', exact: true }).click();
-  await expect(dialog).toContainText('MSERP: LOCAL12 IN');
+  await expect(dialog).toContainText('Clustie: LOCAL12 IN');
   await expect(dialog).toContainText('PrePass: ABC123 OH');
   await page.screenshot({ path: join(tmpdir(), 'mserp-prepass-resolve-plate.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -113,7 +113,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'plate dialog must fit mobile');
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(dialog.getByRole('button', { name: 'Resolve plate', exact: true })).toBeDisabled();
-  await dialog.getByRole('radio', { name: 'MSERP: LOCAL12 IN' }).check();
+  await dialog.getByRole('radio', { name: 'Clustie: LOCAL12 IN' }).check();
   await dialog.getByRole('button', { name: 'Resolve plate', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).input.plateSource, 'mserp');
@@ -127,7 +127,7 @@ try {
   await expect(region).toBeVisible();
   await region.getByRole('button', { name: 'Refresh PrePass' }).click();
   await region.getByRole('button', { name: 'Resolve plate', exact: true }).click();
-  await expect(dialog.getByRole('radio', { name: 'MSERP: LOCAL12 IN' })).toBeDisabled();
+  await expect(dialog.getByRole('radio', { name: 'Clustie: LOCAL12 IN' })).toBeDisabled();
   await dialog.getByRole('radio', { name: 'PrePass: REMOTE1 IL' }).check();
   await expect(dialog.getByRole('checkbox')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Resolve plate', exact: true })).toBeEnabled();

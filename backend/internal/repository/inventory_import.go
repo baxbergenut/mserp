@@ -195,7 +195,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 		if current, ok := existing[key]; ok {
 			v.ID = current.ID
 			v.Version = current.Version
-			issues = append(issues, "Existing MSERP record: review source values before merging")
+			issues = append(issues, "Existing Clustie record: review source values before merging")
 		}
 		d.Source = source
 		v.Data = d
@@ -299,7 +299,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 						add("lines", InventoryFields{WirelessNumber: phone, AssetID: assetID, Carrier: "AT&T", Active: true}, source, nil)
 					}
 				}
-				archive(source+":profile", "Truck identity, ownership, status and compliance fields retained in snapshot; existing MSERP records remain authoritative")
+				archive(source+":profile", "Truck identity, ownership, status and compliance fields retained in snapshot; existing Clustie records remain authoritative")
 			case "Samsara Inventory":
 				truck, issues := resolve(inventoryCell(row, 2), "") // # prefixes are deliberately not stripped.
 				gateway := ""
@@ -355,7 +355,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 					}
 				}
 			case "Oil change":
-				archive(source, "Compare with MSERP preventative maintenance; apply reviewed missing baselines through maintenance, without expense creation")
+				archive(source, "Compare with Clustie preventative maintenance; apply reviewed missing baselines through maintenance, without expense creation")
 			default:
 				archive(source, "Historical/report data retained in original snapshot; excluded from operational migration")
 			}

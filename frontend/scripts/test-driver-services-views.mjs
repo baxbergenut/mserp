@@ -58,7 +58,7 @@ const server=createServer(async(req,res)=>{
     const i=[...setups.values()].flatMap(s=>s.items).find(i=>i.relay?.driver.id===input.relayDriverId);
     i.state='added';i.message='Account linked and policy enabled.';i.relay.assignment={id:'a',policy_id:input.policyId,policy_name:policies.find(p=>p.id===input.policyId).name,enabled:true};return send({saved:true});
    }
-   if(p.endsWith('/verify')){const i=setups.get('driver-1').items[1];i.state='added';i.message='Membership confirmed in MSERP.';i.membership.enrolled=true;i.membership.state='confirmed';return send({saved:true});}
+   if(p.endsWith('/verify')){const i=setups.get('driver-1').items[1];i.state='added';i.message='Membership confirmed in Clustie.';i.membership.enrolled=true;i.membership.state='confirmed';return send({saved:true});}
    if(p.endsWith('/link')){const setup=setups.get(input.driverId),i=setup.items[0];i.relay=i.candidates[0];i.relay.driverId=input.driverId;i.candidates=[];i.state='needs_setup';return send({saved:true});}
    return send({});
   }

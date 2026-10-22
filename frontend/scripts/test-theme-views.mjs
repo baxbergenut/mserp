@@ -83,7 +83,7 @@ try {
   await page.getByRole('button', { name: 'Appearance', exact: true }).click();
   await page.setViewportSize({ width: 640, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole('button', { name: /^MSERP \(default\)/ }).click();
+  await page.getByRole('button', { name: /^Clustie \(default\)/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'default');
   expect(errors).toEqual([]);
   console.log('Theme views passed: all palettes, persistence, per-user isolation, save failure, non-admin settings, logout reset, dialog portals and narrow layout.');

@@ -15,8 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MSERP",
-  description: "MS Express ERP — Loads, dispatch & revenue management",
+  title: "Clustie",
+  applicationName: "Clustie",
+  description: "Clustie — Fleet, dispatch & revenue management",
+  appleWebApp: { title: "Clustie", capable: true },
 };
 
 export default function RootLayout({

@@ -131,13 +131,13 @@ export default function WeighMyTruckPage() {
     }}>
       {error && <ErrorBanner message={error} />}
       {dialog.kind === "recover" ? <div className="space-y-3 text-[13px]">
-        <p className="text-zinc-400">Check the WeighMyTruck fleet roster for <span className="text-zinc-200">{dialog.entry.email}</span>, then record the result. This updates MSERP tracking only.</p>
+        <p className="text-zinc-400">Check the WeighMyTruck fleet roster for <span className="text-zinc-200">{dialog.entry.email}</span>, then record the result. This updates Clustie tracking only.</p>
         {dialog.entry.warning && <p className="text-amber-400">{dialog.entry.warning}</p>}
         <label className="block space-y-2">Verified membership<select aria-label="Verified membership" required className={controlClass} value={verifiedMembership} onChange={e => setVerifiedMembership(e.target.value)}>
           <option value="">Select verified result</option><option value="removed">Already removed from fleet</option><option value="enrolled">Still enrolled in fleet</option>
         </select></label>
         <label className="block space-y-2">Verification note<textarea aria-label="Verification note" required maxLength={1000} className={controlClass} value={verificationReason} onChange={e => setVerificationReason(e.target.value)} placeholder="Describe what you confirmed on the fleet roster" /></label>
-      </div> : dialog.kind === "link" ? <label className="block space-y-2 text-[13px]">MSERP driver<select required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}><option value="">Select driver</option>{items.filter(e => e.driverId && !e.id).map(e => <option key={e.driverId} value={e.driverId}>{e.name} · {e.driverStatus}</option>)}</select></label> : <div className="space-y-3">
+      </div> : dialog.kind === "link" ? <label className="block space-y-2 text-[13px]">Clustie driver<select required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}><option value="">Select driver</option>{items.filter(e => e.driverId && !e.id).map(e => <option key={e.driverId} value={e.driverId}>{e.name} · {e.driverStatus}</option>)}</select></label> : <div className="space-y-3">
         <label className="block space-y-2 text-[13px]">Active driver<select aria-label="Active driver" required className={controlClass} value={driverId} onChange={e => setDriverId(e.target.value)}>
           <option value="">Select driver</option>{available.map(entry => <option key={entry.driverId} value={entry.driverId} disabled={!!entry.addBlockReason || entry.state !== "confirmed"}>{entry.name}{entry.addBlockReason ? ` — ${entry.addBlockReason}` : entry.state !== "confirmed" ? " — Change pending" : ""}</option>)}
         </select></label>

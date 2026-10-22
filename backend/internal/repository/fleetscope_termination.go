@@ -94,11 +94,11 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 			if err = setDriverTruck(ctx, tx, *driverID, nil); err != nil {
 				return IntakeResult{}, err
 			}
-			notes += "Driver marked terminated; current truck and dispatcher assignments disconnected.\nMSERP driver ID: " + *driverID + "\n"
+			notes += "Driver marked terminated; current truck and dispatcher assignments disconnected.\nClustie driver ID: " + *driverID + "\n"
 		} else if foundIntake && completedAt == nil {
-			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing MSERP record before marking it terminated.\n"
+			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing Clustie record before marking it terminated.\n"
 		} else {
-			notes += "ACTION REQUIRED: No saved MSERP driver link exists (or the linked driver was deleted). Verify the driver's identity in Drivers, mark the correct record terminated, and review charges. No driver was automatically changed.\n"
+			notes += "ACTION REQUIRED: No saved Clustie driver link exists (or the linked driver was deleted). Verify the driver's identity in Drivers, mark the correct record terminated, and review charges. No driver was automatically changed.\n"
 		}
 		if _, err = tx.Exec(ctx, `UPDATE fleetscope_driver_intake SET terminated_at=$3 WHERE company_id=$1 AND fleetscope_driver_id=$2`, event.CompanyID, event.Driver.ID, event.OccurredAt); err != nil {
 			return IntakeResult{}, err

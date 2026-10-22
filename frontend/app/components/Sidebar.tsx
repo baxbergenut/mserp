@@ -26,6 +26,7 @@ import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { usePermissions, pagePermission, canVisitPage } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
 import { useSidebarCounts } from "./useSidebarCounts";
+import { BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/driver-board", label: "Status Board", icon: Truck },
@@ -76,14 +77,7 @@ export function Sidebar() {
     >
       {/* ── Brand ── */}
       <div className="flex h-14 items-center gap-2.5 border-b border-zinc-800/40 px-4">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
-          <span className="text-xs font-bold text-accent">M</span>
-        </div>
-        {!collapsed && (
-          <span className="text-sm font-semibold tracking-wide text-zinc-100">
-            MSERP
-          </span>
-        )}
+        <BrandLogo compact={collapsed} />
       </div>
 
       {/* ── Navigation ── */}

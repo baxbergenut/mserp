@@ -64,7 +64,7 @@ try {
  data.remote.trucks.push({ ...data.remote.trucks[0], id: 'old-truck', unitNumber: '002', primaryId: 'remote-driver' });
  await page.getByRole('button', { name: 'Refresh status' }).click();
  await page.getByRole('button', { name: 'Review assignments' }).click();
- await expect(dialog).toContainText('002 (deleted in MSERP)'); await expect(dialog).toContainText('Unassigned; retained for retirement');
+ await expect(dialog).toContainText('002 (deleted in Clustie)'); await expect(dialog).toContainText('Unassigned; retained for retirement');
  await dialog.getByRole('button', { name: 'Queue reviewed assignments' }).click(); await expect(dialog).toHaveCount(0);
  assert.equal(writes.at(-1).path, '/api/fleetscope-sync/assignments');
  data.local.sourceRevision++; await page.getByRole('button', { name: 'Refresh status' }).click();

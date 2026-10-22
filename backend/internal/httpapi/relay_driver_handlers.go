@@ -76,7 +76,7 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 		case errors.Is(err, repository.ErrRelayNotConfigured):
 			writeAPIError(w, 503, err.Error())
 		case errors.Is(err, repository.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
-			writeAPIError(w, 404, "Relay account or MSERP driver was not found")
+			writeAPIError(w, 404, "Relay account or Clustie driver was not found")
 		case errors.As(err, &upstream):
 			writeAPIError(w, 502, err.Error())
 		default:
@@ -162,7 +162,7 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 		}
 		id := chi.URLParam(r, "id")
 		if decodeJSON(r, &in) != nil || !isUUID(in.DriverID) || !relayExternalID.MatchString(id) {
-			writeAPIError(w, 400, "Choose a Relay account and MSERP driver")
+			writeAPIError(w, 400, "Choose a Relay account and Clustie driver")
 			return
 		}
 		n, err := repo.LinkRelayRosterDriver(r.Context(), id, in.DriverID, session.User.ID)

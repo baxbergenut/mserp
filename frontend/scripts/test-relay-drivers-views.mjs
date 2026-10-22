@@ -106,7 +106,7 @@ else {
     await page.getByRole('dialog').getByRole('button', { name: 'Disable policy', exact: true }).click();
     await expect(rows.first()).toContainText('Disabled');
     await page.getByRole('button', { name: 'Add driver', exact: true }).click();
-    await page.getByRole('dialog').getByLabel('Active MSERP driver').selectOption('new');
+    await page.getByRole('dialog').getByLabel('Active Clustie driver').selectOption('new');
     await expect(page.getByRole('dialog').getByLabel('First name')).toHaveValue('New');
     await expect(page.getByRole('dialog').getByRole('option', { name: /Terminated/ })).toHaveCount(0);
     await page.getByRole('dialog').getByRole('button', { name: 'Add driver', exact: true }).click();

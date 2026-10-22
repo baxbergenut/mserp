@@ -222,7 +222,7 @@ func (r *FuelRepository) RelayDrivers(ctx context.Context) (RelayDriverList, err
 		} else if e.Status == "inactive" {
 			e.Warning = "Inactive driver is still in Relay."
 		} else if e.DriverID == "" {
-			e.Warning = "Link this Relay account to an MSERP driver to check employment status."
+			e.Warning = "Link this Relay account to a Clustie driver to check employment status."
 		}
 		for _, op := range result.Operations {
 			if op.RelayDriverID == e.Driver.ID {
@@ -390,7 +390,7 @@ func (r *FuelRepository) changeRelayDriverLocked(ctx context.Context, conn *pgxp
 			return mapNotFound(err)
 		}
 		if status != "active" {
-			return &RelayDriverValidation{"Only active MSERP drivers can be added."}
+			return &RelayDriverValidation{"Only active Clustie drivers can be added."}
 		}
 		snap, e := r.refreshRelayDrivers(ctx, conn)
 		if e != nil {
@@ -583,7 +583,7 @@ func (r *FuelRepository) changeRelayDriverLocked(ctx context.Context, conn *pgxp
 	return nil
 }
 
-// A newly created account has an explicit user-selected MSERP identity. Existing
+// A newly created account has an explicit user-selected Clustie identity. Existing
 // accounts still require the assigned reviewer's normal Tasks authorization.
 func (r *FuelRepository) linkCreatedRelayDriver(ctx context.Context, conn *pgxpool.Conn, d relay.Driver, driverID, actor string) error {
 	tx, err := conn.Begin(ctx)

@@ -3,7 +3,7 @@
 // and extensions/theme-{solarized-light,solarized-dark,monokai,monokai-dimmed}.
 // Semantic ERP status colors remain independent of the editor syntax palettes.
 export const themes = [
-  { id: "default", name: "MSERP (default)", description: "Original zinc and blue", background: "#09090b", sidebar: "#0c0c0e", foreground: "#d4d4d8", accent: "#3b82f6" },
+  { id: "default", name: "Clustie (default)", description: "Original zinc and blue", background: "#09090b", sidebar: "#0c0c0e", foreground: "#d4d4d8", accent: "#3b82f6" },
   { id: "solarized-light", name: "Solarized Light", description: "Warm ivory and muted teal", background: "#fdf6e3", sidebar: "#eee8d5", foreground: "#657b83", accent: "#268bd2" },
   { id: "solarized-dark", name: "Solarized Dark", description: "Deep blue-green and soft accents", background: "#002b36", sidebar: "#00212b", foreground: "#93a1a1", accent: "#2aa198" },
   { id: "monokai", name: "Monokai", description: "Charcoal with vivid accents", background: "#272822", sidebar: "#1e1f1c", foreground: "#f8f8f2", accent: "#a6e22e" },

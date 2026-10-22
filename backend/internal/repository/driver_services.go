@@ -198,7 +198,7 @@ func (r *DriverServiceRepository) Status(ctx context.Context, driver string) (Dr
 					}
 				} else if member.Enrolled && member.State == "confirmed" {
 					item.State = "added"
-					item.Message = "Membership confirmed in MSERP."
+					item.Message = "Membership confirmed in Clustie."
 				}
 			}
 		}

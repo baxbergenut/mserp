@@ -34,7 +34,7 @@ export function PrePassVehicleFields({ truck, vehicle, setVehicle, vin, setVIN }
   };
   const field = (name: "unit" | "plate" | "state") => {
     switch (name) {
-      case "unit": return <Field key={name} label="PrePass unit number" hint="Up to 8 letters, digits or hyphens. MSERP’s unit name stays unchanged."><input className={controlClass} required maxLength={8} pattern="[A-Za-z0-9\-]{1,8}" value={vehicle.vehicleNumber} onChange={e => setVehicle(v => ({ ...v, vehicleNumber: e.target.value }))} /></Field>;
+      case "unit": return <Field key={name} label="PrePass unit number" hint="Up to 8 letters, digits or hyphens. Clustie’s unit name stays unchanged."><input className={controlClass} required maxLength={8} pattern="[A-Za-z0-9\-]{1,8}" value={vehicle.vehicleNumber} onChange={e => setVehicle(v => ({ ...v, vehicleNumber: e.target.value }))} /></Field>;
       case "plate": return <Field key={name} label="Plate number"><input className={controlClass} required={!vehicle.licensePlate.temporary} maxLength={9} pattern="[A-Z0-9\-]{5,9}" value={vehicle.licensePlate.number} onChange={e => setVehicle(v => ({ ...v, licensePlate: { ...v.licensePlate, number: e.target.value.toUpperCase() } }))} /></Field>;
       case "state": return <Field key={name} label="Plate state"><input className={controlClass} required minLength={2} maxLength={2} value={vehicle.licensePlate.state} onChange={e => setVehicle(v => ({ ...v, licensePlate: { ...v.licensePlate, state: e.target.value.toUpperCase() } }))} /></Field>;
     }
@@ -55,10 +55,10 @@ export function PrePassVehicleFields({ truck, vehicle, setVehicle, vin, setVIN }
           <dt className="text-zinc-500">Plate</dt><dd className="break-all">{[known.plate ? vehicle.licensePlate.number : "Number needed", known.state ? vehicle.licensePlate.state : "State needed"].join(" · ")}</dd>
         </dl>
       </div>
-      <p className="text-[13px] text-zinc-400">Complete the details MSERP doesn’t have for this truck.</p>
+      <p className="text-[13px] text-zinc-400">Complete the details Clustie doesn’t have for this truck.</p>
     </>}
     <div className="grid gap-4 sm:grid-cols-2">
-      {truck && !truck.vin.trim() && <Field label="VIN" hint="Used for this PrePass enrollment; the MSERP truck profile stays unchanged."><input className={controlClass} required minLength={16} maxLength={19} pattern="[A-Z0-9]{16,19}" value={vin} onChange={e => setVIN(e.target.value.toUpperCase())} /></Field>}
+      {truck && !truck.vin.trim() && <Field label="VIN" hint="Used for this PrePass enrollment; the Clustie truck profile stays unchanged."><input className={controlClass} required minLength={16} maxLength={19} pattern="[A-Z0-9]{16,19}" value={vin} onChange={e => setVIN(e.target.value.toUpperCase())} /></Field>}
       {(["unit", "plate", "state"] as const).filter(name => !known[name]).map(field)}
       <Field label="Declared weight (lb)"><input className={controlClass} type="number" required min={0} max={600000} step={1} value={Number.isFinite(vehicle.declaredWeight) ? vehicle.declaredWeight : ""} onChange={e => setVehicle(v => ({ ...v, declaredWeight: e.target.value === "" ? Number.NaN : Number(e.target.value) }))} /></Field>
       {(["irp", "ifta"] as const).map(kind => <div key={kind} className="contents">

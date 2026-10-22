@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LockKeyhole } from "lucide-react";
+import { BrandLogo } from "@/app/components/BrandLogo";
 import { login } from "@/app/lib/api";
 import { firstAllowedPage, pagePermission } from "@/app/lib/access";
 import { controlClass } from "@/app/components/management/ManagementUI";
@@ -33,8 +33,8 @@ export default function LoginPage() {
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(59,130,246,0.12),transparent_38%)]" />
     <div className="relative w-full max-w-sm animate-fade-in">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10"><LockKeyhole className="h-5 w-5 text-accent" /></div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Sign in to MSERP</h1>
+        <div className="mb-6 flex justify-center"><BrandLogo className="w-56" /></div>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Sign in to Clustie</h1>
         <p className="mt-2 text-sm text-zinc-500">Use your work email and password.</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800 bg-card p-6 shadow-2xl shadow-black/25">

@@ -7,6 +7,15 @@
 }
 @import "./themes.css";
 
+/* Reuse the original artwork's alpha for light lettering on dark surfaces.
+   The clip preserves the full-color symbol and the blue dot over the i. */
+.brand-logo-wordmark {
+  background: #f4f4f5;
+  mask: url("/brand/clustie-logo.png") center / 100% 100% no-repeat;
+  clip-path: polygon(28% 0, 81% 0, 81% 25%, 86% 25%, 86% 0, 100% 0, 100% 100%, 28% 100%);
+}
+html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-logo-wordmark { display: none; }
+
 :root {
   --ui-font-size: 13px;
   --ui-label-size: 12px;

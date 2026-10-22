@@ -167,18 +167,18 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 			if e.TruckID == t.ID {
 				e.TruckUnit = t.Unit
 				if !t.Active {
-					e.Warning = "Inactive MSERP truck remains in PrePass"
+					e.Warning = "Inactive Clustie truck remains in PrePass"
 				} else if strings.TrimSpace(t.VIN) == "" {
-					e.Warning = "MSERP truck profile is missing its VIN"
+					e.Warning = "Clustie truck profile is missing its VIN"
 				} else if !strings.EqualFold(strings.TrimSpace(t.VIN), v.VIN) {
 					e.Warning = "Linked truck VIN differs from PrePass"
 				} else if !strings.EqualFold(strings.TrimSpace(t.Plate), strings.TrimSpace(v.LicensePlateNumber)) || !strings.EqualFold(strings.TrimSpace(t.PlateState), strings.TrimSpace(v.LicensePlateState)) {
-					e.Warning = "Plate differs from MSERP"
+					e.Warning = "Plate differs from Clustie"
 				}
 			}
 		}
 		if e.TruckID == "" {
-			e.Warning = "Not linked to an MSERP truck"
+			e.Warning = "Not linked to a Clustie truck"
 		}
 		keys := fleetTollKeys(v)
 		if e.TruckID != "" && len(keys) > 0 {
@@ -321,7 +321,7 @@ func findPrePassVehicle(s prepass.FleetSnapshot, a, v string) (prepass.Vehicle, 
 func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleetChange, actor string) error {
 	resolvePlate := in.PlateSource != ""
 	if resolvePlate && (in.Action != "edit" || !slices.Contains([]string{"mserp", "prepass"}, in.PlateSource)) {
-		return prepassInvalid("Select the MSERP or PrePass plate to use in both systems")
+		return prepassInvalid("Select the Clustie or PrePass plate to use in both systems")
 	}
 	if in.Action == "link" {
 		if err := validateFleetTollLink(in); err != nil {
@@ -397,7 +397,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		return ErrPrePassFleetConflict
 	}
 	if resolvePlate && (linked == "" || linked != in.TruckID) {
-		return prepassInvalid("Link this PrePass vehicle to the correct MSERP truck before resolving its plate")
+		return prepassInvalid("Link this PrePass vehicle to the correct Clustie truck before resolving its plate")
 	}
 	if in.Action == "assign" {
 		if before.TransponderNumber != "" {
@@ -632,7 +632,7 @@ func (r *TollRepository) checkPrePassTruck(ctx context.Context, tx pgx.Tx, in Pr
 		}
 	}
 	if !missingVIN && strings.ToUpper(strings.TrimSpace(vin)) != in.VIN {
-		return prepassInvalid("The selected MSERP truck must have the same VIN. Correct its profile first.")
+		return prepassInvalid("The selected Clustie truck must have the same VIN. Correct its profile first.")
 	}
 	if missingVIN {
 		// A missing VIN may be supplied for this enrollment, without changing the
@@ -642,18 +642,18 @@ func (r *TollRepository) checkPrePassTruck(ctx context.Context, tx pgx.Tx, in Pr
 			return err
 		}
 		if !prepass.FleetVIN.MatchString(in.VIN) || otherTruck {
-			return prepassInvalid("Provide a valid VIN that does not belong to another MSERP truck")
+			return prepassInvalid("Provide a valid VIN that does not belong to another Clustie truck")
 		}
 	}
 	if in.Action == "add" && !active {
-		return prepassInvalid("Only active MSERP trucks can be added to PrePass")
+		return prepassInvalid("Only active Clustie trucks can be added to PrePass")
 	}
 	var conflict bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prepass_fleet_links WHERE environment=$1 AND truck_id=$2 AND (account_number<>$3 OR vin<>$4))`, r.prepassEnvironment, in.TruckID, in.AccountNumber, in.VIN).Scan(&conflict); err != nil {
 		return err
 	}
 	if conflict {
-		return prepassInvalid("This MSERP truck is already linked to another PrePass vehicle")
+		return prepassInvalid("This Clustie truck is already linked to another PrePass vehicle")
 	}
 	return nil
 }

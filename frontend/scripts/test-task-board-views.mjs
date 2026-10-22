@@ -218,7 +218,7 @@ try {
   await review.getByLabel('Unit number', { exact: true }).fill('0013');
   await page.clock.runFor(300);
   await page.screenshot({ animations: 'disabled', path: join(tmpdir(), 'mserp-five-eld-review.png') });
-  await review.getByRole('button', { name: 'Add truck to MSERP', exact: true }).click();
+  await review.getByRole('button', { name: 'Add truck to Clustie', exact: true }).click();
   await expect(review).toHaveCount(0);
   await page.goto(`${base}/driver-board`);
   await expect(page.getByText(/totals for shown drivers|Five ELD: .*need review/)).toHaveCount(0);

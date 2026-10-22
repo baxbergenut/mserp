@@ -66,7 +66,7 @@ func registerPrePassFleetRoutes(router chi.Router, logger *slog.Logger, repo *re
 		case errors.Is(err, repository.ErrPrePassFleetNotConfigured):
 			writeAPIError(w, 503, err.Error())
 		case errors.Is(err, repository.ErrNotFound):
-			writeAPIError(w, 404, "MSERP truck was not found")
+			writeAPIError(w, 404, "Clustie truck was not found")
 		case errors.As(err, &upstream):
 			writeAPIError(w, 502, err.Error())
 		default:

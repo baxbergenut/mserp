@@ -280,7 +280,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 				if fake.calls != 1 {
 					t.Fatal("copying PrePass plate sent a vendor mutation")
 				}
-				if choice(truck).Plate != "VENDOR1" || choice(truck).PlateState != "IL" || list().Vehicles[0].Warning == "Plate differs from MSERP" {
+				if choice(truck).Plate != "VENDOR1" || choice(truck).PlateState != "IL" || list().Vehicles[0].Warning == "Plate differs from Clustie" {
 					t.Fatal("PrePass source did not update local profile")
 				}
 				exec(`UPDATE trucks SET license_plate='BAD',updated_at=clock_timestamp() WHERE id=$1`, truck)
