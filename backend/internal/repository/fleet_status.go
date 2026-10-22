@@ -167,24 +167,12 @@ func (r *FleetRepository) StatusHistory(ctx context.Context, kind, id, track, st
 	rows, err := r.pool.Query(ctx, `WITH periods AS (
  SELECT h.*,lead(effective_at) OVER(PARTITION BY entity_kind,entity_id,track ORDER BY effective_at,id) AS ended_at
  FROM fleet_status_history h WHERE id<=$1
- ), assignments AS (
- SELECT truck_id,assigned_at,unassigned_at FROM truck_driver_assignments WHERE driver_id=$3::uuid
- UNION ALL SELECT a.truck_id,greatest(a.assigned_at,team.start_week::timestamp AT TIME ZONE 'America/New_York'),
- least(a.unassigned_at,team.end_week::timestamp AT TIME ZONE 'America/New_York')
- FROM driver_teams team JOIN truck_driver_assignments a ON a.driver_id=team.main_driver_id
- WHERE team.team_driver_id=$3::uuid AND a.assigned_at<coalesce(team.end_week::timestamp AT TIME ZONE 'America/New_York','infinity'::timestamptz)
- AND coalesce(a.unassigned_at,'infinity'::timestamptz)>team.start_week::timestamp AT TIME ZONE 'America/New_York'
- ), visible AS (
- SELECT p.*,p.track AS shown_track,p.effective_at AS started,p.ended_at AS ended FROM periods p WHERE entity_kind=$2 AND entity_id=$3::uuid AND p.track<>'dispatch'
- UNION ALL SELECT p.*,'assigned_truck',greatest(p.effective_at,a.assigned_at),least(p.ended_at,a.unassigned_at)
- FROM periods p JOIN assignments a ON a.truck_id=p.entity_id
- WHERE $2='driver' AND p.entity_kind='truck' AND p.track='condition'
- AND p.effective_at<coalesce(a.unassigned_at,'infinity'::timestamptz) AND coalesce(p.ended_at,'infinity'::timestamptz)>a.assigned_at
- ) SELECT id,entity_kind,entity_id::text,entity_name,shown_track,previous_status,status,started,ended,recorded_at,actor_name,source,source_ref,related_truck_name,action_id,baseline,reason
- FROM visible WHERE ($4='' OR shown_track=$4) AND ($5='' OR status=$5)
- AND ($6='' OR coalesce(ended,'infinity'::timestamptz)>=($6::date::timestamp AT TIME ZONE 'America/New_York'))
- AND ($7='' OR started<(($7::date+1)::timestamp AT TIME ZONE 'America/New_York'))
- ORDER BY started DESC,id DESC LIMIT 51 OFFSET $8`, result.Snapshot, kind, id, track, status, from, to, (page-1)*50)
+ ) SELECT id,entity_kind,entity_id::text,entity_name,track,previous_status,status,effective_at,ended_at,recorded_at,actor_name,source,source_ref,related_truck_name,action_id,baseline,reason
+ FROM periods WHERE entity_kind=$2 AND entity_id=$3::uuid AND track<>'dispatch'
+ AND ($4='' OR track=$4) AND ($5='' OR status=$5)
+ AND ($6='' OR coalesce(ended_at,'infinity'::timestamptz)>=($6::date::timestamp AT TIME ZONE 'America/New_York'))
+ AND ($7='' OR effective_at<(($7::date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ ORDER BY effective_at DESC,id DESC LIMIT 51 OFFSET $8`, result.Snapshot, kind, id, track, status, from, to, (page-1)*50)
 	if err != nil {
 		return result, err
 	}

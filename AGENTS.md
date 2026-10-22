@@ -2485,8 +2485,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   personal reasons never restrict trucks. Board editors may place restrictions,
   while existing Fleet/work-order permissions govern releases. Independent holds
   remain effective until explicitly released; loads and finances stay intact.
-- Driver/Truck profiles have Status history tables/timelines with effective time,
-  recorded time, actor/source snapshots and clipped assigned-truck periods.
+- Driver/Truck profiles have Status history tables/timelines showing Status,
+  Date changed, and Changed by, with recorded time and source in details.
+  Driver histories show only driver availability/employment, defaulting to
+  availability; truck condition history appears only on truck profiles.
   Profile history excludes operational dispatch events and filter choices;
   Status Board edit history retains the operational audit.
   No-op writes and GETs add no history. Newest transitions may be backdated after
