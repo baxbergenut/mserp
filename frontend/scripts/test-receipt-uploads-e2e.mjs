@@ -83,9 +83,7 @@ try {
   const options = await api('get', '/maintenance/options');
   await page.getByRole('button', { name: 'Add work order', exact: true }).click();
   await page.getByLabel('Maintenance truck', { exact: true }).selectOption(options.trucks.find(truck => truck.active).id);
-  await page.getByLabel('Service type', { exact: true }).selectOption('other');
   await page.getByLabel('Work order description', { exact: true }).fill(note + ' work order');
-  await page.getByLabel('Maintenance amount', { exact: true }).fill('25.00');
   await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
   await page.getByRole('button', { name: 'Save work order', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -96,6 +94,7 @@ try {
   const workReceipt = await page.request.get(access.base + '/api/maintenance/documents/' + visit.documents[0].id);
   expect(await workReceipt.body()).toEqual(file.buffer);
   expect(extracted).toEqual([]);
+  await page.goto(access.base + '/maintenance');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Add work order', exact: true }).click();
   await page.getByLabel('Upload receipt / invoice', { exact: true }).setInputFiles(file);
@@ -104,7 +103,7 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-work-order-receipt-mobile.png') });
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
-  // Category view permits downloads, while upload requires edit or ownership plus create.
+  // Category view permits downloads; uploads require Edit or Add with a matching creator role.
   const suffix = Date.now();
   const makeUser = async (kind, categoryAccess) => {
     const name = `Receipt ${kind} ${suffix}`;

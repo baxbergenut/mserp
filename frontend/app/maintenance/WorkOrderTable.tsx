@@ -55,9 +55,9 @@ export function WorkOrderTable({records,options,stage,loading,embeddedTruck,truc
         </> : <>
           <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{date(archived?record.updatedAt:record.serviceDate)}</td>
           {archived ? <td className="p-3 text-xs text-zinc-500">{workStatusLabels[state]}</td> : <>
-            <td className="whitespace-nowrap p-3 text-right font-mono">{record.noCharge?"No charge":amount(paid?record.paymentConfirmation?.amount ?? record.expense?.amount:record.expense?.baseAmount ?? record.expense?.amount)}</td>
-            <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{paid?record.noCharge?"—":record.paymentConfirmation?.method || (record.historicalPaid?record.expense?.paymentType:undefined) || "—":record.expense?"Invoice entered":"No invoice yet"}</td>
-            {paid && <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{record.paymentConfirmation?.paidBy || (record.historicalPaid?record.expense?.paidBy:undefined) || "—"}</td>}
+            <td className="whitespace-nowrap p-3 text-right font-mono">{record.noCharge?"No charge":amount(paid?record.expense?.amount ?? record.paymentConfirmation?.amount:record.expense?.baseAmount ?? record.expense?.amount)}</td>
+            <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{paid?record.noCharge?"—":record.expense?.paymentType || record.paymentConfirmation?.method || "—":record.expense?"Invoice entered":"No invoice yet"}</td>
+            {paid && <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{record.expense?.paidBy || record.paymentConfirmation?.paidBy || "—"}</td>}
           </>}
         </>}
       </tr>;

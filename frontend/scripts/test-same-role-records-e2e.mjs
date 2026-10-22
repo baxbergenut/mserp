@@ -99,6 +99,33 @@ try {
   const readOnlyPage = await viewer.context.newPage();
   await readOnlyPage.goto(`${access.base}/maintenance/detail?id=${work.id}`);
   await expect(readOnlyPage.getByLabel('Work order description', { exact: true })).toBeDisabled();
+  // Paid work supports full edits, retaining the original confirmation and audit.
+  const paidInput={...workInput,id:randomUUID(),status:'completed',workStatus:'completed',serviceDate:'2026-10-22',services:[{typeCode:'electrical',name:'Electrical',amount:'100.00',trackingCode:''}],expense:{categoryId:options.categoryId,expenseDate:'2026-10-22',amount:'100.00',baseAmount:'100.00',costBreakdown:[],expenseType:'Electrical',coveredBy:'Company',paidBy:alice.name,paymentType:'Check'}};
+  let paid=await api(alice,'POST','/maintenance',paidInput);
+  paid=await api(alice,'PUT','/maintenance/'+paid.id,{...paidInput,version:paid.version,workStatus:'closed',confirmPayment:true,expense:{...paidInput.expense,updatedAt:paid.expense.updatedAt}});
+  const confirmation=structuredClone(paid.paymentConfirmation);
+  await page.goto(access.base+'/maintenance/detail?id='+paid.id);
+  await page.getByRole('button',{name:'Edit work order',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Work order details',exact:true});
+  await dialog.getByLabel('Maintenance payment method',{exact:true}).selectOption('Cash');
+  await dialog.getByLabel('Maintenance amount',{exact:true}).fill('150.50');
+  await dialog.getByLabel('Maintenance paid by',{exact:true}).selectOption(bob.name);
+  await dialog.getByLabel('Maintenance reference number',{exact:true}).fill('CORRECTED-INVOICE');
+  await dialog.getByLabel('Work order description',{exact:true}).fill('Corrected completed repair');
+  await dialog.getByLabel('Service type',{exact:true}).selectOption('brakes');
+  await dialog.getByLabel('Maintenance truck',{exact:true}).selectOption(options.trucks[1].id);
+  await dialog.getByLabel('Vendor name',{exact:true}).fill('Corrected shop');
+  await dialog.getByRole('button',{name:'Save work order',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  const corrected=await api(bob,'GET','/maintenance/'+paid.id);
+  expect(corrected.expense.paymentType).toBe('Cash');expect(corrected.expense.amount).toBe('150.50');expect(corrected.workStatus).toBe('closed');
+  expect(corrected.expense.paidBy).toBe(bob.name);expect(corrected.expense.referenceNumber).toBe('CORRECTED-INVOICE');
+  expect(corrected.notes).toBe('Corrected completed repair');expect(corrected.vendorName).toBe('Corrected shop');expect(corrected.truckId).toBe(options.trucks[1].id);expect(corrected.services[0].typeCode).toBe('brakes');
+  const {invoiceCorrections,...originalConfirmation}=corrected.paymentConfirmation;
+  expect(originalConfirmation).toEqual(confirmation);expect(invoiceCorrections[0]).toMatchObject({method:'Cash',amount:'150.50',correctedBy:bob.name});
+  await readOnlyPage.goto(access.base+'/maintenance/detail?id='+paid.id);
+  await expect(readOnlyPage.getByRole('heading',{name:'Work order finished',exact:true})).toBeVisible();
+  await expect(readOnlyPage.getByRole('button',{name:'Edit work order',exact:true})).toHaveCount(0);
   // Current role IDs are authoritative even after the creator changes roles.
   const creator = (await api(admin, 'GET', '/settings/access')).users.find(u => u.username === alice.name);
   await api(admin, 'PUT', `/settings/users/${creator.id}`, { ...creator, roleId: otherRole.id });

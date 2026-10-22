@@ -467,7 +467,7 @@ Completed - paid. Canceled keeps canceled/voided records out of the paid list.
 In progress includes newly created, scheduled and active repairs. Its rows show
 truck/hold, service type, description, shop, planning dates, work stage and creator.
 Pending payment shows service date, invoice amount (unknown stays blank) and
-whether an invoice is entered. Paid shows the confirmed payment amount, method
+whether an invoice is entered. Paid shows the current recorded invoice amount, method
 and payer; explicitly No charge orders are identified without inventing payment.
 Filtering and pagination stay server-side; tab changes cannot momentarily show
 another stage's rows. There is no Kanban board or work-order summary-card strip.
@@ -503,7 +503,13 @@ never release a truck automatically.
 Invoice & payment reuses the existing invoice amount, reference, payment method,
 Paid by and Responsibility fields. Saving an invoice alone does not confirm paid.
 Confirm paid & finish explicitly confirms an already made payment and stores an
-immutable confirmation of those invoice fields and the confirming employee/time.
+original confirmation of those invoice fields and the confirming employee/time.
+Paid orders expose **Edit work order** for every ordinary field. Versioned saves
+keep that original confirmation and append `invoiceCorrections` when amount,
+method, payer or reference changes; each save keeps its before/after audit. The
+paid directory displays the corrected current invoice. Existing finalized payroll,
+collection identity and EFS collectible-total safeguards remain enforced. These
+edits do not issue money, create recovery payments, or replay sheet exports.
 It never issues money or alters expense_payments/driver-owner recovery. There is
 no separate shop-payment screen, endpoint or ledger. Done requires finished work,
 release of this order's hold and either that confirmation or explicit No charge.
