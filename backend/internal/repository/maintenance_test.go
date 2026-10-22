@@ -127,6 +127,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	identityMigration, err := os.ReadFile("../../sql/141_datatruck_identity.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	programMigration, err := os.ReadFile("../../sql/129_service_programs.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +169,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(identityMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(scaleMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(methodMigration), "\r\n", "\n"), "", 1)
 				statusMigration, readErr := os.ReadFile("../../sql/137_fleet_status_history.sql")
@@ -231,6 +236,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				}
 				exec(string(statusMigration))
 				exec(string(scaleMigration))
+				exec(string(identityMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))

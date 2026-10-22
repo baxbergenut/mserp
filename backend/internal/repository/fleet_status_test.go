@@ -56,6 +56,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 			} else {
 				execAdmin(prefix)
 				execAdmin(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "137")
 			}
 			for _, name := range []string{"fleet_status_control", "fleet_status_rules", "fleet_status_history"} {
 				var owner string
