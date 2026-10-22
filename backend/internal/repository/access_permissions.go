@@ -13,6 +13,8 @@ type Permission struct {
 
 // Code-owned capabilities. Unknown keys and incomplete prerequisites never grant access.
 var Permissions = []Permission{
+	{Key: "pti.read", Label: "View Weekly PTI", Group: "Weekly PTI", Action: "read", Requires: []string{"drivers.read", "trucks.read"}},
+	{Key: "pti.edit", Label: "Update Weekly PTI", Group: "Weekly PTI", Action: "edit", Requires: []string{"pti.read"}},
 	{Key: "service_programs.manage", Label: "Manage Service programs", Group: "Service programs", Action: "edit", Requires: []string{}},
 	{Key: "inventory.read", Label: "View Inventory", Group: "Inventory", Action: "read", Requires: []string{}},
 	{Key: "inventory.manage", Label: "Manage Inventory", Group: "Inventory", Action: "edit", Requires: []string{"inventory.read"}},

@@ -309,6 +309,15 @@ func main() {
 		}})
 	}()
 	schedulerDone := make(chan struct{})
+	ptiAutomationDone := make(chan struct{})
+	go func() {
+		defer close(ptiAutomationDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "weekly-pti", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 30*time.Second)
+			defer cancel()
+			return fleetRepo.EnsureCurrentPTIWeek(bounded)
+		}})
+	}()
 	boardAutomationDone := make(chan struct{})
 	go func() {
 		defer close(boardAutomationDone)
@@ -471,6 +480,10 @@ func main() {
 	}
 	select {
 	case <-boardAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-ptiAutomationDone:
 	case <-shutdownCtx.Done():
 	}
 }
