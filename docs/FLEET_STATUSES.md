@@ -47,7 +47,7 @@ history shows only that driver's availability and employment, defaulting to
 availability. Truck condition history appears only on the truck profile.
 Operational dispatch events remain stored for audit and are excluded from
 profile history and its filters before pagination. Tables show Status, Date
-changed, and Changed by; timelines show the same single effective change date.
+changed, Duration, and Changed by; timelines show the same change date and duration.
 New York times are used, and recorded time stays in row details. Baselines show
 Date unknown rather than inventing a change date. Existing board edit/undo
 history remains intact; undo cannot bypass holds.

@@ -2486,7 +2486,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   while existing Fleet/work-order permissions govern releases. Independent holds
   remain effective until explicitly released; loads and finances stay intact.
 - Driver/Truck profiles have Status history tables/timelines showing Status,
-  Date changed, and Changed by, with recorded time and source in details.
+  Date changed, Duration, and Changed by, with recorded time and source in details.
   Driver histories show only driver availability/employment, defaulting to
   availability; truck condition history appears only on truck profiles.
   Profile history excludes operational dispatch events and filter choices;

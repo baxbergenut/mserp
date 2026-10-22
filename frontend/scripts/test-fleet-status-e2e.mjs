@@ -35,11 +35,11 @@ try{
  await page.getByRole('button',{name:'Change condition',exact:true}).click();await page.getByLabel('Truck condition',{exact:true}).selectOption('ready');await page.getByRole('button',{name:'Save status',exact:true}).click();
  expect((await api('get','/drivers/'+driver.id)).availabilityStatus).toBe('family_issue');
  await page.getByRole('tab',{name:'Status history',exact:true}).click();await expect(page.getByRole('table')).toBeVisible();await expect(page.getByRole('table').getByText('Shop',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-table.png'),fullPage:true});
- expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Changed by']);
+ expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Duration','Changed by']);
  await page.getByRole('button',{name:'Timeline',exact:true}).click();await expect(page.locator('ol')).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-timeline.png'),fullPage:true});
  await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('tab',{name:'Status history',exact:true}).click();await expect(page.getByRole('table')).toBeVisible();
  await expect(page.getByLabel('History track')).toHaveValue('availability');expect(await page.getByLabel('History track').locator('option').allTextContents()).toEqual(['All types','Driver availability','Employment']);
- expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Changed by']);
+ expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Status','Date changed','Duration','Changed by']);
  const statusChoices=await page.getByLabel('Filter status').locator('option').allTextContents();expect(statusChoices).toEqual(expect.arrayContaining(['Home','Vacation']));for(const unrelated of ['DISPATCHED','ENROUTE','RESERVED','Ready','Shop','OOS','Hold'])expect(statusChoices).not.toContain(unrelated);
  expect((await api('get','/drivers/'+driver.id+'/status-history')).items.every(v=>v.entityKind==='driver'&&v.track!=='dispatch')).toBe(true);
  expect((await api('get','/drivers/'+driver.id+'/status-history?track=assigned_truck')).items).toEqual([]);
