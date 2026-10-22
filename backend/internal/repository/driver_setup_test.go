@@ -90,10 +90,17 @@ func TestDriverSetupDatabase(t *testing.T) {
 			if err != nil || truck.DriverID == nil || *truck.DriverID != driver.ID || truck.Status != "assigned" || truck.IsCompanyOwned || truck.OwnerName != driver.FullName {
 				t.Fatalf("truck/ownership: %+v %v", truck, err)
 			}
-			var week string
-			if err = pool.QueryRow(ctx, `SELECT assigned_at::date::text FROM truck_driver_assignments WHERE driver_id=$1 AND unassigned_at IS NULL`, driver.ID).Scan(&week); err != nil || week != "2026-10-05" {
-				t.Fatalf("dated assignment: %s %v", week, err)
+			checkStart := func(id string) {
+				t.Helper()
+				var correct bool
+				if err := pool.QueryRow(ctx, `SELECT roster_start_week='2026-10-07'
+ AND EXISTS(SELECT 1 FROM truck_driver_assignments WHERE driver_id=d.id AND unassigned_at IS NULL AND (assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-07')
+ AND EXISTS(SELECT 1 FROM driver_dispatcher_assignments WHERE driver_id=d.id AND unassigned_at IS NULL AND (assigned_at AT TIME ZONE 'America/New_York')::date='2026-10-07')
+ FROM drivers d WHERE id=$1`, id).Scan(&correct); err != nil || !correct {
+					t.Fatalf("setup must preserve the Wednesday hire date: %v", err)
+				}
 			}
+			checkStart(driver.ID)
 			raw, _ := json.Marshal(driver)
 			if strings.Contains(string(raw), "driverHome") || strings.Contains(string(raw), "homeVersion") {
 				t.Fatal("retired address exposed")
@@ -147,6 +154,7 @@ func TestDriverSetupDatabase(t *testing.T) {
 			if err != nil || completed.TruckID == nil {
 				t.Fatalf("intake truck: %+v %v", completed, err)
 			}
+			checkStart(completed.ID)
 		})
 	}
 }
