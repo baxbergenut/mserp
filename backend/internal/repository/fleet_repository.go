@@ -23,50 +23,55 @@ func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
 }
 
 type Driver struct {
-	TeamVersion        int        `json:"teamVersion"`
-	TeamTruckID        *string    `json:"teamTruckId,omitempty"`
-	TeamTruckUnit      *string    `json:"teamTruckUnit,omitempty"`
-	TeamStartWeek      *string    `json:"teamStartWeek,omitempty"`
-	TeamRole           string     `json:"teamRole,omitempty"`
-	TeamPartnerID      *string    `json:"teamPartnerId,omitempty"`
-	TeamPartnerName    *string    `json:"teamPartnerName,omitempty"`
-	Status             string     `json:"status"`
-	TerminationDate    *time.Time `json:"terminationDate"`
-	ID                 string     `json:"id"`
-	FullName           string     `json:"fullName"`
-	FirstName          *string    `json:"firstName"`
-	LastName           *string    `json:"lastName"`
-	EmploymentType     string     `json:"employmentType"`
-	DriverType         string     `json:"driverType"`
-	IsOwnerOperator    bool       `json:"isOwnerOperator"`
-	PayType            string     `json:"payType"`
-	PayRate            float64    `json:"payRate"`
-	Phone              *string    `json:"phone"`
-	Email              *string    `json:"email"`
-	LicenseNumber      *string    `json:"licenseNumber"`
-	LicenseState       *string    `json:"licenseState"`
-	LicenseExpires     *time.Time `json:"licenseExpires"`
-	HireDate           *time.Time `json:"hireDate"`
-	Address            *string    `json:"address"`
-	City               *string    `json:"city"`
-	State              *string    `json:"state"`
-	PostalCode         *string    `json:"postalCode"`
-	EmergencyContact   *string    `json:"emergencyContact"`
-	DispatcherID       *string    `json:"dispatcherId"`
-	DispatcherName     *string    `json:"dispatcherName"`
-	TruckID            *string    `json:"truckId"`
-	TruckUnit          *string    `json:"truckUnit"`
-	Active             bool       `json:"active"`
-	Notes              *string    `json:"notes"`
-	CDLFileID          *string    `json:"cdlFileId"`
-	CDLFileName        *string    `json:"cdlFileName"`
-	CDLFileContentType *string    `json:"cdlFileContentType"`
-	CDLFileSizeBytes   *int64     `json:"cdlFileSizeBytes"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	EmploymentStatus     string     `json:"employmentStatus"`
+	TruckOperatingStatus string     `json:"truckOperatingStatus"`
+	AvailabilityStatus   string     `json:"availabilityStatus"`
+	StatusVersion        int        `json:"statusVersion"`
+	TeamVersion          int        `json:"teamVersion"`
+	TeamTruckID          *string    `json:"teamTruckId,omitempty"`
+	TeamTruckUnit        *string    `json:"teamTruckUnit,omitempty"`
+	TeamStartWeek        *string    `json:"teamStartWeek,omitempty"`
+	TeamRole             string     `json:"teamRole,omitempty"`
+	TeamPartnerID        *string    `json:"teamPartnerId,omitempty"`
+	TeamPartnerName      *string    `json:"teamPartnerName,omitempty"`
+	Status               string     `json:"status"`
+	TerminationDate      *time.Time `json:"terminationDate"`
+	ID                   string     `json:"id"`
+	FullName             string     `json:"fullName"`
+	FirstName            *string    `json:"firstName"`
+	LastName             *string    `json:"lastName"`
+	EmploymentType       string     `json:"employmentType"`
+	DriverType           string     `json:"driverType"`
+	IsOwnerOperator      bool       `json:"isOwnerOperator"`
+	PayType              string     `json:"payType"`
+	PayRate              float64    `json:"payRate"`
+	Phone                *string    `json:"phone"`
+	Email                *string    `json:"email"`
+	LicenseNumber        *string    `json:"licenseNumber"`
+	LicenseState         *string    `json:"licenseState"`
+	LicenseExpires       *time.Time `json:"licenseExpires"`
+	HireDate             *time.Time `json:"hireDate"`
+	Address              *string    `json:"address"`
+	City                 *string    `json:"city"`
+	State                *string    `json:"state"`
+	PostalCode           *string    `json:"postalCode"`
+	EmergencyContact     *string    `json:"emergencyContact"`
+	DispatcherID         *string    `json:"dispatcherId"`
+	DispatcherName       *string    `json:"dispatcherName"`
+	TruckID              *string    `json:"truckId"`
+	TruckUnit            *string    `json:"truckUnit"`
+	Active               bool       `json:"active"`
+	Notes                *string    `json:"notes"`
+	CDLFileID            *string    `json:"cdlFileId"`
+	CDLFileName          *string    `json:"cdlFileName"`
+	CDLFileContentType   *string    `json:"cdlFileContentType"`
+	CDLFileSizeBytes     *int64     `json:"cdlFileSizeBytes"`
+	CreatedAt            time.Time  `json:"createdAt"`
+	UpdatedAt            time.Time  `json:"updatedAt"`
 }
 
 type DriverInput struct {
+	StatusVersion         *int
 	PreserveFields        []string
 	NewTruck              *TruckInput
 	NewTruckOwnedByDriver bool
@@ -115,6 +120,7 @@ func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSet
 }
 
 type Truck struct {
+	StatusVersion       int        `json:"statusVersion"`
 	OperatingStatus     string     `json:"operatingStatus"`
 	OwnerSince          *string    `json:"ownerSince"`
 	OwnershipVersion    string     `json:"ownershipVersion"`
@@ -149,6 +155,8 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	StatusVersion            *int
+	StatusActor              string
 	AddToDataTruck           bool
 	PreserveFields           []string
 	OwnershipEffectiveDate   string
@@ -280,6 +288,9 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.ChargeActor, "profile"); err != nil {
+		return Driver{}, err
+	}
 	if input.IsTeamDriver != nil && *input.IsTeamDriver {
 		if err = lockDriverTeamSetup(ctx, tx); err != nil {
 			return Driver{}, err
@@ -418,6 +429,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if err = setBoardActor(ctx, tx, input.ChargeActor, "profile"); err != nil {
 		return Driver{}, err
 	}
+	var oldStatus string
+	var statusVersion int
+	if err = tx.QueryRow(ctx, `SELECT status,status_version FROM drivers WHERE id=$1 FOR UPDATE`, id).Scan(&oldStatus, &statusVersion); err != nil {
+		return Driver{}, mapNotFound(err)
+	}
+	if input.ChargeActor != "" && input.Status != "" && input.Status != oldStatus && (input.StatusVersion == nil || *input.StatusVersion != statusVersion) {
+		return Driver{}, ErrDriverBoardConflict
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Driver{}, err
 	}
@@ -511,7 +530,8 @@ SELECT d.id, d.full_name, d.first_name, d.last_name, (driver_employment_type(d.i
 	CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
 	d.created_at, d.updated_at, d.status, d.termination_date,
-	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week
+	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week,
+ CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(fleet_status_driver_truck(d.id)),'')
 FROM drivers d
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
  p.id::text partner_id,p.full_name partner_name,m.dispatcher_id main_dispatcher_id,dt.start_week::text start_week,
@@ -551,6 +571,7 @@ func scanDriver(row rowScanner) (Driver, error) {
 		&value.EmploymentType, &value.TeamRole, &value.TeamPartnerID, &value.TeamPartnerName,
 		&value.TeamVersion, &value.TeamTruckID, &value.TeamTruckUnit,
 		&value.TeamStartWeek,
+		&value.EmploymentStatus, &value.AvailabilityStatus, &value.StatusVersion, &value.TruckOperatingStatus,
 	)
 	value.DriverType = driverBoardType(value.PayType, value.IsOwnerOperator, investorTruck, ownTruck)
 	if value.FirstName == nil {
@@ -635,6 +656,9 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.StatusActor, "profile"); err != nil {
+		return Truck{}, err
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Truck{}, err
 	}
@@ -707,6 +731,17 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.StatusActor, "profile"); err != nil {
+		return Truck{}, err
+	}
+	var oldStatus string
+	var statusVersion int
+	if err = tx.QueryRow(ctx, `SELECT status,status_version FROM trucks WHERE id=$1 FOR UPDATE`, id).Scan(&oldStatus, &statusVersion); err != nil {
+		return Truck{}, mapNotFound(err)
+	}
+	if input.StatusActor != "" && input.Status != oldStatus && (input.StatusVersion == nil || *input.StatusVersion != statusVersion) {
+		return Truck{}, ErrDriverBoardConflict
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Truck{}, err
 	}
@@ -767,7 +802,7 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
 	t.created_at, t.updated_at,
 	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
-	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id)
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
@@ -786,7 +821,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 		&value.Notes, &value.IRPFileID, &value.IRPFileName,
 		&value.IRPFileContentType, &value.IRPFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt,
-		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus,
+		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus, &value.StatusVersion,
 	)
 	value.UnitNumber = normalizeTruckUnit(value.UnitNumber)
 	value.DriverName = formatPersonNamePtr(value.DriverName)

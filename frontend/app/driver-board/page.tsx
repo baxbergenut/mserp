@@ -3,6 +3,10 @@
 
 import { Fragment, memo, useContext, useMemo, useState } from "react";
 import { FleetStatusBadge } from "../components/FleetStatusBadge";
+import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
+import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
+import type {Driver} from "@/app/lib/types";
+import {useEffect} from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
@@ -54,6 +58,9 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
 });
 
 export default function DriverBoardPage() {
+  const [terminating,setTerminating]=useState<Driver|null>(null);
+  const [statusChoices,setStatusChoices]=useState(statuses);
+  useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
   const state = useDriverBoard(etaEditor?.id);
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
@@ -130,7 +137,7 @@ export default function DriverBoardPage() {
 
 
       <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled} />
-      <BoardFilter label="Status" options={[["", "No status"], ...statuses.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
+      <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "All changes saved" : "Read only"}</span>
@@ -213,7 +220,7 @@ export default function DriverBoardPage() {
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
                 <td className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
                   canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
-                  onChange={value => edit(d.id, "status", value)} onAdvance={async () => {
+                  choices={statusChoices} onChange={value => {if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
@@ -241,6 +248,7 @@ export default function DriverBoardPage() {
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
     {etaEditor && <ETAEditor key={`${etaEditor.id}:${board?.loads[etaEditor.id]?.automation?.context ?? ""}:${board?.loads[etaEditor.id]?.automation?.stopType ?? ""}`} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
   </div>;

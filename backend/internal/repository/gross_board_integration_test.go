@@ -83,6 +83,12 @@ func TestGrossBoardDatabase(t *testing.T) {
  CREATE FUNCTION `+functionSchema+`.payroll_driver_at`+teamFunction); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, `ALTER TABLE pg_temp.drivers ADD COLUMN availability_status text NOT NULL DEFAULT 'active';
+ CREATE FUNCTION `+functionSchema+`.fleet_status_lock() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
+ CREATE FUNCTION `+functionSchema+`.fleet_status_enabled() RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+ CREATE FUNCTION `+functionSchema+`.fleet_status_driver_truck(driver uuid) RETURNS uuid LANGUAGE sql AS $$ SELECT truck_id FROM truck_driver_assignments WHERE driver_id=driver AND unassigned_at IS NULL LIMIT 1 $$;`); err != nil {
+		t.Fatal(err)
+	}
 	migration, err := os.ReadFile("../../sql/027_add_gross_board_review_values.sql")
 	if err != nil {
 		t.Fatal(err)

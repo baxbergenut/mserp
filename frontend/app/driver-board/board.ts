@@ -63,6 +63,7 @@ export function statusColor(status: string) {
     case "HOME": case "HOME (YARD)": return "bg-[#ff0000] text-black";
     case "VACATION": return "bg-[#e06666] text-black";
     case "SHOP": return "bg-[#ff9900] text-white";
+    case "HOLD": return "bg-orange-500/20 text-orange-300";
     case "STOP": return "bg-[#990000] text-black";
   }
   // The remaining sheet choices have white cells with black text.

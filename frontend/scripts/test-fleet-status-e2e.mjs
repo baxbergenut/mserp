@@ -1,0 +1,52 @@
+// Synthetic local API/database/UI coverage. Never run against production.
+import {readFile,mkdir} from 'node:fs/promises';
+import {dirname,join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {chromium,expect} from '@playwright/test';
+
+const accessFile=process.env.MSERP_REVIEW_ACCESS_FILE;
+const access=JSON.parse(await readFile(accessFile,'utf8'));
+const database=new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
+if(!['127.0.0.1','localhost'].includes(new URL(access.base).hostname)||!['127.0.0.1','localhost'].includes(database.hostname)||!database.pathname.endsWith('_test')||!/^review_[a-f0-9]+$/.test(access.schema))throw Error('A disposable local review is required');
+database.searchParams.set('search_path',access.schema+',public');database.searchParams.set('role','mserp_app');
+const binary=join(dirname(accessFile),process.platform==='win32'?'api.exe':'api');
+const cliEnv={...process.env,DATABASE_URL:database.toString(),DATATRUCK_API_KEY:'test-disabled',DATATRUCK_COMPANY_NAME:'test',RELAY_API_KEY:'test-disabled',RELAY_PRODUCTION_API_KEY:'test-disabled',PREPASS_CLIENT_ID:'test-disabled',PREPASS_CLIENT_SECRET:'test-disabled',FRONTEND_ORIGIN:access.base,AUTH_COOKIE_SECURE:'false',SCHEDULED_SYNCS_ENABLED:'false'};
+const cli=args=>execFileSync(binary,args,{cwd:dirname(accessFile),env:cliEnv,encoding:'utf8',windowsHide:true});
+const preview=JSON.parse(cli(['-fleet-status-preview']));
+if(!preview.enabled)cli(['-fleet-status-activate',preview.revision]);
+const artifacts=join(dirname(accessFile),'fleet-status');await mkdir(artifacts,{recursive:true});
+const browser=await chromium.launch();
+try{
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
+ const session=await(await page.request.get(access.base+'/api/auth/session')).json();const headers={'X-CSRF-Token':session.csrfToken,Origin:access.base};
+ const api=async(method,path,data)=>{const r=await page.request[method](access.base+'/api'+path,{headers,...(data?{data}:{})});if(!r.ok())throw Error(path+': '+r.status()+' '+await r.text());return r.status()===204?null:r.json();};
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());const monday=new Date(today+'T12:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);const boardPath='/driver-board?weekStart='+monday.toISOString().slice(0,10);
+ let board=await api('get',boardPath);expect(board.statusSyncEnabled).toBe(true);const driver=board.drivers.find(d=>d.truckId&&d.truckOperatingStatus==='ready');expect(driver).toBeTruthy();
+ const live=await context.newPage();await live.goto(access.base+'/driver-board');await expect(live.getByText('Live',{exact:true})).toBeVisible();
+ await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('family_issue');await page.getByRole('button',{name:'Save status',exact:true}).click();
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Family issue',{timeout:15000});
+ await page.goto(access.base+'/trucks/detail?id='+driver.truckId);await page.getByRole('button',{name:'Change condition',exact:true}).click();await page.getByLabel('Truck condition',{exact:true}).selectOption('shop');await page.getByRole('button',{name:'Save status',exact:true}).click();
+ await expect(live.getByRole('row').filter({hasText:driver.fullName}).getByText('Shop',{exact:true})).toBeVisible({timeout:15000});await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Family issue');
+ board=await api('get',boardPath);let entry=board.entries.find(e=>e.driverId===driver.id);
+ expect((await page.request.put(access.base+'/api/driver-board',{headers,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
+ await page.getByRole('button',{name:'Change condition',exact:true}).click();await page.getByLabel('Truck condition',{exact:true}).selectOption('ready');await page.getByRole('button',{name:'Save status',exact:true}).click();
+ expect((await api('get','/drivers/'+driver.id)).availabilityStatus).toBe('family_issue');
+ await page.getByRole('tab',{name:'Status history',exact:true}).click();await expect(page.getByRole('table')).toBeVisible();await expect(page.getByRole('table').getByText('Shop',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-table.png'),fullPage:true});
+ await page.getByRole('button',{name:'Timeline',exact:true}).click();await expect(page.locator('ol')).toBeVisible();await page.screenshot({path:join(artifacts,'truck-history-timeline.png'),fullPage:true});
+ await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('tab',{name:'Status history',exact:true}).click();await page.getByLabel('History track').selectOption('assigned_truck');await expect(page.getByRole('table').getByText('Shop',{exact:true}).first()).toBeVisible();
+ await page.getByLabel('History track').selectOption('availability');await expect(page.getByRole('table').getByText('Family issue',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'driver-history-table.png'),fullPage:true});
+ await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('active');await page.getByRole('button',{name:'Save status',exact:true}).click();
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('READY',{timeout:15000});
+ const roleName='Status Board only '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['driver_board.read','driver_board.write']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName);const email=randomUUID()+'@example.test';const password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
+ const restricted=await browser.newContext();await restricted.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const restrictedSession=await(await restricted.request.get(access.base+'/api/auth/session')).json();const restrictedHeaders={'X-CSRF-Token':restrictedSession.csrfToken,Origin:access.base};
+ board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);
+ const held=await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'SHOP',statusEdited:true}]}});expect(held.ok(),await held.text()).toBe(true);
+ const truck=await api('get','/trucks/'+driver.truckId);expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/condition',{headers:restrictedHeaders,data:{status:'ready',version:truck.statusVersion,reason:''}})).status()).toBe(403);
+ expect((await restricted.request.get(access.base+'/api/drivers/'+driver.id+'/status-history')).status()).toBe(403);
+ board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);expect((await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
+ await api('patch','/trucks/'+truck.id+'/condition',{status:'ready',version:truck.statusVersion,reason:'Synthetic test release'});await restricted.close();
+ await live.getByLabel(driver.fullName+' · Status',{exact:true}).selectOption('Left');await expect(live.getByRole('dialog')).toBeVisible();await expect(live.getByLabel('Termination date',{exact:true})).toBeVisible();await live.getByRole('button',{name:'Cancel',exact:true}).click();expect((await api('get','/drivers/'+driver.id)).active).toBe(true);
+ expect(errors).toEqual([]);console.log('Fleet status E2E passed: synchronization, history table/timeline, assigned-truck periods, permissions, explicit release and termination. Screenshots: '+artifacts);
+}finally{await browser.close();}

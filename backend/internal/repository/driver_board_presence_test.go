@@ -15,7 +15,7 @@ import (
 // notification triggers only after those tables have been migrated back in.
 func withoutBoardLiveMigration(t *testing.T, source string) string {
 	t.Helper()
-	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql", "125_status_board_dispatcher_order.sql", "131_samsara_telemetry.sql", "132_fleet_workflow.sql", "133_odometer_source_selection.sql", "135_historical_work_orders_paid.sql", "136_work_order_corrections.sql"} {
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql", "125_status_board_dispatcher_order.sql", "131_samsara_telemetry.sql", "132_fleet_workflow.sql", "133_odometer_source_selection.sql", "135_historical_work_orders_paid.sql", "136_work_order_corrections.sql", "137_fleet_status_history.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -32,7 +32,7 @@ func withoutBoardLiveMigration(t *testing.T, source string) string {
 
 func applyBoardLiveMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
-	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql", "125_status_board_dispatcher_order.sql", "131_samsara_telemetry.sql", "132_fleet_workflow.sql", "133_odometer_source_selection.sql", "135_historical_work_orders_paid.sql", "136_work_order_corrections.sql"} {
+	for _, name := range []string{"113_status_board_live.sql", "115_gross_board_live.sql", "116_status_board_automation.sql", "118_status_board_driver_order.sql", "125_status_board_dispatcher_order.sql", "131_samsara_telemetry.sql", "132_fleet_workflow.sql", "133_odometer_source_selection.sql", "135_historical_work_orders_paid.sql", "136_work_order_corrections.sql", "137_fleet_status_history.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)

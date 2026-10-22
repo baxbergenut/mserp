@@ -14,8 +14,9 @@ import (
 var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
-	UndoID       int64 `json:"undoId,omitempty"`
-	StatusEdited bool  `json:"statusEdited,omitempty"`
+	EffectiveAt  *time.Time `json:"effectiveAt,omitempty"`
+	UndoID       int64      `json:"undoId,omitempty"`
+	StatusEdited bool       `json:"statusEdited,omitempty"`
 	// Write-only intent: selecting the same number should still resolve its stops.
 	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
 	DriverID           string `json:"driverId"`
@@ -31,6 +32,8 @@ type DriverBoardEntry struct {
 }
 
 type DriverBoardDriver struct {
+	AvailabilityStatus         string               `json:"availabilityStatus"`
+	StatusVersion              int                  `json:"statusVersion"`
 	TruckOperatingStatus       string               `json:"truckOperatingStatus"`
 	DispatcherExtension        *int                 `json:"dispatcherExtension"`
 	MainUpdaterName            string               `json:"mainUpdaterName"`
@@ -68,6 +71,7 @@ type FiveELDBoardSummary struct {
 }
 
 type DriverBoard struct {
+	StatusSyncEnabled       bool                  `json:"statusSyncEnabled"`
 	DriverOrderRevisions    map[string]string     `json:"driverOrderRevisions"`
 	DispatcherOrderRevision string                `json:"dispatcherOrderRevision"`
 	WeekStart               string                `json:"weekStart"`
@@ -114,13 +118,16 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	defer tx.Rollback(ctx)
+	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
+		return result, err
+	}
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,coalesce(fleet_truck_operating_status(t.id),'')
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,coalesce(fleet_truck_operating_status(t.id),''),d.availability_status,d.status_version
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -146,7 +153,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion)
 		if err != nil {
 			rows.Close()
 			return result, err
@@ -206,7 +213,9 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	}
 	for i := range result.Entries {
 		e := &result.Entries[i]
-		e.Status = boardProgressStatus(e.Status, result.Loads[e.DriverID].Next)
+		if !result.StatusSyncEnabled {
+			e.Status = boardProgressStatus(e.Status, result.Loads[e.DriverID].Next)
+		}
 		if a := result.Loads[e.DriverID].Automation; a != nil && !a.ManualETAValid {
 			e.ETA = ""
 		}
@@ -245,6 +254,13 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID < entries[j].DriverID })
 	for index := range entries {
 		e := &entries[index]
+		when := ""
+		if e.EffectiveAt != nil {
+			when = e.EffectiveAt.UTC().Format(time.RFC3339Nano)
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('mserp.status_effective_at',$1,true)`, when); err != nil {
+			return nil, err
+		}
 		e.UndoID = 0
 		var active bool
 		err = tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&active)
@@ -373,6 +389,10 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, err
 		}
 		e.Version = version
+		if err = tx.QueryRow(ctx, `SELECT status,version FROM driver_board WHERE driver_id=$1`, e.DriverID).Scan(&e.Status, &e.Version); err != nil {
+			return nil, err
+		}
+		e.EffectiveAt = nil
 		if stateChanged {
 			if err = saveLoadState(ctx, tx, e.DriverID, loadStateValue); err != nil {
 				return nil, err
