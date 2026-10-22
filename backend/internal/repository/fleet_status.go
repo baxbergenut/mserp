@@ -175,7 +175,7 @@ func (r *FleetRepository) StatusHistory(ctx context.Context, kind, id, track, st
  WHERE team.team_driver_id=$3::uuid AND a.assigned_at<coalesce(team.end_week::timestamp AT TIME ZONE 'America/New_York','infinity'::timestamptz)
  AND coalesce(a.unassigned_at,'infinity'::timestamptz)>team.start_week::timestamp AT TIME ZONE 'America/New_York'
  ), visible AS (
- SELECT p.*,p.track AS shown_track,p.effective_at AS started,p.ended_at AS ended FROM periods p WHERE entity_kind=$2 AND entity_id=$3::uuid
+ SELECT p.*,p.track AS shown_track,p.effective_at AS started,p.ended_at AS ended FROM periods p WHERE entity_kind=$2 AND entity_id=$3::uuid AND p.track<>'dispatch'
  UNION ALL SELECT p.*,'assigned_truck',greatest(p.effective_at,a.assigned_at),least(p.ended_at,a.unassigned_at)
  FROM periods p JOIN assignments a ON a.truck_id=p.entity_id
  WHERE $2='driver' AND p.entity_kind='truck' AND p.track='condition'

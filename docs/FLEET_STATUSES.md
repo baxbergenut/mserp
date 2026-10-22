@@ -43,7 +43,9 @@ individual, and only the main team driver has a dispatch row.
 
 Events retain name/actor/source snapshots and a transaction action ID. No-op
 saves create no events. Baselines explicitly have unknown earlier starts. Driver
-history clips truck condition periods to dated solo/team assignments. Table and
+history shows availability and employment, and clips truck condition periods to
+dated solo/team assignments. Operational dispatch events remain stored for audit
+and are excluded from profile history and its filters before pagination. Table and
 timeline views display New York times; recorded time is separate from effective
 time. Existing board edit/undo history remains intact; undo cannot bypass holds.
 
