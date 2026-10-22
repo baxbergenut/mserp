@@ -132,6 +132,7 @@ export default function ExpensesPage() {
   const [workOrder,setWorkOrder]=useState<{key:string;recordId?:string;expense?:ExpenseInput;draft?:AIExpenseDraft;file?:File|null}|null>(null);
   const [aiBusy,setAIBusy]=useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState("");
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const saveLock=useRef(false);
   const [currentUser, setCurrentUser] = useState("");
@@ -197,12 +198,12 @@ export default function ExpensesPage() {
 
   const workCategory=options.workOrdersCategoryId ?? "";
   function showReview(queue: NonNullable<typeof review>,index:number) {
-    const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);
+    const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);setUploadError("");
     if(workCategory && entry.form.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),draft:{...entry.source,...entry.form},file:queue.file});}
     else {setWorkOrder(null);setForm(entry.form);setEditing(null);}
   }
-  function completeEntry() {setWorkOrder(null);setEditing(undefined);setAttachment(null);setPendingUploadId(null);if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
-  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);}
+  function completeEntry() {setWorkOrder(null);setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
+  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
   function changeForm(next:ExpenseInput){
     if(!editing && workCategory && next.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),file:attachment,...(review ? {draft:{...review.entries[review.index].source,...next}} : {expense:next})});}
     else setForm(next);
@@ -212,12 +213,12 @@ export default function ExpensesPage() {
   function openCreate() {
     const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds.find(id=>id!==workCategory) ?? createCategoryIds[0] ?? "";
     const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
-    setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);
+    setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);setUploadError("");
     if(workCategory && categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),expense:value});}else{setWorkOrder(null);setEditing(null);}
   }
   useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
   function openEdit(expense: Expense) {
-    setReview(null);setError("");setAttachment(null);setPendingUploadId(null);
+    setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");
     if(workCategory && expense.categoryId===workCategory){void fetchMaintenancePage({expenseId:expense.id,pageSize:1}).then(result=>{if(!result.items[0])throw new Error("No work order was found for this charge.");setWorkOrder({key:crypto.randomUUID(),recordId:result.items[0].id});}).catch(e=>setError(e.message));return;}
     setForm(expenseToInput(expense));setEditing(expense);
   }
@@ -235,7 +236,7 @@ export default function ExpensesPage() {
         try { await uploadExpenseDocument(id, attachment); }
         catch (reason) {
           setPendingUploadId(id);
-          setError(`Entry saved. Receipt upload failed: ${reason instanceof Error ? reason.message : "Try again."}`);
+          setUploadError(`Entry saved. Receipt upload failed: ${reason instanceof Error ? reason.message : "Try again."}`);
           await loadData(false); return;
         }
       }
@@ -459,7 +460,7 @@ export default function ExpensesPage() {
           onClose={closeEntry}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
-          {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+          {(uploadError || error) && <div className="mb-4"><ErrorBanner message={uploadError || error} /></div>}
           {!editing && !review && !pendingUploadId && (
             <div className="mb-5">
               <ExpenseAIImport

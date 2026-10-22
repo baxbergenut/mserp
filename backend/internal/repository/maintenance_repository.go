@@ -294,6 +294,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		return MaintenanceRecord{}, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+		return MaintenanceRecord{}, err
+	}
 	var old MaintenanceRecord
 	var before []byte
 	if in.Version > 0 {
@@ -510,6 +513,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		if !confirmed {
 			return old, fmt.Errorf("%w: select the payment method and paid by person before confirming payment", ErrMaintenanceInvalid)
 		}
+	}
+	if err := recordMaintenanceInvoiceCorrection(ctx, tx, old, in.Actor); err != nil {
+		return old, err
 	}
 	after, err := scanMaintenance(tx.QueryRow(ctx, maintenanceSelect+" WHERE m.id=$1", in.ID))
 	if err != nil {

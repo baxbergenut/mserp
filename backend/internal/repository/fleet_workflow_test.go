@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -139,6 +140,42 @@ func testFleetWorkOrderWorkflow(t *testing.T, ctx context.Context, admin *pgx.Co
 	}
 	if _, err := admin.Exec(ctx, `UPDATE expenses SET amount=90,base_amount=90 WHERE id=$1`, *m.ExpenseID); err == nil {
 		t.Fatal("invoice edit changed confirmed payment")
+	}
+	// An explicit versioned work-order edit records corrected invoice values while
+	// preserving the original paid confirmation and independent collection ledger.
+	originalConfirmation := string(m.PaymentConfirmation)
+	first.Version = m.Version
+	first.Expense.UpdatedAt = &m.Expense.UpdatedAt
+	first.Expense.Amount = "175.25"
+	first.Expense.BaseAmount = payTestString("175.25")
+	first.Expense.PaymentType = payTestString("Cash")
+	first.Expense.ReferenceNumber = payTestString("Corrected invoice")
+	first.Expense.PaidBy = payTestString("Correcting employee")
+	first.Notes = "Corrected repair details"
+	first.Actor = "Correcting employee"
+	m = save(first)
+	if *m.Expense.Amount != "175.25" || *m.Expense.PaymentType != "Cash" || m.WorkStatus != "closed" || m.Notes != first.Notes {
+		t.Fatal("paid work-order edits were not saved", m)
+	}
+	var original, corrected map[string]any
+	if err := json.Unmarshal([]byte(originalConfirmation), &original); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(m.PaymentConfirmation, &corrected); err != nil {
+		t.Fatal(err)
+	}
+	corrections, ok := corrected["invoiceCorrections"].([]any)
+	if !ok || len(corrections) != 1 {
+		t.Fatal("missing invoice correction audit")
+	}
+	delete(corrected, "invoiceCorrections")
+	originalJSON, _ := json.Marshal(original)
+	correctedJSON, _ := json.Marshal(corrected)
+	if string(originalJSON) != string(correctedJSON) {
+		t.Fatal("original payment confirmation changed")
+	}
+	if _, err := admin.Exec(ctx, `UPDATE expenses SET payment_type='Check' WHERE id=$1`, *m.ExpenseID); err == nil {
+		t.Fatal("unreviewed update bypassed corrected confirmation")
 	}
 	free := newOrder("")
 	free.WorkStatus = payTestString("completed")

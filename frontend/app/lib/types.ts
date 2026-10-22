@@ -780,7 +780,7 @@ export interface MaintenanceWorkflow { workStatus?:WorkOrderStatus; dispatchStat
 export interface MaintenanceRecord extends MaintenanceWorkflow {
   canEdit?: boolean;
  historicalPaid?:boolean;
- paymentConfirmation?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;confirmedBy:string;confirmedAt:string}|null;
+ paymentConfirmation?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;confirmedBy:string;confirmedAt:string;invoiceCorrections?:{expenseId:string;amount:string;method:string;reference:string;paidBy:string;correctedBy:string;correctedAt:string}[]}|null;
   programIds?: string[];
   oilType: string;
   id: string; expenseId: string | null; truckId: string | null; unitNumber: string; driverId: string | null; driverName: string; vendorId: string | null;

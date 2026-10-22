@@ -2464,7 +2464,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Final payment uses existing invoice fields and explicit Confirm paid & finish;
   Save invoice alone does not confirm paid. There is no separate payment endpoint
   or ledger. Done requires finished work, no own hold, and confirmation or explicit
-  No charge. Confirmed invoice fields are protected. It never issues money or
+  No charge. Paid work orders expose Edit work order for all ordinary fields. Migration 136
+  preserves the original payment confirmation and appends invoiceCorrections for
+  explicit versioned invoice edits; existing finalized/collection guards remain. It never issues money or
   changes expense_payments/payroll recovery; do not infer payment from collections.
   See docs/MAINTENANCE.md and test-fleet-workflow-e2e.mjs.
 - Migration 135 records the user's explicit historical paid confirmation. Only

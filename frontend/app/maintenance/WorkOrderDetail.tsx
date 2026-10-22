@@ -11,6 +11,7 @@ import { controlClass, ErrorBanner, ManagementHeader, Modal } from "../component
 import { FleetStatusBadge } from "../components/FleetStatusBadge";
 import { ReceiptUpload } from "../components/ReceiptUpload";
 import { MaintenanceForm } from "./MaintenanceForm";
+import { MaintenanceWorkspace } from "./MaintenanceWorkspace";
 import { WorkOrderProgress } from "./WorkOrderProgress";
 import { maintenanceError, maintenanceToInput, normalizeMaintenance, today, workStatusLabels } from "./maintenance";
 
@@ -22,6 +23,7 @@ export function WorkOrderDetail() {
   const [options,setOptions]=useState<MaintenanceOptions|null>(null);const [step,setStep]=useState(1);
   const [error,setError]=useState("");const [notice,setNotice]=useState("");const [busy,setBusy]=useState(false);
   const [attachment,setAttachment]=useState<File|null>(null);const [changes,setChanges]=useState<MaintenanceChange[]|null>(null);
+  const [editing,setEditing]=useState(false);
   const [cancelReason,setCancelReason]=useState<string|null>(null);const lock=useRef(false);
   const access=useExpenseCategoryAccess();const canEdit=record?.canEdit ?? !!access.find(a=>a.categoryId===options?.categoryId)?.canEdit;
   useEffect(()=>{let active=true;Promise.all([fetchMaintenance(id),fetchMaintenanceOptions()]).then(([r,o])=>{if(active){setRecord(r);setDraft(maintenanceToInput(r));setOptions(o);setStep(["completed","closed"].includes(r.workStatus ?? r.status)?2:1);setError("");}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
@@ -45,6 +47,7 @@ export function WorkOrderDetail() {
   const body=<MaintenanceForm value={draft} options={options} onChange={setDraft} section={step===2?"payment":"work"} />;
   return <div className="space-y-5 pb-8">
     <ManagementHeader icon={Wrench} title={title} />
+    {editing && <MaintenanceWorkspace modalOnly recordId={record.id} onRecordClose={()=>setEditing(false)} onComplete={()=>setEditing(false)} onRecordSaved={()=>{void fetchMaintenance(record.id).then(saved=>{setRecord(saved);setDraft(maintenanceToInput(saved));setNotice("Work order updated.");});}}/>}
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
       {record.truckId?<Link href={`/trucks/detail?id=${record.truckId}`} className="text-blue-400">Truck {record.unitNumber}</Link>:<span>Truck not linked</span>}
       <span>Added by <span className="text-zinc-300">{record.createdByName || "Unknown"}</span> · {dateTime(record.createdAt)}</span>
@@ -62,6 +65,7 @@ export function WorkOrderDetail() {
         </div>
       </section>
       <aside className="space-y-4">
+        {canEdit && finished && <button type="button" className="ui-button" disabled={busy} onClick={()=>setEditing(true)}>Edit work order</button>}
         <section className="rounded-xl border border-zinc-800 p-4"><h3 className="text-xs font-semibold text-zinc-300">Truck availability</h3><div className="mt-3">{record.dispatchStatus?<FleetStatusBadge status={record.dispatchStatus}/>:<span className="text-xs text-zinc-400">No hold from this order</span>}</div><p className="mt-3 text-xs leading-5 text-zinc-500">{record.dispatchStatus?"This order blocks new dispatch assignments until Fleet releases its hold.":"This order does not block dispatch. Other truck holds still apply."}</p></section>
         <section className="rounded-xl border border-zinc-800 p-4"><h3 className="mb-3 text-xs font-semibold text-zinc-300">Attachments</h3><div className="space-y-3">{record.documents.map(d=><a key={d.id} className="flex items-center gap-2 break-all text-xs text-blue-400" href={maintenanceDocumentUrl(d.id)} target="_blank" rel="noreferrer"><FileText className="h-3.5 w-3.5 shrink-0"/>{d.fileName}</a>)}{canEdit && !terminal && <><ReceiptUpload file={attachment} disabled={busy} onChange={setAttachment} onError={setError}/>{attachment && <button type="button" className="ui-button w-full" disabled={busy} onClick={()=>void attach(attachment)}>Attach receipt</button>}</>}</div></section>
         <details className="rounded-xl border border-zinc-800 p-4" onToggle={e=>{if(e.currentTarget.open && changes===null)void fetchMaintenanceHistory(record.id).then(setChanges).catch(e=>setError(e.message));}}><summary className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-zinc-300"><History className="h-3.5 w-3.5"/>Activity</summary><div className="mt-4 space-y-4">{changes?.map((change,index)=><div key={index} className="border-l border-zinc-800 pl-3 text-xs"><p className="text-zinc-300">{change.actorName}</p><p className="mt-1 text-zinc-500">{workStatusLabels[change.after.workStatus ?? change.after.status] ?? "Updated details"}</p><p className="mt-1 text-[11px] text-zinc-600">{dateTime(change.happenedAt)}</p></div>)}</div></details>
