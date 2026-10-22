@@ -307,6 +307,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and home-screen branding. Keep existing MSERP API/wire identifiers, environment
   variables, cookie/storage/event keys, sheet headers and historical records
   compatible; MS Express remains the operating company.
+  Sidebar branding uses a 96px wordmark whose visible symbol matches the padded
+  32px collapsed icon. Reserve the frame's aspect ratio, remount image variants,
+  and clip the header during width transitions to avoid stale-image enlargement.
+  `node scripts/test-sidebar-branding.mjs` checks delayed image loads and toggling.
 
 - Fleet > Inventory (`/fleet/inventory?tab=tablets`) and Fleet > Trailers
   (`/fleet/trailers`) use migration 119, repository `inventory.go` /

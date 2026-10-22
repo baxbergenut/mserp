@@ -70,13 +70,13 @@ export function Sidebar() {
   return (
     <aside
       className={`
-        flex flex-col border-r border-zinc-800/60 bg-sidebar-bg
+        flex shrink-0 flex-col border-r border-zinc-800/60 bg-sidebar-bg
         transition-[width] duration-200 ease-in-out
         ${collapsed ? "w-16" : "w-60"}
       `}
     >
       {/* ── Brand ── */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-zinc-800/40 px-4">
+      <div className="flex h-14 shrink-0 items-center overflow-hidden border-b border-zinc-800/40 px-4">
         <BrandLogo compact={collapsed} />
       </div>
 
