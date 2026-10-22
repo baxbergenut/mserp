@@ -94,6 +94,7 @@ type DriverPayDriver struct {
 	TruckUnit        string               `json:"truckUnit"`
 	DispatcherID     string               `json:"dispatcherId"`
 	DispatcherName   string               `json:"dispatcherName"`
+	Dispatchers      []PayPerson          `json:"dispatchers,omitempty"`
 	EmploymentType   string               `json:"employmentType,omitempty"`
 	IsOwnerOperator  bool                 `json:"isOwnerOperator"`
 	PayType          string               `json:"payType"`
@@ -177,6 +178,10 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 			}
 		}
 		result.Drivers = selected
+	}
+	// Carry and team routing can add rows after the source read.
+	if err = setPayDispatchers(ctx, tx, &result); err != nil {
+		return result, err
 	}
 	return overlayPayrollSettlements(ctx, tx, result, driverID)
 }

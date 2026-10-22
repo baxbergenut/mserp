@@ -264,7 +264,7 @@ export function DriverForm({
             </button>
             <span className={isTeam ? "font-medium text-blue-400" : "text-zinc-500"}>Team driver</span>
           </div></div><FormSection title="Assignments" hideTitle={section === "assignments"}>
-        {!showEscrow && <AssignmentWeekField value={value.assignmentWeek} onChange={week => onChange({ ...value, assignmentWeek: week, ...(isTeam ? { truckId: null, teamMainDriverId: undefined, teamMainVersion: undefined } : {}) })} />}
+        {!showEscrow && <AssignmentWeekField team={value.isTeamDriver !== undefined} value={value.assignmentWeek} onChange={week => onChange({ ...value, assignmentWeek: week, ...(isTeam ? { truckId: null, teamMainDriverId: undefined, teamMainVersion: undefined } : {}) })} />}
         {!isTeam && <Field label="Dispatcher">
           <select
             value={value.dispatcherId ?? ""}

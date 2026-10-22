@@ -1527,21 +1527,29 @@ assignment lookup lists.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
-- Assignment changes in driver, truck, and dispatcher forms accept any start Monday,
-  including future New York weeks. The optional assignmentWeek API field
+- Assignment changes in driver, truck, and dispatcher forms accept any effective date,
+  including future New York dates. The legacy assignmentWeek API field
   defaults to the current week for older clients. Migration 047 makes dispatcher
   history honor this boundary; truck writes use the same boundary. Same-week
   corrections retain zero-length periods without overlaps. Migration 062 permits
   corrections across later assignment weeks, retaining superseded periods at zero
-  length. Finalized driver payroll from the selected week onward blocks changes,
+  length. Migration 139 removes the roster Monday check and protects finalized
+  payroll starting with the week containing the effective date. Finalized driver
+  payroll from that week onward blocks changes,
   including displaced drivers; affected finalized investor truck payroll is also
   protected. Fleet writes share the payroll finalization lock. Unchanged links never
   reopen periods. Gross Board and unsaved Driver Pay projections exclude drivers
-  before drivers.roster_start_week. Setup and reactivation save that Monday
+  before drivers.roster_start_week. Ordinary setup and reactivation save the date
   independently of old assignment history; migration 062 backfills only known
   initial starts. Unknown legacy starts and explicitly saved historical work
   remain visible. Current fleet links still
   represent the latest selection; weekly reports use the effective history.
+  Gross Board exposes daily assignments and groups each driver under every
+  dispatcher active during that week; other groups' days show Changed dispatcher.
+  Daily loads and dispatcher totals count once. Rate balances remain per driver,
+  counted once under the latest visible dispatcher. Driver Pay retains one
+  complete statement, shows all weekly dispatchers and matches any of them in
+  filters. Team membership and recurring-charge schedules remain weekly.
   Tests cover fresh/migrated schemas and assignment-week-e2e.mjs (run with
   test-investors-e2e.mjs --assignment-week-only). Migration 046
   is reserved for the separate Driver Board history work.
@@ -2186,9 +2194,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   `payroll_cache.go`; unknown tables still invalidate conservatively.
 
 - New-driver setup asks when the driver started working. Creation derives the
-  assignment/roster Monday from hireDate; truck and dispatcher assignments share
-  that week, and escrow starts on the actual selected date. Existing profile
-  assignment edits keep the explicit Assignment starts week control.
+  assignment/roster date from hireDate; truck and dispatcher assignments share
+  that date, and escrow starts on the actual selected date. Existing profile
+  assignment edits keep the explicit Assignment effective date control.
 - Profile hire-date corrections atomically move the matching initial roster,
   truck/dispatcher boundaries and uncollected setup escrow (actual date). Later
   transfers, reactivation periods, independent escrow dates and truck ownership

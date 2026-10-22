@@ -28,14 +28,14 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel(/^Dispatcher/).selectOption(mark);
   await page.getByLabel(/^Truck/).selectOption(truck2);
-  const start = page.getByLabel('Assignment starts week (Monday)', { exact: true });
+  const start = page.getByLabel('Assignment effective date', { exact: true });
   await expect(start).toHaveValue('');
   await expect(start).toHaveAttribute('required', '');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(start).toBeVisible(); // Native validation prevents a date-free save.
-  await page.getByRole('button', { name: 'This week', exact: true }).click();
-  await expect(start).toHaveValue(week);
-  await expect(start).not.toHaveAttribute('max', /.+/);
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(start).toHaveValue(today);
+  await expect(start).toHaveAttribute('max', '2100-12-31');
   await start.fill(next);
   expect(await start.evaluate(input => input.checkValidity())).toBe(true);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -58,7 +58,7 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await page.getByLabel(/^Truck/).selectOption(truck1);
   await start.fill(week);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('dialog').getByText('Reopen finalized payroll for this driver from the selected assignment week onward before changing assignments', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Reopen finalized payroll for this driver from the selected assignment date onward before changing assignments', { exact: true })).toBeVisible();
   expect(await getDriver(next)).toMatchObject({ dispatcherName: 'Week Mark', truckUnit: 'WEEK-TWO' });
   sql(`SET search_path TO ${schema},public; UPDATE payroll_settlements SET finalized=false WHERE driver_id='${driver}';`);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -99,6 +99,51 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
       }
     }
   }
+  // A midweek dispatcher/truck change keeps exactly one editable copy of each
+  // day, splits dispatcher totals, and leaves a single complete pay statement.
+  const wednesdayDate = new Date(`${week}T12:00:00Z`);
+  wednesdayDate.setUTCDate(wednesdayDate.getUTCDate() + 2);
+  const wednesday = wednesdayDate.toISOString().slice(0, 10);
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,driver_rate,miles)
+    VALUES('${driver}','${week}','DAILY-OLD',1000,900,100),('${driver}','${wednesday}','DAILY-NEW',2000,1800,200);`);
+  await page.goto(`${base}/drivers`);
+  await page.getByPlaceholder('Search drivers…').fill('Week Didi');
+  await row.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel(/^Dispatcher/).selectOption(mark);
+  await page.getByLabel(/^Truck/).selectOption(truck2);
+  await start.fill(wednesday);
+  expect(await start.evaluate(input => input.checkValidity())).toBe(true);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(start).toHaveCount(0);
+  const daily = await getDriver(week);
+  expect(daily.assignments.slice(0, 2).every(a => a.dispatcherId === cameron && a.truckId === truck1)).toBe(true);
+  expect(daily.assignments.slice(2).every(a => a.dispatcherId === mark && a.truckId === truck2)).toBe(true);
+  await page.goto(`${base}/gross-board`);
+  await page.getByPlaceholder('Search drivers…').fill('Week Didi');
+  const dailyRows = page.locator('tbody > tr').filter({ has: page.locator(`th[data-gross-driver="${driver}"]`) });
+  await expect(dailyRows).toHaveCount(2);
+  await expect(dailyRows.nth(0).getByText('Changed dispatcher', { exact: true })).toHaveCount(5);
+  await expect(dailyRows.nth(1).getByText('Changed dispatcher', { exact: true })).toHaveCount(2);
+  await expect(dailyRows.nth(0).locator('[data-gross-field=originalTotal]')).toHaveText('$1,000.00');
+  await expect(dailyRows.nth(1).locator('[data-gross-field=originalTotal]')).toHaveText('$2,000.00');
+  await expect(page.locator('tfoot td').first()).toHaveText('$3,000.00');
+  await expect(page.locator('tfoot td').last()).toHaveText('+$300.00');
+  await page.getByRole('button', { name: 'Dispatcher filter', exact: true }).click();
+  const choices = page.getByRole('group', { name: 'Dispatcher choices', exact: true });
+  await choices.getByRole('button', { name: 'Clear all', exact: true }).click();
+  await choices.getByRole('checkbox', { name: 'Week Cameron', exact: true }).check();
+  await expect(dailyRows).toHaveCount(1);
+  await expect(page.locator('tfoot td').first()).toHaveText('$1,000.00');
+  await choices.getByRole('button', { name: 'Select all', exact: true }).click();
+  await page.keyboard.press('Escape');
+  const payResponse = await page.request.get(`${base}/api/driver-pay?weekStart=${week}&statementId=${driver}`);
+  expect(payResponse.status()).toBe(200);
+  const payDriver = (await payResponse.json()).drivers.find(d => d.id === driver);
+  expect(payDriver.loads).toHaveLength(2);
+  expect(payDriver.dispatcherName).toBe('Week Cameron / Week Mark');
+  await page.goto(`${base}/accounting/driver-pay?weekStart=${week}&driverId=${driver}`);
+  await expect(page.getByText('Week Cameron / Week Mark', { exact: true })).toBeVisible();
   await page.goto(`${base}/driver-board`);
   await expect(page.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
   const nav = page.locator('aside a');

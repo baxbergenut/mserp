@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { compactDecimal, indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { dispatcherRows, compactDecimal, indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 const { amountDisplay, signedMoney } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 for (const [value, display] of [['', ''], ['67', '67'], ['67.00', '67'], ['67.50', '67.5'], ['67.05', '67.05'], ['0.00', '0'], ['0.10', '0.1'], ['-67.50', '-67.5'], ['9999999999.99', '9999999999.99']]) {
@@ -177,3 +177,15 @@ assert.equal(matchLoad(annotated, {id: 2, loadNumber: 'OTHER', originalRate: '10
 assert.equal(setDayStatus(annotated, 'HOME').note, '');
 assert.equal(reconcileAutosave({[key]: {...annotated, note:'Newest note'}}, {[key]:annotated}, [{...annotated,version:4}])[key].note, 'Newest note');
 console.log('Load note checks passed: identity, status clearing and queued typing.');
+
+const dates = Array.from({length:7},(_,i)=>addDays('2026-09-28',i));
+const movingDriver={id:'moving',fullName:'Moving Driver',active:true,truckId:'t',truckUnit:'1',dispatcherId:'c',dispatcherName:'Charlie',assignments:dates.map((date,i)=>({date,dispatcherId:i<2?'a':i<5?'b':'a',dispatcherName:i<2?'Alpha':i<5?'Bravo':'Alpha',truckId:'t',truckUnit:'1'}))};
+const split=dispatcherRows([movingDriver],dates);
+assert.equal(split.length,2);
+assert.deepEqual(split[0].dates,[dates[0],dates[1],dates[5],dates[6]]);
+assert.deepEqual(split[1].dates,[dates[2],dates[3],dates[4]]);
+assert.equal(new Set(split.flatMap(d=>d.dates)).size,7);
+const daily=dates.map(date=>({...emptyEntry('moving',date),loadNumber:date,originalRate:'100',driverRate:'90',miles:'10'}));
+assert.equal(split.reduce((sum,d)=>sum+totals(daily.filter(e=>d.dates.includes(e.date))).original,0n),totals(daily).original);
+assert.equal(totals(daily.filter(e=>split[1].dates.includes(e.date))).original,30000n);
+assert.equal(dispatcherRows([{...movingDriver,assignments:undefined}],dates).length,1);

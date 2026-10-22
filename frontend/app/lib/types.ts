@@ -351,6 +351,7 @@ export interface DriverInput {
   teamMainVersion?: number;
   status?: DriverStatus;
   terminationDate?: string;
+  /** Effective calendar date; legacy field name retained for API compatibility. */
   assignmentWeek?: string;
   chargePauseWeek?: string;
   escrowAmount: string;
@@ -634,6 +635,7 @@ export interface TruckInput {
   ownershipEffectiveDate?: string;
   expectedOwnershipVersion?: string;
   ownerDriverId?: string | null;
+  /** Effective calendar date; legacy field name retained for API compatibility. */
   assignmentWeek?: string;
   ownerId: string | null;
   unitNumber: string;
@@ -712,6 +714,7 @@ export interface Dispatcher {
 export interface DispatcherInput {
   extension?: number | null;
   updaters?: { mainUpdaterId: string | null; afterHoursUpdaterId: string | null };
+  /** Effective calendar date; legacy field name retained for API compatibility. */
   assignmentWeek?: string;
   fullName: string;
   email: string;
@@ -1009,6 +1012,7 @@ export interface GrossBoardEntry {
 }
 
 export interface GrossBoardDriver {
+  assignments?: { date: string; dispatcherId: string; dispatcherName: string; truckId: string; truckUnit: string }[];
   id: string;
   fullName: string;
   truckId: string;
@@ -1137,6 +1141,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  dispatchers?: { id: string; name: string }[];
   summary?: { loads: number; missingFees: number; review: number; fee: string; payable: string };
   layovers?: { date: string; amount: string }[];
   employmentType?: EmploymentType;

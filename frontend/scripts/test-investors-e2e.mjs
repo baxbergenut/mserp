@@ -127,7 +127,7 @@ try {
     await runProfilesE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--assignment-week-only')) {
     await runAssignmentWeekE2E({ page, base, sql, schema });
-    console.log('Assignment week E2E passed: future Monday selection and historical assignment boundaries.');
+    console.log('Assignment date E2E passed: daily transfers, split Gross Board rows and totals, complete Driver Pay, future dates and finalized guards.');
   } else {
   if (!process.argv.includes('--offboarding-only')) {
   await expect(page.getByText('No investors yet.', { exact: true })).toBeVisible();

@@ -316,7 +316,7 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 // Shared by manual entry and atomic completion of a FleetScope intake.
 func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, error) {
 	if input.HireDate != nil {
-		input.AssignmentWeek = input.HireDate.AddDate(0, 0, -(int(input.HireDate.Weekday())+6)%7).Format(time.DateOnly)
+		input.AssignmentWeek = input.HireDate.Format(time.DateOnly)
 	}
 	if input.Status != "" {
 		input.Active = input.Status != "terminated"

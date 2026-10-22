@@ -26,7 +26,7 @@ import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
-import { indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 80, 112, 112];
@@ -160,11 +160,12 @@ export default function GrossBoardPage() {
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
-  const drivers = useMemo(() => (board?.drivers ?? []).filter((driver) => (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [board, selectedDispatchers, search]);
-  const dispatchers = useMemo(() => Array.from(new Map((board?.drivers ?? []).map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [board]);
+  const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates), [board, dates]);
+  const drivers = useMemo(() => rows.filter((driver) => (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [rows, selectedDispatchers, search]);
+  const dispatchers = useMemo(() => Array.from(new Map(rows.map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [rows]);
   const shownEntries = useMemo(() => {
-    const ids = new Set(drivers.map((driver) => driver.id));
-    return Object.values(allEntries).filter((entry) => ids.has(entry.driverId));
+    const days = new Set(drivers.flatMap(driver => driver.dates.map(date => `${driver.id}:${date}`)));
+    return Object.values(allEntries).filter((entry) => days.has(`${entry.driverId}:${entry.date}`));
   }, [allEntries, drivers]);
   const targetEntry = loadTarget && allEntries[entryKey(loadTarget.driverId, loadTarget.date, loadTarget.slot)];
   const targetMatches = !!targetEntry && !targetEntry.deleted && !targetEntry.dayStatus
@@ -173,18 +174,20 @@ export default function GrossBoardPage() {
   const summary = totals(shownEntries);
   const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
   const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
-  const endingBalances = drivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
-    (entryIndex.byDriver.get(driver.id) ?? [])));
+  const uniqueDrivers = Array.from(new Map(drivers.map(driver => [driver.id, driver])).values());
+  const balanceOwners = new Map([...drivers].sort((a, b) => (a.dates.at(-1) ?? "").localeCompare(b.dates.at(-1) ?? "")).map(driver => [driver.id, driver.dispatcherId]));
+  const endingBalances = uniqueDrivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
+    entryIndex.byDriver.get(driver.id) ?? []));
   const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
   const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
   const dispatcherTotals = new Map<string, { original: bigint; driver: bigint; miles: bigint; balance: bigint }>();
   for (const driver of drivers) {
-    const entries = dates.flatMap(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? []);
+    const entries = driver.dates.flatMap(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? []);
     const subtotal = totals(entries);
     const opening = openings.get(driver.id);
     const group = dispatcherTotals.get(driver.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0), balance: BigInt(0) };
     group.original += subtotal.original; group.driver += subtotal.driver; group.miles += subtotal.miles;
-    group.balance += rateBalance(opening?.openingBalance ?? "0", entries);
+    if (balanceOwners.get(driver.id) === driver.dispatcherId) group.balance += rateBalance(opening?.openingBalance ?? "0", entryIndex.byDriver.get(driver.id) ?? []);
     dispatcherTotals.set(driver.dispatcherId, group);
   }
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
@@ -280,7 +283,7 @@ export default function GrossBoardPage() {
           <div className="flex items-center gap-3">
             <CalendarRange className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Gross Board</h1>
-            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span>
+            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : uniqueDrivers.length}</span>
           </div>
 
         </div></PageHeader>
@@ -329,14 +332,15 @@ export default function GrossBoardPage() {
           <tbody>
             {drivers.map((driver, index) => {
               const dayEntries = dates.map(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]);
-              const entries = dayEntries.flat();
+              const entries = dayEntries.filter((_, i) => driver.dates.includes(dates[i])).flat();
               const sum = totals(entries);
-              const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", entries);
-              const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(entries);
+              const driverEntries = entryIndex.byDriver.get(driver.id) ?? [];
+              const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", driverEntries);
+              const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(driverEntries);
 
               const groupStart = index === 0 || drivers[index - 1].dispatcherId !== driver.dispatcherId;
               const group = dispatcherTotals.get(driver.dispatcherId)!;
-              return <Fragment key={driver.id}>
+              return <Fragment key={`${driver.id}:${driver.dispatcherId}`}>
                 {groupStart && <tr className="bg-blue-500/10 font-sans text-xs font-medium leading-4" aria-label={`${driver.dispatcherName} totals`}>
                   <th colSpan={10} scope="rowgroup" className="border-b border-zinc-700 py-2 text-left font-medium text-blue-300"><span className="sticky left-3">{driver.dispatcherName}</span></th>
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-blue-200">{decimalDisplay(group.original, true)}</td>
@@ -349,7 +353,7 @@ export default function GrossBoardPage() {
                   <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Total gross", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {dayEntries.map((entries, i) => <DaySummaryCell readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
+                  {dayEntries.map((entries, i) => !driver.dates.includes(dates[i]) ? <td key={dates[i]} className="border-b border-r border-zinc-800 bg-zinc-900/40 px-2 text-center text-xs text-zinc-500"><span>{driver.assignments?.some(a => a.date === dates[i]) ? "Changed dispatcher" : "Not started"}</span><span className="mt-1 block text-[10px]">{driver.assignments?.find(a => a.date === dates[i])?.dispatcherName}</span></td> : <DaySummaryCell readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   <td data-gross-driver={driver.id} data-gross-field="originalTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="milesTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="rpm" aria-label={`Driver RPM for ${driver.fullName}`} className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{rpmDisplay(sum.driver, sum.miles)}</td>
