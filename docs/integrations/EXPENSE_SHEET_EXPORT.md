@@ -76,6 +76,45 @@ mismatch holds the entry for review without overwriting a subsequent manual edit
 for review rather than adding another row. Delivered outbox receipts are retained.
 Do not delete the Google developer metadata or clear local delivery receipts.
 
+
+
+## Scale tickets (migration 138)
+
+Scale has a separate `scale_enabled` switch, initially false, and a required
+`scale_from_date`. With both the main export and scale enabled, newly inserted
+WeighMyTruck tickets dated on/after that date use the same durable outbox and
+Maintenance_and_other_expenses tab as Other → Scale. Existing tickets, repeated
+imports and later corrections never enqueue another row or rewrite a snapshot.
+There is no historical backfill. Reconcile old sheet entries separately before
+considering any historical copies; manual scale rows often combine reweighs and
+can have different dates or units.
+
+Capture runs after settlement linking commits. Amounts retain their sign and
+exact cents, units retain leading zeros, and Reference # records site/ticket.
+Payment Type is WeighMyTruck; Paid By and verification remain blank/unchecked.
+No card number, human author, payment confirmation or collected deduction is
+inferred. Who will cover uses dated truck ownership and the dated main driver,
+matching Scale's automatic payer. Missing/conflicting attribution is explicitly
+Needs review. The private outbox also retains the full source ticket snapshot.
+The sheet's MSERP Entry ID is a namespaced UUID derived from site/ticket, so
+retries and CSV reimports cannot create a duplicate expense or payroll deduction.
+This creates no Expenses & Charges row and does not change payroll.
+
+After deploying and checking the existing exporter, activate prospectively:
+
+```sql
+UPDATE expense_sheet_export_config
+SET scale_enabled=true, scale_from_date='2026-10-22'
+WHERE singleton AND enabled;
+```
+
+The normal server settlement sync supplies new tickets; the existing exporter
+wakes on committed outbox notifications. To end scale copying independently,
+set `scale_enabled=false`; stopping the shared service pauses all categories.
+Retain delivery receipts. `TestScaleOutboxDatabase` covers fresh/upgraded schemas,
+activation/date boundaries, rollback, final linking, payer ownership, credits,
+immutable retries/corrections and absence of duplicate native expenses.
+
 ## Google setup (one time)
 
 1. In a Google Cloud project, enable **Google Sheets API**.

@@ -39,6 +39,10 @@ func TestOutboxDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	scaleMigration, err := os.ReadFile("../../sql/138_scale_sheet_export.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("expense_sheet_%d", time.Now().UnixNano())
@@ -52,6 +56,7 @@ func TestOutboxDatabase(t *testing.T) {
 			defer func() { conn.Exec(ctx, "RESET ROLE; SET search_path TO public; DROP SCHEMA "+schema+" CASCADE") }()
 			source := strings.ReplaceAll(string(schemaSource), "\r\n", "\n")
 			if upgrade {
+				source = strings.Replace(source, strings.ReplaceAll(string(scaleMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(notifyMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
@@ -59,6 +64,7 @@ func TestOutboxDatabase(t *testing.T) {
 			if upgrade {
 				exec(string(migration))
 				exec(string(notifyMigration))
+				exec(string(scaleMigration))
 			}
 			exec("SET ROLE mserp_app")
 			count := func(want int) {
