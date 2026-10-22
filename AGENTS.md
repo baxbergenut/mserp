@@ -2487,6 +2487,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   remain effective until explicitly released; loads and finances stay intact.
 - Driver/Truck profiles have Status history tables/timelines with effective time,
   recorded time, actor/source snapshots and clipped assigned-truck periods.
+  Profile history excludes operational dispatch events and filter choices;
+  Status Board edit history retains the operational audit.
   No-op writes and GETs add no history. Newest transitions may be backdated after
   the prior transition; migration baselines have unknown earlier starts.
 - Status activation is separate from schema deployment: review

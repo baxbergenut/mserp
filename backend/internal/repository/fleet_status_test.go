@@ -229,12 +229,22 @@ func TestFleetStatusDatabase(t *testing.T) {
 			}
 			foundTruck := false
 			for _, event := range history.Items {
+				if event.Track == "dispatch" {
+					t.Fatal("profile history includes operational dispatch status", event.Status)
+				}
 				if event.Track == "assigned_truck" {
 					foundTruck = true
 				}
 			}
 			if !foundTruck {
 				t.Fatal("driver cannot see assigned truck history")
+			}
+			if got := scalar(`SELECT count(*)::text FROM fleet_status_history WHERE entity_id=$1 AND track='dispatch'`, d.ID); got == "0" {
+				t.Fatal("operational dispatch audit was lost")
+			}
+			dispatchHistory, e := fleet.StatusHistory(ctx, "driver", d.ID, "dispatch", "", "", "", 1, history.Snapshot)
+			if e != nil || len(dispatchHistory.Items) != 0 || dispatchHistory.HasMore {
+				t.Fatal("profile history exposes dispatch through filters", dispatchHistory, e)
 			}
 			if got := scalar(`SELECT actor_name FROM fleet_status_history WHERE source='board' ORDER BY id DESC LIMIT 1`); got != "Status Reviewer" {
 				t.Fatal("lost actor", got)
