@@ -796,6 +796,12 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err = saveLoadState(ctx, tx, a.DriverID, s); err != nil {
 		return result, err
 	}
+	if err = syncFleetStatusProgress(ctx, tx, []string{a.DriverID}); err != nil {
+		return result, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT status,version FROM driver_board WHERE driver_id=$1`, a.DriverID).Scan(&saved[0].Status, &saved[0].Version); err != nil {
+		return result, err
+	}
 	views, err = readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate)
 	if err != nil {
 		return result, err

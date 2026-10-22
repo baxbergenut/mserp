@@ -1,4 +1,8 @@
 import { expensePayload } from "./expenseCosts";
+export const fetchFleetStatusCatalog = (signal?:AbortSignal) => apiRequest<{enabled:boolean;rules:import("./types").FleetStatusRule[]}>("/fleet-status/catalog",{signal});
+export const fetchFleetStatusHistory = (kind:"drivers"|"trucks",id:string,query:Record<string,string>,signal?:AbortSignal) => apiRequest<import("./types").FleetStatusHistory>(`/${kind}/${id}/status-history?${new URLSearchParams(query)}`,{signal});
+export const changeDriverAvailability = (id:string,input:import("./types").FleetStatusChange) => apiRequest<Driver>(`/drivers/${id}/availability`,{method:"PATCH",body:JSON.stringify(input)});
+export const changeTruckCondition = (id:string,input:import("./types").FleetStatusChange) => apiRequest<Truck>(`/trucks/${id}/condition`,{method:"PATCH",body:JSON.stringify(input)});
 export const fetchTruckDataTruck = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DataTruckEnrollment>(`/trucks/${id}/datatruck`, {signal});
 export const retryTruckDataTruck = (id: string, version: number) => apiRequest<void>(`/trucks/${id}/datatruck`, {method:"POST",body:JSON.stringify({version})});
 import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";

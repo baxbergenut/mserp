@@ -255,12 +255,19 @@ func (r *GrossBoardRepository) Save(ctx context.Context, entries []GrossBoardEnt
 	return err
 }
 
-func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossBoardEntry) ([]GrossBoardEntry, error) {
+func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossBoardEntry, actors ...string) ([]GrossBoardEntry, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	actor := ""
+	if len(actors) > 0 {
+		actor = actors[0]
+	}
+	if err = setBoardActor(ctx, tx, actor, "gross_board"); err != nil {
+		return nil, err
+	}
 	sort.Slice(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
 		if a.DriverID+a.Date == b.DriverID+b.Date {
@@ -384,6 +391,13 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		entries[index] = e
 	}
 
+	progressIDs := []string{}
+	for _, entry := range entries {
+		progressIDs = append(progressIDs, entry.DriverID)
+	}
+	if err = syncFleetStatusProgress(ctx, tx, progressIDs); err != nil {
+		return nil, err
+	}
 	for i := range entries {
 		date, err := time.Parse(time.DateOnly, entries[i].Date)
 		if err != nil {

@@ -2474,3 +2474,23 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   recovery. No payment transaction, date, price or No charge is inferred. New
   orders still require explicit payment confirmation; historical corrections cannot
   reopen work or place holds. See testHistoricalPaidCutover in maintenance tests.
+
+### Shared fleet statuses and history (137)
+
+- Employment, driver availability, truck condition, and dispatch detail remain
+  separate. `fleet_status_rules` owns the mapping; database triggers synchronize
+  profile, board, crew, and work-order writes. Left requires explicit termination;
+  personal reasons never restrict trucks. Board editors may place restrictions,
+  while existing Fleet/work-order permissions govern releases. Independent holds
+  remain effective until explicitly released; loads and finances stay intact.
+- Driver/Truck profiles have Status history tables/timelines with effective time,
+  recorded time, actor/source snapshots and clipped assigned-truck periods.
+  No-op writes and GETs add no history. Newest transitions may be backdated after
+  the prior transition; migration baselines have unknown earlier starts.
+- Status activation is separate from schema deployment: review
+  `-fleet-status-preview`, then use `-fleet-status-activate <reviewed-revision>`.
+  Snapshot changes refuse activation. See docs/FLEET_STATUSES.md. New writers
+  call setBoardActor before operational row locks. Queue changes persist
+  ENROUTE/RESERVED; a cache-only startup/minute worker catches date/source changes.
+- Database checks use the disposable MSERP_DRIVER_BOARD_TEST_DATABASE_URL.
+  Browser coverage: `node scripts/test-fleet-status-e2e.mjs` against review-local.

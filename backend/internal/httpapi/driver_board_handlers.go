@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -46,7 +47,7 @@ func (request *driverBoardRequest) validate() error {
 			}
 		}
 		switch e.Status {
-		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT":
+		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT", "HOLD":
 		// Retain existing values during unrelated autosaves and history recovery.
 		// These are no longer offered as driver status choices.
 		case "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "LOAD CANCELLED", "REJECTED":
@@ -63,6 +64,16 @@ func (request *driverBoardRequest) validate() error {
 func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository) {
 	registerBoardPresenceRoutes(r, logger, repo)
 	fail := func(w http.ResponseWriter, err error) {
+		var statusError *pgconn.PgError
+		if errors.As(err, &statusError) && statusError.ConstraintName == "fleet_status_invalid" {
+			writeAPIError(w, 409, statusError.Message)
+			return
+		}
+		var invalid *repository.ChargeValidationError
+		if errors.As(err, &invalid) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
 		if errors.Is(err, repository.ErrNotFound) {
 			writeAPIError(w, 404, "history event not found")
 			return

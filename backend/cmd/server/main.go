@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"log/slog"
@@ -33,6 +34,8 @@ import (
 )
 
 func main() {
+	statusPreview := flag.Bool("fleet-status-preview", false, "print the read-only status activation snapshot and exit")
+	statusActivate := flag.String("fleet-status-activate", "", "activate the explicitly reviewed status snapshot SHA256 and exit")
 	wmtImport := flag.String("import-weighmytruck-roster", "", "initialize WeighMyTruck tracker from website CSV and exit without external calls")
 	syncWMTOnly := flag.Bool("sync-weighmytruck-once", false, "sync scale transactions and exit")
 	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
@@ -56,6 +59,26 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	if *statusPreview || *statusActivate != "" {
+		repo := repository.NewFleetRepository(pool)
+		if *statusActivate != "" {
+			if err = repo.ActivateStatuses(ctx, *statusActivate); err != nil {
+				logger.Error("activate fleet statuses", "error", err)
+				os.Exit(1)
+			}
+			logger.Info("fleet statuses activated")
+			return
+		}
+		v, e := repo.PreviewStatuses(ctx)
+		if e != nil {
+			logger.Error("preview fleet statuses", "error", e)
+			os.Exit(1)
+		}
+		if e = json.NewEncoder(os.Stdout).Encode(v); e != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if *wmtImport != "" {
 		file, err := os.Open(*wmtImport)
 		if err != nil {
@@ -98,6 +121,20 @@ func main() {
 		return
 	}
 	fleetRepo := repository.NewFleetRepository(pool)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			if err := fleetRepo.ReconcileStatusProgress(ctx); err != nil && ctx.Err() == nil {
+				logger.Error("reconcile status queue", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	dataTruckRepo := repository.NewDataTruckRepository(pool, client, cfg.DataTruckMCID)
 	fleetRepo.ConfigureDataTruck(dataTruckRepo)
 	tollRepo := repository.NewTollRepository(pool)

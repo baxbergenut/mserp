@@ -157,6 +157,11 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				statusMigration, readErr := os.ReadFile("../../sql/137_fleet_status_history.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(statusMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(historicalMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(odometerMigration), "\r\n", "\n"), "", 1)
 				// Replay task-kind constraints in their original order before the
@@ -209,6 +214,11 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(workflowMigration))
 				exec(string(odometerMigration))
 				exec(string(historicalMigration))
+				statusMigration, readErr := os.ReadFile("../../sql/137_fleet_status_history.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(statusMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))

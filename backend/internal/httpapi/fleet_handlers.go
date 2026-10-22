@@ -26,6 +26,11 @@ type fleetHandler struct {
 
 func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository) {
 	handler := fleetHandler{logger: logger, repo: repo}
+	r.Get("/fleet-status/catalog", handler.fleetStatusCatalog)
+	r.Get("/drivers/{id}/status-history", handler.fleetStatusHistory)
+	r.Patch("/drivers/{id}/availability", handler.changeAvailability)
+	r.Get("/trucks/{id}/status-history", handler.fleetStatusHistory)
+	r.Patch("/trucks/{id}/condition", handler.changeTruckCondition)
 
 	r.Get("/tasks/five-eld/{id}", handler.fiveELDTruckTask)
 	r.Post("/tasks/five-eld/{id}/complete", handler.fiveELDTruckTask)
@@ -116,6 +121,7 @@ func (handler fleetHandler) getTruck(w http.ResponseWriter, r *http.Request) {
 }
 
 type driverRequest struct {
+	StatusVersion         *int `json:"statusVersion"`
 	preserveFields        []string
 	NewTruck              *truckRequest                    `json:"newTruck"`
 	NewTruckOwnedByDriver bool                             `json:"newTruckOwnedByDriver"`
@@ -253,6 +259,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		return repository.DriverInput{}, errors.New("driver ownership requires a new truck")
 	}
 	return repository.DriverInput{
+		StatusVersion:  request.StatusVersion,
 		PreserveFields: request.preserveFields,
 		NewTruck:       newTruck, NewTruckOwnedByDriver: request.NewTruckOwnedByDriver,
 		IsTeamDriver: request.IsTeamDriver, TeamVersion: request.TeamVersion, TeamMainDriverID: request.TeamMainDriverID, TeamMainVersion: request.TeamMainVersion,
@@ -275,6 +282,7 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
+	StatusVersion            *int `json:"statusVersion"`
 	AddToDataTruck           bool `json:"addToDataTruck"`
 	preserveFields           []string
 	OwnershipEffectiveDate   string  `json:"ownershipEffectiveDate"`
@@ -358,6 +366,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
+		StatusVersion:            request.StatusVersion,
 		AddToDataTruck:           request.AddToDataTruck,
 		PreserveFields:           request.preserveFields,
 		OwnershipEffectiveDate:   request.OwnershipEffectiveDate,
@@ -614,6 +623,8 @@ func (handler fleetHandler) createTruck(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.StatusActor = session.User.ID
 	value, err := handler.repo.CreateTruck(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -647,6 +658,8 @@ func (handler fleetHandler) updateTruck(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.StatusActor = session.User.ID
 	value, err := handler.repo.UpdateTruck(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -774,6 +787,10 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 	}
 	var postgresError *pgconn.PgError
 	if errors.As(err, &postgresError) {
+		if postgresError.ConstraintName == "fleet_status_invalid" {
+			writeAPIError(w, 409, postgresError.Message)
+			return
+		}
 		switch postgresError.Code {
 		case "23514":
 			if strings.HasPrefix(postgresError.Message, "Assign the truck to the main driver") || strings.HasPrefix(postgresError.Message, "A driver can belong to only one") {

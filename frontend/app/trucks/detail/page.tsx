@@ -1,4 +1,6 @@
 "use client";
+import {FleetStatusDialog} from "@/app/components/fleet/FleetStatusDialog";
+import {FleetStatusHistory} from "@/app/components/fleet/FleetStatusHistory";
 
 import { useEffect, useState } from "react";
 import Link from "@/app/components/AccessLink";
@@ -21,7 +23,7 @@ import {operatingStatus} from "@/app/components/FleetStatusBadge";
 import { DataTruckSetup } from "../DataTruckSetup";
 import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
-const tabs = ["Overview", "Equipment", "Service programs", "Work orders", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Status history", "Equipment", "Service programs", "Work orders", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -33,6 +35,8 @@ export default function TruckDetailPage() {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [changingCondition,setChangingCondition]=useState(false);
+  useEffect(()=>{if(editing||changingCondition)return;const refresh=()=>{if(document.visibilityState==="visible")setAttempt(v=>v+1);};const timer=setInterval(refresh,30000);window.addEventListener("focus",refresh);return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);};},[editing,changingCondition]);
   const [savedTab, setTab] = useViewState<typeof tabs[number] | "Maintenance">("page:tab", "Overview");
   const candidateTab = savedTab === "Maintenance" ? "Work orders" : savedTab;
   const permissions = usePermissions();
@@ -58,7 +62,7 @@ export default function TruckDetailPage() {
       <header className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
           <div className="min-w-0"><PageHeader><div><div className="flex flex-wrap items-center gap-3"><TruckIcon className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">Truck {truck.unitNumber}</h1><span className={`rounded-full px-2 py-0.5 text-xs ${truck.active ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-400"}`}>{truck.active ? "Active" : "Inactive"}</span></div></div></PageHeader><p className="break-all font-mono text-xs text-zinc-400">VIN · {truck.vin || "Not recorded"}</p></div>
-          {permissions.includes("trucks.edit") && <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button>}
+          {permissions.includes("trucks.edit") && <div className="flex gap-2"><button className="ui-button" onClick={()=>setChangingCondition(true)}>Change condition</button><button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button></div>}
         </div>
         <dl className="grid grid-cols-1 gap-px border-t border-zinc-800 bg-zinc-800 sm:grid-cols-2 md:grid-cols-4">
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Current driver</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{truck.driverId ? <Link href={`/drivers/detail?id=${truck.driverId}`} className="hover:text-blue-300">{truck.driverName}</Link> : "Unassigned"}</dd></div>
@@ -81,6 +85,8 @@ export default function TruckDetailPage() {
       {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} onRecordSaved={()=>setAttempt(v=>v+1)} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
+      {tab === "Status history" && <FleetStatusHistory kind="trucks" id={truck.id}/>}
+      {changingCondition&&<FleetStatusDialog kind="trucks" value={truck} onClose={()=>setChangingCondition(false)} onSaved={v=>{setTruck(v);setChangingCondition(false);}}/>}
       {tab === "Equipment" && permissions.includes("inventory.read") && <InventoryWorkspace truckId={truck.id} />}
       {editing && <TruckEditor truck={truck} onClose={() => setEditing(false)} onSaved={value => { setTruck(value); setEditing(false); }} />}
     </>}

@@ -41,6 +41,7 @@ export const emptyTruckInput: TruckInput = {
 
 export function truckToInput(truck: Truck): TruckInput {
   return {
+	statusVersion:truck.statusVersion,
     ownershipEffectiveDate: truck.ownerSince ?? "",
     expectedOwnershipVersion: truck.ownershipVersion,
     ownerId: truck.ownerId,

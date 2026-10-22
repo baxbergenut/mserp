@@ -277,6 +277,11 @@ export type TruckStatus =
  | "hold";
 
 export type DriverStatus = "active" | "vacation" | "home" | "terminated";
+export type DriverAvailability = "active" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
+export interface FleetStatusRule { boardStatus:string;availability:string;truckCondition:string;requiresActive:boolean;requiresReady:boolean }
+export interface FleetStatusChange {status:string;version:number;effectiveAt?:string;reason:string}
+export interface FleetStatusHistoryEntry { id:number;entityKind:"driver"|"truck";entityId:string;entityName:string;track:string;previousStatus:string;status:string;effectiveAt:string;endedAt:string|null;recordedAt:string;actorName:string;source:string;sourceRef:string;relatedTruckName:string;actionId:number;baseline:boolean;reason:string }
+export interface FleetStatusHistory {items:FleetStatusHistoryEntry[];hasMore:boolean;snapshot:number}
 export interface DriverStatusChange {
   status: DriverStatus;
   terminationDate: string;
@@ -285,6 +290,10 @@ export interface DriverStatusChange {
   updatedAt: string;
 }
 export interface Driver {
+	employmentStatus?: "active" | "terminated";
+	truckOperatingStatus?:TruckOperatingStatus|"";
+	availabilityStatus?: DriverAvailability;
+	statusVersion?: number;
   firstName?: string | null;
   lastName?: string | null;
   employmentType: EmploymentType;
@@ -330,6 +339,7 @@ export interface Driver {
 }
 
 export interface DriverInput {
+	statusVersion?:number;
   firstName?: string;
   lastName?: string;
   newTruck?: TruckInput;
@@ -371,6 +381,7 @@ export interface DriverSetupDefaults {
 }
 
 export interface DriverBoardEntry {
+	effectiveAt?: string;
   undoId?: number;
   statusEdited?: boolean;
   resolveCurrentLoad?: boolean;
@@ -387,6 +398,8 @@ export interface DriverBoardEntry {
 }
 
 export interface DriverBoardDriver {
+	availabilityStatus?: DriverAvailability;
+	statusVersion?: number;
  truckOperatingStatus?: TruckOperatingStatus | "";
   truckId: string;
   dispatcherExtension?: number | null;
@@ -430,6 +443,7 @@ export interface FiveELDBoardSummary {
 }
 
 export interface DriverBoard {
+	statusSyncEnabled?: boolean;
   driverOrderRevisions: Record<string, string>;
   dispatcherOrderRevision: string;
   weekStart: string;
@@ -579,6 +593,7 @@ export interface PrePassFleetChange {
 
 export type TruckOperatingStatus = "ready" | "shop" | "out_of_service" | "hold";
 export interface Truck {
+	statusVersion?: number;
  operatingStatus?: TruckOperatingStatus;
   ownerSince?: string | null;
   ownershipVersion?: string;
@@ -614,6 +629,7 @@ export interface Truck {
 
 export interface DataTruckEnrollment { state: string; message: string; version: number }
 export interface TruckInput {
+	statusVersion?:number;
   addToDataTruck?: boolean;
   ownershipEffectiveDate?: string;
   expectedOwnershipVersion?: string;

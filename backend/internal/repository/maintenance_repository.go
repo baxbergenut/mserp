@@ -294,6 +294,9 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 		return MaintenanceRecord{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, in.ActorID, "work_order"); err != nil {
+		return MaintenanceRecord{}, err
+	}
 	var old MaintenanceRecord
 	var before []byte
 	if in.Version > 0 {
@@ -556,6 +559,12 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, "", "work_order"); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.status_actor_name',$1,true)`, actor); err != nil {
+		return err
+	}
 	old, err := scanMaintenance(tx.QueryRow(ctx, maintenanceSelect+" WHERE m.id=$1 AND m.version=$2 AND m.status<>'voided' FOR UPDATE OF m", id, version))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrMaintenanceConflict

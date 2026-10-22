@@ -184,7 +184,8 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		entries, err := repo.SaveEntries(r.Context(), request.Entries)
+		session, _ := authSessionFromContext(r.Context())
+		entries, err := repo.SaveEntries(r.Context(), request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

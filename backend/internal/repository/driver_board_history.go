@@ -29,6 +29,9 @@ type DriverBoardHistory struct {
 }
 
 func setBoardActor(ctx context.Context, tx pgx.Tx, actor, source string) error {
+	if _, err := tx.Exec(ctx, `SELECT fleet_status_lock()`); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `SELECT set_config('mserp.board_actor',$1,true),set_config('mserp.board_source',$2,true)`, actor, source)
 	return err
 }

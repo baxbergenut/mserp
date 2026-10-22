@@ -53,6 +53,7 @@ export const emptyDriverInput: DriverInput = {
 
 export function driverToInput(driver: Driver): DriverInput {
   return {
+	statusVersion:driver.statusVersion,
     isTeamDriver: driver.teamRole === "team" ? true : undefined,
     teamVersion: driver.teamVersion,
     teamMainDriverId: driver.teamRole === "team" ? driver.teamPartnerId : undefined,
