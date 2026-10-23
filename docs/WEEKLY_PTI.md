@@ -6,7 +6,7 @@ and investor trucks are grouped above owner-operated trucks. All trucks appear,
 including inactive, unassigned, home, vacation and shop trucks. Ownership uses
 the recorded investor/company/driver-owner relationship, never the assigned driver.
 
-Cells are direct text inputs: typing `/`, `1`, or `0` replaces the mark and saves immediately. Other characters, deletion, and invalid pastes are blocked. Tab moves between cells. Read-only users cannot edit. The API and database also enforce the allowed marks:
+Cells are direct text inputs: typing `/`, `1`, or `0` replaces the mark and saves immediately. Other characters and invalid pastes are blocked. Backspace/Delete clears the mark. No text caret appears. Arrows move between cells, Enter moves down (Shift+Enter up), and Tab moves across. Ctrl+Z/Cmd+Z undoes up to 100 edits from this page session, including clears and previously blank cells. Undo waits for pending saves and uses the saved version, actor-owned event, and current mark to reject intervening edits; every undo is audited. Read-only users cannot edit. The API and database also enforce the allowed marks:
 - `/`: not operational, no driver, or PTI not required; yellow (#ffff00).
 - `1`: sent and checked; green (#00ff00).
 - `0`: not sent; red (#ff0000).
@@ -14,10 +14,10 @@ Cells are direct text inputs: typing `/`, `1`, or `0` replaces the mark and save
 Blank cells are unrecorded, never inferred as 0 or /. Manual marks are independent
 of fleet eligibility. Legacy completed native checks display as 1; other unchecked
 legacy records remain blank until explicitly recorded. Existing snapshots and
-audit history remain intact. The current-week worker maintains roster context
+audit history remain intact. The always-on worker checks every minute and creates the new week on Monday in America/New_York (shared fleet statuses are enabled in production). Open pages refresh every 30 seconds. The current-week worker maintains roster context
 but does not set or overwrite manual marks. Past weeks are never recalculated.
 
-The page shows only Unit # and week columns. Week cells are 64px wide; the
+The page shows only Unit # and week columns. Week cells are about 64px wide; upcoming read-only columns fill unused width and become editable when their week is created. The
 scroll area fills the available page height and resizes with the window. Truck
 numbers and week headers stay frozen. Notes and reviewer columns are removed;
 previous notes and attribution remain stored and are preserved by mark edits.

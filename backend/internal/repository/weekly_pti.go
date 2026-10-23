@@ -53,6 +53,7 @@ type PTIWeek struct {
 	Rows         []PTIRow   `json:"rows"`
 }
 type PTIChange struct {
+	UndoRequestID     string  `json:"undoRequestId,omitempty"`
 	Mark              *string `json:"mark,omitempty"`
 	RequestID         string  `json:"requestId"`
 	Version           int64   `json:"version"`
@@ -220,7 +221,7 @@ func (r *FleetRepository) PTIWeek(ctx context.Context, week string) (PTIWeek, er
 
 func (in *PTIChange) Validate() error {
 	if in.Mark != nil {
-		if *in.Mark != "/" && *in.Mark != "1" && *in.Mark != "0" {
+		if *in.Mark != "" && *in.Mark != "/" && *in.Mark != "1" && *in.Mark != "0" {
 			return chargeInvalid("PTI must be /, 1 or 0")
 		}
 		in.Received = *in.Mark == "1"
@@ -295,12 +296,38 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	if row.Version != in.Version {
 		return row, ErrPTIConflict
 	}
+	if in.UndoRequestID != "" {
+		var beforeJSON, afterJSON []byte
+		err = tx.QueryRow(ctx, `SELECT before_data,after_data FROM weekly_pti_events WHERE id::text=$1 AND week_start=$2 AND truck_id=$3 AND actor_id=$4`, in.UndoRequestID, week, truck, actor).Scan(&beforeJSON, &afterJSON)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return row, ErrPTIConflict
+		}
+		if err != nil {
+			return row, err
+		}
+		var previous, applied PTIRow
+		if err = json.Unmarshal(beforeJSON, &previous); err != nil {
+			return row, err
+		}
+		if err = json.Unmarshal(afterJSON, &applied); err != nil {
+			return row, err
+		}
+		marksEqual := (row.Mark == nil && applied.Mark == nil) || (row.Mark != nil && applied.Mark != nil && *row.Mark == *applied.Mark)
+		if !marksEqual || row.Received != applied.Received || row.Review != applied.Review {
+			return row, ErrPTIConflict
+		}
+		in.Mark, in.Received, in.Review = previous.Mark, previous.Received, previous.Review
+		in.Notes = row.Notes
+	}
 	// Legacy fields remain decodable, but eligibility is server-owned and links archived.
 	if (in.Eligibility != "" && in.Eligibility != row.Eligibility) || (in.VideoURL != "" && in.VideoURL != row.VideoURL) {
 		return row, chargeInvalid("PTI eligibility is automatic; video links are no longer editable")
 	}
-	if row.Mark != nil && in.Mark == nil {
+	if row.Mark != nil && in.Mark == nil && in.UndoRequestID == "" {
 		return row, chargeInvalid("Reload PTI and choose /, 1 or 0")
+	}
+	if in.Mark != nil && *in.Mark == "" {
+		in.Mark = nil
 	}
 	sameMark := (row.Mark == nil && in.Mark == nil) || (row.Mark != nil && in.Mark != nil && *row.Mark == *in.Mark)
 	if sameMark && row.Received == in.Received && row.Review == in.Review && row.Notes == in.Notes {

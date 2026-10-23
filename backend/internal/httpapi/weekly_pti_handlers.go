@@ -60,7 +60,7 @@ func (h fleetHandler) changePTI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in repository.PTIChange
-	if decodeJSON(r, &in) != nil || !isUUID(in.RequestID) {
+	if decodeJSON(r, &in) != nil || !isUUID(in.RequestID) || (in.UndoRequestID != "" && !isUUID(in.UndoRequestID)) {
 		writeAPIError(w, 400, "Invalid PTI change request")
 		return
 	}

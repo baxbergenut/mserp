@@ -336,6 +336,29 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 				}
 			}
 			badMark := "2"
+			clear := ""
+			clearInput := PTIChange{RequestID: "93000000-0000-4000-8000-000000000301", Version: current.Version, Mark: &clear, Notes: current.Notes}
+			cleared, e := repo.ChangePTI(ctx, week, current.TruckID, actor, clearInput)
+			if e != nil || cleared.Mark != nil || cleared.Received || cleared.Review != "pending" {
+				t.Fatal("clear mark", cleared, e)
+			}
+			undoInput := PTIChange{RequestID: "93000000-0000-4000-8000-000000000302", UndoRequestID: clearInput.RequestID, Version: cleared.Version, Review: "pending"}
+			if _, e = repo.ChangePTI(ctx, week, current.TruckID, "93000000-0000-4000-8000-000000000999", undoInput); !errors.Is(e, ErrPTIConflict) {
+				t.Fatal("undo another actor", e)
+			}
+			undone, e := repo.ChangePTI(ctx, week, current.TruckID, actor, undoInput)
+			if e != nil || undone.Mark == nil || *undone.Mark != "1" || undone.Notes != current.Notes {
+				t.Fatal("undo clear", undone, e)
+			}
+			retried, e := repo.ChangePTI(ctx, week, current.TruckID, actor, undoInput)
+			if e != nil || retried.Version != undone.Version {
+				t.Fatal("undo retry", e)
+			}
+			undoInput.RequestID = "93000000-0000-4000-8000-000000000303"
+			if _, e = repo.ChangePTI(ctx, week, current.TruckID, actor, undoInput); !errors.Is(e, ErrPTIConflict) {
+				t.Fatal("stale undo", e)
+			}
+			current = undone
 			if _, err = repo.ChangePTI(ctx, week, current.TruckID, actor, PTIChange{RequestID: "93000000-0000-4000-8000-000000000200", Version: current.Version, Mark: &badMark}); err == nil {
 				t.Fatal("free-form PTI accepted")
 			}
@@ -349,6 +372,10 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			created, e := repo.ChangePTI(ctx, oldWeek.Format("2006-01-02"), newTruck, actor, newInput)
 			if e != nil || created.Mark == nil || *created.Mark != "/" {
 				t.Fatal("new historical cell", created, e)
+			}
+			restored, e := repo.ChangePTI(ctx, oldWeek.Format("2006-01-02"), newTruck, actor, PTIChange{RequestID: "93000000-0000-4000-8000-000000000304", UndoRequestID: newInput.RequestID, Version: created.Version, Review: "pending"})
+			if e != nil || restored.Mark != nil || restored.Received {
+				t.Fatal("undo to blank", restored, e)
 			}
 			newInput.RequestID = "93000000-0000-4000-8000-000000000202"
 			if _, e = repo.ChangePTI(ctx, oldWeek.Format("2006-01-02"), newTruck, actor, newInput); !errors.Is(e, ErrPTIConflict) {
