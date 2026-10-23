@@ -101,7 +101,7 @@ try{
  await cell.press('Control+z');await expect(page.getByText(/PTI changed since/)).toBeVisible();await expect(cell).toHaveValue('0');
  const fleetBefore=sql(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks;`);
  const search=page.getByLabel('Search PTI',{exact:true});await search.fill('103');
- const dragTo=async(handle,target,after=false)=>{await handle.scrollIntoViewIfNeeded();const from=await handle.boundingBox();await target.scrollIntoViewIfNeeded();const to=await target.boundingBox();await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(to.x+Math.min(to.width/2,150),to.y+to.height*(after?0.8:0.2),{steps:10});await page.mouse.up();};
+ const dragTo=async(handle,target,after=false)=>{await handle.scrollIntoViewIfNeeded();const from=await handle.boundingBox();await target.scrollIntoViewIfNeeded();const to=await target.boundingBox();await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(to.x+Math.min(to.width/2,150),to.y+to.height*(after?0.8:0.2),{steps:10});await page.mouse.up();await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);};
  await dragTo(page.getByRole('button',{name:'Move truck 103',exact:true}),page.locator('[data-pti-group="owner_operator"]'));
  await expect(page.getByRole('rowgroup',{name:'Owner-operated trucks',exact:true}).getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
  await page.reload();await expect(page.getByRole('rowgroup',{name:'Owner-operated trucks',exact:true}).getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
