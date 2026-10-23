@@ -20,6 +20,7 @@ const artifacts=join(dirname(accessFile),'weekly-pti');await mkdir(artifacts,{re
 const browser=await chromium.launch();
 try{
  const context=await browser.newContext({viewport:{width:1600,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.addInitScript(()=>{window.ptiPaintWidths=[];const sample=()=>{const cell=document.querySelector('table[aria-label="Weekly PTI matrix"] td');if(cell)window.ptiPaintWidths.push(cell.getBoundingClientRect().width);if(window.ptiPaintWidths.length<120)requestAnimationFrame(sample);};requestAnimationFrame(sample);});
  await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
  const session=await(await page.request.get(access.base+'/api/auth/session')).json(),headers={'X-CSRF-Token':session.csrfToken,Origin:access.base};
  const api=async(method,path,data)=>{const r=await page.request[method](access.base+'/api'+path,{headers,...(data?{data}:{})});if(!r.ok())throw Error(path+': '+r.status()+' '+await r.text());return r.status()===204?null:r.json();};
@@ -37,6 +38,8 @@ try{
  await page.goto(access.base+'/fleet/weekly-pti');
  const row=page.getByRole('row',{name:'Truck 102',exact:true}),cell=page.getByLabel('Truck 102 PTI '+week,{exact:true});
  await expect(row).toBeVisible();await expect(page.getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>window.ptiPaintWidths.length)).toBeGreaterThan(0);
+ expect(await page.evaluate(()=>Math.max(...window.ptiPaintWidths))).toBeLessThan(60);
  const matrix=await api('get','/weekly-pti/matrix');expect(matrix.trucks.length).toBe(initial.rows.length-1);await expect(page.getByRole('row',{name:'Truck PTI-059',exact:true})).toHaveCount(0);
  expect(matrix.weeks).toEqual(weeks);
  const groupNames=await page.locator('tbody').evaluateAll(elements=>elements.map(e=>e.getAttribute('aria-label')));expect(groupNames).toEqual(['Company & investor trucks','Owner-operated trucks']);
@@ -132,7 +135,7 @@ try{
  expect((await reader.request.put(access.base+'/api/weekly-pti/layout',{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:layoutBody})).status()).toBe(403);
  expect((await reader.request.patch(access.base+'/api'+writePath,{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:body(saved,'/')})).status()).toBe(403);expect((await reader.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(200);await reader.close();
  const anonymous=await browser.newContext();expect((await anonymous.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(401);await anonymous.close();
- await page.reload();await expect(cell).toHaveValue('0');await table.evaluate(el=>{el.parentElement.scrollTop=0;});
+ await page.reload();await expect(cell).toHaveValue('0');await expect.poll(()=>page.evaluate(()=>window.ptiPaintWidths.length)).toBeGreaterThan(0);expect(await page.evaluate(()=>Math.max(...window.ptiPaintWidths))).toBeLessThan(60);await table.evaluate(el=>{el.parentElement.scrollTop=0;});
  await page.screenshot({path:join(artifacts,'weekly-pti.png'),fullPage:true});
  await page.getByRole('button',{name:'Collapse sidebar',exact:true}).click();await expect.poll(async()=>page.locator('aside').evaluate(el=>el.getBoundingClientRect().width)).toBe(64);await page.setViewportSize({width:390,height:844});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:join(artifacts,'weekly-pti-mobile.png'),fullPage:true});

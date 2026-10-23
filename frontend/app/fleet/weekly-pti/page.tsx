@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useLayoutEffect,useRef,useState} from "react";
 import {GripVertical,ListChecks} from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import {changePTI,createPTIWeek,fetchPTIMatrix,savePTILayout} from "@/app/lib/api";
@@ -24,7 +24,8 @@ export default function WeeklyPTIPage(){
  const cells=useRef(new Map<string,HTMLInputElement>()),undoStack=useRef<{requestId:string;after:PTIRow;order:number}[]>([]),sequence=useRef(0),undoing=useRef(false),pendingUndo=useRef(false);
  const [layoutBusy,setLayoutBusy]=useState(false),layoutLock=useRef(false);
  const ready=data!==null;
- useEffect(()=>{
+ // Measure and add filler weeks before the browser paints the grid.
+ useLayoutEffect(()=>{
   const element=scroller.current,main=element?.closest("main");if(!element||!main)return;
   const fit=()=>{const top=element.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;const height=Math.max(160,main.clientHeight-top-24)+"px";if(element.style.height!==height)element.style.height=height;setVisibleWeeks(Math.max(1,Math.floor(((element.parentElement?.clientWidth??688)-114)/56)));};
   const observer=new ResizeObserver(fit);observer.observe(main);if(element.parentElement)observer.observe(element.parentElement);window.addEventListener("resize",fit);fit();
