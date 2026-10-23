@@ -97,7 +97,7 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 			if err = offboardDriverAssignments(ctx, tx, *driverID, "", "fleetscope_termination"); err != nil {
 				return IntakeResult{}, err
 			}
-			notes += "Driver marked terminated; dispatcher assignment disconnected. Non-owned truck assignments disconnected; existing own-truck links retained. Owned trucks made inactive unless an active driver is linked; those trucks have separate review tasks.\nClustie driver ID: " + *driverID + "\n"
+			notes += "Driver marked terminated; dispatcher assignment disconnected. Non-owned truck assignments disconnected; existing own-truck links retained. Eligible owner-operated trucks made inactive unless an active teammate requires review. Continuing active-investor fleets are unaffected.\nClustie driver ID: " + *driverID + "\n"
 		} else if foundIntake && completedAt == nil {
 			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing Clustie record before marking it terminated.\n"
 		} else {

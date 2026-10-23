@@ -25,7 +25,7 @@ export function DriverStatusDialog({ driver, onClose, onSaved, startTerminated=f
     {status === "terminated" && <>
       <Field label="Termination date"><input aria-label="Termination date" className={controlClass} required type="date" min="2000-01-01" max={new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date())} value={date} onChange={event => setDate(event.target.value)} /></Field>
       <Field label="Pause charges from week (Monday)"><input aria-label="Pause charges from week (Monday)" className={controlClass} required type="date" min="2000-01-03" step={7} value={pauseWeek} onChange={event => setPauseWeek(event.target.value)} /></Field>
-      <p className="text-xs text-zinc-500">Termination clears the dispatcher and releases non-owned trucks. An existing link to the driver’s own truck stays; owned trucks become inactive unless an active driver is linked, in which case a review task is created. Existing charge-pause rules and outstanding balances remain.</p>
+      <p className="text-xs text-zinc-500">Termination clears the dispatcher and releases non-owned trucks. An existing link to the driver’s own truck stays; that truck becomes inactive unless an active teammate requires review. Their continuing active-investor fleet is unaffected. Existing charge-pause rules and outstanding balances remain.</p>
     </>}
   </div></Modal>;
 }

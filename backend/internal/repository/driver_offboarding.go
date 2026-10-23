@@ -49,13 +49,18 @@ const terminatedOwnerTrucksSQL = `SELECT t.id::text,t.unit_number,d.id::text,d.f
  WHERE (person.id=team.main_driver_id OR person.id=team.team_driver_id)
  AND team.start_week <= (now() AT TIME ZONE 'America/New_York')::date
  AND (team.end_week IS NULL OR team.end_week > (now() AT TIME ZONE 'America/New_York')::date))) ORDER BY person.id),
- coalesce(receipt.outcome,''),jsonb_build_object('truck',to_jsonb(t),'ownerUpdatedAt',d.updated_at,
+ coalesce(receipt.outcome,''),jsonb_build_object('truck',to_jsonb(t),'ownerUpdatedAt',d.updated_at,'investor',jsonb_build_object('id',owner.id,'active',owner.active,'updatedAt',owner.updated_at),
  'assignments',coalesce((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.unassigned_at IS NULL),'[]'::jsonb),
  'teams',coalesce((SELECT jsonb_agg(to_jsonb(team) ORDER BY team.id) FROM driver_teams team JOIN truck_driver_assignments a ON a.driver_id=team.main_driver_id AND a.truck_id=t.id AND a.unassigned_at IS NULL
  WHERE team.start_week <= (now() AT TIME ZONE 'America/New_York')::date AND (team.end_week IS NULL OR team.end_week > (now() AT TIME ZONE 'America/New_York')::date)),'[]'::jsonb))
  FROM trucks t JOIN investors owner ON owner.id=t.owner_id JOIN drivers d ON d.id=owner.driver_id
  LEFT JOIN driver_termination_truck_actions receipt ON receipt.termination_id=d.termination_id AND receipt.truck_id=t.id
- WHERE NOT d.active AND ($1='' OR d.id::text=$1) ORDER BY t.id`
+ WHERE NOT d.active AND ($1='' OR d.id::text=$1)
+ -- Driver employment does not terminate a continuing investor's fleet. Only
+ -- their own current operating assignment belongs to driver offboarding.
+ AND (NOT owner.active OR EXISTS(SELECT 1 FROM truck_driver_assignments own
+ WHERE own.truck_id=t.id AND own.driver_id=d.id AND own.unassigned_at IS NULL))
+ ORDER BY t.id`
 
 func readTerminatedOwnerTrucks(ctx context.Context, q chargeQuery, driver string) ([]TerminatedOwnerTruck, error) {
 	rows, err := q.Query(ctx, terminatedOwnerTrucksSQL, driver)

@@ -219,36 +219,48 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		}
 	})
 
-	t.Run("active direct driver", func(t *testing.T) {
-		owner, _ := newDriver("Shared Owner")
-		operator, _ := newDriver("Active Operator")
-		truck := newTruck("SHARED-DIRECT", &owner.ID, &operator.ID)
-		owner, err = fleet.GetDriver(ctx, owner.ID)
-		must(err)
-		_, err = terminate(owner)
-		must(err)
-		truck, err = fleet.GetTruck(ctx, truck.ID)
-		must(err)
-		if !truck.Active || truck.DriverID == nil || *truck.DriverID != operator.ID {
-			t.Fatal("active driver truck changed")
-		}
-		if got := scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID); got != "held" {
-			t.Fatal(got)
-		}
-		if _, err = NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: "HELD-OWNER-BLOCKED", Slot: 0}}); err == nil {
-			t.Fatal("terminated owner dispatched on an active held truck")
-		}
-		page, err := NewCustomTaskRepository(pool).List(ctx, Pagination{}, truck.UnitNumber, "open")
-		must(err)
-		if page.Total != 1 {
-			t.Fatal("missing review task")
-		}
-		hidden, err := NewCustomTaskRepository(pool).List(WithTaskViewer(ctx, operator.ID, false), Pagination{}, truck.UnitNumber, "open")
-		must(err)
-		if hidden.Total != 0 {
-			t.Fatal("review task leaked")
-		}
-	})
+	for _, continuing := range []bool{true, false} {
+		t.Run(fmt.Sprintf("investor with hired driver active=%v", continuing), func(t *testing.T) {
+			owner, _ := newDriver(fmt.Sprintf("Shared Owner %v", continuing))
+			operator, _ := newDriver(fmt.Sprintf("Active Operator %v", continuing))
+			truck := newTruck(fmt.Sprintf("SHARED-DIRECT-%v", continuing), &owner.ID, &operator.ID)
+			if !continuing {
+				exec(`UPDATE investors SET active=false WHERE driver_id=$1`, owner.ID)
+			}
+			owner, err = fleet.GetDriver(ctx, owner.ID)
+			must(err)
+			_, err = terminate(owner)
+			must(err)
+			truck, err = fleet.GetTruck(ctx, truck.ID)
+			must(err)
+			if !truck.Active || truck.DriverID == nil || *truck.DriverID != operator.ID {
+				t.Fatal("active driver truck changed")
+			}
+			want := "0"
+			if !continuing {
+				want = "1"
+			}
+			if got := scalar(`SELECT count(*)::text FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID); got != want {
+				t.Fatal("incorrect investor offboarding receipt", got)
+			}
+			if !continuing && scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID) != "held" {
+				t.Fatal("inactive investor conflict not held")
+			}
+			if _, err = NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: "HELD-OWNER-BLOCKED", Slot: 0}}); err == nil {
+				t.Fatal("terminated owner dispatched on an active held truck")
+			}
+			page, err := NewCustomTaskRepository(pool).List(ctx, Pagination{}, truck.UnitNumber, "open")
+			must(err)
+			if (continuing && page.Total != 0) || (!continuing && page.Total != 1) {
+				t.Fatal("incorrect investor review task count", page.Total)
+			}
+			hidden, err := NewCustomTaskRepository(pool).List(WithTaskViewer(ctx, operator.ID, false), Pagination{}, truck.UnitNumber, "open")
+			must(err)
+			if hidden.Total != 0 {
+				t.Fatal("review task leaked")
+			}
+		})
+	}
 
 	t.Run("active team driver", func(t *testing.T) {
 		owner, _ := newDriver("Team Owner")
@@ -298,6 +310,7 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		owner, _ := newDriver("Rollback Owner")
 		operator, _ := newDriver("Rollback Operator")
 		truck := newTruck("ROLLBACK-REVIEW", &owner.ID, &operator.ID)
+		exec(`UPDATE investors SET active=false WHERE driver_id=$1`, owner.ID)
 		execAdmin(`ALTER TABLE custom_tasks ADD CONSTRAINT reject_offboarding_review CHECK(title <> 'Review terminated owner''s truck ROLLBACK-REVIEW')`)
 		owner, err = fleet.GetDriver(ctx, owner.ID)
 		must(err)
@@ -350,8 +363,13 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		if scalar(`SELECT count(*)::text FROM truck_driver_assignments WHERE truck_id=$1`, unassigned.ID) != "0" {
 			t.Fatal("cleanup invented a driving assignment")
 		}
+		unassigned, err = fleet.GetTruck(ctx, unassigned.ID)
+		must(err)
+		if !unassigned.Active || scalar(`SELECT count(*)::text FROM driver_termination_truck_actions WHERE truck_id=$1`, unassigned.ID) != "0" {
+			t.Fatal("unassigned active-investor truck entered driver offboarding")
+		}
 		before := scalar(`SELECT count(*)::text FROM driver_termination_truck_actions`)
-		// A held truck needs explicit review even after its active driver leaves.
+		// Continuing investor trucks stay independent when the hired driver leaves.
 		exec(`UPDATE drivers SET status='terminated' WHERE id=$1`, active.ID)
 		preview, err = fleet.PreviewTerminationCleanup(ctx)
 		must(err)
@@ -363,7 +381,7 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		shared, err = fleet.GetTruck(ctx, shared.ID)
 		must(err)
 		if !shared.Active {
-			t.Fatal("retry silently inactivated held truck")
+			t.Fatal("retry silently inactivated continuing investor truck")
 		}
 	})
 }

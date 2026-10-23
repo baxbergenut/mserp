@@ -58,8 +58,7 @@ try {
   await terminate(sharedOwner);
   expect(await api('get', '/trucks/' + sharedTruck.id)).toMatchObject({ active: true, driverId: activeDriver.id });
   const tasks = await api('get', '/tasks/custom?status=open&search=' + encodeURIComponent(sharedTruck.unitNumber));
-  expect(tasks.total).toBe(1);
-  expect(tasks.items[0].systemTaskKind).toBe('driver_offboarding');
+  expect(tasks.total).toBe(0);
   const monday = new Date(today + 'T12:00:00Z');
   monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
   const board = await api('get', '/driver-board?weekStart=' + monday.toISOString().slice(0, 10));
@@ -68,7 +67,7 @@ try {
   expect((await anonymous.request.patch(access.base + '/api/drivers/' + owner.id + '/status', { data: { status: 'active' } })).status()).toBe(401);
   await anonymous.close();
   expect(errors).toEqual([]);
-  console.log('Termination E2E passed: owner link retained, owned truck inactive, company truck released, active-driver truck held with review task, dispatch exclusion and anonymous denial. Screenshots: ' + artifacts);
+  console.log('Termination E2E passed: owner link retained, owned truck inactive, company truck released, continuing investor fleet unchanged without review tasks, dispatch exclusion and anonymous denial. Screenshots: ' + artifacts);
 } finally {
   await browser.close();
 }

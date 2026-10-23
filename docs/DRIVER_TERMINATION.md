@@ -6,7 +6,14 @@ truck's active flag and assignment history. An existing assignment to the driver
 own truck remains. Recorded ownership through the driver's investor identity is
 authoritative; the legacy owner-operator boolean is ignored.
 
-The terminated driver's owned trucks become inactive, except trucks with an active
+An active investor's fleet is independent of their linked driver's employment.
+For an active investor, only trucks they currently operate themselves enter
+driver offboarding. Trucks operated by hired drivers, and unassigned investor
+trucks, stay unchanged and do not receive driver-termination review tasks.
+The owner's existing driving assignment is the evidence; an active investor
+record alone is not an owner-operator classification.
+
+Eligible owner-operated trucks become inactive, except trucks with an active
 direct driver or an active member of a current driver team. Those trucks stay
 unchanged and receive an offboarding review task. Review task visibility follows
 Settings > System tasks > Driver offboarding, including Administrator access.

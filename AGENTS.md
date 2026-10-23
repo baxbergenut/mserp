@@ -2153,8 +2153,9 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   `terminationDate`. Only terminated maps to active=false. A compatibility trigger
   synchronizes legacy active writes; nonterminated named statuses retain fleet links.
   Termination keeps the existing charge pause workflow, clears dispatchers, and
-  releases non-owned truck assignments. Existing own-truck links remain; owned
-  trucks become inactive unless an active direct/team driver requires review.
+  releases non-owned truck assignments. Existing own-truck links remain; eligible
+  owner-operated trucks become inactive unless an active driver requires review.
+  Continuing active-investor fleets remain independent of driver employment.
   See migration 148 and `docs/DRIVER_TERMINATION.md`. FleetScope
   records its source termination date. Legacy inactive records become terminated;
   known source dates survive, otherwise migration day minus 30 days is the explicitly
@@ -2604,7 +2605,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   never legacy type booleans or name matching. Retain only an existing own-truck
   assignment; never recreate an ended one. Other trucks keep their active flag
   when their terminated driver is released. Rehire never reactivates trucks.
-- Owned trucks with active direct or current team drivers stay unchanged and get
+- Active investor fleets remain independent of linked driver employment. Only
+  the investor's own current operating assignments enter driver offboarding;
+  hired-driver and unassigned trucks receive no termination tasks or status changes.
+  Inactive investors' owned trucks still enter review. Eligible trucks with active direct or current team drivers stay unchanged and get
   private `driver_offboarding` review tasks under existing system-task assignment
   permissions. Migration 148 stores per-termination/truck outcome receipts with
   before/after snapshots; retries do not duplicate tasks or revisit held trucks.
