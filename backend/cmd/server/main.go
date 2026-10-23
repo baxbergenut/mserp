@@ -34,6 +34,8 @@ import (
 )
 
 func main() {
+	terminationPreview := flag.Bool("termination-cleanup-preview", false, "preview terminated driver assignments and owned trucks without writing")
+	terminationApply := flag.String("termination-cleanup-apply", "", "apply the reviewed termination cleanup SHA256 and exit without jobs or external calls")
 	statusPreview := flag.Bool("fleet-status-preview", false, "print the read-only status activation snapshot and exit")
 	statusActivate := flag.String("fleet-status-activate", "", "activate the explicitly reviewed status snapshot SHA256 and exit")
 	wmtImport := flag.String("import-weighmytruck-roster", "", "initialize WeighMyTruck tracker from website CSV and exit without external calls")
@@ -59,6 +61,23 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	if *terminationPreview || *terminationApply != "" {
+		repo := repository.NewFleetRepository(pool)
+		var result repository.TerminationCleanup
+		if *terminationApply != "" {
+			result, err = repo.ApplyTerminationCleanup(ctx, *terminationApply)
+		} else {
+			result, err = repo.PreviewTerminationCleanup(ctx)
+		}
+		if err != nil {
+			logger.Error("termination cleanup", "error", err)
+			os.Exit(1)
+		}
+		if err = json.NewEncoder(os.Stdout).Encode(result); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if *statusPreview || *statusActivate != "" {
 		repo := repository.NewFleetRepository(pool)
 		if *statusActivate != "" {

@@ -20,6 +20,9 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('fleetscope:intake', 0))`); err != nil {
 		return IntakeResult{}, err
 	}
+	if err = setBoardActor(ctx, tx, "", "fleetscope_termination"); err != nil {
+		return IntakeResult{}, err
+	}
 	result := IntakeResult{Status: "duplicate"}
 	var existingHash string
 	err = tx.QueryRow(ctx, `SELECT coalesce(termination_id::text,''),body_sha256 FROM fleetscope_webhook_receipts WHERE event_id=$1`, event.EventID).Scan(&result.TerminationID, &existingHash)
@@ -91,10 +94,10 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 			if _, err = tx.Exec(ctx, `UPDATE drivers SET active=false,status='terminated',termination_date=$2::date,dispatcher_id=NULL,updated_at=now() WHERE id=$1`, *driverID, event.TerminationDate); err != nil {
 				return IntakeResult{}, err
 			}
-			if err = setDriverTruck(ctx, tx, *driverID, nil); err != nil {
+			if err = offboardDriverAssignments(ctx, tx, *driverID, "", "fleetscope_termination"); err != nil {
 				return IntakeResult{}, err
 			}
-			notes += "Driver marked terminated; current truck and dispatcher assignments disconnected.\nClustie driver ID: " + *driverID + "\n"
+			notes += "Driver marked terminated; dispatcher assignment disconnected. Non-owned truck assignments disconnected; existing own-truck links retained. Owned trucks made inactive unless an active driver is linked; those trucks have separate review tasks.\nClustie driver ID: " + *driverID + "\n"
 		} else if foundIntake && completedAt == nil {
 			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing Clustie record before marking it terminated.\n"
 		} else {
