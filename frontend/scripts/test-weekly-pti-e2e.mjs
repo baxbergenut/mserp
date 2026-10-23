@@ -121,7 +121,7 @@ try{
  await page.unroute('**/api/weekly-pti/layout');
  await page.emulateMedia({reducedMotion:'reduce'});
  const reducedBox=await handle.boundingBox();await page.mouse.move(reducedBox.x+reducedBox.width/2,reducedBox.y+reducedBox.height/2);await page.mouse.down();
- expect(await sliding.evaluate(e=>e.style.transition)).toContain('0ms');await page.keyboard.press('Escape');await page.mouse.up();await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);await page.emulateMedia({reducedMotion:'no-preference'});
+ expect(await sliding.evaluate(e=>getComputedStyle(e).transitionDuration)).toBe('0s');await page.keyboard.press('Escape');await page.mouse.up();await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);await page.emulateMedia({reducedMotion:'no-preference'});
  expect((await api('get','/weekly-pti/matrix')).layoutVersion).toBe(layout.layoutVersion);
  expect(sql(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks;`)).toBe(fleetBefore);
  await search.fill('');
