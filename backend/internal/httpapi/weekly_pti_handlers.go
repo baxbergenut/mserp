@@ -29,6 +29,30 @@ func (h fleetHandler) ptiMatrix(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, value)
 }
+func (h fleetHandler) ptiLayout(w http.ResponseWriter, r *http.Request) {
+	var in repository.PTILayoutChange
+	if decodeJSON(r, &in) != nil {
+		writeAPIError(w, 400, "Invalid PTI layout")
+		return
+	}
+	for _, p := range in.Placements {
+		if !isUUID(p.TruckID) {
+			writeAPIError(w, 400, "Invalid truck")
+			return
+		}
+	}
+	session, _ := authSessionFromContext(r.Context())
+	version, err := h.repo.SavePTILayout(r.Context(), session.User.ID, in)
+	if errors.Is(err, repository.ErrPTIConflict) {
+		writeAPIError(w, 409, "PTI layout or active trucks changed. Reload and try again.")
+		return
+	}
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]int64{"version": version})
+}
 func (h fleetHandler) createPTIWeek(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		WeekStart string `json:"weekStart"`

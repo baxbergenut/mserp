@@ -11,6 +11,7 @@ const database=new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
 if(!['127.0.0.1','localhost'].includes(new URL(access.base).hostname)||!['127.0.0.1','localhost'].includes(database.hostname)||!database.pathname.endsWith('_test')||!/^review_[a-f0-9]+$/.test(access.schema))throw Error('Disposable local review required');
 const sql=input=>execFileSync(process.env.PSQL_PATH||'psql',['-X','-q','-v','ON_ERROR_STOP=1','-d',process.env.MSERP_REVIEW_TEST_DATABASE_URL],{input:`SET search_path TO ${access.schema},public;SET ROLE mserp_app;\n${input}`,encoding:'utf8',windowsHide:true});
 sql(`INSERT INTO trucks(unit_number) SELECT 'PTI-'||lpad(n::text,3,'0') FROM generate_series(1,60) n WHERE NOT EXISTS(SELECT 1 FROM trucks WHERE unit_number='PTI-'||lpad(n::text,3,'0')); UPDATE trucks SET created_at=now()-interval '30 days';`);
+sql(`UPDATE trucks SET active=false WHERE unit_number='PTI-059';`);
 database.searchParams.set('search_path',access.schema+',public');database.searchParams.set('role','mserp_app');
 const binary=join(dirname(accessFile),process.platform==='win32'?'api.exe':'api');
 const cli=args=>execFileSync(binary,args,{cwd:dirname(accessFile),env:{...process.env,DATABASE_URL:database.toString(),DATATRUCK_API_KEY:'test-disabled',DATATRUCK_COMPANY_NAME:'test',RELAY_API_KEY:'test-disabled',PREPASS_CLIENT_ID:'test-disabled',PREPASS_CLIENT_SECRET:'test-disabled',FRONTEND_ORIGIN:access.base,AUTH_COOKIE_SECURE:'false',SCHEDULED_SYNCS_ENABLED:'false'},encoding:'utf8',windowsHide:true});
@@ -36,10 +37,10 @@ try{
  await page.goto(access.base+'/fleet/weekly-pti');
  const row=page.getByRole('row',{name:'Truck 102',exact:true}),cell=page.getByLabel('Truck 102 PTI '+week,{exact:true});
  await expect(row).toBeVisible();await expect(page.getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
- const matrix=await api('get','/weekly-pti/matrix');expect(matrix.trucks.length).toBe(initial.rows.length);
+ const matrix=await api('get','/weekly-pti/matrix');expect(matrix.trucks.length).toBe(initial.rows.length-1);await expect(page.getByRole('row',{name:'Truck PTI-059',exact:true})).toHaveCount(0);
  expect(matrix.weeks).toEqual(weeks);
  const groupNames=await page.locator('tbody').evaluateAll(elements=>elements.map(e=>e.getAttribute('aria-label')));expect(groupNames).toEqual(['Company & investor trucks','Owner-operated trucks']);
- for(const truck of matrix.trucks){await expect(page.getByRole('rowgroup',{name:truck.ownership==='owner_operator'?'Owner-operated trucks':'Company & investor trucks',exact:true}).getByRole('row',{name:'Truck '+truck.unit,exact:true})).toBeVisible();}
+ for(const truck of matrix.trucks){await expect(page.getByRole('rowgroup',{name:truck.group==='owner_operator'?'Owner-operated trucks':'Company & investor trucks',exact:true}).getByRole('row',{name:'Truck '+truck.unit,exact:true})).toBeVisible();}
  await expect(page.getByRole('button',{name:'Previous week',exact:true})).toHaveCount(0);
  expect(await cell.evaluate(e=>e.type)).toBe('text');
  await expect(page.locator('table select')).toHaveCount(0);
@@ -98,8 +99,26 @@ try{
  await cell.press('/');await expect(cell).not.toHaveAttribute('aria-busy','true');await expect(cell).toHaveValue('/');
  target=(await api('get',path)).rows.find(r=>r.truckId===target.truckId);await api('patch',writePath,body(target,'0'));
  await cell.press('Control+z');await expect(page.getByText(/PTI changed since/)).toBeVisible();await expect(cell).toHaveValue('0');
+ const fleetBefore=sql(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks;`);
+ const search=page.getByLabel('Search PTI',{exact:true});await search.fill('103');
+ const dragTo=async(handle,target,after=false)=>{await handle.scrollIntoViewIfNeeded();const from=await handle.boundingBox();await target.scrollIntoViewIfNeeded();const to=await target.boundingBox();await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(to.x+Math.min(to.width/2,150),to.y+to.height*(after?0.8:0.2),{steps:10});await page.mouse.up();};
+ await dragTo(page.getByRole('button',{name:'Move truck 103',exact:true}),page.locator('[data-pti-group="owner_operator"]'));
+ await expect(page.getByRole('rowgroup',{name:'Owner-operated trucks',exact:true}).getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByRole('rowgroup',{name:'Owner-operated trucks',exact:true}).getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
+ await search.fill('103');await dragTo(page.getByRole('button',{name:'Move truck 103',exact:true}),page.locator('[data-pti-group="company"]'));
+ await expect(page.getByRole('rowgroup',{name:'Company & investor trucks',exact:true}).getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
+ await search.fill('PTI-00');await dragTo(page.getByRole('button',{name:'Move truck PTI-002',exact:true}),page.getByRole('row',{name:'Truck PTI-001',exact:true}));
+ await expect.poll(()=>page.locator('tr[data-pti-truck]').first().getAttribute('aria-label')).toBe('Truck PTI-002');
+ const layout=await api('get','/weekly-pti/matrix');const layoutBody={version:layout.layoutVersion-1,placements:layout.trucks.map(t=>({truckId:t.id,group:t.group}))};
+ expect((await page.request.put(access.base+'/api/weekly-pti/layout',{headers,data:layoutBody})).status()).toBe(409);
+ const handle=page.getByRole('button',{name:'Move truck PTI-002',exact:true}),box=await handle.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+20,box.y+90,{steps:5});await page.keyboard.press('Escape');await page.mouse.up();
+ expect((await api('get','/weekly-pti/matrix')).layoutVersion).toBe(layout.layoutVersion);
+ expect(sql(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks;`)).toBe(fleetBefore);
+ await search.fill('');
  const roleName='PTI reader '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['drivers.read','trucks.read','pti.read']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName),email=randomUUID()+'@example.test',password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
  const reader=await browser.newContext();await reader.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const readerSession=await(await reader.request.get(access.base+'/api/auth/session')).json();const readPage=await reader.newPage();await readPage.goto(access.base+'/fleet/weekly-pti');await expect(readPage.getByLabel('Truck 102 PTI '+week,{exact:true})).toHaveAttribute('readonly','');await expect(readPage.getByLabel('Truck 102 notes',{exact:true})).toHaveCount(0);
+ await expect(readPage.getByRole('button',{name:/Move truck/})).toHaveCount(0);
+ expect((await reader.request.put(access.base+'/api/weekly-pti/layout',{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:layoutBody})).status()).toBe(403);
  expect((await reader.request.patch(access.base+'/api'+writePath,{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:body(saved,'/')})).status()).toBe(403);expect((await reader.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(200);await reader.close();
  const anonymous=await browser.newContext();expect((await anonymous.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(401);await anonymous.close();
  await page.reload();await expect(cell).toHaveValue('0');await table.evaluate(el=>{el.parentElement.scrollTop=0;});

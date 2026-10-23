@@ -1462,5 +1462,6 @@ export type PTIRow = {
 };
 export type PTIWeek = {weekStart:string;exists:boolean;createdAt:string|null;createdBy:string;lateSnapshot:boolean;rows:PTIRow[]};
 export type PTIChange = Pick<PTIRow,"version"|"received"|"review"|"notes"> & {mark?:PTIRow["mark"]|"";requestId:string;undoRequestId?:string};
-export type PTIMatrix = {weeks:string[];trucks:{id:string;unit:string;ownership:"company"|"investor"|"owner_operator"}[];rows:PTIRow[]};
+export type PTIGroup = "company"|"owner_operator";
+export type PTIMatrix = {layoutVersion:number;weeks:string[];trucks:{id:string;unit:string;ownership:"company"|"investor"|"owner_operator";group:PTIGroup;position:number|null}[];rows:PTIRow[]};
 export type PTIEvent = {id:string;before:PTIRow;after:PTIRow;actorName:string;createdAt:string};

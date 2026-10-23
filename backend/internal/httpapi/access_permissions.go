@@ -12,6 +12,7 @@ type routeAccess struct{ method, path, permission string }
 var routeAccessPolicies = []routeAccess{
 	{"GET", "/weekly-pti", "pti.read"},
 	{"GET", "/weekly-pti/matrix", "pti.read"},
+	{"PUT", "/weekly-pti/layout", "pti.edit"},
 	{"POST", "/weekly-pti/weeks", "pti.edit"},
 	{"PATCH", "/weekly-pti/{week}/{truck}", "pti.edit"},
 	{"GET", "/weekly-pti/{week}/{truck}/history", "pti.read"},

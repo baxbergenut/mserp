@@ -9,15 +9,18 @@ type PTIMatrixTruck struct {
 	ID        string `json:"id"`
 	Unit      string `json:"unit"`
 	Ownership string `json:"ownership"`
+	Group     string `json:"group"`
+	Position  *int   `json:"position"`
 }
 type PTIMatrix struct {
-	Weeks  []string         `json:"weeks"`
-	Trucks []PTIMatrixTruck `json:"trucks"`
-	Rows   []PTIRow         `json:"rows"`
+	Weeks         []string         `json:"weeks"`
+	Trucks        []PTIMatrixTruck `json:"trucks"`
+	Rows          []PTIRow         `json:"rows"`
+	LayoutVersion int64            `json:"layoutVersion"`
 }
 
-// The matrix deliberately includes every truck, independently of fleet eligibility.
-// Ownership comes from the recorded owner, never from the assigned driver's job.
+// Only active trucks appear, independently of weekly eligibility. Display groups
+// and positions never mutate the separately returned recorded ownership.
 func (r *FleetRepository) PTIMatrix(ctx context.Context) (PTIMatrix, error) {
 	result := PTIMatrix{Weeks: []string{}, Trucks: []PTIMatrixTruck{}, Rows: []PTIRow{}}
 	tx, err := r.pool.Begin(ctx)
@@ -26,6 +29,9 @@ func (r *FleetRepository) PTIMatrix(ctx context.Context) (PTIMatrix, error) {
 	}
 	defer tx.Rollback(ctx)
 	if _, err = tx.Exec(ctx, `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`); err != nil {
+		return result, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT version FROM weekly_pti_layout_state WHERE id`).Scan(&result.LayoutVersion); err != nil {
 		return result, err
 	}
 	weeks, err := tx.Query(ctx, `SELECT week_start::text FROM weekly_pti_weeks ORDER BY week_start`)
@@ -45,13 +51,13 @@ func (r *FleetRepository) PTIMatrix(ctx context.Context) (PTIMatrix, error) {
 	if err != nil {
 		return result, err
 	}
-	trucks, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,CASE WHEN i.is_company THEN 'company' WHEN i.driver_id IS NOT NULL THEN 'owner_operator' ELSE 'investor' END FROM trucks t JOIN investors i ON i.id=t.owner_id ORDER BY t.unit_number,t.id`)
+	trucks, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,CASE WHEN i.is_company THEN 'company' WHEN i.driver_id IS NOT NULL THEN 'owner_operator' ELSE 'investor' END,coalesce(l.display_group,CASE WHEN NOT i.is_company AND i.driver_id IS NOT NULL THEN 'owner_operator' ELSE 'company' END),l.position FROM trucks t JOIN investors i ON i.id=t.owner_id LEFT JOIN weekly_pti_layout l ON l.truck_id=t.id WHERE t.active ORDER BY t.unit_number,t.id`)
 	if err != nil {
 		return result, err
 	}
 	for trucks.Next() {
 		var truck PTIMatrixTruck
-		if err = trucks.Scan(&truck.ID, &truck.Unit, &truck.Ownership); err != nil {
+		if err = trucks.Scan(&truck.ID, &truck.Unit, &truck.Ownership, &truck.Group, &truck.Position); err != nil {
 			trucks.Close()
 			return result, err
 		}
@@ -62,7 +68,7 @@ func (r *FleetRepository) PTIMatrix(ctx context.Context) (PTIMatrix, error) {
 	if err != nil {
 		return result, err
 	}
-	rows, err := tx.Query(ctx, `SELECT version,data FROM weekly_pti_rows ORDER BY week_start,truck_id`)
+	rows, err := tx.Query(ctx, `SELECT p.version,p.data FROM weekly_pti_rows p JOIN trucks t ON t.id=p.truck_id WHERE t.active ORDER BY p.week_start,p.truck_id`)
 	if err != nil {
 		return result, err
 	}

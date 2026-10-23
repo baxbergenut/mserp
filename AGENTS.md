@@ -2523,9 +2523,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 ### Shared fleet statuses and history (137)
 
 - Weekly PTI uses migrations 140/144, repository/httpapi `weekly_pti*`, and
-  `/fleet/weekly-pti`. The matrix lists every truck and every recorded week,
+  `/fleet/weekly-pti`. The matrix lists active trucks and every recorded week,
   with company/investor trucks above owner-operated trucks. Grouping uses the
-  recorded owner, never driver availability. Restricted marks are / (not required,
+  recorded owner by default, never driver availability. Migration 146 stores shared PTI-only display groups/order; drag handles move rows across groups without changing ownership, status, assignment or marks. Versioned PUT /weekly-pti/layout requires pti.edit and validates the complete active roster. Inactive trucks are hidden but their placement/history is retained. Restricted marks are / (not required,
   yellow), 1 (sent and checked, green), and 0 (not sent, red). Blank means unrecorded.
   Legacy eligibility snapshots remain stored but never filter the matrix or set marks.
   The startup/minute worker maintains the current roster without changing manual marks.

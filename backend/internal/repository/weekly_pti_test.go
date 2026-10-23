@@ -315,8 +315,42 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			financialAfter := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
 			matrix, err := repo.PTIMatrix(ctx)
-			if err != nil || len(matrix.Trucks) != 9 || len(matrix.Weeks) != 2 {
+			if err != nil || len(matrix.Trucks) != 8 || len(matrix.Weeks) != 2 {
 				t.Fatal("matrix omitted trucks/weeks", matrix, err)
+			}
+			ownershipBefore := scalar(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks`)
+			placements := []PTIPlacement{}
+			for _, truck := range matrix.Trucks {
+				if truck.Unit == "PTI-8" {
+					t.Fatal("inactive truck visible")
+				}
+				placements = append(placements, PTIPlacement{TruckID: truck.ID, Group: truck.Group})
+			}
+			placements[0].Group = "owner_operator"
+			layoutInput := PTILayoutChange{Version: matrix.LayoutVersion, Placements: placements}
+			layoutVersion, e := repo.SavePTILayout(ctx, actor, layoutInput)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = repo.SavePTILayout(ctx, actor, layoutInput); !errors.Is(e, ErrPTIConflict) {
+				t.Fatal("stale layout accepted", e)
+			}
+			moved, e := repo.PTIMatrix(ctx)
+			if e != nil || moved.LayoutVersion != layoutVersion {
+				t.Fatal("layout read", e)
+			}
+			for _, truck := range moved.Trucks {
+				if truck.ID == placements[0].TruckID && (truck.Group != "owner_operator" || truck.Position == nil || *truck.Position != 0) {
+					t.Fatal("placement missing", truck)
+				}
+			}
+			if ownershipBefore != scalar(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks`) {
+				t.Fatal("layout modified actual fleet")
+			}
+			layoutInput.Version = layoutVersion
+			layoutInput.Placements = placements[:len(placements)-1]
+			if _, e = repo.SavePTILayout(ctx, actor, layoutInput); !errors.Is(e, ErrPTIConflict) {
+				t.Fatal("partial roster accepted", e)
 			}
 			var current PTIRow
 			for _, row := range matrix.Rows {

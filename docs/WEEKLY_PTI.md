@@ -2,9 +2,13 @@
 
 Fleet > Weekly PTI is a truck-by-week matrix. Every recorded week appears as a
 column, oldest to newest, with frozen week headings and truck numbers. Company
-and investor trucks are grouped above owner-operated trucks. All trucks appear,
-including inactive, unassigned, home, vacation and shop trucks. Ownership uses
-the recorded investor/company/driver-owner relationship, never the assigned driver.
+and investor trucks default above owner-operated trucks. Only active trucks appear;
+active unassigned, home, vacation and shop trucks remain listed. Drag handles let
+PTI editors reorder trucks and move them between these display groups. Arrow keys
+on the handle also move rows, including across the group boundary. Shared placement
+persists across weeks and reloads. It never changes truck ownership, assignment,
+active status, fleet type or weekly marks. New trucks default to their recorded
+ownership group; inactive trucks retain saved placement for reactivation.
 
 Cells are direct text inputs: typing `/`, `1`, or `0` replaces the mark and saves immediately. Other characters and invalid pastes are blocked. Backspace/Delete clears the mark. No text caret appears. Arrows move between cells, Enter moves down (Shift+Enter up), and Tab moves across. Ctrl+Z/Cmd+Z undoes up to 100 edits from this page session, including clears and previously blank cells. Undo waits for pending saves and uses the saved version, actor-owned event, and current mark to reject intervening edits; every undo is audited. Read-only users cannot edit. The API and database also enforce the allowed marks:
 - `/`: not operational, no driver, or PTI not required; yellow (#ffff00).
@@ -24,12 +28,18 @@ previous notes and attribution remain stored and are preserved by mark edits.
 Cell hover shows recording attribution and time. There is no notes-week selector,
 history button, eligibility UI, video link, or explanatory page copy.
 
-GET /weekly-pti/matrix returns all recorded weeks, current trucks/ownership and
+GET /weekly-pti/matrix returns all recorded weeks, active trucks, actual ownership, PTI display placement and
 saved cells in a consistent read-only transaction. pti.read/edit protect reads
 and writes. Row versions and immutable request receipts prevent stale overwrites
 and duplicate saves. Missing cells for an existing week are created only on an
 explicit version-zero edit. Concurrent creation conflicts. Conflicting edits refresh the row without overwriting another user.
 Legacy clients cannot overwrite a recorded symbol without supplying it.
+
+PUT /weekly-pti/layout requires pti.edit and the current layout version. Migration
+146 stores a shared layout, monotonic version and immutable audit. Saves validate
+the complete active roster; stale layouts or membership changes conflict. Filtered
+dragging preserves hidden trucks. The matrix returns layoutVersion, group and
+position separately from ownership. No truck/profile fields are updated.
 
 ## Reviewed Sheets import
 

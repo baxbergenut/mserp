@@ -1,12 +1,13 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {ListChecks} from "lucide-react";
+import {GripVertical,ListChecks} from "lucide-react";
 import Link from "@/app/components/AccessLink";
-import {changePTI,createPTIWeek,fetchPTIMatrix} from "@/app/lib/api";
-import type {PTIMatrix,PTIRow} from "@/app/lib/types";
+import {changePTI,createPTIWeek,fetchPTIMatrix,savePTILayout} from "@/app/lib/api";
+import type {PTIGroup,PTIMatrix,PTIRow} from "@/app/lib/types";
 import {usePermissions} from "@/app/lib/access";
 import {currentChargeWeek} from "@/app/accounting/driver-charges/charges";
 import {controlClass,ErrorBanner,ManagementHeader} from "@/app/components/management/ManagementUI";
+import {usePTIRowDrag} from "./usePTIRowDrag";
 type Mark="/"|"1"|"0";
 const colors={"/":"#ffff00","1":"#00ff00","0":"#ff0000"};
 const label=(week:string)=>new Date(week+"T12:00:00Z").toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"});
@@ -21,6 +22,7 @@ export default function WeeklyPTIPage(){
  const locks=useRef(new Set<string>()),scroller=useRef<HTMLDivElement>(null),positioned=useRef(false);
  const [visibleWeeks,setVisibleWeeks]=useState(9);
  const cells=useRef(new Map<string,HTMLInputElement>()),undoStack=useRef<{requestId:string;after:PTIRow;order:number}[]>([]),sequence=useRef(0),undoing=useRef(false),pendingUndo=useRef(false);
+ const [layoutBusy,setLayoutBusy]=useState(false),layoutLock=useRef(false);
  const ready=data!==null;
  useEffect(()=>{
   const element=scroller.current,main=element?.closest("main");if(!element||!main)return;
@@ -29,10 +31,10 @@ export default function WeeklyPTIPage(){
   return()=>{observer.disconnect();window.removeEventListener("resize",fit);};
  },[ready]);
  const refresh=()=>setAttempt(v=>v+1);
- useEffect(()=>{const c=new AbortController();fetchPTIMatrix(c.signal).then(next=>{setData(old=>{const prior=new Map(old?.rows.map(r=>[keyOf(r.weekStart,r.truckId),r]));return {...next,rows:next.rows.map(r=>{const saved=prior.get(keyOf(r.weekStart,r.truckId));return saved&&saved.version>r.version?saved:r;})};});}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[attempt]);
+ useEffect(()=>{const c=new AbortController();fetchPTIMatrix(c.signal).then(next=>{setData(old=>{const prior=new Map(old?.rows.map(r=>[keyOf(r.weekStart,r.truckId),r]));return {...next,...(old&&old.layoutVersion>next.layoutVersion?{trucks:old.trucks,layoutVersion:old.layoutVersion}:{}),rows:next.rows.map(r=>{const saved=prior.get(keyOf(r.weekStart,r.truckId));return saved&&saved.version>r.version?saved:r;})};});}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[attempt]);
  useEffect(()=>{const update=()=>{if(document.visibilityState==="visible")setAttempt(v=>v+1);};const timer=setInterval(update,30000);window.addEventListener("focus",update);return()=>{clearInterval(timer);window.removeEventListener("focus",update);};},[]);
  useEffect(()=>{if(data?.weeks.length&&!positioned.current&&scroller.current){scroller.current.scrollLeft=scroller.current.scrollWidth;positioned.current=true;}},[data]);
- useEffect(()=>{if(!Object.keys(busy).length)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[busy]);
+ useEffect(()=>{if(!Object.keys(busy).length&&!layoutBusy)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[busy,layoutBusy]);
  const save=async(row:PTIRow,mark:Mark|"")=>{
   const key=keyOf(row.weekStart,row.truckId);if(locks.current.has(key)||undoing.current)return;
   const requestId=crypto.randomUUID(),order=++sequence.current;
@@ -54,8 +56,23 @@ export default function WeeklyPTIPage(){
  };
  const rows=new Map(data?.rows.map(r=>[keyOf(r.weekStart,r.truckId),r])),weeks=[...(data?.weeks??[])];
  if(data){if(!weeks.length)weeks.push(current);while(weeks.length<visibleWeeks)weeks.push(nextWeek(weeks.at(-1)!));}
- const trucks=(data?.trucks??[]).filter(t=>t.unit.toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>a.unit.localeCompare(b.unit,undefined,{numeric:true})||a.unit.localeCompare(b.unit));
- const groups=[{name:"Company & investor trucks",trucks:trucks.filter(t=>t.ownership!=="owner_operator")},{name:"Owner-operated trucks",trucks:trucks.filter(t=>t.ownership==="owner_operator")}];
+ const allTrucks=[...(data?.trucks??[])].sort((a,b)=>(a.position??Number.MAX_SAFE_INTEGER)-(b.position??Number.MAX_SAFE_INTEGER)||a.unit.localeCompare(b.unit,undefined,{numeric:true})||a.unit.localeCompare(b.unit));
+ const trucks=allTrucks.filter(t=>t.unit.toLowerCase().includes(search.trim().toLowerCase()));
+ const rearrange=async(id:string,drop:{group:PTIGroup;target?:string;after:boolean},version:number)=>{
+  if(!canEdit||layoutLock.current||!data)return;
+  const source=allTrucks.find(t=>t.id===id);if(!source||drop.target===id)return;
+  const list=allTrucks.filter(t=>t.id!==id);let index=drop.target?list.findIndex(t=>t.id===drop.target):-1;
+  if(drop.target&&(index<0||list[index].group!==drop.group))return;
+  if(index<0){index=list.findLastIndex(t=>t.group===drop.group)+1;if(index===0)index=list.length;}else if(drop.after)index++;
+  list.splice(index,0,{...source,group:drop.group});
+  const ordered=(["company","owner_operator"] as const).flatMap(group=>list.filter(t=>t.group===group));
+  layoutLock.current=true;setLayoutBusy(true);setError("");
+  try{const result=await savePTILayout(version,ordered.map(t=>({truckId:t.id,group:t.group})));setData(old=>old?{...old,layoutVersion:result.version,trucks:ordered.map((t,position)=>({...t,position}))}:old);}
+  catch(e){setError(e instanceof Error?e.message:"Could not save PTI order");refresh();}
+  finally{layoutLock.current=false;setLayoutBusy(false);}
+ };
+ const drag=usePTIRowDrag(trucks,rearrange);
+ const groups=[{id:"company" as const,name:"Company & investor trucks",trucks:drag.trucks.filter(t=>t.group==="company")},{id:"owner_operator" as const,name:"Owner-operated trucks",trucks:drag.trucks.filter(t=>t.group==="owner_operator")}];
  const orderedTrucks=groups.flatMap(g=>g.trucks);
  const move=(truck:string,week:string,dx:number,dy:number)=>{const targetTruck=orderedTrucks[orderedTrucks.findIndex(t=>t.id===truck)+dy],targetWeek=weeks[weeks.indexOf(week)+dx];if(targetTruck&&targetWeek)cells.current.get(keyOf(targetWeek,targetTruck.id))?.focus();};
  return <div className="space-y-3">
@@ -73,10 +90,10 @@ export default function WeeklyPTIPage(){
      {weeks.map(w=><th key={w} style={{backgroundColor:"#6d9eeb",color:"#000"}} className="border-b border-r border-zinc-700 px-1 py-2 text-center font-normal" title={w}>{label(w)}<span className="block text-[10px]">{w.slice(0,4)}</span></th>)}
     </tr></thead>
     {groups.map(group=><tbody key={group.name} aria-label={group.name}>
-     <tr><th colSpan={weeks.length+1} className="border-b border-zinc-700 bg-zinc-800 px-3 py-2 text-left font-medium"><span className="sticky left-3">{group.name} <span className="ml-2 text-zinc-400">{group.trucks.length}</span></span></th></tr>
+     <tr data-pti-group={group.id}><th colSpan={weeks.length+1} className="border-b border-zinc-700 bg-zinc-800 px-3 py-2 text-left font-medium"><span className="sticky left-3">{group.name} <span className="ml-2 text-zinc-400">{group.trucks.length}</span></span></th></tr>
      {group.trucks.map(truck=>{
-      return <tr key={truck.id} aria-label={"Truck "+truck.unit}>
-       <th className="sticky left-0 z-10 border-b border-r border-zinc-700 bg-zinc-950 px-3 py-1.5 text-left font-mono font-normal"><Link className="text-blue-400" href={"/trucks/detail?id="+truck.id}>{truck.unit}</Link></th>
+      return <tr key={truck.id} data-pti-truck={truck.id} data-pti-category={group.id} aria-label={"Truck "+truck.unit}>
+       <th className="sticky left-0 z-10 border-b border-r border-zinc-700 bg-zinc-950 px-3 py-1.5 text-left font-mono font-normal"><div className="flex items-center gap-1">{canEdit&&<button type="button" aria-label={"Move truck "+truck.unit} title="Drag to arrange PTI groups, or use Arrow Up / Arrow Down" disabled={layoutBusy||!!Object.keys(busy).length} className="-ml-2 flex h-5 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 active:cursor-grabbing disabled:opacity-30" onPointerDown={e=>drag.start(e,truck,data.layoutVersion)} onKeyDown={e=>{if(e.key!=="ArrowUp"&&e.key!=="ArrowDown")return;e.preventDefault();const target=orderedTrucks[orderedTrucks.findIndex(t=>t.id===truck.id)+(e.key==="ArrowUp"?-1:1)];if(target&&!drag.active)void rearrange(truck.id,{group:target.group,target:target.id,after:e.key==="ArrowDown"},data.layoutVersion);}}><GripVertical className="h-3 w-3"/></button>}<Link className="text-blue-400" href={"/trucks/detail?id="+truck.id}>{truck.unit}</Link></div></th>
        {weeks.map(w=>{const key=keyOf(w,truck.id),entry=rows.get(key)??blank(w,truck),value=markOf(entry),editable=canEdit&&data.weeks.includes(w);const title=[entry.updatedBy,stamp(entry.updatedAt)].filter(Boolean).join(" · ");
         return <td key={w} className="border-b border-r border-zinc-700 p-0" style={{backgroundColor:value?colors[value]:undefined}}>
          <input ref={el=>{if(el)cells.current.set(key,el);else cells.current.delete(key);}} aria-label={"Truck "+truck.unit+" PTI "+w} title={title||(!data.weeks.includes(w)?"Upcoming week":undefined)} value={value} placeholder="—" readOnly={!editable||!!busy[key]} aria-busy={!!busy[key]} autoComplete="off" spellCheck={false}
