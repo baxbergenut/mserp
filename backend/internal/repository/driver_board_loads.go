@@ -279,6 +279,34 @@ func hasBoardNumber(plans []BoardLoad, number string) bool {
 	return false
 }
 
+// A dispatch selection keeps its identity when accounting adds or recreates a
+// plan for the same imported load. Only reconnect an absent plan when every
+// exact-number candidate resolves to the already selected source record.
+// Preserve the selection's plan/manual identity for queue actions and undo.
+func refreshedBoardCurrent(saved BoardLoad, plans []BoardLoad) BoardLoad {
+	current := saved
+	current.Warning = "Current plan was removed, replaced or reassigned in Gross Board; review it"
+	if saved.PlanID != "" {
+		for _, p := range plans {
+			if p.PlanID != saved.PlanID {
+				continue
+			}
+			if saved.LoadID != nil && (p.LoadID == nil || *saved.LoadID != *p.LoadID) {
+				current.Warning = "Current plan's load match changed; review it"
+				return current
+			}
+			return p
+		}
+	}
+	if saved.LoadID != nil {
+		if p := matchBoardCurrentLoad(plans, saved.Number); p != nil && p.LoadID != nil && *p.LoadID == *saved.LoadID {
+			current = *p
+			current.PlanID, current.Manual = saved.PlanID, saved.Manual
+		}
+	}
+	return current
+}
+
 func defaultBoardStop(stops []BoardStop) *BoardStop {
 	// New current loads always start at pickup.
 	for i := range stops {
@@ -334,8 +362,9 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	plans := map[string][]BoardLoad{}
 	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),coalesce(l.driver_id::text,''),coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb)
  FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
+ LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
- AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[])
+ AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'
  OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','cancelled','canceled')
  OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
@@ -376,7 +405,9 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				return nil, e
 			}
 			if p != nil {
-				s.Current = p
+				if s.Current == nil {
+					s.Current = p
+				}
 				if s.StopKey == "" && !s.DestinationManual && entries[id].Destination == "" {
 					kind := "pickup"
 					if entries[id].Status == "ENROUTE" || entries[id].Status == "RESERVED" {
@@ -385,8 +416,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 					useBoardStop(&s, kind)
 				}
 				plans[id] = append(plans[id], *p)
-			} else {
-				s.Current = nil
+			} else if s.Current == nil {
 				s.StopKey = ""
 				s.DestinationSource = false
 			}
@@ -400,18 +430,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		view.StopKey = s.StopKey
 		view.CustomOrder = len(s.Order) > 0
 		if s.Current != nil {
-			current := *s.Current
-			current.Warning = "Current plan was removed, replaced or reassigned in Gross Board; review it"
-			for _, p := range plans[id] {
-				if p.PlanID == current.PlanID {
-					if current.LoadID != nil && (p.LoadID == nil || *current.LoadID != *p.LoadID) {
-						current.Warning = "Current plan's load match changed; review it"
-					} else {
-						current = p
-					}
-					break
-				}
-			}
+			current := refreshedBoardCurrent(*s.Current, plans[id])
 			view.Current = &current
 			if !manualMismatch[id] {
 				if stop := lateBoardStop(s, current, entries[id].Status, entries[id].Destination); stop != nil {

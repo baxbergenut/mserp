@@ -359,8 +359,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and `node scripts/test-inventory-views.mjs`.
 
 - Status Board appointment/arrival automation uses migration 116, repository
-  `board_automation.go`/`board_travel.go`, and `internal/boardroutes`. Preserve
-  DataTruck per-stop schedule fields through import serialization. Appointment
+  `board_automation.go`/`board_travel.go`, and `internal/boardroutes`.
+  `driver_board_reconnect_test.go` covers reconnection within TestDriverBoardDatabase
+  (fresh/migrated). Exact-number replacement plans must all resolve to the selected
+  imported load ID; preserve selection/stop identities and manual overrides.
+  Reads never write board state, history or accounting. Surviving plans with
+  changed source IDs and ambiguous/unresolved replacements require review.
+  Preserve DataTruck per-stop schedule fields through import serialization. Appointment
   text is read-only inside ETA; @PU/@DEL replaces travel mileage when the last
   GPS position was within five straight-line miles of the selected stop,
   including stops without a provider schedule.

@@ -25,6 +25,16 @@ selections also remain usable if DataTruck changes its driver. This does not rew
 the imported driver, fleet assignments, or Gross Board. Missing/ambiguous matches
 show a review message in Loads. The legacy requiresConfirmation response stays false.
 
+If Gross Board later adds or recreates a plan for an already selected imported
+load, Status Board reconnects its source details by exact load number and the
+same imported record ID. Repeated plans for that one source are equivalent;
+unresolved or conflicting matches remain blocked. A surviving selected plan
+that changes its source record also requires review. Reconnection preserves the
+operational selection identity, selected pickup/delivery stop, manual destination,
+manual stop time and travel context. It is a read-only projection: no dispatch
+progress, assignments, accounting plans, versions or history are rewritten.
+Equivalent plans remain eligible across week boundaries for the selected source.
+
 Import preserves provider stop IDs, coordinates, local schedule dates/times, UTC
 schedule instants, ready-time fields and notes. Existing imported snapshots acquire
 these fields on the next shared operational refresh; older current selections

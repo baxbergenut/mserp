@@ -116,11 +116,11 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if r.Loads.SourceDestination != "Boston, MA" || e.Destination != "Richmond, VA" {
 		t.Fatal("return to source overwrote manual text")
 	}
-	// Gross edits do not erase the current snapshot or silently pick another load.
+	// Removing one repeated plan retains the same imported operational load.
 	exec(`UPDATE gross_board_entries SET load_number='' WHERE driver_id=$1 AND service_date='2026-09-28'`, d.ID)
 	v = view()
-	if v.Current == nil || v.Current.PlanID != currentID || !strings.Contains(v.Current.Warning, "removed") {
-		t.Fatalf("removed current lost: %+v", v.Current)
+	if v.Current == nil || v.Current.PlanID != currentID || v.Current.Warning != "" {
+		t.Fatalf("equivalent current source lost: %+v", v.Current)
 	}
 	// A free-text correction explicitly detaches the selection; undo restores it.
 	e.CurrentLoad = "Manual correction"

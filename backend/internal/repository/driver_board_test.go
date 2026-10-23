@@ -133,6 +133,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testBoardProgress(t, ctx, pool, repo, fleet)
 			testOperationalLoadSync(t, ctx, pool, repo, fleet)
 			testBoardAutomationDatabase(t, ctx, pool, repo, fleet)
+			testBoardLoadReconnection(t, ctx, pool, repo, fleet)
 			testDriverBoardOrder(t, ctx, pool, repo, fleet)
 			testDispatcherBoardOrder(t, ctx, pool, repo)
 			city := "Louisville"
