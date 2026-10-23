@@ -17,18 +17,18 @@ legacy records remain blank until explicitly recorded. Existing snapshots and
 audit history remain intact. The current-week worker maintains roster context
 but does not set or overwrite manual marks. Past weeks are never recalculated.
 
-Notes remain a single-line input for the selected week. Click a week heading or
-use Notes for to select it. Checked by follows Notes and shows the saved reviewer
-with a New York date/time tooltip. Imported checks do not invent a reviewer or an
-inspection timestamp. Cell hover retains recording attribution and notes.
-There is no history button, eligibility UI, video link, or explanatory page copy.
+The page shows only Unit # and week columns. Week cells are 64px wide; the
+scroll area fills the available page height and resizes with the window. Truck
+numbers and week headers stay frozen. Notes and reviewer columns are removed;
+previous notes and attribution remain stored and are preserved by mark edits.
+Cell hover shows recording attribution and time. There is no notes-week selector,
+history button, eligibility UI, video link, or explanatory page copy.
 
 GET /weekly-pti/matrix returns all recorded weeks, current trucks/ownership and
 saved cells in a consistent read-only transaction. pti.read/edit protect reads
 and writes. Row versions and immutable request receipts prevent stale overwrites
 and duplicate saves. Missing cells for an existing week are created only on an
-explicit version-zero edit. Concurrent creation conflicts. Notes drafts survive
-refresh and conflicts; explicit retry applies a retained note to the latest row.
+explicit version-zero edit. Concurrent creation conflicts. Conflicting edits refresh the row without overwriting another user.
 Legacy clients cannot overwrite a recorded symbol without supplying it.
 
 ## Reviewed Sheets import
@@ -60,5 +60,5 @@ and append-only audit tables remain compatible.
 - Frontend npm run lint and NEXT_PUBLIC_API_URL=/api npm run build.
 - Start scripts/review-local.mjs, then run scripts/test-weekly-pti-e2e.mjs with
   its access file. Covers all trucks/weeks, ownership grouping, marks/colors,
-  single-line notes, reviewer attribution, historical cells, retries/conflicts,
+  preserved notes, compact full-height layout, historical cells, retries/conflicts,
   mobile scrolling and authorization boundaries.
