@@ -31,10 +31,14 @@ const NAV_ITEMS = [
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/expenses", label: "Expenses", icon: WalletCards },
+  { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
   { href: "/loads", label: "Loads", icon: Package },
-  { href: "/fuel", label: "Fuel", icon: Fuel },
-  { href: "/tolls", label: "Tolls", icon: Receipt },
-  { href: "/weighmytruck", label: "Scale", icon: Scale },
+  { href: "/operating-costs", label: "Operating Costs", icon: Receipt, children: [
+    { href: "/fuel", label: "Fuel", icon: Fuel },
+    { href: "/tolls", label: "Tolls", icon: Receipt },
+    { href: "/weighmytruck", label: "Scale", icon: Scale },
+  ] },
   { href: "/fleet", label: "Fleet", icon: Truck, children: [
     { href: "/trucks", label: "Trucks", icon: Truck },
     { href: "/fleet/trailers", label: "Trailers", icon: Truck },
@@ -42,8 +46,6 @@ const NAV_ITEMS = [
     { href: "/fleet/weekly-pti", label: "Weekly PTI", icon: ListChecks },
     { href: "/fleet/service-programs", label: "Service programs", icon: CalendarRange },
   ] },
-  { href: "/expenses", label: "Expenses", icon: WalletCards },
-  { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
   { href: "/accounting", label: "Accounting", icon: Landmark, children: [
     { href: "/accounting/driver-pay", label: "Driver Pay", icon: Banknote },
     { href: "/accounting/investor-pay", label: "Investor Pay", icon: Banknote },
@@ -55,10 +57,18 @@ const NAV_ITEMS = [
     { href: "/drivers", label: "Drivers", icon: Users },
     { href: "/dispatchers", label: "Dispatchers", icon: Headset },
     { href: "/updaters", label: "Updaters", icon: Headset },
+    { href: "/investors", label: "Investors", icon: Landmark },
   ] },
-  { href: "/investors", label: "Investors", icon: Landmark },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
+
+type Badge = { count: number; label: string };
+
+function NavBadge({ badge, collapsed = false }: { badge?: Badge; collapsed?: boolean }) {
+  if (!badge || !(badge.count > 0)) return null;
+  return <span aria-label={badge.label} title={badge.label}
+    className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{badge.count > 99 ? "99+" : badge.count}</span>;
+}
 
 export function Sidebar() {
   const { count } = useTaskUpdates();
@@ -68,6 +78,11 @@ export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const badgeFor = (href: string): Badge | undefined => href === "/tasks" ? { count, label: `${count} open tasks` }
+    : href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
+    : href === "/weighmytruck" ? { count: alerts.weighMyTruck, label: `${alerts.weighMyTruck} terminated drivers with confirmed or unresolved WeighMyTruck access` }
+    : href === "/tolls" ? { count: alerts.tolls, label: `${alerts.tolls} toll transactions without a linked truck, posted since ${alerts.tollsFrom}` }
+    : undefined;
   return (
     <aside
       className={`
@@ -91,11 +106,14 @@ export function Sidebar() {
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));
           const Icon = item.icon;
-          const badge = item.href === "/tasks" ? { count, label: `${count} open tasks` }
-            : item.href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
-            : item.href === "/weighmytruck" ? { count: alerts.weighMyTruck, label: `${alerts.weighMyTruck} terminated drivers with confirmed or unresolved WeighMyTruck access` }
-            : item.href === "/tolls" ? { count: alerts.tolls, label: `${alerts.tolls} toll transactions without a linked truck, posted since ${alerts.tollsFrom}` }
-            : undefined;
+          const childBadges = children.flatMap(child => {
+            const childBadge = badgeFor(child.href);
+            return childBadge && childBadge.count > 0 ? [childBadge] : [];
+          });
+          const badge = "children" in item ? (childBadges.length ? {
+            count: childBadges.reduce((sum, childBadge) => sum + childBadge.count, 0),
+            label: `${item.label}: ${childBadges.map(childBadge => childBadge.label).join("; ")}`,
+          } : undefined) : badgeFor(item.href);
 
           if ("children" in item) {
             if (collapsed) {
@@ -103,14 +121,16 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={children[0].href}
-                  className={`group flex items-center justify-center rounded-lg py-2 text-[13px] font-medium transition-all duration-150 ${
+                  className={`group relative flex items-center justify-center rounded-lg py-2 text-[13px] font-medium transition-all duration-150 ${
                     active
                       ? "bg-accent/10 text-accent"
                       : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                   }`}
                   title={item.label}
+                  aria-label={badge?.label ?? item.label}
                 >
                   <Icon className={`h-[18px] w-[18px] ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
+                  <NavBadge badge={badge} collapsed />
                 </Link>
               );
             }
@@ -128,9 +148,11 @@ export function Sidebar() {
                       : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                   }`}
                   aria-expanded={groupExpanded}
+                  aria-label={badge?.label ?? item.label}
                 >
                   <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
                   <span className="flex-1 text-left">{item.label}</span>
+                  <NavBadge badge={badge} />
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupExpanded ? "rotate-180" : ""}`} />
                 </button>
                 {groupExpanded && (
@@ -150,6 +172,7 @@ export function Sidebar() {
                         >
                           <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                           <span>{child.label}</span>
+                          <NavBadge badge={badgeFor(child.href)} />
                         </Link>
                       );
                     })}
@@ -183,8 +206,7 @@ export function Sidebar() {
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
-              {badge && badge.count > 0 && <span aria-label={badge.label} title={badge.label}
-                className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{badge.count > 99 ? "99+" : badge.count}</span>}
+              <NavBadge badge={badge} collapsed={collapsed} />
             </Link>
           );
         })}

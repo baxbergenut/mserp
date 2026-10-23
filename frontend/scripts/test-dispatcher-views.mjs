@@ -20,6 +20,8 @@ try {
   const errors = [], extensionRequests = [], writes = [], reads = [];
   let permissions = ['drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'drivers.create','drivers.edit','drivers.delete','trucks.create','trucks.edit','trucks.delete','dispatchers.create','dispatchers.edit','dispatchers.delete','updaters.create','updaters.edit','updaters.delete','investors.create','investors.edit','drivers.private.read','drivers.private.edit','driver_compensation.read','driver_compensation.edit','dispatcher_compensation.read','dispatcher_compensation.edit','escrow.read','escrow.create','escrow.edit','escrow.delete', 'access.manage'];
   let updaters = [{ id, fullName: 'Roy', shift: 'main', extension: 106, version: 1, dispatcherNames: [] }];
+  permissions.push('tasks.read', 'expenses.read', 'fuel.read', 'tolls.read', 'weighmytruck.read');
+  let sidebarCounts = { fuel: 2, tolls: 14, weighMyTruck: 3, tollsFrom: '2026-09-01' };
   const dispatcher = { id, fullName: 'Test Dispatcher', active: true, email: 'dispatcher@example.test', extension: 105, mainUpdaterId: id, afterHoursUpdaterId: null, payPercentage: null, driverCount: 0 };
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
@@ -42,7 +44,8 @@ try {
       [`/dispatchers/${id}`]: dispatcher,
       '/dispatchers': { items: [dispatcher], total: 1, page: 1, pageSize: 25, totalPages: 1 },
       '/drivers': [], '/updaters': updaters,
-      '/tasks/count': { count: 0 }, '/sidebar-counts': {},
+      '/tasks/count': { count: 4 }, '/sidebar-counts': sidebarCounts,
+      '/investors': { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 },
     }[path];
     await route.fulfill({ status: fixture === undefined ? 404 : 200, json: fixture ?? { error: 'fixture not found' } });
   });
@@ -60,6 +63,15 @@ try {
   await expect(nav.getByRole('link', { name: 'Drivers', exact: true })).toHaveAttribute('href', '/drivers');
   await expect(nav.getByRole('link', { name: 'Dispatchers', exact: true })).toHaveAttribute('href', '/dispatchers');
   await expect(nav.getByRole('link', { name: 'Updaters', exact: true })).toHaveAttribute('href', '/updaters');
+  await expect(nav.getByRole('link', { name: 'Investors', exact: true })).toHaveAttribute('href', '/investors');
+  const links = await nav.locator('a').evaluateAll(rows => rows.map(row => row.getAttribute('href')));
+  expect(links.indexOf('/expenses')).toBe(links.indexOf('/tasks') + 1);
+  const operatingCosts = page.getByRole('button', { name: /^Operating Costs/ });
+  await expect(operatingCosts.locator('span[aria-label]')).toHaveText('19');
+  await operatingCosts.click();
+  await expect(nav.getByRole('link', { name: /^Fuel/ }).locator('span[aria-label]')).toHaveText('2');
+  await expect(nav.getByRole('link', { name: /^Tolls/ }).locator('span[aria-label]')).toHaveText('14');
+  await expect(nav.getByRole('link', { name: /^Scale/ }).locator('span[aria-label]')).toHaveText('3');
   await expect(page.getByRole('button', { name: 'Add updater', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Roy (106)', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -90,6 +102,7 @@ try {
   expect(writes[1].body.version).toBe(1);
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await expect(nav.locator('a[title="HR"]')).toHaveAttribute('href', '/drivers');
+  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveText('19');
   await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
 
   permissions = ['updaters.read'];
@@ -113,6 +126,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(`${origin}/updaters`);
   await expect(page.getByRole('heading', { name: 'Updaters', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Roy', exact: true })).toBeVisible();
 
   permissions = ['dispatchers.read'];
   reads.length = 0;
@@ -124,10 +138,33 @@ try {
   await page.goto(`${origin}/updaters`);
   await expect(page.getByRole('heading', { name: 'Access restricted', exact: true })).toBeVisible();
 
+  permissions = ['investors.read'];
+  await page.goto(`${origin}/investors`);
+  await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'HR', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(nav.locator('a[title="HR"]')).toHaveAttribute('href', '/investors');
+
+  permissions = ['tolls.read'];
+  await page.goto(`${origin}/updaters`);
+  await expect(operatingCosts.locator('span[aria-label]')).toHaveText('14');
+  await operatingCosts.click();
+  await expect(nav.getByRole('link', { name: /^Fuel/ })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: /^Scale/ })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: /^Tolls/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(nav.locator('a[title="Operating Costs"]')).toHaveAttribute('href', '/tolls');
+  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveText('14');
+  sidebarCounts = { ...sidebarCounts, tolls: 0 };
+  await page.goto(`${origin}/updaters`);
+  await expect(operatingCosts).toBeVisible();
+  await expect(operatingCosts.locator('span[aria-label]')).toHaveCount(0);
+
   permissions = [];
   await page.goto(`${origin}/updaters`);
   await expect(page.getByRole('heading', { name: 'Access restricted', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'HR', exact: true })).toHaveCount(0);
+  await expect(operatingCosts).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Chrome extension/ })).toHaveCount(0);
   if (errors.length || extensionRequests.length) throw new Error(`Unexpected page errors or retired requests: ${errors.join('; ')} / ${extensionRequests.join(', ')}`);
   console.log('PASS: HR navigation, separate dispatcher/updater pages, assignments, updater CRUD, read-only access and login landing; retired controls and API requests are absent.');

@@ -131,8 +131,10 @@ else {
     await page.getByRole('button',{name:'Clear selection',exact:true}).click();
     await page.screenshot({ path: join(tmpdir(), 'mserp-relay-desktop.png'), fullPage: true });
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
-    await expect(tollBadge).toBeVisible();
-    await expect(tollBadge).toHaveClass(/absolute/);
+    const costBadge = sidebar.locator('a[title="Operating Costs"] span[aria-label]');
+    await expect(costBadge).toHaveText('99+');
+    await expect(costBadge).toHaveClass(/absolute/);
+    await expect(costBadge).toHaveAttribute('aria-label', /125 toll transactions without a linked truck/);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -151,7 +153,6 @@ else {
     readOnly=false;
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(base+'/tolls');
-    await page.getByRole('button',{name:'PrePass',exact:true}).click();
     await page.getByRole('button',{name:'Needs attention',exact:true}).click();
     await expect(page.getByRole('cell',{name:'Tag 777780673',exact:true})).toBeVisible();
     await expect(page.getByLabel('Unlinked tolls posted since')).toHaveValue('2026-09-01');

@@ -877,7 +877,11 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
-- HR groups Drivers, Dispatchers and Updaters in the sidebar. `/dispatchers`
+- Expenses sits directly below Tasks in the sidebar. Operating Costs groups
+  Fuel, Tolls and Scale, preserving each page's permission-scoped alert badge.
+  The group shows the sum of its visible children's alerts when expanded or
+  collapsed; hidden pages never contribute to that total.
+- HR groups Drivers, Dispatchers, Updaters and Investors in the sidebar. `/dispatchers`
   manages dispatchers and their updater assignments; `/updaters` manages updater
   profiles separately. Each page requires its own read permission; updater-only
   users land on `/updaters`. Dispatcher forms use permission-scoped updater lookups.
