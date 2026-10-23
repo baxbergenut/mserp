@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/url"
 	"strings"
 	"time"
 
@@ -75,37 +74,21 @@ func PTICurrentWeek(now time.Time) string {
 	return local.AddDate(0, 0, -(int(local.Weekday())+6)%7).Format("2006-01-02")
 }
 
-// Unknown Monday data is never replaced with today's status. Team eligibility is
-// per truck: one available employed crew member is enough to require one video.
-func ptiEligibility(active, late bool, condition string, crew []PTICrew) (string, string) {
-	if late {
-		return "unknown", "Monday snapshot captured late; confirm Monday eligibility"
-	}
+// Eligibility follows shared fleet status, never manual PTI overrides.
+// One available employed team member is enough for the shared truck.
+func ptiEligibility(active bool, condition string, crew []PTICrew) (string, string) {
 	if !active {
 		return "exempt", "Inactive truck"
 	}
-	if condition == "shop" || condition == "out_of_service" {
-		return "exempt", "Truck in " + condition
+	if condition != "ready" {
+		return "exempt", "Truck is not ready for the road"
 	}
-	if len(crew) == 0 {
-		return "exempt", "No assigned driver at Monday start"
-	}
-	unknown := false
 	for _, d := range crew {
 		if d.Employment == "active" && d.Availability == "active" {
-			if condition == "" {
-				return "unknown", "Truck condition at Monday start is unknown"
-			}
-			return "required", "Available driver and truck at Monday start"
-		}
-		if d.Employment == "" || (d.Employment == "active" && d.Availability == "") {
-			unknown = true
+			return "required", "Available driver and road-ready truck"
 		}
 	}
-	if unknown {
-		return "unknown", "Driver status at Monday start is unknown"
-	}
-	return "exempt", "All assigned drivers unavailable at Monday start"
+	return "exempt", "No available assigned driver"
 }
 
 func (r *FleetRepository) EnsureCurrentPTIWeek(ctx context.Context) error {
@@ -132,43 +115,32 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 	if _, err = tx.Exec(ctx, `SELECT fleet_status_lock()`); err != nil {
 		return err
 	}
-	zone, _ := time.LoadLocation("America/New_York")
-	boundary, err := time.ParseInLocation("2006-01-02", week, zone)
-	if err != nil {
-		return err
-	}
-	late := now.Sub(boundary) > 5*time.Minute
-	var enabled, exists bool
+	var enabled bool
 	var author string
-	err = tx.QueryRow(ctx, `SELECT fleet_status_enabled(),EXISTS(SELECT 1 FROM weekly_pti_weeks WHERE week_start=$1::date),
-	 CASE WHEN $2='' THEN 'System' ELSE coalesce((SELECT username FROM app_users WHERE id::text=$2),'System') END`, week, actor).Scan(&enabled, &exists, &author)
+	err = tx.QueryRow(ctx, `SELECT fleet_status_enabled(),CASE WHEN $1='' THEN 'System' ELSE coalesce((SELECT username FROM app_users WHERE id::text=$1),'System') END`, actor).Scan(&enabled, &author)
 	if err != nil {
 		return err
-	}
-	if exists {
-		return tx.Commit(ctx)
 	}
 	if !enabled {
 		return chargeInvalid("Activate shared fleet statuses before starting PTI tracking")
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_weeks(week_start,created_by,late_snapshot) VALUES($1,$2,$3)`, week, author, late); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_weeks(week_start,created_by,late_snapshot) VALUES($1,$2,false) ON CONFLICT DO NOTHING`, week, author); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `WITH boundary AS (SELECT $1::date::timestamp AT TIME ZONE 'America/New_York' AS at)
- SELECT t.id::text,t.unit_number,t.active,
- coalesce((SELECT h.status FROM fleet_status_history h,boundary b WHERE h.entity_kind='truck' AND h.entity_id=t.id AND h.track='condition' AND h.effective_at<=b.at ORDER BY h.effective_at DESC,h.id DESC LIMIT 1),''),
+	// Reconcile only this week; prior checklists keep their last saved context.
+	rows, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,t.active,fleet_truck_operating_status(t.id),
  coalesce((SELECT jsonb_agg(jsonb_build_object('id',d.id,'name',d.full_name,
- 'availability',coalesce((SELECT status FROM fleet_status_history h WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability' AND h.effective_at<=b.at ORDER BY h.effective_at DESC,h.id DESC LIMIT 1),''),
- 'employment',coalesce((SELECT status FROM fleet_status_history h WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='employment' AND h.effective_at<=b.at ORDER BY h.effective_at DESC,h.id DESC LIMIT 1),'')) ORDER BY d.full_name)
- FROM drivers d CROSS JOIN boundary b WHERE d.id IN (
- SELECT a.driver_id FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.assigned_at<=b.at AND (a.unassigned_at IS NULL OR a.unassigned_at>b.at)
+ 'availability',d.availability_status,'employment',CASE WHEN d.active THEN 'active' ELSE 'terminated' END) ORDER BY d.full_name,d.id)
+ FROM drivers d WHERE d.id IN (
+ SELECT a.driver_id FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.assigned_at<=$2::timestamptz AND (a.unassigned_at IS NULL OR a.unassigned_at>$2::timestamptz)
  UNION SELECT team.team_driver_id FROM driver_teams team JOIN truck_driver_assignments a ON a.driver_id=team.main_driver_id
- WHERE a.truck_id=t.id AND a.assigned_at<=b.at AND (a.unassigned_at IS NULL OR a.unassigned_at>b.at) AND team.start_week<=$1::date AND (team.end_week IS NULL OR team.end_week>$1::date)
+ WHERE a.truck_id=t.id AND a.assigned_at<=$2::timestamptz AND (a.unassigned_at IS NULL OR a.unassigned_at>$2::timestamptz) AND team.start_week<=($2::timestamptz AT TIME ZONE 'America/New_York')::date AND (team.end_week IS NULL OR team.end_week>($2::timestamptz AT TIME ZONE 'America/New_York')::date)
  )), '[]'::jsonb)
- FROM trucks t CROSS JOIN boundary b WHERE t.created_at<=b.at ORDER BY t.unit_number`, week)
+ FROM trucks t WHERE t.created_at<=$2::timestamptz OR EXISTS(SELECT 1 FROM weekly_pti_rows p WHERE p.week_start=$1 AND p.truck_id=t.id) ORDER BY t.unit_number`, week, now)
 	if err != nil {
 		return err
 	}
+
 	entries := []PTIRow{}
 	for rows.Next() {
 		var row PTIRow
@@ -183,7 +155,7 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 		row.WeekStart = week
 		row.Version = 1
 		row.Review = "pending"
-		row.Eligibility, row.EligibilityReason = ptiEligibility(active, late, row.Condition, row.Crew)
+		row.Eligibility, row.EligibilityReason = ptiEligibility(active, row.Condition, row.Crew)
 		row.SnapshotEligibility = row.Eligibility
 		row.SnapshotReason = row.EligibilityReason
 		entries = append(entries, row)
@@ -201,7 +173,11 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 		if e != nil {
 			return e
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_rows(week_start,truck_id,data) VALUES($1,$2,$3)`, week, row.TruckID, raw); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_rows(week_start,truck_id,data) VALUES($1,$2,$3)
+ ON CONFLICT(week_start,truck_id) DO UPDATE SET version=weekly_pti_rows.version+1,
+ data=weekly_pti_rows.data || jsonb_build_object('truckUnit',EXCLUDED.data->'truckUnit','crew',EXCLUDED.data->'crew','condition',EXCLUDED.data->'condition','eligibility',EXCLUDED.data->'eligibility','eligibilityReason',EXCLUDED.data->'eligibilityReason')
+ WHERE (weekly_pti_rows.data->'truckUnit',weekly_pti_rows.data->'crew',weekly_pti_rows.data->'condition',weekly_pti_rows.data->'eligibility',weekly_pti_rows.data->'eligibilityReason')
+ IS DISTINCT FROM (EXCLUDED.data->'truckUnit',EXCLUDED.data->'crew',EXCLUDED.data->'condition',EXCLUDED.data->'eligibility',EXCLUDED.data->'eligibilityReason')`, week, row.TruckID, raw); err != nil {
 			return err
 		}
 	}
@@ -241,28 +217,14 @@ func (r *FleetRepository) PTIWeek(ctx context.Context, week string) (PTIWeek, er
 
 func (in *PTIChange) Validate() error {
 	in.Notes = strings.TrimSpace(in.Notes)
-	in.VideoURL = strings.TrimSpace(in.VideoURL)
-	in.EligibilityReason = strings.TrimSpace(in.EligibilityReason)
-	if in.Version < 1 || len(in.Notes) > 5000 || len(in.EligibilityReason) > 1000 || len(in.VideoURL) > 2000 || strings.ContainsRune(in.Notes+in.VideoURL+in.EligibilityReason, '\x00') {
-		return chargeInvalid("Invalid PTI version or text length")
-	}
-	if in.Eligibility != "required" && in.Eligibility != "exempt" && in.Eligibility != "unknown" {
-		return chargeInvalid("Choose required, exempt or needs confirmation")
+	if in.Version < 1 || len(in.Notes) > 5000 || strings.ContainsRune(in.Notes, '\x00') {
+		return chargeInvalid("Invalid PTI version or notes length")
 	}
 	if in.Review != "pending" && in.Review != "checked" && in.Review != "issues" {
 		return chargeInvalid("Invalid PTI review status")
 	}
-	if !in.Received && (in.Review != "pending" || in.VideoURL != "") {
-		return chargeInvalid("A video must be received before linking or reviewing it")
-	}
-	if in.Review == "issues" && in.Notes == "" {
-		return chargeInvalid("Describe the issues in Notes")
-	}
-	if in.VideoURL != "" {
-		u, err := url.Parse(in.VideoURL)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
-			return chargeInvalid("Use an http or https video link without embedded credentials")
-		}
+	if !in.Received && in.Review != "pending" {
+		return chargeInvalid("Receive the video before checking it")
 	}
 	return nil
 }
@@ -308,10 +270,11 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	if row.Version != in.Version {
 		return row, ErrPTIConflict
 	}
-	if (row.Eligibility != in.Eligibility || row.EligibilityReason != in.EligibilityReason) && in.EligibilityReason == "" {
-		return row, chargeInvalid("Explain the Monday eligibility correction")
+	// Legacy fields remain decodable, but eligibility is server-owned and links archived.
+	if (in.Eligibility != "" && in.Eligibility != row.Eligibility) || (in.VideoURL != "" && in.VideoURL != row.VideoURL) {
+		return row, chargeInvalid("PTI eligibility is automatic; video links are no longer editable")
 	}
-	if row.Received == in.Received && row.Review == in.Review && row.VideoURL == in.VideoURL && row.Notes == in.Notes && row.Eligibility == in.Eligibility && row.EligibilityReason == in.EligibilityReason {
+	if row.Received == in.Received && row.Review == in.Review && row.Notes == in.Notes {
 		return row, tx.Commit(ctx)
 	}
 	before := row
@@ -329,9 +292,6 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 		}
 	}
 	review := in.Review
-	if row.VideoURL != in.VideoURL && row.Review != "pending" {
-		review = "pending"
-	}
 	if row.Review != review {
 		row.ReviewedAt = nil
 		row.ReviewedBy = ""
@@ -342,10 +302,7 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	}
 	row.Received = in.Received
 	row.Review = review
-	row.VideoURL = in.VideoURL
 	row.Notes = in.Notes
-	row.Eligibility = in.Eligibility
-	row.EligibilityReason = in.EligibilityReason
 	row.UpdatedAt = &now
 	row.UpdatedBy = author
 	row.Version++

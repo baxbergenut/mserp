@@ -2520,13 +2520,16 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 ### Shared fleet statuses and history (137)
 
 - Weekly PTI uses migration 140, repository/httpapi `weekly_pti*`, and
-  `/fleet/weekly-pti`. One record per truck/week freezes the Monday New York
-  roster and status evidence. Late/missing Monday snapshots require explicit
-  eligibility confirmation; subsequent fleet changes never rewrite a checklist.
-  Receipt/review/link/notes edits are versioned and audited, with `pti.read/edit`
-  permissions. Startup/minute automation creates the current week only; GETs
-  never write. Videos stay in their existing delivery channels. No financial,
-  fleet, provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
+  `/fleet/weekly-pti`. A startup/minute worker reconciles the current week's
+  truck/team roster from shared fleet availability and condition. Only active,
+  ready trucks with an available employed driver require PTI. No manual Monday
+  eligibility confirmation; Home/Vacation/Shop/OOS/Hold/unassigned trucks are
+  excluded automatically. Midweek additions and returns are included; saved
+  receipt/review/notes and original snapshots survive roster changes. Past weeks
+  stay frozen. One-click receipt/checked boxes show actor/time on hover; inline
+  notes hold issues. Links are archived. Versions, idempotency, audit and
+  `pti.read/edit` remain enforced; GETs never write. No financial, fleet,
+  provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
   Tests: TestWeeklyPTIDatabase, TestPTIEligibility and test-weekly-pti-e2e.mjs.
 
 - Employment, driver availability, truck condition, and dispatch detail remain

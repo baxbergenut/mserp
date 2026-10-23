@@ -1,131 +1,141 @@
 "use client";
 
-import {useEffect,useState} from "react";
-import {useRouter,useSearchParams} from "next/navigation";
-import {ChevronLeft,ChevronRight,ListChecks,History, Pencil} from "lucide-react";
+import {useEffect, useRef, useState} from "react";
+import {useRouter, useSearchParams} from "next/navigation";
+import {ChevronLeft, ChevronRight, History, ListChecks, LoaderCircle, Search} from "lucide-react";
 import Link from "@/app/components/AccessLink";
-import {changePTI,createPTIWeek,fetchPTIHistory,fetchPTIWeek} from "@/app/lib/api";
-import type {PTIChange,PTIEvent,PTIRow,PTIWeek} from "@/app/lib/types";
+import {changePTI, createPTIWeek, fetchPTIHistory, fetchPTIWeek} from "@/app/lib/api";
+import type {PTIChange, PTIEvent, PTIRow, PTIWeek} from "@/app/lib/types";
 import {usePermissions} from "@/app/lib/access";
-import {statusLabel} from "@/app/lib/fleetStatus";
-import {currentChargeWeek,validChargeWeek} from "@/app/accounting/driver-charges/charges";
-import {controlClass,ErrorBanner,Field,ManagementHeader,Modal} from "@/app/components/management/ManagementUI";
+import {currentChargeWeek, validChargeWeek} from "@/app/accounting/driver-charges/charges";
+import {controlClass, ErrorBanner, ManagementHeader, Modal} from "@/app/components/management/ManagementUI";
 
-const eligibilityLabels={required:"Required",exempt:"Exempt",unknown:"Needs confirmation"};
-const reviewLabels={pending:"Not reviewed",checked:"Checked",issues:"Issues found"};
-const stamp=(value:string|null)=>value?new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—";
-function shiftWeek(week:string,days:number){const d=new Date(week+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
-function formValues(row:PTIRow):PTIChange{return {requestId:"",version:row.version,received:row.received,review:row.review,eligibility:row.eligibility,eligibilityReason:row.eligibilityReason,videoUrl:row.videoUrl,notes:row.notes};}
-function mergeWeek(prior:PTIWeek|null,next:PTIWeek):PTIWeek{
- if(!prior||prior.weekStart!==next.weekStart)return next;
- if(prior.exists&&!next.exists)return prior;
- return {...next,rows:next.rows.map(row=>{const old=prior.rows.find(v=>v.truckId===row.truckId);return old&&old.version>row.version?old:row;})};
+const stamp = (value: string | null) => value ? new Date(value).toLocaleString("en-US", {timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"}) : "";
+function shiftWeek(week: string, days: number) {
+ const date = new Date(week + "T12:00:00Z"); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10);
+}
+function mergeWeek(prior: PTIWeek | null, next: PTIWeek): PTIWeek {
+ if (!prior || prior.weekStart !== next.weekStart) return next;
+ if (prior.exists && !next.exists) return prior;
+ return {...next, rows: next.rows.map(row => {const old = prior.rows.find(v => v.truckId === row.truckId); return old && old.version > row.version ? old : row;})};
 }
 
-export default function WeeklyPTIPage(){
- const router=useRouter(),query=useSearchParams(),current=currentChargeWeek();
- const selected=query.get("weekStart")??"";const week=validChargeWeek(selected)?selected:current;
- const navigate=(value:string)=>{if(validChargeWeek(value)&&value<=current)router.push(`/fleet/weekly-pti?weekStart=${value}`,{scroll:false});};
- return <div className="space-y-5 p-6">
+export default function WeeklyPTIPage() {
+ const router = useRouter(), query = useSearchParams(), current = currentChargeWeek();
+ const selected = query.get("weekStart") ?? "", week = validChargeWeek(selected) && selected <= current ? selected : current;
+ const navigate = (value: string) => {if (validChargeWeek(value) && value <= current) router.push(`/fleet/weekly-pti?weekStart=${value}`, {scroll: false});};
+ return <div className="space-y-4 p-4 md:p-6">
   <ManagementHeader title="Weekly PTI" icon={ListChecks}/>
   <div className="flex flex-wrap items-center gap-2">
-   <button className="ui-button" aria-label="Previous week" onClick={()=>navigate(shiftWeek(week,-7))}><ChevronLeft className="h-4 w-4"/></button>
-   <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">Week of<span className="w-40"><input aria-label="PTI week" type="date" min="2000-01-03" max={current} step={7} value={week} className={controlClass} onChange={e=>navigate(e.target.value)}/></span></label>
-   <button className="ui-button" aria-label="Next week" disabled={week>=current} onClick={()=>navigate(shiftWeek(week,7))}><ChevronRight className="h-4 w-4"/></button>
-   <button className="ui-button" onClick={()=>navigate(current)}>This week</button>
-   <span className="text-xs text-zinc-500">Monday–Sunday · New York</span>
+   <button className="ui-button" aria-label="Previous week" onClick={() => navigate(shiftWeek(week, -7))}><ChevronLeft className="h-4 w-4"/></button>
+   <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">Week of <input aria-label="PTI week" type="date" min="2000-01-03" max={current} step={7} value={week} className={controlClass + " w-40"} onChange={e => navigate(e.target.value)}/></label>
+   <button className="ui-button" aria-label="Next week" disabled={week >= current} onClick={() => navigate(shiftWeek(week, 7))}><ChevronRight className="h-4 w-4"/></button>
+   {week !== current && <button className="ui-button" onClick={() => navigate(current)}>This week</button>}
+   <span className="ml-auto text-xs text-zinc-500">Monday–Sunday</span>
   </div>
   <Checklist key={week} week={week}/>
  </div>;
 }
 
-function Checklist({week}:{week:string}){
- const canEdit=usePermissions().includes("pti.edit");
- const [data,setData]=useState<PTIWeek|null>(null),[error,setError]=useState(""),[attempt,setAttempt]=useState(0);
- const [search,setSearch]=useState(""),[filter,setFilter]=useState(""),[reviewFilter,setReviewFilter]=useState("");
- const [saving,setSaving]=useState(""),[editing,setEditing]=useState<(PTIRow&{requestedReview?:PTIRow["review"]})|null>(null),[history,setHistory]=useState<PTIRow|null>(null);
- useEffect(()=>{
-  const c=new AbortController();fetchPTIWeek(week,c.signal).then(v=>{setData(old=>mergeWeek(old,v));setError("");}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();
- },[week,attempt]);
- useEffect(()=>{const refresh=()=>{if(document.visibilityState==="visible")setAttempt(v=>v+1);};const timer=setInterval(refresh,30000);window.addEventListener("focus",refresh);return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);};},[]);
- const accept=(row:PTIRow)=>{setData(old=>old?{...old,rows:old.rows.map(v=>v.truckId===row.truckId&&v.version<=row.version?row:v)}:old);};
- const save=async(row:PTIRow,input:PTIChange)=>{
-  setSaving(row.truckId);setError("");
-  try{const value=await changePTI(week,row.truckId,{...input,requestId:crypto.randomUUID()});accept(value);return value;}
-  catch(e){setError(e instanceof Error?e.message:"PTI could not be saved");setAttempt(v=>v+1);throw e;}
-  finally{setSaving("");}
+type Filter = "required" | "missing" | "unchecked" | "checked" | "all";
+function Checklist({week}: {week: string}) {
+ const canEdit = usePermissions().includes("pti.edit");
+ const [data, setData] = useState<PTIWeek | null>(null), [error, setError] = useState(""), [attempt, setAttempt] = useState(0);
+ const [search, setSearch] = useState(""), [filter, setFilter] = useState<Filter>(() => week === currentChargeWeek() ? "required" : "all"), [starting, setStarting] = useState(false);
+ const [history, setHistory] = useState<PTIRow | null>(null);
+ useEffect(() => {
+  const controller = new AbortController();
+  fetchPTIWeek(week, controller.signal).then(value => {setData(old => mergeWeek(old, value)); setError("");}).catch(e => {if (!controller.signal.aborted) setError(e.message);});
+  return () => controller.abort();
+ }, [week, attempt]);
+ useEffect(() => {
+  const refresh = () => {if (document.visibilityState === "visible") setAttempt(v => v + 1);};
+  const timer = setInterval(refresh, 30000); window.addEventListener("focus", refresh);
+  return () => {clearInterval(timer); window.removeEventListener("focus", refresh);};
+ }, []);
+ const accept = (row: PTIRow) => setData(old => old ? {...old, rows: old.rows.map(v => v.truckId === row.truckId && v.version <= row.version ? row : v)} : old);
+ const start = async () => {
+  setStarting(true);
+  try {setData(await createPTIWeek(week)); setError("");} catch (e) {setError(e instanceof Error ? e.message : "Checklist could not be created");} finally {setStarting(false);}
  };
- const start=async()=>{setSaving("week");try{setData(await createPTIWeek(week));setError("");}catch(e){setError(e instanceof Error?e.message:"Checklist could not be created");}finally{setSaving("");}};
- const all=data?.rows??[],required=all.filter(r=>r.eligibility==="required"),unknown=all.filter(r=>r.eligibility==="unknown").length;
- const summary:[[string,number],[string,number],[string,number],[string,number],[string,number],[string,number]]=[
-  ["Required",required.length],["Received",required.filter(r=>r.received).length],["Not received",required.filter(r=>!r.received).length],
-  ["Not reviewed",all.filter(r=>r.received&&r.review==="pending").length],["Issues found",all.filter(r=>r.review==="issues").length],["Exempt",all.filter(r=>r.eligibility==="exempt").length]
- ];
- const rows=all.filter(r=>(!search||[r.truckUnit,...r.crew.map(d=>d.name),r.notes].join(" ").toLowerCase().includes(search.toLowerCase()))&&
-  (!filter||(filter==="received"?r.received:filter==="missing"?r.eligibility==="required"&&!r.received:r.eligibility===filter))&&(!reviewFilter||(r.received&&r.review===reviewFilter)));
+ const all = data?.rows ?? [], required = all.filter(row => row.eligibility === "required");
+ const counts = {required: required.length, missing: required.filter(row => !row.received).length, unchecked: required.filter(row => row.received && row.review === "pending").length, checked: required.filter(row => row.review !== "pending").length, all: all.length};
+ const filters: [Filter, string][] = [["required", "On the road"], ["missing", "Missing video"], ["unchecked", "To check"], ["checked", "Checked"], ["all", "All trucks"]];
+ const rows = all.filter(row => (filter === "all" || (row.eligibility === "required" && (filter === "required" || (filter === "missing" && !row.received) || (filter === "unchecked" && row.received && row.review === "pending") || (filter === "checked" && row.review !== "pending")))) &&
+  [row.truckUnit, ...row.crew.map(driver => driver.name), row.notes].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
  return <>
-  {error&&<ErrorBanner message={error}/>}
-  {!data?<div className="py-8 text-sm text-zinc-500">{error?<button className="ui-button" onClick={()=>setAttempt(v=>v+1)}>Retry</button>:"Loading weekly PTI…"}</div>:!data.exists?<div className="rounded-xl border border-zinc-800 p-6 text-sm text-zinc-400">
-   <p>No checklist has been created for this week.</p>{week===currentChargeWeek()&&canEdit&&<button className="ui-button mt-3" disabled={!!saving} onClick={()=>void start()}>Create weekly checklist</button>}
-  </div>:<>
-   <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{summary.map(([label,count])=><div key={label} className="rounded-xl border border-zinc-800 p-4"><p className="text-xl font-semibold tabular-nums">{count}</p><p className="mt-1 text-xs text-zinc-500">{label}</p></div>)}</div>
-   {unknown>0&&<div role="status" className="rounded-lg border border-amber-900/60 bg-amber-500/5 px-4 py-3 text-xs text-amber-300">{unknown} trucks need Monday eligibility confirmed. {data.lateSnapshot?"A timely Monday snapshot wasn’t captured; confirm Monday’s actual situation.":"Monday status history is incomplete."}<button className="ml-2 underline" onClick={()=>setFilter("unknown")}>Show trucks</button></div>}
-   <div className="flex flex-wrap items-center gap-2">
-    <input aria-label="Search PTI" placeholder="Search truck, driver or notes…" className={controlClass+" max-w-sm"} value={search} onChange={e=>setSearch(e.target.value)}/>
-    <div className="w-48"><select aria-label="PTI filter" className={controlClass} value={filter} onChange={e=>setFilter(e.target.value)}><option value="">All trucks</option><option value="required">Required</option><option value="missing">Not received</option><option value="received">Received</option><option value="exempt">Exempt</option><option value="unknown">Needs confirmation</option></select></div>
-    <div className="w-44"><select aria-label="Review filter" className={controlClass} value={reviewFilter} onChange={e=>setReviewFilter(e.target.value)}><option value="">All reviews</option>{Object.entries(reviewLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
-    <button className="ui-button ml-auto" onClick={()=>setAttempt(v=>v+1)}>Refresh</button>
+  {error && <ErrorBanner message={error}/>}
+  {!data ? <div className="py-8 text-sm text-zinc-500">{error ? <button className="ui-button" onClick={() => setAttempt(v => v + 1)}>Retry</button> : "Loading weekly PTI…"}</div> : !data.exists ? <div className="rounded-xl border border-zinc-800 p-6 text-sm text-zinc-400">
+   <p>No checklist has been created for this week.</p>{week === currentChargeWeek() && canEdit && <button className="ui-button mt-3" disabled={starting} onClick={() => void start()}>Start this week</button>}
+  </div> : <>
+   <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+    <p>{week === currentChargeWeek() ? "Trucks on the road appear automatically. Home, vacation, shop and unassigned trucks do not need a PTI." : "Saved checklist for this week."}</p>
+    <span className="whitespace-nowrap tabular-nums"><strong className="text-zinc-200">{counts.checked} / {counts.required}</strong> checked</span>
    </div>
-   <p className="text-xs text-zinc-500">One video per truck. Eligibility is based on Monday’s status (New York).</p>
-   <div className="overflow-x-auto rounded-xl border border-zinc-800"><table className="w-full text-left text-[13px]"><thead className="bg-zinc-900 text-xs text-zinc-400"><tr>{["Truck","Driver / team","Monday eligibility","Video received","Review","Notes / video","Updated by",""].map((label,i)=><th key={label||i} className="px-3 py-3 font-medium">{label}</th>)}</tr></thead>
-    <tbody>{rows.map(row=><tr key={row.truckId} className="border-t border-zinc-800 align-top" aria-label={`Truck ${row.truckUnit}`}>
-     <td className="px-3 py-3 font-mono"><Link className="text-blue-400" href={`/trucks/detail?id=${row.truckId}`}>{row.truckUnit}</Link></td>
-     <td className="px-3 py-3">{row.crew.length?row.crew.map(d=><div key={d.id}><Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.name}</Link></div>):<span className="text-zinc-500">No driver</span>}</td>
-     <td className="px-3 py-3"><span title={row.eligibilityReason} className={row.eligibility==="unknown"?"text-amber-300":row.eligibility==="exempt"?"text-zinc-500":"text-zinc-200"}>{eligibilityLabels[row.eligibility]}</span>{canEdit&&row.eligibility==="unknown"&&<button className="ml-2 text-xs text-blue-400" disabled={!!saving} onClick={()=>setEditing(row)}>Confirm</button>}</td>
-     <td className="px-3 py-2">{canEdit?<select aria-label={`Truck ${row.truckUnit} video received`} className={controlClass+" min-w-36"} disabled={!!saving} value={row.received?"yes":"no"} onChange={e=>{const received=e.target.value==="yes";void save(row,{...formValues(row),received,...(!received?{review:"pending",videoUrl:""}:{})}).catch(()=>{});}}><option value="no">Not received</option><option value="yes">Received</option></select>:row.received?"Received":"Not received"}</td>
-     <td className="px-3 py-2">{canEdit&&row.received?<select aria-label={`Truck ${row.truckUnit} review`} className={controlClass+" min-w-36"} disabled={!!saving} value={row.review} onChange={e=>{if(e.target.value==="issues"){setEditing({...row,requestedReview:"issues"});return;}void save(row,{...formValues(row),review:e.target.value as PTIRow["review"]}).catch(()=>{});}}>{Object.entries(reviewLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>:row.received?reviewLabels[row.review]:<span className="text-zinc-600">—</span>}</td>
-     <td className="max-w-xs px-3 py-3"><p title={row.notes} className="line-clamp-2 text-xs text-zinc-400">{row.notes}</p>{row.videoUrl&&<a className="text-xs text-blue-400" href={row.videoUrl} target="_blank" rel="noopener noreferrer">Open video</a>}</td>
-     <td className="px-3 py-3 text-xs text-zinc-500">{row.updatedBy||"—"}<div className="mt-1 whitespace-nowrap">{stamp(row.updatedAt)}</div></td>
-     <td className="px-3 py-2"><div className="flex gap-1">{canEdit&&<button className="ui-button" aria-label={`Edit PTI truck ${row.truckUnit}`} disabled={!!saving} onClick={()=>setEditing(row)}><Pencil className="h-3.5 w-3.5"/></button>}<button className="ui-button" aria-label={`PTI history truck ${row.truckUnit}`} onClick={()=>setHistory(row)}><History className="h-3.5 w-3.5"/></button></div></td>
-    </tr>)}</tbody></table>{!rows.length&&<p className="p-6 text-sm text-zinc-500">No trucks match these filters.</p>}</div>
-   <p className="text-xs text-zinc-600">Checklist created {stamp(data.createdAt)} by {data.createdBy}. Times in New York.</p>
+   <div className="flex flex-wrap items-center gap-3">
+    <div className="flex max-w-full gap-1 overflow-x-auto whitespace-nowrap" role="group" aria-label="PTI filters">{filters.map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition-colors ${filter === value ? "bg-blue-500/15 text-blue-300" : "text-zinc-400 hover:bg-zinc-800"}`}>{label}<span className="ml-2 tabular-nums opacity-75">{counts[value]}</span></button>)}</div>
+    <label className="relative ml-auto min-w-52 flex-1 sm:max-w-xs"><Search aria-hidden className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500"/><input aria-label="Search PTI" placeholder="Search truck, driver or notes" className={controlClass + " pl-9"} value={search} onChange={e => setSearch(e.target.value)}/></label>
+    <button className="ui-button" onClick={() => setAttempt(v => v + 1)}>Refresh</button>
+   </div>
+   <div className="max-h-[calc(100dvh-280px)] overflow-auto rounded-xl border border-zinc-800">
+    <table className="w-full min-w-[720px] text-left text-[13px]"><thead className="sticky top-0 z-10 bg-zinc-900 text-xs text-zinc-400"><tr>
+     <th className="w-24 px-4 py-3 font-medium">Truck</th><th className="w-56 px-4 py-3 font-medium">Driver / team</th><th className="w-32 px-3 py-3 text-center font-medium">Video received</th><th className="w-24 px-3 py-3 text-center font-medium">Checked</th><th className="px-4 py-3 font-medium">Notes</th><th className="w-12"><span className="sr-only">History</span></th>
+    </tr></thead><tbody>{rows.map(row => <ChecklistRow key={row.truckId} row={row} canEdit={canEdit} accept={accept} refresh={() => setAttempt(v => v + 1)} history={() => setHistory(row)}/>)}</tbody></table>
+    {!rows.length && <p className="p-8 text-center text-sm text-zinc-500">{search ? "No trucks match your search." : filter === "missing" ? "All required videos have been received." : filter === "unchecked" ? "No videos waiting to be checked." : "No trucks in this view."}</p>}
+   </div>
+   <p className="text-xs text-zinc-500">{canEdit ? "Changes save automatically. Add any issues to Notes. " : "View only. "}Hover over a checkbox to see who recorded it.</p>
   </>}
-  {editing&&<PTIEditor row={editing} busy={!!saving} close={()=>setEditing(null)} save={input=>save(editing,input).then(()=>setEditing(null))}/>}
-  {history&&<PTIHistory row={history} close={()=>setHistory(null)}/>}
+  {history && <PTIHistory row={history} close={() => setHistory(null)}/>}
  </>;
 }
 
-function PTIEditor({row,busy,close,save}:{row:PTIRow&{requestedReview?:PTIRow["review"]};busy:boolean;close:()=>void;save:(input:PTIChange)=>Promise<void>}){
- const [form,setForm]=useState(()=>({...formValues(row),review:row.requestedReview??row.review})),[error,setError]=useState("");
- const update=<K extends keyof PTIChange>(key:K,value:PTIChange[K])=>setForm(old=>({...old,[key]:value}));
- return <Modal title={`Weekly PTI · Truck ${row.truckUnit}`} description="Confirm Monday eligibility, record receipt, and review the video." isSaving={busy} submitLabel="Save PTI" onClose={close} onSubmit={e=>{e.preventDefault();void save(form).catch(e=>setError(e instanceof Error?e.message:"Save failed"));}}>
-  {error&&<ErrorBanner message={error}/>}<div className="space-y-4 p-1">
-   <p className="text-xs text-zinc-400">Monday truck condition: {row.condition?statusLabel(row.condition):"Unknown"}. {row.crew.map(d=>`${d.name}: ${d.availability?statusLabel(d.availability):"Unknown"}`).join(" · ")||"No driver assigned"}</p>
-   <p className="text-xs text-zinc-500">Original eligibility: {eligibilityLabels[row.snapshotEligibility as PTIRow["eligibility"]]} · {row.snapshotReason}</p>
-   <Field label="Monday eligibility"><select aria-label="Monday eligibility" className={controlClass} value={form.eligibility} onChange={e=>update("eligibility",e.target.value as PTIRow["eligibility"])}>{Object.entries(eligibilityLabels).map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></Field>
-   <Field label="Eligibility reason"><input aria-label="Eligibility reason" className={controlClass} maxLength={1000} value={form.eligibilityReason} onChange={e=>update("eligibilityReason",e.target.value)}/></Field>
-   <div className="grid gap-4 sm:grid-cols-2"><Field label="Video received"><select aria-label="Video received" className={controlClass} value={form.received?"yes":"no"} onChange={e=>{const received=e.target.value==="yes";setForm(old=>({...old,received,...(!received?{review:"pending",videoUrl:""}:{})}));}}><option value="no">Not received</option><option value="yes">Received</option></select></Field>
-   <Field label="Video review"><select aria-label="Video review" className={controlClass} disabled={!form.received} value={form.review} onChange={e=>update("review",e.target.value as PTIRow["review"])}>{Object.entries(reviewLabels).map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></Field></div>
-   <Field label="Video link (optional)"><input aria-label="Video link" className={controlClass} type="url" maxLength={2000} disabled={!form.received} placeholder="https://…" value={form.videoUrl} onChange={e=>update("videoUrl",e.target.value)}/></Field>
-   <Field label="Notes"><textarea aria-label="PTI notes" className={controlClass} rows={3} maxLength={5000} required={form.review==="issues"} value={form.notes} onChange={e=>update("notes",e.target.value)}/></Field>
-   {row.receivedAt&&<p className="text-xs text-zinc-500">Receipt recorded {stamp(row.receivedAt)} by {row.receivedBy}. {row.reviewedAt&&`Reviewed ${stamp(row.reviewedAt)} by ${row.reviewedBy}.`}</p>}
-   {row.review!=="pending"&&form.videoUrl!==row.videoUrl&&<p className="text-xs text-amber-300">Changing the video link resets its review to Not reviewed.</p>}
-  </div>
- </Modal>;
+function ChecklistRow({row, canEdit, accept, refresh, history}: {row: PTIRow; canEdit: boolean; accept: (row: PTIRow) => void; refresh: () => void; history: () => void}) {
+ const [draft, setDraft] = useState<{value: string; base: PTIRow} | null>(null), [pending, setPending] = useState<PTIChange | null>(null), [error, setError] = useState("");
+ const saving = useRef(false);
+ const notes = draft?.value ?? row.notes;
+ const dirty = draft !== null && draft.value !== draft.base.notes;
+ useEffect(() => {
+  if (!dirty && !pending) return;
+  const warn = (event: BeforeUnloadEvent) => {event.preventDefault();};
+  window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
+ }, [dirty, pending]);
+ const save = async (overrides: Partial<PTIChange> = {}, base = draft?.base ?? row) => {
+  if (saving.current) return;
+  const input: PTIChange = {requestId: crypto.randomUUID(), version: base.version, received: base.received, review: base.review, notes, ...overrides};
+  saving.current = true; setPending(input); setError("");
+  try {const value = await changePTI(row.weekStart, row.truckId, input); accept(value); setDraft(null);}
+  catch (e) {setError(e instanceof Error ? e.message : "Could not save. Try again."); refresh();}
+  finally {saving.current = false; setPending(null);}
+ };
+ const received = pending?.received ?? row.received, checked = (pending?.review ?? row.review) !== "pending";
+ const receiptTitle = row.received ? `Received by ${row.receivedBy || "Unknown"}${row.receivedAt ? ` · ${stamp(row.receivedAt)} (New York)` : ""}` : "Video not received";
+ const reviewTitle = checked ? `Checked by ${row.reviewedBy || "Unknown"}${row.reviewedAt ? ` · ${stamp(row.reviewedAt)} (New York)` : ""}` : received ? "Not checked yet" : "Receive the video first";
+ const checkboxClass = "h-4 w-4 cursor-pointer rounded border-zinc-600 accent-blue-500 disabled:cursor-default disabled:opacity-60";
+ return <tr aria-label={`Truck ${row.truckUnit}`} className="border-t border-zinc-800/80 hover:bg-zinc-800/20">
+  <td className="px-4 py-3 align-top font-mono"><Link className="text-blue-400" href={`/trucks/detail?id=${row.truckId}`}>{row.truckUnit}</Link>{row.eligibility !== "required" && <span className="mt-1 block font-sans text-[10px] text-zinc-500" title={row.eligibilityReason}>{row.eligibility === "unknown" ? "Not recorded" : "Not required"}</span>}</td>
+  <td className="px-4 py-3 align-top">{row.crew.length ? row.crew.map(driver => <div key={driver.id}><Link className="hover:text-blue-300" href={`/drivers/detail?id=${driver.id}`}>{driver.name}</Link></div>) : <span className="text-zinc-500">No driver</span>}</td>
+  <td className="px-3 py-2 text-center align-top"><label title={receiptTitle} className="inline-flex min-h-9 min-w-9 items-center justify-center"><input type="checkbox" className={checkboxClass} aria-label={`Truck ${row.truckUnit} video received`} title={receiptTitle} checked={received} disabled={!canEdit || !!pending} onChange={e => void save({received: e.target.checked, ...(!e.target.checked ? {review: "pending"} : {})})}/></label></td>
+  <td className="px-3 py-2 text-center align-top"><label title={reviewTitle} className="inline-flex min-h-9 min-w-9 items-center justify-center"><input type="checkbox" className={checkboxClass} aria-label={`Truck ${row.truckUnit} checked`} title={reviewTitle} checked={checked} disabled={!canEdit || !received || !!pending} onChange={e => void save({review: e.target.checked ? "checked" : "pending"})}/></label></td>
+  <td className="min-w-64 px-3 py-2 align-top">{canEdit ? <textarea aria-label={`Truck ${row.truckUnit} notes`} rows={1} maxLength={5000} className="min-h-9 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-2 text-xs placeholder:text-zinc-600 hover:border-zinc-700 focus:border-blue-500 focus:outline-none" placeholder="Add a note…" value={notes} readOnly={!!pending} onChange={e => setDraft(old => ({base: old?.base ?? row, value: e.target.value}))} onBlur={e => {if (dirty && !(e.relatedTarget instanceof HTMLElement && e.currentTarget.closest("tr")?.contains(e.relatedTarget))) void save();}} onKeyDown={e => {if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {e.preventDefault(); void save();}}}/> : <p className="whitespace-pre-wrap px-2 py-2 text-xs text-zinc-400">{row.notes || "—"}</p>}
+   {pending && <span role="status" className="flex items-center gap-1 px-2 text-[11px] text-zinc-500"><LoaderCircle className="h-3 w-3 animate-spin"/>Saving…</span>}
+   {error && <div role="alert" className="px-2 text-xs text-red-400">{error}{draft && <button className="ml-2 underline" onClick={() => void save({}, row)}>Save my note on the latest entry</button>}</div>}
+   {dirty && !pending && <button className="px-2 text-[11px] text-blue-400" onClick={() => void save()}>Save note</button>}
+  </td>
+  <td className="px-2 py-2 align-top"><button className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="View history" aria-label={`PTI history truck ${row.truckUnit}`} onClick={history}><History className="h-4 w-4"/></button></td>
+ </tr>;
 }
 
-function PTIHistory({row,close}:{row:PTIRow;close:()=>void}){
- const [events,setEvents]=useState<PTIEvent[]|null>(null),[error,setError]=useState("");
- useEffect(()=>{const c=new AbortController();fetchPTIHistory(row.weekStart,row.truckId,c.signal).then(setEvents).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[row.weekStart,row.truckId]);
- const changes=(event:PTIEvent)=>[
-  event.before.eligibility!==event.after.eligibility?`Eligibility: ${eligibilityLabels[event.before.eligibility]} → ${eligibilityLabels[event.after.eligibility]}`:"",
-  event.before.received!==event.after.received?`Video: ${event.after.received?"Received":"Not received"}`:"",
-  event.before.review!==event.after.review?`Review: ${reviewLabels[event.after.review]}`:"",
-  event.before.notes!==event.after.notes?`Notes: ${event.after.notes||"Cleared"}`:"",
-  event.before.videoUrl!==event.after.videoUrl?`Video link: ${event.after.videoUrl||"Cleared"}`:"",
-  event.before.eligibilityReason!==event.after.eligibilityReason?`Reason: ${event.after.eligibilityReason}`:""
+function PTIHistory({row, close}: {row: PTIRow; close: () => void}) {
+ const [events, setEvents] = useState<PTIEvent[] | null>(null), [error, setError] = useState("");
+ useEffect(() => {const controller = new AbortController(); fetchPTIHistory(row.weekStart, row.truckId, controller.signal).then(setEvents).catch(e => {if (!controller.signal.aborted) setError(e.message);}); return () => controller.abort();}, [row.weekStart, row.truckId]);
+ const changes = (event: PTIEvent) => [
+  event.before.received !== event.after.received ? `Video: ${event.after.received ? "Received" : "Not received"}` : "",
+  event.before.review !== event.after.review ? `Review: ${event.after.review === "pending" ? "Not checked" : "Checked"}` : "",
+  event.before.notes !== event.after.notes ? `Notes: ${event.after.notes || "Cleared"}` : "",
+  event.before.eligibility !== event.after.eligibility ? `Earlier eligibility correction: ${event.after.eligibility}` : "",
+  event.before.videoUrl !== event.after.videoUrl ? "Earlier video link updated" : ""
  ].filter(Boolean);
- return <Modal title={`PTI history · Truck ${row.truckUnit}`} isSaving={false} submitLabel="" hideSubmit cancelLabel="Close" onClose={close} onSubmit={e=>e.preventDefault()}>
-  {error&&<ErrorBanner message={error}/>}<div className="space-y-4 text-xs">{events===null?<p>Loading history…</p>:!events.length?<p className="text-zinc-500">No changes yet.</p>:events.map(event=><div key={event.id} className="border-b border-zinc-800 pb-3"><p className="mb-2 font-medium">{event.actorName} <span className="ml-2 font-normal text-zinc-500">{stamp(event.createdAt)}</span></p>{changes(event).map((line,i)=><p key={i} className="break-words text-zinc-400">{line}</p>)}</div>)}</div>
+ return <Modal title={`PTI history · Truck ${row.truckUnit}`} isSaving={false} submitLabel="" hideSubmit cancelLabel="Close" onClose={close} onSubmit={e => e.preventDefault()}>
+  {error && <ErrorBanner message={error}/>}<div className="space-y-4 text-xs">{events === null ? <p>Loading history…</p> : !events.length ? <p className="text-zinc-500">No changes yet.</p> : events.map(event => <div key={event.id} className="border-b border-zinc-800 pb-3"><p className="mb-2 font-medium">{event.actorName}<span className="ml-2 font-normal text-zinc-500">{stamp(event.createdAt)} (New York)</span></p>{changes(event).map((line, index) => <p key={index} className="whitespace-pre-wrap break-words text-zinc-400">{line}</p>)}</div>)}</div>
  </Modal>;
 }

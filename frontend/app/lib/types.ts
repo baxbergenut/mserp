@@ -1453,5 +1453,5 @@ export type PTIRow = {
  videoUrl:string;notes:string;updatedAt:string|null;updatedBy:string;version:number;
 };
 export type PTIWeek = {weekStart:string;exists:boolean;createdAt:string|null;createdBy:string;lateSnapshot:boolean;rows:PTIRow[]};
-export type PTIChange = Pick<PTIRow,"version"|"eligibility"|"eligibilityReason"|"received"|"review"|"videoUrl"|"notes"> & {requestId:string};
+export type PTIChange = Pick<PTIRow,"version"|"received"|"review"|"notes"> & {requestId:string};
 export type PTIEvent = {id:string;before:PTIRow;after:PTIRow;actorName:string;createdAt:string};

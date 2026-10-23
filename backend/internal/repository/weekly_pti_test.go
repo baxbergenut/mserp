@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,27 +18,27 @@ func TestPTIEligibility(t *testing.T) {
 	active := PTICrew{Employment: "active", Availability: "active"}
 	home := PTICrew{Employment: "active", Availability: "home"}
 	for _, test := range []struct {
-		name         string
-		active, late bool
-		condition    string
-		crew         []PTICrew
-		want         string
+		name      string
+		active    bool
+		condition string
+		crew      []PTICrew
+		want      string
 	}{
-		{"active", true, false, "ready", []PTICrew{active}, "required"},
-		{"home", true, false, "ready", []PTICrew{home}, "exempt"},
-		{"team available", true, false, "ready", []PTICrew{home, active}, "required"},
-		{"team unavailable", true, false, "ready", []PTICrew{home, home}, "exempt"},
-		{"shop", true, false, "shop", []PTICrew{active}, "exempt"},
-		{"OOS", true, false, "out_of_service", []PTICrew{active}, "exempt"},
-		{"hold", true, false, "hold", []PTICrew{active}, "required"},
-		{"no driver", true, false, "ready", nil, "exempt"},
-		{"inactive", false, false, "ready", nil, "exempt"},
-		{"unknown condition", true, false, "", []PTICrew{active}, "unknown"},
-		{"unknown driver", true, false, "ready", []PTICrew{{}}, "unknown"},
-		{"late capture", true, true, "ready", []PTICrew{active}, "unknown"},
+		{"active", true, "ready", []PTICrew{active}, "required"},
+		{"home", true, "ready", []PTICrew{home}, "exempt"},
+		{"team available", true, "ready", []PTICrew{home, active}, "required"},
+		{"team unavailable", true, "ready", []PTICrew{home, home}, "exempt"},
+		{"shop", true, "shop", []PTICrew{active}, "exempt"},
+		{"OOS", true, "out_of_service", []PTICrew{active}, "exempt"},
+		{"hold", true, "hold", []PTICrew{active}, "exempt"},
+		{"no driver", true, "ready", nil, "exempt"},
+		{"inactive", false, "ready", nil, "exempt"},
+		{"unknown condition", true, "", []PTICrew{active}, "exempt"},
+		{"unknown driver", true, "ready", []PTICrew{{}}, "exempt"},
+		{"vacation", true, "ready", []PTICrew{{Employment: "active", Availability: "vacation"}}, "exempt"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, reason := ptiEligibility(test.active, test.late, test.condition, test.crew)
+			got, reason := ptiEligibility(test.active, test.condition, test.crew)
 			if got != test.want || reason == "" {
 				t.Fatal(got, reason)
 			}
@@ -137,7 +138,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			actor := scalar(`INSERT INTO app_users(username,password_hash,role_id) VALUES('PTI Reviewer','$2a$test',(SELECT id FROM app_roles WHERE system_role)) RETURNING id::text`)
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,availability_status,status,created_at) SELECT ('91000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'PTI Driver '||n,'pti driver '||n,'cpm',0.6,CASE WHEN n IN(2,3) THEN 'home' ELSE 'active' END,CASE WHEN n IN(2,3) THEN 'home' ELSE 'active' END,$1::timestamptz FROM generate_series(1,7) n`, monday.AddDate(0, 0, -21))
 			exec(`INSERT INTO trucks(id,unit_number,status,active,created_at) SELECT ('92000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'PTI-'||n,CASE n WHEN 3 THEN 'maintenance' WHEN 6 THEN 'out_of_service' WHEN 7 THEN 'hold' ELSE 'available' END,n<>8,$1::timestamptz FROM generate_series(1,8) n`, monday.AddDate(0, 0, -21))
-			exec(`INSERT INTO trucks(unit_number,created_at) VALUES('PTI-new-midweek',$1)`, monday.AddDate(0, 0, 1))
+			exec(`INSERT INTO trucks(unit_number,created_at) VALUES('PTI-new-midweek',$1)`, monday.Add(2*time.Minute))
 			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT ('92000000-0000-4000-8000-'||lpad(t::text,12,'0'))::uuid,('91000000-0000-4000-8000-'||lpad(d::text,12,'0'))::uuid,$1 FROM (VALUES(1,1),(2,3),(3,4),(5,5),(6,6),(7,7)) v(t,d)`, monday.AddDate(0, 0, -14))
 			exec(`INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES('91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002',$1)`, monday.AddDate(0, 0, -14).Format("2006-01-02"))
 			// Fixture-only known baselines predate Monday. Production baselines are never rewritten.
@@ -153,7 +154,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			if err != nil || !initial.Exists || initial.LateSnapshot || len(initial.Rows) != 8 {
 				t.Fatal(initial, err)
 			}
-			want := map[string]string{"PTI-1": "required", "PTI-2": "exempt", "PTI-3": "exempt", "PTI-4": "exempt", "PTI-5": "unknown", "PTI-6": "exempt", "PTI-7": "required", "PTI-8": "exempt"}
+			want := map[string]string{"PTI-1": "required", "PTI-2": "exempt", "PTI-3": "exempt", "PTI-4": "exempt", "PTI-5": "required", "PTI-6": "exempt", "PTI-7": "exempt", "PTI-8": "exempt"}
 			var selected PTIRow
 			for _, row := range initial.Rows {
 				if row.Eligibility != want[row.TruckUnit] {
@@ -166,10 +167,12 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 					}
 				}
 			}
-			if err := repo.CreatePTIWeek(ctx, week, actor); err != nil {
+			// Simulate an existing rollout row needing Monday confirmation.
+			exec(`UPDATE weekly_pti_rows SET data=jsonb_set(data,'{eligibility}','"unknown"') WHERE data->>'truckUnit'='PTI-5'`)
+			if err := repo.createPTIWeek(ctx, week, actor, monday.Add(time.Hour)); err != nil {
 				t.Fatal(err)
 			}
-			if scalar(`SELECT count(*)::text FROM weekly_pti_rows WHERE week_start=$1`, week) != "8" {
+			if scalar(`SELECT count(*)::text FROM weekly_pti_rows WHERE week_start=$1`, week) != "9" {
 				t.Fatal("idempotent week creation failed")
 			}
 			if _, err = repo.PTIWeek(ctx, monday.AddDate(0, 0, -7).Format("2006-01-02")); err != nil {
@@ -183,16 +186,16 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			late, err := repo.PTIWeek(ctx, oldWeek.Format("2006-01-02"))
-			if err != nil || !late.LateSnapshot {
+			if err != nil || late.LateSnapshot {
 				t.Fatal(late, err)
 			}
 			for _, row := range late.Rows {
-				if row.Eligibility != "unknown" {
-					t.Fatal("late snapshot invented Monday state", row)
+				if row.Eligibility == "unknown" {
+					t.Fatal("midweek creation needs manual eligibility", row)
 				}
 			}
 			financialBefore := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
-			in := PTIChange{RequestID: "93000000-0000-4000-8000-000000000001", Version: selected.Version, Eligibility: "required", EligibilityReason: selected.EligibilityReason, Received: true, Review: "checked", VideoURL: "https://example.test/pti/1", Notes: "Video inspected"}
+			in := PTIChange{RequestID: "93000000-0000-4000-8000-000000000001", Version: selected.Version, Eligibility: "required", EligibilityReason: selected.EligibilityReason, Received: true, Review: "checked", Notes: "Video inspected"}
 			changed, err := repo.ChangePTI(ctx, week, selected.TruckID, actor, in)
 			if err != nil || changed.ReviewedBy != "PTI Reviewer" || changed.ReceivedBy != "PTI Reviewer" || changed.Version != 2 {
 				t.Fatal(changed, err)
@@ -210,14 +213,14 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			next := in
 			next.Version = changed.Version
 			next.RequestID = "93000000-0000-4000-8000-000000000003"
-			next.VideoURL = "https://example.test/pti/replacement"
+			next.Notes = "Marker lamp needs follow-up"
 			replaced, err := repo.ChangePTI(ctx, week, selected.TruckID, actor, next)
-			if err != nil || replaced.Review != "pending" || replaced.ReviewedAt != nil || replaced.ReviewedBy != "" {
-				t.Fatal("new video retained old review", replaced, err)
+			if err != nil || replaced.Review != "checked" || replaced.ReviewedAt == nil || replaced.ReviewedBy != "PTI Reviewer" {
+				t.Fatal("notes edit changed reviewer", replaced, err)
 			}
 			noop := next
 			noop.Version = replaced.Version
-			noop.Review = "pending"
+			noop.Review = "checked"
 			noop.RequestID = "93000000-0000-4000-8000-000000000004"
 			if _, err = repo.ChangePTI(ctx, week, selected.TruckID, actor, noop); err != nil {
 				t.Fatal(err)
@@ -250,13 +253,64 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			if _, err = repo.ChangeAvailability(ctx, d.ID, actor, FleetStatusChange{Status: "home", Version: d.StatusVersion}); err != nil {
 				t.Fatal(err)
 			}
+			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
+				t.Fatal(err)
+			}
 			snapshot, err := repo.PTIWeek(ctx, week)
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, row := range snapshot.Rows {
-				if row.TruckID == selected.TruckID && (row.Eligibility != "required" || row.Crew[0].Availability != "active") {
-					t.Fatal("later availability rewrote Monday", row)
+				if row.TruckID == selected.TruckID && (row.Eligibility != "exempt" || row.Crew[0].Availability != "home" || !row.Received || row.Notes != "Marker lamp needs follow-up" || row.ReviewedBy != "PTI Reviewer") {
+					t.Fatal("automatic roster lost availability or saved PTI", row)
+				}
+			}
+			d, _ = repo.GetDriver(ctx, d.ID)
+			if _, err = repo.ChangeAvailability(ctx, d.ID, actor, FleetStatusChange{Status: "active", Version: d.StatusVersion}); err != nil {
+				t.Fatal(err)
+			}
+			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
+				t.Fatal(err)
+			}
+			returning, err := repo.PTIWeek(ctx, week)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range returning.Rows {
+				if row.TruckID == selected.TruckID && (row.Eligibility != "required" || !row.Received || row.Review != "checked") {
+					t.Fatal("returning driver", row)
+				}
+			}
+			past, err := repo.PTIWeek(ctx, oldWeek.Format("2006-01-02"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pastJSON, _ := json.Marshal(past)
+			lateJSON, _ := json.Marshal(late)
+			if string(pastJSON) != string(lateJSON) {
+				t.Fatal("past week rewritten")
+			}
+			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
+				t.Fatal(err)
+			}
+			unchanged, _ := repo.PTIWeek(ctx, week)
+			returningJSON, _ := json.Marshal(returning)
+			unchangedJSON, _ := json.Marshal(unchanged)
+			if string(returningJSON) != string(unchangedJSON) {
+				t.Fatal("no-op refresh changed versions")
+			}
+			// Shop restrictions also remove the truck without losing its saved PTI.
+			truck, _ := repo.GetTruck(ctx, selected.TruckID)
+			if _, err = repo.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "shop", Version: truck.StatusVersion}); err != nil {
+				t.Fatal(err)
+			}
+			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
+				t.Fatal(err)
+			}
+			shop, _ := repo.PTIWeek(ctx, week)
+			for _, row := range shop.Rows {
+				if row.TruckID == selected.TruckID && (row.Eligibility != "exempt" || !row.Received) {
+					t.Fatal("shop PTI", row)
 				}
 			}
 			financialAfter := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
