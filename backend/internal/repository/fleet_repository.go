@@ -545,11 +545,11 @@ SELECT d.id, d.full_name, d.first_name, d.last_name, (driver_employment_type(d.i
 	coalesce(NOT i.is_company,false), coalesce(i.driver_id=d.id,false),
 	d.phone, d.email, d.license_number, d.license_state, d.license_expires,
 	d.hire_date, d.address, d.city, d.state, d.postal_code, d.emergency_contact,
-	CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END, dp.full_name, a.truck_id, t.unit_number,
+	CASE WHEN d.active AND team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END, dp.full_name, a.truck_id, t.unit_number,
 	d.active, d.notes, d.cdl_file_id, f.file_name, f.content_type, f.size_bytes,
 	d.created_at, d.updated_at, d.status, d.termination_date,
-	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,team.truck_id,team.truck_unit,team.start_week,
- CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(fleet_status_driver_truck(d.id)),''),d.date_of_birth
+	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,CASE WHEN d.active THEN team.truck_id END,CASE WHEN d.active THEN team.truck_unit END,team.start_week,
+ CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(CASE WHEN d.active THEN fleet_status_driver_truck(d.id) ELSE a.truck_id END),''),d.date_of_birth
 FROM drivers d
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
  p.id::text partner_id,p.full_name partner_name,m.dispatcher_id main_dispatcher_id,dt.start_week::text start_week,
@@ -563,7 +563,7 @@ LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'tea
  AND dt.start_week<coalesce(dt.end_week,'infinity'::date)
  AND (dt.end_week IS NULL OR (now() AT TIME ZONE 'America/New_York')::date<dt.end_week)
  ORDER BY (dt.start_week<=(now() AT TIME ZONE 'America/New_York')::date) DESC,dt.start_week,dt.id LIMIT 1) team ON true
-LEFT JOIN dispatchers dp ON dp.id=CASE WHEN team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END
+LEFT JOIN dispatchers dp ON dp.id=CASE WHEN d.active AND team.role='team' THEN team.main_dispatcher_id ELSE d.dispatcher_id END
 LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
 LEFT JOIN trucks t ON t.id=a.truck_id
 LEFT JOIN investors i ON i.id=t.owner_id

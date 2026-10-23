@@ -203,6 +203,22 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		}
 	})
 
+	t.Run("independent investor truck", func(t *testing.T) {
+		d, _ := newDriver("Investor Hired Driver")
+		owner := scalar(`INSERT INTO investors(full_name) VALUES('Independent Owner') RETURNING id::text`)
+		truck, createErr := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "INVESTOR-HIRED", Active: true, Status: "available", OwnerID: &owner, DriverID: &d.ID})
+		must(createErr)
+		d, err = fleet.GetDriver(ctx, d.ID)
+		must(err)
+		d, err = terminate(d)
+		must(err)
+		truck, err = fleet.GetTruck(ctx, truck.ID)
+		must(err)
+		if d.TruckID != nil || d.DispatcherID != nil || truck.DriverID != nil || !truck.Active || truck.OwnerID != owner {
+			t.Fatal("investor truck not released with ownership preserved")
+		}
+	})
+
 	t.Run("active direct driver", func(t *testing.T) {
 		owner, _ := newDriver("Shared Owner")
 		operator, _ := newDriver("Active Operator")
@@ -250,6 +266,31 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 		}
 		if got := scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID); got != "held" {
 			t.Fatal(got)
+		}
+	})
+
+	t.Run("terminated teammate loses inherited current assignments", func(t *testing.T) {
+		main, _ := newDriver("Working Main")
+		teammate, _ := newDriver("Departing Teammate")
+		truck := newTruck("TEAM-COMPANY", nil, &main.ID)
+		exec(`INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES($1,$2,$3::date)`, main.ID, teammate.ID, ChargeCurrentWeek())
+		teammate, err = fleet.GetDriver(ctx, teammate.ID)
+		must(err)
+		if teammate.DispatcherID == nil || teammate.TeamTruckID == nil {
+			t.Fatal("missing inherited setup")
+		}
+		teammate, err = terminate(teammate)
+		must(err)
+		if teammate.DispatcherID != nil || teammate.DispatcherName != nil || teammate.TruckID != nil || teammate.TeamTruckID != nil || teammate.TeamTruckUnit != nil || teammate.TruckOperatingStatus != "" {
+			t.Fatal("terminated teammate retained current assignments", teammate)
+		}
+		truck, err = fleet.GetTruck(ctx, truck.ID)
+		must(err)
+		if !truck.Active || truck.DriverID == nil || *truck.DriverID != main.ID {
+			t.Fatal("teammate termination changed main driver truck")
+		}
+		if scalar(`SELECT count(*)::text FROM driver_teams WHERE main_driver_id=$1 AND team_driver_id=$2 AND end_week IS NULL`, main.ID, teammate.ID) != "1" {
+			t.Fatal("termination rewrote weekly team history")
 		}
 	})
 
