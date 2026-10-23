@@ -51,9 +51,12 @@ const NAV_ITEMS = [
     { href: "/accounting/driver-charges", label: "Recurring Charges", icon: Receipt },
     { href: "/accounting/dispatcher-pay", label: "Dispatcher Pay", icon: Headset },
   ] },
-  { href: "/drivers", label: "Drivers", icon: Users },
+  { href: "/hr", label: "HR", icon: Users, children: [
+    { href: "/drivers", label: "Drivers", icon: Users },
+    { href: "/dispatchers", label: "Dispatchers", icon: Headset },
+    { href: "/updaters", label: "Updaters", icon: Headset },
+  ] },
   { href: "/investors", label: "Investors", icon: Landmark },
-  { href: "/dispatchers", label: "Dispatchers and updaters", icon: Headset },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

@@ -3,8 +3,7 @@ import type { DriverOption, UpdaterOption } from "@/app/lib/types";
 import { usePermissions } from "../lib/access";
 
 import Link from "@/app/components/AccessLink";
-import { UpdaterPanel } from "./UpdaterPanel";
-import { fetchUpdaters, fetchUpdaterOptions } from "../lib/api";
+import { fetchUpdaterOptions } from "../lib/api";
 import { formatPhone } from "../lib/phone";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -18,7 +17,7 @@ import {
   fetchDriverOptions,
   updateDispatcher,
 } from "../lib/api";
-import type { Dispatcher, DispatcherInput, Updater } from "../lib/types";
+import type { Dispatcher, DispatcherInput } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   ConfirmDialog,
@@ -41,9 +40,8 @@ import {
 
 export default function DispatchersPage() {
   const permissions = usePermissions();
- const canDispatchers=permissions.includes("dispatchers.read"),canUpdaters=permissions.includes("updaters.read");
+ const canDispatchers=permissions.includes("dispatchers.read");
   const [dispatchers, setDispatchers] = useState<Dispatcher[]>([]);
-  const [updaters, setUpdaters] = useState<Updater[]>([]);
   const [updaterChoices, setUpdaterChoices] = useState<UpdaterOption[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
@@ -63,11 +61,10 @@ export default function DispatchersPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dispatcherPage, updaterRows, updaterOptions] = await Promise.all([canDispatchers ? fetchDispatchersPage({
+      const [dispatcherPage, updaterOptions] = await Promise.all([canDispatchers ? fetchDispatchersPage({
         page, pageSize, search: debouncedSearch,
-      }) : Promise.resolve({items:[],page:1,total:0,totalPages:1}), canUpdaters ? fetchUpdaters() : Promise.resolve([]), canDispatchers && !canUpdaters ? fetchUpdaterOptions() : Promise.resolve([])]);
-      setUpdaters(updaterRows);
-      setUpdaterChoices([...updaterRows, ...updaterOptions]);
+      }) : Promise.resolve({items:[],page:1,total:0,totalPages:1}), canDispatchers ? fetchUpdaterOptions() : Promise.resolve([])]);
+      setUpdaterChoices(updaterOptions);
       setDispatchers(dispatcherPage.items);
       setPage(dispatcherPage.page);
       setTotal(dispatcherPage.total);
@@ -78,7 +75,7 @@ export default function DispatchersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, page, pageSize,canDispatchers,canUpdaters]);
+  }, [setPage, debouncedSearch, page, pageSize,canDispatchers]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -150,7 +147,7 @@ export default function DispatchersPage() {
       {error && <ErrorBanner message={error} />}
       <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search dispatchers…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={Headset}
-        title="Dispatchers and updaters"
+        title="Dispatchers"
 
         count={total}
         actionLabel="Add dispatcher"
@@ -196,7 +193,6 @@ export default function DispatchersPage() {
         />
       )}
 
-      {!isLoading && canUpdaters && <UpdaterPanel updaters={updaters} onChanged={loadData} />}
 
       {editing !== undefined && (
         <Modal

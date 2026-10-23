@@ -877,7 +877,12 @@ assignment lookup lists.
 
 ## Domain invariants and data flows
 
-- Dispatchers and updaters share /dispatchers. Migration 049 adds optional integer
+- HR groups Drivers, Dispatchers and Updaters in the sidebar. `/dispatchers`
+  manages dispatchers and their updater assignments; `/updaters` manages updater
+  profiles separately. Each page requires its own read permission; updater-only
+  users land on `/updaters`. Dispatcher forms use permission-scoped updater lookups.
+  `node scripts/test-dispatcher-views.mjs` checks both pages, HR navigation,
+  updater CRUD and permission boundaries. Migration 049 adds optional integer
   phone extensions (0–999999), updater profiles with main/after_hours shifts, and
   one assignment per dispatcher/shift. An updater may serve multiple dispatchers.
   Composite foreign keys enforce shift matching; assigned updaters cannot change

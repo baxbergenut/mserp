@@ -32,9 +32,9 @@ export function pagePermission(path: string): string {
 }
 
 export function firstAllowedPage(permissions: string[]): string {
-  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/trucks", "/fleet/inventory", "/fleet/trailers", "/dispatchers", "/investors", "/accounting/investor-pay", "/accounting/dispatcher-pay", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => canVisitPage(permissions,p)) ?? "/access-denied";
+  return ["/gross-board", "/driver-board", "/loads", "/drivers", "/trucks", "/fleet/inventory", "/fleet/trailers", "/dispatchers", "/updaters", "/investors", "/accounting/investor-pay", "/accounting/dispatcher-pay", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => canVisitPage(permissions,p)) ?? "/access-denied";
 }
 
-export function canVisitPage(permissions: string[], path: string) { if(path === "/dispatchers") return permissions.includes("dispatchers.read") || permissions.includes("updaters.read"); const required=pagePermission(path); return !required || permissions.includes(required); }
+export function canVisitPage(permissions: string[], path: string) { const required=pagePermission(path); return !required || permissions.includes(required); }
 export function canCreateDriver(permissions: string[]) { return ["drivers.create","drivers.private.edit","driver_compensation.edit","escrow.create"].every(key=>permissions.includes(key)); }
 export function pageActionPermission(path:string, action:"create"|"edit"|"delete") { const area=path.split("/")[1]; return ["drivers","trucks","dispatchers","updaters","investors","tasks"].includes(area) ? area+"."+action : ""; }

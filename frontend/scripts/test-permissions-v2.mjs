@@ -54,15 +54,17 @@ try {
  if(trucks.length){await truckViewer.page.goto(`${base}/trucks/detail?id=${trucks[0].id}`);await expect(truckViewer.page.getByRole('heading',{name:`Truck ${trucks[0].unitNumber}`,exact:true})).toBeVisible();}
  expect((await truckViewer.context.request.get(`${base}/api/drivers`)).status()).toBe(403);
  const updater=await user('updater-viewer',['updaters.read']);
+ await updater.page.goto(`${base}/updaters`);
+ await expect(updater.page.getByRole('heading',{name:'Updaters',exact:true})).toBeVisible();
  await updater.page.goto(`${base}/dispatchers`);
- await expect(updater.page.getByRole('heading',{name:'Dispatchers and updaters',exact:true})).toBeVisible();
+ await expect(updater.page.getByRole('heading',{name:'Access restricted',exact:true})).toBeVisible();
  expect((await updater.context.request.get(`${base}/api/dispatchers`)).status()).toBe(403);
  expect((await updater.context.request.get(`${base}/api/lookups/investors`)).status()).toBe(403);
  const dispatcher=await user('dispatcher-viewer',['dispatchers.read']);
  const dispatcherFailures=[];
  dispatcher.page.on('response',r=>{if(r.url().includes('/api/')&&r.status()>=400)dispatcherFailures.push(r.url())});
  await dispatcher.page.goto(`${base}/dispatchers`);
- await expect(dispatcher.page.getByRole('heading',{name:'Dispatchers and updaters',exact:true})).toBeVisible();
+ await expect(dispatcher.page.getByRole('heading',{name:'Dispatchers',exact:true})).toBeVisible();
  expect((await dispatcher.context.request.get(`${base}/api/lookups/updaters`)).status()).toBe(200);
  expect((await dispatcher.context.request.get(`${base}/api/updaters`)).status()).toBe(403);
  expect(dispatcherFailures).toEqual([]);
