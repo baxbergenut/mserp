@@ -38,6 +38,10 @@ func TestExpenseDocumentsDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	expenseMigration, err := os.ReadFile("../../sql/147_maintenance_expenses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migrated"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("expense_documents_%d", time.Now().UnixNano())
@@ -52,11 +56,13 @@ func TestExpenseDocumentsDatabase(t *testing.T) {
 			defer func() { _, _ = admin.Exec(ctx, "SET search_path TO public;DROP SCHEMA "+quoted+" CASCADE") }()
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			if mode == "migrated" {
+				source = strings.Replace(source, strings.ReplaceAll(string(expenseMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(source)
 			if mode == "migrated" {
 				exec(string(migration))
+				exec(string(expenseMigration))
 			}
 			var category, expense string
 			if err := admin.QueryRow(ctx, `SELECT id FROM expense_settings WHERE kind='category' AND active ORDER BY name LIMIT 1`).Scan(&category); err != nil {

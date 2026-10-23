@@ -389,12 +389,27 @@ func (h maintenanceHandler) save(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, err.Error())
 		return
 	}
+	// Keep the service-program completion endpoint, but retire invoice/workflow
+	// writes from stale clients. Maintenance invoices use /expenses atomically.
+	if request.Expense != nil || request.WorkStatus != nil || request.DispatchStatus != nil || request.ConfirmPayment || request.WaitingOn != "" || request.ScheduledFor != nil || request.ExpectedReady != nil || request.CancelReason != "" || (r.Method == "POST" && (request.Status != "completed" || len(request.ProgramIDs) == 0)) {
+		writeAPIError(w, http.StatusGone, "record Maintenance expenses through Expenses; service programs retain completed-service tracking")
+		return
+	}
 	if r.Method == "PUT" {
 		id, ok := pathID(w, r)
 		if !ok {
 			return
 		}
 		request.ID = id
+		existing, err := h.repo.Get(r.Context(), id)
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		if existing.ExpenseID != nil {
+			writeAPIError(w, http.StatusGone, "edit this Maintenance record through its expense")
+			return
+		}
 		if request.Version < 1 {
 			writeAPIError(w, 400, "record version is required")
 			return

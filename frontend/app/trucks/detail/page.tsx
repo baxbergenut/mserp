@@ -16,14 +16,14 @@ import { TruckLocationPanel } from "@/app/components/fleet/TruckLocationPanel";
 import { ProfileNotes } from "@/app/components/fleet/ProfileNotes";
 import { AssignmentHistory } from "@/app/drivers/detail/AssignmentHistory";
 import { ServiceProgramsWorkspace } from "@/app/fleet/service-programs/ServiceProgramsWorkspace";
-import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
+
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
 import {operatingStatus} from "@/app/components/FleetStatusBadge";
 import { DataTruckSetup } from "../DataTruckSetup";
 import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
-const tabs = ["Overview", "Status history", "Equipment", "Service programs", "Work orders", "Expenses", "Assignments"] as const;
+const tabs = ["Overview", "Status history", "Equipment", "Service programs", "Expenses", "Assignments"] as const;
 const showDate = (value: string | null) => value ? value.slice(0, 10) : "Not recorded";
 
 function Details({ values }: { values: [string, string | number | null][] }) {
@@ -37,13 +37,13 @@ export default function TruckDetailPage() {
   const [editing, setEditing] = useState(false);
   const [changingCondition,setChangingCondition]=useState(false);
   useEffect(()=>{if(editing||changingCondition)return;const refresh=()=>{if(document.visibilityState==="visible")setAttempt(v=>v+1);};const timer=setInterval(refresh,30000);window.addEventListener("focus",refresh);return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);};},[editing,changingCondition]);
-  const [savedTab, setTab] = useViewState<typeof tabs[number] | "Maintenance">("page:tab", "Overview");
-  const candidateTab = savedTab === "Maintenance" ? "Work orders" : savedTab;
+  const [savedTab, setTab] = useViewState<typeof tabs[number] | "Maintenance" | "Work orders">("page:tab", "Overview");
+  const candidateTab = savedTab === "Maintenance" || savedTab === "Work orders" ? "Expenses" : savedTab;
   const permissions = usePermissions();
   const expenseCategoryAccess = useExpenseCategoryAccess();
   const maintenanceAccess = useMaintenanceAccess();
   const expenseTabsVisible = expenseCategoryAccess.some(a=>a.canView);
-  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Equipment" || permissions.includes("inventory.read")) && (name !== "Expenses" || expenseTabsVisible) && (!["Work orders","Service programs"].includes(name) || maintenanceAccess?.canView));
+  const visibleTabs: readonly (typeof tabs)[number][] = tabs.filter(name => (name !== "Equipment" || permissions.includes("inventory.read")) && (name !== "Expenses" || expenseTabsVisible) && (name !== "Service programs" || maintenanceAccess?.canView));
   const tab=visibleTabs.includes(candidateTab)?candidateTab:"Overview";
   useEffect(() => {
     if (!expenseTabsVisible && tab === "Expenses") setTab("Overview");
@@ -82,8 +82,7 @@ export default function TruckDetailPage() {
         <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
       </div>}
       {tab === "Service programs" && maintenanceAccess?.canView && <ServiceProgramsWorkspace truckId={truck.id} />}
-      {tab === "Work orders" && maintenanceAccess?.canView && <MaintenanceWorkspace embedded truckId={truck.id} onRecordSaved={()=>setAttempt(v=>v+1)} />}
-      {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} generalOnly />}
+      {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} />}
       {tab === "Assignments" && <AssignmentHistory key={truck.updatedAt} truckId={truck.id} />}
       {tab === "Status history" && <FleetStatusHistory kind="trucks" id={truck.id}/>}
       {changingCondition&&<FleetStatusDialog kind="trucks" value={truck} onClose={()=>setChangingCondition(false)} onSaved={v=>{setTruck(v);setChangingCondition(false);}}/>}

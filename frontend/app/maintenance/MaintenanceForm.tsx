@@ -6,7 +6,6 @@ import { extractMaintenance } from "../lib/api";
 import type { MaintenanceInput, MaintenanceOptions } from "../lib/types";
 import { controlClass, Field, FormSection } from "../components/management/ManagementUI";
 import { ExpensePayerSelect, ExpensePaymentMethodSelect } from "../expenses/ExpenseFields";
-import { ExpenseCostBreakdown } from "../expenses/ExpenseCostBreakdown";
 import { ExpenseFeePreview } from "../expenses/ExpenseFeePreview";
 import { assignMaintenanceTruck, maintenanceDraft, normalizeMaintenance, serviceWork, today, maintenanceInvoice, waitingLabels } from "./maintenance";
 
@@ -75,7 +74,6 @@ export function MaintenanceForm({ value, options, onChange, odometerMessage, onR
       {section!=="work" && serviceDateField}
       {payment && expense && <Field label="Amount"><input aria-label="Maintenance amount" type="number" step="0.01" min="0" required className={controlClass} value={expense.amount} onChange={e => finance("amount", e.target.value)} />{value.legacyPaymentTotal === expense.amount && expense.paymentType.trim().toLowerCase() === "efs" ? <p className="text-xs text-zinc-500">Saved total includes the existing payment fee.</p> : <ExpenseFeePreview amount={expense.amount} paymentType={expense.paymentType} />}</Field>}
     </FormSection>}
-    {section==="all" && expense && <ExpenseCostBreakdown value={expense} names={options.names} onChange={next => set("expense", next)} />}
     {work && <OptionalServiceSection title="Additional service details" collapse={section==="work"}>
       {completedPrograms.length>0 && <Field label="Service programs" wide><p className="text-xs text-zinc-400">Updates {completedPrograms.map(id=>options.programs?.find(p=>p.id===id)?.name??"saved service program").join(", ")} automatically when completed.</p></Field>}
       <Field label="Driver"><select aria-label="Maintenance driver" className={controlClass} value={value.driverId ?? ""} onChange={e => { const driver = options.drivers.find(d => d.id === e.target.value); change({ ...value, driverId: driver?.id ?? null, driverName: driver?.name ?? "" }); }}><option value="">{!value.driverId && value.driverName ? `${value.driverName} (unlinked)` : "No assigned driver"}</option>{value.driverId && !options.drivers.some(d => d.id === value.driverId) && <option value={value.driverId}>{value.driverName || "Saved driver"}</option>}{options.drivers.filter(d => d.active || d.id === value.driverId).map(d => <option key={d.id} value={d.id}>{d.name}{d.active ? "" : " (inactive)"}</option>)}</select></Field>
@@ -94,7 +92,6 @@ export function MaintenanceForm({ value, options, onChange, odometerMessage, onR
       <Field label="Invoice"><select aria-label="Work order invoice" className={controlClass} value={expense ? "invoice" : value.noCharge ? "no_charge" : "unknown"} onChange={e=>change({...value,noCharge:e.target.value==="no_charge",services:e.target.value==="invoice" ? value.services : value.services.map(s=>({...s,amount:null})),expense:e.target.value==="invoice" ? maintenanceInvoice(value,options) : null})}><option value="unknown" disabled={value.version>0 && !!expense}>No invoice yet</option><option value="invoice">Invoice</option><option value="no_charge" disabled={value.version>0 && !!expense}>No charge</option></select></Field>
       {section==="payment" && expense && <Field label="Amount"><input aria-label="Maintenance amount" type="number" step="0.01" min="0" required className={controlClass} value={expense.amount} onChange={e=>finance("amount",e.target.value)} /><ExpenseFeePreview amount={expense.amount} paymentType={expense.paymentType} /></Field>}
     </FormSection>}
-    {payment && expense && section==="payment" && <ExpenseCostBreakdown value={expense} names={options.names} onChange={next=>set("expense",next)} />}
     {payment && expense && <FormSection title="Payment">
       <Field label="Invoice / reference number"><input aria-label="Maintenance reference number" className={controlClass} value={expense.referenceNumber} onChange={e => finance("referenceNumber", e.target.value)} /></Field>
       <Field label="Payment method"><ExpensePaymentMethodSelect label="Maintenance payment method" value={expense.paymentType} methods={options.paymentMethods} onChange={next => finance("paymentType", next)} saved={value.version > 0} className={controlClass} /></Field>

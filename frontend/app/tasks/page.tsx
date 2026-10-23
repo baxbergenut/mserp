@@ -175,7 +175,7 @@ function TaskDetails({ task, saving, canWrite, canSetup, canViewDriver, onClose,
     {error && <ErrorBanner message={error} />}
     <div className="grid gap-1 text-xs text-zinc-400"><p>Assigned by {task.systemTaskKind ? "System" : task.assignerName || "Unknown"}</p><p>Assigned to {task.assigneeName || "Unassigned"}</p>{task.completedAt && <p>Completed by {task.completedByName || "Unknown"} · {dateTime(task.completedAt)} NY</p>}</div>
     {task.notes && <p className="whitespace-pre-wrap break-words">{task.notes}</p>}{task.outcome && <p>{task.outcome}</p>}
-    {task.maintenanceTruckId && <Link className="ui-button ui-button-primary" href={`/maintenance?truckId=${task.maintenanceTruckId}`}>Review work orders</Link>}
+    {task.maintenanceTruckId && <Link className="ui-button ui-button-primary" href={`/expenses?truckId=${task.maintenanceTruckId}`}>Review maintenance expenses</Link>}
     {task.serviceDriverId && canViewDriver && <Link className="ui-button ui-button-primary" href={`/drivers/detail?id=${task.serviceDriverId}${task.systemTaskKind==="driver_leave_return"?"":"&services=1"}`}>{task.systemTaskKind==="driver_leave_return"?"Review driver return":"Review service setup"}</Link>}
     {task.systemTaskKind === "driver_leave_return" && <Link className="ui-button" href="/driver-board">Review Status Board</Link>}
     {!task.completedAt && task.systemTaskKind === "driver_onboarding" && canSetup && <Link className="ui-button ui-button-primary" href={`/drivers?setup=${task.id}`}>Set up driver</Link>}

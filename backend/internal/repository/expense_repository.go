@@ -37,6 +37,7 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
+	Maintenance          *ExpenseMaintenance   `json:"maintenance,omitempty"`
 	CreatorRoleID        string                `json:"-"`
 	CanEdit              bool                  `json:"canEdit"`
 	ApplicantID          *string               `json:"applicantId"`
@@ -79,6 +80,7 @@ type Expense struct {
 }
 
 type ExpenseInput struct {
+	Maintenance        *ExpenseMaintenance
 	ApplicantID        *string
 	CostBreakdown      *[]ExpenseCostItem
 	BaseAmount         *string
@@ -315,7 +317,7 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 		ids[i] = values[i].ID
 		byID[values[i].ID] = i
 	}
-	rows, err := r.pool.Query(ctx, `SELECT expense_id::text, nullif(btrim(notes),'') FROM maintenance_records WHERE expense_id=ANY($1::uuid[])`, ids)
+	rows, err := r.pool.Query(ctx, `SELECT expense_id::text, nullif(btrim(notes),''), jsonb_build_object('recordId',id,'version',version,'odometer',odometer,'vendorId',vendor_id,'vendorName',vendor_name,'vendorAddress',vendor_address,'vendorPhone',vendor_phone,'vendorContact',vendor_contact,'oilType',coalesce(to_jsonb(m)->>'oil_type','')), (SELECT s.name FROM expense_settings s JOIN maintenance_configuration c ON c.category_id=s.id) FROM maintenance_records m WHERE expense_id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
@@ -327,19 +329,37 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 	for rows.Next() {
 		var id string
 		var description *string
-		if err := rows.Scan(&id, &description); err != nil {
+		var maintenance ExpenseMaintenance
+		var category string
+		if err := rows.Scan(&id, &description, &maintenance, &category); err != nil {
 			return err
 		}
 		if i, ok := byID[id]; ok {
 			values[i].WorkOrderDescription = description
+			values[i].Maintenance = &maintenance
+			values[i].Category = category
 		}
 	}
 	return rows.Err()
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {
-	id, err := insertExpense(ctx, r.pool, input)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
+		return Expense{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err = prepareExpenseMaintenance(ctx, tx, input); err != nil {
+		return Expense{}, err
+	}
+	id, err := insertExpense(ctx, tx, input)
+	if err != nil {
+		return Expense{}, err
+	}
+	if err = syncExpenseMaintenance(ctx, tx, id, input, nil); err != nil {
+		return Expense{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
@@ -354,9 +374,15 @@ func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []Expense
 
 	values := make([]Expense, 0, len(inputs))
 	for _, input := range inputs {
+		if err = prepareExpenseMaintenance(ctx, tx, input); err != nil {
+			return nil, err
+		}
 		id, insertErr := insertExpense(ctx, tx, input)
 		if insertErr != nil {
 			return nil, insertErr
+		}
+		if err = syncExpenseMaintenance(ctx, tx, id, input, nil); err != nil {
+			return nil, err
 		}
 		value, scanErr := scanExpense(tx.QueryRow(ctx, selectExpensesSQL+" WHERE e.id = $1", id))
 		if scanErr != nil {
@@ -365,6 +391,9 @@ func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []Expense
 		values = append(values, value)
 	}
 	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	if err = r.loadWorkOrderDescriptions(ctx, values); err != nil {
 		return nil, err
 	}
 	return values, nil
@@ -492,7 +521,25 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 }
 
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
-	if err := updateExpenseRow(ctx, r.pool, id, input); err != nil {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Expense{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err = prepareExpenseMaintenance(ctx, tx, input); err != nil {
+		return Expense{}, err
+	}
+	previous, err := scanExpense(tx.QueryRow(ctx, selectExpensesSQL+" WHERE e.id=$1 FOR UPDATE OF e", id))
+	if err != nil {
+		return Expense{}, mapNotFound(err)
+	}
+	if err := updateExpenseRow(ctx, tx, id, input); err != nil {
+		return Expense{}, err
+	}
+	if err = syncExpenseMaintenance(ctx, tx, id, input, &previous); err != nil {
+		return Expense{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
@@ -531,7 +578,28 @@ func updateExpenseRow(ctx context.Context, exec interface {
 	return nil
 }
 
-func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string) error {
+func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors ...string) error {
+	// Maintenance deletion uses the same invoice/collection protections and keeps
+	// the service snapshot, documents and odometer audit instead of orphaning them.
+	var enabled bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('maintenance_records') AND attname='expense_entry' AND NOT attisdropped)`).Scan(&enabled); err != nil {
+		return err
+	}
+	if enabled {
+		var record string
+		var version int
+		err := r.pool.QueryRow(ctx, `SELECT id::text,version FROM maintenance_records WHERE expense_id=$1 AND expense_entry`, id).Scan(&record, &version)
+		if err == nil {
+			actor := "Expense deletion"
+			if len(actors) > 0 {
+				actor = actors[0]
+			}
+			return NewMaintenanceRepository(r.pool).Void(ctx, record, version, "Deleted maintenance expense", actor)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
 	command, err := r.pool.Exec(ctx, "DELETE FROM expenses WHERE id = $1", id)
 	if err != nil {
 		return err

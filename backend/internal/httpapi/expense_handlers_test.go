@@ -10,6 +10,23 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestExpenseMaintenanceRequestValidation(t *testing.T) {
+	base := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseType: "Electrical", ExpenseDate: "2026-10-22", Amount: "100.00", Maintenance: &repository.ExpenseMaintenance{VendorName: "Test shop"}}
+	if _, err := base.validate(); err != nil {
+		t.Fatal(err)
+	}
+	negative := -1
+	tooLarge := 2000000001
+	badID := "not-a-shop-id"
+	for _, details := range []*repository.ExpenseMaintenance{{Odometer: &negative}, {Odometer: &tooLarge}, {VendorID: &badID}, {VendorName: strings.Repeat("x", 201)}, {RecordID: badID}, {Version: -1}} {
+		request := base
+		request.Maintenance = details
+		if _, err := request.validate(); err == nil {
+			t.Fatal("invalid maintenance details accepted", details)
+		}
+	}
+}
+
 func TestExpensePersonMustBeSelected(t *testing.T) {
 	name, id := "Manual candidate", "00000000-0000-4000-8000-000000000001"
 	input := repository.ExpenseInput{DriverName: &name}

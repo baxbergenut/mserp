@@ -4,7 +4,8 @@ import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types"
 import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { ExpenseDriverSelect } from "./ExpenseDriverSelect";
 import { expenseAssignment } from "./assignments";
-import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
+import { ExpenseNameSelect } from "./ExpenseNameSelect";
+import { ExpenseMaintenanceFields } from "./ExpenseMaintenanceFields";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
@@ -37,8 +38,11 @@ export const emptyExpenseInput: ExpenseInput = {
 
 export function expenseToInput(expense: Expense): ExpenseInput {
   return {
-    costBreakdown: expense.costBreakdown ?? [],
+    costBreakdown: [],
+    maintenance: expense.maintenance,
+    legacyPaymentTotal: expense.baseAmount == null && expense.paymentType?.toUpperCase() === "EFS" ? expense.amount ?? undefined : undefined,
     updatedAt: expense.updatedAt,
+    savedAmount: expense.baseAmount ?? expense.amount ?? "",
     ownerId: expense.ownerId,
     categoryId: expense.categoryId,
     expenseDate: expense.expenseDate ?? "",
@@ -51,7 +55,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     paymentType: expense.paymentType ?? "",
     expenseType: expense.expenseType ?? "",
     referenceNumber: expense.referenceNumber ?? "",
-    description: expense.description ?? "",
+    description: expense.maintenance ? Array.from(new Set([expense.workOrderDescription?.trim(), expense.description?.trim()].filter(Boolean))).join("\n\n") : expense.description ?? "",
     coveredBy: expense.coveredBy ?? "",
     paidBy: expense.paidBy ?? "",
     managerVerified: expense.managerVerified,
@@ -80,7 +84,7 @@ export function ExpenseForm({
 }) {
   const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);
   const value = applyExpenseCategoryRules(initialValue, options.settings);
-  const change = (next: ExpenseInput) => onChange(applyExpenseCategoryRules(next, options.settings));
+  const change = (next: ExpenseInput) => onChange(applyExpenseCategoryRules(next.categoryId === options.workOrdersCategoryId || options.settings.some(item => item.id === next.categoryId && item.kind === "category" && item.name === "Maintenance") ? next : { ...next, maintenance: undefined }, options.settings));
   const set = <K extends keyof ExpenseInput>(key: K, next: ExpenseInput[K]) =>
     change({ ...value, [key]: next });
 
@@ -124,10 +128,10 @@ export function ExpenseForm({
             className={controlClass}
             placeholder="0.00"
           />
-          <ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} />
+          {!(value.updatedAt && value.legacyPaymentTotal === value.amount && value.paymentType.trim().toUpperCase() === "EFS") && <ExpenseFeePreview amount={value.amount} paymentType={value.paymentType} />}
         </Field>
       </FormSection>
-      <ExpenseCostBreakdown value={value} names={expenseNames(options.settings, value.categoryId)} onChange={change} />
+      {(value.categoryId === options.workOrdersCategoryId || options.settings.some(item => item.id === value.categoryId && item.kind === "category" && item.name === "Maintenance")) && <ExpenseMaintenanceFields value={value} onChange={change} />}
 
       <FormSection title="Assignment and classification">
         <Field label="Unit number">

@@ -7,7 +7,7 @@ import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchProgramTrucks, fe
 import type { ExpenseCategoryAccess, MaintenanceOptions, ProgramTruck, ServiceProgram } from "@/app/lib/types";
 import { ErrorBanner, ManagementHeader, ManagementSearch, TablePagination, TableShell } from "@/app/components/management/ManagementUI";
 import { OdometerSourcePicker } from "@/app/maintenance/OdometerSourcePicker";
-import { MaintenanceWorkspace } from "@/app/maintenance/MaintenanceWorkspace";
+import { MaintenanceExpenseModal } from "@/app/maintenance/MaintenanceExpenseModal";
 import { today } from "@/app/maintenance/maintenance";
 import { AddProgramTrucks, ProgramEditor, ProgramServiceEditor, ProgramTruckEditor } from "./ProgramEditors";
 
@@ -82,6 +82,6 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
     {truckSettings && <ProgramTruckEditor truck={truckSettings} onClose={() => setTruckSettings(null)} onSaved={refresh} />}
     {service && serviceProgram && options && <ProgramServiceEditor truck={service.truck} program={serviceProgram} options={options} baseline={service.baseline} onClose={() => setService(null)} onSaved={refresh} />}
     {readingTruck && options && <OdometerSourcePicker truckId={readingTruck} canEdit={!!access?.canEdit} options={options} onClose={() => setReadingTruck(null)} onSaved={refresh} />}
-    {recordId && <MaintenanceWorkspace key={recordId} modalOnly recordId={recordId} onRecordClose={() => setRecordId(null)} onRecordSaved={() => setRevision(v => v + 1)} />}
+    {recordId && <MaintenanceExpenseModal key={recordId} recordId={recordId} onClose={() => setRecordId(null)} onSaved={async () => { setRevision(v => v + 1); }} />}
   </div>;
 }

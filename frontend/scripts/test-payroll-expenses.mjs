@@ -126,7 +126,7 @@ try {
     await expect(modal.getByLabel('Amount',{exact:true})).toBeDisabled();
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
     expect(expenseReads.length).toBeGreaterThan(0);
-    expect(expenseReads.every(path => path === '/expenses/expense')).toBe(true);
+    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents'].includes(path))).toBe(true);
     // Dated non-paying driver classifications hide empty costs, but historical
     // balances remain collectable. Investor statements still show truck costs.
     for (const employmentType of ['company', 'investor_driver']) {

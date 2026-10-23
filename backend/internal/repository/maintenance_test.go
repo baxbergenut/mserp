@@ -163,6 +163,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	expenseMigration, err := os.ReadFile("../../sql/147_maintenance_expenses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -177,6 +181,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(expenseMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(voidPaidMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(leaveAccountsMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(identityMigration), "\r\n", "\n"), "", 1)
@@ -249,6 +254,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(identityMigration))
 				exec(string(leaveAccountsMigration))
 				exec(string(voidPaidMigration))
+				exec(string(expenseMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))

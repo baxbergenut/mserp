@@ -1,5 +1,6 @@
 "use client";
 
+import { ExpenseEditModal } from "@/app/expenses/ExpenseEditModal";
 import { PaymentHistoryPanel } from "@/app/components/PaymentHistoryPanel";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -40,6 +41,7 @@ export function RelatedExpenses({
   driverId?: string;
   scope?: "personal" | "non_personal";
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Expense | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [page, setPage] = useViewState(`RelatedExpenses:${scope ?? "linked"}:page`, 1);
@@ -130,6 +132,7 @@ export function RelatedExpenses({
           onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
         />
       )}
+      {editingId && <ExpenseEditModal id={editingId} onClose={() => setEditingId(null)} onSaved={load} />}
       {selected && <PaymentHistoryPanel title={selected.description || selected.category} paid={selected.paidAmount ?? "0"} remaining={selected.remainingAmount ?? "0"} previouslyPaid={selected.driverSettled ? selected.paidAmount ?? "0" : "0"} payments={selected.driverSettled ? [] : selected.payments} driverId={driverId} onClose={() => setSelected(null)} />}
     </section>
   );

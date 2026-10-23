@@ -1,12 +1,42 @@
 # Maintenance
 
-Fleet > Work orders retains the directory and entry form at `/maintenance`, and
-a Work orders tab on each truck. Fleet > Service programs lives at
-`/fleet/service-programs`, with recurring programs and explicit truck assignments.
-The old `/fleet/preventative-maintenance` page redirects to Oil change 20k. Expenses
-includes work-order charges in the same ledger alongside other expenses, with
-category-scoped verification. Explicit legacy `scope=general` API reads still
-exclude the configured work-order category. No expense copies are created.
+Maintenance is now an ordinary category in Expenses. Add or edit it in the same
+expense modal as any other category. Maintenance adds odometer, oil grade and shop
+name/address/phone/contact fields. The date is Expense date, service classification
+is Expense type, and all expense categories have one entered amount without cost
+breakdown rows. Receipts remain attachments; there is no invoice selector or work
+stage. The Work orders navigation and truck tab are retired; old URLs open the
+linked expense. Service programs remain at /fleet/service-programs.
+
+Migration 147 preserves the configured category UUID and access grants. Existing
+ledger rows are reused; service records without an expense receive a linked record
+with unknown amounts, dates and payers left unknown. Migration does not issue money,
+create collections, confirm payment, complete unfinished work, or backfill sheet
+exports. It copies existing documents into expense attachments while retaining the
+originals, payment confirmations and service audit. Old work-order holds transfer
+to the truck's effective manual condition; use truck/Status Board controls to release.
+
+Expense and maintenance edits commit atomically with version checks, the financial
+lock, existing finalized-period/collection protections, and invoice correction audits.
+Recorded expense dates drive service readings; completed history and program links
+remain available. Expense-setting types own reporting names and archive state through
+stable UUID links, so renaming a type retains its service-program association.
+Program-only completed service remains a tracking record without an expense.
+The old maintenance write endpoint accepts program tracking only; invoice/workflow
+requests return HTTP 410 and must use /expenses.
+
+AI prompts and strict output schemas follow the same model: one total, expense date,
+expense type and optional source-grounded maintenance metadata. They request no
+cost rows, service date, invoice selector or work-order classification list. Mixed
+receipts remain separate review drafts; missing amount/payment details stay unknown.
+
+Validation: TestExpenseMaintenanceDatabase tests fresh/migrated data, receipts,
+unknown fields, invoice corrections, preserved restrictions and renamed program
+links. test-maintenance-expenses-e2e.mjs tests real API saves, the unified modal,
+AI review, attachments, legacy URLs and mobile layout using review-local.
+
+The sections below describe retained historical storage and the former workflow.
+The unified expense behavior above supersedes its entry and navigation instructions.
 
 ## Records and accounting
 

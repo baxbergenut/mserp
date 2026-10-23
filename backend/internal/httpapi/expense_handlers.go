@@ -53,11 +53,12 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
-	ApplicantID   *string                       `json:"applicantId"`
-	CostBreakdown *[]repository.ExpenseCostItem `json:"costBreakdown"`
-	BaseAmount    *string                       `json:"baseAmount"`
-	UpdatedAt     *time.Time                    `json:"updatedAt"`
-	OwnerID       *string                       `json:"ownerId"`
+	Maintenance   *repository.ExpenseMaintenance `json:"maintenance"`
+	ApplicantID   *string                        `json:"applicantId"`
+	CostBreakdown *[]repository.ExpenseCostItem  `json:"costBreakdown"`
+	BaseAmount    *string                        `json:"baseAmount"`
+	UpdatedAt     *time.Time                     `json:"updatedAt"`
+	OwnerID       *string                        `json:"ownerId"`
 
 	LegacyCompany      json.RawMessage `json:"company,omitempty"` // Ignored for clients opened before the field was retired.
 	CategoryID         string          `json:"categoryId"`
@@ -130,6 +131,28 @@ type expenseExtractionResponse struct {
 }
 
 func (request expenseRequest) validate() (repository.ExpenseInput, error) {
+	if details := request.Maintenance; details != nil {
+		if details.Odometer != nil && (*details.Odometer < 0 || *details.Odometer > 2000000000) {
+			return repository.ExpenseInput{}, errors.New("odometer must be a whole number between 0 and 2000000000")
+		}
+		if err := validateOptionalUUID(details.VendorID, "shop id"); err != nil {
+			return repository.ExpenseInput{}, err
+		}
+		if details.RecordID != "" && !isUUID(details.RecordID) {
+			return repository.ExpenseInput{}, errors.New("invalid maintenance record id")
+		}
+		if details.Version < 0 {
+			return repository.ExpenseInput{}, errors.New("invalid maintenance version")
+		}
+		for _, field := range []struct {
+			value string
+			max   int
+		}{{details.VendorName, 200}, {details.VendorAddress, 1000}, {details.VendorPhone, 500}, {details.VendorContact, 500}, {details.OilType, 100}} {
+			if utf8.RuneCountInString(field.value) > field.max {
+				return repository.ExpenseInput{}, errors.New("shop details are too long")
+			}
+		}
+	}
 	fee := "0.00"
 	if request.BaseAmount != nil {
 		base := strings.TrimSpace(*request.BaseAmount)
@@ -210,6 +233,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		}
 	}
 	return repository.ExpenseInput{
+		Maintenance:   request.Maintenance,
 		CostBreakdown: request.CostBreakdown,
 		BaseAmount:    request.BaseAmount, PaymentFee: fee, UpdatedAt: request.UpdatedAt,
 		OwnerID:    request.OwnerID,
@@ -522,20 +546,9 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		handler.writeError(w, err)
 		return
 	}
-	if createIDs[workCategory] && categoryIDs[workCategory] != "" && r.FormValue("includeWorkOrders") == "true" {
+	if createIDs[workCategory] && categoryIDs[workCategory] != "" {
 		input.MixedMaintenance = true
 		input.WorkOrdersCategory = categoryIDs[workCategory]
-		types, e := repository.NewMaintenanceRepository(handler.repo.Pool()).Types(r.Context())
-		if e != nil {
-			handler.writeError(w, e)
-			return
-		}
-		input.ServiceTypes = map[string]string{}
-		for _, t := range types {
-			if t.Active {
-				input.ServiceTypes[t.Code] = t.Name
-			}
-		}
 	}
 	extraction, err := handler.extractor.ExtractExpense(r.Context(), input)
 	if err != nil {
@@ -566,17 +579,6 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			return
 		}
 		category := validExtractedCategory(item.Category, categories)
-		if r.FormValue("scope") == "general" {
-			maintenanceCat, err := repository.NewMaintenanceRepository(handler.repo.Pool()).CategoryID(r.Context())
-			if err != nil {
-				handler.writeError(w, err)
-				return
-			}
-			if categoryNames[strings.ToLower(category)] == maintenanceCat {
-				writeAPIError(w, 400, "Use Maintenance for truck service entries, including repairs, PM and oil changes")
-				return
-			}
-		}
 		if categoryNames[strings.ToLower(category)] != workCategory {
 			item.Maintenance = nil
 		}
@@ -585,7 +587,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			item.Maintenance.OilType = &grade
 		}
 		values = append(values, extractedExpense{Maintenance: item.Maintenance,
-			CostBreakdown: extractedCostBreakdown(item.CostBreakdown),
+			CostBreakdown: []repository.ExpenseCostItem{},
 			Category:      category, CategoryID: categoryNames[strings.ToLower(category)],
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID, ApplicantID: applicantID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
@@ -708,6 +710,7 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 		handler.writeError(w, err)
 		return
 	}
+	input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
 	value, err := handler.repo.UpdateExpense(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -731,7 +734,7 @@ func (handler expenseHandler) deleteExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to delete entries in that category")
 		return
 	}
-	if err := handler.repo.DeleteExpense(r.Context(), id); err != nil {
+	if err := handler.repo.DeleteExpense(r.Context(), id, session.User.Username); err != nil {
 		handler.writeError(w, err)
 		return
 	}
@@ -772,6 +775,10 @@ func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categor
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrMaintenanceInvalid) {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrExpensePaymentMethodInvalid) {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
@@ -792,7 +799,7 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 			return
 		case "23514":
 			if postgresError.ConstraintName == "maintenance_work_total" {
-				writeAPIError(w, http.StatusBadRequest, "Use Maintenance to change this service visit, its work costs, or its invoice classification")
+				writeAPIError(w, http.StatusBadRequest, "check the maintenance category, linked truck and saved payment details")
 				return
 			}
 			if postgresError.ConstraintName == "expense_cost_breakdown_total" {

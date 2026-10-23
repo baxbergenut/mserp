@@ -10,14 +10,15 @@ import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
-import { MaintenanceWorkspace } from "../maintenance/MaintenanceWorkspace";
+
 import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   uploadExpenseDocument,
   deleteExpense,
   fetchExpensesPage,
-  fetchMaintenancePage,
+  fetchExpense,
+
   fetchAuthSession,
   fetchDriverOptions,
   fetchInvestorOptions,
@@ -101,6 +102,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [category, setCategory] = useViewState("page:categoryId", "");
+  const [truckId, setTruckId] = useState("");
 
   const [unitNumber, setUnitNumber] = useViewState("page:unitNumber", "");
   const [driverName, setDriverName] = useViewState("page:driverName", "");
@@ -129,7 +131,6 @@ export default function ExpensesPage() {
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [form, setForm] = useState<ExpenseInput>(emptyExpenseInput);
   const [review,setReview]=useState<{entries:{form:ExpenseInput;source:AIExpenseDraft}[];index:number;file:File|null}|null>(null);
-  const [workOrder,setWorkOrder]=useState<{key:string;recordId?:string;expense?:ExpenseInput;draft?:AIExpenseDraft;file?:File|null}|null>(null);
   const [aiBusy,setAIBusy]=useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState("");
@@ -152,7 +153,7 @@ export default function ExpensesPage() {
     if (showLoading) setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, categoryId: category, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
+        page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
       setCurrentUserId(session.user.id);
@@ -170,7 +171,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
+  }, [setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -226,30 +227,40 @@ export default function ExpensesPage() {
     };
   }, [expenseOpen, canLoadFleetSelectors]);
 
-  const workCategory=options.workOrdersCategoryId ?? "";
   function showReview(queue: NonNullable<typeof review>,index:number) {
     const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);setUploadError("");
-    if(workCategory && entry.form.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),draft:{...entry.source,...entry.form},file:queue.file});}
-    else {setWorkOrder(null);setForm(entry.form);setEditing(null);}
+    setForm(entry.form);setEditing(null);
   }
-  function completeEntry() {setWorkOrder(null);setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
-  function closeEntry(){setWorkOrder(null);setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
-  function changeForm(next:ExpenseInput){
-    if(!editing && workCategory && next.categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),file:attachment,...(review ? {draft:{...review.entries[review.index].source,...next}} : {expense:next})});}
-    else setForm(next);
-  }
-  const hasFilters = Boolean(unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
+  function completeEntry() {setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
+  function closeEntry(){setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
+  function changeForm(next:ExpenseInput){ setForm(next); }
+  const hasFilters = Boolean(truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
 
   function openCreate() {
-    const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds.find(id=>id!==workCategory) ?? createCategoryIds[0] ?? "";
+    const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds[0] ?? "";
     const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
     setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);setUploadError("");
-    if(workCategory && categoryId===workCategory){setEditing(undefined);setWorkOrder({key:crypto.randomUUID(),expense:value});}else{setWorkOrder(null);setEditing(null);}
+    setEditing(null);
   }
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const id = query.get("expenseId");
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      if (query.get("categoryId")) setCategory(query.get("categoryId")!);
+      if (query.get("truckId")) setTruckId(query.get("truckId")!);
+      if (query.get("search")) setSearch(query.get("search")!);
+      if (id) {
+        const expense = await fetchExpense(id);
+        if (active) { setForm(expenseToInput(expense)); setEditing(expense); }
+      }
+    }).catch(reason => { if (active) setError(reason.message); });
+    return () => { active = false; };
+  }, [setCategory, setSearch]);
   useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
   function openEdit(expense: Expense) {
     setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");
-    if(workCategory && expense.categoryId===workCategory){void fetchMaintenancePage({expenseId:expense.id,pageSize:1}).then(result=>{if(!result.items[0])throw new Error("No work order was found for this charge.");setWorkOrder({key:crypto.randomUUID(),recordId:result.items[0].id});}).catch(e=>setError(e.message));return;}
     setForm(expenseToInput(expense));setEditing(expense);
   }
   async function save() {
@@ -329,7 +340,7 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.shiftKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || editing !== undefined || workOrder || verificationDetails) return;
+      if (event.defaultPrevented || event.shiftKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || editing !== undefined || verificationDetails) return;
       if ((event.target as HTMLElement)?.closest("input,textarea,select,[contenteditable='true']")) return;
       const last = verificationUndo.current.at(-1);
       if (!last) return;
@@ -338,7 +349,7 @@ export default function ExpensesPage() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelVerification, editing, workOrder, verificationDetails]);
+  }, [cancelVerification, editing, verificationDetails]);
 
   useEffect(() => {
     if (!verificationNotice) return;
@@ -353,6 +364,7 @@ export default function ExpensesPage() {
   function clearFilters() {
     setSearch("");
     setCategory("");
+    setTruckId("");
     setUnitNumber(""); setDriverName(""); setPaymentType(""); setPaidBy(""); setCoveredBy("");
 
     setDateFrom("");
@@ -445,7 +457,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className="max-w-[310px] px-4 py-3">
                     <div className="truncate text-zinc-300" title={expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || undefined}>{expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || expense.category}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.categoryId===workCategory ? "Work orders" : expense.category}{expense.expenseType && ` · ${expense.expenseType}`}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{expense.category}{expense.expenseType && ` · ${expense.expenseType}`}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.paymentType || "—"}</div>
@@ -510,7 +522,6 @@ export default function ExpensesPage() {
         </Modal>
       )}
 
-      {workOrder && <MaintenanceWorkspace key={workOrder.key} modalOnly recordId={workOrder.recordId} initialExpense={workOrder.expense} initialAIDraft={workOrder.draft} initialAttachment={workOrder.file} reviewHasNext={!!review && review.index+1<review.entries.length} reviewLabel={review ? `Review entry ${review.index+1} of ${review.entries.length}` : undefined} onRecordClose={closeEntry} onComplete={completeEntry} onRecordSaved={()=>void loadData(false)} onUseExpense={workOrder.recordId ? undefined : (value,file)=>{setWorkOrder(null);setForm({...value,categoryId:""});setAttachment(file ?? null);setEditing(null);}} />}
       {verificationDetails && <Modal title="Verification" isSaving={!!verifying} submitLabel="Done" hideSubmit cancelLabel="Done" onClose={() => setVerificationDetails(null)} onSubmit={event => event.preventDefault()}>
         {error && <ErrorBanner message={error} />}
         <div className="space-y-3">

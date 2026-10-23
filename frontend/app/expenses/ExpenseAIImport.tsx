@@ -1,6 +1,6 @@
 "use client";
 
-import { ExpenseCostBreakdown, ExpenseNameSelect } from "./ExpenseCostBreakdown";
+import { ExpenseNameSelect } from "./ExpenseNameSelect";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 
 import { useRef, useState } from "react";
@@ -35,7 +35,8 @@ function isSupportedAttachment(file: File) {
 
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
-    costBreakdown: draft.costBreakdown ?? [],
+    costBreakdown: [],
+    maintenance: draft.maintenance ? { odometer: draft.maintenance.odometer, vendorId: null, vendorName: draft.maintenance.vendorName ?? "", vendorAddress: draft.maintenance.vendorAddress ?? "", vendorPhone: draft.maintenance.vendorPhone ?? "", vendorContact: draft.maintenance.vendorContact ?? "", oilType: draft.maintenance.oilType ?? "" } : undefined,
     categoryId: draft.categoryId,
     expenseDate: draft.expenseDate,
     truckId: draft.truckId,
@@ -251,7 +252,6 @@ export function ExpenseBatchEditor({
                   </button>
                 </td>
               </tr>
-              <tr><td colSpan={13} className="px-3 pb-3"><div className="max-w-xl"><ExpenseCostBreakdown value={value} names={expenseNames(settings, value.categoryId)} onChange={next => update(index, next)} label={`Transaction ${index + 1} cost breakdown`} /></div></td></tr>
               </tbody>
             ))}
         </table>

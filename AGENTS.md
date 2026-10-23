@@ -559,54 +559,29 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Status fills follow the TODAY sheet where a matching rule exists. Future
   feature scope, exclusions and rollout order live in `docs/DRIVER_BOARD_PLAN.md`.
 - `frontend/app/tolls/`: toll overview, transaction table, and manual PrePass sync UX.
-- `frontend/app/maintenance/`: typed service visits, vendor snapshots, invoice/document
-  history, background odometers and independent PM/oil schedules.
-  `repository/maintenance_*`, `httpapi/maintenance_handlers.go` and migration 096
-  own its backend. See `docs/MAINTENANCE.md` for accounting, permissions, migration
-  review and reminder rules. Truck details reuse the workspace in a Maintenance tab.
-  Migration 097 simplifies entry: service types supply work/invoice names and PM Service
-  resets, service date supplies invoice date, and the visit stores its driver even
-  without a charge. Default US shops are directory records. AI source files attach
-  automatically. Today's blank odometer reads Five ELD telemetry by unique exact VIN
-  (one-hour freshness); receipt/manual readings and historical dates are preserved.
-  Vendor management lives under Fleet > Work orders > Settings, outside the entry modal.
-  Fleet groups Work orders (`/maintenance`, existing workspace) and Preventative
-  maintenance (`/fleet/preventative-maintenance`). Migration 099 stores oil grades
-  and seeds 300 sourced US vendor locations (docs/data/maintenance-vendors-us.json).
-  The preventative API lists each truck with its latest completed PM Service visit
-  and latest dated reading. Migration 126 adds audited, versioned manual last-PM
-  dates/service odometers through PUT /maintenance/preventative/{truckId} and
-  compact table editors requiring Maintenance Edit. Work orders/invoices remain
-  unchanged; a new/changed latest completed PM supersedes the operational baseline.
-  Due services and reminders share the same baseline; current odometers use the
-  existing dated reading API and chronology guards.
-  PM and legacy oil completions reset the same schedule;
-  one table has no service tabs, vendor, service cost or last-service-note columns. Migration 102 adds durable Five ELD mileage snapshots: the minute
-  worker polls active exact-unique VINs on a five-minute cadence (three concurrent,
-  forty-second budget), independently of browsing and schedules. GETs use cache
-  only; source/time appears on odometer hover. Due odometers, signed miles remaining
-  and status use the same interval/override logic as service tasks. Stale mileage
-  cannot establish Current; historical service readings are never rewritten.
-  New PM Service entry defaults to 10W-30, supports other/custom grades, and AI extracts
-  only explicit source grades. Existing unknown historical grades stay blank.
-  Preventative Settings edits one fleet PM Service interval; truck overrides
-  and existing reminder behavior remain in place. Work orders has History/Settings
-  only; Settings separates service types, searchable paginated vendors and intervals.
-  The manual odometer-history, Due services and Reports panels are removed.
-  Expenses includes existing work-order charges once, with ordinary category-scoped
-  verification. Selecting its Work orders category opens the shared work-order modal
-  in place. Mixed AI imports review entries sequentially using the appropriate form
-  and attach source files to work orders after saving. The configuration category
-  UUID stays stable (default display name becomes Work orders); existing financial
-  snapshots, approval/payment identities and legacy scope=general reads are kept.
-  New operational work orders can start without an invoice or known cost;
-  imported history keeps unknown costs.
-  Work-order entry uses one unframed Service type and the shared expense Add cost
-  breakdown. Migration 110 separates invoice cost names from typed services while
-  retaining exact totals, historical allocations and PM classification. Existing
-  multi-type orders keep their saved types until an explicit selection replaces them.
-  `cmd/import-oil-changes` defaults to a dry run of the Fleet board A:G snapshot;
-  reviewed `-apply` writes idempotent visits with source notes, never expenses.
+- Maintenance is an ordinary Expenses category after migration 147. The configured
+  category UUID and permissions stay stable; its display name is Maintenance.
+  The regular ExpenseForm adds odometer, oil type and shop name/address/phone/contact
+  in place. All categories use a single entered amount; no cost-breakdown controls,
+  invoice selector, service date or work-order stage appears in expense entry.
+  Existing work-order URLs redirect to Expenses and open the linked expense.
+  Truck profiles include Maintenance in Expenses; service programs remain separate.
+  `repository/expense_maintenance.go` saves expense + maintenance evidence in one
+  actor-scoped transaction, retaining optimistic versions, invoice confirmations,
+  correction audits, payroll locks and dated odometer/program history. New linked
+  maintenance expenses contribute service history on their expense date. Migration
+  alone never marks incomplete work completed or invents a missing date/amount/payer.
+  Migration 147 links existing expenseless service rows without duplicating existing
+  ledger rows or queueing historical sheet exports; original documents and financial
+  snapshots remain stored. Existing dispatch holds transfer to the effective manual
+  truck condition, released through the normal truck/Status Board controls.
+  Expense-setting type IDs retain stable maintenance reporting/program links across
+  type renames and archives. Service-program completions without invoices remain
+  tracking records. Old maintenance invoice/workflow writes return 410; new expenses
+  use /expenses. Background odometer selection, chronology, program baselines and
+  reminder workers keep their existing boundaries. See docs/MAINTENANCE.md.
+  Verify TestExpenseMaintenanceDatabase (fresh/migration), TestMaintenanceDatabase,
+  and frontend/scripts/test-maintenance-expenses-e2e.mjs against review-local.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
   payment balances, row-click editing and modal deletion; review-first AI entry.
   POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators
@@ -855,7 +830,7 @@ browser bundle.
   All expense settings routes require `expense_settings.manage`.
 - AI expense entry: `POST /expenses/extract` (multipart text/file analysis) and
   `POST /expenses/bulk` (atomic reviewed batch creation)
-- Expense and work-order modals also offer independent receipt/invoice uploads
+- The shared expense modal offers independent receipt/invoice uploads
   through `components/ReceiptUpload.tsx`, without AI extraction. Migration 127
   stores general expense files separately from work-order documents. Expense
   `GET/POST /expenses/{id}/documents` and `GET /expenses/documents/{id}` enforce
@@ -2385,7 +2360,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Migration 100 consolidates untouched branch vendors into 12 brands; superseded rows are hidden from options, while work-order address/name snapshots remain historical. Enter branch addresses per work order. Sources: docs/data/maintenance-brands.json.
 - Customer-confirmed untouched expense-sheet imports use saved expense_date as service date and Completed status, audited without changing ledger amounts. Only legacy imports can be Completed without a resolved truck. Exact PM Service/Oil change names reset the unified PM Service schedule; missing mileage stays unknown.
-- Preventative dates open the shared work-order modal in place; notes truncate with hover/focus details, and stale mileage is gray. Embedded truck History/Due services omit Truck; Settings remains on standalone Work orders.
+- Preventative dates open the linked shared expense modal in place; notes truncate with hover/focus details, and stale mileage is gray. Embedded truck History/Due services omit Truck; Type settings live under Expenses settings.
 - Migration 101 originally added maintenance_pm/maintenance_oil system categories and assigneeRoleIds. Settings supports people and roles; all active current role members receive the category. Keep role membership checks synchronized in task_assignments.go and task_board_repository.go. API writes validate role IDs and versions, preserve omitted role arrays, and audit changes.
 - repository/maintenance_tasks.go and jobs/maintenance_tasks.go reconcile service tasks at startup/every minute using existing schedules plus fresh exact-VIN Five ELD mileage. One open PM Service task per truck; source completion closes its cycle. Missing telemetry preserves outstanding reminders. Worker never creates service/expense readings. See docs/MAINTENANCE.md for lifecycle and history rules.
 
@@ -2489,7 +2464,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   TestDriverBoardDatabase, TestMaintenanceDatabase and test-samsara-views.mjs.
   See docs/integrations/SAMSARA.md for matching, configuration and live proof.
 
-### Fleet work order lifecycle (132)
+### Legacy fleet work order lifecycle (132, retired by 147)
 
 - Migration 132 adds workStatus, explicit dispatch holds, planning fields and an
   immutable final invoice payment confirmation. Tables use In progress,
@@ -2594,3 +2569,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Create new dispatchers through Dispatchers, not the generic Add user flow.
 - Verify TestFleetStatusDatabase (fresh/migrated as mserp_app), test-driver-board.mjs,
   test-status-board-layout.mjs and test-driver-leave-e2e.mjs against review-local.
+
+### Unified expense extraction (147)
+
+- AI drafts use the same expense form for all categories. Prompts and strict provider
+  schemas request one invoice total, expense date and category expense type; no cost
+  breakdown, invoice status, separate service date or work-order service list.
+  Maintenance adds only source-grounded shop/contact, odometer, oil grade and location
+  metadata. Mixed documents keep separate invoices and category permissions; partial
+  drafts preserve missing amounts and payment details. Read-only extraction never
+  saves, pays, completes a program or issues a provider payment.

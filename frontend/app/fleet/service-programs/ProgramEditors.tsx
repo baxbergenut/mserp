@@ -29,7 +29,7 @@ export function ProgramEditor({ initial, options, onClose, onSaved }: { initial:
     {error && <ErrorBanner message={error} />}
     <FormSection title="Program">
       <Field label="Name" wide><input aria-label="Program name" autoFocus required maxLength={100} className={controlClass} value={value.name} onChange={e => setValue({ ...value, name: e.target.value })} /></Field>
-      <div className="space-y-1.5 sm:col-span-2"><span className="text-[12px] font-medium text-zinc-400">Service types that reset this program</span><ProgramServiceTypes program={value} options={options} onChange={serviceTypeCodes=>setValue({...value,serviceTypeCodes})} /></div>
+      <div className="space-y-1.5 sm:col-span-2"><span className="text-[12px] font-medium text-zinc-400">Expense types that reset this program</span><ProgramServiceTypes program={value} options={options} onChange={serviceTypeCodes=>setValue({...value,serviceTypeCodes})} /></div>
       <IntervalFields value={value} onChange={v => setValue({ ...value, ...v })} />
       <Field label="Remind before (miles)"><input aria-label="Program warning miles" className={controlClass} required type="number" min="0" max="2000000000" step="1" value={value.warningMiles} onChange={e => setValue({ ...value, warningMiles: Number(e.target.value) })} /></Field>
       <Field label="Remind before (days)"><input aria-label="Program warning days" className={controlClass} required type="number" min="0" max="36500" step="1" value={value.warningDays} onChange={e => setValue({ ...value, warningDays: Number(e.target.value) })} /></Field>
@@ -89,6 +89,6 @@ export function ProgramServiceEditor({ truck, program, options, baseline, onClos
       <Field label="Service odometer"><input aria-label="Program service odometer" className={controlClass} type="number" min="0" max="2000000000" step="1" value={miles} onChange={e => setMiles(e.target.value)} placeholder="Unknown" /></Field>
       {!baseline && <Field label="Notes" wide><textarea aria-label="Program service notes" className={controlClass} rows={3} maxLength={5000} value={notes} onChange={e => setNotes(e.target.value)} /></Field>}
     </FormSection>
-    <p className="mt-3 text-xs text-zinc-500">{baseline ? "Corrects the tracking baseline without editing an invoice. A newer or changed latest completed service supersedes it." : "Records completed work in Work orders without creating an invoice. Select only programs actually completed during this service."}</p>
+    <p className="mt-3 text-xs text-zinc-500">{baseline ? "Corrects the tracking baseline without editing an invoice. A newer or changed latest completed service supersedes it." : "Records completed service for program tracking. Select only programs actually completed during this service."}</p>
   </Modal>;
 }

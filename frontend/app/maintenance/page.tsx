@@ -1,5 +1,5 @@
 "use client";
 
-import { MaintenanceWorkspace } from "./MaintenanceWorkspace";
+import { LegacyMaintenanceRedirect } from "./LegacyMaintenanceRedirect";
 
-export default function MaintenancePage() { return <MaintenanceWorkspace />; }
+export default function MaintenancePage() { return <LegacyMaintenanceRedirect />; }

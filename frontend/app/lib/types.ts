@@ -845,7 +845,10 @@ export interface MaintenanceChange { actorName: string; happenedAt: string; befo
 
 export interface ExpenseApplicant { id: string; fullName: string; status: "applied" | "hired" | "rejected" | "withdrawn"; }
 
+export interface ExpenseMaintenance { recordId?: string; version?: number; odometer: number | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string; oilType: string; }
+
 export interface Expense {
+  maintenance?: ExpenseMaintenance;
   canEdit?: boolean;
   applicantId?: string | null;
   costBreakdown?: ExpenseCostItem[];
@@ -904,6 +907,9 @@ export interface DriverEscrowSetting {
 }
 
 export interface ExpenseInput {
+  savedAmount?: string;
+  legacyPaymentTotal?: string;
+  maintenance?: ExpenseMaintenance;
   applicantId?: string | null;
   costBreakdown?: ExpenseCostItem[];
 	updatedAt?: string;
@@ -943,7 +949,7 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
   };
 }
 
-export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified"> {
+export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified" | "maintenance"> {
   maintenance?: MaintenanceAIDetails | null;
   category: ExpenseCategory;
   confidence: number;

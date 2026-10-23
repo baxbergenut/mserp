@@ -21,9 +21,9 @@ export function costBreakdownError(value: ExpenseInput): string {
 }
 
 export function expensePayload(value: ExpenseInput) {
-  const error = costBreakdownError(value);
-  if (error) throw new Error(error);
-  return { ...value, baseAmount: value.amount, costBreakdown: value.costBreakdown?.map(row => ({ name: row.name.trim(), amount: row.amount.trim() })) };
+  const { legacyPaymentTotal, savedAmount, ...input } = value;
+  const preserveLegacyTotal = !!input.updatedAt && legacyPaymentTotal === input.amount && input.paymentType.trim().toUpperCase() === "EFS";
+  return { ...input, baseAmount: preserveLegacyTotal ? undefined : input.amount, costBreakdown: input.updatedAt && savedAmount === input.amount ? undefined : [] };
 }
 
 export function centsLabel(cents: bigint) {

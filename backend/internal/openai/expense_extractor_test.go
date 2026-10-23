@@ -27,6 +27,14 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 				if format["type"] != "json_schema" || format["strict"] != true || request["store"] != false || request["model"] != "gpt-6-luna" {
 					t.Error("wrong structured request")
 				}
+				props := format["schema"].(map[string]any)["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+				if _, ok := props["costBreakdown"]; ok {
+					t.Fatal("provider request asks for cost rows")
+				}
+				maintenance := props["maintenance"].(map[string]any)["properties"].(map[string]any)
+				if _, ok := maintenance["services"]; ok {
+					t.Fatal("provider request asks for work-order services")
+				}
 				parts := request["input"].([]any)[0].(map[string]any)["content"].([]any)
 				prompt := parts[0].(map[string]any)["text"].(string)
 				if !strings.Contains(prompt, `"HR":["Transportation","Hotel","Team shuttle"]`) || !strings.Contains(prompt, `"paymentMethods":["Cash"]`) {
@@ -49,12 +57,12 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 			defer server.Close()
 			client := NewClient("secret", "gpt-6-luna")
 			client.baseURL = server.URL
-			input := ExpenseInput{Text: "receipt", MIMEType: mime, FileName: "receipt.pdf", MessageDate: time.Now(), Categories: map[string][]string{"HR": {"Transportation", "Hotel", "Team shuttle"}}, PaymentMethods: []string{"Cash"}}
+			input := ExpenseInput{MixedMaintenance: true, WorkOrdersCategory: "Maintenance", ServiceTypes: map[string]string{"preventive": "Oil change"}, Text: "receipt", MIMEType: mime, FileName: "receipt.pdf", MessageDate: time.Now(), Categories: map[string][]string{"HR": {"Transportation", "Hotel", "Team shuttle"}}, PaymentMethods: []string{"Cash"}}
 			if mime != "" {
 				input.FileData = []byte("receipt")
 			}
 			result, err := client.ExtractExpense(context.Background(), input)
-			if err != nil || !result.IsExpense || len(result.Expenses) != 1 || len(result.Expenses[0].CostBreakdown) != 1 {
+			if err != nil || !result.IsExpense || len(result.Expenses) != 1 || len(result.Expenses[0].CostBreakdown) != 0 {
 				t.Fatal(result, err)
 			}
 		})
@@ -111,7 +119,7 @@ func TestExtractionRejectsFailureWithoutProviderData(t *testing.T) {
 
 func TestExpensePromptAndSchema(t *testing.T) {
 	prompt := expensePrompt(ExpenseInput{Text: "Oil change $125", MessageDate: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"Maintenance": {"Oil change", "Tire issue"}}})
-	for _, want := range []string{"untrusted source data", "2026-10-14", "costBreakdown", "EXACTLY", "Tire issue", "empty costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation", "NOT Shipping", "custom Document translation", "Accept partial expense evidence", "Missing price alone is not a reason to reject", "bare driver's license", "Leave amt, pay, paid, and other unsupported fields null"} {
+	for _, want := range []string{"untrusted source data", "2026-10-14", "one total amount", "Tire issue", "Do not return costBreakdown", "semantic matching", "CUSTOM expense type ONLY", "flight ticket", "Transportation", "NOT Shipping", "custom Document translation", "Accept partial expense evidence", "Missing price alone is not a reason to reject", "bare driver's license", "Leave amt, pay, paid, and other unsupported fields null"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatal("missing prompt instruction", want)
 		}
@@ -136,6 +144,64 @@ func TestExpensePromptAndSchema(t *testing.T) {
 	}
 	check(expenseSchema())
 	check(maintenanceExtractionSchema(expenseSchema()))
+}
+
+func TestMaintenanceExpensePromptAndSchema(t *testing.T) {
+	prompt := expensePrompt(ExpenseInput{MixedMaintenance: true, WorkOrdersCategory: "Maintenance", Categories: map[string][]string{"Maintenance": {"Oil change", "Electrical"}, "Other": {"Office supplies"}}})
+	for _, want := range []string{"Maintenance is an ordinary expense", "same expense form", "expense date field", "one total amount", "vendorAddress", "odometer", "maintenance=null", "no separate service date", "estimates, quotes, plans and uninstalled parts"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("missing unified expense rule %q", want)
+		}
+	}
+	schema := maintenanceExtractionSchema(expenseSchema())
+	item := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)
+	props := item["properties"].(map[string]any)
+	if _, ok := props["costBreakdown"]; ok {
+		t.Fatal("provider schema still requests cost breakdowns")
+	}
+	maintenance := props["maintenance"].(map[string]any)["properties"].(map[string]any)
+	for _, retired := range []string{"hasInvoice", "serviceDate", "services", "workOrder"} {
+		if _, ok := maintenance[retired]; ok {
+			t.Fatalf("retired field %s still requested", retired)
+		}
+	}
+	for _, field := range []string{"vendorName", "vendorAddress", "vendorPhone", "vendorContact", "odometer", "oilType"} {
+		if _, ok := maintenance[field]; !ok {
+			t.Fatalf("missing maintenance field %s", field)
+		}
+	}
+}
+
+func TestUnifiedExpenseExtractionLive(t *testing.T) {
+	if os.Getenv("MSERP_OPENAI_LIVE_TEST") != "1" {
+		t.Skip("opt-in synthetic live extraction")
+	}
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = "gpt-6-luna"
+	}
+	result, err := NewClient(os.Getenv("OPENAI_API_KEY"), model).ExtractExpense(context.Background(), ExpenseInput{MixedMaintenance: true, WorkOrdersCategory: "Maintenance", MessageDate: time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC), Categories: map[string][]string{"Maintenance": {"Oil change", "Electrical"}, "Other": {"Office supplies"}}, PaymentMethods: []string{"Cash"}, Text: `Two distinct receipts. Receipt A: Acme Truck Repair #14, 123 Test Lane, Albany NY, phone 555-123-4567, contact Service desk. Truck 101. Invoice date October 22, 2026. Work performed October 20, 2026: completed engine oil replacement with SAE 10w 30 at odometer 400000 miles. Labor $80, oil $40, tax $10. Invoice total $130.00, paid cash. Receipt B: Office supplies, October 21, 2026, paper $15 plus pens $5, total $20.00, paid cash.`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsExpense || len(result.Expenses) != 2 {
+		t.Fatal("expected two expenses", result)
+	}
+	for _, item := range result.Expenses {
+		if len(item.CostBreakdown) != 0 {
+			t.Fatal("cost breakdown returned")
+		}
+		if item.Category != nil && *item.Category == "Maintenance" {
+			if item.ExpenseDate == nil || *item.ExpenseDate != "2026-10-22" || item.Amount == nil || *item.Amount != "130.00" || item.ExpenseType == nil || *item.ExpenseType != "Oil change" {
+				t.Fatal("wrong maintenance date, total or expense type", item)
+			}
+			if item.Maintenance == nil || item.Maintenance.Odometer == nil || *item.Maintenance.Odometer != 400000 || item.Maintenance.VendorName == nil || *item.Maintenance.VendorName != "Acme Truck Repair #14" || item.Maintenance.OilType == nil || *item.Maintenance.OilType != "10W-30" {
+				t.Fatal("missing shop/odometer", item)
+			}
+		} else if item.Category == nil || *item.Category != "Other" || item.Maintenance != nil || item.Amount == nil || *item.Amount != "20.00" {
+			t.Fatal("wrong ordinary expense", item)
+		}
+	}
 }
 
 // Explicit opt-in; synthetic reports exercise classification without saving expenses.
@@ -217,16 +283,10 @@ func TestExpenseExtractionLive(t *testing.T) {
 				t.Fatal("expected one expense")
 			}
 			item := result.Expenses[0]
-			if item.Amount == nil || *item.Amount != "120.30" || len(item.CostBreakdown) != 2 {
+			if item.Amount == nil || *item.Amount != "120.30" || len(item.CostBreakdown) != 0 {
 				t.Fatalf("unexpected synthetic result: %+v", item)
 			}
-			names := map[string]string{}
-			for _, row := range item.CostBreakdown {
-				names[row.Name] = row.Amount
-			}
-			if names["Oil change"] != "100.10" || names["Tire issue"] != "20.20" {
-				t.Fatal("default naming/breakdown mismatch", names)
-			}
+
 		})
 	}
 }
