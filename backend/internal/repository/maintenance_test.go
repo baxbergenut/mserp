@@ -155,6 +155,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	leaveAccountsMigration, err := os.ReadFile("../../sql/143_dispatcher_accounts_and_leave_tasks.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -169,6 +173,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(leaveAccountsMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(identityMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(scaleMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(methodMigration), "\r\n", "\n"), "", 1)
@@ -237,6 +242,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(statusMigration))
 				exec(string(scaleMigration))
 				exec(string(identityMigration))
+				exec(string(leaveAccountsMigration))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
@@ -256,7 +262,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			}
 			defer pool.Close()
 			// Fleet tables in historical test schemas predate explicit ownership migrations.
-			exec("GRANT SELECT,INSERT,UPDATE,DELETE ON trucks,expenses,expense_settings,drivers,truck_driver_assignments,app_users TO mserp_app")
+			exec("GRANT SELECT,INSERT,UPDATE,DELETE ON trucks,expenses,expense_settings,drivers,dispatchers,truck_driver_assignments,app_users TO mserp_app")
 			testMaintenanceManualPM(t, ctx, admin, pool)
 			testMaintenanceTaskLifecycle(t, ctx, admin, pool)
 			testMaintenanceBackgroundTelemetry(t, ctx, admin, pool)
