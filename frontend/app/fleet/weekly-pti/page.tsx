@@ -59,16 +59,16 @@ export default function WeeklyPTIPage(){
  const allTrucks=[...(data?.trucks??[])].sort((a,b)=>(a.position??Number.MAX_SAFE_INTEGER)-(b.position??Number.MAX_SAFE_INTEGER)||a.unit.localeCompare(b.unit,undefined,{numeric:true})||a.unit.localeCompare(b.unit));
  const trucks=allTrucks.filter(t=>t.unit.toLowerCase().includes(search.trim().toLowerCase()));
  const rearrange=async(id:string,drop:{group:PTIGroup;target?:string;after:boolean},version:number)=>{
-  if(!canEdit||layoutLock.current||!data)return;
-  const source=allTrucks.find(t=>t.id===id);if(!source||drop.target===id)return;
+  if(!canEdit||layoutLock.current||!data)return false;
+  const source=allTrucks.find(t=>t.id===id);if(!source||drop.target===id)return false;
   const list=allTrucks.filter(t=>t.id!==id);let index=drop.target?list.findIndex(t=>t.id===drop.target):-1;
-  if(drop.target&&(index<0||list[index].group!==drop.group))return;
+  if(drop.target&&(index<0||list[index].group!==drop.group))return false;
   if(index<0){index=list.findLastIndex(t=>t.group===drop.group)+1;if(index===0)index=list.length;}else if(drop.after)index++;
   list.splice(index,0,{...source,group:drop.group});
   const ordered=(["company","owner_operator"] as const).flatMap(group=>list.filter(t=>t.group===group));
   layoutLock.current=true;setLayoutBusy(true);setError("");
-  try{const result=await savePTILayout(version,ordered.map(t=>({truckId:t.id,group:t.group})));setData(old=>old?{...old,layoutVersion:result.version,trucks:ordered.map((t,position)=>({...t,position}))}:old);}
-  catch(e){setError(e instanceof Error?e.message:"Could not save PTI order");refresh();}
+  try{const result=await savePTILayout(version,ordered.map(t=>({truckId:t.id,group:t.group})));setData(old=>old?{...old,layoutVersion:result.version,trucks:ordered.map((t,position)=>({...t,position}))}:old);return true;}
+  catch(e){setError(e instanceof Error?e.message:"Could not save PTI order");refresh();return false;}
   finally{layoutLock.current=false;setLayoutBusy(false);}
  };
  const drag=usePTIRowDrag(trucks,rearrange);

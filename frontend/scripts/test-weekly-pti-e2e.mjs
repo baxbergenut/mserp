@@ -111,7 +111,17 @@ try{
  await expect.poll(()=>page.locator('tr[data-pti-truck]').first().getAttribute('aria-label')).toBe('Truck PTI-002');
  const layout=await api('get','/weekly-pti/matrix');const layoutBody={version:layout.layoutVersion-1,placements:layout.trucks.map(t=>({truckId:t.id,group:t.group}))};
  expect((await page.request.put(access.base+'/api/weekly-pti/layout',{headers,data:layoutBody})).status()).toBe(409);
- const handle=page.getByRole('button',{name:'Move truck PTI-002',exact:true}),box=await handle.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+20,box.y+90,{steps:5});await page.keyboard.press('Escape');await page.mouse.up();
+ const handle=page.getByRole('button',{name:'Move truck PTI-002',exact:true}),box=await handle.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+20,box.y+90,{steps:5});expect(await page.locator('tr[data-row-dragging]').evaluate(e=>e.style.transition)).toBe('none');
+ const sliding=page.getByRole('row',{name:'Truck PTI-001',exact:true});expect(await sliding.evaluate(e=>e.style.transition)).toContain('180ms');expect(await sliding.evaluate(e=>e.style.transform)).not.toBe('');
+ await page.keyboard.press('Escape');await page.mouse.up();await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);
+ await page.route('**/api/weekly-pti/layout',route=>route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'Layout changed'})}));
+ await dragTo(handle,page.getByRole('row',{name:'Truck PTI-003',exact:true}),true);
+ await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);
+ await expect(page.locator('tr[data-pti-truck]').first()).toHaveAttribute('aria-label','Truck PTI-002');
+ await page.unroute('**/api/weekly-pti/layout');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const reducedBox=await handle.boundingBox();await page.mouse.move(reducedBox.x+reducedBox.width/2,reducedBox.y+reducedBox.height/2);await page.mouse.down();
+ expect(await sliding.evaluate(e=>e.style.transition)).toContain('0ms');await page.keyboard.press('Escape');await page.mouse.up();await expect(page.locator('tr[data-row-dragging]')).toHaveCount(0);await page.emulateMedia({reducedMotion:'no-preference'});
  expect((await api('get','/weekly-pti/matrix')).layoutVersion).toBe(layout.layoutVersion);
  expect(sql(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks;`)).toBe(fleetBefore);
  await search.fill('');
