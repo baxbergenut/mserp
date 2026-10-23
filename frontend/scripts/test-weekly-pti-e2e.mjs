@@ -29,6 +29,7 @@ try{
  await page.goto(access.base+'/fleet/weekly-pti');await expect(page.getByRole('heading',{name:'Weekly PTI',exact:true})).toBeVisible();
  const row=page.getByRole('row',{name:'Truck 102',exact:true});await expect(row).toBeVisible();
  await expect(page.getByRole('columnheader',{name:'Monday eligibility'})).toHaveCount(0);
+ await expect(page.getByRole('columnheader')).toHaveText(['Truck','Driver / team','Video received','Checked','Notes','Checked by']);
  await expect(page.getByRole('button',{name:'PTI history truck 102',exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Truck 102 notes',{exact:true})).toHaveCSS('resize','none');
  await expect(page.getByText(/Trucks on the road appear automatically|Hover over a checkbox/)).toHaveCount(0);
@@ -38,11 +39,11 @@ try{
  await page.getByLabel('Truck 102 video received',{exact:true}).check();
  await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeEnabled();
  await page.getByLabel('Truck 102 checked',{exact:true}).check();
- await expect(page.getByLabel('Truck 102 checked',{exact:true})).toHaveAttribute('title',/Checked by Local Review/);
+ await expect(row.getByRole('cell',{name:'Local Review',exact:true})).toBeVisible();await expect(row.getByText('Local Review',{exact:true})).toHaveAttribute('title',/\d{4}.*\d{1,2}:\d{2}.*[AP]M.*E[DS]T/);
  await page.getByLabel('Truck 102 notes',{exact:true}).fill('Left marker lamp needs follow-up');
  await page.getByRole('heading',{name:'Weekly PTI',exact:true}).click();
  await expect(page.getByRole('button',{name:'Save note',exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Truck 102 checked',{exact:true})).toHaveAttribute('title',/Checked by Local Review/);
+ await expect(row.getByRole('cell',{name:'Local Review',exact:true})).toBeVisible();await expect(row.getByText('Local Review',{exact:true})).toHaveAttribute('title',/\d{4}.*\d{1,2}:\d{2}.*[AP]M.*E[DS]T/);
  await page.reload();await expect(page.getByLabel('Truck 102 notes',{exact:true})).toHaveValue('Left marker lamp needs follow-up');
  await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeChecked();
  await page.getByRole('button',{name:/All trucks/}).click();await expect(page.getByRole('row',{name:'Truck 103',exact:true})).toBeVisible();
@@ -57,7 +58,7 @@ try{
  await expect.poll(async()=>((await api('get',path)).rows.find(r=>r.truckId===target.truckId)).notes).toBe('Another reviewer note');
  await page.getByRole('button',{name:'Save my note on the latest entry',exact:true}).click();await expect(row.getByRole('alert')).toHaveCount(0);
  await expect.poll(async()=>((await api('get',path)).rows.find(r=>r.truckId===target.truckId)).notes).toBe('My unsaved inspection note');
- await page.getByLabel('Truck 102 video received',{exact:true}).uncheck();await expect(page.getByLabel('Truck 102 checked',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeDisabled();
+ await page.getByLabel('Truck 102 video received',{exact:true}).uncheck();await expect(page.getByLabel('Truck 102 checked',{exact:true})).not.toBeChecked();await expect(row.getByRole('cell',{name:'Local Review',exact:true})).toHaveCount(0);await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeDisabled();
  await expect(page.getByLabel('Truck 102 video received',{exact:true})).toBeEnabled();await page.getByLabel('Truck 102 video received',{exact:true}).check();await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeEnabled();await page.getByLabel('Truck 102 checked',{exact:true}).check();await expect(page.getByLabel('Truck 102 checked',{exact:true})).toBeEnabled();
  target=(await api('get',path)).rows.find(r=>r.truckUnit==='102');
  const body=(row,overrides={})=>({requestId:randomUUID(),version:row.version,eligibility:row.eligibility,eligibilityReason:row.eligibilityReason,received:row.received,review:row.review,videoUrl:row.videoUrl,notes:row.notes,...overrides});

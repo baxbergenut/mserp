@@ -3,8 +3,8 @@
 Fleet > Weekly PTI is a compact checklist for a Monday–Sunday New York week.
 The default On the road view shows trucks that need a video. Missing video,
 To check, Checked and All trucks are one-click filters; search includes units,
-drivers and notes. Receipt and review use checkboxes, with authenticated names
-and timestamps on hover. Notes use a fixed-height field and save on blur or Ctrl/Cmd+Enter. There is no
+drivers and notes. Receipt and review use checkboxes. Receipt keeps its actor/time hover. Checked by
+follows Notes and shows the reviewer name, with the New York date and time on hover. Notes use a fixed-height field and save on blur or Ctrl/Cmd+Enter. There is no
 history button or explanatory page copy. Issues
 belong in Notes. Videos continue arriving through existing channels.
 

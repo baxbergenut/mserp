@@ -2526,7 +2526,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   eligibility confirmation; Home/Vacation/Shop/OOS/Hold/unassigned trucks are
   excluded automatically. Midweek additions and returns are included; saved
   receipt/review/notes and original snapshots survive roster changes. Past weeks
-  stay frozen. One-click receipt/checked boxes show actor/time on hover; inline
+  stay frozen. Receipt keeps its actor/time hover; Checked by follows Notes with
+  the reviewer name and New York date/time on hover. Inline
   fixed-height notes hold issues; no history button or explanatory page copy. Links are archived. Versions, idempotency, audit and
   `pti.read/edit` remain enforced; GETs never write. No financial, fleet,
   provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
