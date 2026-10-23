@@ -2508,6 +2508,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   preserves the original payment confirmation and appends invoiceCorrections for
   explicit versioned invoice edits; existing finalized/collection guards remain. It never issues money or
   changes expense_payments/payroll recovery; do not infer payment from collections.
+  Migration 145 permits voiding payment-confirmed duplicates, validating the retained
+  confirmation against the archived invoice snapshot. Existing collection, verification,
+  finalized-period and dispatch-hold guards still apply.
   See docs/MAINTENANCE.md and test-fleet-workflow-e2e.mjs.
 - Migration 135 records the user's explicit historical paid confirmation. Only
   blank workflow stages without holds, created before migration 132's activation,

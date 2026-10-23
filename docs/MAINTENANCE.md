@@ -38,8 +38,11 @@ exclude the configured work-order category. No expense copies are created.
   stored base amount retain their original total when adding service metadata.
 - Financial guards still reject changes to paid/finalized obligations. Payroll's
   expense detail modal links to the Maintenance visit for typed work corrections.
-  Voiding requires category Delete and a reason; paid or verified invoices cannot
-  be voided. An unpaid expense is removed atomically while its audit snapshot,
+  Voiding requires category Delete and a reason. A work-order payment confirmation
+  does not block voiding a duplicate: its confirmation and invoice correction history
+  remain, and the invoice is archived in the void snapshot. Invoices with actual
+  collections, settlements or verifications still require those obligations to be
+  resolved first. An eligible expense is removed atomically while its audit snapshot,
   service details and attachments remain. Voided work does not affect reminders
   or spending reports. Ordinary expense DELETE cannot bypass the visit workflow.
 - Vendor directory edits never rewrite earlier visit snapshots. Existing vendor

@@ -581,9 +581,6 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 	if old.DispatchStatus != "" {
 		return fmt.Errorf("%w: release the truck before voiding its work order", ErrMaintenanceInvalid)
 	}
-	if len(old.PaymentConfirmation) > 0 {
-		return fmt.Errorf("%w: an order with confirmed payment cannot be voided", ErrMaintenanceInvalid)
-	}
 	before, _ := json.Marshal(old)
 	var expenseJSON []byte
 	if old.ExpenseID != nil {
