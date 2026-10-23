@@ -84,7 +84,10 @@ export function ExpenseForm({
 }) {
   const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);
   const value = applyExpenseCategoryRules(initialValue, options.settings);
-  const change = (next: ExpenseInput) => onChange(applyExpenseCategoryRules(next.categoryId === options.workOrdersCategoryId || options.settings.some(item => item.id === next.categoryId && item.kind === "category" && item.name === "Maintenance") ? next : { ...next, maintenance: undefined }, options.settings));
+  const change = (next: ExpenseInput) => {
+    if (next.truckId !== value.truckId && next.maintenance) next = { ...next, maintenance: { ...next.maintenance, odometer: null } };
+    onChange(applyExpenseCategoryRules(next.categoryId === options.workOrdersCategoryId || options.settings.some(item => item.id === next.categoryId && item.kind === "category" && item.name === "Maintenance") ? next : { ...next, maintenance: undefined }, options.settings));
+  };
   const set = <K extends keyof ExpenseInput>(key: K, next: ExpenseInput[K]) =>
     change({ ...value, [key]: next });
 

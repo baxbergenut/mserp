@@ -8,6 +8,15 @@ breakdown rows. Receipts remain attachments; there is no invoice selector or wor
 stage. The Work orders navigation and truck tab are retired; old URLs open the
 linked expense. Service programs remain at /fleet/service-programs.
 
+Oil type uses the standard grade dropdown (with Unknown and Other/custom) only for
+oil-change/PM expense types, including renamed canonical types. Selecting a truck on
+a new entry dated today fills a blank odometer using its existing source selection,
+freshness and chronology guards. Changing truck clears the previous truck's reading;
+changing date clears an automatic reading. Saved, historical, manual and AI-supplied
+readings are never replaced by current telemetry. Oil-change expenses update the
+linked service-program history and mileage/calendar due limits for enrolled trucks;
+recording an expense does not enroll an excluded truck.
+
 Migration 147 preserves the configured category UUID and access grants. Existing
 ledger rows are reused; service records without an expense receive a linked record
 with unknown amounts, dates and payers left unknown. Migration does not issue money,

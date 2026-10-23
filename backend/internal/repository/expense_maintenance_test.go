@@ -122,6 +122,26 @@ func TestExpenseMaintenanceDatabase(t *testing.T) {
 			if got := scalar(`SELECT cardinality(program_ids)::text FROM maintenance_records WHERE expense_id=$1`, saved.ID); got != "1" {
 				t.Fatal("PM program missing", got)
 			}
+			maintenance := NewMaintenanceRepository(pool)
+			if members, err := maintenance.ProgramTrucks(ctx, OilChangeProgramID, truck); err != nil || len(members) != 0 {
+				t.Fatal("expense must not enroll an excluded truck", members, err)
+			}
+			intervalMiles, intervalDays := 20000, 30
+			if err := maintenance.SaveProgramTrucks(ctx, OilChangeProgramID, []ProgramTruckInput{{TruckID: truck, Active: true, OverrideInterval: true, IntervalMiles: &intervalMiles, IntervalDays: &intervalDays}}, ""); err != nil {
+				t.Fatal(err)
+			}
+			assertDue := func() {
+				t.Helper()
+				members, err := maintenance.ProgramTrucks(ctx, OilChangeProgramID, truck)
+				if err != nil || len(members) != 1 {
+					t.Fatal("oil-change expense service history", members, err)
+				}
+				cycle := members[0]
+				if cycle.LastRecordID == nil || *cycle.LastRecordID != saved.Maintenance.RecordID || cycle.LastDate == nil || *cycle.LastDate != "2026-10-22" || cycle.LastMiles == nil || *cycle.LastMiles != 100000 || cycle.NextMiles == nil || *cycle.NextMiles != 120000 || cycle.NextDate == nil || *cycle.NextDate != "2026-11-21" {
+					t.Fatalf("oil-change expense did not drive mileage/date due limits: %+v", cycle)
+				}
+			}
+			assertDue()
 			input.UpdatedAt = &saved.UpdatedAt
 			input.Maintenance = saved.Maintenance
 			input.Maintenance.VendorAddress = "Corrected shop address"
@@ -134,6 +154,7 @@ func TestExpenseMaintenanceDatabase(t *testing.T) {
 			if updated.Maintenance.VendorAddress != "Corrected shop address" || *updated.Amount != "250.00" {
 				t.Fatal(updated)
 			}
+			assertDue()
 			if _, err = repo.UpdateExpense(ctx, saved.ID, input); err == nil {
 				t.Fatal("stale expense edit accepted")
 			}

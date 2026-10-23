@@ -562,7 +562,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - Maintenance is an ordinary Expenses category after migration 147. The configured
   category UUID and permissions stay stable; its display name is Maintenance.
   The regular ExpenseForm adds odometer, oil type and shop name/address/phone/contact
-  in place. All categories use a single entered amount; no cost-breakdown controls,
+  in place. Oil type is a grade dropdown shown only for oil-change/PM expense types,
+  including renamed canonical types. New entries dated today autofill a blank odometer
+  from the selected truck's existing guarded source endpoint. Truck/date changes
+  invalidate automatic readings; saved, historical, AI and manual readings are retained.
+  All categories use a single entered amount; no cost-breakdown controls,
   invoice selector, service date or work-order stage appears in expense entry.
   Existing work-order URLs redirect to Expenses and open the linked expense.
   Truck profiles include Maintenance in Expenses; service programs remain separate.

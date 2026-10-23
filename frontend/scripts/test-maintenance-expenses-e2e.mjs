@@ -33,6 +33,50 @@ try {
   await page.getByLabel('Amount',{exact:true}).fill('12.50');
   await page.getByRole('button',{name:'Create entry',exact:true}).click();
   await expect(dialog).toHaveCount(0);
+  // Current readings autofill new, today-dated entries only. Truck/date changes
+  // invalidate automatic readings; manual values and late user edits win.
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const historical='2026-09-01';
+  const secondTruck=options.trucks.find(t=>t.id!==truck.id);
+  const readings=[], readingReplies=[];
+  await page.route('**/api/maintenance/odometer?*',async route=>{
+    const id=new URL(route.request().url()).searchParams.get('truckId');readings.push(id);
+    await new Promise(resolve=>setTimeout(resolve,150));
+    await route.fulfill({json:{reading:{mileage:id===truck.id?390000:390500,reportedAt:new Date().toISOString(),source:'samsara'},message:''}}).catch(()=>{});
+    readingReplies.push(id);
+  });
+  await page.getByRole('button',{name:'Add entry',exact:true}).click();
+  await page.getByLabel('Category',{exact:true}).selectOption(options.categoryId);
+  await page.getByLabel('Expense type',{exact:true}).selectOption('Electrical');
+  await expect(page.getByLabel('Oil type',{exact:true})).toHaveCount(0);
+  await page.getByLabel('Expense type',{exact:true}).selectOption('Oil change');
+  await expect(page.getByRole('combobox',{name:'Oil type',exact:true})).toBeVisible();
+  await page.getByLabel('Oil type',{exact:true}).selectOption('15W-40');
+  await page.getByLabel('Expense date',{exact:true}).fill(today);
+  await page.getByLabel('Unit number',{exact:true}).selectOption(truck.id);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('390000');
+  await expect(page.getByText(/^Samsara ·/)).toBeVisible();
+  await page.getByLabel('Odometer',{exact:true}).fill('390123');
+  await page.getByLabel('Expense date',{exact:true}).fill(historical);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('390123');
+  const beforeHistorical=readings.length;
+  await page.getByLabel('Unit number',{exact:true}).selectOption(secondTruck.id);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('');
+  await page.getByLabel('Expense date',{exact:true}).fill(today);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('390500');
+  expect(readings.slice(beforeHistorical)).toEqual([secondTruck.id]);
+  await page.getByLabel('Expense date',{exact:true}).fill(historical);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('');
+  const beforeRace=readingReplies.length;
+  await page.getByLabel('Expense date',{exact:true}).fill(today);
+  await page.getByLabel('Odometer',{exact:true}).fill('391000');
+  await page.getByLabel('Description',{exact:true}).fill('Keep manual reading while telemetry completes');
+  await page.getByLabel('Oil type',{exact:true}).selectOption('custom');
+  await page.getByLabel('Custom oil type',{exact:true}).fill('20w-50');
+  await expect(page.getByLabel('Custom oil type',{exact:true})).toHaveValue('20W-50');
+  await expect.poll(()=>readingReplies.length).toBeGreaterThan(beforeRace);
+  await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('391000');
+  await page.getByRole('button',{name:'Close',exact:true}).click();
   await page.getByRole('button',{name:'Add entry',exact:true}).click();
   await page.getByLabel('Description',{exact:true}).fill(maintenanceDescription);
   await page.getByLabel('Amount',{exact:true}).fill('120.30');
@@ -49,7 +93,7 @@ try {
   await page.getByLabel('Unit number',{exact:true}).selectOption(truck.id);
   await page.getByLabel('Who will cover',{exact:true}).selectOption('Company');
   await page.getByLabel('Odometer',{exact:true}).fill('400000');
-  await page.getByLabel('Oil type',{exact:true}).fill('10w 30');
+  await page.getByLabel('Oil type',{exact:true}).selectOption('10W-30');
   const shop=options.vendors.find(v=>v.active);
   await page.getByLabel('Shop',{exact:true}).selectOption(shop.id);
   await expect(page.getByLabel('Shop name',{exact:true})).toHaveValue(shop.name);
@@ -123,5 +167,5 @@ try {
   await expect(page.getByRole('button',{name:'Add cost',exact:true})).toHaveCount(0);
   await page.screenshot({path:process.env.MSERP_MAINTENANCE_SCREENSHOT || 'maintenance-expense-mobile.png',fullPage:true,animations:'disabled'});
   expect(errors).toEqual([]);
-  console.log('PASS: one expense modal, Maintenance category, shop/odometer persistence, total-only regular expenses, receipts, edits, legacy links and mobile layout.');
+  console.log('PASS: shared expense modal, oil-only grade dropdown, guarded odometer autofill and manual/AI preservation, shop details, totals, receipts, edits, legacy links and mobile layout.');
 } finally {await browser.close();}
