@@ -2528,7 +2528,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   receipt/review/notes and original snapshots survive roster changes. Past weeks
   stay frozen. Receipt keeps its actor/time hover; Checked by follows Notes with
   the reviewer name and New York date/time on hover. Inline
-  fixed-height notes hold issues; no history button or explanatory page copy. Links are archived. Versions, idempotency, audit and
+  single-line notes inputs hold issues; no history button or explanatory page copy. Links are archived. Versions, idempotency, audit and
   `pti.read/edit` remain enforced; GETs never write. No financial, fleet,
   provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
   Tests: TestWeeklyPTIDatabase, TestPTIEligibility and test-weekly-pti-e2e.mjs.

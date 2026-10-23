@@ -31,7 +31,7 @@ try{
  await expect(page.getByRole('columnheader',{name:'Monday eligibility'})).toHaveCount(0);
  await expect(page.getByRole('columnheader')).toHaveText(['Truck','Driver / team','Video received','Checked','Notes','Checked by']);
  await expect(page.getByRole('button',{name:'PTI history truck 102',exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Truck 102 notes',{exact:true})).toHaveCSS('resize','none');
+ await expect(page.getByLabel('Truck 102 notes',{exact:true})).toHaveAttribute('type','text');
  await expect(page.getByText(/Trucks on the road appear automatically|Hover over a checkbox/)).toHaveCount(0);
  await expect(page.getByRole('table').getByRole('combobox')).toHaveCount(0);
  await expect(page.getByRole('row',{name:'Truck 103',exact:true})).toHaveCount(0);
@@ -68,7 +68,7 @@ try{
  target=(await api('get',path)).rows.find(r=>r.truckUnit==='102');const events=await api('get',writePath+'/history');await api('patch',writePath,body(target));expect((await api('get',writePath+'/history')).length).toBe(events.length);
  expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,{videoUrl:'javascript:alert(1)'})})).status()).toBe(409);
  expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,{eligibility:'exempt',eligibilityReason:''})})).status()).toBe(409);
- const driver=await api('get','/drivers/'+target.crew[0].id);await api('patch','/drivers/'+driver.id+'/availability',{status:'home',version:driver.statusVersion,reason:'Synthetic later availability'});
+ const driver=await api('get','/drivers/'+target.crew[0].id);await api('patch','/drivers/'+driver.id+'/availability',{status:'home',version:driver.statusVersion,reason:'Synthetic later availability',leavePlan:{homeStart:week,homeEnd:week}});
  await api('post','/weekly-pti/weeks',{weekStart:week});
  const away=(await api('get',path)).rows.find(r=>r.truckUnit==='102');expect(away.eligibility).toBe('exempt');expect(away.received).toBe(true);expect(away.reviewedBy).toBe('Local Review');
  await page.getByRole('button',{name:'Refresh',exact:true}).click();await expect(row).toHaveCount(0);
