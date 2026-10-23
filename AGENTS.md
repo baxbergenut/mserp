@@ -2153,8 +2153,9 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   `terminationDate`. Only terminated maps to active=false. A compatibility trigger
   synchronizes legacy active writes; nonterminated named statuses retain fleet links.
   Termination keeps the existing charge pause workflow, clears dispatchers, and
-  releases non-owned truck assignments. Existing own-truck links remain; owned
-  trucks become inactive unless an active direct/team driver requires review.
+  releases non-owned truck assignments. Existing own-truck links remain; eligible
+  owner-operated trucks become inactive unless an active driver requires review.
+  Continuing active-investor fleets remain independent of driver employment.
   See migration 148 and `docs/DRIVER_TERMINATION.md`. FleetScope
   records its source termination date. Legacy inactive records become terminated;
   known source dates survive, otherwise migration day minus 30 days is the explicitly
