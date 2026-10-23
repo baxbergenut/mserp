@@ -4,7 +4,8 @@ Fleet > Weekly PTI is a compact checklist for a Monday–Sunday New York week.
 The default On the road view shows trucks that need a video. Missing video,
 To check, Checked and All trucks are one-click filters; search includes units,
 drivers and notes. Receipt and review use checkboxes, with authenticated names
-and timestamps on hover. Notes save inline on blur or Ctrl/Cmd+Enter. Issues
+and timestamps on hover. Notes use a fixed-height field and save on blur or Ctrl/Cmd+Enter. There is no
+history button or explanatory page copy. Issues
 belong in Notes. Videos continue arriving through existing channels.
 
 ## Automatic roster
@@ -52,7 +53,7 @@ PTI has no fleet, dispatch, accounting or provider mutations. GETs never write.
 - GET `/weekly-pti/{week}/{truck}/history` returns the latest 200 edits.
 
 `pti.read` requires Drivers and Trucks read access; `pti.edit` requires `pti.read`.
-Read-only users see disabled checkboxes and can inspect history. Migration 140's
+Read-only users see disabled checkboxes. Audit history remains stored server-side. Migration 140's
 permissions and schema remain unchanged; no data migration is needed.
 
 ## Validation

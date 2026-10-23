@@ -2,13 +2,13 @@
 
 import {useEffect, useRef, useState} from "react";
 import {useRouter, useSearchParams} from "next/navigation";
-import {ChevronLeft, ChevronRight, History, ListChecks, LoaderCircle, Search} from "lucide-react";
+import {ChevronLeft, ChevronRight, ListChecks, LoaderCircle, Search} from "lucide-react";
 import Link from "@/app/components/AccessLink";
-import {changePTI, createPTIWeek, fetchPTIHistory, fetchPTIWeek} from "@/app/lib/api";
-import type {PTIChange, PTIEvent, PTIRow, PTIWeek} from "@/app/lib/types";
+import {changePTI, createPTIWeek, fetchPTIWeek} from "@/app/lib/api";
+import type {PTIChange, PTIRow, PTIWeek} from "@/app/lib/types";
 import {usePermissions} from "@/app/lib/access";
 import {currentChargeWeek, validChargeWeek} from "@/app/accounting/driver-charges/charges";
-import {controlClass, ErrorBanner, ManagementHeader, Modal} from "@/app/components/management/ManagementUI";
+import {controlClass, ErrorBanner, ManagementHeader} from "@/app/components/management/ManagementUI";
 
 const stamp = (value: string | null) => value ? new Date(value).toLocaleString("en-US", {timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"}) : "";
 function shiftWeek(week: string, days: number) {
@@ -31,7 +31,6 @@ export default function WeeklyPTIPage() {
    <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs">Week of <input aria-label="PTI week" type="date" min="2000-01-03" max={current} step={7} value={week} className={controlClass + " w-40"} onChange={e => navigate(e.target.value)}/></label>
    <button className="ui-button" aria-label="Next week" disabled={week >= current} onClick={() => navigate(shiftWeek(week, 7))}><ChevronRight className="h-4 w-4"/></button>
    {week !== current && <button className="ui-button" onClick={() => navigate(current)}>This week</button>}
-   <span className="ml-auto text-xs text-zinc-500">Monday–Sunday</span>
   </div>
   <Checklist key={week} week={week}/>
  </div>;
@@ -42,7 +41,6 @@ function Checklist({week}: {week: string}) {
  const canEdit = usePermissions().includes("pti.edit");
  const [data, setData] = useState<PTIWeek | null>(null), [error, setError] = useState(""), [attempt, setAttempt] = useState(0);
  const [search, setSearch] = useState(""), [filter, setFilter] = useState<Filter>(() => week === currentChargeWeek() ? "required" : "all"), [starting, setStarting] = useState(false);
- const [history, setHistory] = useState<PTIRow | null>(null);
  useEffect(() => {
   const controller = new AbortController();
   fetchPTIWeek(week, controller.signal).then(value => {setData(old => mergeWeek(old, value)); setError("");}).catch(e => {if (!controller.signal.aborted) setError(e.message);});
@@ -68,10 +66,6 @@ function Checklist({week}: {week: string}) {
   {!data ? <div className="py-8 text-sm text-zinc-500">{error ? <button className="ui-button" onClick={() => setAttempt(v => v + 1)}>Retry</button> : "Loading weekly PTI…"}</div> : !data.exists ? <div className="rounded-xl border border-zinc-800 p-6 text-sm text-zinc-400">
    <p>No checklist has been created for this week.</p>{week === currentChargeWeek() && canEdit && <button className="ui-button mt-3" disabled={starting} onClick={() => void start()}>Start this week</button>}
   </div> : <>
-   <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
-    <p>{week === currentChargeWeek() ? "Trucks on the road appear automatically. Home, vacation, shop and unassigned trucks do not need a PTI." : "Saved checklist for this week."}</p>
-    <span className="whitespace-nowrap tabular-nums"><strong className="text-zinc-200">{counts.checked} / {counts.required}</strong> checked</span>
-   </div>
    <div className="flex flex-wrap items-center gap-3">
     <div className="flex max-w-full gap-1 overflow-x-auto whitespace-nowrap" role="group" aria-label="PTI filters">{filters.map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition-colors ${filter === value ? "bg-blue-500/15 text-blue-300" : "text-zinc-400 hover:bg-zinc-800"}`}>{label}<span className="ml-2 tabular-nums opacity-75">{counts[value]}</span></button>)}</div>
     <label className="relative ml-auto min-w-52 flex-1 sm:max-w-xs"><Search aria-hidden className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500"/><input aria-label="Search PTI" placeholder="Search truck, driver or notes" className={controlClass + " pl-9"} value={search} onChange={e => setSearch(e.target.value)}/></label>
@@ -79,17 +73,15 @@ function Checklist({week}: {week: string}) {
    </div>
    <div className="max-h-[calc(100dvh-280px)] overflow-auto rounded-xl border border-zinc-800">
     <table className="w-full min-w-[720px] text-left text-[13px]"><thead className="sticky top-0 z-10 bg-zinc-900 text-xs text-zinc-400"><tr>
-     <th className="w-24 px-4 py-3 font-medium">Truck</th><th className="w-56 px-4 py-3 font-medium">Driver / team</th><th className="w-32 px-3 py-3 text-center font-medium">Video received</th><th className="w-24 px-3 py-3 text-center font-medium">Checked</th><th className="px-4 py-3 font-medium">Notes</th><th className="w-12"><span className="sr-only">History</span></th>
-    </tr></thead><tbody>{rows.map(row => <ChecklistRow key={row.truckId} row={row} canEdit={canEdit} accept={accept} refresh={() => setAttempt(v => v + 1)} history={() => setHistory(row)}/>)}</tbody></table>
+     <th className="w-24 px-4 py-3 font-medium">Truck</th><th className="w-56 px-4 py-3 font-medium">Driver / team</th><th className="w-32 px-3 py-3 text-center font-medium">Video received</th><th className="w-24 px-3 py-3 text-center font-medium">Checked</th><th className="px-4 py-3 font-medium">Notes</th>
+    </tr></thead><tbody>{rows.map(row => <ChecklistRow key={row.truckId} row={row} canEdit={canEdit} accept={accept} refresh={() => setAttempt(v => v + 1)}/>)}</tbody></table>
     {!rows.length && <p className="p-8 text-center text-sm text-zinc-500">{search ? "No trucks match your search." : filter === "missing" ? "All required videos have been received." : filter === "unchecked" ? "No videos waiting to be checked." : "No trucks in this view."}</p>}
    </div>
-   <p className="text-xs text-zinc-500">{canEdit ? "Changes save automatically. Add any issues to Notes. " : "View only. "}Hover over a checkbox to see who recorded it.</p>
   </>}
-  {history && <PTIHistory row={history} close={() => setHistory(null)}/>}
  </>;
 }
 
-function ChecklistRow({row, canEdit, accept, refresh, history}: {row: PTIRow; canEdit: boolean; accept: (row: PTIRow) => void; refresh: () => void; history: () => void}) {
+function ChecklistRow({row, canEdit, accept, refresh}: {row: PTIRow; canEdit: boolean; accept: (row: PTIRow) => void; refresh: () => void}) {
  const [draft, setDraft] = useState<{value: string; base: PTIRow} | null>(null), [pending, setPending] = useState<PTIChange | null>(null), [error, setError] = useState("");
  const saving = useRef(false);
  const notes = draft?.value ?? row.notes;
@@ -116,26 +108,10 @@ function ChecklistRow({row, canEdit, accept, refresh, history}: {row: PTIRow; ca
   <td className="px-4 py-3 align-top">{row.crew.length ? row.crew.map(driver => <div key={driver.id}><Link className="hover:text-blue-300" href={`/drivers/detail?id=${driver.id}`}>{driver.name}</Link></div>) : <span className="text-zinc-500">No driver</span>}</td>
   <td className="px-3 py-2 text-center align-top"><label title={receiptTitle} className="inline-flex min-h-9 min-w-9 items-center justify-center"><input type="checkbox" className={checkboxClass} aria-label={`Truck ${row.truckUnit} video received`} title={receiptTitle} checked={received} disabled={!canEdit || !!pending} onChange={e => void save({received: e.target.checked, ...(!e.target.checked ? {review: "pending"} : {})})}/></label></td>
   <td className="px-3 py-2 text-center align-top"><label title={reviewTitle} className="inline-flex min-h-9 min-w-9 items-center justify-center"><input type="checkbox" className={checkboxClass} aria-label={`Truck ${row.truckUnit} checked`} title={reviewTitle} checked={checked} disabled={!canEdit || !received || !!pending} onChange={e => void save({review: e.target.checked ? "checked" : "pending"})}/></label></td>
-  <td className="min-w-64 px-3 py-2 align-top">{canEdit ? <textarea aria-label={`Truck ${row.truckUnit} notes`} rows={1} maxLength={5000} className="min-h-9 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-2 text-xs placeholder:text-zinc-600 hover:border-zinc-700 focus:border-blue-500 focus:outline-none" placeholder="Add a note…" value={notes} readOnly={!!pending} onChange={e => setDraft(old => ({base: old?.base ?? row, value: e.target.value}))} onBlur={e => {if (dirty && !(e.relatedTarget instanceof HTMLElement && e.currentTarget.closest("tr")?.contains(e.relatedTarget))) void save();}} onKeyDown={e => {if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {e.preventDefault(); void save();}}}/> : <p className="whitespace-pre-wrap px-2 py-2 text-xs text-zinc-400">{row.notes || "—"}</p>}
+  <td className="min-w-64 px-3 py-2 align-top">{canEdit ? <textarea aria-label={`Truck ${row.truckUnit} notes`} rows={1} maxLength={5000} className="h-9 w-full resize-none rounded-lg border border-transparent bg-transparent px-2 py-2 text-xs placeholder:text-zinc-600 hover:border-zinc-700 focus:border-blue-500 focus:outline-none" placeholder="Add a note…" value={notes} readOnly={!!pending} onChange={e => setDraft(old => ({base: old?.base ?? row, value: e.target.value}))} onBlur={e => {if (dirty && !(e.relatedTarget instanceof HTMLElement && e.currentTarget.closest("tr")?.contains(e.relatedTarget))) void save();}} onKeyDown={e => {if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {e.preventDefault(); void save();}}}/> : <p title={row.notes} className="line-clamp-1 px-2 py-2 text-xs text-zinc-400">{row.notes || "—"}</p>}
    {pending && <span role="status" className="flex items-center gap-1 px-2 text-[11px] text-zinc-500"><LoaderCircle className="h-3 w-3 animate-spin"/>Saving…</span>}
    {error && <div role="alert" className="px-2 text-xs text-red-400">{error}{draft && <button className="ml-2 underline" onClick={() => void save({}, row)}>Save my note on the latest entry</button>}</div>}
    {dirty && !pending && <button className="px-2 text-[11px] text-blue-400" onClick={() => void save()}>Save note</button>}
   </td>
-  <td className="px-2 py-2 align-top"><button className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="View history" aria-label={`PTI history truck ${row.truckUnit}`} onClick={history}><History className="h-4 w-4"/></button></td>
  </tr>;
-}
-
-function PTIHistory({row, close}: {row: PTIRow; close: () => void}) {
- const [events, setEvents] = useState<PTIEvent[] | null>(null), [error, setError] = useState("");
- useEffect(() => {const controller = new AbortController(); fetchPTIHistory(row.weekStart, row.truckId, controller.signal).then(setEvents).catch(e => {if (!controller.signal.aborted) setError(e.message);}); return () => controller.abort();}, [row.weekStart, row.truckId]);
- const changes = (event: PTIEvent) => [
-  event.before.received !== event.after.received ? `Video: ${event.after.received ? "Received" : "Not received"}` : "",
-  event.before.review !== event.after.review ? `Review: ${event.after.review === "pending" ? "Not checked" : "Checked"}` : "",
-  event.before.notes !== event.after.notes ? `Notes: ${event.after.notes || "Cleared"}` : "",
-  event.before.eligibility !== event.after.eligibility ? `Earlier eligibility correction: ${event.after.eligibility}` : "",
-  event.before.videoUrl !== event.after.videoUrl ? "Earlier video link updated" : ""
- ].filter(Boolean);
- return <Modal title={`PTI history · Truck ${row.truckUnit}`} isSaving={false} submitLabel="" hideSubmit cancelLabel="Close" onClose={close} onSubmit={e => e.preventDefault()}>
-  {error && <ErrorBanner message={error}/>}<div className="space-y-4 text-xs">{events === null ? <p>Loading history…</p> : !events.length ? <p className="text-zinc-500">No changes yet.</p> : events.map(event => <div key={event.id} className="border-b border-zinc-800 pb-3"><p className="mb-2 font-medium">{event.actorName}<span className="ml-2 font-normal text-zinc-500">{stamp(event.createdAt)} (New York)</span></p>{changes(event).map((line, index) => <p key={index} className="whitespace-pre-wrap break-words text-zinc-400">{line}</p>)}</div>)}</div>
- </Modal>;
 }

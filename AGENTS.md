@@ -2527,7 +2527,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   excluded automatically. Midweek additions and returns are included; saved
   receipt/review/notes and original snapshots survive roster changes. Past weeks
   stay frozen. One-click receipt/checked boxes show actor/time on hover; inline
-  notes hold issues. Links are archived. Versions, idempotency, audit and
+  fixed-height notes hold issues; no history button or explanatory page copy. Links are archived. Versions, idempotency, audit and
   `pti.read/edit` remain enforced; GETs never write. No financial, fleet,
   provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
   Tests: TestWeeklyPTIDatabase, TestPTIEligibility and test-weekly-pti-e2e.mjs.
