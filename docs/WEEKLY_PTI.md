@@ -1,67 +1,64 @@
 # Weekly PTI
 
-Fleet > Weekly PTI is a compact checklist for a Monday–Sunday New York week.
-The default On the road view shows trucks that need a video. Missing video,
-To check, Checked and All trucks are one-click filters; search includes units,
-drivers and notes. Receipt and review use checkboxes. Receipt keeps its actor/time hover. Checked by
-follows Notes and shows the reviewer name, with the New York date and time on hover. Notes use a single-line text input and save on blur or Enter. There is no
-history button or explanatory page copy. Issues
-belong in Notes. Videos continue arriving through existing channels.
+Fleet > Weekly PTI is a truck-by-week matrix. Every recorded week appears as a
+column, oldest to newest, with frozen week headings and truck numbers. Company
+and investor trucks are grouped above owner-operated trucks. All trucks appear,
+including inactive, unassigned, home, vacation and shop trucks. Ownership uses
+the recorded investor/company/driver-owner relationship, never the assigned driver.
 
-## Automatic roster
+Each cell accepts only `/`, `1`, or `0`, enforced by the UI, API and database:
+- `/`: not operational, no driver, or PTI not required; yellow (#ffff00).
+- `1`: sent and checked; green (#00ff00).
+- `0`: not sent; red (#ff0000).
 
-After shared fleet statuses are activated, the startup/minute worker creates
-and reconciles the current week from current fleet state. Active trucks with a
-Ready condition and at least one active, available assigned driver require PTI.
-Home, vacation and other personal unavailability, Shop/OOS/Hold, inactive trucks
-and trucks without an available driver are excluded automatically. Team trucks
-have one row; one available employed crew member is sufficient. Dated assignments
-are evaluated at the refresh time, including team membership and midweek additions.
+Blank cells are unrecorded, never inferred as 0 or /. Manual marks are independent
+of fleet eligibility. Legacy completed native checks display as 1; other unchecked
+legacy records remain blank until explicitly recorded. Existing snapshots and
+audit history remain intact. The current-week worker maintains roster context
+but does not set or overwrite manual marks. Past weeks are never recalculated.
 
-There is no Monday confirmation or manual eligibility override. The existing
-current-week roster, including old Needs confirmation entries, is reconciled on
-the first worker run. Returning trucks reappear. Changes normally appear within
-the worker's one-minute interval plus the page's 30-second refresh.
+Notes remain a single-line input for the selected week. Click a week heading or
+use Notes for to select it. Checked by follows Notes and shows the saved reviewer
+with a New York date/time tooltip. Imported checks do not invent a reviewer or an
+inspection timestamp. Cell hover retains recording attribution and notes.
+There is no history button, eligibility UI, video link, or explanatory page copy.
 
-Reconciliation updates only roster context and automatic eligibility, incrementing
-the row version only when those change. Receipt, reviewer, notes and original
-snapshot fields are preserved. Excluded trucks and their saved work remain under
-All trucks. Prior weeks keep their last stored roster and eligibility; they are
-never reinterpreted using today's statuses. The original snapshot/late-capture
-metadata remains stored for audit but is no longer part of the workflow.
+GET /weekly-pti/matrix returns all recorded weeks, current trucks/ownership and
+saved cells in a consistent read-only transaction. pti.read/edit protect reads
+and writes. Row versions and immutable request receipts prevent stale overwrites
+and duplicate saves. Missing cells for an existing week are created only on an
+explicit version-zero edit. Concurrent creation conflicts. Notes drafts survive
+refresh and conflicts; explicit retry applies a retained note to the latest row.
+Legacy clients cannot overwrite a recorded symbol without supplying it.
 
-## Receipt and review
+## Reviewed Sheets import
 
-A video must be received before it can be checked. Unchecking receipt also clears
-its review. Review attribution changes only when the checkbox changes; editing
-notes preserves who checked it. Legacy Issues found reviews display as checked,
-with their original notes retained. Legacy video URLs remain archived and cannot
-be edited. No videos are uploaded and no driver messages are sent.
+The user authorized the last four columns of Fleet board / Weekly Report:
+27-Sep, 05-Oct, 12-Oct and 19-Oct, mapped to Monday weeks 2026-09-28, 2026-10-05,
+2026-10-12 and 2026-10-19. The first source header is an inconsistent Sunday;
+its neighboring columns identify the corresponding Monday week.
 
-Every edit uses an optimistic row version and request UUID. Concurrent changes
-conflict, retries are idempotent, no-ops add no audit, and append-only events retain
-before/after values and actors. Automatic roster updates do not alter edit history.
-PTI has no fleet, dispatch, accounting or provider mutations. GETs never write.
+backend/scripts/prepare-weekly-pti-import.mjs prepares SQL and a comparison from
+private source and current truck snapshots. Keep these files outside Git.
+Exact units and unique exact VINs resolve identities; user-reviewed aliases and
+duplicate-cell resolutions are explicit input. Source blanks remain blank.
+Unknown marks and conflicting duplicates are held instead of guessed.
+SQL locks PTI rows, rechecks truck identity, preserves any native edit, completed
+check or note, records source digest/rows and appends import audit events.
+Reapplying the same source preserves already imported cells. No fleet records,
+ownership, eligibility, financial records or external services are changed.
 
-## API and access
-
-- GET `/weekly-pti?weekStart=YYYY-MM-DD` reads a selected Monday week.
-- POST `/weekly-pti/weeks` creates/reconciles only the current week, idempotently.
-- PATCH `/weekly-pti/{week}/{truck}` accepts `received`, `review`, `notes`, `version`
-  and UUID `requestId`. Legacy eligibility/link fields are tolerated only when
-  unchanged; they cannot override automatic eligibility or edit archived links.
-- GET `/weekly-pti/{week}/{truck}/history` returns the latest 200 edits.
-
-`pti.read` requires Drivers and Trucks read access; `pti.edit` requires `pti.read`.
-Read-only users see disabled checkboxes. Audit history remains stored server-side. Migration 140's
-permissions and schema remain unchanged; no data migration is needed.
+Migration 144 adds the database mark constraint. The original migration 140
+and append-only audit tables remain compatible.
 
 ## Validation
 
-`TestWeeklyPTIDatabase` uses disposable local `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`
-for fresh/migrated schemas as `mserp_app`. It covers automatic teams, unavailable
-trucks/drivers, midweek additions, return to road, record preservation, frozen
-prior weeks, versions, retries, attribution and no-op refreshes. `TestPTIEligibility`
-covers eligibility and New York DST weeks. After a `/api` frontend build, start
-`scripts/review-local.mjs`, then run `node scripts/test-weekly-pti-e2e.mjs` with
-its private access file. Synthetic mutations stay in disposable test schemas.
+- go test ./...
+- go vet ./...
+- MSERP_DRIVER_BOARD_TEST_DATABASE_URL: local disposable _test database;
+  go test ./internal/repository -run 'TestWeeklyPTIDatabase|TestPTIEligibility' -count=1
+- Frontend npm run lint and NEXT_PUBLIC_API_URL=/api npm run build.
+- Start scripts/review-local.mjs, then run scripts/test-weekly-pti-e2e.mjs with
+  its access file. Covers all trucks/weeks, ownership grouping, marks/colors,
+  single-line notes, reviewer attribution, historical cells, retries/conflicts,
+  mobile scrolling and authorization boundaries.

@@ -314,6 +314,46 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 				}
 			}
 			financialAfter := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
+			matrix, err := repo.PTIMatrix(ctx)
+			if err != nil || len(matrix.Trucks) != 9 || len(matrix.Weeks) != 2 {
+				t.Fatal("matrix omitted trucks/weeks", matrix, err)
+			}
+			var current PTIRow
+			for _, row := range matrix.Rows {
+				if row.WeekStart == week && row.TruckID == selected.TruckID {
+					current = row
+				}
+			}
+			for i, mark := range []string{"/", "0", "1"} {
+				input := PTIChange{RequestID: fmt.Sprintf("93000000-0000-4000-8000-%012d", 100+i), Version: current.Version, Mark: &mark, Notes: current.Notes}
+				current, err = repo.ChangePTI(ctx, week, current.TruckID, actor, input)
+				if err != nil || current.Mark == nil || *current.Mark != mark || current.Received != (mark == "1") {
+					t.Fatal("mark save", current, err)
+				}
+				replayed, e := repo.ChangePTI(ctx, week, current.TruckID, actor, input)
+				if e != nil || replayed.Version != current.Version {
+					t.Fatal("mark retry", e)
+				}
+			}
+			badMark := "2"
+			if _, err = repo.ChangePTI(ctx, week, current.TruckID, actor, PTIChange{RequestID: "93000000-0000-4000-8000-000000000200", Version: current.Version, Mark: &badMark}); err == nil {
+				t.Fatal("free-form PTI accepted")
+			}
+			if _, err = pool.Exec(ctx, `UPDATE weekly_pti_rows SET data=jsonb_set(data,'{mark}','"bad"') WHERE week_start=$1 AND truck_id=$2`, week, current.TruckID); err == nil {
+				t.Fatal("database accepted invalid mark")
+			}
+			// A truck added after an old week can be recorded explicitly, never inferred.
+			newTruck := scalar(`INSERT INTO trucks(unit_number) VALUES('PTI-later') RETURNING id::text`)
+			mark := "/"
+			newInput := PTIChange{RequestID: "93000000-0000-4000-8000-000000000201", Version: 0, Mark: &mark}
+			created, e := repo.ChangePTI(ctx, oldWeek.Format("2006-01-02"), newTruck, actor, newInput)
+			if e != nil || created.Mark == nil || *created.Mark != "/" {
+				t.Fatal("new historical cell", created, e)
+			}
+			newInput.RequestID = "93000000-0000-4000-8000-000000000202"
+			if _, e = repo.ChangePTI(ctx, oldWeek.Format("2006-01-02"), newTruck, actor, newInput); !errors.Is(e, ErrPTIConflict) {
+				t.Fatal("zero-version overwrite", e)
+			}
 			if financialBefore != financialAfter {
 				t.Fatal("PTI changed financial/provider state", financialBefore, financialAfter)
 			}

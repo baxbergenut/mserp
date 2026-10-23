@@ -2519,20 +2519,21 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ### Shared fleet statuses and history (137)
 
-- Weekly PTI uses migration 140, repository/httpapi `weekly_pti*`, and
-  `/fleet/weekly-pti`. A startup/minute worker reconciles the current week's
-  truck/team roster from shared fleet availability and condition. Only active,
-  ready trucks with an available employed driver require PTI. No manual Monday
-  eligibility confirmation; Home/Vacation/Shop/OOS/Hold/unassigned trucks are
-  excluded automatically. Midweek additions and returns are included; saved
-  receipt/review/notes and original snapshots survive roster changes. Past weeks
-  stay frozen. Receipt keeps its actor/time hover; Checked by follows Notes with
-  the reviewer name and New York date/time on hover. Inline
-  single-line notes inputs hold issues; no history button or explanatory page copy. Links are archived. Versions, idempotency, audit and
-  `pti.read/edit` remain enforced; GETs never write. No financial, fleet,
-  provider or outbound-message side effects. See docs/WEEKLY_PTI.md.
-  Tests: TestWeeklyPTIDatabase, TestPTIEligibility and test-weekly-pti-e2e.mjs.
-
+- Weekly PTI uses migrations 140/144, repository/httpapi `weekly_pti*`, and
+  `/fleet/weekly-pti`. The matrix lists every truck and every recorded week,
+  with company/investor trucks above owner-operated trucks. Grouping uses the
+  recorded owner, never driver availability. Restricted marks are / (not required,
+  yellow), 1 (sent and checked, green), and 0 (not sent, red). Blank means unrecorded.
+  Legacy eligibility snapshots remain stored but never filter the matrix or set marks.
+  The startup/minute worker maintains the current roster without changing manual marks.
+  Notes are single-line inputs for the selected week; Checked by follows Notes with
+  date/time hover. Imported checks have no invented reviewer/time. Source provenance,
+  optimistic versions, idempotency, immutable audit and pti.read/edit are preserved.
+  GET /weekly-pti/matrix is read-only; missing historical cells are created only on
+  explicit edits to existing weeks. No fleet, financial or provider writes occur.
+  `backend/scripts/prepare-weekly-pti-import.mjs` prepares the reviewed four-week
+  Sheets import and comparison outside Git, preserving native edits and source blanks.
+  See docs/WEEKLY_PTI.md. Tests: TestWeeklyPTIDatabase and test-weekly-pti-e2e.mjs.
 - Employment, driver availability, truck condition, and dispatch detail remain
   separate. `fleet_status_rules` owns the mapping; database triggers synchronize
   profile, board, crew, and work-order writes. Left requires explicit termination;

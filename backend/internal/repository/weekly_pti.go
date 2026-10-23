@@ -21,26 +21,28 @@ type PTICrew struct {
 	Employment   string `json:"employment"`
 }
 type PTIRow struct {
-	WeekStart           string     `json:"weekStart"`
-	TruckID             string     `json:"truckId"`
-	TruckUnit           string     `json:"truckUnit"`
-	Crew                []PTICrew  `json:"crew"`
-	Condition           string     `json:"condition"`
-	SnapshotEligibility string     `json:"snapshotEligibility"`
-	SnapshotReason      string     `json:"snapshotReason"`
-	Eligibility         string     `json:"eligibility"`
-	EligibilityReason   string     `json:"eligibilityReason"`
-	Received            bool       `json:"received"`
-	ReceivedAt          *time.Time `json:"receivedAt"`
-	ReceivedBy          string     `json:"receivedBy"`
-	Review              string     `json:"review"`
-	ReviewedAt          *time.Time `json:"reviewedAt"`
-	ReviewedBy          string     `json:"reviewedBy"`
-	VideoURL            string     `json:"videoUrl"`
-	Notes               string     `json:"notes"`
-	UpdatedAt           *time.Time `json:"updatedAt"`
-	UpdatedBy           string     `json:"updatedBy"`
-	Version             int64      `json:"version"`
+	ImportSource        json.RawMessage `json:"importSource,omitempty"`
+	Mark                *string         `json:"mark,omitempty"`
+	WeekStart           string          `json:"weekStart"`
+	TruckID             string          `json:"truckId"`
+	TruckUnit           string          `json:"truckUnit"`
+	Crew                []PTICrew       `json:"crew"`
+	Condition           string          `json:"condition"`
+	SnapshotEligibility string          `json:"snapshotEligibility"`
+	SnapshotReason      string          `json:"snapshotReason"`
+	Eligibility         string          `json:"eligibility"`
+	EligibilityReason   string          `json:"eligibilityReason"`
+	Received            bool            `json:"received"`
+	ReceivedAt          *time.Time      `json:"receivedAt"`
+	ReceivedBy          string          `json:"receivedBy"`
+	Review              string          `json:"review"`
+	ReviewedAt          *time.Time      `json:"reviewedAt"`
+	ReviewedBy          string          `json:"reviewedBy"`
+	VideoURL            string          `json:"videoUrl"`
+	Notes               string          `json:"notes"`
+	UpdatedAt           *time.Time      `json:"updatedAt"`
+	UpdatedBy           string          `json:"updatedBy"`
+	Version             int64           `json:"version"`
 }
 type PTIWeek struct {
 	WeekStart    string     `json:"weekStart"`
@@ -51,14 +53,15 @@ type PTIWeek struct {
 	Rows         []PTIRow   `json:"rows"`
 }
 type PTIChange struct {
-	RequestID         string `json:"requestId"`
-	Version           int64  `json:"version"`
-	Eligibility       string `json:"eligibility"`
-	EligibilityReason string `json:"eligibilityReason"`
-	Received          bool   `json:"received"`
-	Review            string `json:"review"`
-	VideoURL          string `json:"videoUrl"`
-	Notes             string `json:"notes"`
+	Mark              *string `json:"mark,omitempty"`
+	RequestID         string  `json:"requestId"`
+	Version           int64   `json:"version"`
+	Eligibility       string  `json:"eligibility"`
+	EligibilityReason string  `json:"eligibilityReason"`
+	Received          bool    `json:"received"`
+	Review            string  `json:"review"`
+	VideoURL          string  `json:"videoUrl"`
+	Notes             string  `json:"notes"`
 }
 type PTIEvent struct {
 	ID        string    `json:"id"`
@@ -216,8 +219,18 @@ func (r *FleetRepository) PTIWeek(ctx context.Context, week string) (PTIWeek, er
 }
 
 func (in *PTIChange) Validate() error {
+	if in.Mark != nil {
+		if *in.Mark != "/" && *in.Mark != "1" && *in.Mark != "0" {
+			return chargeInvalid("PTI must be /, 1 or 0")
+		}
+		in.Received = *in.Mark == "1"
+		in.Review = "pending"
+		if in.Received {
+			in.Review = "checked"
+		}
+	}
 	in.Notes = strings.TrimSpace(in.Notes)
-	if in.Version < 1 || len(in.Notes) > 5000 || strings.ContainsRune(in.Notes, '\x00') {
+	if in.Version < 0 || (in.Version == 0 && in.Mark == nil) || len(in.Notes) > 5000 || strings.ContainsRune(in.Notes, '\x00') {
 		return chargeInvalid("Invalid PTI version or notes length")
 	}
 	if in.Review != "pending" && in.Review != "checked" && in.Review != "issues" {
@@ -243,6 +256,18 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	}
 	defer tx.Rollback(ctx)
 	// Lock only this checklist row; fleet, dispatch and financial records are read-only.
+	if in.Version == 0 && in.Mark != nil {
+		created, e := tx.Exec(ctx, `INSERT INTO weekly_pti_rows(week_start,truck_id,data)
+ SELECT w.week_start,t.id,jsonb_build_object('weekStart',w.week_start::text,'truckId',t.id::text,'truckUnit',t.unit_number,'crew','[]'::jsonb,'eligibility','unknown','snapshotEligibility','unknown','review','pending','received',false,'notes','')
+ FROM weekly_pti_weeks w CROSS JOIN trucks t WHERE w.week_start=$1 AND t.id=$2
+ ON CONFLICT DO NOTHING`, week, truck)
+		if e != nil {
+			return row, e
+		}
+		if created.RowsAffected() == 1 {
+			in.Version = 1
+		}
+	}
 	var raw []byte
 	var version int64
 	err = tx.QueryRow(ctx, `SELECT version,data FROM weekly_pti_rows WHERE week_start=$1 AND truck_id=$2 FOR UPDATE`, week, truck).Scan(&version, &raw)
@@ -274,7 +299,11 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	if (in.Eligibility != "" && in.Eligibility != row.Eligibility) || (in.VideoURL != "" && in.VideoURL != row.VideoURL) {
 		return row, chargeInvalid("PTI eligibility is automatic; video links are no longer editable")
 	}
-	if row.Received == in.Received && row.Review == in.Review && row.Notes == in.Notes {
+	if row.Mark != nil && in.Mark == nil {
+		return row, chargeInvalid("Reload PTI and choose /, 1 or 0")
+	}
+	sameMark := (row.Mark == nil && in.Mark == nil) || (row.Mark != nil && in.Mark != nil && *row.Mark == *in.Mark)
+	if sameMark && row.Received == in.Received && row.Review == in.Review && row.Notes == in.Notes {
 		return row, tx.Commit(ctx)
 	}
 	before := row
@@ -301,6 +330,7 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 		}
 	}
 	row.Received = in.Received
+	row.Mark = in.Mark
 	row.Review = review
 	row.Notes = in.Notes
 	row.UpdatedAt = &now

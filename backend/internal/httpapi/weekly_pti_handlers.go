@@ -21,6 +21,14 @@ func (h fleetHandler) ptiWeek(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, value)
 }
+func (h fleetHandler) ptiMatrix(w http.ResponseWriter, r *http.Request) {
+	value, err := h.repo.PTIMatrix(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, 200, value)
+}
 func (h fleetHandler) createPTIWeek(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		WeekStart string `json:"weekStart"`

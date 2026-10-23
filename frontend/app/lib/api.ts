@@ -700,6 +700,7 @@ export const saveProgramTrucks=(program:string,items:import("./types").ProgramTr
 export const saveProgramBaseline=(program:string,truck:import("./types").ProgramTruck,lastDate:string,lastMiles:number|null)=>apiRequest<void>(`/maintenance/programs/${program}/trucks/${truck.truckId}/baseline`,{method:"PUT",body:JSON.stringify({memberVersion:truck.memberVersion,recordId:truck.lastRecordId,recordVersion:truck.recordVersion,baselineVersion:truck.baselineVersion,lastDate,lastMiles})});
 export const fetchProgramAssignees=()=>apiRequest<{people:{id:string;name:string}[];roles:{id:string;name:string}[]}>("/maintenance/program-assignees");
 export const fetchPTIWeek = (weekStart:string,signal?:AbortSignal) => apiRequest<import("./types").PTIWeek>(`/weekly-pti?${new URLSearchParams({weekStart})}`,{signal});
+export const fetchPTIMatrix = (signal?:AbortSignal) => apiRequest<import("./types").PTIMatrix>("/weekly-pti/matrix",{signal});
 export const createPTIWeek = (weekStart:string) => apiRequest<import("./types").PTIWeek>("/weekly-pti/weeks",{method:"POST",body:JSON.stringify({weekStart})});
 export const changePTI = (week:string,truck:string,input:import("./types").PTIChange) => apiRequest<import("./types").PTIRow>(`/weekly-pti/${week}/${truck}`,{method:"PATCH",body:JSON.stringify(input)});
 export const fetchPTIHistory = (week:string,truck:string,signal?:AbortSignal) => apiRequest<import("./types").PTIEvent[]>(`/weekly-pti/${week}/${truck}/history`,{signal});

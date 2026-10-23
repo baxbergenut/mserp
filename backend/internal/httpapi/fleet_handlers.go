@@ -27,6 +27,7 @@ type fleetHandler struct {
 func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.FleetRepository) {
 	handler := fleetHandler{logger: logger, repo: repo}
 	r.Get("/weekly-pti", handler.ptiWeek)
+	r.Get("/weekly-pti/matrix", handler.ptiMatrix)
 	r.Post("/weekly-pti/weeks", handler.createPTIWeek)
 	r.Patch("/weekly-pti/{week}/{truck}", handler.changePTI)
 	r.Get("/weekly-pti/{week}/{truck}/history", handler.ptiHistory)
