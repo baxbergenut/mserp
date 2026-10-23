@@ -2604,7 +2604,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   never legacy type booleans or name matching. Retain only an existing own-truck
   assignment; never recreate an ended one. Other trucks keep their active flag
   when their terminated driver is released. Rehire never reactivates trucks.
-- Owned trucks with active direct or current team drivers stay unchanged and get
+- Active investor fleets remain independent of linked driver employment. Only
+  the investor's own current operating assignments enter driver offboarding;
+  hired-driver and unassigned trucks receive no termination tasks or status changes.
+  Inactive investors' owned trucks still enter review. Eligible trucks with active direct or current team drivers stay unchanged and get
   private `driver_offboarding` review tasks under existing system-task assignment
   permissions. Migration 148 stores per-termination/truck outcome receipts with
   before/after snapshots; retries do not duplicate tasks or revisit held trucks.
