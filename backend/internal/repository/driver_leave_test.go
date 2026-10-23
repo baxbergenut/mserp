@@ -9,15 +9,18 @@ import (
 )
 
 func TestDriverLeaveDates(t *testing.T) {
-	for _, p := range []DriverLeavePlan{{HomeStart: "2026-02-30", HomeEnd: "2026-03-01"}, {HomeStart: "2026-10-23"}, {HomeStart: "2026-10-24", HomeEnd: "2026-10-23"}, {VacationReturn: "2026-13"}, {VacationReturn: "2026-02-30"}} {
+	for _, p := range []DriverLeavePlan{{HomeStart: "2026-02-30", HomeEnd: "2026-03-01"}, {HomeEnd: "2026-10-23"}, {HomeStart: "2026-10-24", HomeEnd: "2026-10-23"}, {VacationReturn: "2026-13"}, {VacationReturn: "2026-02-30"}} {
 		if p.Validate() == nil {
 			t.Fatalf("accepted invalid plan %+v", p)
 		}
 	}
-	for _, p := range []DriverLeavePlan{{}, {HomeStart: "2026-10-23", HomeEnd: "2026-10-23"}, {VacationReturn: "2026-12"}, {VacationReturn: "2026-12-31"}} {
+	for _, p := range []DriverLeavePlan{{}, {HomeStart: "2026-10-23"}, {HomeStart: "2026-10-23", HomeEnd: "2026-10-23"}, {VacationReturn: "2026-12"}, {VacationReturn: "2026-12-31"}} {
 		if err := p.Validate(); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if got := leaveReturnDeadline(&DriverLeavePlan{HomeStart: "2026-01-01"}, "home", "2026-10-23"); got != "" {
+		t.Fatal("unknown home return established a deadline", got)
 	}
 	if got := leaveReturnDeadline(&DriverLeavePlan{VacationReturn: "2028-02"}, "vacation", "2028-03-01"); got != "2028-02-29" {
 		t.Fatal(got)
@@ -49,8 +52,28 @@ func testDriverLeaveWorkflow(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if err != nil {
 		t.Fatal(err)
 	}
+	unknown, err := board.Save(ctx, []DriverBoardEntry{{DriverID: driver.ID, Status: "HOME", StatusEdited: true, LeavePlan: &DriverLeavePlan{HomeStart: "2026-10-20"}}}, actor)
+	if err != nil {
+		t.Fatal("board rejected unknown return", err)
+	}
+	unknownCurrent, err := fleet.GetDriver(ctx, driver.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknownCurrent, err = fleet.ChangeAvailability(ctx, driver.ID, actor, FleetStatusChange{Status: "home", Version: unknownCurrent.StatusVersion, LeavePlan: &DriverLeavePlan{HomeStart: "2026-10-19"}, LeavePlanVersion: unknown[0].Version})
+	if err != nil || unknownCurrent.LeavePlan.HomeEnd != "" {
+		t.Fatal("profile rejected unknown return", err)
+	}
+	future, _ := time.Parse(time.RFC3339, "2026-11-01T12:00:00Z")
+	if err = tasks.RefreshDriverLeaveTasks(ctx, future); err != nil {
+		t.Fatal(err)
+	}
+	var reminders int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM system_task_records WHERE kind='driver_leave_return' AND service_driver_id=$1 AND completed_at IS NULL`, driver.ID).Scan(&reminders); err != nil || reminders != 0 {
+		t.Fatal("unknown return created an overdue task", reminders, err)
+	}
 	plan := &DriverLeavePlan{HomeStart: "2026-10-20", HomeEnd: "2026-10-23"}
-	saved, err := board.Save(ctx, []DriverBoardEntry{{DriverID: driver.ID, Status: "HOME", StatusEdited: true, LeavePlan: plan}}, actor)
+	saved, err := board.Save(ctx, []DriverBoardEntry{{DriverID: driver.ID, Status: "HOME", StatusEdited: true, LeavePlan: plan, Version: unknownCurrent.LeavePlanVersion}}, actor)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,9 +49,6 @@ func (request *driverBoardRequest) validate() error {
 		if err := e.LeavePlan.Validate(); err != nil {
 			return err
 		}
-		if e.StatusEdited && (e.Status == "HOME" || e.Status == "HOME (YARD)") && (e.LeavePlan == nil || e.LeavePlan.HomeEnd == "") {
-			return errors.New("Choose the date the driver will be back")
-		}
 		switch e.Status {
 		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT", "HOLD":
 		// Retain existing values during unrelated autosaves and history recovery.

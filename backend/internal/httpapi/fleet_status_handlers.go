@@ -78,10 +78,6 @@ func (h fleetHandler) changeAvailability(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, 400, err.Error())
 		return
 	}
-	if in.Status == "home" && (in.LeavePlan == nil || in.LeavePlan.HomeEnd == "") {
-		writeAPIError(w, 400, "Choose the date the driver will be back")
-		return
-	}
 	session, _ := authSessionFromContext(r.Context())
 	v, e := h.repo.ChangeAvailability(r.Context(), id, session.User.ID, in)
 	if e != nil {

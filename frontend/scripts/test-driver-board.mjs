@@ -99,6 +99,9 @@ const leaveSource = fs.readFileSync(new URL('../app/lib/driverLeave.ts', import.
 const leaveJS = ts.transpileModule(leaveSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
 const {formatDriverLeave,leaveToday,leaveDate} = await import('data:text/javascript;base64,'+Buffer.from(leaveJS).toString('base64'));
 const today='2026-10-23',home={homeStart:today,homeEnd:'2026-10-25'};
+assert.equal(formatDriverLeave({homeStart:today},'READY','',today),'HOME FRI');
+assert.equal(formatDriverLeave({homeStart:today},'HOME','',today),'BACK TBD');
+assert.equal(formatDriverLeave({homeStart:'2026-10-25'},'HOME','',today),'HOME SUN');
 assert.equal(formatDriverLeave(home,'READY','',today),'HOME FRI');
 assert.equal(formatDriverLeave(home,'HOME','',today),'BACK SUN');
 assert.equal(formatDriverLeave(home,'HOME (YARD)','','2026-10-22'),'HOME FRI');

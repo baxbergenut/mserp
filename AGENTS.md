@@ -2547,8 +2547,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   HOME FRI/BACK TUE, otherwise day/month. Home switches to Back only once its
   start has arrived and status is Home. Vacation returns accept a date, month,
   or unknown. Legacy home_time text stays until explicitly replaced/cleared.
-- Board and driver-profile availability dialogs share date fields. Home requires
-  a return date when selected; vacation remains optional. Profile saves fence
+- Board and driver-profile availability dialogs share date fields. Home back dates
+  and vacation returns are optional; unknown Home returns show BACK TBD and create
+  no overdue reminder. Profile saves fence
   both statusVersion and leavePlanVersion. Dates, status, history/undo and SSE
   retain the existing atomic version/audit boundaries; no date changes status.
 - A startup/minute cache-only driver-leave-tasks worker creates one overdue task

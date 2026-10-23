@@ -15,6 +15,6 @@ export function DriverLeaveFields({ plan, onChange, vacation, disabled = false }
   </div>;
   return <div className="grid grid-cols-2 gap-3">
     <Field label="Home start date"><input aria-label="Home start date" required className={controlClass} disabled={disabled} type="date" min="2000-01-01" max={plan.homeEnd || "2100-12-31"} value={plan.homeStart ?? ""} onChange={e => onChange({ ...plan, homeStart: e.target.value })} /></Field>
-    <Field label="Back date"><input aria-label="Back date" required className={controlClass} disabled={disabled} type="date" min={plan.homeStart || "2000-01-01"} max="2100-12-31" value={plan.homeEnd ?? ""} onChange={e => onChange({ ...plan, homeEnd: e.target.value })} /></Field>
+    <Field label="Back date (optional)" hint="Leave blank if unknown."><input aria-label="Back date" className={controlClass} disabled={disabled} type="date" min={plan.homeStart || "2000-01-01"} max="2100-12-31" value={plan.homeEnd ?? ""} onChange={e => onChange({ ...plan, homeEnd: e.target.value })} /></Field>
   </div>;
 }

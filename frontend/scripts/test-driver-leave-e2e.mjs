@@ -27,16 +27,19 @@ try{
 
  const row=page.getByLabel(driver.fullName+' · Home time',{exact:true});
  await page.goto(access.base+'/driver-board');await row.click();
- await page.getByLabel('Home start date',{exact:true}).fill(today);await page.getByLabel('Back date',{exact:true}).fill(today);
+ await page.getByLabel('Home start date',{exact:true}).fill(today);await page.getByLabel('Back date',{exact:true}).fill('');
  await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^HOME /);
  await page.reload();await expect(row).toHaveText(/^HOME /);
  const status=page.getByLabel(driver.fullName+' · Status',{exact:true});
  await status.selectOption('HOME');await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect((await api('get',boardPath)).entries.find(e=>e.driverId===driver.id).status).not.toBe('HOME');
- await status.selectOption('HOME');await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^BACK /);
+ await status.selectOption('HOME');await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText('BACK TBD');
+ await page.reload();await expect(row).toHaveText('BACK TBD');
  await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
  await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();
- await page.getByLabel('Availability',{exact:true}).selectOption('vacation');await page.getByLabel('Vacation return precision').selectOption('month');await page.getByLabel('Back month',{exact:true}).fill('2027-02');await page.getByRole('button',{name:'Save status',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByLabel('Availability',{exact:true}).selectOption('home');await page.getByLabel('Back date',{exact:true}).fill('');await page.getByRole('button',{name:'Save status',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect((await api('get','/drivers/'+driver.id)).leavePlan.homeEnd??'').toBe('');
+ await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('vacation');await page.getByLabel('Vacation return precision').selectOption('month');await page.getByLabel('Back month',{exact:true}).fill('2027-02');await page.getByRole('button',{name:'Save status',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  let personal=await api('get','/drivers/'+driver.id);expect(personal.leavePlan.vacationReturn).toBe('2027-02');
  await page.goto(access.base+'/driver-board');await expect(row).toHaveText('BACK FEB 2027');
  await status.selectOption('VACATION');await page.getByLabel('Vacation return precision').selectOption('date');await page.getByLabel('Back date',{exact:true}).fill(today);await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^BACK /);
