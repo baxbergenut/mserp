@@ -6,10 +6,11 @@ const [sourceFile,trucksFile,out]=process.argv.slice(2);
 if(!out)throw Error('Supply source JSON, verified truck JSON, and output prefix');
 const read=p=>JSON.parse(readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 const source=read(sourceFile),trucks=read(trucksFile);
-const weeks=['2026-09-28','2026-10-05','2026-10-12','2026-10-19'];
-if(JSON.stringify(source.values[0])!==JSON.stringify(['27-Sep','05-Oct','12-Oct','19-Oct']))throw Error('Unexpected source headers; review week mapping');
+const mapping=source.weekMapping??{'27-Sep':'2026-09-28','05-Oct':'2026-10-05','12-Oct':'2026-10-12','19-Oct':'2026-10-19'};
+const weeks=Object.values(mapping);
+if(!weeks.length||new Set(weeks).size!==weeks.length||weeks.some(w=>!/^\d{4}-\d{2}-\d{2}$/.test(w)||new Date(w+'T12:00:00Z').getUTCDay()!==1)||JSON.stringify(source.values[0])!==JSON.stringify(Object.keys(mapping)))throw Error('Unexpected source headers; review week mapping');
 const sheetTrucks=source.truckList.slice(1).filter(r=>r[1]&&r[4]);
-const report={source:'Fleet board / Weekly Report / HD:HG',weekMapping:{'27-Sep':'2026-09-28','05-Oct':'2026-10-05','12-Oct':'2026-10-12','19-Oct':'2026-10-19'},appTrucks:trucks.length,sheetRows:source.units.length,matches:[],unmatched:[],conflicts:[],invalid:[],entries:[],appOnly:[]};
+const report={source:source.range??'Fleet board / Weekly Report / HD:HG',weekMapping:mapping,appTrucks:trucks.length,sheetRows:source.units.length,matches:[],unmatched:[],conflicts:[],invalid:[],entries:[],appOnly:[]};
 const grouped=new Map();
 for(const row of source.units){
  const exact=trucks.filter(t=>t.unit===row.unit),identity=sheetTrucks.filter(t=>t[1]===row.unit),vins=[...new Set(identity.map(t=>t[4]))];

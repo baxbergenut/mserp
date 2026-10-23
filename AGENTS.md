@@ -2529,7 +2529,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   yellow), 1 (sent and checked, green), and 0 (not sent, red). Blank means unrecorded.
   Legacy eligibility snapshots remain stored but never filter the matrix or set marks.
   The startup/minute worker maintains the current roster without changing manual marks.
-  The grid has 64px week cells and fills the available page height. Notes and
+  Direct typing or a single-symbol paste replaces and saves a cell; other values and deletion are blocked. The grid has 64px week cells and fills the available page height. Notes and
   Checked by are hidden; stored notes/attribution survive edits. Source provenance,
   optimistic versions, idempotency, immutable audit and pti.read/edit are preserved.
   GET /weekly-pti/matrix is read-only; missing historical cells are created only on

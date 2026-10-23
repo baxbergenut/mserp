@@ -25,7 +25,7 @@ try{
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date()),monday=new Date(today+'T12:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);const week=monday.toISOString().slice(0,10),path='/weekly-pti?weekStart='+week;
 
  const initial=await api('post','/weekly-pti/weeks',{weekStart:week});
- const weeks=[3,2,1,0].map(n=>{const d=new Date(monday);d.setUTCDate(d.getUTCDate()-7*n);return d.toISOString().slice(0,10);});
+ const weeks=[8,7,6,5,4,3,2,1,0].map(n=>{const d=new Date(monday);d.setUTCDate(d.getUTCDate()-7*n);return d.toISOString().slice(0,10);});
  sql(`INSERT INTO weekly_pti_weeks(week_start,created_by,late_snapshot) SELECT d::date,'Fixture',true FROM unnest(ARRAY[${weeks.map(w=>"'"+w+"'").join(',')}]) d ON CONFLICT DO NOTHING;`);
  let target=initial.rows.find(r=>r.truckUnit==='102');
  const writePath=`/weekly-pti/${week}/${target.truckId}`;
@@ -39,12 +39,19 @@ try{
  const groupNames=await page.locator('tbody').evaluateAll(elements=>elements.map(e=>e.getAttribute('aria-label')));expect(groupNames).toEqual(['Company & investor trucks','Owner-operated trucks']);
  for(const truck of matrix.trucks){await expect(page.getByRole('rowgroup',{name:truck.ownership==='owner_operator'?'Owner-operated trucks':'Company & investor trucks',exact:true}).getByRole('row',{name:'Truck '+truck.unit,exact:true})).toBeVisible();}
  await expect(page.getByRole('button',{name:'Previous week',exact:true})).toHaveCount(0);
- expect(await cell.locator('option').evaluateAll(options=>options.filter(o=>!o.disabled).map(o=>o.value))).toEqual(['/','1','0']);
+ expect(await cell.evaluate(e=>e.type)).toBe('text');
+ await expect(page.locator('table select')).toHaveCount(0);
  for(const [mark,color] of [['/','rgb(255, 255, 0)'],['0','rgb(255, 0, 0)'],['1','rgb(0, 255, 0)']]){
-  await cell.selectOption(mark);await expect(cell).toBeEnabled();await expect(cell).toHaveValue(mark);
+  await cell.press(mark);await expect(cell).not.toHaveAttribute('aria-busy','true');await expect(cell).toHaveValue(mark);
   await expect.poll(()=>cell.evaluate(e=>getComputedStyle(e.parentElement).backgroundColor)).toBe(color);
  }
- await expect(page.locator('thead th')).toHaveCount(5);
+ await cell.press('2');await cell.press('x');await cell.press('Backspace');await expect(cell).toHaveValue('1');
+ await cell.fill('10');await expect(cell).toHaveValue('1');
+ await cell.evaluate(e=>{const data=new DataTransfer();data.setData('text/plain','10');e.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});await expect(cell).toHaveValue('1');
+ await cell.evaluate(e=>{const data=new DataTransfer();data.setData('text/plain','0');e.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});await expect(cell).toHaveValue('0');await expect(cell).not.toHaveAttribute('aria-busy','true');
+ await cell.press('1');await expect(cell).toHaveValue('1');await expect(cell).not.toHaveAttribute('aria-busy','true');
+ await cell.press('Shift+Tab');await expect(page.getByLabel('Truck 102 PTI '+weeks[7],{exact:true})).toBeFocused();
+ await expect(page.locator('thead th')).toHaveCount(10);
  await expect(page.getByRole('columnheader',{name:'Checked by',exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Notes week',{exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Truck 102 notes',{exact:true})).toHaveCount(0);
@@ -53,20 +60,20 @@ try{
  const table=page.getByRole('table',{name:'Weekly PTI matrix',exact:true});
  await expect.poll(()=>table.evaluate(el=>Math.round(el.querySelector('td').getBoundingClientRect().width))).toBe(64);
  await expect.poll(()=>table.evaluate(el=>Math.round(window.innerHeight-el.parentElement.getBoundingClientRect().bottom))).toBeLessThanOrEqual(32);
- const oldCell=page.getByLabel('Truck 102 PTI '+weeks[0],{exact:true});await oldCell.selectOption('/');await expect(oldCell).toBeEnabled();await expect(oldCell).toHaveValue('/');await expect(cell).toHaveValue('1');
+ const oldCell=page.getByLabel('Truck 102 PTI '+weeks[0],{exact:true});await oldCell.press('/');await expect(oldCell).not.toHaveAttribute('aria-busy','true');await expect(oldCell).toHaveValue('/');await expect(cell).toHaveValue('1');
  target=(await api('get',path)).rows.find(r=>r.truckId===target.truckId);
  expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,'2')})).status()).toBe(409);
  const receipt=body(target,'0');await api('patch',writePath,receipt);const saved=(await api('get',path)).rows.find(r=>r.truckId===target.truckId);
  expect((await api('patch',writePath,receipt)).version).toBe(saved.version);
  expect((await page.request.patch(access.base+'/api'+writePath,{headers,data:body(target,'/')})).status()).toBe(409);
  await page.getByRole('button',{name:'Refresh',exact:true}).click();await expect(cell).toHaveValue('0');
- await cell.selectOption('1');await expect(cell).toBeEnabled();
+ await cell.press('1');await expect(cell).not.toHaveAttribute('aria-busy','true');
  target=(await api('get',path)).rows.find(r=>r.truckId===target.truckId);
  await api('patch',writePath,body(target,'0'));
- await cell.selectOption('/');await expect(page.getByText(/PTI changed since/)).toBeVisible();await expect(cell).toHaveValue('0');
- await cell.selectOption('/');await expect(cell).toBeEnabled();await expect(cell).toHaveValue('/');
+ await cell.press('/');await expect(page.getByText(/PTI changed since/)).toBeVisible();await expect(cell).toHaveValue('0');
+ await cell.press('/');await expect(cell).not.toHaveAttribute('aria-busy','true');await expect(cell).toHaveValue('/');
  const roleName='PTI reader '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['drivers.read','trucks.read','pti.read']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName),email=randomUUID()+'@example.test',password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
- const reader=await browser.newContext();await reader.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const readerSession=await(await reader.request.get(access.base+'/api/auth/session')).json();const readPage=await reader.newPage();await readPage.goto(access.base+'/fleet/weekly-pti');await expect(readPage.getByLabel('Truck 102 PTI '+week,{exact:true})).toBeDisabled();await expect(readPage.getByLabel('Truck 102 notes',{exact:true})).toHaveCount(0);
+ const reader=await browser.newContext();await reader.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const readerSession=await(await reader.request.get(access.base+'/api/auth/session')).json();const readPage=await reader.newPage();await readPage.goto(access.base+'/fleet/weekly-pti');await expect(readPage.getByLabel('Truck 102 PTI '+week,{exact:true})).toHaveAttribute('readonly','');await expect(readPage.getByLabel('Truck 102 notes',{exact:true})).toHaveCount(0);
  expect((await reader.request.patch(access.base+'/api'+writePath,{headers:{Origin:access.base,'X-CSRF-Token':readerSession.csrfToken},data:body(saved,'/')})).status()).toBe(403);expect((await reader.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(200);await reader.close();
  const anonymous=await browser.newContext();expect((await anonymous.request.get(access.base+'/api/weekly-pti/matrix')).status()).toBe(401);await anonymous.close();
  await table.evaluate(el=>{el.parentElement.scrollTop=0;});

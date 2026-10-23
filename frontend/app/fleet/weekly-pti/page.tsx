@@ -62,9 +62,12 @@ export default function WeeklyPTIPage(){
        <th className="sticky left-0 z-10 border-b border-r border-zinc-700 bg-zinc-950 px-3 py-1.5 text-left font-mono font-normal"><Link className="text-blue-400" href={"/trucks/detail?id="+truck.id}>{truck.unit}</Link></th>
        {weeks.map(w=>{const key=keyOf(w,truck.id),entry=rows.get(key)??blank(w,truck),value=markOf(entry);const title=[entry.updatedBy,stamp(entry.updatedAt)].filter(Boolean).join(" · ");
         return <td key={w} className="border-b border-r border-zinc-700 p-0" style={{backgroundColor:value?colors[value]:undefined}}>
-         <select aria-label={"Truck "+truck.unit+" PTI "+w} title={title||undefined} value={value} disabled={!canEdit||!!busy[key]} className={"h-8 w-full cursor-pointer appearance-none rounded-none border-0 bg-transparent text-center font-semibold outline-offset-[-2px] focus:outline-2 focus:outline-blue-600 disabled:cursor-default "+(value?"text-black":"text-zinc-500")} onChange={e=>{const v=e.target.value;if(v==="/"||v==="1"||v==="0")void save(entry,v);}}>
-          <option value="" disabled>—</option>{(["/","1","0"] as const).map(v=><option key={v} value={v} style={{backgroundColor:colors[v],color:"#000"}}>{v}</option>)}
-         </select>
+         <input aria-label={"Truck "+truck.unit+" PTI "+w} title={title||undefined} value={value} placeholder="—" readOnly={!canEdit||!!busy[key]} aria-busy={!!busy[key]} autoComplete="off" spellCheck={false}
+          className={"h-8 w-full min-w-0 rounded-none border-0 bg-transparent p-0 text-center font-semibold outline-offset-[-2px] focus:outline-2 focus:outline-blue-600 "+(value?"text-black":"text-zinc-500")}
+          onFocus={e=>e.currentTarget.select()}
+          onKeyDown={e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;if(e.key.length===1||e.key==="Backspace"||e.key==="Delete"){e.preventDefault();if(canEdit&&!busy[key]&&(e.key==="/"||e.key==="1"||e.key==="0")&&e.key!==value)void save(entry,e.key);}}}
+          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData("text");if(canEdit&&!busy[key]&&(v==="/"||v==="1"||v==="0")&&v!==value)void save(entry,v);}}
+          onChange={e=>{const v=e.target.value;if(canEdit&&!busy[key]&&(v==="/"||v==="1"||v==="0")&&v!==value)void save(entry,v);}}/>
         </td>;
        })}
       </tr>;

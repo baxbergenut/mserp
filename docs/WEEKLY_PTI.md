@@ -6,7 +6,7 @@ and investor trucks are grouped above owner-operated trucks. All trucks appear,
 including inactive, unassigned, home, vacation and shop trucks. Ownership uses
 the recorded investor/company/driver-owner relationship, never the assigned driver.
 
-Each cell accepts only `/`, `1`, or `0`, enforced by the UI, API and database:
+Cells are direct text inputs: typing `/`, `1`, or `0` replaces the mark and saves immediately. Other characters, deletion, and invalid pastes are blocked. Tab moves between cells. Read-only users cannot edit. The API and database also enforce the allowed marks:
 - `/`: not operational, no driver, or PTI not required; yellow (#ffff00).
 - `1`: sent and checked; green (#00ff00).
 - `0`: not sent; red (#ff0000).
@@ -47,6 +47,8 @@ SQL locks PTI rows, rechecks truck identity, preserves any native edit, complete
 check or note, records source digest/rows and appends import audit events.
 Reapplying the same source preserves already imported cells. No fleet records,
 ownership, eligibility, financial records or external services are changed.
+
+Five additional source columns GY:HC (August 24, August 31, September 7, September 14 and September 21, 2026) were imported on request: 504 marks, with the user-confirmed `418` September 21 `/1` interpreted as `1`. All existing four-week records were verified unchanged. The import helper accepts an explicit ordered `weekMapping` and checks matching source headers and Monday dates.
 
 Migration 144 adds the database mark constraint. The original migration 140
 and append-only audit tables remain compatible.
