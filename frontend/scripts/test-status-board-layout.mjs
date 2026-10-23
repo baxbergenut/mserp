@@ -51,12 +51,14 @@ try {
   expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
   const colors = { READY: [0, 0, 0], REST: [217, 217, 217], COVERED: [255, 255, 0], DISPATCHED: [251, 188, 4], ENROUTE: [61, 133, 198], RESERVED: [183, 225, 205], VACATION: [224, 102, 102], HOME: [255, 0, 0], SHOP: [255, 153, 0], STOP: [153, 0, 0], 'HOME (YARD)': [255, 0, 0] };
   for (const value of sheetStatuses) {
+    if(value === "Left") continue; // Termination has its own permission-gated workflow.
     // Existing progress behavior derives RESERVED from an actual next load.
     if (value === 'RESERVED' || value === 'VACATION') {
       loads.next = value === 'RESERVED' ? [{ planId: 'next', number: 'NEXT', loadId: null, stops: [] }] : [];
       await page.reload();
     }
     await status.selectOption(value);
+    if (["HOME","HOME (YARD)","VACATION"].includes(value)) { if(value!=="VACATION"){await page.getByLabel("Home start date",{exact:true}).fill("2026-10-23");await page.getByLabel("Back date",{exact:true}).fill("2026-10-27");} await page.getByRole("button",{name:"Apply dates",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
     const cell = status.locator('xpath=ancestor::td');
     await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);

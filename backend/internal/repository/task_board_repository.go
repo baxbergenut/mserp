@@ -19,11 +19,11 @@ type BoardTask struct {
 // independent driver/truck boundaries. Completed records remain durable.
 const boardTaskCTE = `WITH tasks AS (
  SELECT c.id,c.title,c.notes,c.completed_at,c.created_by,c.created_at,c.updated_at,
- c.assigned_to,c.assigned_by,c.system_task_kind,c.completed_by_name,''::text AS outcome,c.in_process,NULL::uuid AS service_driver_id,NULL::uuid AS maintenance_truck_id,''::text AS maintenance_service,NULL::uuid AS maintenance_program_id
+ c.assigned_to,c.assigned_by,c.system_task_kind,c.completed_by_name,''::text AS outcome,c.in_process,NULL::uuid AS service_driver_id,NULL::uuid AS maintenance_truck_id,''::text AS maintenance_service,NULL::uuid AS maintenance_program_id,NULL::uuid AS leave_dispatcher_id
  FROM custom_tasks c
  UNION ALL
  SELECT s.id,s.title,s.notes,s.completed_at,NULL::uuid,s.created_at,s.created_at,
- NULL::uuid,NULL::uuid,s.kind,s.completed_by_name,s.outcome,false,s.service_driver_id,s.maintenance_truck_id,s.maintenance_service,s.maintenance_program_id FROM system_task_records s
+ NULL::uuid,NULL::uuid,s.kind,s.completed_by_name,s.outcome,false,s.service_driver_id,s.maintenance_truck_id,s.maintenance_service,s.maintenance_program_id,s.leave_dispatcher_id FROM system_task_records s
  WHERE (s.completed_at IS NOT NULL OR s.available_on<=(now() AT TIME ZONE 'America/New_York')::date) AND (s.kind<>'escrow_release' OR s.completed_at IS NOT NULL OR EXISTS(
  SELECT 1 FROM escrow_release_reviews e WHERE e.id=s.id AND e.due_date<=(now() AT TIME ZONE 'America/New_York')::date))
 ), visible AS (
@@ -32,11 +32,12 @@ const boardTaskCTE = `WITH tasks AS (
  CASE WHEN t.system_task_kind IS NOT NULL THEN a.assignee_id ELSE t.assigned_to END AS effective_assignee
  FROM tasks t
  LEFT JOIN system_task_assignments defaults ON defaults.kind=CASE WHEN t.system_task_kind='maintenance_program' THEN 'maintenance_pm' ELSE t.system_task_kind END
+ LEFT JOIN dispatchers leave_dispatcher ON leave_dispatcher.id=t.leave_dispatcher_id AND t.system_task_kind='driver_leave_return'
  LEFT JOIN service_programs program ON program.id=t.maintenance_program_id
  LEFT JOIN LATERAL (SELECT
- CASE WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_ids[1] ELSE defaults.assignee_id END AS assignee_id,
- CASE WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_ids ELSE defaults.assignee_ids END AS assignee_ids,
- CASE WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_role_ids ELSE defaults.assignee_role_ids END AS assignee_role_ids) a ON true
+ CASE WHEN t.system_task_kind='driver_leave_return' THEN leave_dispatcher.user_account_id WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_ids[1] ELSE defaults.assignee_id END AS assignee_id,
+ CASE WHEN t.system_task_kind='driver_leave_return' THEN ARRAY[]::uuid[] WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_ids ELSE defaults.assignee_ids END AS assignee_ids,
+ CASE WHEN t.system_task_kind='driver_leave_return' THEN ARRAY[]::uuid[] WHEN program.id IS NOT NULL AND NOT program.use_default_assignees THEN program.assignee_role_ids ELSE defaults.assignee_role_ids END AS assignee_role_ids) a ON true
  LEFT JOIN app_users u ON u.id=CASE WHEN t.system_task_kind IS NOT NULL THEN a.assignee_id ELSE t.assigned_to END
  LEFT JOIN app_users b ON b.id=coalesce(t.assigned_by,t.created_by)
  WHERE ($1::boolean OR

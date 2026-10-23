@@ -87,6 +87,7 @@ export default function DispatchersPage() {
 
   const openCreate = async () => {
  if(!permissions.includes("dispatchers.create"))return;
+ if(!permissions.includes("access.manage")){setError("Creating a dispatcher login requires user-management permission.");return;}
     setError("");
     try {
       const rows = await fetchDriverOptions();
@@ -220,7 +221,7 @@ export default function DispatchersPage() {
       {pendingDelete && (
         <ConfirmDialog
           title="Delete dispatcher?"
-          message={`This permanently deletes ${pendingDelete.fullName}. Their ${pendingDelete.driverCount} assigned driver(s) will become unassigned.`}
+          message={`This permanently deletes ${pendingDelete.fullName}. Their ${pendingDelete.driverCount} assigned driver(s) will become unassigned. Their login will also be disabled.`}
           isDeleting={isDeleting}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => void remove()}

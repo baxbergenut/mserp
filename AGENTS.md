@@ -2553,3 +2553,34 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   ENROUTE/RESERVED; a cache-only startup/minute worker catches date/source changes.
 - Database checks use the disposable MSERP_DRIVER_BOARD_TEST_DATABASE_URL.
   Browser coverage: `node scripts/test-fleet-status-e2e.mjs` against review-local.
+
+
+### Driver leave plans and dispatcher accounts (142–143)
+
+- Status Board Home time uses versioned driver_board.leave_plan JSON (homeStart,
+  homeEnd, vacationReturn). Calendar dates use New York; Monday–Sunday dates show
+  HOME FRI/BACK TUE, otherwise day/month. Home switches to Back only once its
+  start has arrived and status is Home. Vacation returns accept a date, month,
+  or unknown. Legacy home_time text stays until explicitly replaced/cleared.
+- Board and driver-profile availability dialogs share date fields. Home requires
+  a return date when selected; vacation remains optional. Profile saves fence
+  both statusVersion and leavePlanVersion. Dates, status, history/undo and SSE
+  retain the existing atomic version/audit boundaries; no date changes status.
+- A startup/minute cache-only driver-leave-tasks worker creates one overdue task
+  per still-Home/Vacation driver beginning the next New York day after return.
+  Month-only vacation returns expire at month end; unknown dates create no task.
+  Return, extension, unknown dates or termination resolve reminders automatically.
+  Only the assigned dispatcher's active account and Administrators see them;
+  reassignments move visibility. Unassigned cases remain visible to Administrators.
+- Dispatcher creation requires dispatchers.create plus access.manage, valid email
+  and a 12–72 byte password. One transaction creates the dispatcher and its login
+  in the permanent built-in Dispatcher role; failure rolls back both. Never place
+  credentials/hashes in audit payloads. Existing account/profile pairs require
+  explicit reviewed UUID pairing; migration never matches names automatically.
+- Dispatcher name/email/active synchronize with their one-to-one account; login
+  detail edits require access.manage and revoke sessions. Deleting a dispatcher
+  disables the retained account. The Dispatcher role cannot be deleted/renamed
+  or replaced on a paired account; its permissions remain administrator editable.
+  Create new dispatchers through Dispatchers, not the generic Add user flow.
+- Verify TestFleetStatusDatabase (fresh/migrated as mserp_app), test-driver-board.mjs,
+  test-status-board-layout.mjs and test-driver-leave-e2e.mjs against review-local.

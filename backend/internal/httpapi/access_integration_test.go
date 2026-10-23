@@ -91,6 +91,7 @@ func TestAccessDatabase(t *testing.T) {
 				}
 				exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at,created_at) SELECT id,repeat('e',64),repeat('f',43),now()-interval '1 day',now()-interval '2 days' FROM app_users WHERE username='legacy'`)
 				exec(string(activity))
+				exec(`ALTER TABLE app_roles ADD COLUMN dispatcher_role boolean NOT NULL DEFAULT false`)
 				var backfilled bool
 				if e = admin.QueryRow(ctx, `SELECT a.last_login_at=s.created_at FROM user_login_activity a JOIN auth_sessions s ON s.user_id=a.user_id`).Scan(&backfilled); e != nil || !backfilled {
 					t.Fatalf("existing login not preserved: %v", e)
@@ -114,7 +115,7 @@ func TestAccessDatabase(t *testing.T) {
 				exec(string(source))
 			}
 			// Grant legacy tables only; new runtime tables must belong to mserp_app.
-			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON app_users,auth_sessions TO mserp_app`)
+			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON app_users,auth_sessions,dispatchers TO mserp_app`)
 			app := cfg.Copy()
 			app.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			app.ConnConfig.RuntimeParams["role"] = "mserp_app"

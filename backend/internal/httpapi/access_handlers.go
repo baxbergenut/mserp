@@ -20,8 +20,13 @@ func validEmail(value string) bool {
 
 func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		var invalid *repository.ChargeValidationError
+		if errors.As(err, &invalid) {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
 		var pgerr *pgconn.PgError
-		if errors.Is(err, repository.ErrAccessConflict) || errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgerr) && (pgerr.Code == "23505" || pgerr.Code == "23503")) {
+		if errors.Is(err, repository.ErrAccessConflict) || errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgerr) && (pgerr.Code == "23505" || pgerr.Code == "23503" || pgerr.ConstraintName == "dispatcher_account_role")) {
 			writeAPIError(w, http.StatusConflict, repository.ErrAccessConflict.Error())
 			return
 		}

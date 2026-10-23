@@ -122,8 +122,8 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 	if changed {
 		return entry, ErrDriverBoardConflict
 	}
-	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0)
- FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.TrailerNote, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.Version)
+	err = tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb)
+ FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, driver).Scan(&entry.DriverID, &entry.CurrentLoad, &entry.TrailerNumber, &entry.TrailerNote, &entry.Status, &entry.Destination, &entry.ETA, &entry.Notes, &entry.HomeTime, &entry.Version, &entry.LeavePlan)
 	if err != nil {
 		return entry, err
 	}
@@ -138,11 +138,24 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 		return entry, err
 	}
 	current["loadPlan"] = stateRaw
+	planRaw, _ := json.Marshal(entry.LeavePlan)
+	current["leavePlan"] = string(planRaw)
 	for k, v := range after {
+		if k == "leavePlan" {
+			var expected DriverLeavePlan
+			if err = json.Unmarshal([]byte(v), &expected); err != nil {
+				return entry, err
+			}
+			normalized, _ := json.Marshal(expected)
+			v = string(normalized)
+		}
 		if current[k] != v {
 			return entry, ErrDriverBoardConflict
 		}
 		current[k] = before[k]
+	}
+	if value, ok := current["leavePlan"].(string); ok {
+		current["leavePlan"] = json.RawMessage(value)
 	}
 	raw, _ = json.Marshal(current)
 	if err = json.Unmarshal(raw, &entry); err != nil {

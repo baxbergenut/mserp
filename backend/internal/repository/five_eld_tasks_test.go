@@ -64,7 +64,7 @@ func TestFiveELDTruckTasksDatabase(t *testing.T) {
 				exec(string(later))
 				// This intentionally partial schema exercises pre-maintenance
 				// workflows; include the optional task-board assignment projection.
-				exec(`ALTER TABLE system_task_records ADD COLUMN maintenance_program_id uuid;
+				exec(`ALTER TABLE dispatchers ADD COLUMN user_account_id uuid; ALTER TABLE system_task_records ADD COLUMN leave_dispatcher_id uuid; ALTER TABLE system_task_records ADD COLUMN maintenance_program_id uuid;
                 CREATE TABLE service_programs(id uuid PRIMARY KEY,use_default_assignees boolean NOT NULL DEFAULT true,assignee_ids uuid[] NOT NULL DEFAULT '{}',assignee_role_ids uuid[] NOT NULL DEFAULT '{}')`)
 
 			}

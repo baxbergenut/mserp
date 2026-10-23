@@ -102,7 +102,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     return () => { cancelled = true; refreshWanted.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
   }, []);
 
-  const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string) => {
+  const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>) => {
     if (!canEdit) return;
     activity.current += 1;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
@@ -110,7 +110,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     if (!last || last.group !== editSession.current.group) draftUndo.current.push({ id, field, before: changesRef.current[id], group: editSession.current.group });
     const current = changesRef.current;
     const baseline = savedRef.current[id];
-    const next = { ...(current[id] ?? baseline), [field]: value };
+    const next = { ...(current[id] ?? baseline), [field]: value, ...patch };
     if (field === "trailerNumber" && value !== (current[id] ?? baseline).trailerNumber) next.trailerNote = "";
     if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : ""; }
     if (field === "status") next.statusEdited = true;

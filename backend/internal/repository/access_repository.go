@@ -12,6 +12,7 @@ import (
 var ErrAccessConflict = errors.New("record changed, email/name already used, or last administrator would be removed")
 
 type AccessRole struct {
+	Permanent             bool                    `json:"permanent"`
 	ID                    string                  `json:"id"`
 	Name                  string                  `json:"name"`
 	Permissions           []string                `json:"permissions"`
@@ -87,14 +88,14 @@ func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
 	if err != nil {
 		return data, err
 	}
-	rows, err = r.pool.Query(ctx, `SELECT id::text,name,permissions,system_role,version FROM app_roles ORDER BY system_role DESC,lower(name)`)
+	rows, err = r.pool.Query(ctx, `SELECT id::text,name,permissions,system_role,version,(system_role OR dispatcher_role) FROM app_roles ORDER BY system_role DESC,lower(name)`)
 	if err != nil {
 		return data, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		role := AccessRole{ExpenseCategoryAccess: []ExpenseCategoryAccess{}}
-		if err = rows.Scan(&role.ID, &role.Name, &role.Permissions, &role.System, &role.Version); err != nil {
+		if err = rows.Scan(&role.ID, &role.Name, &role.Permissions, &role.System, &role.Version, &role.Permanent); err != nil {
 			return data, err
 		}
 		if role.System {
@@ -168,6 +169,21 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if err = accessLock(ctx, tx, actor); err != nil {
 		return "", err
 	}
+	var dispatcherRole bool
+	if err = tx.QueryRow(ctx, `SELECT dispatcher_role FROM app_roles WHERE id=$1`, input.RoleID).Scan(&dispatcherRole); err != nil {
+		return "", err
+	}
+	if dispatcherRole {
+		var paired bool
+		if input.ID != "" {
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM dispatchers WHERE user_account_id=$1)`, input.ID).Scan(&paired); err != nil {
+				return "", err
+			}
+		}
+		if !paired {
+			return "", chargeInvalid("Create dispatchers in Dispatchers so their profile and login are saved together")
+		}
+	}
 	id := input.ID
 	if id == "" {
 		err = tx.QueryRow(ctx, `INSERT INTO app_users(username,email,role_id,active,password_hash) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, input.Username, input.Email, input.RoleID, input.Active, passwordHash).Scan(&id)
@@ -218,7 +234,7 @@ func (r *AuthRepository) SaveRole(ctx context.Context, actor string, input Acces
 		err = tx.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES($1,$2) RETURNING id::text`, input.Name, input.Permissions).Scan(&input.ID)
 	} else {
 		var id string
-		err = tx.QueryRow(ctx, `UPDATE app_roles SET name=$2,permissions=$3,version=version+1 WHERE id=$1 AND version=$4 AND NOT system_role RETURNING id::text`, input.ID, input.Name, input.Permissions, input.Version).Scan(&id)
+		err = tx.QueryRow(ctx, `UPDATE app_roles SET name=$2,permissions=$3,version=version+1 WHERE id=$1 AND version=$4 AND NOT system_role AND (NOT dispatcher_role OR name=$2) RETURNING id::text`, input.ID, input.Name, input.Permissions, input.Version).Scan(&id)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrAccessConflict

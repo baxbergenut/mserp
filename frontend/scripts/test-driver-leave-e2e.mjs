@@ -1,0 +1,62 @@
+// Synthetic local API/database/UI coverage. Never run against production.
+import {readFile,mkdir} from 'node:fs/promises';
+import {dirname,join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {chromium,expect} from '@playwright/test';
+
+const accessFile=process.env.MSERP_REVIEW_ACCESS_FILE;
+const access=JSON.parse(await readFile(accessFile,'utf8'));
+const database=new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
+if(!['127.0.0.1','localhost'].includes(new URL(access.base).hostname)||!['127.0.0.1','localhost'].includes(database.hostname)||!database.pathname.endsWith('_test')||!/^review_[a-f0-9]+$/.test(access.schema))throw Error('A disposable local review is required');
+database.searchParams.set('search_path',access.schema+',public');database.searchParams.set('role','mserp_app');
+const binary=join(dirname(accessFile),process.platform==='win32'?'api.exe':'api');
+const cliEnv={...process.env,DATABASE_URL:database.toString(),DATATRUCK_API_KEY:'test-disabled',DATATRUCK_COMPANY_NAME:'test',RELAY_API_KEY:'test-disabled',RELAY_PRODUCTION_API_KEY:'test-disabled',PREPASS_CLIENT_ID:'test-disabled',PREPASS_CLIENT_SECRET:'test-disabled',FRONTEND_ORIGIN:access.base,AUTH_COOKIE_SECURE:'false',SCHEDULED_SYNCS_ENABLED:'false'};
+const cli=args=>execFileSync(binary,args,{cwd:dirname(accessFile),env:cliEnv,encoding:'utf8',windowsHide:true});
+const preview=JSON.parse(cli(['-fleet-status-preview']));
+if(!preview.enabled)cli(['-fleet-status-activate',preview.revision]);
+const artifacts=join(dirname(accessFile),'fleet-status');await mkdir(artifacts,{recursive:true});
+const browser=await chromium.launch();
+try{
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
+ const session=await(await page.request.get(access.base+'/api/auth/session')).json();const headers={'X-CSRF-Token':session.csrfToken,Origin:access.base};
+ const api=async(method,path,data)=>{const r=await page.request[method](access.base+'/api'+path,{headers,...(data?{data}:{})});if(!r.ok())throw Error(path+': '+r.status()+' '+await r.text());return r.status()===204?null:r.json();};
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());const monday=new Date(today+'T12:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);const boardPath='/driver-board?weekStart='+monday.toISOString().slice(0,10);
+ let board=await api('get',boardPath);expect(board.statusSyncEnabled).toBe(true);const driver=board.drivers.find(d=>d.truckId&&d.truckOperatingStatus==='ready');expect(driver).toBeTruthy();
+
+ const row=page.getByLabel(driver.fullName+' · Home time',{exact:true});
+ await page.goto(access.base+'/driver-board');await row.click();
+ await page.getByLabel('Home start date',{exact:true}).fill(today);await page.getByLabel('Back date',{exact:true}).fill(today);
+ await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^HOME /);
+ await page.reload();await expect(row).toHaveText(/^HOME /);
+ const status=page.getByLabel(driver.fullName+' · Status',{exact:true});
+ await status.selectOption('HOME');await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ expect((await api('get',boardPath)).entries.find(e=>e.driverId===driver.id).status).not.toBe('HOME');
+ await status.selectOption('HOME');await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^BACK /);
+ await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+ await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();
+ await page.getByLabel('Availability',{exact:true}).selectOption('vacation');await page.getByLabel('Vacation return precision').selectOption('month');await page.getByLabel('Back month',{exact:true}).fill('2027-02');await page.getByRole('button',{name:'Save status',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ let personal=await api('get','/drivers/'+driver.id);expect(personal.leavePlan.vacationReturn).toBe('2027-02');
+ await page.goto(access.base+'/driver-board');await expect(row).toHaveText('BACK FEB 2027');
+ await status.selectOption('VACATION');await page.getByLabel('Vacation return precision').selectOption('date');await page.getByLabel('Back date',{exact:true}).fill(today);await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText(/^BACK /);
+ await row.click();await page.getByLabel('Vacation return precision').selectOption('unknown');await page.getByRole('button',{name:'Apply dates',exact:true}).click();await expect(row).toHaveText('BACK TBD');
+ await expect(page.getByRole('status').filter({hasText:'All changes saved'})).toBeVisible();
+ const password='Synthetic-'+randomUUID(),name='Leave '+randomUUID(),email=randomUUID()+'@example.test';
+ const dispatcher=await api('post','/dispatchers',{fullName:name,email,password,active:true,phone:'',notes:'',driverIds:[driver.id],assignmentWeek:today,payPercentage:null});expect(dispatcher.userAccountId).toBeTruthy();
+ const accessData=await api('get','/settings/access');const role=accessData.roles.find(r=>r.name==='Dispatcher');expect(role.permanent).toBe(true);expect(accessData.users.find(u=>u.id===dispatcher.userAccountId).roleId).toBe(role.id);
+ const denied=await page.request.put(access.base+'/api/settings/roles/'+role.id,{headers,data:{...role,name:'Renamed role'}});expect(denied.status()).toBe(409);
+ const restricted=await browser.newContext();const login=await restricted.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});expect(login.ok(),await login.text()).toBe(true);
+ const sess=await(await restricted.request.get(access.base+'/api/auth/session')).json();const restrictedHeaders={'X-CSRF-Token':sess.csrfToken,Origin:access.base};
+ const yesterday=new Date(today+'T12:00:00Z');yesterday.setUTCDate(yesterday.getUTCDate()-1);const past=yesterday.toISOString().slice(0,10);
+ board=await api('get',boardPath);let entry=board.entries.find(e=>e.driverId===driver.id);
+ await api('put','/driver-board',{entries:[{...entry,status:'HOME',statusEdited:true,leavePlan:{homeStart:past,homeEnd:past}}]});
+ await expect.poll(async()=>{const r=await restricted.request.get(access.base+'/api/tasks?status=open&search='+encodeURIComponent(driver.fullName));return (await r.json()).total;},{timeout:75000}).toBe(1);
+ const restrictedTasks=await(await restricted.request.get(access.base+'/api/tasks?status=open&search='+encodeURIComponent(driver.fullName))).json();expect(restrictedTasks.items[0].title).toContain('overdue back from home time');expect(restrictedTasks.items[0].assignedTo).toBe(dispatcher.userAccountId);
+ expect((await restricted.request.post(access.base+'/api/dispatchers',{headers:restrictedHeaders,data:{fullName:'No account escalation',email:'blocked@example.test',password,active:true,driverIds:[]}})).status()).toBe(403);
+ await page.goto(access.base+'/dispatchers');await page.getByRole('button',{name:'Add dispatcher',exact:true}).click();await expect(page.getByLabel('Dispatcher password',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('home');await page.getByLabel('Home start date',{exact:true}).fill(today);await page.getByLabel('Back date',{exact:true}).fill(today);await page.getByRole('button',{name:'Save status',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.screenshot({path:join(artifacts,'driver-leave-profile.png'),fullPage:true});
+ await restricted.close();expect(errors).toEqual([]);
+ console.log('Driver leave E2E passed: board range, cancellation, Home/Back, profile vacation month, exact/unknown returns, permanent role, atomic dispatcher login, private overdue task and authorization.');
+}finally{await browser.close();}

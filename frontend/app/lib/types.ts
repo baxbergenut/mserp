@@ -279,7 +279,8 @@ export type TruckStatus =
 export type DriverStatus = "active" | "vacation" | "home" | "terminated";
 export type DriverAvailability = "active" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
 export interface FleetStatusRule { boardStatus:string;availability:string;truckCondition:string;requiresActive:boolean;requiresReady:boolean }
-export interface FleetStatusChange {status:string;version:number;effectiveAt?:string;reason:string}
+export interface DriverLeavePlan { homeStart?: string; homeEnd?: string; vacationReturn?: string }
+export interface FleetStatusChange {status:string;version:number;effectiveAt?:string;reason:string;leavePlan?:DriverLeavePlan;leavePlanVersion?:number}
 export interface FleetStatusHistoryEntry { id:number;entityKind:"driver"|"truck";entityId:string;entityName:string;track:string;previousStatus:string;status:string;effectiveAt:string;endedAt:string|null;recordedAt:string;actorName:string;source:string;sourceRef:string;relatedTruckName:string;actionId:number;baseline:boolean;reason:string }
 export interface FleetStatusHistory {items:FleetStatusHistoryEntry[];hasMore:boolean;snapshot:number}
 export interface DriverStatusChange {
@@ -290,6 +291,8 @@ export interface DriverStatusChange {
   updatedAt: string;
 }
 export interface Driver {
+ leavePlan?: DriverLeavePlan;
+ leavePlanVersion?: number;
 	employmentStatus?: "active" | "terminated";
 	truckOperatingStatus?:TruckOperatingStatus|"";
 	availabilityStatus?: DriverAvailability;
@@ -384,6 +387,7 @@ export interface DriverSetupDefaults {
 }
 
 export interface DriverBoardEntry {
+ leavePlan?: DriverLeavePlan;
 	effectiveAt?: string;
   undoId?: number;
   statusEdited?: boolean;
@@ -697,6 +701,7 @@ export interface Updater {
 export type UpdaterInput = Pick<Updater, "fullName" | "shift" | "extension"> & { version?: number };
 
 export interface Dispatcher {
+ userAccountId?: string | null;
   extension: number | null;
   mainUpdaterId: string | null;
   afterHoursUpdaterId: string | null;
@@ -714,6 +719,7 @@ export interface Dispatcher {
 }
 
 export interface DispatcherInput {
+ password?: string;
   extension?: number | null;
   updaters?: { mainUpdaterId: string | null; afterHoursUpdaterId: string | null };
   /** Effective calendar date; legacy field name retained for API compatibility. */
@@ -966,6 +972,7 @@ export interface ManagedUser {
   lastLoginAt?: string | null; online?: boolean;
 }
 export interface AccessRole {
+ permanent?: boolean;
   id: string; name: string; permissions: string[]; expenseCategoryAccess: ExpenseCategoryAccess[]; system: boolean; version: number;
 }
 export interface AccessData {

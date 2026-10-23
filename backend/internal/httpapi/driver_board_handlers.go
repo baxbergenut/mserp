@@ -46,6 +46,12 @@ func (request *driverBoardRequest) validate() error {
 				return errors.New("a board field exceeds its character limit or contains invalid text")
 			}
 		}
+		if err := e.LeavePlan.Validate(); err != nil {
+			return err
+		}
+		if e.StatusEdited && (e.Status == "HOME" || e.Status == "HOME (YARD)") && (e.LeavePlan == nil || e.LeavePlan.HomeEnd == "") {
+			return errors.New("Choose the date the driver will be back")
+		}
 		switch e.Status {
 		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT", "HOLD":
 		// Retain existing values during unrelated autosaves and history recovery.
@@ -264,7 +270,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		field := r.URL.Query().Get("field")
 		switch field {
-		case "", "currentLoad", "trailerNumber", "trailerNote", "status", "destination", "eta", "notes", "homeTime", "loadPlan", "driverHome":
+		case "", "currentLoad", "trailerNumber", "trailerNote", "status", "destination", "eta", "notes", "homeTime", "leavePlan", "loadPlan", "driverHome":
 		default:
 			writeAPIError(w, 400, "invalid history field")
 			return

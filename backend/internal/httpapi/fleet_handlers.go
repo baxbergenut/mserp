@@ -400,6 +400,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 }
 
 type dispatcherRequest struct {
+	Password       string `json:"password"`
 	preserveFields []string
 	Extension      json.RawMessage                `json:"extension"`
 	Updaters       *repository.UpdaterAssignments `json:"updaters"`
@@ -736,6 +737,9 @@ func (handler fleetHandler) createDispatcher(w http.ResponseWriter, r *http.Requ
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !handler.prepareDispatcherAccount(w, r, request, &input) {
+		return
+	}
 	value, err := handler.repo.CreateDispatcher(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -763,6 +767,18 @@ func (handler fleetHandler) updateDispatcher(w http.ResponseWriter, r *http.Requ
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if currentProfile.UserAccountID != nil && !validEmail(valueOrEmpty(input.Email)) {
+		writeAPIError(w, 400, "A dispatcher login email is required")
+		return
+	}
+	if currentProfile.UserAccountID != nil && (currentProfile.FullName != input.FullName || valueOrEmpty(currentProfile.Email) != valueOrEmpty(input.Email) || currentProfile.Active != input.Active) {
+		session, _ := authSessionFromContext(r.Context())
+		if !repository.HasPermission(session.User, "access.manage") {
+			writeAPIError(w, 403, "Managing dispatcher login details requires user-management permission")
+			return
+		}
+		input.AccountActor = session.User.ID
+	}
 	value, err := handler.repo.UpdateDispatcher(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -776,7 +792,12 @@ func (handler fleetHandler) deleteDispatcher(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if err := handler.repo.DeleteDispatcher(r.Context(), id); err != nil {
+	session, _ := authSessionFromContext(r.Context())
+	if !repository.HasPermission(session.User, "access.manage") {
+		writeAPIError(w, 403, "Deleting a dispatcher login requires user-management permission")
+		return
+	}
+	if err := handler.repo.DeleteDispatcher(r.Context(), id, session.User.ID); err != nil {
 		handler.writeError(w, err)
 		return
 	}

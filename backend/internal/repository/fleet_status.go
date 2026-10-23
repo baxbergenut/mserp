@@ -45,10 +45,12 @@ func (r *FleetRepository) FleetStatusCatalog(ctx context.Context) (FleetStatusCa
 }
 
 type FleetStatusChange struct {
-	Status      string    `json:"status"`
-	Version     int       `json:"version"`
-	EffectiveAt time.Time `json:"effectiveAt"`
-	Reason      string    `json:"reason"`
+	LeavePlan        *DriverLeavePlan `json:"leavePlan,omitempty"`
+	LeavePlanVersion int              `json:"leavePlanVersion"`
+	Status           string           `json:"status"`
+	Version          int              `json:"version"`
+	EffectiveAt      time.Time        `json:"effectiveAt"`
+	Reason           string           `json:"reason"`
 }
 
 func setFleetStatusContext(ctx context.Context, tx pgx.Tx, actor, source string, effective time.Time, reason string) error {
@@ -78,12 +80,34 @@ func (r *FleetRepository) ChangeAvailability(ctx context.Context, id, actor stri
 	if !enabled {
 		return Driver{}, chargeInvalid("Status reconciliation must be activated first")
 	}
+	if err = in.LeavePlan.Validate(); err != nil {
+		return Driver{}, err
+	}
+	if in.LeavePlan != nil {
+		var driverVersion int
+		if err = tx.QueryRow(ctx, `SELECT status_version FROM drivers WHERE id=$1 FOR UPDATE`, id).Scan(&driverVersion); err != nil {
+			return Driver{}, mapNotFound(err)
+		}
+		entry, readErr := boardEntry(ctx, tx, id)
+		if readErr != nil {
+			return Driver{}, readErr
+		}
+		if entry.Version != in.LeavePlanVersion {
+			return Driver{}, ErrDriverBoardConflict
+		}
+	}
 	command, err := tx.Exec(ctx, `UPDATE drivers SET availability_status=$2,updated_at=CASE WHEN availability_status<>$2 THEN now() ELSE updated_at END WHERE id=$1 AND status_version=$3 AND active`, id, in.Status, in.Version)
 	if err != nil {
 		return Driver{}, err
 	}
 	if command.RowsAffected() != 1 {
 		return Driver{}, ErrDriverBoardConflict
+	}
+	if in.LeavePlan != nil {
+		_, err = tx.Exec(ctx, `INSERT INTO driver_board(driver_id,leave_plan) VALUES($1,$2) ON CONFLICT(driver_id) DO UPDATE SET leave_plan=EXCLUDED.leave_plan,version=driver_board.version+1,updated_at=now() WHERE driver_board.leave_plan IS DISTINCT FROM EXCLUDED.leave_plan`, id, in.LeavePlan)
+		if err != nil {
+			return Driver{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Driver{}, err

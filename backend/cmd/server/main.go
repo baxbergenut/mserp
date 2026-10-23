@@ -298,6 +298,15 @@ func main() {
 			return customTaskRepo.GenerateEscrowTasks(bounded)
 		}})
 	}()
+	leaveTasksDone := make(chan struct{})
+	go func() {
+		defer close(leaveTasksDone)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "driver-leave-tasks", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 30*time.Second)
+			defer cancel()
+			return customTaskRepo.RefreshDriverLeaveTasks(bounded, time.Now())
+		}})
+	}()
 	maintenanceTasksDone := make(chan struct{})
 	go func() {
 		defer close(maintenanceTasksDone)
@@ -459,6 +468,10 @@ func main() {
 	}
 	select {
 	case <-escrowTasksDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-leaveTasksDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

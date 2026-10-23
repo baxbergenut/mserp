@@ -23,52 +23,54 @@ func NewFleetRepository(pool *pgxpool.Pool) *FleetRepository {
 }
 
 type Driver struct {
-	EmploymentStatus     string     `json:"employmentStatus"`
-	TruckOperatingStatus string     `json:"truckOperatingStatus"`
-	AvailabilityStatus   string     `json:"availabilityStatus"`
-	StatusVersion        int        `json:"statusVersion"`
-	TeamVersion          int        `json:"teamVersion"`
-	TeamTruckID          *string    `json:"teamTruckId,omitempty"`
-	TeamTruckUnit        *string    `json:"teamTruckUnit,omitempty"`
-	TeamStartWeek        *string    `json:"teamStartWeek,omitempty"`
-	TeamRole             string     `json:"teamRole,omitempty"`
-	TeamPartnerID        *string    `json:"teamPartnerId,omitempty"`
-	TeamPartnerName      *string    `json:"teamPartnerName,omitempty"`
-	Status               string     `json:"status"`
-	TerminationDate      *time.Time `json:"terminationDate"`
-	ID                   string     `json:"id"`
-	FullName             string     `json:"fullName"`
-	FirstName            *string    `json:"firstName"`
-	LastName             *string    `json:"lastName"`
-	EmploymentType       string     `json:"employmentType"`
-	DriverType           string     `json:"driverType"`
-	IsOwnerOperator      bool       `json:"isOwnerOperator"`
-	PayType              string     `json:"payType"`
-	PayRate              float64    `json:"payRate"`
-	Phone                *string    `json:"phone"`
-	Email                *string    `json:"email"`
-	LicenseNumber        *string    `json:"licenseNumber"`
-	LicenseState         *string    `json:"licenseState"`
-	LicenseExpires       *time.Time `json:"licenseExpires"`
-	HireDate             *time.Time `json:"hireDate"`
-	DateOfBirth          *time.Time `json:"dateOfBirth"`
-	Address              *string    `json:"address"`
-	City                 *string    `json:"city"`
-	State                *string    `json:"state"`
-	PostalCode           *string    `json:"postalCode"`
-	EmergencyContact     *string    `json:"emergencyContact"`
-	DispatcherID         *string    `json:"dispatcherId"`
-	DispatcherName       *string    `json:"dispatcherName"`
-	TruckID              *string    `json:"truckId"`
-	TruckUnit            *string    `json:"truckUnit"`
-	Active               bool       `json:"active"`
-	Notes                *string    `json:"notes"`
-	CDLFileID            *string    `json:"cdlFileId"`
-	CDLFileName          *string    `json:"cdlFileName"`
-	CDLFileContentType   *string    `json:"cdlFileContentType"`
-	CDLFileSizeBytes     *int64     `json:"cdlFileSizeBytes"`
-	CreatedAt            time.Time  `json:"createdAt"`
-	UpdatedAt            time.Time  `json:"updatedAt"`
+	LeavePlan            *DriverLeavePlan `json:"leavePlan,omitempty"`
+	LeavePlanVersion     int              `json:"leavePlanVersion"`
+	EmploymentStatus     string           `json:"employmentStatus"`
+	TruckOperatingStatus string           `json:"truckOperatingStatus"`
+	AvailabilityStatus   string           `json:"availabilityStatus"`
+	StatusVersion        int              `json:"statusVersion"`
+	TeamVersion          int              `json:"teamVersion"`
+	TeamTruckID          *string          `json:"teamTruckId,omitempty"`
+	TeamTruckUnit        *string          `json:"teamTruckUnit,omitempty"`
+	TeamStartWeek        *string          `json:"teamStartWeek,omitempty"`
+	TeamRole             string           `json:"teamRole,omitempty"`
+	TeamPartnerID        *string          `json:"teamPartnerId,omitempty"`
+	TeamPartnerName      *string          `json:"teamPartnerName,omitempty"`
+	Status               string           `json:"status"`
+	TerminationDate      *time.Time       `json:"terminationDate"`
+	ID                   string           `json:"id"`
+	FullName             string           `json:"fullName"`
+	FirstName            *string          `json:"firstName"`
+	LastName             *string          `json:"lastName"`
+	EmploymentType       string           `json:"employmentType"`
+	DriverType           string           `json:"driverType"`
+	IsOwnerOperator      bool             `json:"isOwnerOperator"`
+	PayType              string           `json:"payType"`
+	PayRate              float64          `json:"payRate"`
+	Phone                *string          `json:"phone"`
+	Email                *string          `json:"email"`
+	LicenseNumber        *string          `json:"licenseNumber"`
+	LicenseState         *string          `json:"licenseState"`
+	LicenseExpires       *time.Time       `json:"licenseExpires"`
+	HireDate             *time.Time       `json:"hireDate"`
+	DateOfBirth          *time.Time       `json:"dateOfBirth"`
+	Address              *string          `json:"address"`
+	City                 *string          `json:"city"`
+	State                *string          `json:"state"`
+	PostalCode           *string          `json:"postalCode"`
+	EmergencyContact     *string          `json:"emergencyContact"`
+	DispatcherID         *string          `json:"dispatcherId"`
+	DispatcherName       *string          `json:"dispatcherName"`
+	TruckID              *string          `json:"truckId"`
+	TruckUnit            *string          `json:"truckUnit"`
+	Active               bool             `json:"active"`
+	Notes                *string          `json:"notes"`
+	CDLFileID            *string          `json:"cdlFileId"`
+	CDLFileName          *string          `json:"cdlFileName"`
+	CDLFileContentType   *string          `json:"cdlFileContentType"`
+	CDLFileSizeBytes     *int64           `json:"cdlFileSizeBytes"`
+	CreatedAt            time.Time        `json:"createdAt"`
+	UpdatedAt            time.Time        `json:"updatedAt"`
 }
 
 type DriverInput struct {
@@ -189,6 +191,7 @@ type TruckInput struct {
 }
 
 type Dispatcher struct {
+	UserAccountID       *string   `json:"userAccountId"`
 	Extension           *int      `json:"extension"`
 	MainUpdaterID       *string   `json:"mainUpdaterId"`
 	AfterHoursUpdaterID *string   `json:"afterHoursUpdaterId"`
@@ -205,18 +208,20 @@ type Dispatcher struct {
 }
 
 type DispatcherInput struct {
-	PreserveFields []string
-	Extension      *int
-	ExtensionSet   bool
-	Updaters       *UpdaterAssignments
-	AssignmentWeek string
-	FullName       string
-	Email          *string
-	Phone          *string
-	PayPercentage  *float64
-	DriverIDs      []string
-	Active         bool
-	Notes          *string
+	AccountPasswordHash string
+	AccountActor        string
+	PreserveFields      []string
+	Extension           *int
+	ExtensionSet        bool
+	Updaters            *UpdaterAssignments
+	AssignmentWeek      string
+	FullName            string
+	Email               *string
+	Phone               *string
+	PayPercentage       *float64
+	DriverIDs           []string
+	Active              bool
+	Notes               *string
 }
 
 func (r *FleetRepository) ListDrivers(ctx context.Context) ([]Driver, error) {
@@ -282,7 +287,11 @@ WHERE ($1 = '' OR concat_ws(' ', d.full_name, d.email, d.phone, t.unit_number,
 
 func (r *FleetRepository) GetDriver(ctx context.Context, id string) (Driver, error) {
 	driver, err := scanDriver(r.pool.QueryRow(ctx, selectDriversSQL+" WHERE d.id = $1", id))
-	return driver, mapNotFound(err)
+	if err != nil {
+		return driver, mapNotFound(err)
+	}
+	err = r.pool.QueryRow(ctx, `SELECT coalesce(b.leave_plan,'{}'::jsonb),coalesce(b.version,0) FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, id).Scan(&driver.LeavePlan, &driver.LeavePlanVersion)
+	return driver, err
 }
 
 func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (Driver, error) {
@@ -901,14 +910,22 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 		return Dispatcher{}, err
 	}
 
+	var accountID *string
+	if input.AccountPasswordHash != "" {
+		account, e := createDispatcherAccount(ctx, tx, input)
+		if e != nil {
+			return Dispatcher{}, e
+		}
+		accountID = &account
+	}
 	var id string
 	displayName := formatPersonName(input.FullName)
 	err = tx.QueryRow(ctx, `
-		INSERT INTO dispatchers (
-			full_name, normalized_name, email, phone, pay_percentage, active, notes, extension
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+ INSERT INTO dispatchers (
+			full_name, normalized_name, email, phone, pay_percentage, active, notes, extension,user_account_id
+ ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,$9) RETURNING id`,
 		displayName, normalizeName(displayName), input.Email, input.Phone,
-		input.PayPercentage, input.Active, input.Notes, input.Extension,
+		input.PayPercentage, input.Active, input.Notes, input.Extension, accountID,
 	).Scan(&id)
 	if err != nil {
 		return Dispatcher{}, err
@@ -931,6 +948,14 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 		return Dispatcher{}, err
 	}
 	defer tx.Rollback(ctx)
+	if input.AccountActor != "" {
+		if err = accessLock(ctx, tx, input.AccountActor); err != nil {
+			return Dispatcher{}, err
+		}
+		if err = accessAudit(ctx, tx, input.AccountActor, "update_dispatcher_account", id, map[string]any{"name": input.FullName, "email": input.Email, "active": input.Active}); err != nil {
+			return Dispatcher{}, err
+		}
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Dispatcher{}, err
 	}
@@ -961,22 +986,46 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 	return r.GetDispatcher(ctx, id)
 }
 
-func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string) error {
-	command, err := r.pool.Exec(ctx, "DELETE FROM dispatchers WHERE id = $1", id)
+func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string, actor ...string) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if command.RowsAffected() == 0 {
-		return ErrNotFound
+	defer tx.Rollback(ctx)
+	if len(actor) > 0 {
+		if err = accessLock(ctx, tx, actor[0]); err != nil {
+			return err
+		}
 	}
-	return nil
+	var user *string
+	if err = tx.QueryRow(ctx, `SELECT user_account_id FROM dispatchers WHERE id=$1 FOR UPDATE`, id).Scan(&user); err != nil {
+		return mapNotFound(err)
+	}
+	if user != nil {
+		if len(actor) == 0 {
+			return ErrAccessConflict
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app_users SET active=false,version=version+1,updated_at=now() WHERE id=$1`, *user); err != nil {
+			return err
+		}
+		if err = revokeUser(ctx, tx, *user); err != nil {
+			return err
+		}
+		if err = accessAudit(ctx, tx, actor[0], "delete_dispatcher_account", *user, map[string]string{"dispatcherId": id}); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM dispatchers WHERE id=$1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 const selectDispatchersSQL = `
 SELECT dp.id, dp.full_name, dp.email, dp.phone, dp.pay_percentage,
 	dp.active, dp.notes, COUNT(d.id)::int, dp.created_at, dp.updated_at, dp.extension,
  (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='main'),
- (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='after_hours')
+ (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='after_hours'),dp.user_account_id
 FROM dispatchers dp
 LEFT JOIN drivers d ON d.dispatcher_id = dp.id`
 
@@ -984,7 +1033,7 @@ func scanDispatcher(row rowScanner) (Dispatcher, error) {
 	var value Dispatcher
 	err := row.Scan(&value.ID, &value.FullName, &value.Email, &value.Phone,
 		&value.PayPercentage, &value.Active, &value.Notes, &value.DriverCount,
-		&value.CreatedAt, &value.UpdatedAt, &value.Extension, &value.MainUpdaterID, &value.AfterHoursUpdaterID)
+		&value.CreatedAt, &value.UpdatedAt, &value.Extension, &value.MainUpdaterID, &value.AfterHoursUpdaterID, &value.UserAccountID)
 	value.FullName = formatPersonName(value.FullName)
 	return value, err
 }

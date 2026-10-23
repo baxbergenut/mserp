@@ -91,8 +91,10 @@ export function DispatcherForm({
           <PhoneInput value={value.phone} onChange={(phone) => set("phone", phone)} />
         </Field>
         <Field label="Phone extension"><input type="number" min="0" max="999999" step="1" value={value.extension ?? ""} onChange={event => set("extension", event.target.value === "" ? null : Number(event.target.value))} className={controlClass} /></Field>
+        {!dispatcherId && <Field label="Password" hint="Creates the dispatcher login with the permanent Dispatcher role."><input aria-label="Dispatcher password" type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={value.password??""} onChange={e=>set("password",e.target.value)} className={controlClass}/></Field>}
         <Field label="Email">
           <input
+            required={!dispatcherId}
             type="email"
             value={value.email}
             onChange={(event) => set("email", event.target.value)}

@@ -35,7 +35,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix, _, ok := strings.Cut(string(init), string(migration))
+	prefix, _, ok := strings.Cut(strings.ReplaceAll(string(init), "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n"))
 	if !ok {
 		t.Fatal("fresh schema must contain exact migration")
 	}
@@ -365,6 +365,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if got := scalar(`SELECT count(*)::text FROM fleet_status_history`); got != beforeAction {
 				t.Fatal("intermediate states leaked into committed history", got, beforeAction)
 			}
+			testDriverLeaveWorkflow(t, ctx, pool, actor)
 		})
 	}
 }
