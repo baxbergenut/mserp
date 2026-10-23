@@ -196,6 +196,36 @@ export default function ExpensesPage() {
     return () => { cancelled = true; };
   }, [canLoadFleetSelectors]);
 
+  const expenseOpen = editing !== undefined;
+  useEffect(() => {
+    if (!expenseOpen || !canLoadFleetSelectors) return;
+    let request: AbortController | undefined;
+    const refresh = () => {
+      request?.abort();
+      const controller = new AbortController();
+      request = controller;
+      void Promise.all([
+        fetchExpensesPage({ page: 1, pageSize: 1 }, controller.signal),
+        fetchDriverOptions(),
+      ]).then(([response, driverValues]) => {
+        if (controller.signal.aborted) return;
+        setOptions(current => ({ ...current, applicants: response.options.applicants }));
+        setDrivers(driverValues);
+      }).catch(reason => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Failed to refresh driver choices");
+      });
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      request?.abort();
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [expenseOpen, canLoadFleetSelectors]);
+
   const workCategory=options.workOrdersCategoryId ?? "";
   function showReview(queue: NonNullable<typeof review>,index:number) {
     const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);setUploadError("");

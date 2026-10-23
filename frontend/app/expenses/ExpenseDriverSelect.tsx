@@ -15,12 +15,13 @@ export function ExpenseDriverSelect({ value, drivers, applicants = [], trucks, o
   label?: string;
 }) {
   const choices = [
-    ...drivers.map(driver => ({ id: driver.id, name: driver.fullName })),
+    ...drivers.map(driver => ({ id: driver.id, fullName: driver.fullName, name: driver.fullName })),
     ...(!required ? applicants.map(applicant => ({
       id: `applicant:${applicant.id}`,
+      fullName: applicant.fullName,
       name: `${applicant.fullName} (${applicant.status === "hired" ? "Pending setup" : applicant.status === "rejected" ? "Rejected applicant" : applicant.status === "withdrawn" ? "Withdrawn applicant" : "Applicant"})${applicants.filter(other => other.fullName === applicant.fullName).length > 1 ? ` · ${applicant.id.slice(-6)}` : ""}`,
     })) : []),
-  ];
+  ].sort((a, b) => a.fullName.localeCompare(b.fullName, "en", { sensitivity: "base" }) || a.id.localeCompare(b.id));
   const selected = value.driverId || (value.applicantId ? `applicant:${value.applicantId}` : value.driverName ? "__unlinked" : "");
 
   return <select

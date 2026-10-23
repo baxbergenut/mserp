@@ -27,6 +27,8 @@ settings.push(...['Cash', 'EFS'].map(name => ({id:'method-'+name,kind:'payment_m
 const blankDraft = { company: 'Wrong company', categoryId: 'maintenance', expenseDate: '2026-09-28', truckId: 'investor-truck', driverId: 'hired', unitNumber: '101', driverName: 'Hired Driver', amount: '12.50', paymentType: '', expenseType: 'Repair', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: 'Invented payer' };
 let drafts = [{...blankDraft,costBreakdown:[{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]}];
 const writes = [];
+const applicants = [{ id: 'applicant-001', fullName: 'Hiring Applicant', status: 'applied' }];
+let applicantReads = 0;
 const receiptUploads = [];
 let entries = [], verificationRole = "admin";
 const verified = [];
@@ -74,16 +76,34 @@ try {
       await route.fulfill({ json: item }); return;
     }
     const q = new URL(route.request().url()).searchParams;
+    if (path === '/expenses') applicantReads++;
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
-      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants:[{id:"applicant-001",fullName:"Hiring Applicant",status:"applied"}], settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
+      '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants, settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
     await route.fulfill({ json: fixtures[path] ?? {} });
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/expenses`);
+  await expect(page.getByRole('button', { name: 'Add entry', exact: true })).toBeVisible();
+  await expect.poll(() => applicantReads).toBeGreaterThan(0);
+  // A webhook arrives after the page loaded, before opening the expense form.
+  applicants.push({ id: 'fiston', fullName: 'Fiston Makuza', status: 'applied' });
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();
+  const refreshedDriver = page.getByLabel('Driver', { exact: true });
+  await expect(refreshedDriver.locator('option')).toHaveText(['No driver', 'Company Driver', 'Fiston Makuza (Applicant)', 'Hired Driver', 'Hiring Applicant (Applicant)', 'Owner Driver']);
+  await refreshedDriver.selectOption('applicant:fiston');
+  await page.getByLabel('Amount', { exact: true }).fill('37.25');
+  // Another arrival while the form is open becomes available on tab focus.
+  applicants.push({ id: 'new-applicant', fullName: 'aaron New Applicant', status: 'applied' });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(refreshedDriver.locator('option')).toHaveText(['No driver', 'aaron New Applicant (Applicant)', 'Company Driver', 'Fiston Makuza (Applicant)', 'Hired Driver', 'Hiring Applicant (Applicant)', 'Owner Driver']);
+  await expect(refreshedDriver).toHaveValue('applicant:fiston');
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('37.25');
+  await expect(page.getByLabel('Who will cover')).toHaveValue('Company');
+  await expect(page.getByLabel('Unit number', { exact: true })).toHaveValue('');
+  await refreshedDriver.selectOption('');
   await expect(page.getByLabel('Paid by', { exact: true })).toHaveValue('Entry User');
   await expect(page.getByText('Company', { exact: true }).filter({ visible: true })).toHaveCount(0);
   await expect(page.getByLabel('Responsible truck owner')).toHaveCount(0);

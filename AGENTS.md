@@ -100,6 +100,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   validation, and CRUD handlers.
   Expense Driver is a searchable selection dropdown for hired drivers and synced
   FleetScope applicants. It uses the standard native select; new unlinked names cannot be saved.
+  Drivers and applicants share one case-insensitive alphabetical order by name.
+  Opening an expense form or returning to its tab refreshes driver/applicant choices
+  without replacing the expense draft.
   Legacy manual-name expenses retain their historical text. Migration 134 stores
   applicants separately from the fleet and uses explicit FleetScope applicant-to-hired
   driver UUIDs plus reviewed local identity links to show prehire expense history.
