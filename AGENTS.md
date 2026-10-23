@@ -2509,7 +2509,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   yellow), 1 (sent and checked, green), and 0 (not sent, red). Blank means unrecorded.
   Legacy eligibility snapshots remain stored but never filter the matrix or set marks.
   The startup/minute worker maintains the current roster without changing manual marks.
-  Direct typing or a single-symbol paste replaces and saves a cell; other values are blocked. Backspace/Delete clears. Arrows/Enter navigate without a text caret; Ctrl+Z undoes session edits through versioned actor-owned audit events. Upcoming read-only weeks fill unused width; the minute worker creates Monday weeks in New York time. The grid has roughly 64px week cells and fills the available page height. Notes and
+  Direct typing or a single-symbol paste replaces and saves a cell; other values are blocked. Backspace/Delete clears. Arrows/Enter navigate without a text caret; Ctrl+Z undoes session edits through versioned actor-owned audit events. Upcoming read-only weeks fill unused width; the minute worker creates Monday weeks in New York time. The grid has roughly 56px week cells and fills the available page height. Notes and
   Checked by are hidden; stored notes/attribution survive edits. Source provenance,
   optimistic versions, idempotency, immutable audit and pti.read/edit are preserved.
   GET /weekly-pti/matrix is read-only; missing historical cells are created only on

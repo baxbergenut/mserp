@@ -78,7 +78,8 @@ try{
  expect(((await api('get',path)).rows.find(r=>r.truckId===target.truckId)).notes).toBe('Preserved historical note');
  await page.reload();await expect(cell).toHaveValue('1');
  const table=page.getByRole('table',{name:'Weekly PTI matrix',exact:true});
- expect(await table.evaluate(el=>el.querySelector('td').getBoundingClientRect().width)).toBeGreaterThanOrEqual(64);
+ expect(await table.evaluate(el=>el.querySelector('td').getBoundingClientRect().width)).toBeGreaterThanOrEqual(56);
+ expect(await cell.evaluate(el=>el.getBoundingClientRect().height)).toBe(28);
  expect(await table.evaluate(el=>el.parentElement.parentElement.clientWidth-el.getBoundingClientRect().width)).toBeLessThanOrEqual(2);
  await expect.poll(()=>table.evaluate(el=>Math.round(window.innerHeight-el.parentElement.getBoundingClientRect().bottom))).toBeLessThanOrEqual(32);
  const oldCell=page.getByLabel('Truck 102 PTI '+weeks[0],{exact:true});await oldCell.press('/');await expect(oldCell).not.toHaveAttribute('aria-busy','true');await expect(oldCell).toHaveValue('/');await expect(cell).toHaveValue('1');
