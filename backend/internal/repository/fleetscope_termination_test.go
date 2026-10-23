@@ -131,7 +131,7 @@ func testFleetScopeOffboarding(t *testing.T, pool, admin *pgxpool.Pool) {
 	}
 	var notes string
 	must(pool.QueryRow(ctx, `SELECT notes FROM custom_tasks WHERE id=(SELECT task_id FROM fleetscope_driver_terminations WHERE id=$1)`, terminationID).Scan(&notes))
-	if !strings.Contains(notes, "current truck and dispatcher assignments disconnected") {
+	if !strings.Contains(notes, "dispatcher assignment disconnected") || !strings.Contains(notes, "Non-owned truck assignments disconnected") {
 		t.Fatal(notes)
 	}
 	taskCount := func() int {

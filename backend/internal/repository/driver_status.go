@@ -42,15 +42,17 @@ func (r *FleetRepository) ChangeDriverStatus(ctx context.Context, id, actor stri
 		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, actor); err != nil {
 			return Driver{}, err
 		}
-		if err = releaseDriverTruck(ctx, tx, id); err != nil {
-			return Driver{}, err
-		}
 	}
 	_, err = tx.Exec(ctx, `UPDATE drivers SET status=$2,active=($2<>'terminated'),
  termination_date=CASE WHEN $2='terminated' THEN nullif($3,'')::date ELSE NULL END,
  dispatcher_id=CASE WHEN $2='terminated' THEN NULL ELSE dispatcher_id END,updated_at=now() WHERE id=$1`, id, input.Status, input.TerminationDate)
 	if err != nil {
 		return Driver{}, err
+	}
+	if input.Status == "terminated" {
+		if err = offboardDriverAssignments(ctx, tx, id, actor, "profile"); err != nil {
+			return Driver{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Driver{}, err

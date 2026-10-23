@@ -13,9 +13,12 @@ var ErrTruckUnavailable = fmt.Errorf("truck is unavailable; Fleet must release i
 // Lock the assigned truck before checking, sharing the work-order writer's fence.
 // Existing load records and historical accounting corrections remain editable.
 func requireDispatchableTruck(ctx context.Context, tx pgx.Tx, driver string) error {
-	var available bool
-	if err := tx.QueryRow(ctx, `SELECT NOT fleet_status_enabled() OR availability_status='active' FROM drivers WHERE id=$1`, driver).Scan(&available); err != nil {
+	var driverActive, available bool
+	if err := tx.QueryRow(ctx, `SELECT active,NOT fleet_status_enabled() OR availability_status='active' FROM drivers WHERE id=$1`, driver).Scan(&driverActive, &available); err != nil {
 		return err
+	}
+	if !driverActive {
+		return chargeInvalid("Only active drivers can be dispatched")
 	}
 	if !available {
 		return chargeInvalid("Set the driver availability to Active before dispatch")

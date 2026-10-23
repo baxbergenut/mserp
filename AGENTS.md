@@ -2152,7 +2152,10 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 - Drivers expose `status` (`active`, `vacation`, `home`, `terminated`) and an optional
   `terminationDate`. Only terminated maps to active=false. A compatibility trigger
   synchronizes legacy active writes; nonterminated named statuses retain fleet links.
-  Termination keeps the existing charge pause/assignment release workflow. FleetScope
+  Termination keeps the existing charge pause workflow, clears dispatchers, and
+  releases non-owned truck assignments. Existing own-truck links remain; owned
+  trucks become inactive unless an active direct/team driver requires review.
+  See migration 148 and `docs/DRIVER_TERMINATION.md`. FleetScope
   records its source termination date. Legacy inactive records become terminated;
   known source dates survive, otherwise migration day minus 30 days is the explicitly
   approved transition date. Each termination has a durable review identity.
@@ -2593,3 +2596,24 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   metadata. Mixed documents keep separate invoices and category permissions; partial
   drafts preserve missing amounts and payment details. Read-only extraction never
   saves, pays, completes a program or issues a provider payment.
+
+### Termination assignments and owned trucks (148)
+
+- Profile edits, Employment status and FleetScope termination share
+  `repository/driver_offboarding.go`. Use recorded `investors.driver_id` ownership,
+  never legacy type booleans or name matching. Retain only an existing own-truck
+  assignment; never recreate an ended one. Other trucks keep their active flag
+  when their terminated driver is released. Rehire never reactivates trucks.
+- Owned trucks with active direct or current team drivers stay unchanged and get
+  private `driver_offboarding` review tasks under existing system-task assignment
+  permissions. Migration 148 stores per-termination/truck outcome receipts with
+  before/after snapshots; retries do not duplicate tasks or revisit held trucks.
+  Inactivation appends a truck profile note. Truck recurring fees, ownership,
+  historical work and provider memberships retain existing rules.
+- Operator cleanup uses `-termination-cleanup-preview`, then
+  `-termination-cleanup-apply <revision>` with the exact preview SHA256. It exits
+  before workers/provider clients, fences the fleet snapshot, clears terminated
+  dispatchers and non-owned truck links using today's New York assignment date,
+  and records owned-truck decisions atomically. Deployment alone does no backfill.
+  Run `TestTerminationOffboardingDatabase` and `TestFleetScopeDatabase` with local
+  disposable `MSERP_FLEETSCOPE_TEST_DATABASE_URL`.

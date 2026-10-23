@@ -496,7 +496,12 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if command.RowsAffected() == 0 {
 		return Driver{}, ErrNotFound
 	}
-	if err = setDriverTruck(ctx, tx, id, input.TruckID); err != nil {
+	if !input.Active {
+		err = offboardDriverAssignments(ctx, tx, id, input.ChargeActor, "profile")
+	} else {
+		err = setDriverTruck(ctx, tx, id, input.TruckID)
+	}
+	if err != nil {
 		return Driver{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -1071,6 +1076,17 @@ func setTruckDriver(ctx context.Context, tx pgx.Tx, truckID string, driverID *st
 	if driverID != nil {
 		return assignTruck(ctx, tx, truckID, *driverID)
 	}
+	// Saving an inactive truck's unrelated details must preserve its retained
+	// terminated owner-driver link, even when an older form sends driverId=null.
+	var retained bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t JOIN investors o ON o.id=t.owner_id
+ JOIN truck_driver_assignments a ON a.truck_id=t.id AND a.unassigned_at IS NULL AND a.driver_id=o.driver_id
+ JOIN drivers d ON d.id=a.driver_id WHERE t.id=$1 AND NOT t.active AND NOT d.active)`, truckID).Scan(&retained); err != nil {
+		return err
+	}
+	if retained {
+		return nil
+	}
 	var assigned bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments WHERE truck_id=$1 AND unassigned_at IS NULL)`, truckID).Scan(&assigned); err != nil {
 		return err
@@ -1089,16 +1105,26 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 	if err := tx.QueryRow(ctx, `SELECT active FROM trucks WHERE id=$1 FOR UPDATE`, truckID).Scan(&truckActive); err != nil {
 		return mapNotFound(err)
 	}
-	if !driverActive || !truckActive {
-		return chargeInvalid("Only active drivers and trucks can be assigned")
-	}
 	var unchanged bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_driver_assignments
  WHERE truck_id=$1 AND driver_id=$2 AND unassigned_at IS NULL)`, truckID, driverID).Scan(&unchanged); err != nil {
 		return err
 	}
 	if unchanged {
+		if !driverActive || !truckActive {
+			var owner bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t JOIN investors o ON o.id=t.owner_id WHERE t.id=$1 AND o.driver_id=$2)`, truckID, driverID).Scan(&owner); err != nil {
+				return err
+			}
+			if owner {
+				return nil
+			}
+			return chargeInvalid("Only active drivers and trucks can be assigned")
+		}
 		return handoffInvestorDriverCharges(ctx, tx, driverID, "")
+	}
+	if !driverActive || !truckActive {
+		return chargeInvalid("Only active drivers and trucks can be assigned")
 	}
 	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {
 		return err

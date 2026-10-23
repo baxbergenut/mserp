@@ -339,7 +339,7 @@ export function TruckForm({
           checked={value.active}
           onChange={(checked) => onChange({ ...value, active: checked, ...(!checked ? { driverId: null, status: value.status === "assigned" ? "available" : value.status, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
           label="Active truck"
-          description="Marking inactive disconnects the current driver. Historical records are retained."
+          description="Marking inactive disconnects the current driver, except a terminated owner’s existing link to their own truck. Historical records are retained."
         />}
         <Field label="Internal notes" wide>
           <textarea
