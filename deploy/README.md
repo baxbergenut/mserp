@@ -19,10 +19,16 @@ Pushes to `main` deploy production. Pull requests run the complete test/build
 job without receiving deployment secrets. `workflow_dispatch` can redeploy the
 current `main` commit.
 
-Production is served at `https://erp.msexpressinc.net`. Nginx redirects port 80
-to HTTPS and uses the Let's Encrypt certificate under
-`/etc/letsencrypt/live/erp.msexpressinc.net`. The Certbot systemd timer renews
-the certificate automatically through the Nginx ACME webroot at
+Production is served at `https://clustie.io`. The apex A record points to
+`137.184.102.22`; `www` is a CNAME for `clustie.io`, managed with Namecheap DNS.
+Nginx redirects HTTP and `https://www.clustie.io` to the canonical HTTPS URL.
+The Let's Encrypt certificate under `/etc/letsencrypt/live/clustie.io` covers
+both names. The former `https://erp.msexpressinc.net` website redirects while
+its `/api/` routes remain proxied for existing signed webhooks and integrations;
+retain its DNS record and certificate renewal. The API's `FRONTEND_ORIGIN` is
+`https://clustie.io`; browser sessions are host-only, so users sign in again on
+the new domain. The Certbot systemd timer renews certificates automatically
+through the Nginx ACME webroot at
 `/var/www/letsencrypt`. Successful renewals invoke the root-owned
 `/usr/local/sbin/mserp-certbot-deploy` hook to validate and reload Nginx. The
 original IP endpoint on port 8443 remains available during the domain

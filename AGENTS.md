@@ -1964,15 +1964,21 @@ Prefer these targeted searches over recursively reading the repository.
 
 ### Production topology
 
-- Canonical URL: `https://erp.msexpressinc.net`.
-- VPS: `137.184.102.22`. DNS is managed by Wix; the `erp` A record points to
-  this address.
+- Canonical URL: `https://clustie.io`.
+- VPS: `137.184.102.22`. Namecheap DNS manages the `clustie.io` apex A record
+  pointing to this address and the `www` CNAME pointing to `clustie.io`.
+  HTTPS `www` and the former `erp.msexpressinc.net` website redirect to the
+  canonical domain, preserving paths and queries. Keep the old domain's DNS and
+  certificate: its `/api/` routes still proxy existing integrations and signed
+  webhooks without redirects. Host-only browser cookies require signing in again
+  at the new domain.
 - Nginx listens on ports 80 and 443, redirects HTTP to HTTPS, serves the static
   frontend from `/opt/mserp/current/frontend`, and proxies `/api/` to
   `127.0.0.1:18080`. The original self-signed IP endpoint on port 8443 remains
   available only as a legacy fallback.
-- The domain certificate is managed by Certbot/Let's Encrypt under
-  `/etc/letsencrypt/live/erp.msexpressinc.net`. Renewal uses the webroot
+- The apex and `www` certificate is managed by Certbot/Let's Encrypt under
+  `/etc/letsencrypt/live/clustie.io`; the old domain retains its separate
+  `/etc/letsencrypt/live/erp.msexpressinc.net` certificate. Renewal uses the webroot
   `/var/www/letsencrypt`, the enabled `certbot.timer`, and the root-owned deploy
   hook `/usr/local/sbin/mserp-certbot-deploy` to validate and reload Nginx.
 - The Go API is `mserp-api.service`, bound only to `127.0.0.1:18080`. Its
@@ -1994,7 +2000,7 @@ Prefer these targeted searches over recursively reading the repository.
 - Runtime environment and secret files live under `/etc/mserp`, primarily
   `/etc/mserp/mserp.env`. Never copy them into a release, artifact, log, commit,
   or tool output. Production `FRONTEND_ORIGIN` is
-  `https://erp.msexpressinc.net`.
+  `https://clustie.io`.
 - The live Nginx site is `/etc/nginx/sites-available/mserp`, enabled through
   `/etc/nginx/sites-enabled/mserp`. Keep `deploy/nginx-mserp.conf` as its
   version-controlled source. Always back up the live file, run `nginx -t`, and
@@ -2092,13 +2098,13 @@ gh run list --repo baxbergenut/mserp --workflow "CI and deploy" --branch main --
 ssh root@137.184.102.22 'readlink -f /opt/mserp/current; systemctl is-active mserp-api nginx fuelbot postgresql@16-main'
 
 # Public routing and trusted TLS (do not use -k for the domain check)
-curl.exe -sS https://erp.msexpressinc.net/api/healthz
-curl.exe -sSI https://erp.msexpressinc.net/login
+curl.exe -sS https://clustie.io/api/healthz
+curl.exe -sSI https://clustie.io/login
 ```
 
 For authentication-related deployments, use a temporary test session to verify
 login -> `/auth/session` -> authenticated page -> logout. Confirm browser
-requests stay on `https://erp.msexpressinc.net/api/...`; any request to the IP
+requests stay on `https://clustie.io/api/...`; any request to the IP
 endpoint indicates a stale or incorrectly built frontend. Never expose session
 cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 
