@@ -51,7 +51,11 @@ func TestExpenseMaintenanceDatabase(t *testing.T) {
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			var legacyExpense, legacyRecord, missingRecord, truck, category string
 			if mode == "migration" {
-				source = strings.Replace(source, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
+				var found bool
+				source, _, found = strings.Cut(source, strings.ReplaceAll(string(migration), "\r\n", "\n"))
+				if !found {
+					t.Fatal("fresh schema missing exact maintenance migration")
+				}
 			}
 			exec(source)
 			scalar := func(sql string, args ...any) string {
@@ -71,6 +75,7 @@ func TestExpenseMaintenanceDatabase(t *testing.T) {
 				exec(`INSERT INTO maintenance_documents(record_id,file_name,content_type,size_bytes,sha256,data,uploaded_by) VALUES($1,'invoice.txt','text/plain',3,'test-hash','abc','Tester')`, legacyRecord)
 				exec(`UPDATE expense_sheet_export_config SET enabled=true`)
 				exec(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "147")
 				if got := scalar(`SELECT concat(amount,':',base_amount,':',payment_fee,':',payment_type,':',paid_by,':',jsonb_array_length(cost_breakdown)) FROM expenses WHERE id=$1`, legacyExpense); got != "103.00:100.00:3.00:EFS:Original payer:1" {
 					t.Fatal("migration changed invoice", got)
 				}

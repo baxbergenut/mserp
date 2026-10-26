@@ -488,7 +488,7 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1`, unrelated)
 	exec(`DELETE FROM loads WHERE id=992`)
 	exec(`DELETE FROM drivers WHERE id=$1`, unrelated)
-	exec(`UPDATE trucks SET active=false WHERE id=$1`, truck)
+	exec(`UPDATE trucks SET status='out_of_service',status_reason='Testing inactive historical statements' WHERE id=$1`, truck)
 	r = read()
 	if len(r.Drivers) != 0 {
 		t.Fatal("inactive truck shown in default pay view")
@@ -500,7 +500,7 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = pr.SettleInvestor(ctx, week, "", r.Revision, actor, "", false, false); err == nil {
 		t.Fatal("whole week finalized hidden inactive truck")
 	}
-	exec(`UPDATE trucks SET active=true WHERE id=$1`, truck)
+	exec(`UPDATE trucks SET status='available',status_reason='Return after historical statement checks' WHERE id=$1`, truck)
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit) VALUES(993,'LATE-TRUCK-LOAD','delivered',100,100,'LATE-UNIT')`)
 	exec(`INSERT INTO trucks(unit_number) VALUES('LATE-UNIT')`)
 	var linked bool
