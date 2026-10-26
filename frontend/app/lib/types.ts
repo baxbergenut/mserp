@@ -602,8 +602,12 @@ export interface PrePassFleetChange {
 export type TruckOperatingStatus = "ready" | "in_use" | "shop" | "out_of_service" | "terminated";
 export interface TruckPage extends PaginatedResponse<Truck> {
  statusCounts: Record<TruckOperatingStatus, number>;
+ gpsAlertCounts: Record<"overdue" | "missing", number>;
 }
 export interface Truck {
+ gpsReportedAt?: string | null;
+ gpsSource?: "five_eld" | "samsara" | null;
+ gpsAlert?: "" | "overdue" | "missing";
  statusReason?: string;
 	statusVersion?: number;
  operatingStatus?: TruckOperatingStatus;

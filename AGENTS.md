@@ -2461,6 +2461,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ### Samsara-first telematics (131)
 
+- Trucks directory/profile GPS health reads the freshest trusted cached Five ELD
+  or Samsara observation. Only In use trucks show GPS update overdue (>168 hours)
+  or No GPS data. These warnings never infer movement or change status/history.
+  `truck_gps.go` guards ambiguous/duplicate VINs, unavailable and future reports;
+  server-side `gpsAlert` filters/counts follow search. No extra polling/storage.
+  Existing map/Status Board source choices stay unchanged. See FLEET_STATUSES.md.
+
 - `internal/samsara`, `jobs/sync_samsara.go`, and repository `samsara_repository.go`
   read complete paginated vehicle/stat snapshots into separate caches. Server-only
   `SAMSARA_API_TOKEN`, optional `SAMSARA_API_VERSION`, `SAMSARA_API_URL` and

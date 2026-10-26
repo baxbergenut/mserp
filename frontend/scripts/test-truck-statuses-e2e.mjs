@@ -14,6 +14,7 @@ const preview = JSON.parse(cli(['-fleet-status-preview']));
 if (!preview.enabled) cli(['-fleet-status-activate', preview.revision]);
 const prefix = 'STATUS-' + randomUUID().slice(0, 8).toUpperCase();
 const driverId = randomUUID(), inUseId = randomUUID();
+const gpsVIN = '1GPS' + randomUUID().replaceAll('-', '').slice(0,13).toUpperCase();
 execFileSync(process.env.PSQL_PATH || 'psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', database.toString()], {
   input: `SET search_path TO ${access.schema},public;
   INSERT INTO trucks(unit_number,status,status_reason) VALUES
@@ -57,7 +58,7 @@ try {
   await page.getByPlaceholder('Search trucks…').fill(prefix);
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(25);
   expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Unit', 'Equipment', 'Driver', 'Status', 'Status notes']);
-  await expect(page.getByRole('table').locator('tbody tr td:nth-child(4)')).toHaveText(first.items.map(t => ({ ready: 'Ready', shop: 'Shop', in_use: 'In use', out_of_service: 'OOS', terminated: 'Terminated' })[t.operatingStatus]));
+  await expect(page.getByRole('table').locator('tbody tr td:nth-child(4)')).toHaveText(first.items.map(t => ({ ready: 'Ready', shop: 'Shop', in_use: 'In use', out_of_service: 'OOS', terminated: 'Terminated' })[t.operatingStatus] + (t.gpsAlert === 'missing' ? 'No GPS data' : '')));
   await expect(page.getByRole('table').locator('tbody tr td:last-child')).toHaveText(first.items.map(t => t.statusReason?.trim() || '—'));
   await expect(card('')).toHaveAttribute('aria-pressed', 'true');
   await expect(card('')).toContainText('30');
@@ -70,6 +71,41 @@ try {
   await readyRow.press('Enter');
   await expect(page).toHaveURL(new RegExp('/trucks/detail\\?id=' + first.items[0].id));
   await page.goBack();
+  const gpsButton = label => page.getByRole('group', {name: 'Filter truck GPS warnings'}).getByRole('button', {name: new RegExp('^'+label+',')});
+  expect(first.gpsAlertCounts).toEqual({overdue:0,missing:1});
+  await gpsButton('No GPS data').click();
+  await expect(gpsButton('No GPS data')).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
+  await page.getByRole('row',{name:`Open truck ${prefix}-X-USE details`,exact:true}).click();
+  await expect(page.getByText('No matched GPS report available.',{exact:true})).toBeVisible();
+  await page.goBack();
+  await expect(gpsButton('No GPS data')).toHaveAttribute('aria-pressed','true');
+  const gpsSQL = input => execFileSync(process.env.PSQL_PATH || 'psql',['-X','-q','-v','ON_ERROR_STOP=1','-d',database.toString()],{input:`SET search_path TO ${access.schema},public;${input}`,encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe']});
+  gpsSQL(`UPDATE trucks SET vin='${gpsVIN}' WHERE id='${inUseId}'; INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at) VALUES('${gpsVIN}',40,-80,now()-interval '8 days',now());`);
+  await page.reload();
+  await expect(gpsButton('GPS update overdue')).toContainText('1');
+  await gpsButton('GPS update overdue').click();
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('table').getByText('GPS update overdue',{exact:true})).toBeVisible();
+  await page.getByRole('row',{name:`Open truck ${prefix}-X-USE details`,exact:true}).click();
+  await expect(page.getByText(/Last GPS report:.*Five ELD/)).toBeVisible();
+  await expect(page.getByText('No GPS report in over seven days. This does not confirm whether the truck moved.',{exact:true})).toBeVisible();
+  await page.goBack();
+  await expect(gpsButton('GPS update overdue')).toHaveAttribute('aria-pressed','true');
+  await page.screenshot({path:join(artifacts,'trucks-gps-overdue.png'),fullPage:true,animations:'disabled'});
+  await page.getByRole('button',{name:'Collapse sidebar',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await expect(gpsButton('GPS update overdue')).toBeInViewport();
+  await page.screenshot({path:join(artifacts,'trucks-gps-mobile.png'),fullPage:true,animations:'disabled'});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Expand sidebar',exact:true}).click();
+  gpsSQL(`UPDATE five_eld_locations SET reported_at=now() WHERE vin='${gpsVIN}';`);
+  await page.reload();
+  await expect(gpsButton('GPS update overdue')).toContainText('0');
+  await expect(page.getByText('No trucks match your filters.',{exact:true})).toBeVisible();
+  expect((await api('get','/trucks/'+inUseId)).operatingStatus).toBe('in_use');
+  expect((await page.request.get(access.base+'/api/trucks?page=1&gpsAlert=invalid')).status()).toBe(400);
+  await card('').click();
   for (const [status, count] of [['ready', 1], ['shop', 1], ['in_use', 1], ['out_of_service', 1], ['terminated', 25]]) {
     await card(status).click();
     await expect(card(status)).toHaveAttribute('aria-pressed', 'true');

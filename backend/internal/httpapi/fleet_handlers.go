@@ -605,6 +605,13 @@ func (handler fleetHandler) deleteDriver(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
+	gpsAlert := r.URL.Query().Get("gpsAlert")
+	switch gpsAlert {
+	case "", "overdue", "missing":
+	default:
+		writeAPIError(w, http.StatusBadRequest, "Invalid truck GPS alert filter")
+		return
+	}
 	status := r.URL.Query().Get("status")
 	switch status {
 	case "", "ready", "in_use", "shop", "out_of_service", "terminated":
@@ -619,7 +626,7 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value, err := handler.repo.ListTrucksPage(
-			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), status,
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), repository.TruckFilters{Status: status, GPSAlert: gpsAlert},
 		)
 		if err != nil {
 			handler.writeError(w, err)
@@ -628,7 +635,7 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, value)
 		return
 	}
-	values, err := handler.repo.ListTrucks(r.Context(), status)
+	values, err := handler.repo.ListTrucks(r.Context(), repository.TruckFilters{Status: status, GPSAlert: gpsAlert})
 	if err != nil {
 		handler.writeError(w, err)
 		return

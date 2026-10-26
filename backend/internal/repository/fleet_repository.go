@@ -125,6 +125,9 @@ func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSet
 }
 
 type Truck struct {
+	GPSReportedAt       *time.Time `json:"gpsReportedAt"`
+	GPSSource           *string    `json:"gpsSource"`
+	GPSAlert            string     `json:"gpsAlert"`
 	StatusVersion       int        `json:"statusVersion"`
 	StatusReason        string     `json:"statusReason"`
 	OperatingStatus     string     `json:"operatingStatus"`
@@ -603,12 +606,12 @@ func scanDriver(row rowScanner) (Driver, error) {
 	return value, err
 }
 
-func (r *FleetRepository) ListTrucks(ctx context.Context, statusFilter ...string) ([]Truck, error) {
-	status := ""
-	if len(statusFilter) > 0 {
-		status = statusFilter[0]
+func (r *FleetRepository) ListTrucks(ctx context.Context, filters ...TruckFilters) ([]Truck, error) {
+	filter := TruckFilters{}
+	if len(filters) > 0 {
+		filter = filters[0]
 	}
-	rows, err := r.pool.Query(ctx, selectTrucksSQL+" WHERE ($1='' OR fleet_truck_operating_status(t.id)=$1) ORDER BY t.unit_number, t.id", status)
+	rows, err := r.pool.Query(ctx, selectTrucksSQL+" WHERE ($1='' OR fleet_truck_operating_status(t.id)=$1) AND ($2='' OR gps_health.alert=$2) ORDER BY t.unit_number, t.id", filter.Status, filter.GPSAlert)
 	if err != nil {
 		return nil, err
 	}
@@ -627,42 +630,47 @@ func (r *FleetRepository) ListTrucks(ctx context.Context, statusFilter ...string
 
 type TruckPage struct {
 	Page[Truck]
-	StatusCounts map[string]int `json:"statusCounts"`
+	StatusCounts   map[string]int `json:"statusCounts"`
+	GPSAlertCounts map[string]int `json:"gpsAlertCounts"`
 }
 
 func (r *FleetRepository) ListTrucksPage(
 	ctx context.Context,
 	pagination Pagination,
 	search string,
-	statusFilter ...string,
+	filters ...TruckFilters,
 ) (TruckPage, error) {
-	status := ""
-	if len(statusFilter) > 0 {
-		status = statusFilter[0]
+	filter := TruckFilters{}
+	if len(filters) > 0 {
+		filter = filters[0]
 	}
 	const searchWhere = `
 WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	t.license_plate, d.full_name) ILIKE '%' || $1 || '%')`
-	const where = searchWhere + ` AND ($2='' OR fleet_truck_operating_status(t.id)=$2)`
+	const where = searchWhere + ` AND ($2='' OR fleet_truck_operating_status(t.id)=$2) AND ($3='' OR gps_health.alert=$3)`
 	counts := map[string]int{"ready": 0, "shop": 0, "in_use": 0, "out_of_service": 0, "terminated": 0}
+	gpsCounts := map[string]int{"overdue": 0, "missing": 0}
 	countRows, err := r.pool.Query(ctx, `
-		SELECT fleet_truck_operating_status(t.id), count(*)
+		SELECT fleet_truck_operating_status(t.id), gps_health.alert, count(*)
 		FROM trucks t
 		LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
-		LEFT JOIN drivers d ON d.id = a.driver_id`+searchWhere+` GROUP BY 1`, search)
+		LEFT JOIN drivers d ON d.id = a.driver_id`+truckGPSJoinSQL+searchWhere+` GROUP BY 1,2`, search)
 	if err != nil {
 		return TruckPage{}, err
 	}
 	total := 0
 	for countRows.Next() {
-		var code string
+		var code, alert string
 		var count int
-		if err = countRows.Scan(&code, &count); err != nil {
+		if err = countRows.Scan(&code, &alert, &count); err != nil {
 			countRows.Close()
 			return TruckPage{}, err
 		}
-		counts[code] = count
-		if status == "" || code == status {
+		counts[code] += count
+		if alert != "" {
+			gpsCounts[alert] += count
+		}
+		if (filter.Status == "" || code == filter.Status) && (filter.GPSAlert == "" || alert == filter.GPSAlert) {
 			total += count
 		}
 	}
@@ -673,8 +681,8 @@ WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectTrucksSQL+where+`
-		ORDER BY CASE fleet_truck_operating_status(t.id) WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $3 OFFSET $4`,
-		search, status, pagination.PageSize, pagination.Offset())
+		ORDER BY CASE fleet_truck_operating_status(t.id) WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $4 OFFSET $5`,
+		search, filter.Status, filter.GPSAlert, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return TruckPage{}, err
 	}
@@ -690,7 +698,7 @@ WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	if err := rows.Err(); err != nil {
 		return TruckPage{}, err
 	}
-	return TruckPage{Page: NewPage(trucks, total, pagination), StatusCounts: counts}, nil
+	return TruckPage{Page: NewPage(trucks, total, pagination), StatusCounts: counts, GPSAlertCounts: gpsCounts}, nil
 }
 
 func (r *FleetRepository) GetTruck(ctx context.Context, id string) (Truck, error) {
@@ -847,13 +855,13 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
 	t.created_at, t.updated_at,
 	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
-	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version,fleet_truck_status_reason(t.id)
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version,fleet_truck_status_reason(t.id),gps.reported_at,gps.source,gps_health.alert
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
 LEFT JOIN files f ON f.id = t.irp_file_id
 JOIN investors oi ON oi.id=t.owner_id
-LEFT JOIN drivers od ON od.id=oi.driver_id`
+LEFT JOIN drivers od ON od.id=oi.driver_id` + truckGPSJoinSQL
 
 func scanTruck(row rowScanner) (Truck, error) {
 	var value Truck
@@ -867,6 +875,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 		&value.IRPFileContentType, &value.IRPFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt,
 		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus, &value.StatusVersion, &value.StatusReason,
+		&value.GPSReportedAt, &value.GPSSource, &value.GPSAlert,
 	)
 	value.UnitNumber = normalizeTruckUnit(value.UnitNumber)
 	value.DriverName = formatPersonNamePtr(value.DriverName)

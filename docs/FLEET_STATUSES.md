@@ -98,6 +98,24 @@ card has a checkmark and highlighted border. All statuses show by default;
 search/filter/page memory survives navigation.
 Visible pages refresh on focus and every 30 seconds without replacing drafts.
 
+GPS health is a separate read-only advisory, never a lifecycle transition or
+proof of movement. Only In use trucks receive `gpsAlert`: `overdue` when the
+latest trusted observation is more than 168 hours old, `missing` when no trusted
+report is available, otherwise empty. `gpsReportedAt` and `gpsSource` identify
+the newest valid cached Five ELD or Samsara observation; refresh/profile-edit
+timestamps never count. Future dates, ambiguous VINs, duplicate local matches
+and unavailable Samsara vehicles cannot establish freshness. Existing map and
+Status Board provider choices stay unchanged. No history table, new polling job,
+provider requests, status writes or migration is added.
+
+GET /trucks accepts `gpsAlert=overdue|missing`. Paginated responses include
+`gpsAlertCounts` for the current search, independent of status/alert filters and
+pagination (as with status counts). The directory has two amber count filters,
+GPS update overdue and No GPS data. Selecting one clears the status filter;
+selecting a status clears the GPS filter. Counts and rows are server-derived.
+The profile shows the last report date/time in Eastern Time and its source,
+separately from restriction notes and the map's selected provider.
+
 History retains actor/name/source/reason snapshots, action ID, effective and
 recorded times. Migration baselines have unknown earlier starts. GETs/no-ops add
 no events. Database triggers synchronize assignments, employment, current teams,

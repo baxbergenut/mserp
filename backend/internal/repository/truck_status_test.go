@@ -79,6 +79,7 @@ func TestTruckStatusesDatabase(t *testing.T) {
 			}
 			defer pool.Close()
 			verifyTruckStatuses(t, ctx, pool)
+			verifyTruckGPSAlerts(t, ctx, pool)
 		})
 	}
 }
@@ -212,7 +213,7 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	}
 	change("ready", "Truck returned to company")
 	check("ready", true, false)
-	page, e := fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 1}, "TS-", "ready")
+	page, e := fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 1}, "TS-", TruckFilters{Status: "ready"})
 	must(e)
 	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != truck.ID {
 		t.Fatal("status pagination", page)
@@ -225,7 +226,7 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	if len(page.Items) != 2 || page.Items[0].ID != truck.ID || page.Items[1].ID != idle.ID {
 		t.Fatal("priority ordering", page)
 	}
-	page, e = fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 25}, "TS-100", "in_use")
+	page, e = fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 25}, "TS-100", TruckFilters{Status: "in_use"})
 	must(e)
 	if page.Total != 0 || page.StatusCounts["ready"] != 1 || page.StatusCounts["in_use"] != 0 {
 		t.Fatal("status cards must count the search even when the selected status is empty", page)

@@ -21,6 +21,7 @@ import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { TruckEditor } from "./TruckEditor";
 import {FleetStatusBadge,operatingStatus} from "@/app/components/FleetStatusBadge";
 import { DataTruckSetup } from "../DataTruckSetup";
+import { TruckGPSHealth } from "@/app/components/fleet/TruckGPSHealth";
 import { InventoryWorkspace } from "@/app/fleet/inventory/InventoryWorkspace";
 
 const tabs = ["Overview", "Status history", "Equipment", "Service programs", "Expenses", "Assignments"] as const;
@@ -76,6 +77,7 @@ export default function TruckDetailPage() {
           {[["Status", ({ready:"Ready",in_use:"In use",shop:"Shop",out_of_service:"OOS",terminated:"Terminated"})[truck.operatingStatus ?? operatingStatus(truck.status)]], ["Mileage", truck.mileage === null ? "Not recorded" : `${truck.mileage.toLocaleString()} mi`]].map(([label, value]) => <div key={label} className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-sm font-medium capitalize text-zinc-200">{value}</dd></div>)}
         </dl>
         {truck.statusReason&&<p className="whitespace-pre-line border-t border-zinc-800 px-5 py-3 text-sm text-zinc-400">{truck.statusReason}</p>}
+        <div className="border-t border-zinc-800 px-5 py-3"><TruckGPSHealth truck={truck} detail /></div>
       </header>
       <nav className="flex flex-wrap gap-1 border-b border-zinc-800" aria-label="Truck sections">{visibleTabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={`border-b-2 px-3 py-3 text-xs font-medium ${tab === name ? "border-blue-500 text-blue-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>{name}</button>)}</nav>
       {tab === "Overview" && <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">

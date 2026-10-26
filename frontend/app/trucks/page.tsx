@@ -32,6 +32,7 @@ import {
 } from "../components/management/ManagementUI";
 import { emptyTruckInput, TruckForm } from "./TruckForm";
 import { DataTruckSetup } from "./DataTruckSetup";
+import { TruckGPSHealth, gpsAlertLabels } from "../components/fleet/TruckGPSHealth";
 
 const statusCards = [
   { code: "", label: "All", color: "text-zinc-200 bg-zinc-500/5", selected: "border-zinc-400 ring-zinc-400/30" },
@@ -50,10 +51,12 @@ export default function TrucksPage() {
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
   const [status, setStatus] = useViewState("page:truckStatus", "");
+  const [gpsAlert, setGPSAlert] = useViewState("page:truckGPSAlert", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState<TruckPage["statusCounts"] | null>(null);
+  const [gpsAlertCounts, setGPSAlertCounts] = useState<TruckPage["gpsAlertCounts"] | null>(null);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -70,12 +73,13 @@ export default function TrucksPage() {
     const sequence=++requestSequence.current;
     if(!background)setIsLoading(true);
     try {
-      const truckPage = await fetchTrucksPage({ page, pageSize, search: debouncedSearch, status },signal);
+      const truckPage = await fetchTrucksPage({ page, pageSize, search: debouncedSearch, status, gpsAlert },signal);
       if(signal?.aborted || sequence!==requestSequence.current)return;
       setTrucks(truckPage.items);
       setPage(truckPage.page);
       setTotal(truckPage.total);
       setStatusCounts(truckPage.statusCounts);
+      setGPSAlertCounts(truckPage.gpsAlertCounts);
       setTotalPages(truckPage.totalPages);
       setError("");
     } catch (reason) {
@@ -83,7 +87,7 @@ export default function TrucksPage() {
     } finally {
       if(!signal?.aborted && sequence===requestSequence.current)setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, page, pageSize, status]);
+  }, [setPage, debouncedSearch, page, pageSize, status, gpsAlert]);
 
   const loadOptions = async () => {
     try {
@@ -175,15 +179,25 @@ export default function TrucksPage() {
       {error && <ErrorBanner message={error} />}
       <div role="group" aria-label="Filter truck status" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {statusCards.map(card => {
-          const selected = status === card.code;
+          const selected = status === card.code && !gpsAlert;
           const count = statusCounts ? (card.code ? statusCounts[card.code] : Object.values(statusCounts).reduce((sum, value) => sum + value, 0)) : null;
           return <button key={card.code} type="button" aria-pressed={selected} aria-label={`${card.label}, ${count ?? "loading"} trucks`}
-            onClick={() => { setStatus(card.code); setPage(1); }}
+            onClick={() => { setStatus(card.code); setGPSAlert(""); setPage(1); }}
             className={`rounded-xl border p-4 text-left transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${card.color} ${selected ? `${card.selected} ring-1` : "border-zinc-800"}`}>
             <span className="flex items-center justify-between gap-2 text-xs font-medium">{card.label}<Check aria-hidden="true" className={`h-4 w-4 ${selected ? "" : "invisible"}`} /></span>
             <span className="mt-2 block text-2xl font-semibold tabular-nums">{count === null ? "—" : count.toLocaleString()}</span>
           </button>;
         })}
+      </div>
+      <div role="group" aria-label="Filter truck GPS warnings" className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-zinc-500">In use · GPS</span>
+        {(["overdue", "missing"] as const).map(code => <button key={code} type="button"
+          aria-pressed={gpsAlert === code} aria-label={`${gpsAlertLabels[code]}, ${gpsAlertCounts?.[code] ?? "loading"} trucks`}
+          onClick={() => { setGPSAlert(gpsAlert === code ? "" : code); setStatus(""); setPage(1); }}
+          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-amber-400 transition hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 ${gpsAlert === code ? "border-amber-400 bg-amber-500/10" : "border-zinc-800"}`}>
+          {gpsAlertLabels[code]}<span className="font-semibold tabular-nums">{gpsAlertCounts?.[code] ?? "—"}</span>
+          {gpsAlert === code && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
+        </button>)}
       </div>
       <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={TruckIcon}
@@ -196,7 +210,7 @@ export default function TrucksPage() {
 
       <TableShell>
         {isLoading ? <LoadingTable columns={5} /> : trucks.length === 0 ? (
-          <EmptyState message={search || status ? "No trucks match your search." : "No trucks yet. Add your first truck to get started."} />
+          <EmptyState message={search || status || gpsAlert ? "No trucks match your filters." : "No trucks yet. Add your first truck to get started."} />
         ) : (
           <table className="w-full min-w-[760px] text-left text-[13px]">
             <thead><tr className="border-b border-zinc-800/50 text-zinc-500">
@@ -214,7 +228,7 @@ export default function TrucksPage() {
                 <td className="px-4 py-3"><span className="font-mono font-medium text-zinc-200">{truck.unitNumber}</span><div className="mt-0.5 text-[11px] text-zinc-600">{truck.ownerName}</div></td>
                 <td className="px-4 py-3"><div className="text-zinc-300">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—"}</div><div className="mt-0.5 font-mono text-[11px] text-zinc-600">{truck.vin ?? truck.licensePlate ?? "No VIN or plate"}</div></td>
                 <td className="px-4 py-3 text-zinc-400">{truck.driverName ?? "Unassigned"}</td>
-                <td className="px-4 py-3"><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady /></td>
+                <td className="px-4 py-3"><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady /><TruckGPSHealth truck={truck} /></td>
                 <td className="max-w-sm whitespace-pre-line break-words px-4 py-3 text-xs text-zinc-400">{truck.statusReason?.trim() || "—"}</td>
               </tr>
             ))}</tbody>

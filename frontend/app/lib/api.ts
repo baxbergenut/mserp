@@ -434,7 +434,7 @@ export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
 export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);
 export const fetchTruckLocation = (id: string) => apiRequest<FleetLocation>(`/trucks/${id}/location`);
 export const fetchDriverTruckLocation = (id: string) => apiRequest<FleetLocation>(`/drivers/${id}/location`);
-export const fetchTrucksPage = (query: PageQuery & { status?: string }, signal?: AbortSignal) =>
+export const fetchTrucksPage = (query: PageQuery & { status?: string; gpsAlert?: string }, signal?: AbortSignal) =>
   paginatedRequest<import("./types").TruckPage>(withQuery("/trucks", query), signal);
 export const createTruck = (input: TruckInput) =>
   apiRequest<Truck>("/trucks", {
