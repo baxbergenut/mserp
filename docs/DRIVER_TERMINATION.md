@@ -35,6 +35,20 @@ dispatcher. Ownership, loads, finalized statements, team history, recurring truc
 fees and existing provider offboarding rules remain separate. No provider mutation
 is added by this feature.
 
+Recurring truck charges stop from the Monday after an owner-driver's termination
+date. The Recurring Charges page hides the affected truck for those weeks, charge
+edits reject it, and both Driver Pay and Investor Pay omit new recurring fees.
+The termination week remains eligible. This follows recorded dated ownership and
+the owner's operating assignment or offboarding receipt; an inactive investor's
+fleet is also subject to the cutoff. Continuing active-investor fleets and trucks
+with employed direct/team operators retain their fees. Home, Vacation and other
+availability changes do not stop charges. Stored charge phases, settlement terms,
+other costs and finalized reports are preserved; viewing earlier weeks still
+uses their historical configuration. No cleanup or provider write is required.
+
+`TestTruckChargeTerminationDatabase` covers the cutoff and recurring API/payroll
+behavior on fresh and migrated schemas with `MSERP_DRIVER_CHARGES_TEST_DATABASE_URL`.
+
 ## Existing-record cleanup
 
 Schema deployment alone does not backfill existing records. With the normal API

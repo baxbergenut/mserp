@@ -111,7 +111,7 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 	d.Owners = []TruckChargeOwner{}
 	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
  FROM trucks t `+truckOwnershipForWeekSQL+`
- LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company ORDER BY t.id`, week)
+ LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company AND NOT (`+terminatedOwnerTruckChargesSQL+`) ORDER BY t.id`, week)
 	if err != nil {
 		return d, err
 	}
@@ -166,6 +166,70 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 
 // All non-company trucks have truck-based recurring fees.
 const investorTruckEligibility = `NOT i.is_company`
+
+// Employment stops fees only for the departing owner's own operating truck (or
+// an inactive investor's fleet). Continuing investor fleets and employed crews
+// remain independent. Compare with Monday, so the termination week is retained.
+// Use dated ownership/assignments, not the legacy owner-operator classification.
+const terminatedOwnerTruckChargesSQL = `EXISTS (
+ SELECT 1 FROM drivers departing WHERE departing.id=i.driver_id
+ AND departing.status='terminated' AND departing.termination_date < $1::date
+ AND (NOT i.active OR EXISTS (
+   SELECT 1 FROM truck_driver_assignments own WHERE own.truck_id=t.id AND own.driver_id=departing.id
+   AND (own.assigned_at AT TIME ZONE 'America/New_York')::date<=departing.termination_date
+   AND (own.unassigned_at IS NULL OR (own.unassigned_at AT TIME ZONE 'America/New_York')::date>departing.termination_date)
+ ) OR EXISTS (
+   SELECT 1 FROM driver_termination_truck_actions receipt
+   WHERE receipt.truck_id=t.id AND receipt.termination_id=departing.termination_id
+   AND receipt.outcome IN ('inactivated','already_inactive')
+ ))
+ AND NOT EXISTS (
+   SELECT 1 FROM truck_driver_assignments crew JOIN drivers person ON person.id=crew.driver_id
+   WHERE crew.truck_id=t.id AND person.id<>departing.id
+   AND (person.active OR person.termination_date >= $1::date)
+   AND crew.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York')
+   AND (crew.unassigned_at IS NULL OR crew.unassigned_at > ($1::date::timestamp AT TIME ZONE 'America/New_York'))
+ )
+ AND NOT EXISTS (
+   SELECT 1 FROM truck_driver_assignments crew JOIN driver_teams team ON team.main_driver_id=crew.driver_id
+   JOIN drivers person ON person.id=team.team_driver_id
+   WHERE crew.truck_id=t.id AND person.id<>departing.id
+   AND (person.active OR person.termination_date >= $1::date)
+   AND team.start_week<=$1::date AND (team.end_week IS NULL OR team.end_week>$1::date)
+   AND crew.assigned_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York')
+   AND (crew.unassigned_at IS NULL OR crew.unassigned_at > ($1::date::timestamp AT TIME ZONE 'America/New_York'))
+ ))`
+
+// Filter only recurring phases: settlement terms, other costs, and frozen
+// reports keep their existing accounting and ownership rules. Build a new slice
+// because payroll inputs may be reused for a different historical week.
+func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data TruckChargeData, week string) (TruckChargeData, error) {
+	rows, err := q.Query(ctx, `SELECT t.id::text FROM trucks t `+truckOwnershipForWeekSQL+`
+ WHERE `+terminatedOwnerTruckChargesSQL, week)
+	if err != nil {
+		return data, err
+	}
+	defer rows.Close()
+	stopped := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return data, err
+		}
+		stopped[id] = true
+	}
+	if err = rows.Err(); err != nil {
+		return data, err
+	}
+	phases := make([]TruckChargePhase, 0, len(data.Phases))
+	for _, phase := range data.Phases {
+		if !stopped[phase.TruckID] {
+			phases = append(phases, phase)
+		}
+	}
+	data.Phases = phases
+	return data, nil
+}
 
 // Both the directory and writes use ownership at the selected week's end.
 // A later transfer to/from the company must not change historical eligibility.
@@ -362,6 +426,14 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor s
 	}
 	if err = requireInvestorTruck(ctx, tx, v.TruckID, v.WeekStart); err != nil {
 		return err
+	}
+	var stopped bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t `+truckOwnershipForWeekSQL+`
+ WHERE t.id=$2 AND `+terminatedOwnerTruckChargesSQL+`)`, v.WeekStart, v.TruckID).Scan(&stopped); err != nil {
+		return err
+	}
+	if stopped {
+		return chargeInvalid("Recurring charges stop the week after the owner-driver's termination")
 	}
 	var options []string
 	var version int

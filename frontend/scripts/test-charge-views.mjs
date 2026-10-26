@@ -76,7 +76,11 @@ try {
     const fixtures = {
       '/auth/session': { user: { id: 'user', username: 'Test user', permissions: readOnly ? ['charges.read'] : ['charges.read', 'charges.create','charges.edit','charges.delete','investor_terms.read','investor_terms.edit', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'] }, csrfToken: 'fixture' },
       '/driver-charges': url.searchParams.has('driverId') ? { ...data, schedules: data.schedules.filter(s => s.driverId === url.searchParams.get('driverId')) } : data,
-      '/drivers': [driver], '/truck-charges': datedOwners ? { ...truckCharges, owners: trucks.map(t => ({ truckId: t.id, ownerId: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? 'new-owner' : t.ownerId, ownerName: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? renamedOwner : t.ownerName })) } : truckCharges,
+      '/drivers': [driver], '/truck-charges': {
+        ...truckCharges,
+        eligibleTruckIds: [...truckCharges.eligibleTruckIds, ...(url.searchParams.get('weekStart') < week ? ['terminated-truck'] : [])],
+        ...(datedOwners ? { owners: trucks.map(t => ({ truckId: t.id, ownerId: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? 'new-owner' : t.ownerId, ownerName: t.id === 'truck-a' && url.searchParams.get('weekStart') >= week ? renamedOwner : t.ownerName })) } : {}),
+      },
       '/trucks': trucks, '/investors': [{ id: 'owner', fullName: 'Truck Owner', active: true }, { id: 'new-owner', fullName: renamedOwner, active: true }],
     };
     await route.fulfill({ json: path === '/trucks' && url.searchParams.has('page') ? { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } : fixtures[path] ?? [] });
@@ -85,14 +89,21 @@ try {
     { id: 'truck-a', unitNumber: '201', ownerId: 'owner', ownerName: 'Truck Owner', driverId: driver.id, driverName: driver.fullName, active: true },
     { id: 'truck-b', unitNumber: '202', ownerId: 'owner', ownerName: 'Truck Owner', active: true },
     { id: 'inactive-truck', unitNumber: 'INACTIVE', ownerId: 'owner', ownerName: 'Truck Owner', active: false },
+    { id: 'terminated-truck', unitNumber: 'TERMINATED', ownerId: 'departed-owner', ownerName: 'Departed Owner', active: false },
     { id: 'company-truck', unitNumber: 'COMPANY', ownerId: 'company', ownerName: 'Company', active: true, isCompanyOwned: true },
   ];
   type.amounts = ['50.00', '75.00'];
-  truckCharges.eligibleTruckIds = trucks.filter(t => !t.isCompanyOwned).map(t => t.id);
+  truckCharges.eligibleTruckIds = trucks.filter(t => !t.isCompanyOwned && t.id !== 'terminated-truck').map(t => t.id);
   truckCharges.terms = [];
   await page.goto(`${base}/accounting/driver-charges?tab=trucks`);
   await expect(page.getByRole('link', { name: 'INACTIVE', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'COMPANY', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Previous week', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next week', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'TERMINATED, Admin fee', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Truck Owner', exact: true }).first()).toHaveAttribute('href', '/investors/detail?id=owner');
   await expect(page.getByRole('link', { name: '201', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-a');
   await expect(page.getByRole('link', { name: driver.fullName, exact: true })).toHaveAttribute('href', '/drivers/detail?id=driver');
@@ -184,6 +195,7 @@ try {
   await expect(page.getByLabel('201, Admin fee amount', { exact: true })).toHaveValue('75.00');
   await expect(page.getByRole('link', { name: /^Back/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'New charge type', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Fleet', exact: true }).click();
   await page.getByRole('link', { name: 'Trucks', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Trucks', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Back/ })).toHaveCount(0);

@@ -14,9 +14,10 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   await page.getByLabel('Truck owner').selectOption(`driver:${driver.id}`);
   await page.getByLabel('Ownership effective date').fill('2026-09-27');
   const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Add to DataTruck after saving').uncheck();
   await dialog.getByLabel(/Assigned driver/).selectOption(driver.id);
   // New trucks use the normal effective-assignment control.
-  const assignment=dialog.getByLabel(/Assignment starts week/);
+  const assignment=dialog.getByLabel('Assignment effective date', { exact: true });
   if(await assignment.count()) await assignment.fill(week);
   await page.getByRole('button',{name:'Create truck',exact:true}).click();
   await expect(dialog).toHaveCount(0);
@@ -78,7 +79,8 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   await page.getByLabel('Truck inclusion').selectOption('all');
   await page.getByLabel('Filter truck charge type').selectOption('');
   await page.getByRole('button', { name: 'Filter Truck', exact: true }).click();
-  const cleared=await page.request.put(base+'/api/trucks/'+truck.id,{headers,data:{unitNumber:truck.unitNumber,ownerId:truck.ownerId,driverId:null,status:'available',active:true,assignmentWeek:week}});
+  const latestTruck=await (await page.request.get(base+'/api/trucks/'+truck.id)).json();
+  const cleared=await page.request.put(base+'/api/trucks/'+truck.id,{headers,data:{unitNumber:truck.unitNumber,ownerId:truck.ownerId,driverId:null,status:'available',statusVersion:latestTruck.statusVersion,active:true,assignmentWeek:week}});
   expect(cleared.ok(),await cleared.text()).toBe(true);
   console.log('Truck recurring E2E passed: direct driver ownership, automatic classification, truck fees through payroll, removed driver writes, included-truck filters and mobile layout.');
 }

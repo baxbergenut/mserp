@@ -136,6 +136,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 	if err != nil {
 		return source, investor, err
 	}
+	config, err = truckChargesForEmploymentWeek(ctx, tx, config, source.WeekStart)
+	if err != nil {
+		return source, investor, err
+	}
 	if err = routeOwnerTruckFees(ctx, tx, &source, config); err != nil {
 		return source, investor, err
 	}

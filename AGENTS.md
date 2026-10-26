@@ -431,6 +431,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Writes recheck the same period guard under the financial lock.
   Eligibility for reads and writes uses ownership at the selected week's end;
   later company transfers do not block historical non-company truck fees.
+  A terminated owner-driver's own truck drops out starting the Monday after
+  termination, using the same predicate for the directory, charge writes and
+  Driver/Investor Pay. Continuing active-investor fleets and employed direct/team
+  crews retain fees. Earlier phases and finalized statements remain stored.
 - `frontend/app/accounting/escrow/`: standalone escrow directory, payment status
   filters, collection history and the new-driver default; shared table in Driver
   details. `escrow_repository.go` and `escrow_handlers.go` own its API.
@@ -1108,8 +1112,11 @@ assignment lookup lists.
   conflicting ownership periods require review. Migration 081 removes driver
   recurring schedules and the specifically requested type named "charge", retaining
   installment ledgers, deletion audit snapshots and finalized payroll reports.
-  All non-company trucks, including owner-operated and inactive trucks, appear in
-  truck charge management. No automatic driver-to-truck handoff remains. Fees can
+  Non-company trucks, including owner-operated and inactive trucks, appear in
+  truck charge management except departed owner-drivers' trucks from the week
+  after termination. Continuing investor fleets and employed crews retain fees;
+  the termination week and finalized statements remain intact.
+  No automatic driver-to-truck handoff remains. Fees can
   be selected without investor terms; owner-operated trucks without terms route
   fees to Driver Pay using existing driver tariffs. Other trucks still need explicit
   terms for Investor Pay. Never infer investor percentages. GET /truck-charges
