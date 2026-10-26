@@ -397,7 +397,7 @@ export function FuelOverview({ refreshKey, actions }: { refreshKey: number; acti
           <div className="flex flex-wrap items-center gap-2">
             <CalendarDays className="h-3.5 w-3.5 text-zinc-600" />
             <input aria-label="Map start date" type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className={inputClass} />
-            <span className="text-[12px] text-zinc-700">to</span>
+            <span className="text-[12px] text-zinc-700">→</span>
             <input aria-label="Map end date" type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} className={inputClass} />
           </div>
         </div>

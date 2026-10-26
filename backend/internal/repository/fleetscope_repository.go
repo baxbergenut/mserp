@@ -70,7 +70,18 @@ func (r *FleetRepository) GetDriverIntake(ctx context.Context, id string) (Drive
 	return item, err
 }
 
-func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pagination, search string, includeInactive bool) (Page[DriverDirectoryEntry], error) {
+type DriverDirectoryFilters struct {
+	Employment   string
+	Availability string
+	DriverType   string
+	Assignment   string
+}
+
+func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pagination, search string, includeInactive bool, filters ...DriverDirectoryFilters) (Page[DriverDirectoryEntry], error) {
+	filter := DriverDirectoryFilters{}
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
 	visible, err := systemTaskVisible(ctx, r.pool, "driver_onboarding", false)
 	if err != nil {
 		return Page[DriverDirectoryEntry]{}, err
@@ -83,16 +94,20 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 	 LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
 	 LEFT JOIN trucks t ON t.id=a.truck_id
 	 WHERE ($1='' OR concat_ws(' ',d.full_name,d.email,d.phone,t.unit_number,dp.full_name,d.license_number) ILIKE '%' || $1 || '%') AND ($2 OR d.active)
+ AND ($4='' OR $4='all' OR ($4='active' AND d.active) OR ($4='terminated' AND NOT d.active))
+ AND ($5='' OR (d.active AND d.availability_status=$5))
+ AND ($6='' OR driver_employment_type(d.id)=$6)
+ AND ($7='' OR ($7='assigned' AND fleet_status_driver_truck(d.id) IS NOT NULL) OR ($7='unassigned' AND fleet_status_driver_truck(d.id) IS NULL))
 	 UNION ALL
 	 SELECT id, driver_data->>'fullName', true, driver_data, received_at, phone FROM fleetscope_driver_intake
-	 WHERE $3::boolean AND completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
+	 WHERE $3::boolean AND ($4='' OR $4='all' OR $4='active' OR $4='pending') AND $5='' AND $6='' AND $7='' AND completed_at IS NULL AND terminated_at IS NULL AND ($1='' OR concat_ws(' ',driver_data->>'fullName',driver_data->>'email',phone,driver_data->>'licenseNumber') ILIKE '%' || $1 || '%')
 	) `
 	var total int
-	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive, visible).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, directory+`SELECT count(*) FROM directory`, search, includeInactive, visible, filter.Employment, filter.Availability, filter.DriverType, filter.Assignment).Scan(&total); err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}
 	pagination = pagination.Normalize(total)
-	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at,phone FROM directory ORDER BY pending DESC,full_name,id LIMIT $4 OFFSET $5`, search, includeInactive, visible, pagination.PageSize, pagination.Offset())
+	rows, err := r.pool.Query(ctx, directory+`SELECT id,pending,data,received_at,phone FROM directory ORDER BY pending DESC,full_name,id LIMIT $8 OFFSET $9`, search, includeInactive, visible, filter.Employment, filter.Availability, filter.DriverType, filter.Assignment, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[DriverDirectoryEntry]{}, err
 	}

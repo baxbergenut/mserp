@@ -90,7 +90,7 @@ export function FilterBar({
           onChange={(e) => set({ pickupFrom: e.target.value })}
           className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600"
         />
-        <span className="text-[13px] text-zinc-700">–</span>
+        <span className="text-[13px] text-zinc-700">→</span>
         <input
           type="date"
           value={filters.pickupTo}

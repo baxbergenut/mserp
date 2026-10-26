@@ -28,8 +28,9 @@ import {
   updateDriver,
 } from "../lib/api";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
-import type { Driver, DriverInput, DriverIntake, DriverDirectoryEntry } from "../lib/types";
+import type { Driver, DriverInput, DriverIntake, DriverDirectoryEntry, DriverDirectoryFilters } from "../lib/types";
 import {
+  controlClass,
   ConfirmDialog,
   EmptyState,
   ErrorBanner,
@@ -68,7 +69,8 @@ function DriversContent() {
   const [trucks, setTrucks] = useState<TruckOption[]>([]);
   const [dispatchers, setDispatchers] = useState<DispatcherOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
-  const [showInactiveDrivers, setShowInactiveDrivers] = useViewState("page:showInactiveDrivers", false);
+  const [filters, setFilters] = useViewState<DriverDirectoryFilters>("drivers:filters", { employment: "active" });
+  const changeFilter = (key: keyof DriverDirectoryFilters, value: string) => { setFilters(current => ({ ...current, [key]: value })); setPage(1); };
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
@@ -96,7 +98,7 @@ function DriversContent() {
     if (!silent) setIsLoading(true);
     try {
       const driverPage = await fetchDriverDirectory({
-        page, pageSize, search: debouncedSearch, includeInactive: showInactiveDrivers,
+        page, pageSize, search: debouncedSearch, ...filters,
       });
       if (sequence !== requestSequence.current) return;
       setDrivers(driverPage.items);
@@ -109,7 +111,7 @@ function DriversContent() {
     } finally {
       if (sequence === requestSequence.current) setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, page, pageSize, showInactiveDrivers]);
+  }, [setPage, debouncedSearch, page, pageSize, filters]);
 
   const loadLookups = useCallback(async () => {
     setLoadingLookups(true);
@@ -251,15 +253,11 @@ function DriversContent() {
       <div className="flex flex-wrap items-center gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
         <TableFilters>
-          <label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
-          <input
-            type="checkbox"
-            checked={showInactiveDrivers}
-            onChange={(event) => { setShowInactiveDrivers(event.target.checked); setPage(1); }}
-            className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600"
-          />
-          Show terminated drivers
-        </label>
+          <select aria-label="Employment" className={controlClass} value={filters.employment ?? "active"} onChange={e => changeFilter("employment", e.target.value)}><option value="active">Active drivers</option><option value="all">All drivers</option><option value="terminated">Terminated</option><option value="pending">Needs setup</option></select>
+          <select aria-label="Availability" className={controlClass} value={filters.availability ?? ""} onChange={e => changeFilter("availability", e.target.value)}><option value="">All availability</option>{[["active","Available"],["home","Home"],["vacation","Vacation"],["rest","Rest"],["reset","Reset"],["family_issue","Family issue"],["health_issue","Health issue"],["new_driver","New driver"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select aria-label="Driver type" className={controlClass} value={filters.driverType ?? ""} onChange={e => changeFilter("driverType", e.target.value)}><option value="">All driver types</option><option value="company">Company driver</option><option value="owner_operator">Owner operator</option><option value="investor_driver">Investor truck driver</option><option value="unassigned">Unassigned</option></select>
+          <select aria-label="Truck assignment" className={controlClass} value={filters.assignment ?? ""} onChange={e => changeFilter("assignment", e.target.value)}><option value="">All assignments</option><option value="assigned">With truck</option><option value="unassigned">Without truck</option></select>
+          {(search || filters.employment !== "active" || filters.availability || filters.driverType || filters.assignment) && <button className="ui-button" onClick={() => { setSearch(""); setFilters({ employment: "active" }); setPage(1); }}>Clear filters</button>}
         </TableFilters>
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
@@ -287,13 +285,8 @@ function DriversContent() {
             </thead>
             <tbody>{isLoading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : drivers.length === 0 ? <tr><td colSpan={8}>{(
           <EmptyState
-            message={
-              search
-                ? "No drivers match your search."
-                : !showInactiveDrivers && drivers.some((driver) => !driver.active)
-                  ? "No active drivers. Check Show terminated drivers to view terminated records."
-                  : "No drivers yet. Add your first driver to get started."
-            }
+            message="No drivers match this view."
+
           />
         )}</td></tr> : <>
               {drivers.map((driver) => (

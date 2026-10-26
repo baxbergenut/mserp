@@ -75,7 +75,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/tolls`);
-  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trucks', exact: true }).click();
   const region = page.getByRole('region', { name: 'PrePass management' });
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeDisabled();
   assert.equal(writes.length, 0, 'opening tab must not contact vendor: '+JSON.stringify(writes));
@@ -98,7 +98,7 @@ try {
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
   for (const name of ['Account', 'Clustie truck', 'PrePass unit']) await expect(region.getByRole('columnheader', { name, exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Truck linking', exact: true })).toHaveCount(0);
-  await expect(region.getByRole('button', { name: 'Trucks', exact: true })).toHaveCount(0);
+  await expect(region.getByRole('tab', { name: 'Trucks', exact: true })).toHaveCount(0);
   await expect(region).not.toContainText('PrePass checked');
   await expect(region).not.toContainText('1 trucks');
   // Resolve a mismatch using each source, preserving the displayed truck version.
@@ -143,8 +143,8 @@ try {
   await expect(dialog.getByLabel(/^Truck/)).toHaveValue(vin);
   await expect(dialog.getByLabel('Available transponder').locator('option')).toHaveCount(2);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Transponders', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Transponders', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Transponders', exact: true })).toHaveAttribute('aria-selected', 'true');
   await region.getByRole('button', { name: 'Assign to truck', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Assign transponder', exact: true })).toBeDisabled();
   await dialog.getByLabel(/^Truck/).selectOption(vin);
@@ -163,7 +163,7 @@ try {
   await expect(region).toContainText('Waiting for PrePass to finish processing');
   await expect(region.getByRole('button', { name: 'Review result', exact: true })).toHaveCount(0);
   await expect(region.getByRole('cell', { name: 'Assigning...', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trucks', exact: true }).click();
   await expect(region.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeEnabled();
   data.vehicles[0].vehicle.transponderNumber = '777111222';
@@ -173,7 +173,7 @@ try {
   await expect(region).not.toContainText('Waiting for PrePass to finish processing');
   await expect(region).toContainText('Transponder assigned.');
   assert.equal(writes.filter(w => w.input.action === 'assign').length, 1);
-  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trucks', exact: true }).click();
   await region.getByRole('button', { name: 'Edit', exact: true }).click();
   await dialog.getByLabel('Plate number', { exact: true }).fill('XYZ789');
   reject = true; await dialog.getByRole('button', { name: 'Edit PrePass truck', exact: true }).click();
@@ -244,9 +244,14 @@ try {
   await dialog.getByLabel('I checked the outcome in PrePass.').check();
   await dialog.getByRole('button', { name: 'Record reviewed result' }).click(); await expect(dialog).toHaveCount(0);
   assert.equal(writes.at(-1).path, '/api/prepass-fleet/operations/operation-1/verify');
-  await page.getByRole('button', { name: 'Transponders', exact: true }).click();
+  await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
   await expect(region.getByRole('cell', { name: '777111222', exact: true })).toBeVisible();
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
+  await page.getByRole('tab', { name: 'Needs attention', exact: true }).click();
+  const postedBox = await page.getByLabel('Unlinked tolls posted since').boundingBox();
+  const refreshBox = await page.getByRole('button', { name: 'Refresh PrePass', exact: true }).boundingBox();
+  assert.ok(Math.abs(postedBox.y - refreshBox.y) < 8, 'Posted since and Refresh PrePass share a toolbar');
+  await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await region.getByRole('cell', { name: '777111222', exact: true }).scrollIntoViewIfNeeded();
@@ -255,9 +260,10 @@ try {
   readOnly = true; await page.reload();
   await expect(page.getByRole('region', { name: 'PrePass management' })).toBeVisible();
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Trucks', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trucks', exact: true }).click();
   for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign', 'Resolve plate']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Needs attention', exact: true }).click();
+  await page.getByRole('tab', { name: 'Needs attention', exact: true }).click();
+
   await expect(region).toContainText('All tolls in this date range are linked to trucks.');
   assert.deepEqual(errors, []); console.log('PrePass browser workflows passed; screenshots saved in OS temp directory.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

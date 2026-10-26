@@ -4,7 +4,7 @@
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
-import { Check, Columns3, List, ListChecks, LockKeyhole, Pencil, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Columns3, List, ListChecks, LockKeyhole, Pencil, Play, RotateCcw, Trash2 } from "lucide-react";
 import { useViewState } from "../lib/viewMemory";
 import { useQuickCreate } from "../lib/topNavigation";
 import { usePermissions } from "../lib/access";
@@ -119,14 +119,13 @@ export default function TasksPage() {
         </TableFilters>
 
       <div className="ml-auto flex items-center gap-2">
-        <button type="button" className="ui-button" aria-label="Refresh tasks" onClick={refresh}><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
-        <div className="flex gap-1" role="group" aria-label="Task view">
-          <button type="button" className={view === "list" ? "ui-button ui-button-primary" : "ui-button"} aria-pressed={view === "list"} onClick={() => setView("list")}><List className="h-4 w-4" />List</button>
-          <button type="button" className={view === "kanban" ? "ui-button ui-button-primary" : "ui-button"} aria-pressed={view === "kanban"} onClick={() => setView("kanban")}><Columns3 className="h-4 w-4" />Kanban</button>
+        <div className="flex gap-1" role="tablist" aria-label="Task view">
+          <button type="button" className={view === "list" ? "ui-button ui-button-primary" : "ui-button"} role="tab" aria-selected={view === "list"} onClick={() => setView("list")}><List className="h-4 w-4" />List</button>
+          <button type="button" className={view === "kanban" ? "ui-button ui-button-primary" : "ui-button"} role="tab" aria-selected={view === "kanban"} onClick={() => setView("kanban")}><Columns3 className="h-4 w-4" />Kanban</button>
         </div>
       </div>
-    <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canCreate ? "Add task" : undefined} onAction={() => setCreating(true)} /></div></div>
-    {error && <ErrorBanner message={error} />}
+    <div className="flex flex-wrap items-center gap-2"><ManagementHeader icon={ListChecks} title="Tasks" count={view === "list" ? data?.total : columns ? columns.open.total + columns.in_process.total + columns.completed.total : undefined} actionLabel={canCreate ? "Add task" : undefined} onAction={() => setCreating(true)} /></div></div>
+    {error && <div className="flex items-center gap-2"><ErrorBanner message={error} /><button className="ui-button" onClick={refresh}>Retry</button></div>}
     {notice && <p role="status" className="text-xs text-zinc-400">{notice}</p>}
     {loading && !data && !columns && <p role="status" className="py-8 text-center text-zinc-500">Loading…</p>}
     {view === "list" && data && <>

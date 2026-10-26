@@ -1485,3 +1485,10 @@ export type PTIChange = Pick<PTIRow,"version"|"received"|"review"|"notes"> & {ma
 export type PTIGroup = "company"|"owner_operator";
 export type PTIMatrix = {layoutVersion:number;weeks:string[];trucks:{id:string;unit:string;ownership:"company"|"investor"|"owner_operator";group:PTIGroup;position:number|null}[];rows:PTIRow[]};
 export type PTIEvent = {id:string;before:PTIRow;after:PTIRow;actorName:string;createdAt:string};
+
+export interface DriverDirectoryFilters {
+ employment?: "" | "all" | "active" | "terminated" | "pending";
+ availability?: "" | "active" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
+ driverType?: "" | "company" | "owner_operator" | "investor_driver" | "unassigned";
+ assignment?: "" | "assigned" | "unassigned";
+}

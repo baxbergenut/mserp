@@ -9,7 +9,7 @@ import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, RefreshCw, Route, CloudCheck } from "lucide-react";
+import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { selectedGrossCell } from "./grossCells";
@@ -128,7 +128,7 @@ export default function GrossBoardPage() {
         const value = await fetchGrossBoard(week);
         accept(value);
       } catch {
-        if (!cancelled) setRefreshError("Automatic load refresh is unavailable. Your edits still autosave; use Reload to retry.");
+        if (!cancelled) setRefreshError("Automatic load refresh is unavailable. Your edits still autosave; retry to reconnect.");
       } finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
@@ -252,14 +252,14 @@ export default function GrossBoardPage() {
         return { ...current, entries: Object.values(entries) };
       });
       setChanges(remaining);
-      setMessage("All changes saved");
+      setMessage("Saved");
       // The stream refreshes carry and matching metadata. Recover by GET when
       // disconnected, preserving newer edits and navigation flushes.
       if (!live.connected && activityRef.current === saveRevision && !leavingRef.current) {
         try {
           const fresh = await fetchGrossBoard(week);
           if (activityRef.current === saveRevision) receiveLive.current(fresh);
-        } catch { setRefreshError("Saved. Automatic load refresh is unavailable; use Reload to retry."); }
+        } catch { setRefreshError("Saved. Automatic load refresh is unavailable; retry to reconnect."); }
       }
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activityRef.current += 1; busyKeys.current = []; savingRef.current = false; setSaving(false); }
@@ -297,7 +297,7 @@ export default function GrossBoardPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1">
           <button aria-label="Previous week" className={buttonClass} disabled={loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100" title={`${week} to ${dates[6]}`}>{shortDate(week)}–{shortDate(dates[6])}</span>
+          <span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100" title={`${week} to ${dates[6]}`}>{shortDate(week)} → {shortDate(dates[6])}</span>
           <button aria-label="Next week" className={buttonClass} disabled={loading || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button>
         </div>
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
@@ -307,8 +307,7 @@ export default function GrossBoardPage() {
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={live.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${live.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{live.connected ? "Live" : "Connecting…"}</span>
-          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{!canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved automatically"}</span>
-          <button className={buttonClass} onClick={reload} disabled={saving || loading} title="Reload saved board"><RefreshCw className="h-4 w-4" />Reload</button>
+          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{!canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
         </div></div></div>
 
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
@@ -316,7 +315,7 @@ export default function GrossBoardPage() {
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
-      {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
+      {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
       {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea>
         <table {...spreadsheetGridEvents} data-spreadsheet-grid data-gross-board-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>

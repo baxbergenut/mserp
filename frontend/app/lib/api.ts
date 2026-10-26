@@ -405,8 +405,8 @@ export async function logout(): Promise<void> {
 
 export const fetchDrivers = () => apiRequest<Driver[]>("/drivers");
 export const fetchDriverSetupDefaults = () => apiRequest<DriverSetupDefaults>("/drivers/setup-defaults");
-export const fetchDriverDirectory = (query: PageQuery & { includeInactive?: boolean }) =>
-  paginatedRequest<PaginatedResponse<DriverDirectoryEntry>>(withQuery("/driver-directory", query));
+export const fetchDriverDirectory = (query: PageQuery & import("./types").DriverDirectoryFilters & { includeInactive?: boolean }) =>
+  paginatedRequest<PaginatedResponse<DriverDirectoryEntry>>(withQuery("/driver-directory", { ...query }));
 export const fetchDriverIntakeById = (id: string) => apiRequest<DriverIntake>(`/driver-intake/${id}`);
 export const fetchDriverIntake = (query: PageQuery) =>
   paginatedRequest<PaginatedResponse<DriverIntake>>(withQuery("/driver-intake", query));

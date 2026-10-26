@@ -6,7 +6,7 @@ import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
 import type {Driver} from "@/app/lib/types";
 import {useEffect} from "react";
-import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, Truck } from "lucide-react";
+import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
@@ -146,14 +146,13 @@ export default function DriverBoardPage() {
       <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
-      <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "All changes saved" : "Read only"}</span>
+      <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "Saved" : "Read only"}</span>
       {board?.eld.configured && board.eld.lastError && <span className="text-xs text-amber-300">Telematics refresh failed</span>}
       {canEdit && board?.eld.configured && <button className={buttonClass} onClick={() => void refreshELD()} disabled={loading || saving || dirty || eldRefreshing} title={board.eld.lastSuccessAt ? `Telematics last refreshed ${locationTime(board.eld.lastSuccessAt)} NY` : "Refresh telematics locations"}><MapPin className="h-4 w-4" />{eldRefreshing ? "Refreshing…" : "Refresh locations"}</button>}
-      <button className={buttonClass} onClick={reload} disabled={loading || saving}><RefreshCw className="h-4 w-4" />Reload</button>
       <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "Status Board history", ids: [] })}><History className="h-4 w-4" />History</button></div></div>
 
-    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty && <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button>}</div>}
-    {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}</p>}
+    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
+    {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}
     <span role="status" aria-live="polite" className="sr-only">{orderNotice}</span>
@@ -248,7 +247,7 @@ export default function DriverBoardPage() {
               </tr>
             </Fragment>;
           })}
-          {!loading && drivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Reload to retry." : "No active drivers match this view."}</td></tr>}
+          {!loading && drivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
     </StatusBoardScrollArea>

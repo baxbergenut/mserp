@@ -310,6 +310,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Section tabs share the theme-aware underline contract in globals.css through
+  role=tab and aria-selected. Tasks, Status Board and Gross Board use live updates;
+  routine Reload controls are omitted, with retry controls retained on errors.
+  Save confirmations say Saved. Paired date filters use an arrow and retain
+  accessible start/end labels.
+- Driver directory filters (employment, availability, driverType, assignment)
+  are validated by the API and applied before SQL counts/pagination. Pending
+  intakes retain task visibility rules and appear in Needs setup or unfiltered
+  active/all views; availability/type/assignment filters exclude unreviewed hires.
+
+
 - Product branding is Clustie. `components/BrandLogo.tsx` uses the supplied logo
   pack artwork in `frontend/public/brand/`, with transparent backgrounds and the
   symbol in the collapsed sidebar. A CSS alpha mask makes only the wordmark light

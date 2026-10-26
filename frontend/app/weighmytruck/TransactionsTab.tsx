@@ -79,7 +79,7 @@ export function TransactionsTab() {
 
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search tickets, drivers or trucks" />
         <TableFilters>
-          <label className="text-[12px] text-zinc-400">From<input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-[12px] text-zinc-400">To<input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label>
+          <label className="text-[12px] text-zinc-400"><input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><span aria-hidden="true">→</span><label><input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label>
         </TableFilters>
       <div className="ml-auto flex items-center gap-3"><span className="text-[13px] tabular-nums text-zinc-300">Total {money(data?.totalAmount ?? "0")}</span>{canWrite && <button className="ui-button" disabled={busy} onClick={() => void sync()}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Sync</button>}</div>
     </div>

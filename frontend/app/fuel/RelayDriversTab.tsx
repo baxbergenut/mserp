@@ -116,8 +116,6 @@ export function RelayDriversTab() {
     {error && !dialog && <ErrorBanner message={error} />}
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     {data && !data.configured && <ErrorBanner message="Relay driver management is not configured on the server." />}
-    {data?.configured && !data.refreshedAt && <p className="text-[13px] text-zinc-400">Select Refresh Relay to load the current roster, including ELD drivers without a policy.</p>}
-    {data?.refreshedAt && <p className="text-[12px] text-zinc-500">Relay checked {new Date(data.refreshedAt).toLocaleString()}{now - Date.parse(data.refreshedAt) > 300000 ? " · Refresh Relay for the latest portal changes." : ""}</p>}
     {data?.operations.map(op => <div key={op.id} role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {op.action}: {items.find(e => e.driver.id === op.relayDriverId)?.driverName || data.drivers.find(d => d.id === op.driverId)?.name || op.relayDriverId || "driver"}. Verify the result in Relay before retrying.</span>{permissions.includes("fuel.drivers.recover") && <button className="ui-button" disabled={busy || now - Date.parse(op.createdAt) < 120000} onClick={() => { setError(""); setReviewed(false); setDialog({ kind: "verify", operation: op }); }}>Review result</button>}</div>)}
     <div className="flex flex-wrap items-center gap-2">
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search driver, phone or Relay ID" />

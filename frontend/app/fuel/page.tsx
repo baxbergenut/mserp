@@ -242,10 +242,10 @@ export default function FuelPage() {
         </div>
       )}
 
-      <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5">
+      <div role="tablist" aria-label="Sections">
         <button
           type="button"
-          onClick={() => setActiveTab("overview")}
+          role="tab" aria-selected={activeTab === "overview"} onClick={() => setActiveTab("overview")}
           className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
             activeTab === "overview"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
@@ -256,7 +256,7 @@ export default function FuelPage() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("transactions")}
+          role="tab" aria-selected={activeTab === "transactions"} onClick={() => setActiveTab("transactions")}
           className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
             activeTab === "transactions"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
@@ -265,7 +265,7 @@ export default function FuelPage() {
         >
           <List className="h-3.5 w-3.5" /> Transactions
         </button>
-        <button type="button" onClick={() => setActiveTab("drivers")} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === "drivers" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}><Users className="h-3.5 w-3.5" />Drivers</button>
+        <button type="button" role="tab" aria-selected={activeTab === "drivers"} onClick={() => setActiveTab("drivers")} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === "drivers" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}><Users className="h-3.5 w-3.5" />Drivers</button>
       </div>
 
       {activeTab === "overview" ? (
@@ -310,13 +310,13 @@ export default function FuelPage() {
           placeholder="Search driver, card, merchant, location…"
         />
         <TableFilters>
-          <label className="block space-y-1">Purchased from<input
+          <label className="block space-y-1"><input
             aria-label="Purchase date from"
             type="date"
             value={dateFrom}
             onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}
             className={filterClass}
-          /></label><label className="block space-y-1">To<input
+          /></label><span aria-hidden="true">→</span><label><input
             aria-label="Purchase date to"
             type="date"
             value={dateTo}

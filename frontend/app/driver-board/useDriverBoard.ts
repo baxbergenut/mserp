@@ -89,7 +89,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       try {
         const value = await fetchDriverBoard(currentChargeWeek());
         accept(value);
-      } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Use Reload to update totals and assignments."); }
+      } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Retry to update totals and assignments."); }
       finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
@@ -159,7 +159,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     try {
       const rows = await Promise.all(ids.map(async id => [id, await fetchBoardLoads(id)] as const));
       setBoard(current => current ? { ...current, loads: { ...current.loads, ...Object.fromEntries(rows) } } : current);
-    } catch { setRefreshError("Load details could not be refreshed. Use Reload to review the saved plans."); }
+    } catch { setRefreshError("Load details could not be refreshed. Retry to review the saved plans."); }
   }, []);
 
   const save = useCallback(async () => {

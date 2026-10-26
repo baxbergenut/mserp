@@ -94,7 +94,7 @@ try {
     await route.fulfill({ json: fixtures[path] ?? [] });
   });
   await page.goto(`${base}/settings`);
-  await page.getByRole('button', { name: 'System tasks', exact: true }).click();
+  await page.getByRole('tab', { name: 'System tasks', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Create role', exact: true })).toHaveCount(0);
   await page.getByLabel('Driver onboarding', { exact: true }).selectOption('teammate');
   await page.getByRole('button', { name: 'Save Driver onboarding assignment', exact: true }).click();
@@ -125,7 +125,16 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-system-task-assignees.png') });
   await page.goto(`${base}/tasks`);
   await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'System tasks', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Refresh tasks', exact: true })).toHaveCount(0);
+  const viewBox = await page.getByRole('tablist', { name: 'Task view' }).boundingBox();
+  const addBox = await page.getByRole('button', { name: 'Add task', exact: true }).boundingBox();
+  expect(addBox.x - (viewBox.x + viewBox.width)).toBeLessThan(32);
+  expect(Math.abs(addBox.y - viewBox.y)).toBeLessThan(8);
+  await page.getByRole('combobox', { name: 'Search records' }).focus();
+  await expect(page.getByRole('combobox', { name: 'Search records' })).toHaveCSS('outline-style', 'none');
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByRole('tab', { name: 'System tasks', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Add task', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('Follow up');
   await page.getByLabel('Assign to', { exact: true }).selectOption('teammate');
@@ -148,7 +157,7 @@ try {
   pushTasks(); await page.clock.runFor(1000);
   await expect(page.getByRole('button', { name: 'Review Relay account: New driver', exact: true })).toBeVisible();
   await expect(page.getByLabel('2 open tasks', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Kanban', exact: true }).click();
+  await page.getByRole('tab', { name: 'Kanban', exact: true }).click();
   const open = page.getByRole('region', { name: 'Open tasks', exact: true });
   const done = page.getByRole('region', { name: 'Completed tasks', exact: true });
   const inProcess = page.getByRole('region', { name: 'In process tasks', exact: true });
@@ -168,7 +177,7 @@ try {
   await done.getByRole('button', { name: 'Reopen Follow up', exact: true }).click();
   await expect(open.getByRole('article', { name: 'Follow up', exact: true })).toBeVisible();
   expect(taskWrites).toBe(3);
-  await page.getByRole('button', { name: 'List', exact: true }).click();
+  await page.getByRole('tab', { name: 'List', exact: true }).click();
   await page.getByRole('button', { name: 'Review Relay account: New driver', exact: true }).click();
   await page.getByRole('button', { name: 'Review account', exact: true }).click();
   await page.getByRole('button', { name: 'Review link', exact: true }).first().click();
@@ -191,9 +200,9 @@ try {
     await expect(page.getByRole('button', { name: 'Follow up', exact: true })).toBeVisible();
     await page.clock.runFor(1000);
     await page.screenshot({ animations: 'disabled', path: join(tmpdir(), `mserp-tasks-list-${palette}.png`) });
-    await page.getByRole('button', { name: 'Kanban', exact: true }).click();
+    await page.getByRole('tab', { name: 'Kanban', exact: true }).click();
     await expect(page.getByRole('article', { name: 'Follow up', exact: true })).toBeVisible();
-    expect(await page.getByRole('button', { name: 'Kanban', exact: true }).evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(32);
+    expect(await page.getByRole('tab', { name: 'Kanban', exact: true }).evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(32);
     await page.screenshot({ animations: 'disabled', path: join(tmpdir(), `mserp-tasks-kanban-${palette}.png`) });
     await page.setViewportSize({ width: 640, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -203,7 +212,7 @@ try {
     expect(dialogBackground).not.toBe('rgba(0, 0, 0, 0)');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.getByRole('tab', { name: 'List', exact: true }).click();
   }
   theme = 'default';
   tasks.push({ id: 'eld', title: 'Review Five ELD truck 0012', notes: '', assigneeName: 'Test user', systemTaskKind: 'five_eld_truck', completedAt: null, createdAt: '2026-10-08T12:00:00Z' });
@@ -250,6 +259,29 @@ try {
   await expect.poll(() => grossRequests.at(-1)).toBe(week);
   await page.goto(`${base}/gross-board?driverId=${driverId}&date=2026-09-15&slot=0&loadNumber=TEST&from=driver-pay`);
   await expect.poll(() => grossRequests.at(-1)).toBe('2026-09-14');
+
+  const directoryRequests = [];
+  await page.route('**/api/driver-directory?**', async route => {
+    directoryRequests.push(new URL(route.request().url()).searchParams);
+    await route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } });
+  });
+  await page.goto(base + '/drivers');
+  await expect(page.getByLabel('Employment', { exact: true })).toHaveValue('active');
+  await page.getByLabel('Employment', { exact: true }).selectOption('terminated');
+  await expect.poll(() => directoryRequests.at(-1)?.get('employment')).toBe('terminated');
+  await page.getByLabel('Availability', { exact: true }).selectOption('home');
+  await page.getByLabel('Driver type', { exact: true }).selectOption('owner_operator');
+  await page.getByLabel('Truck assignment', { exact: true }).selectOption('assigned');
+  await expect.poll(() => directoryRequests.at(-1)?.get('assignment')).toBe('assigned');
+  expect(directoryRequests.at(-1).get('page')).toBe('1');
+  expect(directoryRequests.at(-1).get('availability')).toBe('home');
+  expect(directoryRequests.at(-1).get('driverType')).toBe('owner_operator');
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect(page.getByLabel('Employment', { exact: true })).toHaveValue('active');
+  await expect(page.getByLabel('Availability', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Driver type', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Truck assignment', { exact: true })).toHaveValue('');
+  await page.screenshot({ path: join(tmpdir(), 'clustie-driver-filters.png') });
   expect(errors).toEqual([]);
   console.log('Task and board UI checks passed: assignments, unified history, push updates without polling, counts, Kanban drag/reopen, locked system tasks, all seven themes, narrow layouts and existing board navigation.');
 } finally {

@@ -51,7 +51,6 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
         <MapPinned className="h-4 w-4 text-blue-400" />
         <h2 id="toll-map-title" className="text-sm font-medium text-zinc-200">Where toll money goes</h2>
       </div>
-      <p className="mt-1 text-[12px] text-zinc-500">Net spending by state for the selected posting dates. Brighter blue means higher spending. Hover, tap, or select a state to see its total.</p>
       <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">
           <div className="rounded-xl border border-zinc-800/60 bg-zinc-950/35 p-2">
@@ -91,7 +90,6 @@ export function TollSpendingMap({ dashboard }: { dashboard: TollDashboard }) {
           </div>
         </div>
       </div>
-      <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">Uses the toll agency state supplied by PrePass. Older records without a state use verified single-state agency locations. Records that still cannot be located are listed below.</p>
       {unmappedCount > 0 && (
         <RememberedDetails memoryKey="unmapped-states" className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12px]">
           <summary className="cursor-pointer text-amber-200/80">Unmapped location: {money.format(unmappedCents / 100)} · {unmappedCount.toLocaleString()} transactions</summary>

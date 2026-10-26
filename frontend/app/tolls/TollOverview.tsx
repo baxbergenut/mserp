@@ -1,7 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 
-import { RememberedDetails } from "@/app/components/RememberedDetails";
+
 
 import { useViewState } from "@/app/lib/viewMemory";
 
@@ -96,7 +96,7 @@ export function TollOverview({ refreshKey, actions }: { refreshKey: number; acti
         <CalendarDays className="h-4 w-4 text-zinc-500" />
         <span className="text-[13px] text-zinc-400">Posting dates</span>
         <input aria-label="Overview start date" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className={inputClass} />
-        <span className="text-zinc-600">–</span>
+        <span className="text-zinc-600">→</span>
         <input aria-label="Overview end date" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={inputClass} />
         <button type="button" onClick={() => { setDateFrom(`${new Date().getFullYear()}-01-01`); setDateTo(todayDate()); }} className="rounded-lg px-2 py-1.5 text-[12px] text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200">Year to date</button>
       <div className="ml-auto">{actions}</div></div>}
@@ -118,14 +118,14 @@ export function TollOverview({ refreshKey, actions }: { refreshKey: number; acti
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <KpiCard label="Toll expense" value={money.format(dashboard.totals.spend)} detail="Net charges after credits" icon={CircleDollarSign} accent="text-blue-400" />
-            <KpiCard label="Transactions" value={dashboard.totals.transactionCount.toLocaleString()} detail="All charges and credits in range" icon={Receipt} accent="text-cyan-400" />
-            <KpiCard label="Truck units" value={dashboard.totals.truckCount.toLocaleString()} detail="Distinct units reported by PrePass" icon={Truck} accent="text-violet-400" />
+            <KpiCard label="Toll expense" value={money.format(dashboard.totals.spend)} icon={CircleDollarSign} accent="text-blue-400" />
+            <KpiCard label="Transactions" value={dashboard.totals.transactionCount.toLocaleString()} icon={Receipt} accent="text-cyan-400" />
+            <KpiCard label="Truck units" value={dashboard.totals.truckCount.toLocaleString()} icon={Truck} accent="text-violet-400" />
           </div><div className="flex flex-wrap items-center gap-2">
         <CalendarDays className="h-4 w-4 text-zinc-500" />
         <span className="text-[13px] text-zinc-400">Posting dates</span>
         <input aria-label="Overview start date" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className={inputClass} />
-        <span className="text-zinc-600">–</span>
+        <span className="text-zinc-600">→</span>
         <input aria-label="Overview end date" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={inputClass} />
         <button type="button" onClick={() => { setDateFrom(`${new Date().getFullYear()}-01-01`); setDateTo(todayDate()); }} className="rounded-lg px-2 py-1.5 text-[12px] text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200">Year to date</button>
       <div className="ml-auto">{actions}</div></div>
@@ -135,25 +135,21 @@ export function TollOverview({ refreshKey, actions }: { refreshKey: number; acti
             <>
             <TollSpendingMap dashboard={dashboard} />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <ChartCard title="Monthly toll spending" description="Net posted charges by month for the selected dates.">
+              <ChartCard title="Monthly toll spending">
                 <SpendingChart points={dashboard.monthly.map((point) => ({ ...point, label: periodLabel(point.label, true) }))} color="#3b82f6" />
               </ChartCard>
-              <ChartCard title="Weekly toll spending" description="Weeks begin Monday; boundary weeks include only selected dates.">
+              <ChartCard title="Weekly toll spending">
                 <SpendingChart points={dashboard.weekly.map((point) => ({ ...point, label: periodLabel(point.label, false) }))} color="#a78bfa" />
               </ChartCard>
-              <ChartCard title="Top toll agencies" description="Up to 10 agencies ranked by net spending in this range.">
+              <ChartCard title="Top toll agencies">
                 <SpendingChart points={[...dashboard.agencies].sort((a, b) => b.spend - a.spend)} color="#22d3ee" horizontal />
               </ChartCard>
-              <ChartCard title="Top truck units" description="Up to 10 source equipment units ranked by net spending.">
+              <ChartCard title="Top truck units">
                 <SpendingChart points={[...dashboard.trucks].sort((a, b) => b.spend - a.spend)} color="#3b82f6" horizontal />
               </ChartCard>
             </div>
             </>
           )}
-          <RememberedDetails memoryKey="toll-explanation" className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3 text-[12px] text-zinc-500">
-            <summary className="cursor-pointer font-medium text-zinc-400">How these numbers are calculated</summary>
-            <p className="mt-3 leading-relaxed">All cards and charts use the selected posting dates, including both endpoints, without timezone conversion. Credits reduce net spend. Historical imports and production PrePass transactions are included; nonproduction transactions are excluded. Truck units come from the original toll records, including unmatched units, and do not use current driver assignments. Months and weeks without transactions show zero spending.</p>
-          </RememberedDetails>
         </>
       )}
     </div>

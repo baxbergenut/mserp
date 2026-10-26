@@ -107,7 +107,31 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		page, err := repo.ListDriverDirectory(r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), r.URL.Query().Get("includeInactive") == "true")
+		query := r.URL.Query()
+		filter := repository.DriverDirectoryFilters{Employment: query.Get("employment"), Availability: query.Get("availability"), DriverType: query.Get("driverType"), Assignment: query.Get("assignment")}
+		for _, check := range []struct {
+			value   string
+			allowed []string
+		}{
+			{filter.Employment, []string{"", "all", "active", "terminated", "pending"}},
+			{filter.Availability, []string{"", "active", "home", "vacation", "rest", "reset", "family_issue", "health_issue", "new_driver"}},
+			{filter.DriverType, []string{"", "company", "owner_operator", "investor_driver", "unassigned"}},
+			{filter.Assignment, []string{"", "assigned", "unassigned"}},
+		} {
+			valid := false
+			for _, allowed := range check.allowed {
+				if check.value == allowed {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				writeAPIError(w, http.StatusBadRequest, "Invalid driver filter")
+				return
+			}
+		}
+		includeInactive := query.Get("includeInactive") == "true" || filter.Employment == "all" || filter.Employment == "terminated"
+		page, err := repo.ListDriverDirectory(r.Context(), pagination, strings.TrimSpace(query.Get("search")), includeInactive, filter)
 		if err != nil {
 			handler.writeError(w, err)
 			return

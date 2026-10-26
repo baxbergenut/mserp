@@ -302,6 +302,24 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 	if err != nil || directory.Total != 2 || directory.Items[0].ID != driver.ID || directory.Items[0].IntakeID != "" {
 		t.Fatalf("combined second page: %+v %v", directory, err)
 	}
+	// Filters run before pagination and preserve the reviewed/pending boundary.
+	for _, test := range []struct {
+		filter  DriverDirectoryFilters
+		want    int
+		pending bool
+	}{
+		{DriverDirectoryFilters{Employment: "pending"}, 1, true},
+		{DriverDirectoryFilters{Employment: "terminated"}, 0, false},
+		{DriverDirectoryFilters{Assignment: "assigned"}, 1, false},
+		{DriverDirectoryFilters{Assignment: "unassigned"}, 0, false},
+		{DriverDirectoryFilters{Availability: "home"}, 0, false},
+		{DriverDirectoryFilters{DriverType: "unassigned"}, 0, false},
+	} {
+		filtered, filterErr := repo.ListDriverDirectory(ctx, Pagination{Page: 2, PageSize: 1}, "Test", true, test.filter)
+		if filterErr != nil || filtered.Total != test.want || (test.want > 0 && (len(filtered.Items) != 1 || (filtered.Items[0].IntakeID != "") != test.pending)) {
+			t.Fatalf("directory filter %+v: %+v %v", test.filter, filtered, filterErr)
+		}
+	}
 	if _, err = repo.CompleteDriverIntake(ctx, result.IntakeID, userID, "", &input, false); !errors.Is(err, ErrIntakeMatch) {
 		t.Fatalf("unreviewed match: %v", err)
 	}

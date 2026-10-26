@@ -72,7 +72,7 @@ else {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${base}/fuel`);
-    await page.getByRole('button', { name: 'Drivers', exact: true }).click();
+    await page.getByRole('tab', { name: 'Drivers', exact: true }).click();
     await expect(page.getByRole('columnheader', { name: 'Relay Driver ID' })).toBeVisible();
     const rows = page.locator('tbody tr');
     await expect(rows.first()).toContainText('Terminated Driver');
@@ -151,7 +151,7 @@ else {
     readOnly=false;
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(base+'/tolls');
-    await page.getByRole('button',{name:'Needs attention',exact:true}).click();
+    await page.getByRole('tab',{name:'Needs attention',exact:true}).click();
     await expect(page.getByRole('cell',{name:'Tag 777780673',exact:true})).toBeVisible();
     await expect(page.getByLabel('Unlinked tolls posted since')).toHaveValue('2026-09-01');
     await page.getByRole('button',{name:'Link truck',exact:true}).click();

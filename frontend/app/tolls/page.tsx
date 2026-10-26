@@ -185,7 +185,7 @@ export default function TollsPage() {
 
       <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
         {(["overview", "transactions", "trucks", "transponders", "attention"] as const).map((tab) => (
-          <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-pressed={(fleetView === tab)}
+          <button key={tab} type="button" onClick={() => setActiveTab(tab)} role="tab" aria-selected={fleetView === tab}
             className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${(fleetView === tab) ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
             {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
             {tab === "overview" ? "Overview" : tab === "trucks" ? "Trucks" : tab === "transponders" ? "Transponders" : tab === "attention" ? "Needs attention" : "Transactions"}
@@ -214,7 +214,7 @@ export default function TollsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search unit, plaza, agency, tag…" />
         <TableFilters>
-          <label className="block space-y-1">Post date from<input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label>
+          <label className="block space-y-1"><input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><span aria-hidden="true">→</span><label><input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label>
           <select aria-label="Toll truck" value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">Truck</option>
           {units.map((value) => <option key={value} value={value}>{value}</option>)}

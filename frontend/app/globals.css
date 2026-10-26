@@ -207,3 +207,19 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .weekly-content-enter { animation: weeklyContentEnter 140ms ease-out; }
 }
+
+/* Shared theme-aware tabs for page sections, profiles and view selectors. */
+.mserp-ui [role="tablist"], .mserp-ui :is(nav, div):has(> [role="tab"]) {
+ display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+ border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0;
+ padding: 0; background: transparent; box-shadow: none;
+}
+.mserp-ui [role="tab"] {
+ display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+ min-height: 36px; padding: 6px 12px; border: 0; border-bottom: 2px solid transparent;
+ border-radius: 0; background: transparent; box-shadow: none; color: var(--muted);
+ font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.mserp-ui [role="tab"]:hover { color: var(--ui-text); background: var(--accent-dim); }
+.mserp-ui [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.mserp-ui .global-search-input:focus-visible { outline: none; }
