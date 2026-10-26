@@ -25,6 +25,7 @@ func registerInventoryRoutes(router chi.Router, logger *slog.Logger, repo *repos
 	router.Get("/inventory/history", h.history)
 	router.Post("/inventory/movements", h.move)
 	router.Get("/trailers", h.trailers)
+	router.Get("/trailers/{id}", h.trailer)
 	router.Put("/trailers/{id}", h.saveTrailer)
 	router.Get("/trailers/{id}/history", h.trailerHistory)
 	router.Post("/inventory/imports/preview", h.previewImport)
@@ -102,8 +103,19 @@ func (h inventoryHandler) saveCollection(w http.ResponseWriter, r *http.Request,
 		writeAPIError(w, 400, "Invalid inventory request")
 		return
 	}
-	if input.Record.Data.TruckID != "" && !requireCapabilities(w, r, "trucks.read") {
-		return
+	if input.Record.Data.TruckID != "" {
+		needsAccess := true
+		if collection == "trailers" && input.Record.Version > 0 {
+			old, err := h.repo.Trailer(r.Context(), input.Record.ID)
+			if err != nil {
+				h.fail(w, err)
+				return
+			}
+			needsAccess = old.Data.TruckID != input.Record.Data.TruckID
+		}
+		if needsAccess && !requireCapabilities(w, r, "trucks.read") {
+			return
+		}
 	}
 	saved, err := h.repo.Save(r.Context(), collection, input, inventoryActor(r))
 	if err != nil {
@@ -113,12 +125,35 @@ func (h inventoryHandler) saveCollection(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, 200, saved)
 }
 func (h inventoryHandler) trailers(w http.ResponseWriter, r *http.Request) {
+	if wantsPagination(r) {
+		pagination, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		q := r.URL.Query()
+		page, err := h.repo.TrailersPage(r.Context(), pagination, repository.TrailerFilters{Search: q.Get("search"), Status: q.Get("status"), Storage: q.Get("storage"), TruckID: q.Get("truckId")})
+		if err != nil {
+			h.fail(w, err)
+			return
+		}
+		writeJSON(w, 200, page)
+		return
+	}
 	records, err := h.repo.List(r.Context(), "trailers")
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
 	writeJSON(w, 200, records)
+}
+func (h inventoryHandler) trailer(w http.ResponseWriter, r *http.Request) {
+	value, err := h.repo.Trailer(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, value)
 }
 func (h inventoryHandler) history(w http.ResponseWriter, r *http.Request) {
 	collection := r.URL.Query().Get("collection")

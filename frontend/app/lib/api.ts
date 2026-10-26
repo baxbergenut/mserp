@@ -8,7 +8,9 @@ export const retryTruckDataTruck = (id: string, version: number) => apiRequest<v
 import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";
 export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory", { signal });
 export const fetchTrailers = (signal?: AbortSignal) => apiRequest<InventoryRecord[]>("/trailers", { signal });
-export const saveInventoryRecord = (collection: InventoryCollection, record: InventoryRecord, requestId: string) => apiRequest<InventoryRecord>(collection === "trailers" ? `/trailers/${record.id}` : `/inventory/${collection}/${record.id}`, { method: "PUT", body: JSON.stringify({ requestId, record }) });
+export const fetchTrailer = (id: string, signal?: AbortSignal) => apiRequest<InventoryRecord>(`/trailers/${id}`, {signal});
+export const fetchTrailersPage = (query: PageQuery & {status?:string;storage?:string;truckId?:string}, signal?:AbortSignal) => paginatedRequest<import("./types").TrailerPage>(withQuery("/trailers",query),signal);
+export const saveInventoryRecord = (collection: InventoryCollection, record: InventoryRecord, requestId: string, reason?: string) => apiRequest<InventoryRecord>(collection === "trailers" ? `/trailers/${record.id}` : `/inventory/${collection}/${record.id}`, { method: "PUT", body: JSON.stringify({ requestId, record, reason }) });
 export const fetchInventoryHistory = (collection = "", id = "") => apiRequest<InventoryEvent[]>(collection === "trailers" ? `/trailers/${encodeURIComponent(id)}/history` : `/inventory/history?${new URLSearchParams({ collection, id })}`);
 export const moveInventoryStock = (movement: InventoryMovement) => apiRequest<void>("/inventory/movements", { method: "POST", body: JSON.stringify(movement) });
 export const fetchInventoryImports = () => apiRequest<InventoryImport[]>("/inventory/imports");

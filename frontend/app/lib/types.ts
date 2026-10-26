@@ -604,6 +604,10 @@ export interface TruckPage extends PaginatedResponse<Truck> {
  statusCounts: Record<TruckOperatingStatus, number>;
  gpsAlertCounts: Record<"overdue" | "missing", number>;
 }
+export interface TrailerPage extends PaginatedResponse<import("./inventoryTypes").InventoryRecord> {
+ statusCounts: Record<TruckOperatingStatus,number>;
+ storageLocations: string[];
+}
 export interface Truck {
  gpsReportedAt?: string | null;
  gpsSource?: "five_eld" | "samsara" | null;

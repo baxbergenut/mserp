@@ -1,5 +1,6 @@
 export type InventoryCollection = "assets" | "lines" | "locations" | "supplies" | "equipment" | "trailers" | "transponder-notes";
 export interface InventoryFields {
+  statusReason?: string;
   name?: string; deviceType?: string; brand?: string; imei?: string; serial?: string; assetLabel?: string;
   make?: string; model?: string; condition?: string; status?: string; ownership?: string;
   truckId?: string; locationId?: string; custodian?: string; gatewayId?: string; assetId?: string;
@@ -11,7 +12,7 @@ export interface InventoryFields {
   storageLocation?: string; usage?: string; registrationUrl?: string;
   providerEnvironment?: string; providerAccount?: string; notes?: string; source?: string; active: boolean;
 }
-export interface InventoryRecord { id: string; version: number; data: InventoryFields; updatedAt: string; updatedBy: string }
+export interface InventoryRecord { id: string; version: number; data: InventoryFields; updatedAt: string; updatedBy: string; truckUnit?: string }
 export interface InventoryEvent { id: string; collection: string; recordId: string; action: string; before: InventoryRecord | null; after: InventoryRecord; actor: string; createdAt: string }
 export interface InventoryMovement { id: string; supplyId: string; kind: string; from: string; to: string; quantity: number; reason: string; physicalCount: boolean; reversesId?: string; actor: string; createdAt: string }
 export interface InventoryBalance { supplyId: string; holder: string; quantity: number; verified: boolean }

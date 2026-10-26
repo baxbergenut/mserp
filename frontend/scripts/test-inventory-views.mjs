@@ -10,8 +10,8 @@ const id = number => '019a0000-0000-4000-8000-' + String(number).padStart(12, '0
 const stamp = '2026-10-19T14:00:00Z';
 const record = (number, data) => ({ id: id(number), version: 1, data: { active: true, ...data }, updatedAt: stamp, updatedBy: 'Fleet Reviewer' });
 const trucks = [
-  { id: id(100), unitNumber: '022', active: true, isCompanyOwned: true },
-  { id: id(101), unitNumber: '023', active: true, isCompanyOwned: false },
+  { id: id(100), unitNumber: '022', active: true, operatingStatus: 'ready', isCompanyOwned: true },
+  { id: id(101), unitNumber: '023', active: true, operatingStatus: 'in_use', isCompanyOwned: false },
   { id: id(102), unitNumber: '061', active: false, isCompanyOwned: true },
 ];
 const data = {
@@ -58,10 +58,24 @@ const server = createServer(async (request, response) => {
       if (path === '/api/maintenance/access') return send({ canView: false, canCreate: false });
       if (path === '/api/lookups/trucks') return send(trucks);
       if (path === '/api/inventory' && request.method === 'GET') return send(data);
-      if (path === '/api/trailers' && request.method === 'GET') return send(trailers);
+      if (path === '/api/trailers' && request.method === 'GET') {
+        const q = new URL(request.url, 'http://localhost').searchParams;
+        if (!q.has('page')) return send(trailers);
+        const statuses = ['ready','shop','in_use','out_of_service','terminated'];
+        const counts = Object.fromEntries(statuses.map(s => [s,0]));
+        const matching = trailers.filter(t => (!q.get('storage') || t.data.storageLocation === q.get('storage')) && JSON.stringify(t.data).toLowerCase().includes((q.get('search') || '').toLowerCase()));
+        matching.forEach(t => counts[t.data.status]++);
+        const items = matching.filter(t => !q.get('status') || t.data.status === q.get('status')).sort((a,b) => statuses.indexOf(a.data.status)-statuses.indexOf(b.data.status) || a.data.unitNumber.localeCompare(b.data.unitNumber));
+        const pageSize = +(q.get('pageSize') || 25), totalPages = Math.max(1,Math.ceil(items.length/pageSize)), page = Math.min(+(q.get('page') || 1),totalPages);
+        return send({ items: items.slice((page-1)*pageSize,page*pageSize), total: items.length, page, pageSize, totalPages, statusCounts: counts, storageLocations: [...new Set(trailers.map(t => t.data.storageLocation).filter(Boolean))] });
+      }
       if (path === '/api/prepass-fleet') return send(prepass);
       if (path === '/api/inventory/imports') return send([]);
       if (path.includes('/history')) return send([]);
+      if (path.startsWith('/api/trailers/') && request.method === 'GET') {
+        const found = trailers.find(t => t.id === path.split('/').at(-1));
+        return found ? send(found) : send({error:'Trailer not found.'},404);
+      }
       let raw = ''; for await (const chunk of request) raw += chunk;
       const input = raw ? JSON.parse(raw) : {};
       writes.push({ path, input });
@@ -72,6 +86,12 @@ const server = createServer(async (request, response) => {
         const index = target.findIndex(item => item.id === input.record.id);
         if (index >= 0 && target[index].version !== input.record.version) return send({ error: 'Inventory changed; reload and review' }, 409);
         const saved = { ...input.record, data: { ...input.record.data }, version: input.record.version + 1, updatedAt: stamp, updatedBy: 'Fleet Reviewer' };
+        if (collection === 'trailers') {
+          if (!['shop','out_of_service','terminated'].includes(saved.data.status)) saved.data.status = saved.data.truckId ? 'in_use' : 'ready';
+          saved.data.active = !['out_of_service','terminated'].includes(saved.data.status);
+          saved.data.statusReason = input.reason || saved.data.statusReason;
+          saved.truckUnit = trucks.find(t => t.id === saved.data.truckId)?.unitNumber || '';
+        }
         if (saved.data.equipmentState === 'verified_installed') { saved.data.verifiedAt = stamp; saved.data.verifiedBy = 'Fleet Reviewer'; }
         else { delete saved.data.verifiedAt; delete saved.data.verifiedBy; }
         if (index < 0) target.push(saved); else target[index] = saved;
@@ -255,13 +275,17 @@ try {
   assert.equal(fleetHrefs.filter(href => href === '/trucks').length, 1);
   assert.ok(fleetHrefs.indexOf('/trucks') < fleetHrefs.indexOf('/fleet/trailers'));
   assert.ok(fleetHrefs.indexOf('/fleet/trailers') < fleetHrefs.indexOf('/fleet/inventory'));
-  await page.getByRole('link', { name: 'MS003', exact: true }).click();
+  await expect(page.locator('thead')).toHaveText('UnitEquipmentTruckStorageStatusStatus notes');
+  for (const name of ['Availability','Condition','Record','Actions','Registration']) await expect(page.getByRole('columnheader', {name,exact:true})).toHaveCount(0);
+  await page.getByRole('row', { name: 'Open trailer MS003 details', exact: true }).getByRole('cell').nth(1).click();
   await expect(page).toHaveURL(/\/fleet\/trailers\/detail\?id=/);
   await expect(page.getByRole('heading', { name: 'Trailer MS003', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Vehicle details', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Registration & documents', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit trailer', exact: true }).click();
   dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Active', {exact:true})).toHaveCount(0);
+  await expect(dialog.getByLabel('Condition', {exact:true})).toHaveCount(0);
   await dialog.getByLabel('Storage Location', { exact: true }).fill('Updated Yard');
   await dialog.getByLabel('Notes', { exact: true }).fill('Reviewed trailer notes');
   await dialog.getByLabel('Registration HTTPS Link', { exact: true }).fill('https://example.com/registration');
@@ -272,20 +296,33 @@ try {
   await page.reload();
   await expect(page.getByText('Reviewed trailer notes', { exact: true })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole('link', { name: 'MS003', exact: true })).toBeVisible();
-  await page.getByRole('row').filter({ hasText: 'MS003' }).getByRole('button', { name: 'Edit', exact: true }).click();
-  dialog = page.getByRole('dialog'); await dialog.getByLabel('Active', { exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click(); await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'MS003', exact: true })).toHaveCount(0);
-  await page.getByLabel('Record status', { exact: true }).selectOption('inactive');
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('link', { name: 'MS003', exact: true })).toBeVisible();
+  await page.getByRole('row', { name: 'Open trailer MS003 details', exact: true }).press('Enter');
+  await page.getByRole('button',{name:'Assign truck',exact:true}).click();
+  dialog=page.getByRole('dialog');await dialog.getByLabel('Truck',{exact:true}).selectOption(id(100));await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('In use',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Change status',exact:true}).click();
+  dialog=page.getByRole('dialog');
+  await expect(dialog.getByRole('button',{name:'Save',exact:true})).toBeDisabled();
+  await expect(dialog.getByLabel('Status',{exact:true}).locator('option[value="terminated"]')).toHaveJSProperty('disabled',true);
+  await dialog.getByLabel('Reason',{exact:true}).fill('Axle inspection');await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('Shop',{exact:true})).toBeVisible();await expect(page.getByText('Axle inspection',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Return to service',exact:true}).click();dialog=page.getByRole('dialog');
+  await expect(dialog).toContainText('In use');await dialog.getByLabel('Reason',{exact:true}).fill('Inspection passed');await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await page.getByRole('button',{name:'Change assignment',exact:true}).click();dialog=page.getByRole('dialog');await dialog.getByLabel('Truck',{exact:true}).selectOption('');await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);
+  for (const [status,label] of [['out_of_service','OOS'],['terminated','Terminated']]) {
+    await page.getByRole('button',{name:'Change status',exact:true}).click();dialog=page.getByRole('dialog');await dialog.getByLabel('Status',{exact:true}).selectOption(status);
+    await dialog.getByLabel('Reason',{exact:true}).fill('Reviewed '+label);await dialog.getByRole('button',{name:'Save',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.getByText(label,{exact:true})).toBeVisible();
+  }
+  await page.goBack();
+  await page.getByRole('button',{name:'Terminated, 1 trailers',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Terminated, 1 trailers',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('row', { name: 'Open trailer MS003 details', exact: true })).toBeVisible();
   await page.getByPlaceholder('Search trailers…').fill('Updated Yard');
-  await page.getByRole('link', { name: 'MS003', exact: true }).click();
+  await page.getByRole('row', { name: 'Open trailer MS003 details', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Trailer MS003', exact: true })).toBeVisible();
   await page.goBack();
   await expect(page.getByPlaceholder('Search trailers…')).toHaveValue('Updated Yard');
-  await expect(page.getByRole('link', { name: 'MS003', exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open trailer MS003 details', exact: true })).toBeVisible();
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))); });
   await page.screenshot({ path: join(tmpdir(), 'mserp-trailers-desktop.png'), animations: 'disabled' });
 
@@ -293,6 +330,7 @@ try {
   await page.goto(origin + '/fleet/trailers/detail?id=' + trailers[0].id);
   await expect(page.getByRole('heading', { name: 'Trailer MS003', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit trailer', exact: true })).toHaveCount(0);
+  for (const name of ['Change status','Return to service','Assign truck','Change assignment']) await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -319,26 +357,25 @@ try {
   await expect(page.getByText('Truck access is required to view the supplies checklist.', { exact: true })).toBeVisible();
   assert.equal(reads.slice(readStart).includes('/api/lookups/trucks'), false);
   trailerOnly = true;
-  trailers.push(...Array.from({ length: 30 }, (_, index) => record(1000 + index, { unitNumber: 'TR' + String(index + 1).padStart(3, '0'), make: 'Utility', status: index % 2 ? 'repair' : 'ready', condition: 'good', storageLocation: 'Main Yard' })));
+  trailers.push(...Array.from({ length: 30 }, (_, index) => record(1000 + index, { unitNumber: 'TR' + String(index + 1).padStart(3, '0'), make: 'Utility', status: index % 2 ? 'shop' : 'ready', statusReason: index % 2 ? 'Inspection' : '', storageLocation: 'Main Yard' })));
   const trailerPage = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const trailerReadStart = reads.length;
   await trailerPage.goto(origin + '/fleet/trailers');
-  await expect(trailerPage.getByRole('link', { name: 'TR001', exact: true })).toBeVisible();
+  await expect(trailerPage.getByRole('row', { name: 'Open trailer TR001 details', exact: true })).toBeVisible();
   await expect(trailerPage.getByText('Page 1 of 2', { exact: true })).toBeVisible();
   await trailerPage.getByRole('button', { name: 'Next page', exact: true }).click();
-  await expect(trailerPage.getByRole('link', { name: 'TR026', exact: true })).toBeVisible();
-  await trailerPage.getByRole('link', { name: 'TR026', exact: true }).click();
+  await expect(trailerPage.getByRole('row', { name: 'Open trailer TR026 details', exact: true })).toBeVisible();
+  await trailerPage.getByRole('row', { name: 'Open trailer TR026 details', exact: true }).click();
   await expect(trailerPage.getByRole('heading', { name: 'Trailer TR026', exact: true })).toBeVisible();
   await expect(trailerPage.getByRole('button', { name: 'Edit trailer', exact: true })).toHaveCount(0);
   await trailerPage.evaluate(async () => { await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))); });
   await trailerPage.screenshot({ path: join(tmpdir(), 'mserp-trailer-detail-desktop.png'), animations: 'disabled' });
   await trailerPage.goBack();
   await expect(trailerPage.getByText('Page 2 of 2', { exact: true })).toBeVisible();
-  await trailerPage.getByLabel('Trailer availability', { exact: true }).selectOption('ready');
-  await trailerPage.keyboard.press('Escape');
+  await trailerPage.getByRole('button', { name: 'Ready, 15 trailers', exact: true }).click();
   await expect(trailerPage.getByText('Page 1 of 1', { exact: true })).toBeVisible();
-  await expect(trailerPage.getByRole('link', { name: 'TR002', exact: true })).toHaveCount(0);
-  await expect(trailerPage.getByRole('link', { name: 'TR001', exact: true })).toBeVisible();
+  await expect(trailerPage.getByRole('row', { name: 'Open trailer TR002 details', exact: true })).toHaveCount(0);
+  await expect(trailerPage.getByRole('row', { name: 'Open trailer TR001 details', exact: true })).toBeVisible();
   await trailerPage.getByPlaceholder('Search trailers…').fill('does not exist');
   await expect(trailerPage.getByText('No trailers match your search or filters.', { exact: true })).toBeVisible();
   await trailerPage.getByPlaceholder('Search trailers…').fill('');

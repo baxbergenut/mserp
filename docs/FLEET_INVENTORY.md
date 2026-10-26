@@ -4,16 +4,48 @@ Fleet > Inventory replaces operational equipment worksheets. Its tabs are
 directly addressable, for example `/fleet/inventory?tab=tablets`, `phones`, `dashcams`,
 `samsara-gateways`, `supplies`, `lines`, `equipment`, `transponders`, `locations`
 and the Administrator-only `imports` workflow. Fleet > Trailers is a separate
-directory at `/fleet/trailers` for stored/unused company trailers. Operational
+directory at `/fleet/trailers` for company trailers. Operational
 Schneider/JB Hunt trailer text on Status Board remains independent.
 
 Fleet navigation lists Trucks, Trailers, then Inventory. Trailers follows the
-Trucks table and profile layout: unit links open `/fleet/trailers/detail?id=...`,
-with vehicle details, registration, availability, condition, storage and notes.
-Search, pagination and the Record column's Active/Inactive/All filter remember
-their state when returning from a profile. Add and Edit share the existing
-versioned trailer editor; `trailers.read` opens both pages and `trailers.manage`
-controls edits. Inactive records remain accessible through their profile links.
+Trucks table and profile layout: clicking anywhere on a row (or Enter/Space)
+opens `/fleet/trailers/detail?id=...`. Colored All/Ready/Shop/In use/OOS/Terminated
+count cards filter the server-paginated directory. Default order is Ready, Shop,
+In use, OOS, Terminated, then unit. Search and storage filtering also affect counts;
+the selected status does not hide other status counts. View state survives profile
+navigation. Columns are Unit (plate below), Equipment, Truck, Storage, Status and
+Status notes. Registration and editing remain in the profile.
+
+Migration 150 replaces trailer availability/condition and editable Active with
+one status. Ready/In use derive from the local truck assignment, independently
+of the truck's driver employment or temporary leave. One truck can hold one
+trailer; new links require an operational truck and trailer. Shop/OOS preserve
+the link and require a fresh reason, as does return to service. Ending an
+assignment never clears a restriction or its reason. Manual Terminated requires
+the assignment to have already been ended and a reason; it is reversible.
+Returning derives Ready/In use from the current link. Active remains a derived
+compatibility field (Ready/In use/Shop true). General edits cannot override it.
+
+The approved existing 34 Stored/Unused trailers become Ready, with explicit
+confirmation provenance. Other legacy restrictions map conservatively:
+inactive to Terminated, retired/lost to OOS, repair/damaged/review to Shop.
+Old notes, conditions and before/after snapshots are preserved in immutable
+inventory history. New source imports start in Shop pending operational review;
+reimports preserve status and assignment. Source sheets cannot authorize readiness.
+
+The versioned `PUT /trailers/{id}` accepts a separate `reason` for restricted
+transitions and returns the server-derived status. The existing request ID guards
+replays; optimistic versions and the fleet-status-then-inventory lock order protect
+concurrent edits and truck changes. Database constraints enforce status/active/link
+consistency and unique truck assignments. No-op saves and reads create no history.
+`GET /trailers/{id}` returns a profile; paginated `GET /trailers` accepts search,
+status, storage and truckId and returns statusCounts/storageLocations. Unpaginated
+reads remain compatible. `trailers.read` opens both pages and history;
+`trailers.manage` controls edits. New assignments additionally require
+`trucks.read`; an existing link can be retained or released without that capability.
+These assignments do not write Status Board trailer text or provider contracts.
+Verify with TestTrailerStatusesDatabase/TestInventoryDatabase (fresh and upgrade)
+and `frontend/scripts/test-inventory-views.mjs`.
 
 Inventory keeps search, filters, refresh and add controls in one desktop
 toolbar, wrapping on smaller screens. Tablet columns show make/model, IMEI and

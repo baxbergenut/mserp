@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import { FileBadge, Pencil, Truck } from "lucide-react";
 import { PageHeader } from "@/app/components/PageHeader";
-import { ErrorBanner, StatusBadge } from "@/app/components/management/ManagementUI";
+import { ErrorBanner } from "@/app/components/management/ManagementUI";
+import { FleetStatusBadge } from "@/app/components/FleetStatusBadge";
+import Link from "@/app/components/AccessLink";
 import { usePermissions } from "@/app/lib/access";
-import { fetchTrailers } from "@/app/lib/api";
-import type { InventoryRecord } from "@/app/lib/types";
-import { StatusBadge as TrailerStatusBadge } from "../../inventory/InventoryStatus";
+import { fetchTrailer, fetchInventoryHistory } from "@/app/lib/api";
+import type { InventoryRecord, InventoryEvent, TruckOperatingStatus } from "@/app/lib/types";
+import { statusLabel } from "@/app/lib/fleetStatus";
+import { TrailerOperationDialog, trailerRestricted } from "../TrailerOperationDialog";
 import { TrailerEditor } from "../TrailerEditor";
 
 function Details({ values }: { values: [string, string | undefined][] }) {
@@ -20,16 +23,24 @@ export default function TrailerDetailPage() {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [operation, setOperation] = useState<"status" | "return" | "assignment" | null>(null);
+  const [history, setHistory] = useState<InventoryEvent[]>([]);
+  const [historyError, setHistoryError] = useState("");
+  useEffect(() => {
+    if (!trailer) return;
+    let cancelled = false;
+    void fetchInventoryHistory("trailers", trailer.id).then(events => { if (!cancelled) { setHistory(events); setHistoryError(""); } })
+      .catch(error => { if (!cancelled) setHistoryError(error instanceof Error ? error.message : "Could not load history"); });
+    return () => { cancelled = true; };
+  }, [trailer, attempt]);
   useEffect(() => {
     const controller = new AbortController();
     const id = new URLSearchParams(window.location.search).get("id");
     const timer = window.setTimeout(() => {
       setError("");
       if (!id) { setError("No trailer was selected."); return; }
-      void fetchTrailers(controller.signal).then(records => {
+      void fetchTrailer(id, controller.signal).then(record => {
         if (controller.signal.aborted) return;
-        const record = records.find(item => item.id === id);
-        if (!record) { setError("Trailer not found."); return; }
         setTrailer(record);
       }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Failed to load trailer"); });
     }, 0);
@@ -43,16 +54,21 @@ export default function TrailerDetailPage() {
     {trailer && d && <>
       <header className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
-          <div className="min-w-0"><PageHeader><div className="flex flex-wrap items-center gap-3"><Truck className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">Trailer {d.unitNumber}</h1><StatusBadge active={d.active} /></div></PageHeader><p className="break-all font-mono text-xs text-zinc-400">VIN · {d.vin || "Not recorded"}</p></div>
-          {canManage && <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit trailer</button>}
+          <div className="min-w-0"><PageHeader><div className="flex flex-wrap items-center gap-3"><Truck className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">Trailer {d.unitNumber}</h1></div></PageHeader><p className="break-all font-mono text-xs text-zinc-400">VIN · {d.vin || "Not recorded"}</p></div>
+          {canManage && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <button className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800" onClick={() => setOperation("status")}>Change status</button>
+            {trailerRestricted(d.status) && <button className="rounded-lg border border-emerald-800 px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-950" onClick={() => setOperation("return")}>Return to service</button>}
+            <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-500" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit trailer</button>
+          </div>}
         </div>
         <dl className="grid grid-cols-1 gap-px border-t border-zinc-800 bg-zinc-800 sm:grid-cols-2 md:grid-cols-4">
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Storage location</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{d.storageLocation || "Not recorded"}</dd></div>
-          <div className="min-w-0 bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Availability</dt><dd className="mt-1"><TrailerStatusBadge value={d.status} /></dd></div>
-          <div className="min-w-0 bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Condition</dt><dd className="mt-1"><TrailerStatusBadge value={d.condition} /></dd></div>
+          <div className="min-w-0 bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Status</dt><dd className="mt-1"><FleetStatusBadge status={d.status as TruckOperatingStatus} showReady /></dd></div>
+          <div className="min-w-0 bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Assigned truck</dt><dd className="mt-1 text-sm text-zinc-200">{d.truckId ? <Link href={"/trucks/detail?id=" + d.truckId}>{trailer.truckUnit || "View truck"}</Link> : "Unassigned"}{canManage && (d.truckId || !trailerRestricted(d.status)) && <button className="ml-3 text-xs text-blue-400" onClick={() => setOperation("assignment")}>{d.truckId ? "Change assignment" : "Assign truck"}</button>}</dd></div>
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">License plate</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{[d.plate, d.plateState].filter(Boolean).join(" · ") || "Not recorded"}</dd></div>
         </dl>
       </header>
+      {d.statusReason && <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-2 text-sm font-semibold text-zinc-100">Status reason</h2><p className="whitespace-pre-wrap break-words text-sm text-zinc-300">{d.statusReason}</p></section>}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
           <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Vehicle details</h2><Details values={[["Unit number", d.unitNumber], ["VIN", d.vin], ["Year", d.year], ["Make", d.make], ["License plate", d.plate], ["Plate state", d.plateState]]} /></section>
@@ -61,7 +77,18 @@ export default function TrailerDetailPage() {
         </div>
         <aside className="min-w-0 rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Storage & usage</h2><dl className="space-y-4 text-xs"><div><dt className="text-zinc-500">Usage notes</dt><dd className="mt-1 whitespace-pre-wrap break-words text-zinc-300">{d.usage || "Not recorded"}</dd></div></dl></aside>
       </div>
+      <section className="rounded-xl border border-zinc-800 p-5">
+        <h2 className="mb-4 text-sm font-semibold text-zinc-100">Status & assignment history</h2>
+        {historyError && <ErrorBanner message={historyError} />}
+        {!history.length && !historyError && <p className="text-xs text-zinc-500">No changes recorded.</p>}
+        <ol className="divide-y divide-zinc-800">{history.map(event => <li key={event.id} className="space-y-1 py-3 text-xs">
+          <div className="flex flex-wrap justify-between gap-2"><span className="font-medium text-zinc-300">{statusLabel(event.before?.data.status || "Created")} → {statusLabel(event.after.data.status || "Unknown")}{event.after.truckUnit ? " · Truck " + event.after.truckUnit : ""}</span><span className="text-zinc-500">{new Date(event.createdAt).toLocaleString()} · {event.actor || "System"}</span></div>
+          {event.before?.data.truckId && event.before.data.truckId !== event.after.data.truckId && <p className="text-zinc-500">Released truck {event.before.truckUnit || "assignment"}</p>}
+          <p className="whitespace-pre-wrap break-words text-zinc-400">{event.after.data.statusReason || statusLabel(event.action)}</p>
+        </li>)}</ol>
+      </section>
       {editing && canManage && <TrailerEditor key={trailer.id} trailer={trailer} onClose={() => setEditing(false)} onSaved={record => { setTrailer(record); setEditing(false); }} />}
+      {operation && canManage && <TrailerOperationDialog trailer={trailer} mode={operation} onClose={() => setOperation(null)} onSaved={record => { setTrailer(record); setOperation(null); }} />}
     </>}
   </div>;
 }

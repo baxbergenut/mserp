@@ -349,7 +349,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   audits and ledger APIs remain stored, and checking presence never moves stock.
   Inventory phone displays reuse the shared phone formatter;
   carrier status appears on AT&T lines rather than next to tablet numbers.
-  Stored trailers have no dispatch/Status Board or
+  Migration 150 gives trailers Ready/In use/Shop/OOS/Terminated statuses and
+  local one-to-one truck assignments. Ready/In use are server-derived from that
+  link; Shop/OOS retain it, and Terminated requires an explicit prior release.
+  Restrictions and returns require reasons; releasing a link preserves restrictions.
+  Active is derived, legacy conditions remain historical, and new imports need
+  operational review (Shop). The reviewed 34 Stored/Unused trailers migrate Ready.
+  Colored count cards filter a server-paginated directory with clickable rows;
+  profiles contain status/assignment controls, reasons and immutable history.
+  See repository/trailers.go and TestTrailerStatusesDatabase; changes share the
+  fleet-status-then-inventory lock order and version/request ID guards.
+  Local trailers have no dispatch/Status Board or
   FleetScope assignment synchronization. Imports require Administrator plus
   `inventory.import`; source snapshots and row outcomes remain private and must
   be reviewed before an atomic commit. No accounting, compliance or vendor writes

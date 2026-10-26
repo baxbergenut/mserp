@@ -134,6 +134,10 @@ func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Conte
 	if err != nil {
 		t.Fatal(err)
 	}
+	statusMigration, err := os.ReadFile("../../sql/150_trailer_statuses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("inventory_%d", time.Now().UnixNano())
@@ -155,12 +159,17 @@ func withInventoryDatabaseSeed(t *testing.T, seed func(*testing.T, context.Conte
 				if !strings.Contains(normalized, body) {
 					t.Fatal("init schema must contain the exact migration")
 				}
-				exec(strings.Replace(strings.Replace(normalized, baseBody, "", 1), body, "", 1))
+				statusBody := strings.ReplaceAll(string(statusMigration), "\r\n", "\n")
+				if !strings.Contains(normalized, statusBody) {
+					t.Fatal("init must include trailer status migration")
+				}
+				exec(strings.Replace(strings.Replace(strings.Replace(normalized, statusBody, "", 1), baseBody, "", 1), body, "", 1))
 				exec(string(migration))
 				if seed != nil {
 					seed(t, ctx, admin)
 				}
 				exec(string(baseMigration))
+				exec(string(statusMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT ALL ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			testCfg := cfg.Copy()
@@ -246,7 +255,7 @@ func TestInventoryDatabase(t *testing.T) {
 		if e != nil || len(events) != 2 || events[0].Action != "transfer" {
 			t.Fatal("line replacement history", events, e)
 		}
-		trailer := save("trailers", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, UnitNumber: "MS003", Status: "stored_unused", Condition: "unknown", VIN: "1UYVS2530K7824719", StorageLocation: "Troy yard"}})
+		trailer := save("trailers", InventoryRecord{ID: inventoryID(), Data: InventoryFields{Active: true, UnitNumber: "MS003", Status: "ready", Condition: "unknown", VIN: "1UYVS2530K7824719", StorageLocation: "Troy yard"}})
 		trailer.Data.Active = false
 		save("trailers", trailer)
 		supplies, e := repo.List(ctx, "supplies")

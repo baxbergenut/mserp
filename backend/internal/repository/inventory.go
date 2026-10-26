@@ -39,6 +39,7 @@ type InventoryFields struct {
 	Model               string `json:"model,omitempty"`
 	Condition           string `json:"condition,omitempty"`
 	Status              string `json:"status,omitempty"`
+	StatusReason        string `json:"statusReason,omitempty"`
 	Ownership           string `json:"ownership,omitempty"`
 	TruckID             string `json:"truckId,omitempty"`
 	LocationID          string `json:"locationId,omitempty"`
@@ -79,6 +80,7 @@ type InventoryFields struct {
 	Active              bool   `json:"active"`
 }
 type InventoryRecord struct {
+	TruckUnit string          `json:"truckUnit,omitempty"`
 	ID        string          `json:"id"`
 	Version   int64           `json:"version"`
 	Data      InventoryFields `json:"data"`
@@ -86,6 +88,7 @@ type InventoryRecord struct {
 	UpdatedBy string          `json:"updatedBy"`
 }
 type InventorySave struct {
+	Reason    string          `json:"reason,omitempty"`
 	RequestID string          `json:"requestId"`
 	Record    InventoryRecord `json:"record"`
 }
@@ -138,6 +141,9 @@ func inventoryLock(ctx context.Context, tx pgx.Tx) error {
 }
 
 func (r *InventoryRepository) List(ctx context.Context, collection string) ([]InventoryRecord, error) {
+	if collection == "trailers" {
+		return r.listTrailers(ctx, "")
+	}
 	table, ok := inventoryTables[collection]
 	if !ok {
 		return nil, inventoryInvalid("Unknown inventory category")
@@ -302,8 +308,8 @@ func validateInventory(collection string, v InventoryRecord) error {
 		}
 	}
 	if collection == "trailers" {
-		if d.Status != "" && !slices.Contains([]string{"stored_unused", "needs_review", "ready", "repair", "retired"}, d.Status) {
-			return inventoryInvalid("Choose a standard trailer availability")
+		if !slices.Contains(trailerStatuses, d.Status) {
+			return inventoryInvalid("Choose a standard trailer status")
 		}
 		if d.UnitNumber == "" || d.UnitNumber != strings.TrimSpace(d.UnitNumber) || len(d.UnitNumber) > 50 {
 			return inventoryInvalid("Enter a trailer unit number")
@@ -323,8 +329,8 @@ func validateInventory(collection string, v InventoryRecord) error {
 				return inventoryInvalid("Registration link must be an HTTPS URL")
 			}
 		}
-		if d.TruckID != "" || d.GatewayID != "" {
-			return inventoryInvalid("Stored trailers do not have dispatch assignments")
+		if d.GatewayID != "" {
+			return inventoryInvalid("Trailers cannot be assigned to a gateway")
 		}
 	}
 	if collection == "transponder-notes" && (d.Serial == "" || d.ProviderAccount == "" || d.ProviderEnvironment == "") {
@@ -351,6 +357,11 @@ func (r *InventoryRepository) Save(ctx context.Context, collection string, input
 		return InventoryRecord{}, err
 	}
 	defer tx.Rollback(ctx)
+	if collection == "trailers" {
+		if _, err = tx.Exec(ctx, `SELECT fleet_status_lock()`); err != nil {
+			return InventoryRecord{}, err
+		}
+	}
 	if err = inventoryLock(ctx, tx); err != nil {
 		return InventoryRecord{}, err
 	}
@@ -370,19 +381,24 @@ func (r *InventoryRepository) Save(ctx context.Context, collection string, input
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return saved, err
 	}
-	saved, err = inventorySaveTx(ctx, tx, collection, input.Record, actor, input.RequestID, hash, false)
+	saved, err = inventorySaveTx(ctx, tx, collection, input.Record, actor, input.RequestID, hash, false, input.Reason)
 	if err != nil {
 		return saved, err
 	}
 	return saved, tx.Commit(ctx)
 }
 
-func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v InventoryRecord, actor InventoryActor, requestID, hash string, importing bool) (InventoryRecord, error) {
+func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v InventoryRecord, actor InventoryActor, requestID, hash string, importing bool, reasons ...string) (InventoryRecord, error) {
+	if !inventoryUUID.MatchString(v.ID) || v.Version < 0 {
+		return v, inventoryInvalid("Invalid record identity or version")
+	}
 	if importing {
 		v.Data = inventoryImportedFields(collection, v.Data)
 	}
-	if err := validateInventory(collection, v); err != nil {
-		return v, err
+	if collection != "trailers" {
+		if err := validateInventory(collection, v); err != nil {
+			return v, err
+		}
 	}
 	old, err := inventoryReadTx(ctx, tx, collection, v.ID)
 	exists := err == nil
@@ -391,6 +407,23 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 	}
 	if (!exists && v.Version != 0) || (exists && old.Version != v.Version) {
 		return v, ErrInventoryConflict
+	}
+	if collection == "trailers" {
+		if old.Data.TruckID != "" {
+			if err = tx.QueryRow(ctx, "SELECT unit_number FROM trucks WHERE id=$1", old.Data.TruckID).Scan(&old.TruckUnit); err != nil {
+				return v, err
+			}
+		}
+		reason := ""
+		if len(reasons) > 0 {
+			reason = reasons[0]
+		}
+		if err = prepareTrailerSave(ctx, tx, &v, old, exists, importing, reason); err != nil {
+			return v, err
+		}
+		if err = validateInventory(collection, v); err != nil {
+			return v, err
+		}
 	}
 	if !importing {
 		v.Data.Source = old.Data.Source
@@ -488,6 +521,10 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 			return v, inventoryInvalid("Resolve remaining storage and issued stock before archiving this supply item")
 		}
 	}
+	if collection == "trailers" && exists && v.Data == old.Data {
+		old.TruckUnit = v.TruckUnit
+		return old, nil
+	}
 	v.Version++
 	v.UpdatedAt = time.Now().UTC()
 	v.UpdatedBy = actor.Name
@@ -506,6 +543,9 @@ func inventorySaveTx(ctx context.Context, tx pgx.Tx, collection string, v Invent
 		action = "archive"
 	} else if old.Data.TruckID != v.Data.TruckID || old.Data.Custodian != v.Data.Custodian || old.Data.LocationID != v.Data.LocationID || old.Data.GatewayID != v.Data.GatewayID || old.Data.AssetID != v.Data.AssetID {
 		action = "transfer"
+	}
+	if collection == "trailers" && exists && old.Data.Status != v.Data.Status {
+		action = "status"
 	}
 	var before any
 	if exists {

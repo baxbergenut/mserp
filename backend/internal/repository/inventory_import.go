@@ -320,7 +320,7 @@ func (r *InventoryRepository) PreviewImport(ctx context.Context, snapshot Invent
 				}
 				add("assets", InventoryFields{DeviceType: "tt_camera", IMEI: inventoryCell(row, 0), TruckID: truck, Ownership: ownership, Condition: "unknown", EquipmentState: "reported_present", Status: inventoryCell(row, 1), Notes: inventoryCell(row, 6), Active: true}, source, issues)
 			case "Trailer  list":
-				add("trailers", InventoryFields{UnitNumber: inventoryCell(row, 0), RegistrationURL: inventoryCell(row, 1), VIN: strings.ToUpper(inventoryCell(row, 2)), Plate: inventoryCell(row, 3), Year: inventoryCell(row, 4), Make: inventoryCell(row, 5), Usage: inventoryCell(row, 6), StorageLocation: inventoryCell(row, 7), Status: "stored_unused", Condition: "unknown", Notes: "Source availability: " + inventoryCell(row, 8) + ". Requires physical condition review.", Active: true}, source, nil)
+				add("trailers", InventoryFields{UnitNumber: inventoryCell(row, 0), RegistrationURL: inventoryCell(row, 1), VIN: strings.ToUpper(inventoryCell(row, 2)), Plate: inventoryCell(row, 3), Year: inventoryCell(row, 4), Make: inventoryCell(row, 5), Usage: inventoryCell(row, 6), StorageLocation: inventoryCell(row, 7), Status: "shop", StatusReason: "Imported trailer requires operational review; source notes are preserved.", Condition: "unknown", Notes: "Source availability: " + inventoryCell(row, 8) + ". Requires physical condition review.", Active: true}, source, nil)
 			case "Inventory":
 				if inventoryCell(row, 0) == "" {
 					archive(source, "Blank-unit checklist placeholder; no equipment inferred")

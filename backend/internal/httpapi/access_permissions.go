@@ -31,6 +31,7 @@ var routeAccessPolicies = []routeAccess{
 	{"PUT", "/inventory/imports/{id}", "inventory.import"},
 	{"POST", "/inventory/imports/{id}/commit", "inventory.import"},
 	{"GET", "/trailers", "trailers.read"},
+	{"GET", "/trailers/{id}", "trailers.read"},
 	{"PUT", "/trailers/{id}", "trailers.manage"},
 	{"GET", "/trailers/{id}/history", "trailers.read"},
 	{"GET", "/gross-board/events", "board.read"},

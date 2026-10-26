@@ -22,6 +22,7 @@ func TestInventoryRoutePermissions(t *testing.T) {
 		{"PUT", "/inventory/imports/019a0000-0000-4000-8000-000000000001", "inventory.import"},
 		{"POST", "/inventory/imports/019a0000-0000-4000-8000-000000000001/commit", "inventory.import"},
 		{"GET", "/trailers", "trailers.read"}, {"PUT", "/trailers/019a0000-0000-4000-8000-000000000001", "trailers.manage"},
+		{"GET", "/trailers/019a0000-0000-4000-8000-000000000001", "trailers.read"},
 		{"GET", "/trailers/019a0000-0000-4000-8000-000000000001/history", "trailers.read"},
 	}
 	for _, test := range tests {

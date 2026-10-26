@@ -36,7 +36,6 @@ const descriptors: Record<InventoryCollection, Descriptor[]> = {
   trailers: [
     { key: "unitNumber", label: "Unit Number", required: true }, { key: "vin", label: "VIN" }, { key: "year", label: "Year" }, { key: "make", label: "Make" },
     { key: "plate", label: "Plate" }, { key: "plateState", label: "Plate State" }, { key: "storageLocation", label: "Storage Location" },
-    { key: "condition", label: "Condition", options: conditionStates }, { key: "status", label: "Availability", options: ["stored_unused", "needs_review", "ready", "repair", "retired"] },
     { key: "usage", label: "Usage Notes" }, { key: "registrationUrl", label: "Registration HTTPS Link" },
   ],
   "transponder-notes": [
@@ -93,7 +92,7 @@ export function InventoryRecordFields({ collection, value, onChange, context }: 
     </>}
     {collection === "lines" && pick("Linked Tablet / Phone", "assetId", context.data.assets.filter(item => item.data.active && ["tablet", "phone"].includes(item.data.deviceType || "")).map(item => ({ id: item.id, label: [inventoryLabel(item), item.data.make, item.data.model].filter(Boolean).join(" · ") })))}
     {collection === "equipment" && pick("Truck", "truckId", context.trucks.map(truck => ({ id: truck.id, label: truck.unitNumber })))}
-    <Field label="Active"><input type="checkbox" checked={value.active} onChange={event => set("active", event.target.checked)} /></Field>
+    {collection !== "trailers" && <Field label="Active"><input type="checkbox" checked={value.active} onChange={event => set("active", event.target.checked)} /></Field>}
     <Field label="Notes" wide><textarea className={controlClass} rows={3} maxLength={5000} value={value.notes || ""} onChange={event => set("notes", event.target.value)} /></Field>
     {value.verifiedAt && <p className="text-xs text-emerald-400 sm:col-span-2">Verified {new Date(value.verifiedAt).toLocaleString()} by {value.verifiedBy}</p>}
     {value.source && <p className="break-all text-xs text-zinc-500 sm:col-span-2">Source: {value.source}</p>}
