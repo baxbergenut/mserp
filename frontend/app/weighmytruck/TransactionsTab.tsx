@@ -2,7 +2,7 @@
 import type { DriverOption, TruckOption } from "@/app/lib/types";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import Link from "@/app/components/AccessLink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -78,11 +78,14 @@ export function TransactionsTab() {
 
 
       <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search tickets, drivers or trucks" />
+        <TableFilters>
+          <label className="text-[12px] text-zinc-400">From<input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-[12px] text-zinc-400">To<input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label>
+        </TableFilters>
       <div className="ml-auto flex items-center gap-3"><span className="text-[13px] tabular-nums text-zinc-300">Total {money(data?.totalAmount ?? "0")}</span>{canWrite && <button className="ui-button" disabled={busy} onClick={() => void sync()}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Sync</button>}</div>
     </div>
     {error && <ErrorBanner message={error} />}{notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     <TableShell><table className="w-full min-w-[900px] text-left text-[13px]">
-      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Date", "Ticket", "Driver", "Truck", "Location", "Charge to", "Amount", ""].map((s,i) => <th key={i} className={`h-8 px-3 font-medium ${s === "Amount" ? "text-right" : ""}`}>{s === "Date" ? <ColumnFilter label="Date" active={!!(from || to)}><label className="text-[12px] text-zinc-400">From<input aria-label="From" type="date" value={from} className={controlClass} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-[12px] text-zinc-400">To<input aria-label="To" type="date" value={to} className={controlClass} onChange={e => { setTo(e.target.value); setPage(1); }} /></label></ColumnFilter> : s}</th>)}</tr></thead>
+      <thead className="bg-zinc-900/60 text-[12px] text-zinc-500"><tr>{["Date", "Ticket", "Driver", "Truck", "Location", "Charge to", "Amount", ""].map((s,i) => <th key={i} className={`h-8 px-3 font-medium ${s === "Amount" ? "text-right" : ""}`}>{s}</th>)}</tr></thead>
       <tbody className="divide-y divide-zinc-800/60">{loading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : !data?.items.length ? <tr><td colSpan={8}>{<EmptyState message="No scale transactions in this date range." />}</td></tr> : <>{data.items.map(t => <tr key={t.id} className={t.warning ? "bg-amber-500/5" : "hover:bg-zinc-800/20"}>
         <td className="whitespace-nowrap px-3 py-1.5" title={t.time}>{t.date}</td>
         <td className="px-3 py-1.5" title={t.originalTicket ? `Reweigh of ${t.originalTicket}` : undefined}>{t.ticket}</td>

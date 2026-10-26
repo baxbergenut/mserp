@@ -2,7 +2,7 @@
 import { usePermissions } from "../lib/access";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { PageHeader } from "@/app/components/PageHeader";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -309,6 +309,56 @@ export default function FuelPage() {
           onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search driver, card, merchant, location…"
         />
+        <TableFilters>
+          <label className="block space-y-1">Purchased from<input
+            aria-label="Purchase date from"
+            type="date"
+            value={dateFrom}
+            onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}
+            className={filterClass}
+          /></label><label className="block space-y-1">To<input
+            aria-label="Purchase date to"
+            type="date"
+            value={dateTo}
+            onChange={(event) => { setDateTo(event.target.value); setPage(1); }}
+            className={filterClass}
+          /></label><span className="text-[11px] text-zinc-600">
+          Dates use each merchant&apos;s local timezone to match Relay reports.
+        </span>
+          <select
+          value={driver}
+          onChange={(event) => { setDriver(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by driver"
+        >
+          <option value="">Driver</option>
+          {drivers.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+          <select
+          value={state}
+          onChange={(event) => { setState(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by state"
+        >
+          <option value="">State</option>
+          {states.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+          <select
+          value={category}
+          onChange={(event) => { setCategory(event.target.value); setPage(1); }}
+          className={filterClass}
+          aria-label="Filter by purchase category"
+        >
+          <option value="">Category</option>
+          <option value="fuel">Fuel</option>
+          <option value="def">DEF</option>
+          <option value="other">Other</option>
+        </select>
+        </TableFilters>
 
 
 
@@ -329,54 +379,10 @@ export default function FuelPage() {
         <table className="w-full min-w-[1080px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Purchased" active={!!(dateFrom || dateTo)}><label className="block space-y-1">From<input
-            aria-label="Purchase date from"
-            type="date"
-            value={dateFrom}
-            onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}
-            className={filterClass}
-          /></label><label className="block space-y-1">To<input
-            aria-label="Purchase date to"
-            type="date"
-            value={dateTo}
-            onChange={(event) => { setDateTo(event.target.value); setPage(1); }}
-            className={filterClass}
-          /></label><span className="text-[11px] text-zinc-600">
-          Dates use each merchant&apos;s local timezone to match Relay reports.
-        </span></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Driver" active={!!(driver)}><select
-          value={driver}
-          onChange={(event) => { setDriver(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by driver"
-        >
-          <option value="">Driver</option>
-          {drivers.map((value) => (
-            <option key={value} value={value}>{value}</option>
-          ))}
-        </select></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Merchant / location" active={!!(state)}><select
-          value={state}
-          onChange={(event) => { setState(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by state"
-        >
-          <option value="">State</option>
-          {states.map((value) => (
-            <option key={value} value={value}>{value}</option>
-          ))}
-        </select></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Products" active={!!(category)}><select
-          value={category}
-          onChange={(event) => { setCategory(event.target.value); setPage(1); }}
-          className={filterClass}
-          aria-label="Filter by purchase category"
-        >
-          <option value="">Category</option>
-          <option value="fuel">Fuel</option>
-          <option value="def">DEF</option>
-          <option value="other">Other</option>
-        </select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium">Purchased</th>
+                <th className="px-4 py-3 font-medium">Driver</th>
+                <th className="px-4 py-3 font-medium">Merchant / location</th>
+                <th className="px-4 py-3 font-medium">Products</th>
                 <th className="px-4 py-3 text-right font-medium">Fuel</th>
                 <th className="px-4 py-3 text-right font-medium">DEF / other</th>
                 <th className="px-4 py-3 text-right font-medium">Paid</th>

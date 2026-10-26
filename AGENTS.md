@@ -620,12 +620,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/components/management/ManagementUI.tsx`: shared management page,
   modal, form, table, empty/error, and confirmation primitives. Reuse these
   before creating parallel UI patterns.
-- `frontend/app/components/management/ColumnFilter.tsx`: native popovers in table
-  column headers for record filters, with active indicators and keyboard dismissal.
-  Keep headers present on loading/empty results; keep search and page-wide periods
-  above tables. `test-column-filter-views.mjs` checks 16 views against the isolated
-  local preview using `MSERP_REVIEW_ACCESS_FILE` from `review-local.mjs`.
-  Status Board/Gross Board retain toolbar filters. Column titles have no filter icons.
+- `frontend/app/components/management/TableFilters.tsx`: visible native dropdowns,
+  dates and checkboxes beside search, wrapping within the toolbar on narrow screens.
+  Table headers contain labels and sorting only. Keep filters available during
+  loading/empty results and preserve tab scope, saved values and edit guards.
+  `test-column-filter-views.mjs` checks toolbar placement across table views against
+  the isolated local preview using `MSERP_REVIEW_ACCESS_FILE` from `review-local.mjs`.
+  Status Board/Gross Board retain their existing toolbar filters.
 - `frontend/app/components/`: shared dashboard, filtering, and navigation pieces.
 - `frontend/app/components/TopBar.tsx`: global paginated record search, quick-create
   links and account menu. PageHeader portals render each page title, icon and count

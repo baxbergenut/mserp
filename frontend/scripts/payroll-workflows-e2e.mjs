@@ -47,9 +47,7 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   await expect(page.getByRole('table', { name: 'Weekly driver pay' }).getByRole('link', { name: 'Workflow Page 27', exact: true })).toBeVisible();
   await expect(page.getByText('Page 1 of 1', { exact: true })).toBeVisible();
   await page.getByPlaceholder('Driver, truck, or load…').fill('');
-  await page.getByRole('button', { name: 'Filter Dispatcher', exact: true }).click();
-  await page.getByRole('listbox', { name: 'Dispatcher', exact: true }).selectOption(dispatcher);
-  await page.getByRole('button', { name: 'Filter Dispatcher', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Dispatcher', exact: true }).selectOption(dispatcher);
   await expect(page.getByRole('table', { name: 'Weekly driver pay' }).getByRole('link', { name: 'Workflow Operator', exact: true })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Weekly driver pay' }).getByRole('row')).toHaveCount(2);
   await page.getByRole('button', { name: 'Finalize week', exact: true }).click();

@@ -71,9 +71,7 @@ export async function runOffboardingE2E({ page, base, apiBase, webhookCompany, w
   await page.getByRole('button', { name: 'Confirm offboarding', exact: true }).click();
   await expect(task).toHaveCount(0);
   expect(await send(term, 'driver-terminated')).toMatchObject({ status: 'duplicate' });
-  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await page.getByLabel('Task status').selectOption('all');
-  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await expect(task).toHaveCount(1);
   await expect(task).toContainText('Completed');
   await expect(page.getByRole('button', { name: 'Release escrow: Offboarding Driver', exact: true })).toBeVisible({ timeout: 75000 });

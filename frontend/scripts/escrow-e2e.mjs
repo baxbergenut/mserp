@@ -3,9 +3,7 @@ import { join } from 'node:path';
 
 export async function verifyEscrow(page, base, temp, driver) {
   const filterStatus = async value => {
-    await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
     await page.getByLabel('Escrow payment status').selectOption(value);
-    await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   };
   const read = async () => (await (await page.request.get(`${base}/api/escrows?driverId=${driver.id}`)).json()).items[0];
   expect(await read()).toMatchObject({ amount: '2650.00', paidAmount: '0.00', remainingAmount: '2650.00', status: 'unpaid' });

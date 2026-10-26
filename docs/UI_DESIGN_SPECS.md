@@ -51,16 +51,14 @@ Do not recolor statuses merely to make every cell identical.
 - Render exactly one page title through `PageHeader` into the top bar.
 - Title content is icon, title, optional count and status. No descriptive
   subtitle or introductory paragraph below a page title.
-- Put summary cards before the main toolbar. Keep page actions beside search
-  below the cards, wrapping controls on narrow screens. Put record filters in the
-  corresponding table header with `ColumnFilter`; blue title text marks active
-  filters. Keep headers accessible while loading and when no rows match. Search
-  stays above the table. Reporting weeks, dashboard-wide ranges, and view tabs
-  remain page controls. Status Board and Gross Board retain their toolbar filters.
-  Do not add filter icons to column titles. Open choices directly below
-  the header at the same width, without an outer frame or repeated headings.
-  Inner filter controls retain rounded corners; the outer menu has rounded bottom
-  corners only. Option labels identify their scope. Retain global search,
+- Put summary cards before the main toolbar. Keep page actions and visible record
+  filters beside search below the cards, wrapping controls on narrow screens.
+  Use `TableFilters` for native dropdowns, date fields and checkboxes; selected
+  values stay visible without opening a table heading. Keep filters available
+  while loading and when no rows match. Table headers contain labels and sorting
+  only. Reporting weeks, dashboard-wide ranges, and view tabs remain page controls.
+  Status Board and Gross Board retain their toolbar filters. Option labels identify
+  their scope; date ranges have visible labels. Retain global search,
   quick-create and account actions on the right of the top bar.
 - Use browser/mouse Back and Forward for page navigation; do not add in-app Back
   links. Modal actions that edit decisions or apply changes keep explicit labels.

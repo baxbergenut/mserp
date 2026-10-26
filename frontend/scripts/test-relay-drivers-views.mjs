@@ -83,7 +83,6 @@ else {
     const tollBadge = sidebar.getByLabel('125 toll transactions without a linked truck, posted since 2026-09-01', { exact: true });
     await expect(tollBadge).toHaveText('99+');
     await expect(tollBadge).toHaveAttribute('title', /2026-09-01/);
-    await page.getByRole('button',{name:'Filter Driver',exact:true}).click();
     await page.getByLabel('Driver status', { exact: true }).selectOption('no_policy');
     await expect(rows).toHaveCount(1); await expect(rows.first()).toContainText('ELD Driver');
     await page.getByRole('button', { name: 'Link driver', exact: true }).click();
@@ -99,7 +98,6 @@ else {
     await page.getByRole('dialog').getByRole('button', { name: 'Assign policy', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     if (writes.at(-1).driverPin !== '1234' || writes.at(-1).truckNumber !== '101') throw new Error('Non ELD fields not sent');
-    await page.getByRole('button',{name:'Filter Driver',exact:true}).click();
     await page.getByLabel('Driver status', { exact: true }).selectOption('');
     await page.getByLabel('Actions for Terminated Driver').selectOption('disable');
     await expect(page.getByRole('dialog')).toContainText('usage counters are preserved');

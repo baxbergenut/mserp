@@ -172,12 +172,14 @@ try {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.reload();
   await expect(page.getByRole('columnheader')).toHaveCount(7);
-  await expect(page.getByRole('columnheader').getByRole('button', { name: 'Filter Verification', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
   const row = page.getByRole('row', { name: 'Open Repair 0', exact: true });
   await expect(row).toBeVisible();
   const add = await page.getByRole('button', { name: 'Add entry', exact: true }).boundingBox();
   const search = await page.getByPlaceholder('Search expenses…').boundingBox();
-  expect(Math.abs(add.y - search.y)).toBeLessThan(3);
+  // Visible filters can wrap between search and actions in the same toolbar.
+  expect(add.y).toBeGreaterThanOrEqual(search.y - 3);
+  expect(add.y + add.height).toBeLessThan((await page.locator('table').boundingBox()).y);
   expect(add.y).toBeGreaterThan((await page.getByText('Filtered total', { exact: true }).boundingBox()).y);
   await expect(row.getByText('$12.50')).toHaveAttribute('title', 'Paid: $5.00\nRemaining: $7.50');
   await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))));
@@ -227,16 +229,15 @@ try {
   entries[1] = { ...entries[1], accountingVerified: false, verifications: [] };
   entries[2] = { ...entries[2], accountingVerified: true, verifications: [...entries[2].verifications, { id: 'filter-accountant', role: 'accountant', userId: 'user', userName: 'Entry User' }] };
   await page.reload();
-  await page.getByRole('button', { name: 'Filter Verification', exact: true }).click();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('true');
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(2);
   await page.getByLabel('Admin verification', { exact: true }).selectOption('false');
   await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Filter Verification', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('false');
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByLabel('Accountant verification', { exact: true })).not.toBeVisible();
+  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
   await page.getByRole('row', { name: 'Open Repair 1', exact: true }).getByRole('button', { name: 'Verify', exact: true }).click();
   await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
   await page.keyboard.press('Control+z');
@@ -245,8 +246,7 @@ try {
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(4);
   entries[3] = { ...entries[3], unitNumber: '102', driverName: 'Owner Driver', paymentType: 'Retired card', paidBy: 'Former Payer', coveredBy: 'Broker' };
   await page.reload();
-  for (const [header, label, value] of [['Unit / driver','Expense truck','102'],['Unit / driver','Expense driver','Owner Driver'],['Payment','Expense payment type','Retired card'],['Payment','Expense paid by','Former Payer'],['Responsibility','Expense responsibility','Broker']]) {
-    await page.getByRole('button', { name: 'Filter ' + header, exact: true }).click();
+  for (const [, label, value] of [['Unit / driver','Expense truck','102'],['Unit / driver','Expense driver','Owner Driver'],['Payment','Expense payment type','Retired card'],['Payment','Expense paid by','Former Payer'],['Responsibility','Expense responsibility','Broker']]) {
     await page.getByLabel(label, { exact: true }).selectOption(value);
     await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(1);
     await expect(page.getByRole('row', { name: 'Open Repair 3', exact: true })).toBeVisible();

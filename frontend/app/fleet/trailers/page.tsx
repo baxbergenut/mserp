@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileText, Truck } from "lucide-react";
 import Link from "@/app/components/AccessLink";
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { EmptyState, ErrorBanner, LoadingTable, ManagementHeader, ManagementSearch, RowActions, StatusBadge, TablePagination, TableShell, controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
 import { fetchTrailers } from "@/app/lib/api";
@@ -56,24 +56,30 @@ export default function TrailersPage() {
     {error && <div className="space-y-2"><ErrorBanner message={error} /><button className="text-sm text-blue-400" onClick={() => void load()}>Retry trailers</button></div>}
     <div className="flex flex-wrap items-center gap-3">
       <ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder="Search trailers…" />
+        <TableFilters>
+
+            <select aria-label="Storage location" className={controlClass} value={storage} onChange={event => { setStorage(event.target.value); setPage(1); }}><option value="">All locations</option>{Array.from(new Set(trailers.map(item => item.data.storageLocation).filter((value): value is string => !!value))).sort().map(value => <option key={value}>{value}</option>)}</select>
+
+
+            <select aria-label="Trailer availability" className={controlClass} value={availability} onChange={event => { setAvailability(event.target.value); setPage(1); }}><option value="">All availability</option>{["stored_unused", "needs_review", "ready", "repair", "retired", "unknown"].map(value => <option key={value} value={value}>{readable(value)}</option>)}</select>
+
+
+            <select aria-label="Trailer condition" className={controlClass} value={condition} onChange={event => { setCondition(event.target.value); setPage(1); }}><option value="">All conditions</option>{conditionStates.map(value => <option key={value} value={value}>{readable(value)}</option>)}</select>
+
+
+            <select aria-label="Record status" className={controlClass} value={recordStatus} onChange={event => { setRecordStatus(event.target.value); setPage(1); }}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All records</option></select>
+
+        </TableFilters>
       <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={Truck} title="Trailers" count={filtered.length} actionLabel={canManage ? "Add Trailer" : undefined} onAction={() => setEditing(newInventoryRecord({ status: "stored_unused", condition: "unknown" }))} /></div>
     </div>
     <TableShell>
       <table className="w-full min-w-[980px] text-left text-[13px]">
         <thead><tr className="border-b border-zinc-800/50 text-zinc-500">
           {["Unit", "Equipment", "Plate", "Registration"].map(label => <th key={label} className="px-4 py-3 font-medium">{label}</th>)}
-          <th className="px-4 py-3 font-medium"><ColumnFilter label="Storage" active={!!storage}>
-            <select aria-label="Storage location" className={controlClass} value={storage} onChange={event => { setStorage(event.target.value); setPage(1); }}><option value="">All locations</option>{Array.from(new Set(trailers.map(item => item.data.storageLocation).filter((value): value is string => !!value))).sort().map(value => <option key={value}>{value}</option>)}</select>
-          </ColumnFilter></th>
-          <th className="px-4 py-3 font-medium"><ColumnFilter label="Availability" active={!!availability}>
-            <select aria-label="Trailer availability" className={controlClass} value={availability} onChange={event => { setAvailability(event.target.value); setPage(1); }}><option value="">All availability</option>{["stored_unused", "needs_review", "ready", "repair", "retired", "unknown"].map(value => <option key={value} value={value}>{readable(value)}</option>)}</select>
-          </ColumnFilter></th>
-          <th className="px-4 py-3 font-medium"><ColumnFilter label="Condition" active={!!condition}>
-            <select aria-label="Trailer condition" className={controlClass} value={condition} onChange={event => { setCondition(event.target.value); setPage(1); }}><option value="">All conditions</option>{conditionStates.map(value => <option key={value} value={value}>{readable(value)}</option>)}</select>
-          </ColumnFilter></th>
-          <th className="px-4 py-3 font-medium"><ColumnFilter label="Record" active={recordStatus !== "active"}>
-            <select aria-label="Record status" className={controlClass} value={recordStatus} onChange={event => { setRecordStatus(event.target.value); setPage(1); }}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All records</option></select>
-          </ColumnFilter></th>
+          <th className="px-4 py-3 font-medium">Storage</th>
+          <th className="px-4 py-3 font-medium">Availability</th>
+          <th className="px-4 py-3 font-medium">Condition</th>
+          <th className="px-4 py-3 font-medium">Record</th>
           <th className="px-4 py-3 text-right font-medium">Actions</th>
         </tr></thead>
         {!loading && <tbody>{filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(trailer => {

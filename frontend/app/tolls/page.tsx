@@ -2,7 +2,7 @@
 import { usePermissions } from "../lib/access";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useState } from "react";
@@ -213,6 +213,17 @@ export default function TollsPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search unit, plaza, agency, tag…" />
+        <TableFilters>
+          <label className="block space-y-1">Post date from<input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label>
+          <select aria-label="Toll truck" value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">Truck</option>
+          {units.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+          <select aria-label="Toll agency" value={agency} onChange={(event) => { setAgency(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">Agency</option>
+          {agencies.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        </TableFilters>
 
 
 
@@ -227,16 +238,10 @@ export default function TollsPage() {
         <table className="w-full min-w-[980px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Post date" active={!!(postFrom || postTo)}><label className="block space-y-1">From<input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Truck" active={!!(unit)}><select aria-label="Toll truck" value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">Truck</option>
-          {units.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium">Post date</th>
+                <th className="px-4 py-3 font-medium">Truck</th>
                 <th className="px-4 py-3 font-medium">Plaza / route</th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Agency" active={!!(agency)}><select aria-label="Toll agency" value={agency} onChange={(event) => { setAgency(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">Agency</option>
-          {agencies.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium">Agency</th>
                 <th className="px-4 py-3 font-medium">Class / miles</th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
                 <th className="w-12 px-2 py-3"><span className="sr-only">Review flag</span></th>

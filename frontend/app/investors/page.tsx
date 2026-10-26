@@ -3,7 +3,7 @@ import type { DriverOption } from "@/app/lib/types";
 import { usePermissions } from "../lib/access";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { formatPhone } from "../lib/phone";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -67,14 +67,17 @@ export default function InvestorsPage() {
     {error && <ErrorBanner message={error} />}
     <div className="flex flex-wrap items-center gap-4">
       <ManagementSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search investors or truck units…" />
+        <TableFilters>
+          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-400">
+        <input type="checkbox" checked={showCompany} onChange={(event) => { setShowCompany(event.target.checked); setPage(1); }} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600" />
+        Show company
+      </label>
+        </TableFilters>
 
     <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={Landmark} title="Investors"  count={total} actionLabel="Add investor" onAction={() => void open(null)} /></div></div>
     <TableShell>
       <table className="w-full min-w-[760px] text-left text-[13px]">
-          <thead><tr className="border-b border-zinc-800/50 text-zinc-500">{["Investor", "Type", "Contact", "Owned trucks", "Status", "Actions"].map((label) => <th key={label} className={`px-4 py-3 font-medium ${label === "Actions" ? "text-right" : ""}`}>{label === "Type" ? <ColumnFilter label="Type" active={showCompany}><label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-400">
-        <input type="checkbox" checked={showCompany} onChange={(event) => { setShowCompany(event.target.checked); setPage(1); }} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600" />
-        Show company
-      </label></ColumnFilter> : label}</th>)}</tr></thead>
+          <thead><tr className="border-b border-zinc-800/50 text-zinc-500">{["Investor", "Type", "Contact", "Owned trucks", "Status", "Actions"].map((label) => <th key={label} className={`px-4 py-3 font-medium ${label === "Actions" ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
           <tbody>{isLoading ? <tr><td colSpan={6} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : investors.length === 0 ? <tr><td colSpan={6}>{<EmptyState message={search ? "No investors match your search." : "No investors yet."} />}</td></tr> : <>{investors.map((investor) => <tr key={investor.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
             <td className="px-4 py-3 font-medium text-zinc-200"><Link className="hover:text-blue-400" href={`/investors/detail?id=${investor.id}`}>{investor.fullName}</Link></td>
             <td className="px-4 py-3"><span className="rounded-full bg-blue-500/10 px-2 py-1 text-[11px] text-blue-400">{investor.isCompany ? "Company" : investor.driverId ? "Driver" : "Investor"}</span></td>

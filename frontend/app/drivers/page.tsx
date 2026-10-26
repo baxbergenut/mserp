@@ -1,7 +1,7 @@
 "use client";
 import type { DriverOption, TruckOption, DispatcherOption, InvestorOption } from "@/app/lib/types";
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { employmentTypeLabel } from "../lib/driverType";
 
 import { formatPhone } from "../lib/phone";
@@ -250,6 +250,17 @@ function DriversContent() {
       {permissions.includes("drivers.create") && !canCreateDriver(permissions) && <p role="status" className="text-sm text-amber-300">Driver setup also requires: {[["drivers.private.edit", "private details editing"], ["driver_compensation.edit", "compensation editing"], ["escrow.create", "escrow creation"]].filter(([key]) => !permissions.includes(key)).map(([, label]) => label).join(", ")}.</p>}
       <div className="flex flex-wrap items-center gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
+        <TableFilters>
+          <label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
+          <input
+            type="checkbox"
+            checked={showInactiveDrivers}
+            onChange={(event) => { setShowInactiveDrivers(event.target.checked); setPage(1); }}
+            className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600"
+          />
+          Show terminated drivers
+        </label>
+        </TableFilters>
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={Users}
@@ -270,15 +281,7 @@ function DriversContent() {
                 <th className="px-4 py-3 font-medium">Dispatcher</th>
                 <th className="px-4 py-3 font-medium">Truck</th>
                 {permissions.includes("drivers.documents.read") && <th className="px-4 py-3 font-medium">CDL</th>}
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Status" active={!!(showInactiveDrivers)}><label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-zinc-400">
-          <input
-            type="checkbox"
-            checked={showInactiveDrivers}
-            onChange={(event) => { setShowInactiveDrivers(event.target.checked); setPage(1); }}
-            className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600"
-          />
-          Show terminated drivers
-        </label></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>

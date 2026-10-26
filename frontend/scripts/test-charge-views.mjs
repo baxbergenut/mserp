@@ -217,14 +217,12 @@ try {
   await truckCheck.click();
   await expect(page.getByRole('button', {name:'Reload',exact:true})).toBeEnabled();
   await expect(page.getByRole('link', {name:'201',exact:true})).toHaveCount(0);
-  await page.getByRole('button', { name: 'Filter Truck', exact: true }).click();
   await page.getByLabel('Truck inclusion').selectOption('excluded');
   await page.keyboard.press('Escape');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await expect(page.getByRole('link',{name:'201',exact:true})).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Truck inclusion')).toHaveValue('excluded');
-  await page.getByRole('button', { name: 'Filter Truck', exact: true }).click();
   await page.getByLabel('Truck inclusion').selectOption('all');
   await page.getByLabel('Filter truck charge type').selectOption('');
   await page.keyboard.press('Escape');

@@ -277,7 +277,6 @@ try {
   dialog = page.getByRole('dialog'); await dialog.getByLabel('Active', { exact: true }).uncheck();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click(); await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'MS003', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Filter Record', exact: true }).click();
   await page.getByLabel('Record status', { exact: true }).selectOption('inactive');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('link', { name: 'MS003', exact: true })).toBeVisible();
@@ -335,7 +334,6 @@ try {
   await trailerPage.screenshot({ path: join(tmpdir(), 'mserp-trailer-detail-desktop.png'), animations: 'disabled' });
   await trailerPage.goBack();
   await expect(trailerPage.getByText('Page 2 of 2', { exact: true })).toBeVisible();
-  await trailerPage.getByRole('button', { name: 'Filter Availability', exact: true }).click();
   await trailerPage.getByLabel('Trailer availability', { exact: true }).selectOption('ready');
   await trailerPage.keyboard.press('Escape');
   await expect(trailerPage.getByText('Page 1 of 1', { exact: true })).toBeVisible();

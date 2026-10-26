@@ -4,7 +4,7 @@ import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types"
 import { applyExpenseCategoryRules } from "./catalog";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
@@ -397,6 +397,17 @@ export default function ExpensesPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
+        <TableFilters>
+          <label className="block space-y-1">Expense date from<input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label>
+          <select aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }} className={filterClass}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }} className={filterClass}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
+          <label className="block space-y-1">Category<select aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
+          <option value="">All categories</option>
+          {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
+        </select></label>
+          <select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
+          <select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
+          <label className="block space-y-1">Accountant<select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select></label><label className="block space-y-1">Admin<select aria-label="Admin verification" value={adminVerified} onChange={e => { setAdminVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any admin status</option><option value="false">Unverified by admin</option><option value="true">Verified by admin</option></select></label>
+        </TableFilters>
 
 
 
@@ -420,16 +431,13 @@ export default function ExpensesPage() {
         <table className="w-full min-w-[960px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-zinc-800/50 text-zinc-500">
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Date" active={!!(dateFrom || dateTo)}><label className="block space-y-1">From<input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><label className="block space-y-1">To<input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Unit / driver" active={!!(unitNumber || driverName)}><select aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }} className={filterClass}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }} className={filterClass}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Expense" active={!!category}><label className="block space-y-1">Category<select aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
-          <option value="">All categories</option>
-          {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
-        </select></label></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Payment" active={!!(paymentType || paidBy)}><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
-                <th className="px-4 py-3 font-medium"><ColumnFilter label="Responsibility" active={!!coveredBy}><select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select></ColumnFilter></th>
+                <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium">Unit / driver</th>
+                <th className="px-4 py-3 font-medium">Expense</th>
+                <th className="px-4 py-3 font-medium">Payment</th>
+                <th className="px-4 py-3 font-medium">Responsibility</th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
-                <th className="px-4 py-3 text-right font-medium"><ColumnFilter label="Verification" active={!!(accountantVerified || adminVerified)}><label className="block space-y-1">Accountant<select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select></label><label className="block space-y-1">Admin<select aria-label="Admin verification" value={adminVerified} onChange={e => { setAdminVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any admin status</option><option value="false">Unverified by admin</option><option value="true">Verified by admin</option></select></label></ColumnFilter></th>
+                <th className="px-4 py-3 text-right font-medium">Verification</th>
               </tr>
             </thead>
             <tbody>{isLoading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan={7}>{(

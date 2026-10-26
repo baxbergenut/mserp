@@ -114,13 +114,13 @@ try {
     await page.getByRole('button', { name: 'Save ' + label + ' assignment', exact: true }).click();
     await expect(page.getByRole('group', { name: label + ' assignees', exact: true })).toContainText('Teammate');
   }
-  await page.getByLabel('Add role for PM Service reminders',{exact:true}).selectOption('role');
-  await page.getByRole('button',{name:'Save PM Service reminders assignment',exact:true}).click();
+  await page.getByLabel('Add role for Service program reminders (default)',{exact:true}).selectOption('role');
+  await page.getByRole('button',{name:'Save Service program reminders (default) assignment',exact:true}).click();
   expect(assignments.find(a=>a.kind==='maintenance_pm').assigneeRoleIds).toEqual(['role']);
   await page.reload();
-  await expect(page.getByRole('group',{name:'PM Service reminders assignees',exact:true})).toContainText('Role: Dispatch team');
-  await page.getByRole('button',{name:'Remove role Dispatch team from PM Service reminders',exact:true}).click();
-  await page.getByRole('button',{name:'Save PM Service reminders assignment',exact:true}).click();
+  await expect(page.getByRole('group',{name:'Service program reminders (default) assignees',exact:true})).toContainText('Role: Dispatch team');
+  await page.getByRole('button',{name:'Remove role Dispatch team from Service program reminders (default)',exact:true}).click();
+  await page.getByRole('button',{name:'Save Service program reminders (default) assignment',exact:true}).click();
   expect(assignments.find(a=>a.kind==='maintenance_pm').assigneeRoleIds).toEqual([]);
   await page.screenshot({ path: join(tmpdir(), 'mserp-system-task-assignees.png') });
   await page.goto(`${base}/tasks`);
@@ -178,13 +178,11 @@ try {
   // Source workflow completion arrives on the same stream and remains in history.
   Object.assign(tasks.find(t => t.id === 'system'), { completedAt: '2026-10-08T18:00:00Z', completedByName: 'Teammate' });
   pushTasks(); await page.clock.runFor(1000);
-  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await page.getByLabel('Task status', { exact: true }).selectOption('completed');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('row').filter({ hasText: 'Review Relay account: New driver' })).toContainText('Teammate');
   await expect(page.getByRole('columnheader', { name: 'Completed by', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Review Relay account: New driver', exact: true })).toHaveAttribute('title', /Completed by Teammate/);
-  await page.getByRole('button', { name: 'Filter Status', exact: true }).click();
   await page.getByLabel('Task status', { exact: true }).selectOption('all');
   await page.keyboard.press('Escape');
   for (const palette of ['default', 'solarized-light', 'solarized-dark', 'monokai', 'monokai-dimmed', 'dark-modern', 'default-light']) {

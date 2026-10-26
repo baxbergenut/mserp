@@ -2,7 +2,7 @@
 import { usePermissions } from "../lib/access";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { PageHeader } from "@/app/components/PageHeader";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -143,6 +143,12 @@ export default function LoadsPage() {
           onChange={(value) => { setSearch(value); setPage(1); }}
           placeholder="Search by load, customer, driver, truck…"
         />
+        <TableFilters>
+          <select aria-label="Customer filter" className={controlClass} value={filters.customer} onChange={e => { setFilters({ ...filters, customer: e.target.value }); setPage(1); }}><option value="">All customers</option>{customerOptions.map(v => <option key={v}>{v}</option>)}</select>
+          <label className="block space-y-1">Driver<select aria-label="Driver filter" className={controlClass} value={filters.driver} onChange={e => { setFilters({ ...filters, driver: e.target.value }); setPage(1); }}><option value="">All drivers</option>{driverOptions.map(v => <option key={v}>{v}</option>)}</select></label><label className="block space-y-1">Dispatcher<select aria-label="Dispatcher filter" className={controlClass} value={filters.dispatcher} onChange={e => { setFilters({ ...filters, dispatcher: e.target.value }); setPage(1); }}><option value="">All dispatchers</option>{dispatcherOptions.map(v => <option key={v}>{v}</option>)}</select></label>
+          <select aria-label="Status filter" className={controlClass} value={filters.status} onChange={e => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}><option value="">All statuses</option>{statusOptions.map(v => <option value={v} key={v}>{statusLabel(v)}</option>)}</select>
+          <label className="block space-y-1">Pickup from<input aria-label="Pickup from" type="date" className={controlClass} value={filters.pickupFrom} onChange={e => { setFilters({ ...filters, pickupFrom: e.target.value }); setPage(1); }} /></label><label className="block space-y-1">To<input aria-label="Pickup to" type="date" className={controlClass} value={filters.pickupTo} onChange={e => { setFilters({ ...filters, pickupTo: e.target.value }); setPage(1); }} /></label>
+        </TableFilters>
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><button
           type="button"
@@ -161,12 +167,7 @@ export default function LoadsPage() {
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
-        headerFilters={{
-          Customer: <ColumnFilter label="Customer" active={!!filters.customer}><select aria-label="Customer filter" className={controlClass} value={filters.customer} onChange={e => { setFilters({ ...filters, customer: e.target.value }); setPage(1); }}><option value="">All customers</option>{customerOptions.map(v => <option key={v}>{v}</option>)}</select></ColumnFilter>,
-          Driver: <ColumnFilter label="Driver" active={!!(filters.driver || filters.dispatcher)}><label className="block space-y-1">Driver<select aria-label="Driver filter" className={controlClass} value={filters.driver} onChange={e => { setFilters({ ...filters, driver: e.target.value }); setPage(1); }}><option value="">All drivers</option>{driverOptions.map(v => <option key={v}>{v}</option>)}</select></label><label className="block space-y-1">Dispatcher<select aria-label="Dispatcher filter" className={controlClass} value={filters.dispatcher} onChange={e => { setFilters({ ...filters, dispatcher: e.target.value }); setPage(1); }}><option value="">All dispatchers</option>{dispatcherOptions.map(v => <option key={v}>{v}</option>)}</select></label></ColumnFilter>,
-          Status: <ColumnFilter label="Status" active={!!filters.status}><select aria-label="Status filter" className={controlClass} value={filters.status} onChange={e => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}><option value="">All statuses</option>{statusOptions.map(v => <option value={v} key={v}>{statusLabel(v)}</option>)}</select></ColumnFilter>,
-          Pickup: <ColumnFilter label="Pickup" active={!!(filters.pickupFrom || filters.pickupTo)}><label className="block space-y-1">From<input aria-label="Pickup from" type="date" className={controlClass} value={filters.pickupFrom} onChange={e => { setFilters({ ...filters, pickupFrom: e.target.value }); setPage(1); }} /></label><label className="block space-y-1">To<input aria-label="Pickup to" type="date" className={controlClass} value={filters.pickupTo} onChange={e => { setFilters({ ...filters, pickupTo: e.target.value }); setPage(1); }} /></label></ColumnFilter>,
-        }}
+
       />
       {!isLoading && (
         <TablePagination

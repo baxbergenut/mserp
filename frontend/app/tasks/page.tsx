@@ -1,7 +1,7 @@
 "use client";
 
 
-import { ColumnFilter } from "@/app/components/management/ColumnFilter";
+import { TableFilters } from "@/app/components/management/TableFilters";
 import { useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
 import { Check, Columns3, List, ListChecks, LockKeyhole, Pencil, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
@@ -114,6 +114,9 @@ export default function TasksPage() {
 
     <div className="flex flex-wrap items-center gap-3">
       <ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); setOpenPage(1); setProcessPage(1); setCompletedPage(1); }} placeholder="Search tasks…" />
+        <TableFilters>
+          {view === "list" && <><select aria-label="Task status" className={`${controlClass} sm:w-40`} value={status} onChange={event => { setStatus(event.target.value as Status); setPage(1); }}><option value="open">Open</option><option value="in_process">In process</option><option value="completed">Completed</option><option value="all">All tasks</option></select></>}
+        </TableFilters>
 
       <div className="ml-auto flex items-center gap-2">
         <button type="button" className="ui-button" aria-label="Refresh tasks" onClick={refresh}><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
@@ -128,7 +131,7 @@ export default function TasksPage() {
     {loading && !data && !columns && <p role="status" className="py-8 text-center text-zinc-500">Loading…</p>}
     {view === "list" && data && <>
       <TableShell><table className="w-full min-w-[560px] text-left text-[13px]">
-        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label === "Status" ? <ColumnFilter label="Status" active={status !== "all"}><select aria-label="Task status" className={`${controlClass} sm:w-40`} value={status} onChange={event => { setStatus(event.target.value as Status); setPage(1); }}><option value="open">Open</option><option value="in_process">In process</option><option value="completed">Completed</option><option value="all">All tasks</option></select></ColumnFilter> : label}</th>)}</tr></thead>
+        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
         <tbody className="divide-y divide-zinc-800">{data.items.map(task => <tr key={task.id} className="bg-card hover:bg-zinc-800/20">
           <td className="max-w-sm px-3 py-2">{title(task)}</td><td className="whitespace-nowrap px-3 py-2 text-zinc-400">{statusLabels[taskStatus(task)]}</td>
           <td className="px-3 py-2 text-zinc-400">{task.assigneeName || "Unassigned"}</td>

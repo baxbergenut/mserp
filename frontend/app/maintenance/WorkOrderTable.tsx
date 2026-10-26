@@ -2,8 +2,7 @@
 
 import Link from "../components/AccessLink";
 import { FleetStatusBadge } from "../components/FleetStatusBadge";
-import { ColumnFilter } from "../components/management/ColumnFilter";
-import { controlClass, TableShell } from "../components/management/ManagementUI";
+import { TableShell } from "../components/management/ManagementUI";
 import { centsLabel } from "../lib/expenseCosts";
 import type { MaintenanceOptions, MaintenanceRecord } from "../lib/types";
 import { waitingLabels, workStatusLabels } from "./maintenance";
@@ -15,21 +14,21 @@ const amount = (value?:string|null) => {
 };
 const date = (value?:string|null) => value ? value.slice(0,10) : "—";
 
-export function WorkOrderTable({records,options,stage,loading,embeddedTruck,truck,vendor,type,status,onTruck,onVendor,onType,onStatus,onOpen}:{
+export function WorkOrderTable({records,options,stage,loading,embeddedTruck,onOpen}:{
   records:MaintenanceRecord[];options:MaintenanceOptions|null;stage:"work"|"payment"|"paid"|"archived";loading:boolean;embeddedTruck:boolean;
-  truck:string;vendor:string;type:string;status:string;onTruck:(value:string)=>void;onVendor:(value:string)=>void;onType:(value:string)=>void;onStatus:(value:string)=>void;onOpen:(record:MaintenanceRecord)=>void;
+  onOpen:(record:MaintenanceRecord)=>void;
 }) {
   const work=stage==="work",paid=stage==="paid",archived=stage==="archived";
   const columns=(embeddedTruck?0:1)+3+(work?4:paid?4:archived?2:3);
   return <TableShell><table aria-label="Work orders" className="w-full min-w-[1050px] text-left text-[13px]">
     <thead><tr className="border-b border-zinc-800 text-xs text-zinc-500">
-      {!embeddedTruck && <th className="whitespace-nowrap p-3 font-medium"><ColumnFilter label="Truck" active={!!truck}><select aria-label="Filter maintenance truck" className={controlClass} value={truck} onChange={e=>onTruck(e.target.value)}><option value="">All trucks</option>{options?.trucks.map(t=><option key={t.id} value={t.id}>{t.unitNumber}</option>)}</select></ColumnFilter></th>}
-      <th className="whitespace-nowrap p-3 font-medium"><ColumnFilter label="Service type" active={!!type}><select aria-label="Filter service type" className={controlClass} value={type} onChange={e=>onType(e.target.value)}><option value="">All service types</option>{options?.types.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></ColumnFilter></th>
+      {!embeddedTruck && <th className="whitespace-nowrap p-3 font-medium">Truck</th>}
+      <th className="whitespace-nowrap p-3 font-medium">Service type</th>
       <th className="p-3 font-medium">Description</th>
-      <th className="p-3 font-medium"><ColumnFilter label="Shop" active={!!vendor}><select aria-label="Filter maintenance vendor" className={controlClass} value={vendor} onChange={e=>onVendor(e.target.value)}><option value="">All shops</option>{options?.vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></ColumnFilter></th>
+      <th className="p-3 font-medium">Shop</th>
       {work ? <>
         <th className="whitespace-nowrap p-3 font-medium">Scheduled</th><th className="whitespace-nowrap p-3 font-medium">Expected ready</th>
-        <th className="whitespace-nowrap p-3 font-medium"><ColumnFilter label="Work stage" active={!!status}><select aria-label="Filter maintenance status" className={controlClass} value={status} onChange={e=>onStatus(e.target.value)}><option value="">All ongoing work</option>{["open","scheduled","in_progress","needs_review"].map(code=><option key={code} value={code}>{workStatusLabels[code]}</option>)}</select></ColumnFilter></th>
+        <th className="whitespace-nowrap p-3 font-medium">Work stage</th>
         <th className="whitespace-nowrap p-3 font-medium">Added by</th>
       </> : <>
         <th className="whitespace-nowrap p-3 font-medium">{archived?"Updated":"Service date"}</th>

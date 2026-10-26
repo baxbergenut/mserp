@@ -1,11 +1,9 @@
-import type { ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Load, SortDir, SortKey } from "../lib/types";
 import { formatDate, formatMiles, formatMoney, formatRate } from "../lib/utils";
 import { StatusDot } from "../components/StatusDot";
 
 interface LoadsTableProps {
-  headerFilters?: Record<string, ReactNode>;
   loads: Load[];
   isLoading: boolean;
   sortKey: SortKey;
@@ -45,7 +43,6 @@ export function LoadsTable({
   sortKey,
   sortDir,
   onSort,
-  headerFilters = {},
 }: LoadsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-800/60">
@@ -59,7 +56,6 @@ export function LoadsTable({
                   col.align === "right" ? "text-right" : "text-left"
                 }`}
               >
-                {col.key && headerFilters[col.label]}
                 {col.key ? (
                   <button
                     onClick={() => onSort(col.key as SortKey)}
@@ -67,11 +63,11 @@ export function LoadsTable({
                       col.align === "right" ? "flex-row-reverse" : ""
                     }`}
                   >
-                    {headerFilters[col.label] ? <span className="sr-only">Sort {col.label}</span> : col.label}
+                    {col.label}
                     <SortIcon active={sortKey === col.key} dir={sortDir} />
                   </button>
                 ) : (
-                  headerFilters[col.label] ?? col.label
+                  col.label
                 )}
               </th>
             ))}

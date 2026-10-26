@@ -86,9 +86,7 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  await page.getByLabel('Reason',{exact:true}).fill('Keep funds for documented final charges');
  await page.getByRole('button',{name:'Complete escrow review',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
- await page.getByRole('button',{name:'Filter Status',exact:true}).click();
  await page.getByLabel('Task status',{exact:true}).selectOption('completed');
- await page.getByRole('button',{name:'Filter Status',exact:true}).click();
  await expect(page.getByRole('button',{name:'Release escrow: Escrow full',exact:true})).toBeVisible();
  await page.screenshot({path:join(temp,'escrow-tasks-completed.png'),fullPage:true});
  await page.goto(`${base}/accounting/escrow`);

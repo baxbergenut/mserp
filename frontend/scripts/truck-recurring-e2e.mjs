@@ -75,10 +75,8 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   // Pause this isolated fee so the installment/expense suite can continue.
   await fee.click();
   await expect(page.getByRole('button',{name:'Reload',exact:true})).toBeEnabled();
-  await page.getByRole('button', { name: 'Filter Truck', exact: true }).click();
   await page.getByLabel('Truck inclusion').selectOption('all');
   await page.getByLabel('Filter truck charge type').selectOption('');
-  await page.getByRole('button', { name: 'Filter Truck', exact: true }).click();
   const latestTruck=await (await page.request.get(base+'/api/trucks/'+truck.id)).json();
   const cleared=await page.request.put(base+'/api/trucks/'+truck.id,{headers,data:{unitNumber:truck.unitNumber,ownerId:truck.ownerId,driverId:null,status:'available',statusVersion:latestTruck.statusVersion,active:true,assignmentWeek:week}});
   expect(cleared.ok(),await cleared.text()).toBe(true);
