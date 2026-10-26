@@ -63,10 +63,12 @@ export default function TruckDetailPage() {
     {!truck && !error && <p className="py-12 text-center text-zinc-500">Loading truck…</p>}
     {truck && <>
       <header className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/30">
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
           <div className="min-w-0"><PageHeader><div><div className="flex flex-wrap items-center gap-3"><TruckIcon className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">Truck {truck.unitNumber}</h1><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady/></div></div></PageHeader><p className="break-all font-mono text-xs text-zinc-400">VIN · {truck.vin || "Not recorded"}</p></div>
-          {permissions.includes("trucks.edit") && <div className="flex gap-2"><button className="ui-button" onClick={()=>{setReturnToService(false);setChangingCondition(true);}}>Change status</button>{["shop","out_of_service","terminated"].includes(truck.operatingStatus??"")&&<button className="ui-button" onClick={()=>{setReturnToService(true);setChangingCondition(true);}}>Return to service</button>}<button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button></div>}
-          {permissions.includes("trucks.delete")&&<button className="ui-button text-red-400" onClick={()=>setDeleting(true)}>Delete truck</button>}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2" role="group" aria-label="Truck actions">
+            {permissions.includes("trucks.edit") && <><button className="ui-button" onClick={()=>{setReturnToService(false);setChangingCondition(true);}}>Change status</button>{["shop","out_of_service","terminated"].includes(truck.operatingStatus??"")&&<button className="ui-button" onClick={()=>{setReturnToService(true);setChangingCondition(true);}}>Return to service</button>}<button className="ui-button ui-button-primary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button></>}
+            {permissions.includes("trucks.delete")&&<button className="ui-button text-red-400" onClick={()=>setDeleting(true)}>Delete truck</button>}
+          </div>
         </div>
         <dl className="grid grid-cols-1 gap-px border-t border-zinc-800 bg-zinc-800 sm:grid-cols-2 md:grid-cols-4">
           <div className="min-w-0 break-words bg-zinc-950/90 px-5 py-4"><dt className="text-xs text-zinc-500">Current driver</dt><dd className="mt-1 text-sm font-medium text-zinc-200">{truck.driverId ? <Link href={`/drivers/detail?id=${truck.driverId}`} className="hover:text-blue-300">{truck.driverName}</Link> : "Unassigned"}</dd></div>
