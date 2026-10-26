@@ -3728,6 +3728,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ### Termination assignments and owned trucks (148)
 
+- `backend/cmd/review-fleetscope-identities` previews/applies an explicit reviewed
+  identity manifest with a SHA256 and per-driver updatedAt fence. It can resolve
+  selected held FleetScope termination receipts using shared offboarding logic.
+  It preserves webhook receipts, rejects identity conflicts/rehire ambiguity,
+  audits the review, and starts no provider jobs or outbound sync. See
+  `docs/FLEETSCOPE_WEBHOOK.md`; TestFleetScopeDatabase covers recovery and replay.
+
 - Profile edits, Employment status and FleetScope termination share
   `repository/driver_offboarding.go`. Use recorded `investors.driver_id` ownership,
   never legacy type booleans or name matching. Retain only an existing own-truck

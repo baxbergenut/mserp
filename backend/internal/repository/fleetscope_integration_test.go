@@ -133,6 +133,7 @@ func TestFleetScopeDatabase(t *testing.T) {
 			}
 			defer appPool.Close()
 			testFleetScopeOffboarding(t, appPool, pool)
+			testFleetScopeIdentityRecovery(t, appPool)
 			testFleetScopeApplicants(t, appPool)
 		})
 	}
