@@ -189,8 +189,9 @@ export default function TrucksPage() {
           </button>;
         })}
       </div>
-      <div role="group" aria-label="Filter truck GPS warnings" className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs text-zinc-500">In use · GPS</span>
+      <div className="flex flex-wrap items-center gap-3">
+        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" />
+        <div role="group" aria-label="Filter truck GPS warnings" className="flex flex-wrap items-center gap-2">
         {(["overdue", "missing"] as const).map(code => <button key={code} type="button"
           aria-pressed={gpsAlert === code} aria-label={`${gpsAlertLabels[code]}, ${gpsAlertCounts?.[code] ?? "loading"} trucks`}
           onClick={() => { setGPSAlert(gpsAlert === code ? "" : code); setStatus(""); setPage(1); }}
@@ -199,7 +200,7 @@ export default function TrucksPage() {
           {gpsAlert === code && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
         </button>)}
       </div>
-      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
+      <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={TruckIcon}
         title="Trucks"
 
