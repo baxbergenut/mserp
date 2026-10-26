@@ -322,16 +322,14 @@ export default function FuelPage() {
             value={dateTo}
             onChange={(event) => { setDateTo(event.target.value); setPage(1); }}
             className={filterClass}
-          /></label><span className="text-[11px] text-zinc-600">
-          Dates use each merchant&apos;s local timezone to match Relay reports.
-        </span>
+          /></label>
           <select
           value={driver}
           onChange={(event) => { setDriver(event.target.value); setPage(1); }}
           className={filterClass}
           aria-label="Filter by driver"
         >
-          <option value="">Driver</option>
+          <option value="">All drivers</option>
           {drivers.map((value) => (
             <option key={value} value={value}>{value}</option>
           ))}
@@ -342,7 +340,7 @@ export default function FuelPage() {
           className={filterClass}
           aria-label="Filter by state"
         >
-          <option value="">State</option>
+          <option value="">All states</option>
           {states.map((value) => (
             <option key={value} value={value}>{value}</option>
           ))}
@@ -353,7 +351,7 @@ export default function FuelPage() {
           className={filterClass}
           aria-label="Filter by purchase category"
         >
-          <option value="">Category</option>
+          <option value="">All categories</option>
           <option value="fuel">Fuel</option>
           <option value="def">DEF</option>
           <option value="other">Other</option>

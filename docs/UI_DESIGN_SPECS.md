@@ -58,8 +58,9 @@ Do not recolor statuses merely to make every cell identical.
   while loading and when no rows match. Table headers contain labels and sorting
   only. Reporting weeks, dashboard-wide ranges, and view tabs remain page controls.
   Status Board and Gross Board retain their toolbar filters. Option labels identify
-  their scope; date ranges have visible labels. Retain global search,
-  quick-create and account actions on the right of the top bar.
+  their scope; omit duplicate dropdown labels and routine explanatory text. Keep
+  accessible names on controls and visible labels for date ranges and checkboxes.
+  Retain global search, quick-create and account actions on the right of the top bar.
 - Use browser/mouse Back and Forward for page navigation; do not add in-app Back
   links. Modal actions that edit decisions or apply changes keep explicit labels.
 - Use the full available width. Overflow belongs to the individual table,

@@ -39,7 +39,7 @@ export function TruckLinksTab() {
  }
  const truck=data?.trucks.find(t=>t.id===input?.truckId);
  return <section className="space-y-4" aria-label="PrePass truck links">
-  <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-[13px] text-zinc-400">Match a PrePass tag once to link its tolls and future imports.</p>
+  <div className="flex flex-wrap items-center justify-between gap-3">
         <TableFilters>
           <label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Unlinked tolls posted since" type="date" className={controlClass.replace("w-full","w-auto")} value={from||data?.dateFrom||""} onChange={e=>setFrom(e.target.value)} /></label>
         </TableFilters></div>
