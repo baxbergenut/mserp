@@ -21,6 +21,7 @@ var routeAccessPolicies = []routeAccess{
 	{"PATCH", "/drivers/{id}/availability", "drivers.edit"},
 	{"GET", "/trucks/{id}/status-history", "trucks.read"},
 	{"PATCH", "/trucks/{id}/condition", "trucks.edit"},
+	{"PATCH", "/trucks/{id}/status", "trucks.edit"},
 	{"GET", "/inventory", "inventory.read"},
 	{"GET", "/inventory/history", "inventory.read"},
 	{"PUT", "/inventory/{collection}/{id}", "inventory.manage"},

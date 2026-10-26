@@ -5,37 +5,33 @@ import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useViewState } from "@/app/lib/viewMemory";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
-import { FileText, Truck as TruckIcon } from "lucide-react";
+import { Truck as TruckIcon } from "lucide-react";
 import {
   createTruck,
-  deleteTruck,
-  fileDownloadUrl,
   fetchDriverOptions,
   fetchTrucksPage,
   fetchInvestorOptions,
   uploadIRPFile,
-  updateTruck,
 } from "../lib/api";
 import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {FleetStatusBadge,operatingStatus} from "../components/FleetStatusBadge";
+import { conditionLabels } from "../lib/fleetStatus";
 import type { Truck, TruckInput } from "../lib/types";
 import {
-  ConfirmDialog,
   EmptyState,
   ErrorBanner,
   LoadingTable,
   ManagementHeader,
   ManagementSearch,
   Modal,
-  RowActions,
-  StatusBadge,
   TablePagination,
   TableShell,
+  controlClass,
 } from "../components/management/ManagementUI";
-import { emptyTruckInput, TruckForm, truckToInput } from "./TruckForm";
+import { emptyTruckInput, TruckForm } from "./TruckForm";
 import { DataTruckSetup } from "./DataTruckSetup";
 
 export default function TrucksPage() {
@@ -44,6 +40,7 @@ export default function TrucksPage() {
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
+  const [status, setStatus] = useViewState("page:truckStatus", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
@@ -51,30 +48,31 @@ export default function TrucksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingIRP, setIsUploadingIRP] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Truck | null | undefined>(undefined);
   const [savedTruck, setSavedTruck] = useState<Truck | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Truck | null>(null);
   const [form, setForm] = useState<TruckInput>(emptyTruckInput);
   const [irpFileName, setIRPFileName] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const requestSequence = useRef(0);
+  const loadData = useCallback(async (signal?: AbortSignal, background=false) => {
+    const sequence=++requestSequence.current;
+    if(!background)setIsLoading(true);
     try {
-      const truckPage = await fetchTrucksPage({ page, pageSize, search: debouncedSearch });
+      const truckPage = await fetchTrucksPage({ page, pageSize, search: debouncedSearch, status },signal);
+      if(signal?.aborted || sequence!==requestSequence.current)return;
       setTrucks(truckPage.items);
       setPage(truckPage.page);
       setTotal(truckPage.total);
       setTotalPages(truckPage.totalPages);
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to load trucks");
+      if(!signal?.aborted && sequence===requestSequence.current)setError(reason instanceof Error ? reason.message : "Failed to load trucks");
     } finally {
-      setIsLoading(false);
+      if(!signal?.aborted && sequence===requestSequence.current)setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, page, pageSize]);
+  }, [setPage, debouncedSearch, page, pageSize, status]);
 
   const loadOptions = async () => {
     try {
@@ -89,8 +87,11 @@ export default function TrucksPage() {
   };
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void loadData(), 0);
-    return () => window.clearTimeout(timeout);
+    const controller=new AbortController();
+    const timeout = window.setTimeout(() => void loadData(controller.signal), 0);
+    const refresh=()=>{if(document.visibilityState==="visible")void loadData(controller.signal,true);};
+    const timer=window.setInterval(refresh,30000);window.addEventListener("focus",refresh);
+    return () => {controller.abort();window.clearTimeout(timeout);window.clearInterval(timer);window.removeEventListener("focus",refresh);};
   }, [loadData]);
 
   const openCreate = async () => {
@@ -103,15 +104,6 @@ export default function TrucksPage() {
   };
 
   useQuickCreate(openCreate);
-
-  const openEdit = async (truck: Truck) => {
- if(!permissions.includes("trucks.edit"))return;
-    if (!await loadOptions()) return;
-    setForm(truckToInput(truck));
-    setIRPFileName(truck.irpFileName ?? null);
-    setEditing(truck);
-    setError("");
-  };
 
   const uploadCabCard = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
@@ -156,8 +148,7 @@ export default function TrucksPage() {
     setIsSaving(true);
     setError("");
     try {
-      if (editing) await updateTruck(editing.id, form);
-      else { const saved = await createTruck(form); if (form.addToDataTruck) setSavedTruck(saved); }
+      { const saved = await createTruck(form); if (form.addToDataTruck) setSavedTruck(saved); }
       setEditing(undefined);
       await loadData();
     } catch (reason) {
@@ -167,27 +158,11 @@ export default function TrucksPage() {
     }
   };
 
-  const remove = async () => {
-    if (!pendingDelete || !permissions.includes("trucks.delete")) return;
-    setIsDeleting(true);
-    setError("");
-    try {
-      await deleteTruck(pendingDelete.id);
-      setPendingDelete(null);
-      await loadData();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Failed to delete truck");
-      setPendingDelete(null);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   return (
     <div className="space-y-5 animate-fade-in">
 
       {error && <ErrorBanner message={error} />}
-      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
+      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="w-40 shrink-0"><select aria-label="Filter truck status" className={controlClass} value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">All statuses</option>{Object.entries(conditionLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={TruckIcon}
         title="Trucks"
 
@@ -197,19 +172,16 @@ export default function TrucksPage() {
       /></div></div>
 
       <TableShell>
-        {isLoading ? <LoadingTable columns={8} /> : trucks.length === 0 ? (
-          <EmptyState message={search ? "No trucks match your search." : "No trucks yet. Add your first truck to get started."} />
+        {isLoading ? <LoadingTable columns={5} /> : trucks.length === 0 ? (
+          <EmptyState message={search || status ? "No trucks match your search." : "No trucks yet. Add your first truck to get started."} />
         ) : (
-          <table className="w-full min-w-[980px] text-left text-[13px]">
+          <table className="w-full min-w-[760px] text-left text-[13px]">
             <thead><tr className="border-b border-zinc-800/50 text-zinc-500">
               <th className="px-4 py-3 font-medium">Unit</th>
               <th className="px-4 py-3 font-medium">Equipment</th>
               <th className="px-4 py-3 font-medium">Driver</th>
               <th className="px-4 py-3 font-medium">Mileage</th>
-              <th className="px-4 py-3 font-medium">IRP</th>
-              <th className="px-4 py-3 font-medium">Operational status</th>
-              <th className="px-4 py-3 font-medium">Record</th>
-              <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <th className="px-4 py-3 font-medium">Status</th>
             </tr></thead>
             <tbody>{trucks.map((truck) => (
               <tr key={truck.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
@@ -217,25 +189,7 @@ export default function TrucksPage() {
                 <td className="px-4 py-3"><div className="text-zinc-300">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—"}</div><div className="mt-0.5 font-mono text-[11px] text-zinc-600">{truck.vin ?? truck.licensePlate ?? "No VIN or plate"}</div></td>
                 <td className="px-4 py-3 text-zinc-400">{truck.driverName ?? "Unassigned"}</td>
                 <td className="px-4 py-3 font-mono tabular-nums text-zinc-400">{truck.mileage?.toLocaleString() ?? "—"}</td>
-                <td className="px-4 py-3">
-                  {truck.irpFileId ? (
-                    <a
-                      href={fileDownloadUrl(truck.irpFileId)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[12px] text-blue-400 transition hover:text-blue-300"
-                      title={truck.irpFileName ?? "Open cab card"}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Cab card
-                    </a>
-                  ) : (
-                    <span className="text-zinc-600">—</span>
-                  )}
-                </td>
                 <td className="px-4 py-3"><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady /></td>
-                <td className="px-4 py-3"><StatusBadge active={truck.active} /></td>
-                <td className="px-4 py-3"><RowActions onEdit={() => openEdit(truck)} onDelete={() => setPendingDelete(truck)} /></td>
               </tr>
             ))}</tbody>
           </table>
@@ -277,15 +231,6 @@ export default function TrucksPage() {
       )}
 
       {savedTruck && <Modal isSaving={false} title={`Truck ${savedTruck.unitNumber} saved`} submitLabel="Done" onClose={() => setSavedTruck(null)} onSubmit={event => {event.preventDefault();setSavedTruck(null);}}><DataTruckSetup key={savedTruck.id} truckId={savedTruck.id}/></Modal>}
-      {pendingDelete && (
-        <ConfirmDialog
-          title="Delete truck?"
-          message={`This permanently deletes truck ${pendingDelete.unitNumber} and its assignment history. The driver record will remain.`}
-          isDeleting={isDeleting}
-          onCancel={() => setPendingDelete(null)}
-          onConfirm={() => void remove()}
-        />
-      )}
     </div>
   );
 }

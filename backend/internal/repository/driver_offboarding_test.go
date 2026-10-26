@@ -58,6 +58,7 @@ func TestTerminationOffboardingDatabase(t *testing.T) {
 			} else {
 				execAdmin(prefix)
 				execAdmin(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "148")
 			}
 			execAdmin(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			app := cfg.Copy()

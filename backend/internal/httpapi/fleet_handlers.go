@@ -36,6 +36,7 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Get("/drivers/{id}/status-history", handler.fleetStatusHistory)
 	r.Patch("/drivers/{id}/availability", handler.changeAvailability)
 	r.Get("/trucks/{id}/status-history", handler.fleetStatusHistory)
+	r.Patch("/trucks/{id}/status", handler.changeTruckCondition)
 	r.Patch("/trucks/{id}/condition", handler.changeTruckCondition)
 
 	r.Get("/tasks/five-eld/{id}", handler.fiveELDTruckTask)
@@ -300,8 +301,9 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 }
 
 type truckRequest struct {
-	StatusVersion            *int `json:"statusVersion"`
-	AddToDataTruck           bool `json:"addToDataTruck"`
+	StatusReason             string `json:"statusReason"`
+	StatusVersion            *int   `json:"statusVersion"`
+	AddToDataTruck           bool   `json:"addToDataTruck"`
 	preserveFields           []string
 	OwnershipEffectiveDate   string  `json:"ownershipEffectiveDate"`
 	ExpectedOwnershipVersion string  `json:"expectedOwnershipVersion"`
@@ -351,7 +353,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, errors.New("unit number is required")
 	}
 	validStatus := map[string]bool{
-		"available": true, "assigned": true, "maintenance": true, "out_of_service": true, "hold": true,
+		"available": true, "assigned": true, "maintenance": true, "out_of_service": true, "terminated": true,
 	}
 	if !validStatus[request.Status] {
 		return repository.TruckInput{}, errors.New("invalid truck status")
@@ -384,6 +386,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		return repository.TruckInput{}, err
 	}
 	return repository.TruckInput{
+		StatusReason:             strings.TrimSpace(request.StatusReason),
 		StatusVersion:            request.StatusVersion,
 		AddToDataTruck:           request.AddToDataTruck,
 		PreserveFields:           request.preserveFields,
@@ -602,6 +605,13 @@ func (handler fleetHandler) deleteDriver(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	switch status {
+	case "", "ready", "in_use", "shop", "out_of_service", "terminated":
+	default:
+		writeAPIError(w, 400, "Invalid truck status filter")
+		return
+	}
 	if wantsPagination(r) {
 		pagination, err := parsePagination(r)
 		if err != nil {
@@ -609,7 +619,7 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value, err := handler.repo.ListTrucksPage(
-			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), status,
 		)
 		if err != nil {
 			handler.writeError(w, err)
@@ -618,7 +628,7 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, value)
 		return
 	}
-	values, err := handler.repo.ListTrucks(r.Context())
+	values, err := handler.repo.ListTrucks(r.Context(), status)
 	if err != nil {
 		handler.writeError(w, err)
 		return

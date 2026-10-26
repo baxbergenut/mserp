@@ -59,6 +59,7 @@ try {
     }
     await status.selectOption(value);
     if (["HOME","HOME (YARD)","VACATION"].includes(value)) { if(value!=="VACATION"){await page.getByLabel("Home start date",{exact:true}).fill("2026-10-23");await page.getByLabel("Back date",{exact:true}).fill("2026-10-27");} await page.getByRole("button",{name:"Apply dates",exact:true}).click(); }
+    if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
     const cell = status.locator('xpath=ancestor::td');
     await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);

@@ -40,7 +40,7 @@ func (request *driverBoardRequest) validate() error {
 		for _, field := range []struct {
 			value *string
 			max   int
-		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.TrailerNote, 5000}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}} {
+		}{{&e.CurrentLoad, 300}, {&e.TrailerNumber, 100}, {&e.TrailerNote, 5000}, {&e.Destination, 500}, {&e.ETA, 500}, {&e.Notes, 5000}, {&e.HomeTime, 500}, {&e.StatusReason, 1000}} {
 			// Preserve spaces while an editor saves on every keystroke.
 			if len([]rune(*field.value)) > field.max || strings.ContainsRune(*field.value, 0) {
 				return errors.New("a board field exceeds its character limit or contains invalid text")
@@ -50,10 +50,10 @@ func (request *driverBoardRequest) validate() error {
 			return err
 		}
 		switch e.Status {
-		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT", "HOLD":
+		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT":
 		// Retain existing values during unrelated autosaves and history recovery.
 		// These are no longer offered as driver status choices.
-		case "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "LOAD CANCELLED", "REJECTED":
+		case "HOLD", "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "LOAD CANCELLED", "REJECTED":
 			if e.StatusEdited {
 				return errors.New("select a current driver status")
 			}

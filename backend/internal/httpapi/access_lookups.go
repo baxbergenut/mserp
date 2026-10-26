@@ -49,7 +49,7 @@ func registerLookupRoutes(r chi.Router, repo *repository.FleetRepository) {
 				writeAPIError(w, 500, "Could not load choices")
 				return
 			}
-			fields := strings.Fields("id fullName unitNumber status active employmentType driverType isOwnerOperator driverId driverName truckId truckUnit teamRole teamTruckId teamTruckUnit teamPartnerId teamPartnerName teamStartWeek teamVersion dispatcherId dispatcherName ownerId ownerName ownerSince ownershipVersion isCompanyOwned isCompany trucks year make model shift extension mainUpdaterId afterHoursUpdaterId driverCount")
+			fields := strings.Fields("id fullName unitNumber status operatingStatus active employmentType driverType isOwnerOperator driverId driverName truckId truckUnit teamRole teamTruckId teamTruckUnit teamPartnerId teamPartnerName teamStartWeek teamVersion dispatcherId dispatcherName ownerId ownerName ownerSince ownershipVersion isCompanyOwned isCompany trucks year make model shift extension mainUpdaterId afterHoursUpdaterId driverCount")
 			if kind == "drivers" && repository.HasPermission(s.User, "drivers.read") {
 				fields = append(fields, "phone", "email")
 			}

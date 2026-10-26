@@ -126,6 +126,7 @@ func (r *FleetRepository) GetDriverSetupDefaults(ctx context.Context) (DriverSet
 
 type Truck struct {
 	StatusVersion       int        `json:"statusVersion"`
+	StatusReason        string     `json:"statusReason"`
 	OperatingStatus     string     `json:"operatingStatus"`
 	OwnerSince          *string    `json:"ownerSince"`
 	OwnershipVersion    string     `json:"ownershipVersion"`
@@ -160,6 +161,7 @@ type Truck struct {
 }
 
 type TruckInput struct {
+	StatusReason             string
 	StatusVersion            *int
 	StatusActor              string
 	AddToDataTruck           bool
@@ -601,8 +603,12 @@ func scanDriver(row rowScanner) (Driver, error) {
 	return value, err
 }
 
-func (r *FleetRepository) ListTrucks(ctx context.Context) ([]Truck, error) {
-	rows, err := r.pool.Query(ctx, selectTrucksSQL+" ORDER BY t.unit_number, t.id")
+func (r *FleetRepository) ListTrucks(ctx context.Context, statusFilter ...string) ([]Truck, error) {
+	status := ""
+	if len(statusFilter) > 0 {
+		status = statusFilter[0]
+	}
+	rows, err := r.pool.Query(ctx, selectTrucksSQL+" WHERE ($1='' OR fleet_truck_operating_status(t.id)=$1) ORDER BY t.unit_number, t.id", status)
 	if err != nil {
 		return nil, err
 	}
@@ -623,23 +629,28 @@ func (r *FleetRepository) ListTrucksPage(
 	ctx context.Context,
 	pagination Pagination,
 	search string,
+	statusFilter ...string,
 ) (Page[Truck], error) {
+	status := ""
+	if len(statusFilter) > 0 {
+		status = statusFilter[0]
+	}
 	const where = `
 WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
-	t.license_plate, d.full_name) ILIKE '%' || $1 || '%')`
+	t.license_plate, d.full_name) ILIKE '%' || $1 || '%') AND ($2='' OR fleet_truck_operating_status(t.id)=$2)`
 	var total int
 	err := r.pool.QueryRow(ctx, `
 		SELECT count(*)
 		FROM trucks t
 		LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
-		LEFT JOIN drivers d ON d.id = a.driver_id`+where, search).Scan(&total)
+		LEFT JOIN drivers d ON d.id = a.driver_id`+where, search, status).Scan(&total)
 	if err != nil {
 		return Page[Truck]{}, err
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectTrucksSQL+where+`
-		ORDER BY t.unit_number, t.id LIMIT $2 OFFSET $3`,
-		search, pagination.PageSize, pagination.Offset())
+		ORDER BY CASE fleet_truck_operating_status(t.id) WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $3 OFFSET $4`,
+		search, status, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[Truck]{}, err
 	}
@@ -664,18 +675,12 @@ func (r *FleetRepository) GetTruck(ctx context.Context, id string) (Truck, error
 }
 
 func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Truck, error) {
-	if !input.Active {
-		input.DriverID = nil
-		if input.Status == "assigned" {
-			input.Status = "available"
-		}
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err = setBoardActor(ctx, tx, input.StatusActor, "profile"); err != nil {
+	if err = setFleetStatusContext(ctx, tx, input.StatusActor, "profile", time.Time{}, input.StatusReason); err != nil {
 		return Truck{}, err
 	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
@@ -693,6 +698,9 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 }
 
 func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, error) {
+	if _, err := tx.Exec(ctx, `SELECT set_config('mserp.status_reason',$1,true)`, input.StatusReason); err != nil {
+		return "", err
+	}
 	if err := resolveTruckDriverOwner(ctx, tx, &input); err != nil {
 		return "", err
 	}
@@ -739,18 +747,12 @@ func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, er
 }
 
 func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input TruckInput) (Truck, error) {
-	if !input.Active {
-		input.DriverID = nil
-		if input.Status == "assigned" {
-			input.Status = "available"
-		}
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Truck{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err = setBoardActor(ctx, tx, input.StatusActor, "profile"); err != nil {
+	if err = setFleetStatusContext(ctx, tx, input.StatusActor, "profile", time.Time{}, input.StatusReason); err != nil {
 		return Truck{}, err
 	}
 	var oldStatus string
@@ -821,7 +823,7 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
 	t.created_at, t.updated_at,
 	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
-	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version,fleet_truck_status_reason(t.id)
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id
@@ -840,7 +842,7 @@ func scanTruck(row rowScanner) (Truck, error) {
 		&value.Notes, &value.IRPFileID, &value.IRPFileName,
 		&value.IRPFileContentType, &value.IRPFileSizeBytes,
 		&value.CreatedAt, &value.UpdatedAt,
-		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus, &value.StatusVersion,
+		&value.OwnerSince, &value.OwnershipVersion, &value.OperatingStatus, &value.StatusVersion, &value.StatusReason,
 	)
 	value.UnitNumber = normalizeTruckUnit(value.UnitNumber)
 	value.DriverName = formatPersonNamePtr(value.DriverName)
@@ -1111,20 +1113,20 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 		return err
 	}
 	if unchanged {
-		if !driverActive || !truckActive {
-			var owner bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t JOIN investors o ON o.id=t.owner_id WHERE t.id=$1 AND o.driver_id=$2)`, truckID, driverID).Scan(&owner); err != nil {
-				return err
-			}
-			if owner {
-				return nil
-			}
-			return chargeInvalid("Only active drivers and trucks can be assigned")
+		if driverActive {
+			return handoffInvestorDriverCharges(ctx, tx, driverID, "")
 		}
-		return handoffInvestorDriverCharges(ctx, tx, driverID, "")
+		return nil
 	}
 	if !driverActive || !truckActive {
 		return chargeInvalid("Only active drivers and trucks can be assigned")
+	}
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT fleet_truck_operating_status($1)`, truckID).Scan(&status); err != nil {
+		return err
+	}
+	if status != "ready" && status != "in_use" {
+		return chargeInvalid("Return the truck to service before assigning a driver")
 	}
 	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {
 		return err

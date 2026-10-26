@@ -274,7 +274,7 @@ export type TruckStatus =
   | "assigned"
   | "maintenance"
   | "out_of_service"
- | "hold";
+ | "terminated";
 
 export type DriverStatus = "active" | "vacation" | "home" | "terminated";
 export type DriverAvailability = "active" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
@@ -387,6 +387,7 @@ export interface DriverSetupDefaults {
 }
 
 export interface DriverBoardEntry {
+ statusReason?: string;
  leavePlan?: DriverLeavePlan;
 	effectiveAt?: string;
   undoId?: number;
@@ -598,8 +599,9 @@ export interface PrePassFleetChange {
   tollFrom?: string; tollRevision?: string;
 }
 
-export type TruckOperatingStatus = "ready" | "shop" | "out_of_service" | "hold";
+export type TruckOperatingStatus = "ready" | "in_use" | "shop" | "out_of_service" | "terminated";
 export interface Truck {
+ statusReason?: string;
 	statusVersion?: number;
  operatingStatus?: TruckOperatingStatus;
   ownerSince?: string | null;
@@ -636,6 +638,7 @@ export interface Truck {
 
 export interface DataTruckEnrollment { state: string; message: string; version: number; providerId?: number }
 export interface TruckInput {
+ statusReason?: string;
 	statusVersion?:number;
   addToDataTruck?: boolean;
   ownershipEffectiveDate?: string;
@@ -1438,7 +1441,7 @@ export type FleetScopeReview = { snapshotId: string; sourceRevision: number; act
 
 // Lookup contracts contain operational choices only, never complete profiles.
 export type DriverOption = Pick<Driver, "id" | "fullName" | "active" | "status" | "employmentType" | "driverType" | "isOwnerOperator" | "dispatcherId" | "dispatcherName" | "truckId" | "truckUnit" | "teamRole" | "teamTruckId" | "teamTruckUnit" | "teamPartnerId" | "teamPartnerName" | "teamStartWeek" | "teamVersion"> & { phone?: Driver["phone"]; email?: Driver["email"] };
-export type TruckOption = Pick<Truck, "id" | "unitNumber" | "active" | "status" | "driverId" | "driverName" | "ownerId" | "ownerName" | "ownerSince" | "ownershipVersion" | "isCompanyOwned" | "year" | "make" | "model">;
+export type TruckOption = Pick<Truck, "id" | "unitNumber" | "active" | "status" | "operatingStatus" | "driverId" | "driverName" | "ownerId" | "ownerName" | "ownerSince" | "ownershipVersion" | "isCompanyOwned" | "year" | "make" | "model">;
 export type DispatcherOption = Pick<Dispatcher, "id" | "fullName" | "active" | "extension" | "mainUpdaterId" | "afterHoursUpdaterId" | "driverCount">;
 export type InvestorOption = Pick<Investor, "id" | "fullName" | "active" | "driverId" | "isCompany" | "trucks">;
 export type UpdaterOption = Pick<Updater, "id" | "fullName" | "shift" | "extension">;

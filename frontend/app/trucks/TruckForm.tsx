@@ -3,7 +3,7 @@ import type { DriverOption, InvestorOption } from "@/app/lib/types";
 import { usePermissions } from "../lib/access";
 
 import { AssignmentWeekField } from "../components/management/AssignmentWeekField";
-import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
+
 
 import { ExternalLink, FileText, LoaderCircle, Sparkles, Upload, X } from "lucide-react";
 import type { Truck, TruckInput } from "../lib/types";
@@ -281,31 +281,19 @@ export function TruckForm({
         <Field label="Assigned driver" hint="Selecting a driver releases any truck currently assigned to them.">
           <select
             value={value.driverId ?? ""}
-            disabled={!value.active}
+
             onChange={(event) => set("driverId", event.target.value || null)}
             className={controlClass}
           >
             <option value="">Unassigned</option>
             {drivers.filter((driver) => driver.active || driver.id === value.driverId).map((driver) => (
-              <option key={driver.id} value={driver.id}>
+              <option key={driver.id} value={driver.id} disabled={!creating && !["available","assigned"].includes(value.status) && driver.id!==value.driverId}>
                 {driver.fullName}{driver.truckUnit ? ` — currently ${driver.truckUnit}` : ""}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Status" hint="Work-order holds also apply until Fleet releases them.">
-          <select
-            value={value.status}
-            onChange={(event) => set("status", event.target.value as TruckInput["status"])}
-            className={controlClass}
-          >
-            <option value="available">Ready</option>
-            {value.driverId !== null && <option value="assigned">Ready (driver assigned)</option>}
-            <option value="maintenance">Shop</option>
-            <option value="out_of_service">OOS</option>
-            <option value="hold">Hold</option>
-          </select>
-        </Field>
+        <p className="text-xs text-zinc-500">Status follows driver assignments. Use Change status on the truck profile for Shop, OOS, or Terminated.</p>
         <Field label="Current mileage">
           <input
             type="number"
@@ -334,13 +322,7 @@ export function TruckForm({
         </Field>
       </FormSection>}
 
-      <FormSection title={setup ? "Notes" : "Status and notes"}>
-        {!setup && <Toggle
-          checked={value.active}
-          onChange={(checked) => onChange({ ...value, active: checked, ...(!checked ? { driverId: null, status: value.status === "assigned" ? "available" : value.status, assignmentWeek: value.assignmentWeek || currentChargeWeek() } : {}) })}
-          label="Active truck"
-          description="Marking inactive disconnects the current driver, except a terminated owner’s existing link to their own truck. Historical records are retained."
-        />}
+      <FormSection title="Notes">
         <Field label="Internal notes" wide>
           <textarea
             rows={3}

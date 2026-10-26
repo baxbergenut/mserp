@@ -51,25 +51,29 @@ func testFleetScopeOffboarding(t *testing.T, pool, admin *pgxpool.Pool) {
 	must(err)
 	truck, err = repo.UpdateTruck(ctx, truck.ID, TruckInput{UnitNumber: truck.UnitNumber, Status: "assigned", Active: false, DriverID: &driver.ID})
 	must(err)
-	if truck.DriverID != nil || truck.Active || truck.Status == "assigned" {
-		t.Fatal("inactive truck kept assignment")
+	if truck.DriverID == nil || !truck.Active || truck.OperatingStatus != "in_use" {
+		t.Fatal("legacy active flag changed truck lifecycle")
+	}
+	truck, err = repo.UpdateTruck(ctx, truck.ID, TruckInput{UnitNumber: truck.UnitNumber, Status: "out_of_service", StatusReason: "Awaiting repair", DriverID: &driver.ID})
+	must(err)
+	if truck.Active || truck.DriverID == nil {
+		t.Fatal("OOS did not preserve assignment")
 	}
 	driver, err = repo.GetDriver(ctx, driver.ID)
 	must(err)
-	if !driver.Active || driver.TruckID != nil || driver.DispatcherID == nil {
-		t.Fatal("truck deactivation changed unrelated driver state")
+	if !driver.Active || driver.TruckID == nil || driver.DispatcherID == nil {
+		t.Fatal("OOS changed driver state")
 	}
-	// Imports cannot resurrect assignments, but retain historical fleet identity.
 	tx, err := pool.Begin(ctx)
 	must(err)
 	must(syncTruckAssignment(ctx, tx, truck.ID, driver.ID))
 	must(tx.Commit(ctx))
 	truck, err = repo.GetTruck(ctx, truck.ID)
 	must(err)
-	if truck.DriverID != nil {
-		t.Fatal("import assigned inactive truck")
+	if truck.OperatingStatus != "out_of_service" || truck.DriverID == nil {
+		t.Fatal("import changed OOS assignment")
 	}
-	truck, err = repo.UpdateTruck(ctx, truck.ID, TruckInput{UnitNumber: truck.UnitNumber, Status: "available", Active: true, DriverID: &driver.ID})
+	truck, err = repo.UpdateTruck(ctx, truck.ID, TruckInput{UnitNumber: truck.UnitNumber, Status: "available", StatusReason: "Repair inspected", Active: true, DriverID: &driver.ID})
 	must(err)
 	company := uuid()
 	hire := fleetscope.Event{Version: 1, Type: "driver.hired", EventID: uuid(), CompanyID: company, OccurredAt: time.Now(), Driver: fleetscope.Driver{ID: uuid(), FullName: driver.FullName, DriverType: "company", HireDate: "2026-09-28"}}
@@ -122,7 +126,8 @@ func testFleetScopeOffboarding(t *testing.T, pool, admin *pgxpool.Pool) {
 	}
 	var n int
 	must(pool.QueryRow(ctx, `SELECT count(*) FROM truck_driver_assignments WHERE driver_id=$1 AND unassigned_at IS NOT NULL`, driver.ID).Scan(&n))
-	if n < 3 {
+	// OOS retains the assignment, so there are only the two employment closures.
+	if n != 2 {
 		t.Fatal("assignment history lost")
 	}
 	must(pool.QueryRow(ctx, `SELECT count(*) FROM driver_dispatcher_assignments WHERE driver_id=$1 AND dispatcher_id IS NOT NULL AND unassigned_at IS NULL`, driver.ID).Scan(&n))

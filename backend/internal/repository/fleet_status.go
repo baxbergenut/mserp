@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -115,6 +116,15 @@ func (r *FleetRepository) ChangeAvailability(ctx context.Context, id, actor stri
 	return r.GetDriver(ctx, id)
 }
 func (r *FleetRepository) ChangeTruckCondition(ctx context.Context, id, actor string, in FleetStatusChange) (Truck, error) {
+	in.Reason = strings.TrimSpace(in.Reason)
+	if in.Reason == "" || len(in.Reason) > 1000 {
+		return Truck{}, chargeInvalid("A status change reason is required (maximum 1000 characters)")
+	}
+	switch in.Status {
+	case "ready", "in_use", "shop", "out_of_service", "terminated":
+	default:
+		return Truck{}, chargeInvalid("Invalid truck status")
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Truck{}, err
@@ -137,7 +147,7 @@ func (r *FleetRepository) ChangeTruckCondition(ctx context.Context, id, actor st
 	if version != in.Version {
 		return Truck{}, ErrDriverBoardConflict
 	}
-	if in.Status == "ready" {
+	if in.Status == "ready" || in.Status == "in_use" {
 		var held bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM maintenance_records WHERE truck_id=$1 AND dispatch_status<>'')`, id).Scan(&held); err != nil {
 			return Truck{}, err
@@ -146,7 +156,7 @@ func (r *FleetRepository) ChangeTruckCondition(ctx context.Context, id, actor st
 			return Truck{}, chargeInvalid("Release the remaining work-order restrictions first")
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE trucks SET status=CASE $2 WHEN 'ready' THEN CASE WHEN EXISTS(SELECT 1 FROM truck_driver_assignments WHERE truck_id=$1 AND unassigned_at IS NULL) THEN 'assigned' ELSE 'available' END WHEN 'shop' THEN 'maintenance' ELSE $2 END,updated_at=now() WHERE id=$1`, id, in.Status)
+	_, err = tx.Exec(ctx, `UPDATE trucks SET status=CASE WHEN $2 IN ('ready','in_use') THEN CASE WHEN fleet_truck_has_operator($1) THEN 'assigned' ELSE 'available' END WHEN $2='shop' THEN 'maintenance' ELSE $2 END,updated_at=now() WHERE id=$1`, id, in.Status)
 	if err != nil {
 		return Truck{}, err
 	}
@@ -271,7 +281,7 @@ func (r *FleetRepository) ActivateStatuses(ctx context.Context, revision string)
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.status_actor_name','Operator (reviewed activation)',true);
  UPDATE drivers d SET availability_status=CASE WHEN r.availability<>'' THEN r.availability ELSE 'active' END FROM driver_board b JOIN fleet_status_rules r ON r.board_status=b.status WHERE b.driver_id=d.id AND d.active AND (r.availability<>'' OR r.requires_active);
- UPDATE trucks t SET status=CASE WHEN t.status='out_of_service' THEN t.status WHEN t.status='hold' AND r.truck_condition='shop' THEN t.status WHEN r.truck_condition='shop' THEN 'maintenance' ELSE r.truck_condition END
+ UPDATE trucks t SET status=CASE WHEN t.status IN ('out_of_service','terminated') THEN t.status WHEN r.truck_condition='shop' THEN 'maintenance' ELSE r.truck_condition END
  FROM driver_board b JOIN fleet_status_rules r ON r.board_status=b.status JOIN drivers d ON d.id=b.driver_id
  WHERE d.active AND r.truck_condition<>'' AND t.id=fleet_status_driver_truck(d.id);
  UPDATE trucks SET condition_status=fleet_truck_operating_status(id);
@@ -323,6 +333,9 @@ func (r *FleetRepository) ReconcileStatusProgress(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 	if err = setBoardActor(ctx, tx, "", "system_queue"); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `SELECT fleet_status_refresh_truck(id) FROM trucks WHERE condition_status IS DISTINCT FROM fleet_truck_operating_status(id) ORDER BY id`); err != nil {
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT driver_id::text FROM driver_board WHERE status IN ('ENROUTE','RESERVED') ORDER BY driver_id`)

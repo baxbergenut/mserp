@@ -84,7 +84,7 @@ func ptiEligibility(active bool, condition string, crew []PTICrew) (string, stri
 	if !active {
 		return "exempt", "Inactive truck"
 	}
-	if condition != "ready" {
+	if condition != "ready" && condition != "in_use" {
 		return "exempt", "Truck is not ready for the road"
 	}
 	for _, d := range crew {

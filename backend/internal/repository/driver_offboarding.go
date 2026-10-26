@@ -13,6 +13,7 @@ import (
 )
 
 type TerminatedOwnerTruck struct {
+	Status        string          `json:"status"`
 	TruckID       string          `json:"truckId"`
 	UnitNumber    string          `json:"unitNumber"`
 	DriverID      string          `json:"driverId"`
@@ -42,7 +43,7 @@ type TerminationCleanup struct {
 
 // A current active co-driver is just as important as a direct assignment.
 // Names here are display snapshots only; all decisions use saved UUID links.
-const terminatedOwnerTrucksSQL = `SELECT t.id::text,t.unit_number,d.id::text,d.full_name,d.termination_id::text,t.active,
+const terminatedOwnerTrucksSQL = `SELECT t.id::text,t.unit_number,d.id::text,d.full_name,d.termination_id::text,t.active,t.status,
  ARRAY(SELECT person.full_name FROM drivers person WHERE person.active AND (
  EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=person.id AND a.unassigned_at IS NULL)
  OR EXISTS(SELECT 1 FROM driver_teams team JOIN truck_driver_assignments a ON a.driver_id=team.main_driver_id AND a.truck_id=t.id AND a.unassigned_at IS NULL
@@ -71,7 +72,7 @@ func readTerminatedOwnerTrucks(ctx context.Context, q chargeQuery, driver string
 	out := []TerminatedOwnerTruck{}
 	for rows.Next() {
 		var v TerminatedOwnerTruck
-		if err = rows.Scan(&v.TruckID, &v.UnitNumber, &v.DriverID, &v.DriverName, &v.TerminationID, &v.Active, &v.ActiveDrivers, &v.Outcome, &v.Snapshot); err != nil {
+		if err = rows.Scan(&v.TruckID, &v.UnitNumber, &v.DriverID, &v.DriverName, &v.TerminationID, &v.Active, &v.Status, &v.ActiveDrivers, &v.Outcome, &v.Snapshot); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -97,7 +98,7 @@ func recordTerminatedOwnerTrucks(ctx context.Context, tx pgx.Tx, driver, actor, 
 		if len(truck.ActiveDrivers) > 0 {
 			outcome = "held"
 			var id string
-			notes := fmt.Sprintf("Owner %s is terminated. Truck %s was left unchanged because active drivers are linked: %s. Review the operating crew before changing this truck's active status. Ownership and existing assignments were retained.\nTruck: /trucks/detail?id=%s\nOwner: /drivers/detail?id=%s", truck.DriverName, truck.UnitNumber, strings.Join(truck.ActiveDrivers, ", "), truck.TruckID, truck.DriverID)
+			notes := fmt.Sprintf("Owner %s is terminated. Truck %s was left unchanged because active drivers are linked: %s. Review the operating crew before changing this truck's status. Ownership and existing assignments were retained.\nTruck: /trucks/detail?id=%s\nOwner: /drivers/detail?id=%s", truck.DriverName, truck.UnitNumber, strings.Join(truck.ActiveDrivers, ", "), truck.TruckID, truck.DriverID)
 			title := []rune("Review terminated owner's truck " + truck.UnitNumber)
 			if len(title) > 200 {
 				title = title[:200]
@@ -106,13 +107,16 @@ func recordTerminatedOwnerTrucks(ctx context.Context, tx pgx.Tx, driver, actor, 
 				return err
 			}
 			task = &id
-		} else if truck.Active {
+		} else if truck.Status != "terminated" {
 			outcome = "inactivated"
-			if _, err = tx.Exec(ctx, `UPDATE trucks SET active=false,updated_at=now() WHERE id=$1`, truck.TruckID); err != nil {
+			if err = setFleetStatusContext(ctx, tx, actor, source, time.Time{}, "Owner-operator employment terminated; no employed operator remains"); err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, `UPDATE trucks SET status='terminated',updated_at=now() WHERE id=$1`, truck.TruckID); err != nil {
 				return err
 			}
 			if _, err = tx.Exec(ctx, `INSERT INTO profile_notes(id,truck_id,body,actor_id,actor_name)
- VALUES(gen_random_uuid(),$1,$2,nullif($3,'')::uuid,coalesce((SELECT username FROM app_users WHERE id=nullif($3,'')::uuid),'System'))`, truck.TruckID, "Made inactive after owner "+truck.DriverName+" was terminated. Owner and existing owner-driver link retained; no active driver was linked.", actor); err != nil {
+ VALUES(gen_random_uuid(),$1,$2,nullif($3,'')::uuid,coalesce((SELECT username FROM app_users WHERE id=nullif($3,'')::uuid),'System'))`, truck.TruckID, "Truck terminated after owner "+truck.DriverName+" was terminated. Owner and existing owner-driver link retained; no active driver was linked.", actor); err != nil {
 				return err
 			}
 		}

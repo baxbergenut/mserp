@@ -54,7 +54,7 @@ func testFleetWorkOrderWorkflow(t *testing.T, ctx context.Context, admin *pgx.Co
 	if m.ExpenseID != nil || len(m.PaymentConfirmation) > 0 {
 		t.Fatal("opening work invented an invoice", m)
 	}
-	status("ready")
+	status("in_use")
 	first.Version = m.Version
 	first.WorkStatus = payTestString("in_progress")
 	first.DispatchStatus = payTestString("shop")
@@ -108,7 +108,7 @@ func testFleetWorkOrderWorkflow(t *testing.T, ctx context.Context, admin *pgx.Co
 	second.Version = other.Version
 	second.DispatchStatus = payTestString("")
 	save(second)
-	status("ready")
+	status("in_use")
 	first.WorkStatus = payTestString("closed")
 	if _, err := repo.Save(ctx, first); err == nil {
 		t.Fatal("unknown cost closed as zero")
@@ -198,19 +198,19 @@ func testFleetWorkOrderWorkflow(t *testing.T, ctx context.Context, admin *pgx.Co
 			t.Fatalf("stage filter %s: got %d, want %d: %v", filter, listing.Total, expected, err)
 		}
 	}
-	if _, err := admin.Exec(ctx, `UPDATE trucks SET status='maintenance' WHERE id=$1`, truck); err != nil {
+	if _, err := admin.Exec(ctx, `UPDATE trucks SET status='maintenance',status_reason='Manual inspection' WHERE id=$1`, truck); err != nil {
 		t.Fatal(err)
 	}
 	status("shop")
-	if _, err := admin.Exec(ctx, `UPDATE trucks SET status='available' WHERE id=$1`, truck); err != nil {
+	if _, err := admin.Exec(ctx, `UPDATE trucks SET status='available',status_reason='Inspected and released' WHERE id=$1`, truck); err != nil {
 		t.Fatal(err)
 	}
-	status("ready")
+	status("in_use")
 	// Keep this fixture out of unrelated reminder/board tests.
 	if _, err := admin.Exec(ctx, `UPDATE drivers SET active=false WHERE id=$1;`, driver); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Exec(ctx, `UPDATE trucks SET active=false WHERE id=$1`, truck); err != nil {
+	if _, err := admin.Exec(ctx, `UPDATE trucks SET status='terminated',status_reason='Fixture retired' WHERE id=$1`, truck); err != nil {
 		t.Fatal(err)
 	}
 }

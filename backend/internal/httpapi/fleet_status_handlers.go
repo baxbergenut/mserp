@@ -97,9 +97,9 @@ func (h fleetHandler) changeTruckCondition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	switch in.Status {
-	case "ready", "shop", "out_of_service", "hold":
+	case "ready", "in_use", "shop", "out_of_service", "terminated":
 	default:
-		writeAPIError(w, 400, "Invalid truck condition")
+		writeAPIError(w, 400, "Invalid truck status")
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())

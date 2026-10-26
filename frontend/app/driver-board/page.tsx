@@ -10,7 +10,7 @@ import { Banknote, CloudCheck, GripVertical, History, MapPin, RefreshCw, Route, 
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
-import { controlClass } from "@/app/components/management/ManagementUI";
+import { controlClass, Modal, Field } from "@/app/components/management/ManagementUI";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { readMemory, ViewMemoryContext, useViewState } from "@/app/lib/viewMemory";
 import { usePermissions } from "@/app/lib/access";
@@ -59,14 +59,16 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
 });
 
 export default function DriverBoardPage() {
-  const [terminating,setTerminating]=useState<Driver|null>(null);
+  const [restriction,setRestriction]=useState<{id:string;name:string;status:string}|null>(null);
+ const [restrictionReason,setRestrictionReason]=useState("");
+ const [terminating,setTerminating]=useState<Driver|null>(null);
   const [statusChoices,setStatusChoices]=useState(statuses);
   useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
   const [leaveEditor, setLeaveEditor] = useState<{ id: string; name: string; status: string; changingStatus: boolean } | null>(null);
  const [today, setToday] = useState(leaveToday);
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
- const state = useDriverBoard(etaEditor?.id ?? leaveEditor?.id);
+ const state = useDriverBoard(etaEditor?.id ?? leaveEditor?.id ?? restriction?.id);
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -224,7 +226,7 @@ export default function DriverBoardPage() {
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
                 <td className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
                   canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
-                  choices={statusChoices} onChange={value => {if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
+                  choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
@@ -252,6 +254,7 @@ export default function DriverBoardPage() {
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
     {etaEditor && <ETAEditor key={`${etaEditor.id}:${board?.loads[etaEditor.id]?.automation?.context ?? ""}:${board?.loads[etaEditor.id]?.automation?.stopType ?? ""}`} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {restriction&&<Modal title={`Shop · ${restriction.name}`} isSaving={false} submitLabel="Apply status" onClose={()=>setRestriction(null)} onSubmit={e=>{e.preventDefault();if(!restrictionReason.trim())return;edit(restriction.id,"status",restriction.status,{statusReason:restrictionReason.trim()});setRestriction(null);}}><Field label="Reason"><textarea aria-label="Truck status reason" required maxLength={1000} className={controlClass} value={restrictionReason} onChange={e=>setRestrictionReason(e.target.value)}/></Field><p className="mt-3 text-xs text-zinc-500">The truck will be marked Shop and cannot receive new dispatch until explicitly returned to service.</p></Modal>}
     {leaveEditor && <DriverLeaveDialog name={leaveEditor.name} initial={entries[leaveEditor.id]?.leavePlan} status={leaveEditor.status} changingStatus={leaveEditor.changingStatus} onClose={() => setLeaveEditor(null)} onApply={plan => { edit(leaveEditor.id, leaveEditor.changingStatus ? "status" : "homeTime", leaveEditor.changingStatus ? leaveEditor.status : "", { leavePlan: plan, homeTime: "" }); setLeaveEditor(null); }} />}
     {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}

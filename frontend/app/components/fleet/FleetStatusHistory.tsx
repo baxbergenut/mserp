@@ -6,7 +6,7 @@ import type {FleetStatusHistory as History,FleetStatusHistoryEntry} from "@/app/
 import {statusLabel} from "@/app/lib/fleetStatus";
 import {ErrorBanner,controlClass} from "../management/ManagementUI";
 
-const tracks:Record<string,string>={availability:"Driver availability",employment:"Employment",condition:"Truck condition"};
+const tracks:Record<string,string>={availability:"Driver availability",employment:"Employment",condition:"Truck status"};
 const date=(v:string)=>new Date(v).toLocaleString("en-US",{timeZone:"America/New_York",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
 function duration(v:FleetStatusHistoryEntry){if(v.baseline)return "Start unknown";const minutes=Math.max(0,Math.floor(((v.endedAt?Date.parse(v.endedAt):Date.now())-Date.parse(v.effectiveAt))/60000));return minutes>=1440?`${Math.floor(minutes/1440)}d ${Math.floor(minutes%1440/60)}h`:minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m`:`${minutes}m`;}
 function Details({item}:{item:FleetStatusHistoryEntry}){return <details className="mt-1 text-xs text-zinc-500"><summary className="cursor-pointer">{tracks[item.track]??item.track}</summary><p>Recorded {date(item.recordedAt)} · {item.source.replaceAll("_"," ")}</p>{item.previousStatus&&<p>Previous: {statusLabel(item.previousStatus)}</p>}{item.reason&&<p>{item.reason}</p>}{item.source==="work_order"&&item.sourceRef&&<a href={`/maintenance/detail?id=${item.sourceRef}`} className="text-blue-400">Work order</a>}{item.baseline&&<p>Known from {date(item.effectiveAt)}; earlier change date unknown.</p>}</details>;}

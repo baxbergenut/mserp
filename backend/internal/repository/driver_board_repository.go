@@ -14,6 +14,7 @@ import (
 var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
+	StatusReason string           `json:"statusReason,omitempty"`
 	LeavePlan    *DriverLeavePlan `json:"leavePlan,omitempty"`
 	EffectiveAt  *time.Time       `json:"effectiveAt,omitempty"`
 	UndoID       int64            `json:"undoId,omitempty"`
@@ -259,7 +260,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if e.EffectiveAt != nil {
 			when = e.EffectiveAt.UTC().Format(time.RFC3339Nano)
 		}
-		if _, err := tx.Exec(ctx, `SELECT set_config('mserp.status_effective_at',$1,true)`, when); err != nil {
+		if _, err := tx.Exec(ctx, `SELECT set_config('mserp.status_effective_at',$1,true),set_config('mserp.status_reason',$2,true)`, when, strings.TrimSpace(e.StatusReason)); err != nil {
 			return nil, err
 		}
 		e.UndoID = 0
@@ -400,6 +401,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, err
 		}
 		e.EffectiveAt = nil
+		e.StatusReason = ""
 		if stateChanged {
 			if err = saveLoadState(ctx, tx, e.DriverID, loadStateValue); err != nil {
 				return nil, err

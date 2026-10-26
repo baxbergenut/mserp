@@ -137,10 +137,11 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			monday, _ := time.ParseInLocation("2006-01-02", week, zone)
 			actor := scalar(`INSERT INTO app_users(username,password_hash,role_id) VALUES('PTI Reviewer','$2a$test',(SELECT id FROM app_roles WHERE system_role)) RETURNING id::text`)
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,availability_status,status,created_at) SELECT ('91000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'PTI Driver '||n,'pti driver '||n,'cpm',0.6,CASE WHEN n IN(2,3) THEN 'home' ELSE 'active' END,CASE WHEN n IN(2,3) THEN 'home' ELSE 'active' END,$1::timestamptz FROM generate_series(1,7) n`, monday.AddDate(0, 0, -21))
-			exec(`INSERT INTO trucks(id,unit_number,status,active,created_at) SELECT ('92000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'PTI-'||n,CASE n WHEN 3 THEN 'maintenance' WHEN 6 THEN 'out_of_service' WHEN 7 THEN 'hold' ELSE 'available' END,n<>8,$1::timestamptz FROM generate_series(1,8) n`, monday.AddDate(0, 0, -21))
+			exec(`INSERT INTO trucks(id,unit_number,status,active,created_at) SELECT ('92000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'PTI-'||n,'available',true,$1::timestamptz FROM generate_series(1,8) n`, monday.AddDate(0, 0, -21))
 			exec(`INSERT INTO trucks(unit_number,created_at) VALUES('PTI-new-midweek',$1)`, monday.Add(2*time.Minute))
 			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT ('92000000-0000-4000-8000-'||lpad(t::text,12,'0'))::uuid,('91000000-0000-4000-8000-'||lpad(d::text,12,'0'))::uuid,$1 FROM (VALUES(1,1),(2,3),(3,4),(5,5),(6,6),(7,7)) v(t,d)`, monday.AddDate(0, 0, -14))
 			exec(`INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES('91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002',$1)`, monday.AddDate(0, 0, -14).Format("2006-01-02"))
+			exec(`UPDATE trucks SET status=CASE unit_number WHEN 'PTI-3' THEN 'maintenance' WHEN 'PTI-6' THEN 'out_of_service' WHEN 'PTI-7' THEN 'maintenance' WHEN 'PTI-8' THEN 'terminated' ELSE status END,status_reason='Synthetic status fixture' WHERE unit_number IN ('PTI-3','PTI-6','PTI-7','PTI-8')`)
 			// Fixture-only known baselines predate Monday. Production baselines are never rewritten.
 			exec(`INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,actor_name,source,baseline)
    SELECT 'driver',id,full_name,track,'',CASE track WHEN 'employment' THEN 'active' ELSE availability_status END,$1,'Fixture','test',true FROM drivers CROSS JOIN (VALUES('employment'),('availability')) tracks(track)`, monday.AddDate(0, 0, -7))
@@ -301,7 +302,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			// Shop restrictions also remove the truck without losing its saved PTI.
 			truck, _ := repo.GetTruck(ctx, selected.TruckID)
-			if _, err = repo.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "shop", Version: truck.StatusVersion}); err != nil {
+			if _, err = repo.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "shop", Version: truck.StatusVersion, Reason: "PTI inspection repair"}); err != nil {
 				t.Fatal(err)
 			}
 			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
@@ -315,7 +316,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			financialAfter := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
 			matrix, err := repo.PTIMatrix(ctx)
-			if err != nil || len(matrix.Trucks) != 8 || len(matrix.Weeks) != 2 {
+			if err != nil || len(matrix.Trucks) != 7 || len(matrix.Weeks) != 2 {
 				t.Fatal("matrix omitted trucks/weeks", matrix, err)
 			}
 			ownershipBefore := scalar(`SELECT md5(string_agg(id::text||owner_id::text||active::text,',' ORDER BY id)) FROM trucks`)

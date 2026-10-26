@@ -103,7 +103,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			holdBeforeActivation := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status) VALUES($1,'shop') RETURNING id::text`, truck.ID)
+			holdBeforeActivation := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status,notes) VALUES($1,'shop','Repair required') RETURNING id::text`, truck.ID)
 			if e = fleet.ActivateStatuses(ctx, preview.Revision); e == nil {
 				t.Fatal("work-order change escaped activation fence")
 			}
@@ -127,6 +127,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 					return e
 				}
 				entry.Status = status
+				entry.StatusReason = "Reported equipment issue"
 				entry.StatusEdited = true
 				_, e = board.Save(ctx, []DriverBoardEntry{entry}, actor)
 				return e
@@ -152,7 +153,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 				if got := scalar(`SELECT availability_status FROM drivers WHERE id=$1`, d.ID); got != availability {
 					t.Fatal(label, got)
 				}
-				if got := scalar(`SELECT fleet_truck_operating_status($1)`, truck.ID); got != "ready" {
+				if got := scalar(`SELECT fleet_truck_operating_status($1)`, truck.ID); got != "in_use" {
 					t.Fatal("personal reason affected truck", got)
 				}
 			}
@@ -175,7 +176,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, "", FleetStatusChange{Status: "ready", Version: fresh.StatusVersion}); e != nil {
+			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, "", FleetStatusChange{Status: "ready", Version: fresh.StatusVersion, Reason: "Repairs checked; return to service"}); e != nil {
 				t.Fatal(e)
 			}
 			if got := scalar(`SELECT status FROM driver_board WHERE driver_id=$1`, d.ID); got != "NEW DRIVER" {
@@ -184,12 +185,12 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e = save("READY"); e != nil {
 				t.Fatal(e)
 			}
-			for _, label := range []string{"STOP", "ACCIDENT", "HOLD"} {
+			for _, label := range []string{"STOP", "ACCIDENT"} {
 				if e = save(label); e != nil {
 					t.Fatal(label, e)
 				}
 				fresh, _ = fleet.GetTruck(ctx, truck.ID)
-				if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, "", FleetStatusChange{Status: "ready", Version: fresh.StatusVersion}); e != nil {
+				if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, "", FleetStatusChange{Status: "ready", Version: fresh.StatusVersion, Reason: "Repairs checked; return to service"}); e != nil {
 					t.Fatal(e)
 				}
 				if got := scalar(`SELECT status FROM driver_board WHERE driver_id=$1`, d.ID); got != "READY" {
@@ -257,14 +258,14 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e = save("READY"); e != nil {
 				t.Fatal(e)
 			}
-			one := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status) VALUES($1,'shop') RETURNING id::text`, truck.ID)
-			two := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status) VALUES($1,'out_of_service') RETURNING id::text`, truck.ID)
+			one := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status,notes) VALUES($1,'shop','Repair required') RETURNING id::text`, truck.ID)
+			two := scalar(`INSERT INTO maintenance_records(truck_id,dispatch_status,notes) VALUES($1,'out_of_service','Engine replacement') RETURNING id::text`, truck.ID)
 			exec(`UPDATE maintenance_records SET dispatch_status='' WHERE id=$1`, one)
 			if got := scalar(`SELECT status FROM driver_board WHERE driver_id=$1`, d.ID); got != "STOP" {
 				t.Fatal("one release cleared another hold", got)
 			}
 			fresh, _ = fleet.GetTruck(ctx, truck.ID)
-			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "ready", Version: fresh.StatusVersion}); e == nil {
+			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "ready", Version: fresh.StatusVersion, Reason: "Repairs checked; return to service"}); e == nil {
 				t.Fatal("manual release bypassed work order")
 			}
 			exec(`UPDATE maintenance_records SET dispatch_status='' WHERE id=$1`, two)
@@ -290,7 +291,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 				t.Fatal("partner's personal status affected main driver", got)
 			}
 			fresh, _ = fleet.GetTruck(ctx, truck.ID)
-			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "ready", Version: fresh.StatusVersion}); e != nil {
+			if _, e = fleet.ChangeTruckCondition(ctx, truck.ID, actor, FleetStatusChange{Status: "ready", Version: fresh.StatusVersion, Reason: "Repairs checked; return to service"}); e != nil {
 				t.Fatal(e)
 			}
 			if got := scalar(`SELECT availability_status FROM drivers WHERE id=$1`, partner.ID); got != "family_issue" {

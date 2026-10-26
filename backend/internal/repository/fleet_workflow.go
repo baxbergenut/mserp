@@ -36,7 +36,7 @@ func requireDispatchableTruck(ctx context.Context, tx pgx.Tx, driver string) err
 	if err = tx.QueryRow(ctx, `SELECT fleet_truck_operating_status(id),active FROM trucks WHERE id=$1`, truck).Scan(&state, &active); err != nil {
 		return err
 	}
-	if !active || state != "ready" {
+	if !active || (state != "ready" && state != "in_use") {
 		return ErrTruckUnavailable
 	}
 	return nil
@@ -86,9 +86,12 @@ func validateMaintenanceWorkflow(in *MaintenanceInput, old MaintenanceRecord) er
 		return invalid("choose a valid work stage")
 	}
 	switch *in.DispatchStatus {
-	case "", "shop", "out_of_service", "hold":
+	case "", "shop", "out_of_service":
 	default:
 		return invalid("choose a valid truck status")
+	}
+	if *in.DispatchStatus != "" && *in.DispatchStatus != old.DispatchStatus && strings.TrimSpace(in.Notes) == "" {
+		return invalid("Specify a reason in work-order notes")
 	}
 	switch in.WaitingOn {
 	case "", "shop", "diagnosis", "approval", "parts", "pickup":
