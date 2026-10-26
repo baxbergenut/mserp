@@ -99,6 +99,15 @@ try {
   await page.screenshot({path:join(artifacts,'trucks-gps-mobile.png'),fullPage:true,animations:'disabled'});
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('button',{name:'Expand sidebar',exact:true}).click();
+  gpsSQL(`UPDATE drivers SET availability_status='vacation' WHERE id='${driverId}';`);
+  await page.reload();
+  await expect(gpsButton('GPS update overdue')).toContainText('0');
+  await expect(page.getByText('No trucks match your filters.',{exact:true})).toBeVisible();
+  expect((await api('get','/trucks/'+inUseId)).operatingStatus).toBe('in_use');
+  gpsSQL(`UPDATE drivers SET availability_status='active' WHERE id='${driverId}';`);
+  await page.reload();
+  await expect(gpsButton('GPS update overdue')).toContainText('1');
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
   gpsSQL(`UPDATE five_eld_locations SET reported_at=now() WHERE vin='${gpsVIN}';`);
   await page.reload();
   await expect(gpsButton('GPS update overdue')).toContainText('0');

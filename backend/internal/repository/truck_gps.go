@@ -22,6 +22,9 @@ LEFT JOIN LATERAL (
 ) gps ON true
 LEFT JOIN LATERAL (
  SELECT CASE WHEN fleet_truck_operating_status(t.id)<>'in_use' THEN ''
+  WHEN NOT EXISTS(SELECT 1 FROM drivers operator
+   WHERE operator.active AND operator.availability_status<>'vacation'
+    AND fleet_status_driver_truck(operator.id)=t.id) THEN ''
   WHEN gps.reported_at IS NULL THEN 'missing'
   WHEN gps.reported_at<now()-interval '168 hours' THEN 'overdue'
   ELSE '' END AS alert

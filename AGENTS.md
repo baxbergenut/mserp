@@ -2471,6 +2471,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Trucks directory/profile GPS health reads the freshest trusted cached Five ELD
   or Samsara observation. Only In use trucks show GPS update overdue (>168 hours)
   or No GPS data. These warnings never infer movement or change status/history.
+  Suppress both warnings when all employed direct/current team operators are on
+  Vacation; other availability statuses remain eligible. Returning from Vacation
+  restores eligibility without altering the truck's status or GPS timestamps.
   `truck_gps.go` guards ambiguous/duplicate VINs, unavailable and future reports;
   server-side `gpsAlert` filters/counts follow search. No extra polling/storage.
   Existing map/Status Board source choices stay unchanged. See FLEET_STATUSES.md.

@@ -102,4 +102,57 @@ func verifyTruckGPSAlerts(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	if before != after {
 		t.Fatal("GPS reads/updates wrote lifecycle history", before, after)
 	}
+	// Vacation suppresses both warning kinds, without changing lifecycle or
+	// hiding the last observation. Home/rest remain eligible by design.
+	five(0, "8 days")
+	availability := func(n int, status string) {
+		t.Helper()
+		exec(`UPDATE drivers SET availability_status=$2 WHERE id=(SELECT driver_id FROM truck_driver_assignments WHERE truck_id=$1 AND unassigned_at IS NULL)`, ids[n], status)
+	}
+	checkAlert := func(n int, want string) {
+		t.Helper()
+		truck, err := fleet.GetTruck(ctx, ids[n])
+		must(err)
+		if truck.GPSAlert != want || truck.OperatingStatus != "in_use" {
+			t.Fatalf("vacation GPS-%02d: %+v; want %q", n, truck, want)
+		}
+		page, err := fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 25}, fmt.Sprintf("GPS-%02d", n), TruckFilters{GPSAlert: "overdue"})
+		must(err)
+		count := 0
+		if want == "overdue" {
+			count = 1
+		}
+		if page.Total != count || page.GPSAlertCounts["overdue"] != count {
+			t.Fatal("vacation filter/counts", page)
+		}
+		missing := 0
+		if want == "missing" {
+			missing = 1
+		}
+		if page.GPSAlertCounts["missing"] != missing {
+			t.Fatal("vacation missing count", page)
+		}
+		if n == 0 && truck.GPSReportedAt == nil {
+			t.Fatal("vacation erased report timestamp")
+		}
+	}
+	availability(0, "vacation")
+	availability(1, "vacation")
+	checkAlert(0, "")
+	checkAlert(1, "")
+	availability(0, "active")
+	availability(1, "home")
+	checkAlert(0, "overdue")
+	checkAlert(1, "missing")
+	availability(0, "vacation")
+	var teammate string
+	must(pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('GPS Team Operator','gps team operator','cpm',0.7) RETURNING id`).Scan(&teammate))
+	exec(`INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) SELECT driver_id,$2,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date-7 FROM truck_driver_assignments WHERE truck_id=$1 AND unassigned_at IS NULL`, ids[0], teammate)
+	checkAlert(0, "overdue")
+	exec(`UPDATE drivers SET availability_status='vacation' WHERE id=$1`, teammate)
+	checkAlert(0, "")
+	exec(`UPDATE drivers SET availability_status='active' WHERE id=$1`, teammate)
+	checkAlert(0, "overdue")
+	exec(`UPDATE driver_teams SET end_week=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date WHERE team_driver_id=$1`, teammate)
+	checkAlert(0, "")
 }
