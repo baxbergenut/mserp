@@ -54,8 +54,8 @@ try {
   await expect(rows).toHaveCount(14);
   await expect(page.getByText('Green = confirmed load', { exact: false })).toHaveCount(0);
   expect(await area.getByRole('columnheader').allTextContents()).toEqual(['Driver', 'Truck', '', 'Mon10/12', 'Tue10/13', 'Wed10/14', 'Thu10/15', 'Fri10/16', 'Sat10/17', 'Sun10/18', 'Total gross', 'Total miles', 'RPM', 'Driver gross', 'Rate balance']);
-  await expect(page.getByLabel('Driver RPM for Alice Layout', { exact: true })).toHaveText('$2.57');
-  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('—');
+  await expect(page.getByLabel('Total gross RPM for Alice Layout', { exact: true })).toHaveText('$4.19');
+  await expect(page.getByLabel('Total gross RPM for Bob Layout', { exact: true })).toHaveText('—');
   const alice = rows.filter({ hasText: 'Alice Layout' });
   await expect(alice.locator('[data-gross-field=driverTotal]')).toHaveText('$1,350.35');
   await expect(alice.locator('[data-gross-field=milesTotal]')).toHaveText('525.60');
@@ -63,10 +63,10 @@ try {
   const alpha = area.getByRole('row', { name: 'Alpha totals', exact: true });
   await expect(alpha.getByRole('cell').nth(1)).toHaveText('525.60');
   await expect(alpha.getByRole('cell').last()).toHaveText('+$849.65');
-  await expect(alpha.getByRole('cell').nth(2)).toHaveText('$2.57');
+  await expect(alpha.getByRole('cell').nth(2)).toHaveText('$4.19');
   await expect(alpha.getByRole('cell').nth(3)).toHaveText('$1,350.35');
   const footer = area.locator('tfoot td');
-  await expect(footer.nth(2)).toHaveText('$3.33');
+  await expect(footer.nth(2)).toHaveText('$5.14');
   await expect(footer.nth(3)).toHaveText('$1,750.35');
   await expect(alice.locator('[data-gross-field=driverTotal]')).not.toContainText('RPM');
   await expect(footer.nth(1)).toHaveText('525.60');
@@ -103,7 +103,7 @@ try {
   // Editing a single-load day updates the weekly RPM through delayed autosave.
   const bobMiles = page.getByLabel(`Bob Layout, ${week}, miles`, { exact: true });
   await bobMiles.click(); await page.keyboard.type('200'); await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveText('$2.00');
+  await expect(page.getByLabel('Total gross RPM for Bob Layout', { exact: true })).toHaveText('$2.50');
   await expect.poll(() => entries.find(e => e.driverId === bobId).miles).toBe('200');
   await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
 
@@ -215,16 +215,16 @@ try {
   await fixtures(legacy);
   await legacy.addInitScript(() => sessionStorage.setItem('mserp-navigation-v1:layout:/gross-board:view:page:dispatcher', JSON.stringify('a')));
   await legacy.goto(`${base}/gross-board`);
-  await expect(legacy.getByLabel('Driver RPM for Alice Layout', { exact: true })).toBeVisible();
-  await expect(legacy.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveCount(0);
+  await expect(legacy.getByLabel('Total gross RPM for Alice Layout', { exact: true })).toBeVisible();
+  await expect(legacy.getByLabel('Total gross RPM for Bob Layout', { exact: true })).toHaveCount(0);
   expect(await legacy.getByRole('main').evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
   expect(await legacy.getByRole('region', { name: 'Weekly gross board' }).evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
   await legacy.getByRole('button', { name: 'Dispatcher filter', exact: true }).click();
   await expect(legacy.getByRole('checkbox', { name: 'Alpha', exact: true })).toBeChecked();
   await expect(legacy.getByRole('checkbox', { name: 'Bravo', exact: true })).not.toBeChecked();
   await legacy.goto(`${base}/gross-board?driverId=${bobId}&date=${week}&slot=0&loadNumber=LOAD-${bobId}-0&from=driver-pay`);
-  await expect(legacy.getByLabel('Driver RPM for Alice Layout', { exact: true })).toHaveCount(1);
-  await expect(legacy.getByLabel('Driver RPM for Bob Layout', { exact: true })).toHaveCount(1);
+  await expect(legacy.getByLabel('Total gross RPM for Alice Layout', { exact: true })).toHaveCount(1);
+  await expect(legacy.getByLabel('Total gross RPM for Bob Layout', { exact: true })).toHaveCount(1);
   await legacy.close();
   expect(errors).toEqual([]);
   console.log('Gross Board layout checks passed: checkbox filters, legacy views, filtered totals, weekly RPM/autosave, column order, balance history, two-stage wheel/keyboard scrolling, frozen columns, resize, and Back restoration.');

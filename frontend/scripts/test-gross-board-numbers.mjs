@@ -24,6 +24,7 @@ const errors = [], invalidWrites = [];
 const fields = ['originalRate', 'driverRate', 'miles', 'enteredOriginalRate', 'enteredMiles'];
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
+  await page.clock.setFixedTime(new Date('2026-10-16T14:00:00Z'));
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname.replace('/lookups/','/').slice(4);
@@ -167,6 +168,7 @@ try {
   await expect(footer.nth(0)).toHaveText('$5,108.00');
   await expect(footer.nth(3)).toHaveText('$5,027.50');
   await expect(footer.nth(1)).toHaveText('425.25');
+  await expect(footer.nth(2)).toHaveText('$12.01');
   await expect(amount('total gross', '2026-10-14')).toHaveText('$67.00');
   await expect(amount('total driver rate', '2026-10-14')).toHaveText('$67.00');
   expect(invalidWrites).toEqual([]);

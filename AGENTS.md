@@ -469,7 +469,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   no extra GET, concurrent typing, modal conflicts, reconnect and latency checks.
   Dispatcher checkboxes share `components/management/BoardFilter.tsx` with Status
   Board and remember multiple selections (legacy single choices still restore).
-  Weekly driver RPM has its own column. After Sunday, columns are Total gross,
+  Weekly RPM has its own column and uses total gross divided by total miles for
+  driver rows, dispatcher subtotals and board totals; zero miles displays a dash. After Sunday, columns are Total gross,
   Total miles, RPM, Driver gross, and Rate balance. Total gross is the shared display
   name across boards, Daily loads, balance history and payroll; legacy API/storage
   field names remain compatible. `BoardScrollArea.tsx` scrolls main until the table is
