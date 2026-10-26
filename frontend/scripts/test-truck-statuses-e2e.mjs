@@ -8,6 +8,10 @@ import { chromium, expect } from '@playwright/test';
 const access = JSON.parse(await readFile(process.env.MSERP_REVIEW_ACCESS_FILE, 'utf8'));
 const database = new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
 if (!['localhost', '127.0.0.1'].includes(database.hostname) || !database.pathname.endsWith('_test') || !['localhost', '127.0.0.1'].includes(new URL(access.base).hostname) || !/^review_[a-f0-9]+$/.test(access.schema)) throw Error('Disposable local review required');
+const cliDatabase = new URL(database); cliDatabase.searchParams.set('search_path', access.schema + ',public'); cliDatabase.searchParams.set('role', 'mserp_app');
+const cli = args => execFileSync(join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE), process.platform === 'win32' ? 'api.exe' : 'api'), args, {cwd: dirname(process.env.MSERP_REVIEW_ACCESS_FILE), env: {...process.env, DATABASE_URL: cliDatabase.toString(), DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', RELAY_API_KEY: 'test-disabled', RELAY_PRODUCTION_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: access.base, SCHEDULED_SYNCS_ENABLED: 'false'}, encoding: 'utf8', windowsHide: true});
+const preview = JSON.parse(cli(['-fleet-status-preview']));
+if (!preview.enabled) cli(['-fleet-status-activate', preview.revision]);
 const prefix = 'STATUS-' + randomUUID().slice(0, 8).toUpperCase();
 const driverId = randomUUID(), inUseId = randomUUID();
 execFileSync(process.env.PSQL_PATH || 'psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', database.toString()], {
@@ -34,6 +38,8 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(u => u.pathname !== '/login');
   const session = await (await page.request.get(access.base + '/api/auth/session')).json();
+  const labels = {ready: 'Ready', shop: 'Shop', in_use: 'In use', out_of_service: 'OOS', terminated: 'Terminated'};
+  const card = code => page.getByRole('group', {name: 'Filter truck status'}).getByRole('button', {name: new RegExp('^' + (labels[code] || 'All') + ',')});
   const headers = { 'X-CSRF-Token': session.csrfToken, Origin: access.base };
   const api = async (method, path, data) => {
     const r = await page.request[method](access.base + '/api' + path, { headers, ...(data ? { data } : {}) });
@@ -42,6 +48,7 @@ try {
   };
   const first = await api('get', `/trucks?page=1&pageSize=25&search=${prefix}`);
   expect(first.total).toBe(30);
+  expect(first.statusCounts).toEqual({ready:1,shop:1,in_use:1,out_of_service:1,terminated:26});
   expect(first.items.slice(0, 4).map(t => t.operatingStatus)).toEqual(['ready', 'shop', 'in_use', 'out_of_service']);
   const second = await api('get', `/trucks?page=2&pageSize=25&search=${prefix}`);
   expect(second.items).toHaveLength(5);
@@ -49,17 +56,32 @@ try {
   await page.goto(access.base + '/trucks');
   await page.getByPlaceholder('Search trucks…').fill(prefix);
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(25);
-  expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Unit', 'Equipment', 'Driver', 'Mileage', 'Status']);
-  await expect(page.getByRole('table').locator('tbody tr td:last-child')).toHaveText(first.items.map(t => ({ ready: 'Ready', shop: 'Shop', in_use: 'In use', out_of_service: 'OOS', terminated: 'Terminated' })[t.operatingStatus]));
+  expect(await page.getByRole('columnheader').allTextContents()).toEqual(['Unit', 'Equipment', 'Driver', 'Status', 'Status notes']);
+  await expect(page.getByRole('table').locator('tbody tr td:nth-child(4)')).toHaveText(first.items.map(t => ({ ready: 'Ready', shop: 'Shop', in_use: 'In use', out_of_service: 'OOS', terminated: 'Terminated' })[t.operatingStatus]));
+  await expect(page.getByRole('table').locator('tbody tr td:last-child')).toHaveText(first.items.map(t => t.statusReason?.trim() || '—'));
+  await expect(card('')).toHaveAttribute('aria-pressed', 'true');
+  await expect(card('')).toContainText('30');
   await page.screenshot({ path: join(artifacts, 'trucks-all.png'), fullPage: true });
+  await page.getByRole('cell', { name: 'Brake repair', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp('/trucks/detail\\?id=' + first.items[1].id));
+  await page.goBack();
+  const readyRow = page.getByRole('row', { name: `Open truck ${prefix}-Z-READY details`, exact: true });
+  await readyRow.focus();
+  await readyRow.press('Enter');
+  await expect(page).toHaveURL(new RegExp('/trucks/detail\\?id=' + first.items[0].id));
+  await page.goBack();
   for (const [status, count] of [['ready', 1], ['shop', 1], ['in_use', 1], ['out_of_service', 1], ['terminated', 25]]) {
-    await page.getByLabel('Filter truck status').selectOption(status);
+    await card(status).click();
+    await expect(card(status)).toHaveAttribute('aria-pressed', 'true');
+    await expect(card('')).toHaveAttribute('aria-pressed', 'false');
+    await expect(card(status)).toContainText(status === 'terminated' ? '26' : '1');
     await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(count);
     const filtered = await api('get', `/trucks?page=1&pageSize=25&search=${prefix}&status=${status}`);
+    expect(filtered.statusCounts).toEqual(first.statusCounts);
     expect(filtered.total).toBe(status === 'terminated' ? 26 : 1);
   }
-  await page.getByLabel('Filter truck status').selectOption('in_use');
-  await page.getByRole('link', { name: prefix + '-X-USE', exact: true }).click();
+  await card('in_use').click();
+  await page.getByRole('row', { name: `Open truck ${prefix}-X-USE details`, exact: true }).locator('td:nth-child(3)').click();
   await expect(page.getByRole('button', { name: 'Change status', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Delete truck', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit truck', exact: true }).click();
@@ -84,7 +106,7 @@ try {
   expect((await page.request.patch(access.base + '/api/trucks/' + inUseId + '/status', { headers, data: { status: 'terminated', version: truck.statusVersion, reason: 'Cannot terminate employed crew' } })).ok()).toBe(false);
   expect((await page.request.patch(access.base + '/api/trucks/' + inUseId + '/condition', { headers, data: { status: 'shop', version: truck.statusVersion, reason: '' } })).ok()).toBe(false);
   await page.goBack();
-  await expect(page.getByLabel('Filter truck status')).toHaveValue('in_use');
+  await expect(card('in_use')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByPlaceholder('Search trucks…')).toHaveValue(prefix);
   expect(errors).toEqual([]);
   console.log('Truck status E2E passed: server pagination/order/filtering, required reasons, OOS assignment preservation, returns, legacy endpoint validation, navigation memory and profile actions. Screenshots: ' + artifacts);

@@ -88,9 +88,14 @@ reasons in truck status details, without rewriting profile or board notes.
   unchanged. Dates use New York; effectiveAt cannot precede the latest transition
   or lie in the future. Board restrictions cannot predate current assignment.
 
-The directory has Unit (with owner), Equipment, Driver, Mileage and Status.
+The directory has Unit (with owner), Equipment, Driver, Status and Status notes.
+Status notes show the current manual and work-order restriction reasons. Clicking
+anywhere on a truck row opens its profile; Enter/Space support keyboard navigation.
 IRP documents and permission-gated edit/delete/status actions are on the profile.
-All statuses show by default; search/filter/page memory survives navigation.
+Colored status cards show server-side counts for the current search, independent
+of the selected status and pagination. Each card filters the table; the selected
+card has a checkmark and highlighted border. All statuses show by default;
+search/filter/page memory survives navigation.
 Visible pages refresh on focus and every 30 seconds without replacing drafts.
 
 History retains actor/name/source/reason snapshots, action ID, effective and

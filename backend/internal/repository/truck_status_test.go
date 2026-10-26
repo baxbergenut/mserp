@@ -217,10 +217,18 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != truck.ID {
 		t.Fatal("status pagination", page)
 	}
+	if page.StatusCounts["ready"] != 1 || page.StatusCounts["in_use"] != 1 || len(page.StatusCounts) != 5 {
+		t.Fatal("status card counts must ignore the selected status and page size", page.StatusCounts)
+	}
 	page, e = fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 25}, "TS-")
 	must(e)
 	if len(page.Items) != 2 || page.Items[0].ID != truck.ID || page.Items[1].ID != idle.ID {
 		t.Fatal("priority ordering", page)
+	}
+	page, e = fleet.ListTrucksPage(ctx, Pagination{Page: 1, PageSize: 25}, "TS-100", "in_use")
+	must(e)
+	if page.Total != 0 || page.StatusCounts["ready"] != 1 || page.StatusCounts["in_use"] != 0 {
+		t.Fatal("status cards must count the search even when the selected status is empty", page)
 	}
 	if _, e = pool.Exec(ctx, `UPDATE trucks SET status='maintenance',status_reason='' WHERE id=$1`, truck.ID); e == nil {
 		t.Fatal("direct writer bypassed required reason")

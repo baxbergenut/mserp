@@ -600,6 +600,9 @@ export interface PrePassFleetChange {
 }
 
 export type TruckOperatingStatus = "ready" | "in_use" | "shop" | "out_of_service" | "terminated";
+export interface TruckPage extends PaginatedResponse<Truck> {
+ statusCounts: Record<TruckOperatingStatus, number>;
+}
 export interface Truck {
  statusReason?: string;
 	statusVersion?: number;

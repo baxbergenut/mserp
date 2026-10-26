@@ -6,8 +6,8 @@ import { useQuickCreate } from "@/app/lib/topNavigation";
 import { useViewState } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "@/app/components/AccessLink";
-import { Truck as TruckIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Truck as TruckIcon } from "lucide-react";
 import {
   createTruck,
   fetchDriverOptions,
@@ -19,7 +19,7 @@ import { renderPDFPages } from "../lib/pdf";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {FleetStatusBadge,operatingStatus} from "../components/FleetStatusBadge";
 import { conditionLabels } from "../lib/fleetStatus";
-import type { Truck, TruckInput } from "../lib/types";
+import type { Truck, TruckInput, TruckPage } from "../lib/types";
 import {
   EmptyState,
   ErrorBanner,
@@ -29,12 +29,21 @@ import {
   Modal,
   TablePagination,
   TableShell,
-  controlClass,
 } from "../components/management/ManagementUI";
 import { emptyTruckInput, TruckForm } from "./TruckForm";
 import { DataTruckSetup } from "./DataTruckSetup";
 
+const statusCards = [
+  { code: "", label: "All", color: "text-zinc-200 bg-zinc-500/5", selected: "border-zinc-400 ring-zinc-400/30" },
+  { code: "ready", label: conditionLabels.ready, color: "text-emerald-400 bg-emerald-500/5", selected: "border-emerald-400 ring-emerald-400/30" },
+  { code: "shop", label: conditionLabels.shop, color: "text-amber-400 bg-amber-500/5", selected: "border-amber-400 ring-amber-400/30" },
+  { code: "in_use", label: conditionLabels.in_use, color: "text-blue-400 bg-blue-500/5", selected: "border-blue-400 ring-blue-400/30" },
+  { code: "out_of_service", label: conditionLabels.out_of_service, color: "text-red-400 bg-red-500/5", selected: "border-red-400 ring-red-400/30" },
+  { code: "terminated", label: conditionLabels.terminated, color: "text-zinc-400 bg-zinc-500/5", selected: "border-zinc-400 ring-zinc-400/30" },
+] as const;
+
 export default function TrucksPage() {
+  const router = useRouter();
   const permissions = usePermissions();
   const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
@@ -44,6 +53,7 @@ export default function TrucksPage() {
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<TruckPage["statusCounts"] | null>(null);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,6 +75,7 @@ export default function TrucksPage() {
       setTrucks(truckPage.items);
       setPage(truckPage.page);
       setTotal(truckPage.total);
+      setStatusCounts(truckPage.statusCounts);
       setTotalPages(truckPage.totalPages);
       setError("");
     } catch (reason) {
@@ -162,7 +173,19 @@ export default function TrucksPage() {
     <div className="space-y-5 animate-fade-in">
 
       {error && <ErrorBanner message={error} />}
-      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="w-40 shrink-0"><select aria-label="Filter truck status" className={controlClass} value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">All statuses</option>{Object.entries(conditionLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
+      <div role="group" aria-label="Filter truck status" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {statusCards.map(card => {
+          const selected = status === card.code;
+          const count = statusCounts ? (card.code ? statusCounts[card.code] : Object.values(statusCounts).reduce((sum, value) => sum + value, 0)) : null;
+          return <button key={card.code} type="button" aria-pressed={selected} aria-label={`${card.label}, ${count ?? "loading"} trucks`}
+            onClick={() => { setStatus(card.code); setPage(1); }}
+            className={`rounded-xl border p-4 text-left transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${card.color} ${selected ? `${card.selected} ring-1` : "border-zinc-800"}`}>
+            <span className="flex items-center justify-between gap-2 text-xs font-medium">{card.label}<Check aria-hidden="true" className={`h-4 w-4 ${selected ? "" : "invisible"}`} /></span>
+            <span className="mt-2 block text-2xl font-semibold tabular-nums">{count === null ? "—" : count.toLocaleString()}</span>
+          </button>;
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-3"><ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search trucks…" /><div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader
         icon={TruckIcon}
         title="Trucks"
 
@@ -180,16 +203,19 @@ export default function TrucksPage() {
               <th className="px-4 py-3 font-medium">Unit</th>
               <th className="px-4 py-3 font-medium">Equipment</th>
               <th className="px-4 py-3 font-medium">Driver</th>
-              <th className="px-4 py-3 font-medium">Mileage</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Status notes</th>
             </tr></thead>
             <tbody>{trucks.map((truck) => (
-              <tr key={truck.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
-                <td className="px-4 py-3"><Link href={`/trucks/detail?id=${truck.id}`} className="font-mono font-medium text-zinc-200 transition hover:text-blue-400">{truck.unitNumber}</Link><div className="mt-0.5 text-[11px] text-zinc-600">{truck.ownerName}</div></td>
+              <tr key={truck.id} tabIndex={0} aria-label={`Open truck ${truck.unitNumber} details`}
+                onClick={() => router.push(`/trucks/detail?id=${truck.id}`)}
+                onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); router.push(`/trucks/detail?id=${truck.id}`); } }}
+                className="cursor-pointer border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15 focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:-outline-offset-2">
+                <td className="px-4 py-3"><span className="font-mono font-medium text-zinc-200">{truck.unitNumber}</span><div className="mt-0.5 text-[11px] text-zinc-600">{truck.ownerName}</div></td>
                 <td className="px-4 py-3"><div className="text-zinc-300">{[truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—"}</div><div className="mt-0.5 font-mono text-[11px] text-zinc-600">{truck.vin ?? truck.licensePlate ?? "No VIN or plate"}</div></td>
                 <td className="px-4 py-3 text-zinc-400">{truck.driverName ?? "Unassigned"}</td>
-                <td className="px-4 py-3 font-mono tabular-nums text-zinc-400">{truck.mileage?.toLocaleString() ?? "—"}</td>
                 <td className="px-4 py-3"><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady /></td>
+                <td className="max-w-sm whitespace-pre-line break-words px-4 py-3 text-xs text-zinc-400">{truck.statusReason?.trim() || "—"}</td>
               </tr>
             ))}</tbody>
           </table>

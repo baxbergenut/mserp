@@ -625,48 +625,72 @@ func (r *FleetRepository) ListTrucks(ctx context.Context, statusFilter ...string
 	return trucks, rows.Err()
 }
 
+type TruckPage struct {
+	Page[Truck]
+	StatusCounts map[string]int `json:"statusCounts"`
+}
+
 func (r *FleetRepository) ListTrucksPage(
 	ctx context.Context,
 	pagination Pagination,
 	search string,
 	statusFilter ...string,
-) (Page[Truck], error) {
+) (TruckPage, error) {
 	status := ""
 	if len(statusFilter) > 0 {
 		status = statusFilter[0]
 	}
-	const where = `
+	const searchWhere = `
 WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
-	t.license_plate, d.full_name) ILIKE '%' || $1 || '%') AND ($2='' OR fleet_truck_operating_status(t.id)=$2)`
-	var total int
-	err := r.pool.QueryRow(ctx, `
-		SELECT count(*)
+	t.license_plate, d.full_name) ILIKE '%' || $1 || '%')`
+	const where = searchWhere + ` AND ($2='' OR fleet_truck_operating_status(t.id)=$2)`
+	counts := map[string]int{"ready": 0, "shop": 0, "in_use": 0, "out_of_service": 0, "terminated": 0}
+	countRows, err := r.pool.Query(ctx, `
+		SELECT fleet_truck_operating_status(t.id), count(*)
 		FROM trucks t
 		LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
-		LEFT JOIN drivers d ON d.id = a.driver_id`+where, search, status).Scan(&total)
+		LEFT JOIN drivers d ON d.id = a.driver_id`+searchWhere+` GROUP BY 1`, search)
 	if err != nil {
-		return Page[Truck]{}, err
+		return TruckPage{}, err
+	}
+	total := 0
+	for countRows.Next() {
+		var code string
+		var count int
+		if err = countRows.Scan(&code, &count); err != nil {
+			countRows.Close()
+			return TruckPage{}, err
+		}
+		counts[code] = count
+		if status == "" || code == status {
+			total += count
+		}
+	}
+	err = countRows.Err()
+	countRows.Close()
+	if err != nil {
+		return TruckPage{}, err
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectTrucksSQL+where+`
 		ORDER BY CASE fleet_truck_operating_status(t.id) WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $3 OFFSET $4`,
 		search, status, pagination.PageSize, pagination.Offset())
 	if err != nil {
-		return Page[Truck]{}, err
+		return TruckPage{}, err
 	}
 	defer rows.Close()
 	trucks := make([]Truck, 0, pagination.PageSize)
 	for rows.Next() {
 		truck, scanErr := scanTruck(rows)
 		if scanErr != nil {
-			return Page[Truck]{}, scanErr
+			return TruckPage{}, scanErr
 		}
 		trucks = append(trucks, truck)
 	}
 	if err := rows.Err(); err != nil {
-		return Page[Truck]{}, err
+		return TruckPage{}, err
 	}
-	return NewPage(trucks, total, pagination), nil
+	return TruckPage{Page: NewPage(trucks, total, pagination), StatusCounts: counts}, nil
 }
 
 func (r *FleetRepository) GetTruck(ctx context.Context, id string) (Truck, error) {
