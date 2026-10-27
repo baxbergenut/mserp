@@ -44,10 +44,11 @@ type PrePassTruckMapping struct {
 	Count       int    `json:"count"`
 }
 type PrePassTruckLinks struct {
-	DateFrom string                `json:"dateFrom"`
-	Groups   []PrePassTruckGroup   `json:"groups"`
-	Trucks   []PrePassTruckChoice  `json:"trucks"`
-	Mappings []PrePassTruckMapping `json:"mappings"`
+	Transactions []Toll                `json:"transactions"`
+	DateFrom     string                `json:"dateFrom"`
+	Groups       []PrePassTruckGroup   `json:"groups"`
+	Trucks       []PrePassTruckChoice  `json:"trucks"`
+	Mappings     []PrePassTruckMapping `json:"mappings"`
 }
 
 func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string) (PrePassTruckLinks, error) {
@@ -60,6 +61,11 @@ func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string) (Pr
 	if _, err := time.Parse(time.DateOnly, out.DateFrom); err != nil {
 		return out, &TollLinkError{"Select a valid posting date."}
 	}
+	transactions, err := r.attentionTolls(ctx, out.DateFrom)
+	if err != nil {
+		return out, err
+	}
+	out.Transactions = transactions
 	rows, err := r.pool.Query(ctx, `SELECT coalesce(prepass_environment,'production'),prepass_truck_key(prepass_tag_id,equipment_unit),
  array_agg(DISTINCT equipment_unit ORDER BY equipment_unit),array_agg(DISTINCT transponder_or_plate ORDER BY transponder_or_plate),count(*),sum(amount)::text,min(exit_date)::text,max(exit_date)::text
  FROM tolls WHERE truck_id IS NULL AND posting_date >= $1::date
@@ -113,13 +119,14 @@ func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string) (Pr
 }
 
 type PrePassTruckLinkInput struct {
-	ID          string `json:"id"`
-	Environment string `json:"environment"`
-	IdentityKey string `json:"identityKey"`
-	TruckID     string `json:"truckId"`
-	From        string `json:"from"`
-	To          string `json:"to"`
-	Revision    string `json:"revision"`
+	TransactionIDs []string `json:"transactionIds,omitempty"`
+	ID             string   `json:"id"`
+	Environment    string   `json:"environment"`
+	IdentityKey    string   `json:"identityKey"`
+	TruckID        string   `json:"truckId"`
+	From           string   `json:"from"`
+	To             string   `json:"to"`
+	Revision       string   `json:"revision"`
 }
 type PrePassTruckPreview struct {
 	Count    int      `json:"count"`
@@ -130,6 +137,9 @@ type PrePassTruckPreview struct {
 }
 
 func validatePrePassLink(in PrePassTruckLinkInput) error {
+	if in.TransactionIDs != nil {
+		return validateTollSelection(in.TransactionIDs)
+	}
 	if in.Environment != "production" && in.Environment != "nonproduction" {
 		return &TollLinkError{"Invalid PrePass environment."}
 	}
@@ -192,6 +202,9 @@ func prePassPreview(ctx context.Context, tx pgx.Tx, in PrePassTruckLinkInput) (P
 	return out, ids, nil
 }
 func (r *TollRepository) PreviewPrePassTruckLink(ctx context.Context, in PrePassTruckLinkInput) (PrePassTruckPreview, error) {
+	if in.TransactionIDs != nil {
+		return r.previewSelectedTolls(ctx, in)
+	}
 	if err := validatePrePassLink(in); err != nil {
 		return PrePassTruckPreview{}, err
 	}
@@ -204,6 +217,9 @@ func (r *TollRepository) PreviewPrePassTruckLink(ctx context.Context, in PrePass
 	return out, err
 }
 func (r *TollRepository) LinkPrePassTruck(ctx context.Context, in PrePassTruckLinkInput, actor string) error {
+	if in.TransactionIDs != nil {
+		return r.linkSelectedTolls(ctx, in, actor)
+	}
 	if err := validatePrePassLink(in); err != nil {
 		return err
 	}

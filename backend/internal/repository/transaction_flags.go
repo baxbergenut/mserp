@@ -229,10 +229,10 @@ func transactionFlags(ctx context.Context, pool *pgxpool.Pool, kind string, ids 
 			t.total_amount_paid > 0, t.relay_environment = 'production'
 			FROM fuel_transactions t WHERE t.id = ANY($1::uuid[])`
 	case "toll":
-		query = `SELECT id::text, ARRAY[equipment_unit], '', exit_date,
+		query = `SELECT t.id::text, ARRAY[COALESCE(tr.unit_number,t.equipment_unit)], '', t.exit_date,
 			(entry_date IS NULL OR entry_date <= exit_date), amount > 0,
 			(prepass_environment IS NULL OR prepass_environment = 'production')
-			FROM tolls WHERE id = ANY($1::uuid[])`
+			FROM tolls t LEFT JOIN trucks tr ON tr.id=t.truck_id WHERE t.id = ANY($1::uuid[])`
 	default:
 		return nil, fmt.Errorf("unsupported transaction kind %q", kind)
 	}

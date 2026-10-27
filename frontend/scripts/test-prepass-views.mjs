@@ -28,7 +28,7 @@ const server = createServer(async (req, res) => {
       if (p === '/api/tasks/count') return send({ count: 0 });
       if (p === '/api/toll-dashboard') return send({ totals: { spend: 0, transactionCount: 0, truckCount: 0 }, monthly: [], weekly: [], trucks: [], states: [], agencies: [] });
       if (p === '/api/tolls') return send({ items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, summary: { amount: 0, trucks: 0 }, options: { units: [], agencies: [] } });
-      if (p === '/api/tolls/truck-links') return send({ dateFrom: '2026-09-01', groups: [], trucks: [], mappings: [] });
+      if (p === '/api/tolls/truck-links') return send({ dateFrom: '2026-09-01', transactions: [], groups: [], trucks: [], mappings: [] });
       if (p === '/api/prepass-fleet' && req.method === 'GET') return send(data);
       let raw = ''; for await (const c of req) raw += c;
       const input = raw ? JSON.parse(raw) : {};
@@ -248,7 +248,7 @@ try {
   await expect(region.getByRole('cell', { name: '777111222', exact: true })).toBeVisible();
   await expect(region.getByRole('link', { name: '003', exact: true })).toHaveAttribute('href', '/trucks/detail?id=truck-1');
   await page.getByRole('tab', { name: 'Needs attention', exact: true }).click();
-  const postedBox = await page.getByLabel('Unlinked tolls posted since').boundingBox();
+  const postedBox = await page.getByLabel('Attention tolls posted since').boundingBox();
   const refreshBox = await page.getByRole('button', { name: 'Refresh PrePass', exact: true }).boundingBox();
   assert.ok(Math.abs(postedBox.y - refreshBox.y) < 8, 'Posted since and Refresh PrePass share a toolbar');
   await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
@@ -264,6 +264,6 @@ try {
   for (const name of ['Edit', 'Remove', 'Link', 'Relink', 'Assign', 'Resolve plate']) await expect(region.getByRole('button', { name, exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Needs attention', exact: true }).click();
 
-  await expect(region).toContainText('All tolls in this date range are linked to trucks.');
+  await expect(region).toContainText('No toll transactions need attention in this date range.');
   assert.deepEqual(errors, []); console.log('PrePass browser workflows passed; screenshots saved in OS temp directory.');
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

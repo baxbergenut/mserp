@@ -161,4 +161,5 @@ func testPrePassTruckLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	if err = repo.LinkPrePassTruck(ctx, in, actor); err == nil {
 		t.Fatal("overlapping active mapping accepted")
 	}
+	testSelectedTollLinks(t, ctx, pool, actor)
 }

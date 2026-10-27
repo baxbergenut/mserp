@@ -185,7 +185,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   processes at most 100 independently and refreshes once. See
   `docs/integrations/RELAY_DRIVERS.md`.
 - PrePass truck mappings use migration 077, `repository/toll_truck_links.go`,
-  `httpapi/toll_truck_link_handlers.go`, and Tolls > Needs attention. Group by tag
+  `httpapi/toll_truck_link_handlers.go`, and Tolls > Needs attention. Migration 154
+  adds individual unlinked/flagged transaction review and selected-only atomic
+  truck linking (up to 100), with preview revisions, idempotent audit snapshots,
+  and both source/destination finalized-statement guards. Explicit links survive
+  sync and legacy mapping undo; future mapping rules stay unchanged. Transactions
+  shows PPDeviceID as Transponder below Truck, never the separate deviceNumber.
+  Legacy dated mappings group by tag
   with exact-unit fallback; never guess equivalent names or strip leading zeros.
   Date-bounded reviewed mappings resolve unlinked tolls and future imports;
   preserve existing links. Preview/save/undo use `tolls.link`; listing uses

@@ -264,7 +264,7 @@ export default function TollsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-mono font-medium text-zinc-200">{toll.truckUnit}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">{toll.readType}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-zinc-600">Transponder {toll.prePassTagId || "—"}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{routeLabel(toll)}</div>

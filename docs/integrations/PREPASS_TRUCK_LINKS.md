@@ -1,6 +1,27 @@
 # PrePass truck linking
 
-Tolls > PrePass > Needs attention groups unlinked tolls by PrePass PPDeviceID (tag), falling
+Tolls > Needs attention lists each unlinked or load-coverage-flagged transaction
+separately, including flagged transactions that already have a truck. Flags use
+the reviewed local truck when linked, falling back to the reported unit otherwise.
+The shared flag popover retains the reason and load evidence. The posting cutoff
+defaults to the first day of the previous New York month; pagination preserves
+selection across pages. Transactions shows PPDeviceID (the fleet transponder
+number) below the truck, never deviceNumber (the separate plate/device value).
+
+Select up to 100 transactions, choose one truck, preview, then Link transactions.
+Only the explicit selected IDs change; no future mapping is created. The same
+`/tolls/truck-links/preview` and `/tolls/truck-links` endpoints accept
+`transactionIds` with `truckId`, plus the save UUID and reviewed revision.
+Migration 154 records the actor, destination, immutable request revision and full
+before snapshots in `toll_transaction_links`, with per-toll provenance. Source
+details remain unchanged. Saves are atomic and idempotent, reject stale previews,
+and check finalized driver/investor statements for both old and new attribution
+under the financial and mapping locks. Explicit links survive provider resync and
+legacy mapping undo. Linking alone does not dismiss a load-coverage flag.
+
+Existing saved mappings remain available for undo. Fleet roster mapping still
+uses the dated rule workflow below. Legacy mapping API clients group unlinked
+tolls by PrePass PPDeviceID (tag), falling
 back to the exact normalized vehicle unit only when a tag is missing. Leading
 zeros, punctuation and spaces remain meaningful. A missing tag and missing unit
 cannot be mapped; investigate that identity in PrePass. No mapping is inferred
