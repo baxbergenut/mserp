@@ -146,21 +146,21 @@ type CompanyDashboard struct {
 // before period filtering so a repeat in another week never creates new revenue.
 // Conflicts are evaluated through the requested end date (not future plans).
 const companyDashboardCTE = `WITH resolved AS MATERIALIZED (
- SELECT e.driver_id,e.service_date,e.slot,e.load_number,l.id AS matched_id,
- coalesce(e.entered_original_rate,CASE WHEN l.id IS NOT NULL THEN l.total_pay ELSE e.original_rate END) AS gross,
- e.driver_rate,coalesce(e.entered_miles,CASE WHEN l.id IS NOT NULL THEN l.total_miles ELSE e.miles END) AS miles
- FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
+ SELECT e.driver_id,e.service_date,e.slot,e.load_number,l.id AS matched_id,e.load_trip_id,trip_source.review AS trip_review,
+ CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS gross,
+ e.driver_rate,CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS miles
+ FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
  WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'' AND e.service_date<=$2::date
 ), identities AS (
- SELECT matched_id,count(DISTINCT driver_id)>1 OR count(DISTINCT gross)>1 OR
+ SELECT matched_id,load_trip_id,bool_or(trip_review) OR count(DISTINCT driver_id)>1 OR count(DISTINCT gross)>1 OR
  count(DISTINCT driver_rate)>1 OR count(DISTINCT miles)>1 OR
  (count(gross)>0 AND count(gross)<count(*)) OR (count(miles)>0 AND count(miles)<count(*)) OR
  (count(driver_rate)>0 AND count(driver_rate)<count(*)) AS conflict
- FROM resolved WHERE matched_id IS NOT NULL GROUP BY matched_id
+ FROM resolved WHERE matched_id IS NOT NULL GROUP BY matched_id,load_trip_id
 ), ranked AS (
  SELECT r.*,coalesce(i.conflict,false) AS conflict,
- row_number() OVER (PARTITION BY r.matched_id ORDER BY service_date,slot,driver_id) AS occurrence
- FROM resolved r LEFT JOIN identities i USING(matched_id)
+ row_number() OVER (PARTITION BY r.matched_id,r.load_trip_id ORDER BY service_date,slot,driver_id) AS occurrence
+ FROM resolved r LEFT JOIN identities i ON i.matched_id=r.matched_id AND i.load_trip_id IS NOT DISTINCT FROM r.load_trip_id
 ), classified AS (
  SELECT r.*,CASE WHEN matched_id IS NULL THEN 'provisional' WHEN conflict THEN 'conflict'
  WHEN occurrence>1 THEN 'repeat' ELSE 'included' END AS inclusion
@@ -185,7 +185,7 @@ const companyDashboardMetricsSQL = `jsonb_build_object(
  'miles',coalesce(sum(miles) FILTER(WHERE inclusion='included'),0)::text,
  'rpm',round(sum(gross) FILTER(WHERE inclusion='included' AND miles>0 AND gross IS NOT NULL)/
  nullif(sum(miles) FILTER(WHERE inclusion='included' AND miles>0 AND gross IS NOT NULL),0),2)::text,
- 'loads',count(*) FILTER(WHERE inclusion='included'),
+ 'loads',count(DISTINCT matched_id) FILTER(WHERE inclusion='included'),
  'missingGross',count(*) FILTER(WHERE inclusion='included' AND gross IS NULL),
  'missingDriverGross',count(*) FILTER(WHERE inclusion='included' AND driver_rate IS NULL),
  'missingMiles',count(*) FILTER(WHERE inclusion='included' AND (miles IS NULL OR miles<=0)),

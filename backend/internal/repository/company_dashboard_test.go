@@ -80,7 +80,7 @@ func TestCompanyDashboardDatabase(t *testing.T) {
  ('00000000-0000-0000-0000-000000000001','2026-10-20','OVERRIDE',2,1000,1,true,''),
  ('00000000-0000-0000-0000-000000000001','2026-10-25','NO-MILES',3,150,1,false,'SHOP');
  UPDATE gross_board_entries SET original_rate=999 WHERE load_record_id=7;
- UPDATE gross_board_entries SET miles=999 WHERE load_record_id=3;`)
+ UPDATE gross_board_entries SET miles=999 WHERE load_record_id=3; ALTER TABLE loads ADD COLUMN raw_payload jsonb, ADD COLUMN split_expected boolean NOT NULL DEFAULT false; ALTER TABLE gross_board_entries ADD COLUMN load_trip_id integer; ALTER TABLE gross_board_extra_entries ADD COLUMN load_trip_id integer;`)
 	if err != nil {
 		t.Fatal(err)
 	}

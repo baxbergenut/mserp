@@ -60,6 +60,7 @@ func (request *grossBoardRequest) validate() error {
 			e.AcceptSystemValues = false
 			e.LoadNumber = ""
 			e.LoadRecordID = nil
+			e.LoadTripID = nil
 			e.OriginalRate = ""
 			e.DriverRate = ""
 			e.Miles = ""
@@ -82,6 +83,9 @@ func (request *grossBoardRequest) validate() error {
 		}
 		if e.Version < 0 || e.Version > 2147483646 {
 			return errors.New("invalid entry version")
+		}
+		if e.LoadTripID != nil && (*e.LoadTripID <= 0 || e.LoadRecordID == nil || e.DayStatus != "") {
+			return errors.New("a trip requires a selected load")
 		}
 		if e.LoadRecordID != nil && (*e.LoadRecordID <= 0 || e.LoadNumber == "") {
 			return errors.New("a selected load requires a valid record id and load number")
@@ -114,8 +118,17 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeAPIError(w, 409, err.Error())
 			return
 		}
-		if errors.Is(err, repository.ErrGrossBoardConflict) || errors.Is(err, repository.ErrGrossBoardLoad) {
+		if errors.Is(err, repository.ErrGrossBoardConflict) || errors.Is(err, repository.ErrGrossBoardLoad) || errors.Is(err, repository.ErrGrossBoardTrip) {
 			writeAPIError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, repository.ErrDriverPayConflict) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
+		var validation *repository.ChargeValidationError
+		if errors.As(err, &validation) {
+			writeAPIError(w, 409, validation.Error())
 			return
 		}
 		var pgErr *pgconn.PgError

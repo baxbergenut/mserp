@@ -97,11 +97,12 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
  GROUP BY d.driver_id,d.service_date
  ), aliases AS MATERIALIZED (SELECT unit_key,array_agg(truck_id::text) trucks FROM truck_unit_aliases GROUP BY unit_key)
  SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
- coalesce(l.truck_id::text,''),(l.id IS NULL OR btrim(coalesce(l.truck_unit,''))=''),
- coalesce(a.trucks,'{}'::text[]),CASE WHEN l.truck_id IS NULL THEN coalesce(aliases.trucks,'{}'::text[]) ELSE '{}'::text[] END
+ CASE WHEN trip_source.review THEN '' WHEN e.load_trip_id IS NOT NULL THEN CASE WHEN cardinality(aliases.trucks)=1 THEN aliases.trucks[1] ELSE '' END ELSE coalesce(l.truck_id::text,'') END,
+ NOT trip_source.review AND (l.id IS NULL OR btrim(coalesce(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END,''))=''),
+ coalesce(a.trucks,'{}'::text[]),CASE WHEN l.truck_id IS NULL OR e.load_trip_id IS NOT NULL THEN coalesce(aliases.trucks,'{}'::text[]) ELSE '{}'::text[] END
  FROM entries e `+payrollResolvedLoad+`
  LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.service_date
- LEFT JOIN aliases ON aliases.unit_key=upper(btrim(l.truck_unit))`, week, payrollDriverIDs(ctx))
+ LEFT JOIN aliases ON aliases.unit_key=upper(btrim(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END))`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -310,13 +311,13 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			}
 		}
 		g.card.AutoCharges = append(truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0), scaleCharges[id]...)
-		seenLoads := map[int]bool{}
+		seenLoads := map[string]bool{}
 		for _, l := range g.card.Loads {
 			if l.LoadRecordID != nil {
-				if seenLoads[*l.LoadRecordID] {
+				if seenLoads[loadAllocationKey(*l.LoadRecordID, l.LoadTripID)] {
 					g.card.Issues = append(g.card.Issues, "A system load is placed more than once on this truck; resolve duplicate Gross Board entries")
 				}
-				seenLoads[*l.LoadRecordID] = true
+				seenLoads[loadAllocationKey(*l.LoadRecordID, l.LoadTripID)] = true
 			}
 		}
 		for _, d := range source.Drivers {

@@ -59,6 +59,7 @@ type Load struct {
 	DeliveryTime            *time.Time            `json:"delivery_time"`
 	CreatedDatetime         *time.Time            `json:"created_datetime"`
 	Trip                    *Trip                 `json:"trip"`
+	Trips                   []Trip                `json:"trips,omitempty"`
 	AssignedDriverNTruck    *AssignedDriverNTruck `json:"assigned_driver_n_truck"`
 	RawPayload              json.RawMessage       `json:"-"`
 	Stops                   []LoadStop            `json:"stops,omitempty"`
@@ -90,7 +91,19 @@ type LoadStop struct {
 	} `json:"location"`
 }
 
+type TripLocation struct {
+	City  string `json:"city"`
+	State string `json:"state"`
+}
+
 type Trip struct {
+	Pickup             *TripLocation   `json:"pickup,omitempty"`
+	Delivery           *TripLocation   `json:"delivery,omitempty"`
+	ID                 int             `json:"id"`
+	TripID             string          `json:"trip_id"`
+	TotalLoadPay       *FlexibleString `json:"total_load_pay"`
+	BeginDate          string          `json:"trip_begin_date"`
+	EndDate            string          `json:"trip_end_date"`
 	LoadedMiles        *FlexibleString `json:"mile,omitempty"`
 	DeadheadMiles      *FlexibleString `json:"empty_mile,omitempty"`
 	DriverFullName     *string         `json:"driver__full_name"`

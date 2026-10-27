@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -12,6 +13,8 @@ import (
 )
 
 var ErrGrossBoardConflict = errors.New("another dispatcher changed one of these days; reload the board before saving again")
+var ErrGrossBoardTrip = errors.New("select a valid trip whose allocations reconcile with the system load; a trip cannot belong to two board drivers")
+
 var ErrGrossBoardLoad = errors.New("the selected load no longer matches this load number; select it again")
 
 type GrossBoardRepository struct{ pool *pgxpool.Pool }
@@ -21,24 +24,28 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
-	Slot                int     `json:"slot"`
-	Deleted             bool    `json:"deleted"`
-	DriverID            string  `json:"driverId"`
-	Date                string  `json:"date"`
-	LoadNumber          string  `json:"loadNumber"`
-	Note                *string `json:"note,omitempty"` // nil on writes preserves the same load's note for older clients.
-	DayStatus           string  `json:"dayStatus"`
-	LoadRecordID        *int    `json:"loadRecordId"`
-	OriginalRate        string  `json:"originalRate"`
-	DriverRate          string  `json:"driverRate"`
-	Miles               string  `json:"miles"`
-	Version             int     `json:"version"`
-	EnteredOriginalRate string  `json:"enteredOriginalRate"`
-	EnteredMiles        string  `json:"enteredMiles"`
-	SystemOriginalRate  string  `json:"systemOriginalRate"`
-	SystemMiles         string  `json:"systemMiles"`
-	Duplicate           bool    `json:"duplicate"`
-	AcceptSystemValues  bool    `json:"acceptSystemValues,omitempty"`
+	LoadTripID          *int             `json:"loadTripId"`
+	Split               bool             `json:"split"`
+	TripReview          bool             `json:"tripReview"`
+	Trips               []GrossBoardTrip `json:"trips"`
+	Slot                int              `json:"slot"`
+	Deleted             bool             `json:"deleted"`
+	DriverID            string           `json:"driverId"`
+	Date                string           `json:"date"`
+	LoadNumber          string           `json:"loadNumber"`
+	Note                *string          `json:"note,omitempty"` // nil on writes preserves the same load's note for older clients.
+	DayStatus           string           `json:"dayStatus"`
+	LoadRecordID        *int             `json:"loadRecordId"`
+	OriginalRate        string           `json:"originalRate"`
+	DriverRate          string           `json:"driverRate"`
+	Miles               string           `json:"miles"`
+	Version             int              `json:"version"`
+	EnteredOriginalRate string           `json:"enteredOriginalRate"`
+	EnteredMiles        string           `json:"enteredMiles"`
+	SystemOriginalRate  string           `json:"systemOriginalRate"`
+	SystemMiles         string           `json:"systemMiles"`
+	Duplicate           bool             `json:"duplicate"`
+	AcceptSystemValues  bool             `json:"acceptSystemValues,omitempty"`
 }
 
 type GrossBoardDriver struct {
@@ -76,19 +83,21 @@ type GrossBoardBalanceLine struct {
 }
 
 type GrossBoardLoad struct {
-	ID           int    `json:"id"`
-	LoadNumber   string `json:"loadNumber"`
-	OriginalRate string `json:"originalRate"`
-	Miles        string `json:"miles"`
-	DriverName   string `json:"driverName"`
-	PickupDate   string `json:"pickupDate"`
+	Trips        []GrossBoardTrip `json:"trips"`
+	Split        bool             `json:"split"`
+	ID           int              `json:"id"`
+	LoadNumber   string           `json:"loadNumber"`
+	OriginalRate string           `json:"originalRate"`
+	Miles        string           `json:"miles"`
+	DriverName   string           `json:"driverName"`
+	PickupDate   string           `json:"pickupDate"`
 }
 
 // Slot zero preserves compatibility with the original daily entry table.
 const grossBoardEntriesSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted,
- load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status,note FROM gross_board_entries
+ load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status,note,load_trip_id FROM gross_board_entries g
  UNION ALL SELECT driver_id,service_date,slot,deleted,
- load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status,note FROM gross_board_extra_entries)`
+ load_number,load_record_id,original_rate,driver_rate,miles,version,entered_original_rate,entered_miles,day_status,note,load_trip_id FROM gross_board_extra_entries g)`
 
 // Resolve an explicit selection, or a unique exact number. Ambiguous numbers
 // remain plans until a dispatcher chooses the intended upstream record.
@@ -107,12 +116,13 @@ const grossBoardResolvedLoad = `
 const grossBoardEffective = `WITH resolved AS (
  SELECT e.*, l.id AS matched_id,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
- coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN l.total_pay ELSE e.original_rate END) AS effective_original,
- coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN l.total_miles ELSE e.miles END) AS effective_miles,
- l.total_pay AS system_original, l.total_miles AS system_miles,
+ CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS effective_original,
+ CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
+ trip_source.original AS system_original, trip_source.miles AS system_miles,
+ trip_source.split,trip_source.review AS trip_review,trip_source.options AS trips,
  l.id IS NOT NULL AND row_number() OVER (
-   PARTITION BY e.driver_id, l.id ORDER BY e.service_date,e.slot) > 1 AS duplicate
- FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
+   PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.service_date,e.slot) > 1 AS duplicate
+ FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
  WHERE e.service_date < $1::date+7
 ), effective AS (
  SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
@@ -125,13 +135,18 @@ const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
  coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
- coalesce(system_original::text,''), coalesce(system_miles::text,''), note`
+ coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trips`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
-	return row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
+	var trips []byte
+	err := row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
 		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
-		&e.SystemOriginalRate, &e.SystemMiles, &e.Note)
+		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &trips)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(trips, &e.Trips)
 }
 
 func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBoard, error) {
@@ -242,8 +257,8 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
- coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,'')
- FROM loads WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
+ coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split
+ FROM loads l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err
@@ -252,7 +267,11 @@ func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) (
 	result := []GrossBoardLoad{}
 	for rows.Next() {
 		var l GrossBoardLoad
-		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate); err != nil {
+		var trips []byte
+		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate, &trips, &l.Split); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(trips, &l.Trips); err != nil {
 			return nil, err
 		}
 		result = append(result, l)
@@ -280,6 +299,10 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 	if err = setBoardActor(ctx, tx, actor, "gross_board"); err != nil {
 		return nil, err
 	}
+	// Preserve the existing fleet-status then financial lock order.
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return nil, err
+	}
 	sort.Slice(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
 		if a.DriverID+a.Date == b.DriverID+b.Date {
@@ -291,6 +314,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
 			empty := ""
 			e.Note = &empty
+			e.LoadTripID = nil
 		}
 		if !e.Deleted && e.LoadNumber != "" && e.DayStatus == "" {
 			var previous string
@@ -328,23 +352,61 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if enteredMiles == "" {
 			enteredMiles = e.Miles
 		}
-		// Keep a source snapshot separately; the displayed values prefer entered amounts.
+		// Preserve an existing selection for older clients that omit the field.
+		var previousTrip *int
+		var oldTrip *int
+		if err = tx.QueryRow(ctx, `SELECT (SELECT load_trip_id FROM `+grossBoardEntriesSQL+` p WHERE p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3 AND NOT p.deleted)`, e.DriverID, e.Date, e.Slot).Scan(&oldTrip); err != nil {
+			return nil, err
+		}
+		if oldTrip != nil {
+			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+				return nil, err
+			}
+		}
+		if err = tx.QueryRow(ctx, `SELECT (SELECT load_trip_id FROM `+grossBoardEntriesSQL+` p WHERE p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3 AND NOT p.deleted AND p.load_record_id=$4)`, e.DriverID, e.Date, e.Slot, loadID).Scan(&previousTrip); err != nil {
+			return nil, err
+		}
+		if e.LoadTripID == nil && !e.Deleted && e.DayStatus == "" {
+			e.LoadTripID = previousTrip
+		}
 		original, miles := e.OriginalRate, e.Miles
+		split, review := false, false
 		if loadID != nil {
-			err = tx.QueryRow(ctx, `SELECT total_pay::text,coalesce(total_miles::text,'') FROM loads WHERE id=$1 FOR SHARE`, loadID).Scan(&original, &miles)
+			// Lock the source before comparing the displayed allocation.
+			if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, *loadID); err != nil {
+				return nil, err
+			}
+			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review)
 			if err != nil {
 				return nil, err
+			}
+		}
+		if e.LoadTripID != nil {
+			if loadID == nil || review {
+				return nil, ErrGrossBoardTrip
+			}
+			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+				return nil, err
+			}
+			var occupied bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` b WHERE NOT b.deleted AND b.day_status='' AND b.load_record_id=$1 AND b.load_trip_id=$2 AND b.driver_id<>$3)`, *loadID, *e.LoadTripID, e.DriverID).Scan(&occupied); err != nil {
+				return nil, err
+			}
+			if occupied {
+				return nil, ErrGrossBoardTrip
+			}
+			if (previousTrip == nil || *previousTrip != *e.LoadTripID) && !e.AcceptSystemValues {
+				return nil, ErrGrossBoardTrip
 			}
 		}
 		if loadID == nil {
 			enteredOriginal, enteredMiles = original, miles
 		} else if e.AcceptSystemValues {
-			// Do not acknowledge a source value that changed since the user saw it.
+			if review {
+				return nil, ErrGrossBoardTrip
+			}
 			var unchanged bool
-			err = tx.QueryRow(ctx, `SELECT total_pay IS NOT DISTINCT FROM NULLIF($2,'')::numeric
-              AND total_miles IS NOT DISTINCT FROM NULLIF($3,'')::numeric FROM loads WHERE id=$1`,
-				loadID, e.OriginalRate, e.Miles).Scan(&unchanged)
-			if err != nil {
+			if err = tx.QueryRow(ctx, `SELECT nullif($1,'')::numeric IS NOT DISTINCT FROM nullif($2,'')::numeric AND nullif($3,'')::numeric IS NOT DISTINCT FROM nullif($4,'')::numeric`, original, e.OriginalRate, miles, e.Miles).Scan(&unchanged); err != nil {
 				return nil, err
 			}
 			if !unchanged {
@@ -355,7 +417,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		// Exact-number resolution can beat the browser's load lookup. Apply the
 		// same initial driver-gross default here, preserving explicit amounts
 		// (including zero) and later edits to an already linked entry.
-		if loadID != nil && e.DriverRate == "" && (e.LoadRecordID == nil || e.Version == 0) {
+		if !split && loadID != nil && e.DriverRate == "" && (e.LoadRecordID == nil || e.Version == 0) {
 			e.DriverRate = enteredOriginal
 			if e.DriverRate == "" {
 				e.DriverRate = original
@@ -364,29 +426,29 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		var version int
 		if e.Slot > 0 {
 			if e.Version == 0 {
-				err = tx.QueryRow(ctx, `INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id,original_rate,driver_rate,miles,deleted,entered_original_rate,entered_miles,day_status,note)
- VALUES($1,$2::date,$3,$4,$5,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,$9,NULLIF($10,'')::numeric,NULLIF($11,'')::numeric,$12,coalesce($13,''))
- ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, enteredOriginal, enteredMiles, e.DayStatus, e.Note).Scan(&version)
+				err = tx.QueryRow(ctx, `INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id,original_rate,driver_rate,miles,deleted,entered_original_rate,entered_miles,day_status,note,load_trip_id)
+ VALUES($1,$2::date,$3,$4,$5,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,$9,NULLIF($10,'')::numeric,NULLIF($11,'')::numeric,$12,coalesce($13,''),$14)
+ ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, enteredOriginal, enteredMiles, e.DayStatus, e.Note, e.LoadTripID).Scan(&version)
 			} else {
 				err = tx.QueryRow(ctx, `UPDATE gross_board_extra_entries SET load_number=$4,load_record_id=$5,original_rate=NULLIF($6,'')::numeric,
  driver_rate=NULLIF($7,'')::numeric,miles=NULLIF($8,'')::numeric,deleted=$9,version=version+1,updated_at=now(),
  entered_original_rate=NULLIF($11,'')::numeric,entered_miles=NULLIF($12,'')::numeric,day_status=$13, note=CASE WHEN $9 OR $4='' OR $13<>'' THEN ''
- WHEN lower(btrim(load_number))=lower(btrim($4)) AND (load_record_id IS NULL OR $5::integer IS NULL OR load_record_id=$5) THEN coalesce($14,note) ELSE coalesce($14,'') END
+ WHEN lower(btrim(load_number))=lower(btrim($4)) AND (load_record_id IS NULL OR $5::integer IS NULL OR load_record_id=$5) THEN coalesce($14,note) ELSE coalesce($14,'') END,load_trip_id=$15
  WHERE driver_id=$1 AND service_date=$2::date AND slot=$3 AND version=$10 RETURNING version`,
-					e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, e.Version, enteredOriginal, enteredMiles, e.DayStatus, e.Note).Scan(&version)
+					e.DriverID, e.Date, e.Slot, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Deleted, e.Version, enteredOriginal, enteredMiles, e.DayStatus, e.Note, e.LoadTripID).Scan(&version)
 			}
 		} else if e.Version == 0 {
-			err = tx.QueryRow(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles,entered_original_rate,entered_miles,day_status,note)
-     VALUES($1,$2::date,$3,$4,NULLIF($5,'')::numeric,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,NULLIF($9,'')::numeric,$10,coalesce($11,''))
-     ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, enteredOriginal, enteredMiles, e.DayStatus, e.Note).Scan(&version)
+			err = tx.QueryRow(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles,entered_original_rate,entered_miles,day_status,note,load_trip_id)
+     VALUES($1,$2::date,$3,$4,NULLIF($5,'')::numeric,NULLIF($6,'')::numeric,NULLIF($7,'')::numeric,NULLIF($8,'')::numeric,NULLIF($9,'')::numeric,$10,coalesce($11,''),$12)
+     ON CONFLICT DO NOTHING RETURNING version`, e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, enteredOriginal, enteredMiles, e.DayStatus, e.Note, e.LoadTripID).Scan(&version)
 		} else {
 			err = tx.QueryRow(ctx, `UPDATE gross_board_entries SET load_number=$3,load_record_id=$4,
      original_rate=NULLIF($5,'')::numeric,driver_rate=NULLIF($6,'')::numeric,miles=NULLIF($7,'')::numeric,
      entered_original_rate=NULLIF($9,'')::numeric,entered_miles=NULLIF($10,'')::numeric,day_status=$11,
      note=CASE WHEN $3='' OR $11<>'' THEN ''
-       WHEN lower(btrim(load_number))=lower(btrim($3)) AND (load_record_id IS NULL OR $4::integer IS NULL OR load_record_id=$4) THEN coalesce($12,note) ELSE coalesce($12,'') END,
+       WHEN lower(btrim(load_number))=lower(btrim($3)) AND (load_record_id IS NULL OR $4::integer IS NULL OR load_record_id=$4) THEN coalesce($12,note) ELSE coalesce($12,'') END,load_trip_id=$13,
      version=version+1,updated_at=now() WHERE driver_id=$1 AND service_date=$2::date AND version=$8 RETURNING version`,
-				e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Version, enteredOriginal, enteredMiles, e.DayStatus, e.Note).Scan(&version)
+				e.DriverID, e.Date, e.LoadNumber, loadID, original, e.DriverRate, miles, e.Version, enteredOriginal, enteredMiles, e.DayStatus, e.Note, e.LoadTripID).Scan(&version)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrGrossBoardConflict

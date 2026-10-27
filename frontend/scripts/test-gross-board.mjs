@@ -144,6 +144,18 @@ assert.equal(indexedEntries[0].slot, 2); // Source ordering is unchanged.
 console.log("Board indexing checks passed: driver/day isolation, slots and tombstones.");
 
 const { editAmount } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+
+const splitMatch = matchLoad({ ...emptyEntry('split-driver', '2026-10-19'), driverRate: '0' },
+  { id: 8101, loadNumber: 'SPLIT-1', originalRate: '1813', miles: '555', driverName: 'Other', pickupDate: '', split: true, trips: [] });
+assert.equal(splitMatch.tripReview, true);
+assert.equal(splitMatch.originalRate, '');
+assert.equal(splitMatch.systemOriginalRate, '');
+assert.equal(splitMatch.driverRate, '0');
+assert.equal(editAmount({ ...splitMatch, driverRate: '500', originalRate: '500' }, 'originalRate', '600').driverRate, '500');
+assert.equal(rateChange({ ...splitMatch, originalRate: '1813', miles: '555' }), null);
+assert.equal(totals([{ ...splitMatch, originalRate: '1813', miles: '555' }]).original, 0n);
+const allocated = { ...splitMatch, tripReview: false, loadTripId: 101, originalRate: '500', miles: '40', driverRate: '200' };
+assert.deepEqual(totals([allocated, { ...allocated, duplicate: true }]), { original: 50000n, miles: 4000n, driver: 20000n });
 const { decimalInputValue } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 for (const text of ['', '-', '.', '-.']) assert.equal(decimalInputValue(text), '');
 for (const [text, value] of [['6', '6'], ['67', '67'], ['67.', '67'], ['67.1', '67.1'], ['67.12', '67.12'], ['.5', '0.5'], ['-.5', '-0.5'], ['1234567890.12', '1234567890.12']]) {

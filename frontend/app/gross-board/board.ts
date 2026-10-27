@@ -58,7 +58,7 @@ export function addDays(date: string, days: number) {
 export const shortDate = (date: string) => `${date.slice(5, 7)}/${date.slice(8, 10)}`;
 export const entryKey = (driverId: string, date: string, slot = 0) => `${driverId}:${date}:${slot}`;
 export const emptyEntry = (driverId: string, date: string, slot = 0): GrossBoardEntry => ({
-  driverId, date, slot, deleted: false, loadNumber: "", note: "", loadRecordId: null, originalRate: "", driverRate: "", miles: "", version: 0,
+  driverId, date, slot, deleted: false, loadNumber: "", note: "", loadRecordId: null, loadTripId: null, split: false, tripReview: false, trips: [], originalRate: "", driverRate: "", miles: "", version: 0,
   enteredOriginalRate: "", enteredMiles: "", duplicate: false, dayStatus: "",
 });
 
@@ -107,17 +107,20 @@ export function amountDisplay(value: string, currency = false) {
 }
 
 export function totals(entries: GrossBoardEntry[]) {
-  return entries.filter((entry) => !entry.dayStatus && !entry.deleted).reduce((sum, entry) => ({
-    original: sum.original + hundredths(entry.originalRate),
+  return entries.filter((entry) => !entry.dayStatus && !entry.deleted && !entry.duplicate).reduce((sum, entry) => ({
+    original: sum.original + (entry.tripReview ? BigInt(0) : hundredths(entry.originalRate)),
     driver: sum.driver + hundredths(entry.driverRate),
-    miles: sum.miles + hundredths(entry.miles),
+    miles: sum.miles + (entry.tripReview ? BigInt(0) : hundredths(entry.miles)),
   }), { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) });
 }
 
 export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBoardEntry {
+  if (load.split) return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
+    loadTripId: null, split: true, tripReview: true, trips: load.trips ?? [],
+    originalRate: "", miles: "", systemOriginalRate: "", systemMiles: "", acceptSystemValues: false };
   const original = entry.enteredOriginalRate || entry.originalRate || load.originalRate;
   const miles = entry.enteredMiles || entry.miles || load.miles;
-  return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
+  return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id, loadTripId: null, split: false, tripReview: false, trips: load.trips ?? [],
     note: entry.loadNumber.trim().toLowerCase() === load.loadNumber.trim().toLowerCase() && (entry.loadRecordId === null || entry.loadRecordId === load.id) ? entry.note : "",
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
@@ -129,7 +132,7 @@ export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBo
 export function editAmount(entry: GrossBoardEntry, field: "originalRate" | "driverRate" | "miles", value: string): GrossBoardEntry {
   return { ...entry, [field]: value, acceptSystemValues: false,
     ...(field === "originalRate" ? { enteredOriginalRate: value,
-      driverRate: entry.driverRate === "" || (validDecimal(entry.driverRate) && validDecimal(entry.originalRate) && hundredths(entry.driverRate) === hundredths(entry.originalRate)) ? value : entry.driverRate,
+      driverRate: !entry.split && (entry.driverRate === "" || (validDecimal(entry.driverRate) && validDecimal(entry.originalRate) && hundredths(entry.driverRate) === hundredths(entry.originalRate))) ? value : entry.driverRate,
     } : field === "miles" ? { enteredMiles: value } : {}),
   };
 }
@@ -139,7 +142,7 @@ export function mismatch(entered: string, actual: string) {
 }
 
 export function rateChange(entry: GrossBoardEntry): bigint | null {
-  if (entry.deleted || entry.dayStatus || entry.duplicate || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
+  if (entry.deleted || entry.dayStatus || entry.duplicate || entry.tripReview || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
     || !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate)) return null;
   return hundredths(entry.originalRate) - hundredths(entry.driverRate);
 }
@@ -170,10 +173,10 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
     const key = entryKey(entry.driverId, entry.date, entry.slot);
     const draft = current[key];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[key])) { delete remaining[key]; continue; }
-    const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId;
+    const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId && draft.loadTripId === snapshot[key].loadTripId;
     remaining[key] = { ...draft, version: entry.version,
       ...(sameLoad && entry.loadRecordId !== null ? {
-        loadRecordId: entry.loadRecordId,
+        loadRecordId: entry.loadRecordId, loadTripId: entry.loadTripId, split: entry.split, tripReview: entry.tripReview, trips: entry.trips,
         originalRate: draft.originalRate === snapshot[key].originalRate ? entry.originalRate : draft.originalRate,
         driverRate: draft.driverRate === snapshot[key].driverRate ? entry.driverRate : draft.driverRate,
         miles: draft.miles === snapshot[key].miles ? entry.miles : draft.miles,

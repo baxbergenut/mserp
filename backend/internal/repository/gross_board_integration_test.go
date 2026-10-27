@@ -110,6 +110,9 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
+	if _, err = pool.Exec(ctx, `ALTER TABLE loads ADD COLUMN raw_payload jsonb, ADD COLUMN split_expected boolean NOT NULL DEFAULT false; ALTER TABLE gross_board_entries ADD COLUMN load_trip_id integer; ALTER TABLE gross_board_extra_entries ADD COLUMN load_trip_id integer;`); err != nil {
+		t.Fatal(err)
+	}
 	noteMigration, err := os.ReadFile("../../sql/084_gross_board_notes.sql")
 	if err != nil {
 		t.Fatal(err)

@@ -66,17 +66,17 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 		return v, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, companyDashboardCTE+` SELECT matched_id,inclusion,coalesce(gross::text,'') FROM dated`, p.DateFrom, p.DateTo)
+	rows, err := tx.Query(ctx, companyDashboardCTE+` SELECT matched_id,load_trip_id,inclusion,coalesce(gross::text,'') FROM dated`, p.DateFrom, p.DateTo)
 	if err != nil {
 		return v, err
 	}
-	grossByLoad := map[int]string{}
+	grossByLoad := map[string]string{}
 	var gross int64
 	excluded := 0
 	for rows.Next() {
-		var id *int
+		var id, tripID *int
 		var inclusion, amount string
-		if err = rows.Scan(&id, &inclusion, &amount); err != nil {
+		if err = rows.Scan(&id, &tripID, &inclusion, &amount); err != nil {
 			rows.Close()
 			return v, err
 		}
@@ -86,7 +86,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 			continue
 		}
 		gross += n
-		grossByLoad[*id] = amount
+		grossByLoad[loadAllocationKey(*id, tripID)] = amount
 	}
 	err = rows.Err()
 	rows.Close()
@@ -106,19 +106,24 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 	err = tx.QueryRow(ctx, companyDashboardCTE+`, ownership AS (
  SELECT c.*,o.owners,i.is_company,i.driver_id owner_driver,term.owner_id term_owner,o.owner_id
  FROM dated c JOIN loads l ON l.id=c.matched_id
+ CROSS JOIN LATERAL (SELECT c.load_trip_id) e `+loadTripSourceSQL+`
+ LEFT JOIN LATERAL (SELECT (array_agg(DISTINCT truck_id))[1] truck_id FROM truck_unit_aliases
+ WHERE unit_key=upper(btrim(trip_source.selected_trip->>'truck__unit_number')) HAVING count(DISTINCT truck_id)=1) trip_truck ON c.load_trip_id IS NOT NULL
+ CROSS JOIN LATERAL (SELECT CASE WHEN c.load_trip_id IS NOT NULL THEN trip_truck.truck_id ELSE l.truck_id END truck_id,
+ CASE WHEN c.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END truck_unit) source_truck
  LEFT JOIN LATERAL (
   SELECT (array_agg(DISTINCT a.truck_id))[1] truck_id FROM truck_driver_assignments a
   WHERE a.driver_id=c.driver_id AND a.assigned_at<((c.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
   AND (a.unassigned_at IS NULL OR a.unassigned_at>=((c.service_date+1)::timestamp AT TIME ZONE 'America/New_York'))
   HAVING count(DISTINCT a.truck_id)=1
- ) assignment ON l.truck_id IS NULL AND btrim(coalesce(l.truck_unit,''))=''
+ ) assignment ON source_truck.truck_id IS NULL AND btrim(coalesce(source_truck.truck_unit,''))=''
  LEFT JOIN LATERAL (
   SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id
-  FROM truck_ownership_history h WHERE h.truck_id=coalesce(l.truck_id,assignment.truck_id)
+  FROM truck_ownership_history h WHERE h.truck_id=coalesce(source_truck.truck_id,assignment.truck_id)
   AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.service_date)
   AND (h.unassigned_at IS NULL OR c.service_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
  ) o ON true LEFT JOIN investors i ON i.id=o.owner_id
- LEFT JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=coalesce(l.truck_id,assignment.truck_id)
+ LEFT JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=coalesce(source_truck.truck_id,assignment.truck_id)
  AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1) term ON true
  WHERE c.inclusion='included'
 ) SELECT count(*) FROM ownership WHERE owners<>1 OR is_company IS NULL
@@ -158,7 +163,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 	if err != nil {
 		return v, err
 	}
-	paidLoads := map[int]bool{}
+	paidLoads := map[string]bool{}
 	driverPay, driverReview := dashboardEarnings(drivers, false, grossByLoad, paidLoads)
 	investorPay, investorReview := dashboardEarnings(investors, true, grossByLoad, paidLoads)
 	for id := range grossByLoad {
@@ -178,14 +183,14 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 	return v, tx.Commit(ctx)
 }
 
-func dashboardEarnings(report DriverPayWeek, investor bool, gross map[int]string, covered map[int]bool) (int64, int) {
+func dashboardEarnings(report DriverPayWeek, investor bool, gross map[string]string, covered map[string]bool) (int64, int) {
 	var total int64
 	review := len(report.Issues)
 	// Current-fleet setup rows do not establish historical work. The dated load
 	// ownership query checks missing investor terms for the selected week's work.
 	for _, d := range report.Drivers {
 		review += len(d.Issues)
-		seen := map[int]bool{}
+		seen := map[string]bool{}
 		for _, l := range d.Loads {
 			fee, e := chargeCents(l.Fee)
 			if e != nil {
@@ -196,7 +201,7 @@ func dashboardEarnings(report DriverPayWeek, investor bool, gross map[int]string
 				review++
 				continue
 			}
-			id := *l.LoadRecordID
+			id := loadAllocationKey(*l.LoadRecordID, l.LoadTripID)
 			source, ok := gross[id]
 			current, ce := chargeCents(source)
 			frozen, fe := chargeCents(l.OriginalRate)

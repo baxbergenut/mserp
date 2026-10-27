@@ -1018,7 +1018,15 @@ export interface AuthSession {
 
 export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "LOAD CANCELLED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
 
+export interface GrossBoardTrip {
+  id: number; number: string; driverName: string; truckUnit: string; originalRate: string; miles: string; loadedMiles: string; emptyMiles: string; startDate: string; endDate: string;
+}
+
 export interface GrossBoardEntry {
+  loadTripId?: number | null;
+  split?: boolean;
+  tripReview?: boolean;
+  trips?: GrossBoardTrip[];
   note?: string;
   slot: number;
   deleted: boolean;
@@ -1068,6 +1076,8 @@ export interface GrossBoardBalanceLine {
 }
 
 export interface GrossBoardLoad {
+  trips?: GrossBoardTrip[];
+  split?: boolean;
   id: number;
   loadNumber: string;
   originalRate: string;
@@ -1147,6 +1157,8 @@ export interface DriverPayEdits {
   version: number;
 }
 export interface DriverPayLoad {
+  loadTripId?: number;
+  tripReview?: boolean;
   boardVersion?: number;
   systemOriginalRate?: string;
   systemMiles?: string;

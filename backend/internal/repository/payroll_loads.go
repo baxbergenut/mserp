@@ -16,4 +16,4 @@ const payrollEntriesCTE = `pay_entries AS MATERIALIZED (
 
 const payrollResolvedLoad = `
  LEFT JOIN pay_load_numbers matched ON matched.number=lower(btrim(e.load_number))
- LEFT JOIN loads l ON l.id=coalesce(e.load_record_id,matched.id) AND NOT e.deleted AND e.day_status='' `
+ LEFT JOIN loads l ON l.id=coalesce(e.load_record_id,matched.id) AND NOT e.deleted AND e.day_status='' ` + loadTripSourceSQL

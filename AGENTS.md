@@ -120,6 +120,19 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/httpapi/gross_board_handlers.go` and
   `backend/internal/repository/gross_board_repository.go`: weekly dispatch plans,
   exact load matching, suggestions, and versioned atomic autosaves.
+  Migration 152 adds explicit DataTruck trip selection (`load_trip_id`) and an
+  immutable selection audit. Import retains the complete typed `trips` list;
+  multi-trip orders require a reviewed selection in the compact Split dialog.
+  `repository/load_trips.go` projects trip original gross and loaded+empty miles
+  consistently for Gross Board, payroll and dashboard. Allocations must reconcile
+  to parent totals; missing/invalid trips remain in review, never full-order
+  fallback. Driver gross is preserved, not inferred from `total_load_pay`.
+  Identity is parent record plus trip ID; repeated display numbers never merge.
+  Selected-trip truck aliases drive investor attribution. Selection/financial
+  edits honor finalized driver/investor statements and optimistic versions.
+  See `docs/integrations/DATATRUCK_LOAD_SPLITS.md`; database checks use
+  `TestLoadTripsDatabase` / `MSERP_GROSS_BOARD_TEST_DATABASE_URL` and browser checks
+  use `node scripts/test-gross-board-splits.mjs` against a `/api` build.
 - `backend/internal/httpapi/file_handlers.go`: IRP/cab-card uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`

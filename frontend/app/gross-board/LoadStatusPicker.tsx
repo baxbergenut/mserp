@@ -102,7 +102,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           setActive(0); setBrowse(false); setFocused(true); setSearchError("");
           if (exact && !hasAmounts(entry)) setFocused(false);
           onChange(entry.driverId, entry.date, (current) => exact && !hasAmounts(current) ? setDayStatus(current, exact.value) :
-            ({ ...current, dayStatus: "", loadNumber, loadRecordId: null,
+            ({ ...current, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, trips: [],
               note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,

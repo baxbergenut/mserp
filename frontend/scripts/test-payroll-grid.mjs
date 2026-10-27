@@ -82,7 +82,7 @@ try {
     await page.keyboard.press('ArrowDown');
     if (investor) await page.keyboard.press('ArrowDown');
     await expect(page.getByLabel('Grid Test, expense Equipment, deduction', { exact: true }).locator('..')).toBeFocused();
-    await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
     await page.keyboard.press('Control+z');
     await expect(fuel).toHaveValue('-40.00');
     await expect.poll(() => driver.edits.fuelOverride).toBe(null);

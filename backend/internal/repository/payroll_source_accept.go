@@ -112,7 +112,10 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 		return "", err
 	}
 	var source, miles string
-	err = tx.QueryRow(ctx, `SELECT total_pay::text,coalesce(total_miles::text,'') FROM loads WHERE id=$1 FOR SHARE`, input.LoadRecordID).Scan(&source, &miles)
+	if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, input.LoadRecordID); err != nil {
+		return "", err
+	}
+	err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,'') FROM `+grossBoardEntriesSQL+` e JOIN loads l ON l.id=$1 `+loadTripSourceSQL+` WHERE e.driver_id=$2 AND e.service_date=$3::date AND e.slot=$4 AND e.version=$5 AND NOT trip_source.review`, input.LoadRecordID, input.DriverID, input.Date, input.Slot, input.Version).Scan(&source, &miles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrDriverPayConflict
 	}

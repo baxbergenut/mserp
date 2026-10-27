@@ -15,19 +15,19 @@ func TestDashboardEarnings(t *testing.T) {
 			SourceCharges: []PaySourceCharge{{Amount: "-200.00"}}, GeneratedCharges: []ChargeOccurrence{{Amount: "-100.00"}}},
 		AutoCharges: []PayAutoCharge{{Source: "escrow_release:1", Amount: "500.00"}}, Layovers: []DriverPayLayover{{Date: "2026-10-19", Amount: "25.00"}}}
 	report := DriverPayWeek{Drivers: []DriverPayDriver{driver}}
-	gross := map[int]string{1: "1000.00"}
-	covered := map[int]bool{}
+	gross := map[string]string{"1": "1000.00"}
+	covered := map[string]bool{}
 	n, review := dashboardEarnings(report, false, gross, covered)
-	if n != 93000 || review != 0 || !covered[1] {
+	if n != 93000 || review != 0 || !covered["1"] {
 		t.Fatalf("earned pay must exclude cost recoveries/carry/escrow: %d %d", n, review)
 	}
 	investor := DriverPayDriver{Loads: []DriverPayLoad{{LoadRecordID: &id, OriginalRate: "1000", Fee: "880"}}, AutoCharges: []PayAutoCharge{{Source: "driver:1", Amount: "-250"}, {Source: "truck_charge:1", Amount: "-100"}}}
-	n, review = dashboardEarnings(DriverPayWeek{Drivers: []DriverPayDriver{investor}}, true, gross, map[int]bool{})
+	n, review = dashboardEarnings(DriverPayWeek{Drivers: []DriverPayDriver{investor}}, true, gross, map[string]bool{})
 	if n != 63000 || review != 0 {
 		t.Fatalf("investor share must subtract hired labor once: %d %d", n, review)
 	}
 	for _, bad := range []DriverPayLoad{{LoadRecordID: &id, OriginalRate: "999", Fee: "900"}, {LoadRecordID: &id, OriginalRate: "1000", Fee: ""}, {OriginalRate: "1000", Fee: "900"}} {
-		n, review = dashboardEarnings(DriverPayWeek{Drivers: []DriverPayDriver{{Loads: []DriverPayLoad{bad}}}}, false, gross, map[int]bool{})
+		n, review = dashboardEarnings(DriverPayWeek{Drivers: []DriverPayDriver{{Loads: []DriverPayLoad{bad}}}}, false, gross, map[string]bool{})
 		if n != 0 || review == 0 {
 			t.Fatal("unknown/stale earnings treated as complete")
 		}

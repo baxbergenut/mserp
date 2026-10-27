@@ -36,13 +36,13 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const confirmed = entry.loadRecordId !== null;
   const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
   const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
-  const needsReview = rateMismatch || milesMismatch;
+  const needsReview = !!entry.tripReview || rateMismatch || milesMismatch;
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   return (
     <td data-gross-driver={entry.driverId} data-gross-date={entry.date} data-gross-slot={entry.slot} {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
-        <span>Load {entry.slot + 1}</span><div className="flex gap-1">
+        <span>Load {entry.slot + 1}</span>{entry.split && <button type="button" aria-label={`Split load ${entry.loadNumber} for ${driverName}`} onClick={() => setReviewing(true)} className="rounded px-1 text-amber-400 hover:bg-zinc-800">Split{entry.tripReview ? " · review" : ""}</button>}<div className="flex gap-1">
           {!disabled && onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} disabled={disabled} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>}
           <button type="button" hidden={disabled} disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 }))}><X className="h-3 w-3" /></button>
         </div>
@@ -71,13 +71,27 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
       })}
       {reviewing && <BoardDialog title={`Review load ${entry.loadNumber}`} onClose={() => setReviewing(false)}>
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
+        {entry.split && <div className="mb-4 space-y-2">
+          <p className="text-sm text-zinc-300">Choose the trip performed by {driverName}. Driver gross stays as entered.</p>
+          {entry.tripReview && <p role="status" className="text-xs text-amber-400">Select a trip. Missing or inconsistent source allocations require review.</p>}
+          {(entry.trips ?? []).map((trip, index) => <div key={`${trip.id}:${index}`} className="flex items-center justify-between gap-3 rounded border border-zinc-700 p-2 text-sm">
+            <div><div>{trip.driverName || "Unassigned"} · {trip.number || "Unknown trip"}</div>
+              <div className="text-xs text-zinc-400">{trip.startDate} → {trip.endDate} · Truck {trip.truckUnit || "—"}</div>
+              <div>{amountDisplay(trip.originalRate, true) || "—"} · {amountDisplay(trip.miles) || "—"} mi</div></div>
+            <button type="button" disabled={disabled || !trip.id || trip.originalRate === "" || trip.miles === ""} className="shrink-0 rounded bg-blue-600 px-3 py-1 disabled:opacity-50" onClick={() => {
+              onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, loadTripId: trip.id, acceptSystemValues: true,
+                tripReview: false, originalRate: trip.originalRate, enteredOriginalRate: trip.originalRate, systemOriginalRate: trip.originalRate,
+                miles: trip.miles, enteredMiles: trip.miles, systemMiles: trip.miles })); setReviewing(false);
+            }}>{entry.loadTripId === trip.id ? "Use this trip" : "Use trip"}</button>
+          </div>)}
+        </div>}
         <table className="w-full text-left text-sm">
           <thead className="text-zinc-500"><tr><th className="p-2">Field</th><th>Entered</th><th>System</th></tr></thead>
           <tbody>{[["Total gross", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
             <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Total gross") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Total gross") || "—"}</td></tr>)}</tbody>
         </table>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the total gross and miles with the values shown here.</p>
-        <button hidden={disabled} disabled={disabled} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
+        <button hidden={disabled || entry.tripReview} disabled={disabled || entry.tripReview} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             originalRate: current.systemOriginalRate ?? "", miles: current.systemMiles ?? "",
             enteredOriginalRate: current.systemOriginalRate ?? "", enteredMiles: current.systemMiles ?? "" }));
@@ -88,6 +102,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
+  && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && previous.entry.note === next.entry.note
   && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date

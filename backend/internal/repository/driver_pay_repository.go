@@ -50,6 +50,8 @@ type DriverPayEdits struct {
 	GeneratedCharges     []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
+	LoadTripID         *int     `json:"loadTripId,omitempty"`
+	TripReview         bool     `json:"tripReview,omitempty"`
 	BoardVersion       int      `json:"boardVersion"`
 	SystemOriginalRate string   `json:"systemOriginalRate"`
 	SystemMiles        string   `json:"systemMiles"`
@@ -192,8 +194,11 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
  coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
- coalesce(coalesce(e.entered_original_rate,l.total_pay,e.original_rate)::text,''),coalesce(e.driver_rate::text,''),
- coalesce(coalesce(e.entered_miles,l.total_miles,e.miles)::text,''),coalesce(e.version,0),coalesce(l.total_pay::text,''),coalesce(l.total_miles::text,''),l.raw_payload,
+ coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END)::text,''),coalesce(e.driver_rate::text,''),
+ coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles,e.miles) END)::text,''),coalesce(e.version,0),coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),
+ CASE WHEN e.load_trip_id IS NOT NULL THEN jsonb_set(l.raw_payload,'{trip}',coalesce(trip_source.selected_trip,'null'::jsonb)) ELSE l.raw_payload END,
+ e.load_trip_id,coalesce(trip_source.review,false),
+ e.load_trip_id IS NOT NULL AND EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` prior WHERE NOT prior.deleted AND prior.day_status='' AND prior.driver_id=e.driver_id AND prior.load_record_id=l.id AND prior.load_trip_id=e.load_trip_id AND (prior.service_date,prior.slot)<(e.service_date,e.slot)),
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
@@ -216,14 +221,21 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var d DriverPayDriver
 		var l DriverPayLoad
 		var raw, comments, adjustments []byte
+		var repeatedTrip bool
 		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.EmploymentType, &d.IsOwnerOperator,
-			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw,
+			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw, &l.LoadTripID, &l.TripReview, &repeatedTrip,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal, &d.Edits.LayoverExcludedDates); err != nil {
 			return result, err
 		}
+		if repeatedTrip {
+			continue
+		}
 		l.CommentKey = l.Date + ":" + strconv.Itoa(l.Slot) + ":" + strings.ToLower(strings.TrimSpace(l.LoadNumber))
 		l.Issues = []string{}
+		if l.TripReview {
+			l.Issues = append(l.Issues, "Split load needs a valid trip selection in Gross Board")
+		}
 		if l.LoadRecordID == nil {
 			l.Issues = append(l.Issues, "Load not matched — resolve in Gross Board")
 		}
@@ -233,7 +245,16 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 				return result, err
 			}
 			l.PickupLocation, l.DeliveryLocation = payLoadLocations(load.Stops)
-			if load.Trip != nil {
+			if load.Trip != nil && !l.TripReview {
+				if l.LoadTripID != nil {
+					l.PickupDate = load.Trip.BeginDate
+					if load.Trip.Pickup != nil {
+						l.PickupLocation = strings.TrimSpace(load.Trip.Pickup.City + ", " + load.Trip.Pickup.State)
+					}
+					if load.Trip.Delivery != nil {
+						l.DeliveryLocation = strings.TrimSpace(load.Trip.Delivery.City + ", " + load.Trip.Delivery.State)
+					}
+				}
 				l.LoadedMiles = paySourceMiles(load.Trip.LoadedMiles)
 				l.DeadheadMiles = paySourceMiles(load.Trip.DeadheadMiles)
 			}
@@ -246,6 +267,9 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 			basis = l.TotalMiles
 		}
 		l.Fee = driverPayFee(d.PayType, d.PayRate, basis)
+		if l.TripReview {
+			l.Fee = ""
+		}
 		if l.Fee == "" {
 			l.Issues = append(l.Issues, "Pay needs a valid tariff and "+map[bool]string{true: "Gross Board mileage", false: "Gross Board driver gross"}[d.PayType == "cpm"])
 		}
