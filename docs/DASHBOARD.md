@@ -91,6 +91,11 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
   escrow and carry are excluded. Owners/investors therefore cover their own
   operating costs without those recoveries inflating this remainder.
 - Counted load ownership and investor terms are checked for the service date.
+  Clicking that warning opens the exact counted loads, source truck labels,
+  dated assignments and reasons, using the same query as its count. Unlinked
+  source trucks cannot appear as Investor Pay statements. A nonblank unmatched
+  source unit never falls back to the driver's assigned truck; assignment is
+  comparison context only. Known trucks link to their profiles.
   Payroll loads must match counted load identities and original gross; missing
   fees, missing payroll coverage, duplicates, stale gross and report issues block
   the final profit. Known partial stages remain visible alongside review links.
@@ -104,7 +109,7 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
 `thisMonth`, `lastMonth`, or `custom&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`.
 It also accepts `week&dateFrom=YYYY-MM-DD` and `view=weekly|current`. Hidden view
 jobs are not executed; omitting view retains the combined legacy response.
-`GET /dashboard/cost-review?kind=fuel|tolls` accepts the same period parameters
+`GET /dashboard/cost-review?kind=fuel|tolls|ownership` accepts the same period parameters
 and standard page/pageSize pagination. It requires the waterfall's five read
 permissions. All dashboard endpoints require the server-confirmed Administrator flag;
 `access.manage` or other permissions alone do not grant access. Session responses
@@ -159,5 +164,9 @@ status/drill-down fixtures in a temporary schema, dropped after each run.
 It also checks whole-fleet waterfall totals, company-only costs, dated ownership,
 refunds, DEF, environment/date exclusions and unresolved-cost handling.
 `TestDashboardEarnings` covers pass-through exclusion and stale/missing fees.
+`TestDashboardLoadOwnershipReviewDatabase` uses the disposable local
+`MSERP_DRIVER_CHARGES_TEST_DATABASE_URL` to verify source identity, missing terms,
+owner-driven exemptions, pagination and count/drilldown agreement on fresh and
+migrated schemas.
 Both must name a disposable localhost database ending `_test`.
 Never point these at production. HTTP permission/error tests need no database.

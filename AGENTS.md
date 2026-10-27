@@ -510,9 +510,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Unknown ownership/terms, excluded gross or unreconciled earnings leave profit null.
   Ownership baselines with start_known=false have an open start, matching payroll;
   their recorded ends still apply. Fuel/tolls never wait for payroll finalization.
-  Unresolved fuel/tolls open a paginated transaction review at /dashboard/cost-review,
-  sharing the waterfall attribution query and its Administrator plus five-read
-  permission gate. Show missing truck links, missing/conflicting dated ownership,
+  Unresolved fuel/tolls and load ownership/terms open a paginated review at /dashboard/cost-review
+  (kind=fuel|tolls|ownership). Ownership review names the exact counted loads,
+  source units, dated assignment context and reasons; unmatched source trucks
+  cannot appear as Investor Pay statements. Counts and detail share the waterfall
+  attribution query and its Administrator plus five-read permission gate.
+  Show missing truck links, missing/conflicting dated ownership,
   or missing amounts; never infer ownership or mutate sources on review.
   All five board/fuel/tolls/driver_pay/investor_pay read permissions are required.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
@@ -1245,9 +1248,10 @@ assignment lookup lists.
   its destination stays Investor Pay during corrections to preserve payments.
   Unassigned trucks retain calendar fees. Without investor terms, dated ownership
   routes recurring fees to the recorded owner's Driver Pay independently of load
-  attribution. Other-driver loads and missing full-week owner assignments show
+  attribution. Other-driver loads and recorded work without full-week owner assignments show
   statement review warnings instead of hiding fees; ordinary finalization requires
-  resolving them. Explicit load/no-load eligibility (including insurance rates)
+  resolving them. Idle owned trucks need no operating assignment and retain their
+  eligible recurring fees without an assignment warning. Explicit load/no-load eligibility (including insurance rates)
   remains automatic. Inactive-driver and finalized-snapshot safeguards still apply.
   Load source units or unique dated assignments for unmatched plans determine
   truck attribution. Missing matches,

@@ -41,7 +41,7 @@ function dashboard(query) {
   for (const kind of ['trucks','drivers','trailers']) if (sections[kind] && fleetMode !== 'normal') {
     sections[kind].items = sections[kind].items.map(item => ({...item, count: fleetMode === 'single' && ['active','in_use'].includes(item.id) ? 5 : 0}));
   }
-  if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'},{id:'tolls',label:'Unresolved tolls ownership',count:1,href:'/tolls?dashboard=1&tab=transactions'}]:[]}});
+  if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'},{id:'tolls',label:'Unresolved tolls ownership',count:1,href:'/tolls?dashboard=1&tab=transactions'},{id:'ownership',label:'Load ownership or investor terms need review',count:1,href:'/accounting/investor-pay'}]:[]}});
   for (const [key,value] of Object.entries(sections)) if (query.get('view') === 'weekly' ? ['fleet','attention'].includes(value.kind) : query.get('view') === 'current' && !['fleet','attention'].includes(value.kind)) delete sections[key];
   return { period, sections };
 }
@@ -61,7 +61,7 @@ try {
       const items=kind==='fuel' ? [
         {id:'fuel-1',reference:'RELAY-REVIEW-1',date:'2026-09-07',ownershipDate:'2026-09-07',truckId:'',truckUnit:'Unmatched unit',driverName:'Review Driver',assignedUnits:['701'],amount:'250.00',reason:'Reported truck number is missing or not uniquely linked'},
         {id:'fuel-2',reference:'RELAY-REVIEW-2',date:'2026-09-08',ownershipDate:'2026-09-08',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'300.00',reason:'No ownership recorded for the transaction date'}
-      ] : [{id:'toll-1',reference:'TOLL-REVIEW-1',date:'2026-09-09',ownershipDate:'2026-09-07',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'15.00',reason:'No ownership recorded for the transaction date'}];
+      ] : kind==='ownership' ? [{id:'load-1',reference:'REVIEW-LOAD-1',date:'2026-09-07',ownershipDate:'2026-09-07',truckId:'',truckUnit:'UNLINKED-SOURCE',driverName:'Review Owner',assignedUnits:['053'],amount:'1800.00',reason:'Source truck number is missing or not uniquely linked'}] : [{id:'toll-1',reference:'TOLL-REVIEW-1',date:'2026-09-09',ownershipDate:'2026-09-07',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'15.00',reason:'No ownership recorded for the transaction date'}];
       return route.fulfill({json:{items,total:items.length,page:1,pageSize:25,totalPages:1}});
     }
     if (path === '/dashboard/loads') return route.fulfill({ json: { items: [{ driverId: driver, driverName: 'Example Driver', date: '2026-10-20', slot: 0, loadNumber: 'LOAD-101', loadRecordId: 101, gross: '2500.00', driverGross: '2200.00', miles: '800.00', dispatcherId: dispatcher, dispatcherName: 'Dispatch East', inclusion: url.searchParams.get('inclusion') || 'included' }], total: 1, page: 1, pageSize: 25, totalPages: 1 } });
@@ -180,6 +180,22 @@ try {
   await expect(page.getByRole('dialog')).toContainText('Ownership date: 2026-09-07');
   await page.screenshot({path:join(output,'dashboard-cost-review-mobile.png'),fullPage:true});
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
+  await page.getByRole('button',{name:'1 load ownership or investor terms need review',exact:true}).click();
+  await expect(page.getByRole('dialog')).toContainText('Load ownership and investor terms');
+  await expect(page.getByRole('dialog')).toContainText('REVIEW-LOAD-1');
+  await expect(page.getByRole('dialog')).toContainText('UNLINKED-SOURCE');
+  await expect(page.getByRole('dialog')).toContainText('Assigned on load date: 053');
+  await expect(page.getByRole('dialog')).toContainText('Source truck number is missing or not uniquely linked');
+  await expect(page.getByRole('dialog').getByRole('link',{name:'UNLINKED-SOURCE',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toContainText('1 loads');
+  if (!requested.some(r=>r.path==='/dashboard/cost-review'&&r.query.kind==='ownership'&&r.query.dateFrom==='2026-09-07')) throw new Error('Ownership review lost its selected week');
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole('dialog').getByText('REVIEW-LOAD-1', {exact:true})).toBeVisible();
+  await expect(page.getByRole('dialog').locator('..')).toHaveCSS('opacity','1');
+  await expect(page.getByRole('dialog').locator('form')).toHaveCSS('opacity','1');
+  await page.screenshot({path:join(output,'dashboard-ownership-review-mobile.png'),fullPage:true,animations:'disabled'});
+  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
+  await page.setViewportSize({width:1440,height:1000});
   waterfallMode='error'; await page.reload();
   await expect(page.getByText('This section could not be loaded',{exact:true})).toBeVisible();
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);

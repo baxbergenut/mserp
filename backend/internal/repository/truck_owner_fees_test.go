@@ -129,14 +129,26 @@ func TestOwnerTruckFeesLoadConflictDatabase(t *testing.T) {
 		}
 		idleFees := map[string]string{"Insurance min": "-150.00", "Samsara": "-20.00"}
 		assertFees(report, idleFees, "")
-		// Missing assignment data is also a review warning, not a reason to
-		// silently drop a known owner's included calendar fees.
+		// An idle owned truck does not need an operating assignment. Its fees
+		// stay with the owner even when that owner drives another owned truck.
 		exec(`DELETE FROM truck_driver_assignments WHERE truck_id=$1`, truck)
+		workingTruck := mustID(`INSERT INTO trucks(unit_number,owner_id) VALUES('OWNER-002',$1) RETURNING id`, investor)
+		exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-09-01')`, workingTruck, owner)
+		for _, target := range []string{"", owner} {
+			report, err = pay.GetDriverWeek(ctx, date, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertFees(report, idleFees, "")
+		}
+		// Source work attributed to the idle truck is a real discrepancy;
+		// preserve the review guard and working-week fees in that case.
+		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($1,'2026-09-30','CONFLICT-1',91001,1000)`, owner)
 		report, err = pay.GetDriverWeek(ctx, date, owner)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertFees(report, idleFees, "no full-week owner-driver assignment")
+		assertFees(report, workingFees, "recorded loads without a full-week owner-driver assignment")
 		investorReport, err := pay.InvestorPay(ctx, date)
 		if err != nil || len(investorReport.Drivers) != 0 {
 			t.Fatalf("fees duplicated in Investor Pay: %+v %v", investorReport, err)

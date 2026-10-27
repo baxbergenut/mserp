@@ -29,14 +29,21 @@ const dashboardCostReviewCTE = dashboardCompanyCostsCTE + `, unresolved AS (
 
 func (r *DashboardRepository) DashboardCostReview(ctx context.Context, p DashboardPeriod, kind string, pagination Pagination) (Page[DashboardCostReview], error) {
 	var empty Page[DashboardCostReview]
-	if kind != "fuel" && kind != "tolls" {
-		return empty, fmt.Errorf("choose fuel or tolls")
+	if kind != "fuel" && kind != "tolls" && kind != "ownership" {
+		return empty, fmt.Errorf("choose fuel, tolls or load ownership")
 	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
+	if kind == "ownership" {
+		result, err := dashboardLoadOwnershipReview(ctx, tx, p, pagination)
+		if err != nil {
+			return empty, err
+		}
+		return result, tx.Commit(ctx)
+	}
 	var total int
 	if err = tx.QueryRow(ctx, dashboardCostReviewCTE+` SELECT count(*) FROM unresolved`, p.DateFrom, p.DateTo, kind).Scan(&total); err != nil {
 		return empty, err

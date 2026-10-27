@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [snapshot, setSnapshot] = useState<{ key: string; data: CompanyDashboard } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const [retry, setRetry] = useState(0);
-  const [costReview, setCostReview] = useState<"fuel" | "tolls" | null>(null);
+  const [costReview, setCostReview] = useState<"fuel" | "tolls" | "ownership" | null>(null);
   const [details, setDetails] = useState<{ dispatcherId: string; inclusion: string } | null>(null);
   const data = snapshot?.key === key ? snapshot.data : null;
   const error = failure?.key === key ? failure.message : "";

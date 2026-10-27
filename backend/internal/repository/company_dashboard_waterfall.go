@@ -103,31 +103,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 	// A historical investor truck without terms can be absent from the current
 	// setup list. Resolve each counted load's dated ownership independently.
 	var ownershipReview int
-	err = tx.QueryRow(ctx, companyDashboardCTE+`, ownership AS (
- SELECT c.*,o.owners,i.is_company,i.driver_id owner_driver,term.owner_id term_owner,o.owner_id
- FROM dated c JOIN loads l ON l.id=c.matched_id
- CROSS JOIN LATERAL (SELECT c.load_trip_id) e `+loadTripSourceSQL+`
- LEFT JOIN LATERAL (SELECT (array_agg(DISTINCT truck_id))[1] truck_id FROM truck_unit_aliases
- WHERE unit_key=upper(btrim(trip_source.selected_trip->>'truck__unit_number')) HAVING count(DISTINCT truck_id)=1) trip_truck ON c.load_trip_id IS NOT NULL
- CROSS JOIN LATERAL (SELECT CASE WHEN c.load_trip_id IS NOT NULL THEN trip_truck.truck_id ELSE l.truck_id END truck_id,
- CASE WHEN c.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END truck_unit) source_truck
- LEFT JOIN LATERAL (
-  SELECT (array_agg(DISTINCT a.truck_id))[1] truck_id FROM truck_driver_assignments a
-  WHERE a.driver_id=c.driver_id AND a.assigned_at<((c.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
-  AND (a.unassigned_at IS NULL OR a.unassigned_at>=((c.service_date+1)::timestamp AT TIME ZONE 'America/New_York'))
-  HAVING count(DISTINCT a.truck_id)=1
- ) assignment ON source_truck.truck_id IS NULL AND btrim(coalesce(source_truck.truck_unit,''))=''
- LEFT JOIN LATERAL (
-  SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id
-  FROM truck_ownership_history h WHERE h.truck_id=coalesce(source_truck.truck_id,assignment.truck_id)
-  AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.service_date)
-  AND (h.unassigned_at IS NULL OR c.service_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
- ) o ON true LEFT JOIN investors i ON i.id=o.owner_id
- LEFT JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=coalesce(source_truck.truck_id,assignment.truck_id)
- AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1) term ON true
- WHERE c.inclusion='included'
-) SELECT count(*) FROM ownership WHERE owners<>1 OR is_company IS NULL
- OR (NOT is_company AND owner_driver IS DISTINCT FROM payroll_driver_at(driver_id,service_date) AND term_owner IS DISTINCT FROM owner_id)`, p.DateFrom, p.DateTo).Scan(&ownershipReview)
+	err = tx.QueryRow(ctx, dashboardLoadOwnershipCTE+` SELECT count(*) FROM unresolved_ownership`, p.DateFrom, p.DateTo).Scan(&ownershipReview)
 	if err != nil {
 		return v, err
 	}

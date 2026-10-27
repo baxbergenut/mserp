@@ -63,11 +63,13 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 			continue
 		}
 		hasLoads := false
+		recordedLoads := []string{}
 		conflicts := []string{}
 		for _, person := range source.Drivers {
 			for _, load := range person.Loads {
 				if loadMap[person.ID+":"+load.CommentKey].TruckID == d.TruckID {
 					hasLoads = true
+					recordedLoads = append(recordedLoads, fmt.Sprintf("%s (%s)", load.LoadNumber, load.Date))
 					if person.ID != d.ID {
 						conflicts = append(conflicts, fmt.Sprintf("%s (%s, %s)", person.FullName, load.LoadNumber, load.Date))
 					}
@@ -84,8 +86,11 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 			sort.Strings(conflicts)
 			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has loads entered for another driver: %s. Recurring fees remain on the recorded owner's statement; review Gross Board entries and truck settlement terms.", d.TruckUnit, strings.Join(conflicts, "; ")))
 		}
-		if !fullWeek {
-			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has no full-week owner-driver assignment. Recurring fees remain on the recorded owner's statement; review dated truck assignments and settlement terms.", d.TruckUnit))
+		// Idle owned trucks do not require an operating assignment. Recorded
+		// work without that assignment still needs source/assignment review.
+		if hasLoads && !fullWeek {
+			sort.Strings(recordedLoads)
+			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has recorded loads without a full-week owner-driver assignment: %s. Recurring fees remain on the recorded owner's statement; review the source truck, dated assignments and settlement terms.", d.TruckUnit, strings.Join(recordedLoads, "; ")))
 		}
 		found := false
 		for index := range source.Drivers {

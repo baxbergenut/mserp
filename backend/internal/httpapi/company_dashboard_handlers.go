@@ -218,8 +218,8 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 			return
 		}
 		kind := r.URL.Query().Get("kind")
-		if kind != "fuel" && kind != "tolls" {
-			writeAPIError(w, 400, "choose fuel or tolls")
+		if kind != "fuel" && kind != "tolls" && kind != "ownership" {
+			writeAPIError(w, 400, "choose fuel, tolls or load ownership")
 			return
 		}
 		pagination, err := parsePagination(r)

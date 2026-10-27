@@ -61,6 +61,8 @@ func TestCompanyDashboardCostReviewAccess(t *testing.T) {
 		status      int
 	}{
 		{"fuel", "fuel", true, permissions, 200}, {"tolls", "tolls", true, permissions, 200},
+		{"ownership", "ownership", true, permissions, 200},
+		{"ownership missing access", "ownership", true, []string{"board.read"}, 403},
 		{"invalid kind", "expenses", true, permissions, 400},
 		{"non administrator", "fuel", false, permissions, 403},
 		{"missing waterfall access", "fuel", true, []string{"fuel.read"}, 403},

@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "@/app/components/AccessLink";
-import type { DashboardSection } from "@/app/lib/dashboardTypes";
+import type { DashboardReviewKind, DashboardSection } from "@/app/lib/dashboardTypes";
 import { hundredths } from "@/app/gross-board/board";
 import { centsAmount } from "@/app/accounting/driver-pay/pay";
 import { money, Panel, SectionError } from "./display";
 
-export function ProfitWaterfall({ section, reconcile, reviewCosts }: { section: DashboardSection; reconcile: () => void; reviewCosts: (kind: "fuel" | "tolls") => void }) {
+export function ProfitWaterfall({ section, reconcile, reviewCosts }: { section: DashboardSection; reconcile: () => void; reviewCosts: (kind: DashboardReviewKind) => void }) {
   const value = section.waterfall;
   if (!value) return <Panel title="Weekly profit"><SectionError section={section} /></Panel>;
   const entries = [
@@ -50,7 +50,7 @@ export function ProfitWaterfall({ section, reconcile, reviewCosts }: { section: 
         {value.profit === null && <text x={cell * 5.5} y={130} textAnchor="middle" fill="currentColor" fontSize={13}>Needs review</text>}
       </svg>
     </div>
-    {value.review.length > 0 && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-500" role="status">{value.review.map(item => item.id === "gross" ? <button key={item.id} onClick={reconcile} className="hover:underline">{item.count} {item.label.toLowerCase()}</button> : item.id === "fuel" || item.id === "tolls" ? <button key={item.id} onClick={() => reviewCosts(item.id as "fuel" | "tolls")} className="hover:underline">{item.count} {item.label.toLowerCase()}</button> : <Link key={item.id} href={item.href} className="hover:underline">{item.count} {item.label.toLowerCase()}</Link>)}</div>}
+    {value.review.length > 0 && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-500" role="status">{value.review.map(item => item.id === "gross" ? <button key={item.id} onClick={reconcile} className="hover:underline">{item.count} {item.label.toLowerCase()}</button> : item.id === "fuel" || item.id === "tolls" || item.id === "ownership" ? <button key={item.id} onClick={() => reviewCosts(item.id as DashboardReviewKind)} className="hover:underline">{item.count} {item.label.toLowerCase()}</button> : <Link key={item.id} href={item.href} className="hover:underline">{item.count} {item.label.toLowerCase()}</Link>)}</div>}
     <details className="mt-3 text-xs text-zinc-500"><summary className="cursor-pointer">Calculation details</summary><p className="mt-2">Whole-fleet gross less company-owned truck fuel and tolls, driver/owner earnings, and investor shares after hired-driver earnings. Uses dated ownership and recorded weekly payroll. Owner fuel/toll recoveries, recurring collections, escrow, and carry are excluded. Fuel includes DEF. Other operating costs and taxes are not deducted. Unresolved amounts leave profit unavailable.</p></details>
   </Panel>;
 }
