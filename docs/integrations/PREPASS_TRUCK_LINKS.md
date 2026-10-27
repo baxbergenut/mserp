@@ -1,12 +1,30 @@
 # PrePass truck linking
 
-Tolls > Needs attention lists each unlinked or load-coverage-flagged transaction
-separately, including flagged transactions that already have a truck. Flags use
+Tolls > Needs attention lists each unlinked transaction and each unreviewed actual
+spending flag (status `review`) separately. Linked `data_issue` / Check data hints
+are excluded. Unlinked transactions remain for truck linking, without Check data
+hints in this view. Flags use
 the reviewed local truck when linked, falling back to the reported unit otherwise.
 The shared flag popover retains the reason and load evidence. The posting cutoff
 defaults to the first day of the previous New York month; pagination preserves
 selection across pages. Transactions shows PPDeviceID (the fleet transponder
 number) below the truck, never deviceNumber (the separate plate/device value).
+
+Flags assess the exit/crossing date, including one day before load pickup and
+after delivery. Posting dates only control the list's Posted since filter.
+Mark reviewed records an actor/time decision and hides the flag by default.
+Show reviewed exposes those decisions with Reopen. Unlinked transactions remain
+until linked even if their spending flag has been reviewed. Review is only a
+workflow acknowledgement; source charges, links, statements and the derived flag
+on Transactions remain unchanged.
+
+Migration 156 stores append-only `toll_flag_review_events`. POST
+`/tolls/{id}/review` requires `tolls.link`, a request UUID, the current evidence
+revision, previous review version, and explicit `reviewed` boolean. Saves reject
+stale source/evidence or concurrent review decisions; retries are idempotent.
+Changed amounts, dates, truck attribution or surrounding load evidence require
+review again, while routine resync timestamps do not. GET `/tolls/truck-links`
+accepts `includeReviewed=true` to include reviewed flags with attribution.
 
 Select up to 100 transactions, choose one truck, preview, then Link transactions.
 Only the explicit selected IDs change; no future mapping is created. The same

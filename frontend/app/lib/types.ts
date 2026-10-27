@@ -749,6 +749,11 @@ export interface DispatcherInput {
 }
 
 export interface Toll {
+  reviewRevision?: string;
+  reviewVersion?: string;
+  reviewed?: boolean;
+  reviewedAt?: string;
+  reviewedBy?: string;
   flag?: TransactionFlag;
   id: string;
   truckId: string | null;

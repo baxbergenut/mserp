@@ -253,7 +253,7 @@ try {
   assert.ok(Math.abs(postedBox.y - refreshBox.y) < 8, 'Posted since and Refresh PrePass share a toolbar');
   await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   await region.getByRole('cell', { name: '777111222', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(tmpdir(), 'mserp-prepass-transponders-mobile.png'), animations: 'disabled' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'table must scroll locally');

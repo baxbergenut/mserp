@@ -26,6 +26,11 @@ func NewTollRepository(pool *pgxpool.Pool) *TollRepository {
 }
 
 type Toll struct {
+	ReviewRevision     string           `json:"reviewRevision,omitempty"`
+	ReviewVersion      string           `json:"reviewVersion,omitempty"`
+	Reviewed           bool             `json:"reviewed,omitempty"`
+	ReviewedAt         string           `json:"reviewedAt,omitempty"`
+	ReviewedBy         string           `json:"reviewedBy,omitempty"`
 	Flag               *TransactionFlag `json:"flag,omitempty"`
 	ID                 string           `json:"id"`
 	TruckID            *string          `json:"truckId"`

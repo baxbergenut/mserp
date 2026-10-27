@@ -220,6 +220,18 @@ func transactionFlags(ctx context.Context, pool *pgxpool.Pool, kind string, ids 
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	flags, err = transactionFlagsTx(ctx, tx, kind, ids, now)
+	if err != nil {
+		return nil, err
+	}
+	return flags, tx.Commit(ctx)
+}
+
+func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []string, now time.Time) (map[string]*TransactionFlag, error) {
+	flags := make(map[string]*TransactionFlag, len(ids))
+	if len(ids) == 0 {
+		return flags, nil
+	}
 	var query string
 	switch kind {
 	case "fuel":
@@ -330,5 +342,5 @@ func transactionFlags(ctx context.Context, pool *pgxpool.Pool, kind string, ids 
 	for _, t := range transactions {
 		flags[t.id] = classifyTransaction(t, byUnit, byDriver, syncedAt, now)
 	}
-	return flags, tx.Commit(ctx)
+	return flags, nil
 }

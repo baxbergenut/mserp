@@ -18,12 +18,31 @@ func (h tollHandler) registerTruckLinks(r chi.Router) {
 		writeAPIError(w, 500, "Could not update PrePass truck links.")
 	}
 	r.Get("/tolls/truck-links", func(w http.ResponseWriter, r *http.Request) {
-		out, err := h.repo.PrePassTruckLinks(r.Context(), r.URL.Query().Get("from"))
+		out, err := h.repo.PrePassTruckLinks(r.Context(), r.URL.Query().Get("from"), r.URL.Query().Get("includeReviewed") == "true")
 		if err != nil {
 			fail(w, err)
 			return
 		}
 		writeJSON(w, 200, out)
+	})
+	r.Post("/tolls/{id}/review", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ID       string `json:"id"`
+			Revision string `json:"revision"`
+			Version  string `json:"version"`
+			Reviewed *bool  `json:"reviewed"`
+		}
+		id := chi.URLParam(r, "id")
+		if !isUUID(id) || decodeJSON(r, &body) != nil || !isUUID(body.ID) || len(body.Revision) != 64 || body.Reviewed == nil || body.Version != "" && !isUUID(body.Version) {
+			writeAPIError(w, 400, "Provide the current flagged transaction and review status.")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := h.repo.ReviewTollFlag(r.Context(), id, repository.TollFlagReviewInput{ID: body.ID, Revision: body.Revision, Version: body.Version, Reviewed: *body.Reviewed}, session.User.ID); err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"saved": true})
 	})
 	read := func(w http.ResponseWriter, r *http.Request) (repository.PrePassTruckLinkInput, bool) {
 		var in repository.PrePassTruckLinkInput
