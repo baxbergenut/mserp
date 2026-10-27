@@ -9,6 +9,11 @@ No migration or additional environment variable is required.
 
 ## Reporting rules
 
+- The UI separates **Weekly** financial results from **Right now** fleet and
+  attention cards. Week navigation uses `preset=week`, a full Monday-Sunday
+  reporting window (including recorded plans), compared with the preceding week.
+  An optional `dateFrom` is normalized to Monday; an omitted date uses New York's
+  current week. The older date-range presets remain API-compatible.
 - The API resolves business dates in `America/New_York`. This week/month runs
   through today and compares with the same elapsed portion of the previous
   week/month (clamped to the previous month's length). Last week/month uses full
@@ -47,15 +52,45 @@ No migration or additional environment variable is required.
   combining both recorded statuses without changing driver profiles or lifecycle.
 - Costs stay separate by source: diesel line items excluding DEF/other purchases,
   production/legacy tolls by posting date, scale tickets by transaction date, and
-  visible expense categories by expense date. Costs can overlap; there is no
-  combined cost/profit total, payer inference, or payment-status inference.
+  visible expense categories by expense date. These all-truck source cards can
+  overlap and are separate from the company's waterfall deductions.
   Fuel drill-down shows whole transactions, which may also contain DEF/other
   purchases. Unknown source coverage is not asserted to be complete.
+
+## Weekly waterfall
+
+Gross -> Company fuel -> Company tolls -> Driver / owner pay -> Investor pay ->
+Profit. The final value is an earned operating remainder **before other costs**,
+not cash received, paid payroll, or net income. All stages use one read-only
+repeatable-read transaction. No payroll edits, settlements or syncs are created.
+
+- Gross follows the existing counted-load reconciliation rules.
+- Fuel uses production Relay fuel line items, including DEF and refunds. Exactly
+  one reported truck unit must resolve through the stored aliases; no driver or
+  current-assignment guess supplies a missing truck. Ownership uses purchase date.
+- Tolls use production/legacy posting dates for the week and exit dates for
+  ownership. Only uniquely resolved, known dated company ownership is deducted.
+  Unknown ownership blocks profit instead of treating the transaction as owner-paid.
+- Driver/owner pay and investor pay reuse routed weekly payroll and its frozen
+  statements: load fees, enabled layovers and signed manual weekly adjustments.
+  Investor shares deduct their hired-driver earnings so labor is counted once.
+  Fuel/toll recoveries, expense recoveries, recurring/installment collections,
+  escrow and carry are excluded. Owners/investors therefore cover their own
+  operating costs without those recoveries inflating this remainder.
+- Counted load ownership and investor terms are checked for the service date.
+  Payroll loads must match counted load identities and original gross; missing
+  fees, missing payroll coverage, duplicates, stale gross and report issues block
+  the final profit. Known partial stages remain visible alongside review links.
+- Setup rows without work in the selected week do not block historical profit.
+  Other expenses, dispatcher pay, taxes and other income are outside this chart.
+  Source completeness is not guaranteed by the existence of recorded transactions.
 
 ## API and access
 
 `GET /dashboard/summary?preset=thisWeek` accepts `thisWeek`, `lastWeek`,
 `thisMonth`, `lastMonth`, or `custom&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`.
+It also accepts `week&dateFrom=YYYY-MM-DD` and `view=weekly|current`. Hidden view
+jobs are not executed; omitting view retains the combined legacy response.
 Both dashboard endpoints require the server-confirmed Administrator flag;
 `access.manage` or other permissions alone do not grant access. Session responses
 expose `user.administrator` for navigation and login decisions. Within that
@@ -64,6 +99,7 @@ boundary, the response also omits unauthorized sections entirely:
 | Section | Required access |
 | --- | --- |
 | Gross, trend, dispatcher breakdown, reconciliation | `board.read` |
+| Weekly waterfall | all of `board.read`, `fuel.read`, `tolls.read`, `driver_pay.read`, `investor_pay.read` |
 | Trucks / GPS | `trucks.read` |
 | Drivers | `drivers.read` |
 | Diesel / Relay attention | `fuel.read` |
@@ -78,8 +114,9 @@ boundary, the response also omits unauthorized sections entirely:
 repeat), `page`, and `pageSize`. Count and page share a database snapshot.
 Money is returned as decimal strings. All dashboard responses are `no-store`.
 
-Summary jobs have at most three concurrent queries, 15 seconds per section and
-a 20-second request deadline. A section failure returns an explicit error while
+Summary jobs have at most three concurrent queries, 15 seconds per ordinary
+section, 45 seconds for payroll reconciliation, and a 60-second request deadline.
+A section failure returns an explicit error while
 other sections remain usable. The UI refreshes every visible minute and on focus,
 aborts obsolete requests, and retains failed sections only for the same resolved
 period and still-present permission projection, with their last-result timestamp.
@@ -103,5 +140,8 @@ and writes screenshots to the system temp directory under
 `MSERP_DASHBOARD_TEST_DATABASE_URL` for temporary-table calculation fixtures and
 `MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL` for full-schema reads and fleet
 status/drill-down fixtures in a temporary schema, dropped after each run.
+It also checks whole-fleet waterfall totals, company-only costs, dated ownership,
+refunds, DEF, environment/date exclusions and unresolved-cost handling.
+`TestDashboardEarnings` covers pass-through exclusion and stale/missing fees.
 Both must name a disposable localhost database ending `_test`.
 Never point these at production. HTTP permission/error tests need no database.

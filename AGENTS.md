@@ -444,7 +444,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Totals and percentages use those displayed statuses.
   Driver Gross is hidden on the dashboard and reconciliation table.
   Resolved loads count once across dates; provisional/conflicting/repeated rows
-  remain visible in reconciliation. No profit/payroll inference or provider calls.
+  remain visible in reconciliation. No provider calls.
+  Weekly and Right now tabs request separate section projections. Weekly uses
+  full Monday-Sunday periods and a read-only repeatable-read profit waterfall:
+  whole-fleet counted gross minus dated company-truck fuel (including DEF), tolls,
+  routed driver/owner earnings and investor shares after hired labor. Reuse payroll
+  calculations and frozen statements; never subtract owner cost recoveries twice.
+  Carry, escrow and recurring collections are excluded; profit is before other costs.
+  Unknown ownership/terms, excluded gross or unreconciled earnings leave profit null.
+  All five board/fuel/tolls/driver_pay/investor_pay read permissions are required.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
   See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.
 - `frontend/app/accounting/driver-pay/`: collapsed weekly driver accordions sourced

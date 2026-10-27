@@ -27,7 +27,7 @@ export function FleetStatusPie({ section, kind }: { section: DashboardSection; k
   return <Panel title={section.title}>
     <SectionError section={section} />
     {!unavailable && <>
-      <p className="mt-1 text-xs text-zinc-500"><strong className="font-semibold tabular-nums text-zinc-200">{number(total)}</strong> {kind === "drivers" ? "drivers · Active, Home or Vacation" : "trucks"}</p>
+      <p className="mt-1 text-xs text-zinc-500"><strong className="font-semibold tabular-nums text-zinc-200">{number(total)}</strong> {kind}</p>
       {total > 0 ? <div className="my-3 flex justify-center" role="img" aria-label={`${section.title} status distribution: ${number(total)} total`}>
         <PieChart width={180} height={180}>
           <Pie data={slices} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={84} startAngle={90} endAngle={-270} stroke="var(--background)" strokeWidth={2} isAnimationActive={false}>

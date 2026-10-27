@@ -12,6 +12,7 @@ import (
 )
 
 type companyDashboardSource interface {
+	Waterfall(context.Context, repository.DashboardPeriod) (repository.DashboardWaterfall, error)
 	Performance(context.Context, repository.DashboardPeriod) (repository.DashboardPerformance, error)
 	DashboardCounts(context.Context, string) ([]repository.DashboardItem, error)
 	DashboardCost(context.Context, string, repository.DashboardPeriod, []string) ([]repository.DashboardItem, error)
@@ -48,11 +49,16 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		if !administrator(w, r) {
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 		defer cancel()
 		r = r.WithContext(ctx)
 		p, ok := period(w, r)
 		if !ok {
+			return
+		}
+		view := r.URL.Query().Get("view")
+		if view != "" && view != "weekly" && view != "current" {
+			writeAPIError(w, 400, "choose a valid dashboard view")
 			return
 		}
 		session, ok := authSessionFromContext(r.Context())
@@ -79,6 +85,12 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 			jobs = append(jobs, job{"performance", "performance", "Gross Board performance", func(ctx context.Context) (repository.DashboardSection, error) {
 				v, err := repo.Performance(ctx, p)
 				return repository.DashboardSection{Performance: &v}, err
+			}})
+		}
+		if view != "current" && p.Preset == "week" && has("board.read") && has("fuel.read") && has("tolls.read") && has("driver_pay.read") && has("investor_pay.read") {
+			jobs = append(jobs, job{"waterfall", "waterfall", "Weekly profit", func(ctx context.Context) (repository.DashboardSection, error) {
+				v, err := repo.Waterfall(ctx, p)
+				return repository.DashboardSection{Waterfall: &v}, err
 			}})
 		}
 		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"drivers", "drivers.read", "Drivers"}, {"gps", "trucks.read", "GPS attention"}} {
@@ -153,6 +165,9 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		var wg sync.WaitGroup
 		gate := make(chan struct{}, 3)
 		for _, j := range jobs {
+			if view == "weekly" && (j.kind == "fleet" || j.kind == "attention") || view == "current" && (j.kind == "performance" || j.kind == "cost" || j.kind == "waterfall") {
+				continue
+			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -161,7 +176,11 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 				select {
 				case gate <- struct{}{}:
 					defer func() { <-gate }()
-					ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+					limit := 15 * time.Second
+					if j.kind == "waterfall" {
+						limit = 45 * time.Second
+					}
+					ctx, cancel := context.WithTimeout(r.Context(), limit)
 					defer cancel()
 					section, err = j.run(ctx)
 				case <-r.Context().Done():
@@ -178,6 +197,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 					section.Error = "This section could not be loaded"
 					section.Items = []repository.DashboardItem{}
 					section.Performance = nil
+					section.Waterfall = nil
 				}
 				mu.Lock()
 				result.Sections[j.key] = section

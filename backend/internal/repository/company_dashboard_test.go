@@ -13,6 +13,8 @@ import (
 
 func TestCompanyDashboardPeriods(t *testing.T) {
 	for _, tc := range []struct{ preset, now, from, to, previousFrom, previousTo string }{
+		{"week", "2026-10-27T02:00:00Z", "2026-10-26", "2026-11-01", "2026-10-19", "2026-10-25"},
+		{"week", "2026-03-09T01:00:00Z", "2026-03-02", "2026-03-08", "2026-02-23", "2026-03-01"},
 		{"thisWeek", "2026-10-27T02:00:00Z", "2026-10-26", "2026-10-26", "2026-10-19", "2026-10-19"},
 		{"lastWeek", "2026-11-02T17:00:00Z", "2026-10-26", "2026-11-01", "2026-10-19", "2026-10-25"},
 		{"thisMonth", "2026-03-31T12:00:00Z", "2026-03-01", "2026-03-31", "2026-02-01", "2026-02-28"},
@@ -283,4 +285,5 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	if err != nil || directory.Total != 2 {
 		t.Fatalf("active/new drilldown: %+v %v", directory, err)
 	}
+	testDashboardWaterfall(t, ctx, pool)
 }

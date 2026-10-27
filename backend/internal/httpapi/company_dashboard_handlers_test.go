@@ -33,6 +33,9 @@ func (f *dashboardFake) call(key string) error {
 func (f *dashboardFake) Performance(context.Context, repository.DashboardPeriod) (repository.DashboardPerformance, error) {
 	return repository.DashboardPerformance{Current: repository.DashboardMetric{Gross: "123.45"}}, f.call("performance")
 }
+func (f *dashboardFake) Waterfall(context.Context, repository.DashboardPeriod) (repository.DashboardWaterfall, error) {
+	return repository.DashboardWaterfall{Gross: "123.45"}, f.call("waterfall")
+}
 func (f *dashboardFake) DashboardCounts(_ context.Context, key string) ([]repository.DashboardItem, error) {
 	return []repository.DashboardItem{{ID: key, Count: 3}}, f.call(key)
 }
@@ -121,6 +124,51 @@ func TestCompanyDashboardAccess(t *testing.T) {
 	}
 	if out := request("/dashboard/loads?page=1&pageSize=25", user); out.Code != 200 {
 		t.Fatalf("authorized loads rejected %s", out.Body.String())
+	}
+}
+
+func TestCompanyDashboardViewsAndProfitAccess(t *testing.T) {
+	all := []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read", "trucks.read"}
+	for _, tc := range []struct {
+		name, view, fail string
+		permissions      []string
+		waterfall        bool
+	}{
+		{"weekly", "weekly", "", all, true}, {"current", "current", "", all, false},
+		{"payroll hidden", "weekly", "", []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read"}, false},
+		{"failed", "weekly", "waterfall", all, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &dashboardFake{fail: tc.fail}
+			r := chi.NewRouter()
+			r.Use(requirePermission)
+			registerCompanyDashboardRoutes(r, slog.New(slog.NewTextHandler(io.Discard, nil)), fake, fake, fake, fake, fake, fake)
+			req := httptest.NewRequest("GET", "/dashboard/summary?preset=week&view="+tc.view, nil)
+			req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: true, Permissions: tc.permissions}}))
+			out := httptest.NewRecorder()
+			r.ServeHTTP(out, req)
+			var got repository.CompanyDashboard
+			if err := json.Unmarshal(out.Body.Bytes(), &got); err != nil || out.Code != 200 {
+				t.Fatalf("%d %s", out.Code, out.Body.String())
+			}
+			section, ok := got.Sections["waterfall"]
+			if ok != tc.waterfall {
+				t.Fatal("profit access projection")
+			}
+			if tc.fail != "" && (section.Error == "" || section.Waterfall != nil) {
+				t.Fatal("failed profit presented as zero")
+			}
+			for _, s := range got.Sections {
+				if tc.view == "weekly" && (s.Kind == "fleet" || s.Kind == "attention") || tc.view == "current" && (s.Kind == "cost" || s.Kind == "performance" || s.Kind == "waterfall") {
+					t.Fatal("mixed dashboard views")
+				}
+			}
+			for _, call := range fake.calls {
+				if tc.view == "current" && (call == "waterfall" || call == "performance" || call == "diesel") {
+					t.Fatal("hidden weekly query executed")
+				}
+			}
+		})
 	}
 }
 

@@ -34,6 +34,16 @@ func ResolveDashboardPeriod(preset, from, to string, now time.Time) (DashboardPe
 	month := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
 	week := today.AddDate(0, 0, -(int(today.Weekday())+6)%7)
 	switch preset {
+	case "week":
+		start = week
+		if from != "" {
+			start, err = time.Parse(time.DateOnly, from)
+			if err != nil {
+				return DashboardPeriod{}, errors.New("provide a valid week date")
+			}
+			start = start.AddDate(0, 0, -(int(start.Weekday())+6)%7)
+		}
+		end = start.AddDate(0, 0, 6)
 	case "thisWeek":
 		start = week
 	case "lastWeek":
@@ -125,6 +135,7 @@ type DashboardSection struct {
 	Error       string                `json:"error,omitempty"`
 	Items       []DashboardItem       `json:"items"`
 	Performance *DashboardPerformance `json:"performance,omitempty"`
+	Waterfall   *DashboardWaterfall   `json:"waterfall,omitempty"`
 }
 type CompanyDashboard struct {
 	Period   DashboardPeriod             `json:"period"`

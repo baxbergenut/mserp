@@ -17,5 +17,5 @@ export function Panel({ title, children, subtitle }: { title: string; children: 
   return <section className="min-w-0 rounded-xl border border-zinc-800 bg-card p-4"><h2 className="text-sm font-semibold text-zinc-100">{title}</h2>{subtitle && <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>}{children}</section>;
 }
 export function SectionError({ section }: { section: DashboardSection }) {
-  return section.error ? <p role="status" className="mt-2 text-xs text-amber-400">{section.error}{section.performance || section.items.length ? ` · Last result: ${new Date(section.updatedAt).toLocaleTimeString()}` : ""}</p> : null;
+  return section.error ? <p role="status" className="mt-2 text-xs text-amber-400">{section.error}{section.performance || section.waterfall || section.items.length ? ` · Last result: ${new Date(section.updatedAt).toLocaleTimeString()}` : ""}</p> : null;
 }
