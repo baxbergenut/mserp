@@ -10,13 +10,13 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 	q, path, param := "", "", "status"
 	switch kind {
 	case "trucks":
-		q = "SELECT fleet_truck_operating_status(id),count(*) FROM trucks GROUP BY 1"
+		q = "SELECT fleet_truck_operating_status(id),count(*) FROM trucks WHERE status<>'terminated' GROUP BY 1"
 		path = "/trucks"
 	case "trailers":
 		q = "SELECT data->>'status',count(*) FROM fleet_trailers GROUP BY 1"
 		path = "/fleet/trailers"
 	case "drivers":
-		q = "SELECT availability_status,count(*) FROM drivers WHERE active GROUP BY 1 UNION ALL SELECT 'unassigned',count(*) FROM drivers WHERE active AND fleet_status_driver_truck(id) IS NULL"
+		q = "SELECT CASE WHEN availability_status='new_driver' THEN 'active' ELSE availability_status END,count(*) FROM drivers WHERE active AND availability_status IN ('active','new_driver','home','vacation') GROUP BY 1"
 		path = "/drivers"
 		param = "availability"
 	case "gps":
@@ -44,9 +44,12 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 		return nil, err
 	}
 	keys := []string{"ready", "in_use", "shop", "out_of_service", "terminated"}
+	if kind == "trucks" {
+		keys = []string{"ready", "in_use", "shop", "out_of_service"}
+	}
 	labels := map[string]string{"ready": "Ready", "in_use": "In use", "shop": "Shop", "out_of_service": "OOS", "terminated": "Terminated", "active": "Active", "home": "Home", "vacation": "Vacation", "rest": "Rest", "reset": "Reset", "family_issue": "Family issue", "health_issue": "Health issue", "new_driver": "New driver", "unassigned": "Without truck", "overdue": "GPS update overdue", "missing": "No GPS data"}
 	if kind == "drivers" {
-		keys = []string{"active", "home", "vacation", "rest", "reset", "family_issue", "health_issue", "new_driver", "unassigned"}
+		keys = []string{"active", "home", "vacation"}
 	}
 	if kind == "gps" {
 		keys = []string{"overdue", "missing"}
@@ -56,9 +59,8 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 		v := url.Values{"dashboard": {"1"}, param: {key}}
 		if kind == "drivers" {
 			v.Set("employment", "active")
-			if key == "unassigned" {
-				v.Del(param)
-				v.Set("assignment", "unassigned")
+			if key == "active" {
+				v.Set(param, "active_or_new")
 			}
 		}
 		items = append(items, DashboardItem{ID: key, Label: labels[key], Count: counts[key], Href: path + "?" + v.Encode()})

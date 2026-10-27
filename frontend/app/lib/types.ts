@@ -1489,7 +1489,7 @@ export type PTIEvent = {id:string;before:PTIRow;after:PTIRow;actorName:string;cr
 
 export interface DriverDirectoryFilters {
  employment?: "" | "all" | "active" | "terminated" | "pending";
- availability?: "" | "active" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
+ availability?: "" | "active" | "active_or_new" | "home" | "vacation" | "rest" | "reset" | "family_issue" | "health_issue" | "new_driver";
  driverType?: "" | "company" | "owner_operator" | "investor_driver" | "unassigned";
  assignment?: "" | "assigned" | "unassigned";
 }

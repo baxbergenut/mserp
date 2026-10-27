@@ -95,7 +95,7 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 	 LEFT JOIN trucks t ON t.id=a.truck_id
 	 WHERE ($1='' OR concat_ws(' ',d.full_name,d.email,d.phone,t.unit_number,dp.full_name,d.license_number) ILIKE '%' || $1 || '%') AND ($2 OR d.active)
  AND ($4='' OR $4='all' OR ($4='active' AND d.active) OR ($4='terminated' AND NOT d.active))
- AND ($5='' OR (d.active AND d.availability_status=$5))
+ AND ($5='' OR (d.active AND (d.availability_status=$5 OR ($5='active_or_new' AND d.availability_status IN ('active','new_driver')))))
  AND ($6='' OR driver_employment_type(d.id)=$6)
  AND ($7='' OR ($7='assigned' AND fleet_status_driver_truck(d.id) IS NOT NULL) OR ($7='unassigned' AND fleet_status_driver_truck(d.id) IS NULL))
 	 UNION ALL

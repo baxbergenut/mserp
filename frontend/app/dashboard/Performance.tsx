@@ -7,19 +7,18 @@ import { addDays } from "@/app/gross-board/board";
 import { money, number, range, Panel, Change } from "./display";
 
 export function PerformanceCards({ report, period, open }: { report: DashboardPerformance; period: DashboardPeriod; open: (dispatcher?: string, inclusion?: string) => void }) {
-  return <><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{([
+  return <><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([
     ["Original Gross", money(report.current.gross), report.current.gross, report.previous.gross, "Customer/load amount recorded on Gross Board"],
-    ["Driver Gross", money(report.current.driverGross), report.current.driverGross, report.previous.driverGross, "Allocated gross; not driver pay"],
     ["Counted loads", number(report.current.loads), report.current.loads, report.previous.loads, "Resolved loads counted once"],
     ["Recorded miles", number(report.current.miles), report.current.miles, report.previous.miles, `${report.current.missingMiles} loads without positive mileage`],
     ["RPM", money(report.current.rpm), report.current.rpm, report.previous.rpm, `${report.current.pairedLoads} loads with paired gross and miles`],
   ] as const).map(([label, value, current, previous, note], i) => <button key={label} onClick={() => open("", "included")} className={`rounded-xl border p-4 text-left transition-colors hover:border-blue-400/60 ${i === 0 ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-800 bg-card"}`}><span className="text-xs text-zinc-400">{label}</span><strong className="mt-2 block text-2xl font-semibold tabular-nums text-zinc-100">{value}</strong><div className="mt-2"><Change current={current} previous={previous} /></div><span className="mt-2 block text-[11px] text-zinc-500">{note}</span></button>)}</div>
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500"><span>Compared with {range(period.compareFrom, period.compareTo)}</span><span>Recorded gross includes plans; it is not collected revenue.</span><button className="text-blue-400 hover:underline" onClick={() => open()}>Reconcile totals →</button></div>
-    {(report.current.provisional + report.current.conflicts + report.current.repeats + report.current.missingGross + report.current.missingDriverGross > 0) && <div className="flex flex-wrap gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400"><CircleAlert size={15} />
+    {(report.current.provisional + report.current.conflicts + report.current.repeats + report.current.missingGross > 0) && <div className="flex flex-wrap gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400"><CircleAlert size={15} />
       {report.current.provisional > 0 && <button className="hover:underline" onClick={() => open("", "provisional")}>{report.current.provisional} provisional rows · {money(report.current.provisionalGross)}</button>}
       {report.current.conflicts > 0 && <button className="hover:underline" onClick={() => open("", "conflict")}>{report.current.conflicts} conflicting rows excluded</button>}
       {report.current.repeats > 0 && <button className="hover:underline" onClick={() => open("", "repeat")}>{report.current.repeats} repeated rows excluded</button>}
-      {(report.current.missingGross + report.current.missingDriverGross > 0) && <button className="hover:underline" onClick={() => open("", "included")}>Partial totals: {report.current.missingGross} missing original / {report.current.missingDriverGross} missing driver gross</button>}
+      {report.current.missingGross > 0 && <button className="hover:underline" onClick={() => open("", "included")}>Partial totals: {report.current.missingGross} missing original gross</button>}
     </div>}
   </>;
 }

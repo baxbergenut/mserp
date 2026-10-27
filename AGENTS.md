@@ -438,6 +438,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Both dashboard APIs require the actual Administrator flag; `/dashboard/loads`
   also requires board.read. Session `user.administrator` gates navigation/login;
   ordinary access.manage permission never substitutes for Administrator status.
+  Dashboard fleet pies omit trailers and terminated trucks; drivers show only
+  Active/Home/Vacation, with New driver grouped under Active. Directory drill-down
+  uses the validated `active_or_new` availability filter; profiles stay unchanged.
+  Totals and percentages use those displayed statuses.
+  Driver Gross is hidden on the dashboard and reconciliation table.
   Resolved loads count once across dates; provisional/conflicting/repeated rows
   remain visible in reconciliation. No profit/payroll inference or provider calls.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.

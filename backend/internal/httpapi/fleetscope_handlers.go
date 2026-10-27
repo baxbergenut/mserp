@@ -114,7 +114,7 @@ func registerDriverIntakeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			allowed []string
 		}{
 			{filter.Employment, []string{"", "all", "active", "terminated", "pending"}},
-			{filter.Availability, []string{"", "active", "home", "vacation", "rest", "reset", "family_issue", "health_issue", "new_driver"}},
+			{filter.Availability, []string{"", "active", "active_or_new", "home", "vacation", "rest", "reset", "family_issue", "health_issue", "new_driver"}},
 			{filter.DriverType, []string{"", "company", "owner_operator", "investor_driver", "unassigned"}},
 			{filter.Assignment, []string{"", "assigned", "unassigned"}},
 		} {

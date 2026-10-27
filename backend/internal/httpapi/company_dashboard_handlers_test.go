@@ -71,6 +71,7 @@ func TestCompanyDashboardAccess(t *testing.T) {
 		sections    int
 	}{
 		{"none", nil, 0}, {"board", []string{"board.read"}, 1}, {"trucks", []string{"trucks.read"}, 2}, {"expenses without categories", []string{"expenses.read"}, 0}, {"costs", []string{"fuel.read", "tolls.read", "weighmytruck.read"}, 6}, {"tasks", []string{"tasks.read"}, 1},
+		{"trailers are omitted", []string{"trailers.read"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &dashboardFake{}

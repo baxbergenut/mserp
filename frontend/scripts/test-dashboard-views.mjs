@@ -21,7 +21,7 @@ const driver = '00000000-0000-0000-0000-000000000001';
 const dispatcher = '00000000-0000-0000-0000-000000000010';
 const permissions = ['board.read', 'trucks.read', 'drivers.read', 'trailers.read', 'fuel.read', 'tolls.read', 'weighmytruck.read', 'expenses.read', 'tasks.read'];
 let administrator = true;
-let allowed = [...permissions], theme = 'default-light', revision = 1, fail = false, partial = false, empty = false;
+let allowed = [...permissions], theme = 'default-light', revision = 1, fail = false, partial = false, empty = false, fleetMode = 'normal';
 const requested = [];
 const section = (kind, title, items, extra = {}) => ({ kind, title, items, updatedAt: '2026-10-26T20:00:00Z', ...extra });
 function dashboard(query) {
@@ -31,11 +31,14 @@ function dashboard(query) {
   if (empty) return { period, sections };
   if (allowed.includes('board.read')) sections.performance = section('performance', 'Gross Board performance', [], partial ? { error: 'This section could not be loaded' } : { performance: { current: metrics, previous: { ...metrics, gross: '128000.00' }, trend: ['19','20','21','22','23','24','25'].map((day, i) => ({ ...metrics, id: `2026-10-${day}`, name: '', gross: String(10000 + i * 3500) })), dispatchers: [ { ...metrics, id: dispatcher, name: 'Dispatch East', gross: '72000.00' }, { ...metrics, id: '00000000-0000-0000-0000-000000000011', name: 'Dispatch West', gross: '71250.00' } ] } });
   for (const kind of ['trucks', 'trailers']) if (allowed.includes(`${kind}.read`)) sections[kind] = section('fleet', kind === 'trucks' ? 'Trucks' : 'Trailers', ['Ready', 'In use', 'Shop', 'OOS', 'Terminated'].map((label, i) => ({ id: ['ready', 'in_use', 'shop', 'out_of_service', 'terminated'][i], label, count: [12, 136, 8, 2, 14][i], href: `${kind === 'trucks' ? '/trucks' : '/fleet/trailers'}?dashboard=1&status=${['ready', 'in_use', 'shop', 'out_of_service', 'terminated'][i]}` })));
-  if (allowed.includes('drivers.read')) sections.drivers = section('fleet', 'Employed drivers', ['Active','Home','Vacation','Rest','Reset','Family issue','Health issue','New driver','Without truck'].map((label, i) => ({ id: ['active','home','vacation','rest','reset','family_issue','health_issue','new_driver','unassigned'][i], label, count: [126,8,4,2,3,0,1,2,6][i], href: '/drivers?dashboard=1&employment=active&availability=home' })));
+  if (allowed.includes('drivers.read')) sections.drivers = section('fleet', 'Drivers', ['Active','Home','Vacation','Rest','Reset','Family issue','Health issue','New driver','Without truck'].map((label, i) => ({ id: ['active','home','vacation','rest','reset','family_issue','health_issue','new_driver','unassigned'][i], label, count: [126,8,4,2,3,0,1,2,6][i], href: '/drivers?dashboard=1&employment=active&availability=home' })));
   if (allowed.includes('tasks.read')) sections.tasks = section('attention', 'Your tasks', [{ id: 'open', label: 'Open tasks', count: 12, href: '/tasks?dashboard=1&status=open' }]);
   if (allowed.includes('trucks.read')) sections.gps = section('attention', 'GPS attention', [{ id: 'overdue', label: 'GPS update overdue', count: 3, href: '/trucks?dashboard=1&gpsAlert=overdue' }]);
   for (const [key,permission,label,path,amount] of [['diesel','fuel.read','Diesel','/fuel','25200.45'],['tolls','tolls.read','Tolls','/tolls','3100.25'],['scale','weighmytruck.read','Scale tickets','/weighmytruck','650.00'],['expenses','expenses.read','Maintenance','/expenses','8500.00']]) {
     if (allowed.includes(permission)) sections[key] = section('cost', key === 'expenses' ? 'Expenses by category' : label, [{ id: key, label, count: 32, amount, previousAmount: '1000.00', href: `${path}?dashboard=1&tab=transactions&dateFrom=${dateFrom}&dateTo=${dateTo}${key === 'diesel' ? '&category=fuel' : key === 'expenses' ? '&categoryId=maintenance' : ''}`, note: 'Recorded transactions; not company payment responsibility.' }]);
+  }
+  for (const kind of ['trucks','drivers']) if (sections[kind] && fleetMode !== 'normal') {
+    sections[kind].items = sections[kind].items.map(item => ({...item, count: fleetMode === 'single' && ['active','in_use'].includes(item.id) ? 5 : 0}));
   }
   return { period, sections };
 }
@@ -51,6 +54,7 @@ try {
     if (path === '/dashboard/summary') return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });
     if (path === '/dashboard/loads') return route.fulfill({ json: { items: [{ driverId: driver, driverName: 'Example Driver', date: '2026-10-20', slot: 0, loadNumber: 'LOAD-101', loadRecordId: 101, gross: '2500.00', driverGross: '2200.00', miles: '800.00', dispatcherId: dispatcher, dispatcherName: 'Dispatch East', inclusion: url.searchParams.get('inclusion') || 'included' }], total: 1, page: 1, pageSize: 25, totalPages: 1 } });
     if (path === '/trucks') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, statusCounts: {ready:12,in_use:136,shop:8,out_of_service:2,terminated:14}, gpsAlertCounts: {overdue:3,missing:0} } });
+    if (path === '/driver-directory') return route.fulfill({json:{items:[],total:0,page:1,pageSize:25,totalPages:1}});
     if (path === '/fuel-transactions') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, options: {drivers:[],states:[]}, summary: {spend:0,saved:0,gallons:0} } });
     if (path === '/tolls') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, options: {units:[],agencies:[]}, summary: {amount:0,truckCount:0} } });
     if (path === '/weighmytruck/transactions') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1 } });
@@ -62,15 +66,31 @@ try {
   await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
   await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
+  await expect(page.getByRole('button', {name:/Driver Gross/})).toHaveCount(0);
+  await expect(page.getByRole('heading', {name:'Trailers',exact:true})).toHaveCount(0);
+  const truckChart = page.getByRole('img',{name:'Trucks status distribution: 158 total',exact:true});
+  const driverChart = page.getByRole('img',{name:'Drivers status distribution: 140 total',exact:true});
+  await expect(truckChart).toBeVisible(); await expect(driverChart).toBeVisible();
+  await expect(truckChart.locator('.recharts-pie-sector')).toHaveCount(4);
+  await expect(driverChart.locator('.recharts-pie-sector')).toHaveCount(3);
+  await expect(page.getByLabel('Trucks status legend').getByRole('link',{name:'In use: 136, 86.1%',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Drivers status legend').getByRole('link')).toHaveCount(3);
+  await expect(page.getByLabel('Drivers status legend').getByRole('link',{name:'Active: 128, 91.4%',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:/Terminated|Without truck|Family issue|Health issue|New driver|Reset|Rest:/})).toHaveCount(0);
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'Miles',exact:true}).click();
   await expect(page.getByRole('heading', {name:'Recorded miles trend'})).toBeVisible();
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'RPM',exact:true}).click();
   await expect(page.getByRole('heading', {name:'RPM trend'})).toBeVisible();
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'Gross',exact:true}).click();
   await page.screenshot({ path: join(output, 'dashboard-light.png'), fullPage: true });
+  await page.getByLabel('Drivers status legend').getByRole('link',{name:/^Active:/}).click();
+  await expect.poll(() => requested.some(r => r.path === '/driver-directory' && r.query.availability === 'active_or_new' && r.query.employment === 'active')).toBe(true);
+  await expect(page.getByLabel('Availability',{exact:true})).toHaveValue('active_or_new');
+  await page.goBack();
   await page.getByRole('button', { name: 'Reconcile totals →' }).click();
   await expect(page.getByRole('dialog')).toContainText('Raw load-row gross');
   await expect(page.getByRole('dialog')).toContainText('LOAD-101');
+  await expect(page.getByRole('dialog').getByRole('columnheader',{name:'Driver Gross',exact:true})).toHaveCount(0);
   await page.getByLabel('Load inclusion').selectOption('repeat');
   await expect.poll(() => requested.some(r => r.path === '/dashboard/loads' && r.query.inclusion === 'repeat')).toBe(true);
   await page.getByRole('button', {name:'Close', exact:true}).last().click();
@@ -101,6 +121,14 @@ try {
   await page.screenshot({ path: join(output, 'dashboard-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await expect(page.getByRole('button',{name:'Expand sidebar'})).toBeVisible(); await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true); await page.screenshot({ path: join(output,'dashboard-mobile.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  fleetMode = 'single'; await page.reload();
+  await expect(page.getByRole('img',{name:'Trucks status distribution: 5 total'}).locator('.recharts-pie-sector')).toHaveCount(1);
+  await expect(page.getByLabel('Trucks status legend').getByRole('link',{name:'In use: 5, 100%',exact:true})).toBeVisible();
+  fleetMode = 'zero'; await page.reload();
+  await expect(page.getByText('No trucks in these statuses.',{exact:true})).toBeVisible();
+  await expect(page.getByText('No drivers in these statuses.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('img',{name:/status distribution/})).toHaveCount(0);
+  fleetMode = 'normal';
   allowed = ['trucks.read']; revision++; await page.reload();
   await expect(page.getByRole('heading',{name:'Trucks',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:/Original Gross/})).toHaveCount(0); await expect(page.getByRole('heading',{name:'Recorded costs'})).toHaveCount(0);

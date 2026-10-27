@@ -313,6 +313,7 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 		{DriverDirectoryFilters{Assignment: "assigned"}, 1, false},
 		{DriverDirectoryFilters{Assignment: "unassigned"}, 0, false},
 		{DriverDirectoryFilters{Availability: "home"}, 0, false},
+		{DriverDirectoryFilters{Availability: "active_or_new"}, 1, false},
 		{DriverDirectoryFilters{DriverType: "unassigned"}, 0, false},
 	} {
 		filtered, filterErr := repo.ListDriverDirectory(ctx, Pagination{Page: 2, PageSize: 1}, "Test", true, test.filter)

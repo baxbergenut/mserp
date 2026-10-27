@@ -15,8 +15,9 @@ No migration or additional environment variable is required.
   periods. Custom dates are inclusive, at most 366 days, and compare with the
   immediately preceding equal-length period. Trends use daily buckets up to 90
   days and calendar weeks beyond that; boundary weeks can be partial.
-- Original Gross is the headline; Driver Gross is the recorded allocation, not
-  driver pay. Gross Board service dates determine the reporting period. Planned
+- Original Gross is the headline. Driver Gross is not displayed on the dashboard
+  or its reconciliation table; the existing API fields and conflict rules remain
+  compatible. Gross Board service dates determine the reporting period. Planned
   rows are included and gross is not represented as collected revenue.
 - Exact load identity and effective original/mileage overrides follow Gross
   Board. A linked load with a missing source value stays missing unless an
@@ -36,6 +37,14 @@ No migration or additional environment variable is required.
 - Dispatcher attribution uses the existing daily historical assignment rule,
   with an explicit Unassigned group. No truck denominator or productivity ranking
   is introduced. Current fleet and attention counts are independent of dates.
+- Trucks and drivers appear as pie charts with counts, percentages and linked
+  status legends. Truck totals include Ready, In use, Shop and OOS, excluding
+  Terminated. Driver totals include Active (including New driver), Home and Vacation;
+  other availability and overlapping assignment counts are omitted. Zero counts
+  remain in legends without slices, and empty charts show a no-data message.
+  Trailers are not queried or shown on the dashboard.
+  Active driver drill-down uses `availability=active_or_new`, a directory filter
+  combining both recorded statuses without changing driver profiles or lifecycle.
 - Costs stay separate by source: diesel line items excluding DEF/other purchases,
   production/legacy tolls by posting date, scale tickets by transaction date, and
   visible expense categories by expense date. Costs can overlap; there is no
@@ -56,7 +65,6 @@ boundary, the response also omits unauthorized sections entirely:
 | --- | --- |
 | Gross, trend, dispatcher breakdown, reconciliation | `board.read` |
 | Trucks / GPS | `trucks.read` |
-| Trailers | `trailers.read` |
 | Drivers | `drivers.read` |
 | Diesel / Relay attention | `fuel.read` |
 | Tolls / missing truck links | `tolls.read` |
@@ -93,6 +101,7 @@ and writes screenshots to the system temp directory under
 
 `go test ./internal/repository -run TestCompanyDashboard -v` uses optional
 `MSERP_DASHBOARD_TEST_DATABASE_URL` for temporary-table calculation fixtures and
-`MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL` for read checks against the complete
-initialized schema. Both must name a disposable localhost database ending `_test`.
+`MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL` for full-schema reads and fleet
+status/drill-down fixtures in a temporary schema, dropped after each run.
+Both must name a disposable localhost database ending `_test`.
 Never point these at production. HTTP permission/error tests need no database.

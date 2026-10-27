@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"strings"
@@ -176,7 +178,7 @@ func TestCompanyDashboardDatabase(t *testing.T) {
 func TestCompanyDashboardSchema(t *testing.T) {
 	dsn := os.Getenv("MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL to an initialized disposable local _test database")
+		t.Skip("set MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL to a disposable local _test database")
 	}
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil || !strings.HasSuffix(config.ConnConfig.Database, "_test") || (config.ConnConfig.Host != "127.0.0.1" && config.ConnConfig.Host != "localhost") {
@@ -184,11 +186,34 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	admin, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close(context.Background())
+	schema := fmt.Sprintf("dashboard_schema_test_%d", time.Now().UnixNano())
+	quoted := pgx.Identifier{schema}.Sanitize()
+	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+	}()
+	config.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer pool.Close()
+	baseline, err := os.ReadFile("../../sql/init.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(baseline)); err != nil {
+		t.Fatal(err)
+	}
 	repo := NewDashboardRepository(pool)
 	p, _ := ResolveDashboardPeriod("thisMonth", "", "", time.Now())
 	for _, kind := range []string{"trucks", "trailers", "drivers", "gps"} {
@@ -217,5 +242,45 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	}
 	if _, err := NewTollRepository(pool).ListTollsPage(ctx, TollPageQuery{Unlinked: true, Pagination: Pagination{Page: 1, PageSize: 25}}); err != nil {
 		t.Error(err)
+	}
+	beforeDrivers, err := repo.DashboardCounts(ctx, "drivers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeTrucks, err := repo.DashboardCounts(ctx, "trucks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fixtures are confined to this run's disposable schema.
+	_, err = pool.Exec(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,availability_status,active,status)
+ SELECT 'Dashboard status fixture '||n,'dashboard status fixture '||n,'cpm',0,availability,employed,CASE WHEN employed THEN 'active' ELSE 'terminated' END
+ FROM (VALUES(1,'active',true),(2,'new_driver',true),(3,'home',true),(4,'vacation',true),(5,'rest',true),(6,'new_driver',false)) v(n,availability,employed);
+ INSERT INTO trucks(unit_number,status,status_reason) VALUES('DASH-STATUS-READY','available',''),('DASH-STATUS-ENDED','terminated','Synthetic test fixture');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drivers, err := repo.DashboardCounts(ctx, "drivers")
+	if err != nil || len(drivers) != 3 {
+		t.Fatalf("driver statuses: %+v %v", drivers, err)
+	}
+	for i, item := range drivers {
+		want := 1
+		if item.ID == "active" {
+			want = 2
+			if !strings.Contains(item.Href, "availability=active_or_new") {
+				t.Fatal(item.Href)
+			}
+		}
+		if item.Count-beforeDrivers[i].Count != want {
+			t.Fatalf("driver grouping: %+v before %+v", drivers, beforeDrivers)
+		}
+	}
+	trucks, err := repo.DashboardCounts(ctx, "trucks")
+	if err != nil || len(trucks) != 4 || trucks[0].Count-beforeTrucks[0].Count != 1 {
+		t.Fatalf("truck grouping: %+v %v", trucks, err)
+	}
+	directory, err := NewFleetRepository(pool).ListDriverDirectory(ctx, Pagination{Page: 1, PageSize: 25}, "Dashboard status fixture", false, DriverDirectoryFilters{Employment: "active", Availability: "active_or_new"})
+	if err != nil || directory.Total != 2 {
+		t.Fatalf("active/new drilldown: %+v %v", directory, err)
 	}
 }

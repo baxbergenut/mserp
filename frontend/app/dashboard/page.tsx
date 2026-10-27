@@ -10,9 +10,9 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { money, number, range, Change, Panel, SectionError } from "./display";
 import { PerformanceCards, PerformanceCharts } from "./Performance";
 import { LoadDetails } from "./LoadDetails";
+import { FleetStatusPie } from "./FleetStatusPie";
 
 const presets: [DashboardPreset, string][] = [["thisWeek", "This week"], ["lastWeek", "Last week"], ["thisMonth", "This month"], ["lastMonth", "Last month"], ["custom", "Custom dates"]];
-const colors: Record<string, string> = { ready: "text-emerald-400", in_use: "text-blue-400", shop: "text-amber-400", out_of_service: "text-red-400", terminated: "text-zinc-500", home: "text-violet-400", vacation: "text-violet-400", unassigned: "text-amber-400" };
 
 export default function DashboardPage() {
   const [preset, setPreset] = useViewState<DashboardPreset>("dashboard:preset", "thisWeek");
@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const performance = data?.sections.performance;
   const report = performance?.performance;
   const sections = Object.entries(data?.sections ?? {});
-  const fleet = sections.filter(([, s]) => s.kind === "fleet").sort(([a], [b]) => ["trucks", "trailers", "drivers"].indexOf(a) - ["trucks", "trailers", "drivers"].indexOf(b));
+  const fleet = (["trucks", "drivers"] as const).flatMap(id => data?.sections[id] ? [{ id, section: data.sections[id] }] : []);
   const costs = sections.filter(([, s]) => s.kind === "cost").sort(([a], [b]) => ["diesel", "tolls", "scale", "expenses"].indexOf(a) - ["diesel", "tolls", "scale", "expenses"].indexOf(b));
   const attention = sections.filter(([, s]) => s.kind === "attention").sort(([a], [b]) => a.localeCompare(b));
   const open = (dispatcherId = "", inclusion = "") => setDetails({ dispatcherId, inclusion });
@@ -77,11 +77,11 @@ export default function DashboardPage() {
     </div></header>
     {error && <p role="alert" className="text-sm text-amber-400">{error}{data ? " · Showing the last available results." : ""}</p>}
     {hasErrors && <button onClick={() => setRetry(v => v + 1)} className="ui-button">Retry unavailable sections</button>}
-    {!data && !error && <div role="status" aria-label="Loading dashboard" className="grid animate-pulse gap-3 sm:grid-cols-5">{Array.from({ length: 5 }, (_, i) => <div key={i} className="h-28 rounded-xl bg-zinc-800/40" />)}</div>}
+    {!data && !error && <div role="status" aria-label="Loading dashboard" className="grid animate-pulse gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="h-28 rounded-xl bg-zinc-800/40" />)}</div>}
     {data && sections.length === 0 && <Panel title="Your dashboard is ready"><p className="mt-2 text-sm text-zinc-400">No dashboard sections are available with your current access. Your administrator can grant access to the relevant areas.</p></Panel>}
     {performance && <SectionError section={performance} />}
     {report && data && <PerformanceCards report={report} period={data.period} open={open} />}
-    {(fleet.length > 0 || attention.length > 0) && <div className={`grid items-start gap-4 ${fleet.length > 0 && attention.length > 0 ? "xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]" : ""}`}>{fleet.length > 0 && <div><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-200"><Truck size={16} />Right now <span className="font-normal text-zinc-500">Current fleet, independent of reporting dates</span></h2><div className="grid gap-3 md:grid-cols-3">{fleet.map(([id, section]) => <Panel key={id} title={section.title}><SectionError section={section} /><div className="mt-3 space-y-1">{section.items.map(item => <Link key={item.id} href={item.href} className="flex items-center justify-between gap-2 rounded px-1 py-1.5 text-xs hover:bg-zinc-800/40"><span className="text-zinc-400">{item.label}</span><strong className={`tabular-nums ${colors[item.id] ?? "text-zinc-200"}`}>{number(item.count)}</strong></Link>)}</div></Panel>)}</div></div>}
+    {(fleet.length > 0 || attention.length > 0) && <div className={`grid items-start gap-4 ${fleet.length > 0 && attention.length > 0 ? "xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]" : ""}`}>{fleet.length > 0 && <div><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-200"><Truck size={16} />Right now <span className="font-normal text-zinc-500">Current fleet, independent of reporting dates</span></h2><div className="grid items-start gap-3 md:grid-cols-2">{fleet.map(({id, section}) => <FleetStatusPie key={id} kind={id} section={section} />)}</div></div>}
       {attention.length > 0 && <Panel title="Needs attention" subtitle="Current items you can access"><div className="mt-3 space-y-1">{attention.map(([id, section]) => <div key={id}><SectionError section={section} />{section.items.filter(item => item.count > 0).map(item => <Link key={item.id} href={item.href} title={item.note} className="flex items-center justify-between gap-3 border-b border-zinc-800/50 py-2 text-xs hover:text-blue-400"><span>{item.label}</span><span className="flex shrink-0 items-center gap-2"><strong className="rounded bg-amber-500/10 px-2 py-0.5 tabular-nums text-amber-400">{number(item.count)}</strong><ArrowRight size={12} /></span></Link>)}</div>)}{attention.length > 0 && attention.every(([, s]) => !s.error && s.items.every(i => i.count === 0)) && <p className="py-4 text-sm text-zinc-500">No current attention items in the sections you can access.</p>}{attention.length === 0 && <p className="text-xs text-zinc-500">No attention sections available with your access.</p>}</div></Panel>}
     </div>}
     {report && data && <PerformanceCharts report={report} period={data.period} open={open} />}

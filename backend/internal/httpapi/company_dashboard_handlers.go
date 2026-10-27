@@ -81,7 +81,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 				return repository.DashboardSection{Performance: &v}, err
 			}})
 		}
-		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"trailers", "trailers.read", "Trailers"}, {"drivers", "drivers.read", "Employed drivers"}, {"gps", "trucks.read", "GPS attention"}} {
+		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"drivers", "drivers.read", "Drivers"}, {"gps", "trucks.read", "GPS attention"}} {
 			if has(v.permission) {
 				kind := "fleet"
 				if v.key == "gps" {
