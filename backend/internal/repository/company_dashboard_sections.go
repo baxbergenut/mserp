@@ -103,7 +103,7 @@ func (r *DashboardRepository) DashboardCost(ctx context.Context, kind string, p 
 	id, name, group := "''", "''", ""
 	if kind == "expenses" {
 		id = "category_id::text"
-		name = "coalesce((SELECT name FROM expense_settings s WHERE s.id=category_id),'Expenses')"
+		name = "coalesce((SELECT name FROM expense_settings s WHERE s.id=expenses.category_id),'Expenses')"
 		group = " GROUP BY category_id"
 	}
 	query := base + " SELECT " + id + "," + name + ",coalesce(sum(" + amount + ") FILTER(WHERE " + date + " BETWEEN $1::date AND $2::date),0)::text,coalesce(sum(" + amount + ") FILTER(WHERE " + date + " BETWEEN $3::date AND $4::date),0)::text,count(*) FILTER(WHERE " + date + " BETWEEN $1::date AND $2::date),count(*) FILTER(WHERE " + date + " IS NULL OR (" + date + " BETWEEN $1::date AND $2::date AND " + amount + " IS NULL)) FROM " + table + " WHERE " + where + " AND (" + date + " BETWEEN $3::date AND $2::date OR " + date + " IS NULL)" + group

@@ -128,8 +128,8 @@ func TestCompanyDashboardDatabase(t *testing.T) {
 	if err != nil || v.Current.Loads != 0 || v.Current.RPM != nil {
 		t.Fatalf("empty=%+v err=%v", v, err)
 	}
-	_, err = pool.Exec(ctx, `CREATE TEMP TABLE expense_settings(id uuid,name text);CREATE TEMP TABLE expenses(category_id uuid,expense_date date,amount numeric(12,2));
- INSERT INTO expense_settings VALUES('00000000-0000-0000-0000-000000000020','Visible'),('00000000-0000-0000-0000-000000000021','Hidden');
+	_, err = pool.Exec(ctx, `CREATE TEMP TABLE expense_settings(id uuid,name text,category_id uuid);CREATE TEMP TABLE expenses(category_id uuid,expense_date date,amount numeric(12,2));
+ INSERT INTO expense_settings(id,name) VALUES('00000000-0000-0000-0000-000000000020','Visible'),('00000000-0000-0000-0000-000000000021','Hidden');
  INSERT INTO expenses VALUES('00000000-0000-0000-0000-000000000020','2026-10-19',12.34),('00000000-0000-0000-0000-000000000020','2026-10-20',null),('00000000-0000-0000-0000-000000000020',null,5),('00000000-0000-0000-0000-000000000021','2026-10-19',9999);
  CREATE TEMP TABLE tolls(posting_date date,amount numeric(12,2),prepass_environment text);INSERT INTO tolls VALUES('2026-10-19',10.10,'production'),('2026-10-20',-1.01,null),('2026-10-20',999,'sandbox');
  CREATE TEMP TABLE weighmytruck_transactions(transaction_date date,amount numeric(12,2));INSERT INTO weighmytruck_transactions VALUES('2026-10-19',15.00);
