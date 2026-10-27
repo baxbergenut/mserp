@@ -141,7 +141,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 						t.Fatalf("missing no-load %s reimbursement: %+v %v", name, report, err)
 					}
 					card := report.Drivers[0]
-					if card.EmploymentType != classification || len(card.AutoCharges) != 1 || card.AutoCharges[0].Source != "expense-reimburse:"+expense || card.AutoCharges[0].Amount != "42.25" || len(card.Edits.ExpenseDeductions) != 0 {
+					if card.EmploymentType != classification || len(card.AutoCharges) != 1 || card.AutoCharges[0].Source != "expense-reimburse:"+expense || card.AutoCharges[0].Amount != "42.25" || card.AutoCharges[0].ExpenseDate != "2026-09-30" || len(card.Edits.ExpenseDeductions) != 0 {
 						t.Fatalf("wrong %s reimbursement: %+v", name, card)
 					}
 					page := PaginatePay(report, PayPageQuery{})
@@ -190,14 +190,28 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			body, err := json.Marshal(report.Drivers[0])
+			legacy := report.Drivers[0]
+			legacy.AutoCharges[0].ExpenseDate = "" // Existing finalized statements have no date metadata.
+			body, err := json.Marshal(legacy)
 			if err != nil {
 				t.Fatal(err)
 			}
 			exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,'2026-09-28',$2::jsonb)`, first, string(body))
 			frozen, err := pay.GetDriverWeek(ctx, week, first)
-			if err != nil || frozen.Drivers[0].Settlement == nil || !frozen.Drivers[0].Settlement.Finalized || frozen.Drivers[0].AutoCharges[0].Amount != "42.25" {
+			if err != nil || frozen.Drivers[0].Settlement == nil || !frozen.Drivers[0].Settlement.Finalized || frozen.Drivers[0].AutoCharges[0].Amount != "42.25" || frozen.Drivers[0].AutoCharges[0].ExpenseDate != "2026-09-30" {
 				t.Fatal("frozen credit snapshot changed", frozen, err)
+			}
+			if id(`SELECT count(*)::text FROM payroll_settlements WHERE driver_id=$1 AND report->'autoCharges'->0->>'expenseDate' IS NULL`, first) != "1" {
+				t.Fatal("display enrichment rewrote the saved snapshot")
+			}
+			history, err = pay.History(ctx, first, Pagination{PageSize: 100})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range history.Items {
+				if item.WeekStart == "2026-09-28" && item.Driver.AutoCharges[0].ExpenseDate != "2026-09-30" {
+					t.Fatal("frozen history is missing the expense date")
+				}
 			}
 			for _, query := range []string{
 				`UPDATE expenses SET amount=43 WHERE id=$1`,

@@ -215,6 +215,7 @@ jobs:
         working-directory: frontend
         run: |
           node scripts/test-expense-views.mjs
+          node scripts/test-payroll-expenses.mjs
           node scripts/test-gross-board-notes.mjs
           node scripts/test-layover-views.mjs
 

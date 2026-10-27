@@ -13,9 +13,10 @@ import (
 )
 
 type PayAutoCharge struct {
-	Name   string `json:"name"`
-	Amount string `json:"amount"`
-	Source string `json:"source"`
+	Name        string `json:"name"`
+	Amount      string `json:"amount"`
+	Source      string `json:"source"`
+	ExpenseDate string `json:"expenseDate,omitempty"`
 }
 type truckPayGroup struct {
 	term        TruckTerm
@@ -69,7 +70,7 @@ func truckRecurringCharges(data TruckChargeData, types []ChargeType, truck, week
 		if t.Direction == "charge" {
 			n = -n
 		}
-		result = append(result, PayAutoCharge{t.Name, chargeMoney(n), "truck_charge:" + truck + ":" + t.ID})
+		result = append(result, PayAutoCharge{Name: t.Name, Amount: chargeMoney(n), Source: "truck_charge:" + truck + ":" + t.ID})
 	}
 	return result
 }
@@ -332,7 +333,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 				}
 			}
 			if g.drivers[d.ID] && d.ID != g.ownerDriver {
-				g.card.AutoCharges = append(g.card.AutoCharges, PayAutoCharge{"Driver earnings · " + d.FullName, chargeMoney(-total), "driver:" + d.ID})
+				g.card.AutoCharges = append(g.card.AutoCharges, PayAutoCharge{Name: "Driver earnings · " + d.FullName, Amount: chargeMoney(-total), Source: "driver:" + d.ID})
 			}
 		}
 		if c := costs[id]; c != nil {

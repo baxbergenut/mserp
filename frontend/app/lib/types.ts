@@ -1192,7 +1192,7 @@ export interface DriverPayDriver {
   investorId?: string;
   profileDriverId?: string;
   truckId?: string;
-  autoCharges?: { name: string; amount: string; source: string }[];
+  autoCharges?: { name: string; amount: string; source: string; expenseDate?: string }[];
   issues?: string[];
  settlement?: PayrollSettlement;
   id: string;
