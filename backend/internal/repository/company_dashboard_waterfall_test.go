@@ -83,6 +83,15 @@ func testDashboardWaterfall(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if got.Gross != "3000.00" || got.Fuel != "105.00" || got.Tolls != "10.00" || got.DriverPay != "1400.00" || got.InvestorPay != "630.00" || got.Profit == nil || *got.Profit != "855.00" {
 		t.Fatalf("whole-fleet margin: %+v", got)
 	}
+	// Imported baselines establish an owner even when the historical start is
+	// unknown and the record was created after the reporting week. No payroll
+	// finalization is required for these source costs to appear.
+	exec(`UPDATE truck_ownership_history SET assigned_at='2026-10-26',start_known=false WHERE truck_unit LIKE 'FLOW-%';`)
+	got, err = repo.Waterfall(ctx, p)
+	if err != nil || got.Fuel != "105.00" || got.Tolls != "10.00" || got.Profit == nil || *got.Profit != "855.00" || len(got.Review) != 0 {
+		t.Fatalf("baseline ownership must count before finalization: %+v %v", got, err)
+	}
+	exec(`UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_unit LIKE 'FLOW-%';`)
 	// Ownership changes are resolved on transaction day, not from today's owner.
 	exec(`UPDATE truck_ownership_history SET unassigned_at='2026-10-20 00:00-04' WHERE truck_unit='FLOW-1';
  INSERT INTO truck_ownership_history(truck_id,truck_unit,owner_id,assigned_at,start_known) VALUES('30000000-0000-0000-0000-000000000001','FLOW-1','20000000-0000-0000-0000-000000000002','2026-10-20 00:00-04',true);`)
@@ -110,6 +119,15 @@ func testDashboardWaterfall(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if costs["fuel"] != "110.00" || costs["tolls"] != "10.00" {
 		t.Fatalf("transaction-day ownership: %v", costs)
 	}
+	// Accepting a baseline must not silently choose between conflicting owners.
+	exec(`INSERT INTO truck_ownership_history(id,truck_id,truck_unit,owner_id,assigned_at,unassigned_at,start_known) VALUES('40000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','FLOW-1','20000000-0000-0000-0000-000000000002','2026-10-18 00:00-04','2026-10-20 00:00-04',true);`)
+	got, err = repo.Waterfall(ctx, p)
+	fuel, fuelErr := chargeCents(got.Fuel)
+	tolls, tollsErr := chargeCents(got.Tolls)
+	if err != nil || fuelErr != nil || tollsErr != nil || fuel != 0 || tolls != 0 || got.Profit != nil || len(got.Review) == 0 {
+		t.Fatalf("conflicting ownership must stay unresolved: %+v %v", got, err)
+	}
+	exec(`DELETE FROM truck_ownership_history WHERE id='40000000-0000-0000-0000-000000000001';`)
 	exec(`UPDATE fuel_transactions SET prompts='[]' WHERE relay_transaction_id='company';`)
 	got, err = repo.Waterfall(ctx, p)
 	if err != nil || got.Profit != nil || len(got.Review) == 0 {

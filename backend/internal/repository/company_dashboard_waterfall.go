@@ -23,6 +23,9 @@ type DashboardWaterfall struct {
 	Review      []DashboardItem `json:"review"`
 }
 
+// start_known=false denotes an imported baseline with an open start, as in
+// payroll ownership classification. Its recorded end still bounds the owner;
+// missing or conflicting owners remain unresolved.
 const dashboardCompanyCostsSQL = `WITH aliases AS (
  SELECT unit_key,(array_agg(DISTINCT truck_id))[1] truck_id FROM truck_unit_aliases
  GROUP BY unit_key HAVING count(DISTINCT truck_id)=1
@@ -38,15 +41,15 @@ const dashboardCompanyCostsSQL = `WITH aliases AS (
  WHERE (t.prepass_environment IS NULL OR t.prepass_environment='production')
  AND t.posting_date BETWEEN $1::date AND $2::date
 ), attributed AS (
- SELECT c.*,o.owners,o.known,i.is_company FROM costs c
+ SELECT c.*,o.owners,i.is_company FROM costs c
  LEFT JOIN LATERAL (
-  SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id,
-   bool_and(h.start_known) known FROM truck_ownership_history h WHERE h.truck_id=c.truck_id
+  SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id
+   FROM truck_ownership_history h WHERE h.truck_id=c.truck_id
    AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.cost_date)
    AND (h.unassigned_at IS NULL OR c.cost_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
  ) o ON true LEFT JOIN investors i ON i.id=o.owner_id
-) SELECT kind,coalesce(sum(amount) FILTER(WHERE owners=1 AND known AND is_company),0)::text,
- count(*) FILTER(WHERE owners<>1 OR NOT coalesce(known,false) OR is_company IS NULL OR amount IS NULL)
+) SELECT kind,coalesce(sum(amount) FILTER(WHERE owners=1 AND is_company),0)::text,
+ count(*) FILTER(WHERE owners<>1 OR is_company IS NULL OR amount IS NULL)
  FROM attributed GROUP BY kind`
 
 func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) (DashboardWaterfall, error) {
@@ -98,7 +101,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
 	// setup list. Resolve each counted load's dated ownership independently.
 	var ownershipReview int
 	err = tx.QueryRow(ctx, companyDashboardCTE+`, ownership AS (
- SELECT c.*,o.owners,o.known,i.is_company,i.driver_id owner_driver,term.owner_id term_owner,o.owner_id
+ SELECT c.*,o.owners,i.is_company,i.driver_id owner_driver,term.owner_id term_owner,o.owner_id
  FROM dated c JOIN loads l ON l.id=c.matched_id
  LEFT JOIN LATERAL (
   SELECT (array_agg(DISTINCT a.truck_id))[1] truck_id FROM truck_driver_assignments a
@@ -107,7 +110,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
   HAVING count(DISTINCT a.truck_id)=1
  ) assignment ON l.truck_id IS NULL AND btrim(coalesce(l.truck_unit,''))=''
  LEFT JOIN LATERAL (
-  SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id,bool_and(h.start_known) known
+  SELECT count(DISTINCT h.owner_id) owners,(array_agg(DISTINCT h.owner_id))[1] owner_id
   FROM truck_ownership_history h WHERE h.truck_id=coalesce(l.truck_id,assignment.truck_id)
   AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.service_date)
   AND (h.unassigned_at IS NULL OR c.service_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
@@ -115,7 +118,7 @@ func (r *DashboardRepository) Waterfall(ctx context.Context, p DashboardPeriod) 
  LEFT JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=coalesce(l.truck_id,assignment.truck_id)
  AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1) term ON true
  WHERE c.inclusion='included'
-) SELECT count(*) FROM ownership WHERE owners<>1 OR NOT coalesce(known,false) OR is_company IS NULL
+) SELECT count(*) FROM ownership WHERE owners<>1 OR is_company IS NULL
  OR (NOT is_company AND owner_driver IS DISTINCT FROM payroll_driver_at(driver_id,service_date) AND term_owner IS DISTINCT FROM owner_id)`, p.DateFrom, p.DateTo).Scan(&ownershipReview)
 	if err != nil {
 		return v, err

@@ -69,8 +69,11 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
   one reported truck unit must resolve through the stored aliases; no driver or
   current-assignment guess supplies a missing truck. Ownership uses purchase date.
 - Tolls use production/legacy posting dates for the week and exit dates for
-  ownership. Only uniquely resolved, known dated company ownership is deducted.
-  Unknown ownership blocks profit instead of treating the transaction as owner-paid.
+  ownership. Only uniquely resolved company ownership is deducted. Imported
+  ownership baselines with an unknown start apply before their recorded end,
+  matching payroll classification; an unknown start is not an unknown owner.
+  Missing or conflicting ownership blocks profit instead of treating the
+  transaction as owner-paid. Fuel and tolls do not wait for payroll finalization.
 - Driver/owner pay and investor pay reuse routed weekly payroll and its frozen
   statements: load fees, enabled layovers and signed manual weekly adjustments.
   Investor shares deduct their hired-driver earnings so labor is counted once.

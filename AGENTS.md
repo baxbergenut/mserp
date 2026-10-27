@@ -452,6 +452,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   calculations and frozen statements; never subtract owner cost recoveries twice.
   Carry, escrow and recurring collections are excluded; profit is before other costs.
   Unknown ownership/terms, excluded gross or unreconciled earnings leave profit null.
+  Ownership baselines with start_known=false have an open start, matching payroll;
+  their recorded ends still apply. Fuel/tolls never wait for payroll finalization.
   All five board/fuel/tolls/driver_pay/investor_pay read permissions are required.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
   See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.
