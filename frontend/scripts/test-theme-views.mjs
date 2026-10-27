@@ -39,7 +39,7 @@ try {
   await page.goto(`${base}/settings`);
   await expect(page.getByRole('heading', { name: 'Color theme', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Users', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Users', exact: true })).toHaveCount(0);
   expect(accessReads).toBe(0);
   const choices = [
     ['Solarized Light', 'solarized-light', 'rgb(253, 246, 227)', 'light'],
@@ -75,12 +75,12 @@ try {
   // Dialog portals inherit light surfaces as well as the app shell.
   user = 'admin'; preferences.admin = 'default-light';
   await page.goto(`${base}/settings`);
-  await page.getByRole('button', { name: 'Users', exact: true }).click();
+  await page.getByRole('tab', { name: 'Users', exact: true }).click();
   await page.getByRole('button', { name: 'Add user', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.getByRole('dialog').locator('form').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   await page.setViewportSize({ width: 640, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: /^Clustie \(default\)/ }).click();

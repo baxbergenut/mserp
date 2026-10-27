@@ -430,9 +430,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Zero counts are hidden; collapsed badges retain their exact accessible counts.
   `components/PageNavigation.tsx` restores view and scroll state for browser/mouse
   Back and Forward navigation. Pages have no in-app Back links.
-- `frontend/app/page.tsx`: redirects `/` to `/gross-board`.
-- `frontend/app/dashboard/`: redirects legacy Dashboard links to Gross Board.
-  The old load-derived dashboard is removed pending a Gross Board-based replacement.
+- `frontend/app/page.tsx`: routes Administrators to `/dashboard`; other users keep
+  their first permitted page. The Dashboard sidebar item is Administrator-only.
+- `frontend/app/dashboard/` and repository/httpapi `company_dashboard*` provide
+  the permission-projected company overview, Gross Board gross/miles/RPM trends,
+  historical dispatcher breakdown, separate source costs and current fleet/attention.
+  Both dashboard APIs require the actual Administrator flag; `/dashboard/loads`
+  also requires board.read. Session `user.administrator` gates navigation/login;
+  ordinary access.manage permission never substitutes for Administrator status.
+  Resolved loads count once across dates; provisional/conflicting/repeated rows
+  remain visible in reconciliation. No profit/payroll inference or provider calls.
+  Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
+  See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.
 - `frontend/app/accounting/driver-pay/`: collapsed weekly driver accordions sourced
   from Gross Board, system load details, profile tariffs, comments and adjustments.
   Driver summaries form a connected compact table; comments use hover previews and

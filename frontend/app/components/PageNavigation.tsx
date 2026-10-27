@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoardLoadTarget } from "@/app/gross-board/loadLink";
 import { BackHrefContext, MarkBackContext, NavigationSearchContext, RestoringViewContext, readMemory, ViewMemoryContext, writeMemory } from "@/app/lib/viewMemory";
+import { DashboardNavigationContext } from "@/app/lib/viewMemory";
 
 type ScrollPosition = Record<string, { top: number; left: number }>;
 function scrollKey(element: HTMLElement, main: HTMLElement): string {
@@ -87,7 +88,7 @@ export function PageNavigation({ userId, url, children }: { userId: string; url:
     : previous ?? ({ "/drivers/detail": "/drivers", "/trucks/detail": "/trucks", "/fleet/trailers/detail": "/fleet/trailers" } as Record<string,string>)[parsed.pathname];
   return <ViewMemoryContext.Provider value={scope}><BackHrefContext.Provider value={back}><MarkBackContext.Provider value={markBack}><main ref={mainRef} className="min-w-0 flex-1 overflow-auto">
     <div className="w-full px-4 py-6 sm:px-6 xl:px-8">
-      <RestoringViewContext.Provider value={restoringView}><NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}>{children}</NavigationSearchContext.Provider></RestoringViewContext.Provider>
+      <RestoringViewContext.Provider value={restoringView}><NavigationSearchContext.Provider value={parsed.searchParams.get("search") ?? undefined}><DashboardNavigationContext.Provider value={parsed.searchParams.get("dashboard") === "1" ? parsed.search : undefined}>{children}</DashboardNavigationContext.Provider></NavigationSearchContext.Provider></RestoringViewContext.Provider>
     </div>
   </main></MarkBackContext.Provider></BackHrefContext.Provider></ViewMemoryContext.Provider>;
 }

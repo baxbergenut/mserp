@@ -56,6 +56,7 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
+	Administrator           bool                               `json:"administrator"`
 	AccessRevision          string                             `json:"accessRevision"`
 	Theme                   string                             `json:"theme"`
 	ID                      string                             `json:"id"`
@@ -321,7 +322,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
 		PermissionCatalog: repository.Permissions,
-		User:              authUserResponse{AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		User:              authUserResponse{Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
 		CSRFToken:         csrfToken,
 		ExpiresAt:         expiresAt,
 	}

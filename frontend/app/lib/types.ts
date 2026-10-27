@@ -975,6 +975,7 @@ export interface ExpenseExtraction {
 }
 
 export interface AuthUser {
+  administrator: boolean;
   accessRevision?: string;
   expenseVerificationRole: "admin" | "accountant" | "";
   theme: string;
@@ -1492,3 +1493,4 @@ export interface DriverDirectoryFilters {
  driverType?: "" | "company" | "owner_operator" | "investor_driver" | "unassigned";
  assignment?: "" | "assigned" | "unassigned";
 }
+export type { CompanyDashboard, DashboardPeriod, DashboardMetric, DashboardSection, DashboardItem, DashboardLoad, DashboardPerformance, DashboardQuery } from "./dashboardTypes";

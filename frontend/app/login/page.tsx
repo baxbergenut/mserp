@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/app/components/BrandLogo";
 import { login } from "@/app/lib/api";
-import { firstAllowedPage, pagePermission } from "@/app/lib/access";
+import { firstAllowedPage, canVisitPage } from "@/app/lib/access";
 import { controlClass } from "@/app/components/management/ManagementUI";
 
 export default function LoginPage() {
@@ -21,9 +21,8 @@ export default function LoginPage() {
     try {
       const session = await login(email, password, trust);
       const next = searchParams.get("next");
-      const permission = pagePermission(next?.split("?")[0] ?? "");
-      const allowed = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") && next.split("?")[0] !== "/login" && (!permission || session.user.permissions.includes(permission));
-      router.replace(allowed ? next! : firstAllowedPage(session.user.permissions));
+      const allowed = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") && next.split("?")[0] !== "/login" && canVisitPage(session.user.permissions, next.split("?")[0], session.user.administrator);
+      router.replace(allowed ? next! : firstAllowedPage(session.user.permissions,session.user.administrator));
       router.refresh();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Login failed"); }
     finally { setSubmitting(false); }

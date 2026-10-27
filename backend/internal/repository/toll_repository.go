@@ -75,12 +75,14 @@ func (r *TollRepository) ListTolls(ctx context.Context) ([]Toll, error) {
 }
 
 type TollPageQuery struct {
-	Pagination Pagination
-	Search     string
-	Unit       string
-	Agency     string
-	PostFrom   *time.Time
-	PostTo     *time.Time
+	ProductionOnly bool
+	Unlinked       bool
+	Pagination     Pagination
+	Search         string
+	Unit           string
+	Agency         string
+	PostFrom       *time.Time
+	PostTo         *time.Time
 }
 
 type TollFilterOptions struct {
@@ -112,8 +114,10 @@ func (r *TollRepository) ListTollsPage(ctx context.Context, query TollPageQuery)
 	AND ($2 = '' OR COALESCE(tr.unit_number, t.equipment_unit) = $2)
 	AND ($3 = '' OR t.agency = $3)
 	AND ($4::date IS NULL OR t.posting_date >= $4)
-	AND ($5::date IS NULL OR t.posting_date <= $5)`
-	args := []any{query.Search, query.Unit, query.Agency, query.PostFrom, query.PostTo}
+	AND ($5::date IS NULL OR t.posting_date <= $5)
+	AND (NOT $6::boolean OR t.truck_id IS NULL)
+	AND (NOT $7::boolean OR t.prepass_environment IS NULL OR t.prepass_environment='production')`
+	args := []any{query.Search, query.Unit, query.Agency, query.PostFrom, query.PostTo, query.Unlinked, query.ProductionOnly}
 	var total int
 	summary := TollSummary{}
 	if err := r.pool.QueryRow(ctx, `
@@ -125,7 +129,7 @@ func (r *TollRepository) ListTollsPage(ctx context.Context, query TollPageQuery)
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectTollsSQL+where+`
 		ORDER BY t.posting_date DESC, t.exit_date DESC, t.exit_time DESC, t.id
-		LIMIT $6 OFFSET $7`, pageArgs...)
+		LIMIT $8 OFFSET $9`, pageArgs...)
 	if err != nil {
 		return TollPage{}, err
 	}

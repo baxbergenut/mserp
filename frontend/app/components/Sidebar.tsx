@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "@/app/components/AccessLink";
 import { usePathname } from "next/navigation";
 import {
@@ -20,14 +20,16 @@ import {
   ListChecks,
   Settings,
   Scale,
+  LayoutDashboard,
 } from "lucide-react";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
-import { usePermissions, pagePermission, canVisitPage } from "@/app/lib/access";
+import { usePermissions, canVisitPage, useAdministrator } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
 import { useSidebarCounts } from "./useSidebarCounts";
 import { BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
@@ -70,13 +72,24 @@ function NavBadge({ badge, collapsed = false }: { badge?: Badge; collapsed?: boo
     className={`rounded-full bg-red-600 px-1.5 text-[11px] font-semibold tabular-nums text-white ${collapsed ? "absolute -right-1 -top-1" : "ml-auto"}`}>{badge.count > 99 ? "99+" : badge.count}</span>;
 }
 
+function subscribeNarrowViewport(update: () => void) {
+  const media = window.matchMedia("(max-width: 639px)");
+  media.addEventListener("change", update);
+  return () => media.removeEventListener("change", update);
+}
+const narrowViewport = () => window.matchMedia("(max-width: 639px)").matches;
+const serverViewport = () => false;
+
 export function Sidebar() {
   const { count } = useTaskUpdates();
   const alerts = useSidebarCounts();
   const permissions = usePermissions();
+  const administrator = useAdministrator();
   const maintenanceAccess = useMaintenanceAccess();
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const narrow = useSyncExternalStore(subscribeNarrowViewport, narrowViewport, serverViewport);
+  const [collapsePreference, setCollapsed] = useState<boolean | null>(null);
+  const collapsed = collapsePreference ?? narrow;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const badgeFor = (href: string): Badge | undefined => href === "/tasks" ? { count, label: `${count} open tasks` }
     : href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
@@ -101,7 +114,7 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
-          if ("children" in item ? children.length === 0 : pagePermission(item.href) && !canVisitPage(permissions,item.href)) return null;
+          if ("children" in item ? children.length === 0 : !canVisitPage(permissions,item.href,administrator)) return null;
           const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||
             (!("exact" in item) && pathname.startsWith(item.href + "/"));
@@ -214,7 +227,7 @@ export function Sidebar() {
 
       <div className="border-t border-zinc-800/40 p-2">
         <button
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={() => setCollapsed(!collapsed)}
           className={`
             flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px]
             text-zinc-600 transition-colors hover:bg-zinc-800/40 hover:text-zinc-300

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useViewState } from "@/app/lib/viewMemory";
 import { CalendarRange, Pencil, Plus, Settings } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchProgramTrucks, fetchServicePrograms } from "@/app/lib/api";
@@ -20,6 +21,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const [access, setAccess] = useState<ExpenseCategoryAccess | null>(null), [options, setOptions] = useState<MaintenanceOptions | null>(null);
   const [programs, setPrograms] = useState<ServiceProgram[]>([]), [members, setMembers] = useState<ProgramTruck[]>([]);
   const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useViewState("programs:status", "");
   const [page, setPage] = useState(1), [size, setSize] = useState(25), [revision, setRevision] = useState(0);
   const [error, setError] = useState(""), [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ServiceProgram | null>(null), [adding, setAdding] = useState(false), [truckSettings, setTruckSettings] = useState<ProgramTruck | null>(null);
@@ -39,7 +41,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   useEffect(() => { const update = () => { if (!document.hidden) {setClock(Date.now());setRevision(v => v + 1);} }; const timer = setInterval(update, 30000); window.addEventListener("focus", update); return () => { clearInterval(timer); window.removeEventListener("focus", update); }; }, []);
   const program = programs.find(p => p.id === selected);
   const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.set("program", ""); window.history.replaceState(null, "", url); } };
-  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
+  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && (statusFilter !== "due" || t.status === "due" || t.status === "overdue") && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
   const visible = rows.slice((page - 1) * size, page * size);
   const listed = programs.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const serviceProgram = service && programs.find(p => p.id === service.truck.programId);
@@ -48,6 +50,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
     {error && <ErrorBanner message={error} />}
     {access && !access.canView ? <p className="text-sm text-zinc-500">Your role cannot view service programs.</p> : <>
       <div className="flex flex-wrap items-center gap-3">
+        {statusFilter === "due" && <button className="ui-button" onClick={() => { setStatusFilter(""); setPage(1); }}>Due / overdue only · Clear</button>}
         <select aria-label="Service program" className="ui-button max-w-full" value={selected} onChange={e => chooseProgram(e.target.value)}><option value="">{truckId ? "All assigned programs" : "All programs"}</option>{programs.map(p => <option key={p.id} value={p.id}>{p.name}{p.active ? "" : " (paused)"}</option>)}</select>
         <ManagementSearch value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder={selected || truckId ? "Search trucks or programs…" : "Search programs…"} />
         {program && access?.canEdit && <button type="button" className="ui-button ml-auto" onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add trucks</button>}

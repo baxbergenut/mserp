@@ -487,6 +487,8 @@ export const fetchTolls = () => apiRequest<Toll[]>("/tolls");
 export const fetchTollDashboard = (query: { dateFrom: string; dateTo: string }) =>
   apiRequest<TollDashboard>(withQuery("/toll-dashboard", query));
 export const fetchTollsPage = (query: PageQuery & {
+  productionOnly?: boolean;
+  unlinked?: boolean;
   unit?: string;
   agency?: string;
   postFrom?: string;
@@ -706,3 +708,5 @@ export const savePTILayout = (version:number,placements:{truckId:string;group:im
 export const createPTIWeek = (weekStart:string) => apiRequest<import("./types").PTIWeek>("/weekly-pti/weeks",{method:"POST",body:JSON.stringify({weekStart})});
 export const changePTI = (week:string,truck:string,input:import("./types").PTIChange) => apiRequest<import("./types").PTIRow>(`/weekly-pti/${week}/${truck}`,{method:"PATCH",body:JSON.stringify(input)});
 export const fetchPTIHistory = (week:string,truck:string,signal?:AbortSignal) => apiRequest<import("./types").PTIEvent[]>(`/weekly-pti/${week}/${truck}/history`,{signal});
+export const fetchCompanyDashboard = (query: import("./dashboardTypes").DashboardQuery, signal?: AbortSignal) => apiRequest<import("./dashboardTypes").CompanyDashboard>(withQuery("/dashboard/summary", { ...query }), { signal });
+export const fetchDashboardLoads = (query: import("./dashboardTypes").DashboardQuery & { dispatcherId?: string; inclusion?: string; page: number; pageSize: number }, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./dashboardTypes").DashboardLoad>>(withQuery("/dashboard/loads", { ...query }), { signal });

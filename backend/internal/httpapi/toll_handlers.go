@@ -93,7 +93,9 @@ func (handler tollHandler) listTolls(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value, err := handler.repo.ListTollsPage(r.Context(), repository.TollPageQuery{
-			Pagination: pagination, Search: strings.TrimSpace(r.URL.Query().Get("search")),
+			Unlinked:       r.URL.Query().Get("unlinked") == "true",
+			ProductionOnly: r.URL.Query().Get("productionOnly") == "true",
+			Pagination:     pagination, Search: strings.TrimSpace(r.URL.Query().Get("search")),
 			Unit: r.URL.Query().Get("unit"), Agency: r.URL.Query().Get("agency"),
 			PostFrom: postFrom, PostTo: postTo,
 		})

@@ -65,6 +65,8 @@ export default function TollsPage() {
   const [search, setSearch] = useViewState("page:search", "");
   const [unit, setUnit] = useViewState("page:unit", "");
   const [agency, setAgency] = useViewState("page:agency", "");
+  const [unlinked, setUnlinked] = useViewState("page:unlinked", false);
+  const [productionOnly, setProductionOnly] = useViewState("page:productionOnly", false);
   const [postFrom, setPostFrom] = useViewState("page:postFrom", "");
   const [postTo, setPostTo] = useViewState("page:postTo", "");
   const [page, setPage] = useViewState("page:page", 1);
@@ -88,7 +90,7 @@ export default function TollsPage() {
     setIsLoading(true);
     try {
       const response = await fetchTollsPage({
-        page, pageSize, search: debouncedSearch, unit, agency, postFrom, postTo,
+        page, pageSize, search: debouncedSearch, unit, agency, postFrom, postTo, unlinked, productionOnly,
       });
       setTolls(response.items);
       setPage(response.page);
@@ -104,13 +106,13 @@ export default function TollsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, agency, debouncedSearch, page, pageSize, postFrom, postTo, unit]);
+  }, [setPage, agency, debouncedSearch, page, pageSize, postFrom, postTo, unit, unlinked, productionOnly]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
     return () => window.clearTimeout(timeout);
   }, [loadData]);
-  const hasFilters = Boolean(search || unit || agency || postFrom || postTo);
+  const hasFilters = Boolean(search || unit || agency || postFrom || postTo || unlinked || productionOnly);
 
   const handleSync = async () => {
     if (!canSync || isSyncing) return;
@@ -135,6 +137,8 @@ export default function TollsPage() {
   };
 
   const clearFilters = () => {
+    setProductionOnly(false);
+    setUnlinked(false);
     setSearch("");
     setUnit("");
     setAgency("");
@@ -214,6 +218,8 @@ export default function TollsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search unit, plaza, agency, tag…" />
         <TableFilters>
+          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={unlinked} onChange={e => { setUnlinked(e.target.checked); setPage(1); }} />Without linked truck</label>
+          {productionOnly && <button className="text-xs text-blue-400" onClick={() => { setProductionOnly(false); setPage(1); }}>Production records only ×</button>}
           <label className="block space-y-1"><input aria-label="Post date from" type="date" value={postFrom} onChange={(event) => { setPostFrom(event.target.value); setPage(1); }} className={filterClass} /></label><span aria-hidden="true">→</span><label><input aria-label="Post date to" type="date" value={postTo} onChange={(event) => { setPostTo(event.target.value); setPage(1); }} className={filterClass} /></label>
           <select aria-label="Toll truck" value={unit} onChange={(event) => { setUnit(event.target.value); setPage(1); }} className={filterClass}>
           <option value="">Truck</option>

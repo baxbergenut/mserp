@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState, type Dispatch, type SetStateAction } from "react";
+import { dashboardView } from "./dashboardNavigation";
 
 export const ViewMemoryContext = createContext("");
 export const BackHrefContext = createContext<string | undefined>(undefined);
@@ -8,6 +9,7 @@ export const MarkBackContext = createContext<(url: string) => void>(() => {});
 export const RestoringViewContext = createContext(false);
 export const useRestoringView = () => useContext(RestoringViewContext);
 export const NavigationSearchContext = createContext<string | undefined>(undefined);
+export const DashboardNavigationContext = createContext<string | undefined>(undefined);
 export const useMarkBack = () => useContext(MarkBackContext);
 export const useBackHref = () => useContext(BackHrefContext);
 const fallback = new Map<string, string>();
@@ -27,12 +29,16 @@ export function writeMemory(key: string, value: unknown) {
 export function useViewState<T>(name: string, initial: T | (() => T), initialOverride?: T): [T, Dispatch<SetStateAction<T>>] {
   const scope = useContext(ViewMemoryContext);
   const explicitSearch = useContext(NavigationSearchContext);
-  const override = explicitSearch !== undefined && name === "page:search" ? explicitSearch as T
-    : explicitSearch !== undefined && name === "page:page" ? 1 as T
-    : explicitSearch !== undefined && ["page:filters", "page:category", "page:company", "page:dateFrom", "page:dateTo"].includes(name)
-      ? (typeof initial === "function" ? (initial as () => T)() : initial) : initialOverride;
+  const dashboardSearch = useContext(DashboardNavigationContext);
   const key = `${scope}:view:${name}`;
-  const [value, setValue] = useState<T>(() => override !== undefined ? override : readMemory(key, typeof initial === "function" ? (initial as () => T)() : initial));
+  const [value, setValue] = useState<T>(() => {
+    const defaultValue = typeof initial === "function" ? (initial as () => T)() : initial;
+    const dashboardOverride = dashboardView(name, defaultValue, dashboardSearch);
+    const override = dashboardOverride !== undefined ? dashboardOverride : explicitSearch !== undefined && name === "page:search" ? explicitSearch as T
+      : explicitSearch !== undefined && name === "page:page" ? 1 as T
+      : explicitSearch !== undefined && ["page:filters", "page:category", "page:company", "page:dateFrom", "page:dateTo"].includes(name) ? defaultValue : initialOverride;
+    return override !== undefined ? override : readMemory(key, defaultValue);
+  });
   const update = useCallback<Dispatch<SetStateAction<T>>>(next => {
     setValue(current => {
       const result = typeof next === "function" ? (next as (value: T) => T)(current) : next;

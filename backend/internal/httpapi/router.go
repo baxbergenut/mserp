@@ -201,6 +201,7 @@ func NewRouter(
 	registerFileRoutes(protected, logger, fileRepo, documentExtractor)
 	registerFuelRoutes(protected, logger, fuelJob, fuelRepo)
 	registerDashboardRoutes(protected, logger, dashboardRepo)
+	registerCompanyDashboardRoutes(protected, logger, dashboardRepo, customTaskRepo, repository.NewMaintenanceRepository(pool), fuelRepo, wmtRepo, tollRepo)
 	registerExpenseRoutes(protected, logger, expenseRepo, expenseExtractor)
 	registerMaintenanceRoutes(protected, pool, logger, expenseRepo, expenseExtractor, fiveELDJob)
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
