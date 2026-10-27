@@ -560,6 +560,7 @@ export const deleteExpense = (id: string) =>
 // detailIds hydrates remembered expanded rows in the same paginated snapshot.
 export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, ...query }), { signal });
 export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => apiRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, { method: "POST", body: JSON.stringify(input) });
+export const transferPayLoadWeek = (investor: boolean, input: { driverId: string; date: string; slot: number; boardVersion: number; transferVersion: number; mode: import("./types").LoadWeekTransferMode; reason: string }) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/transfer-load`, { method: "POST", body: JSON.stringify(input) });
 export const undoPaySystemValues = (investor: boolean, id: string) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/undo-system`, { method: "POST", body: JSON.stringify({ id }) });
 export const changeDriverStatus = (id: string, input: DriverStatusChange) => apiRequest<Driver>(`/drivers/${id}/status`, { method: "PATCH", body: JSON.stringify(input) });
 export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });

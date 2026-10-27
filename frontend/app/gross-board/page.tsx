@@ -26,7 +26,7 @@ import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
-import { dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 80, 112, 112];
@@ -160,12 +160,11 @@ export default function GrossBoardPage() {
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
-  const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates), [board, dates]);
+  const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates, board?.entries ?? []), [board, dates]);
   const drivers = useMemo(() => rows.filter((driver) => (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [rows, selectedDispatchers, search]);
   const dispatchers = useMemo(() => Array.from(new Map(rows.map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [rows]);
   const shownEntries = useMemo(() => {
-    const days = new Set(drivers.flatMap(driver => driver.dates.map(date => `${driver.id}:${date}`)));
-    return Object.values(allEntries).filter((entry) => days.has(`${entry.driverId}:${entry.date}`));
+    return Object.values(allEntries).filter(entry => drivers.some(driver => driver.id === entry.driverId && driver.dates.includes(entry.date) && entryForDispatcher(entry,driver.dispatcherId,driver)));
   }, [allEntries, drivers]);
   const targetEntry = loadTarget && allEntries[entryKey(loadTarget.driverId, loadTarget.date, loadTarget.slot)];
   const targetMatches = !!targetEntry && !targetEntry.deleted && !targetEntry.dayStatus
@@ -182,7 +181,7 @@ export default function GrossBoardPage() {
   const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
   const dispatcherTotals = new Map<string, { original: bigint; driver: bigint; miles: bigint; balance: bigint }>();
   for (const driver of drivers) {
-    const entries = driver.dates.flatMap(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? []);
+    const entries = driver.dates.flatMap(date => (entryIndex.byDay.get(`${driver.id}:${date}`) ?? []).filter(entry => entryForDispatcher(entry,driver.dispatcherId,driver)));
     const subtotal = totals(entries);
     const opening = openings.get(driver.id);
     const group = dispatcherTotals.get(driver.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0), balance: BigInt(0) };
@@ -330,7 +329,7 @@ export default function GrossBoardPage() {
           </thead>
           <tbody>
             {drivers.map((driver, index) => {
-              const dayEntries = dates.map(date => entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]);
+              const dayEntries = dates.map(date => (entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]).filter(entry => entryForDispatcher(entry,driver.dispatcherId,driver)));
               const entries = dayEntries.filter((_, i) => driver.dates.includes(dates[i])).flat();
               const sum = totals(entries);
               const driverEntries = entryIndex.byDriver.get(driver.id) ?? [];

@@ -90,7 +90,7 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
 	entriesSQL := strings.ReplaceAll(payrollEntriesCTE, "$3", "$2")
 	entriesSQL = strings.Replace(entriesSQL, "WHERE NOT e.deleted", "WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''", 1)
 	rows, err := tx.Query(ctx, `WITH `+entriesSQL+`, entries AS MATERIALIZED (SELECT * FROM pay_entries
- ), days AS (SELECT DISTINCT driver_id,service_date FROM entries), assigned AS MATERIALIZED (
+ ), days AS (SELECT DISTINCT driver_id,source_date AS service_date FROM entries), assigned AS MATERIALIZED (
  SELECT d.driver_id,d.service_date,array_agg(DISTINCT a.truck_id::text) trucks
  FROM days d JOIN truck_driver_assignments a ON a.driver_id=d.driver_id
  AND a.assigned_at < ((d.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
@@ -98,11 +98,11 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
  GROUP BY d.driver_id,d.service_date
  ), aliases AS MATERIALIZED (SELECT unit_key,array_agg(truck_id::text) trucks FROM truck_unit_aliases GROUP BY unit_key)
  SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
- CASE WHEN trip_source.review THEN '' WHEN e.load_trip_id IS NOT NULL THEN CASE WHEN cardinality(aliases.trucks)=1 THEN aliases.trucks[1] ELSE '' END ELSE coalesce(l.truck_id::text,'') END,
+ CASE WHEN e.transfer_truck_id IS NOT NULL THEN e.transfer_truck_id::text WHEN trip_source.review THEN '' WHEN e.load_trip_id IS NOT NULL THEN CASE WHEN cardinality(aliases.trucks)=1 THEN aliases.trucks[1] ELSE '' END ELSE coalesce(l.truck_id::text,'') END,
  NOT trip_source.review AND (l.id IS NULL OR btrim(coalesce(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END,''))=''),
  coalesce(a.trucks,'{}'::text[]),CASE WHEN l.truck_id IS NULL OR e.load_trip_id IS NOT NULL THEN coalesce(aliases.trucks,'{}'::text[]) ELSE '{}'::text[] END
  FROM entries e `+payrollResolvedLoad+`
- LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.service_date
+ LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.source_date
  LEFT JOIN aliases ON aliases.unit_key=upper(btrim(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END))`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
@@ -656,6 +656,9 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	}
 	for i := range result.Drivers {
 		result.Drivers[i].TruckInactive = !active[result.Drivers[i].ID]
+	}
+	if err = decorateTransferLoads(ctx, tx, &result); err != nil {
+		return result, err
 	}
 	result.Revision = payrollRevision(result)
 	return result, nil

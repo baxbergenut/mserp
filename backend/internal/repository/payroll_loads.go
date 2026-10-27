@@ -2,8 +2,9 @@ package repository
 
 // Match each relevant number once. Search all records for that number so an
 // older duplicate remains ambiguous; never impose a history cutoff on identity.
-const payrollEntriesCTE = `pay_entries AS MATERIALIZED (
- SELECT * FROM ` + grossBoardEntriesSQL + ` e WHERE NOT e.deleted
+var payrollEntriesCTE = `pay_entries AS MATERIALIZED (
+ SELECT * FROM ` + payrollBoardEntriesSQL + ` e WHERE NOT e.deleted
+ AND e.source_date >= $1::date-7 AND e.source_date < $1::date+7
  AND e.service_date >= $1::date AND e.service_date < $1::date+7
  AND ($3::uuid[] IS NULL OR e.driver_id=ANY($3::uuid[]))
 ), pay_load_numbers AS MATERIALIZED (

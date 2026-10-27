@@ -56,6 +56,13 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			transferMigration, readErr := os.ReadFile("../../sql/159_load_week_transfers.sql")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if mode == "migration" {
+				sql = strings.Replace(sql, strings.ReplaceAll(string(transferMigration), "\r\n", "\n"), "", 1)
+			}
 			reimbursementMigration, err := os.ReadFile("../../sql/157_expense_reimbursement_payments.sql")
 			if err != nil {
 				t.Fatal(err)
@@ -186,6 +193,11 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				if _, err = admin.Exec(ctx, string(reimbursementMigration)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "migration" {
+				if _, err = admin.Exec(ctx, string(transferMigration)); err != nil {
 					t.Fatal(err)
 				}
 			}

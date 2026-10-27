@@ -1030,6 +1030,12 @@ export interface GrossBoardTrip {
 }
 
 export interface GrossBoardEntry {
+ sourceDate?: string;
+ sourceSlot?: number;
+ transferVersion?: number;
+ transferOut?: boolean;
+ creditedDispatcherId?: string;
+ creditedDispatcherName?: string;
   loadTripId?: number | null;
   split?: boolean;
   tripReview?: boolean;
@@ -1163,7 +1169,16 @@ export interface DriverPayEdits {
   tollOverride: string | null;
   version: number;
 }
+export type LoadWeekTransferMode = "everyone" | "dispatch_only" | "restore";
 export interface DriverPayLoad {
+ placementVersion?: number;
+ sourceSlot?: number;
+ sourceDate?: string;
+ dispatchDate?: string;
+ dispatchSlot?: number;
+ transferVersion?: number;
+ creditedDispatcherId?: string;
+ creditedDispatcherName?: string;
   loadTripId?: number;
   tripReview?: boolean;
   boardVersion?: number;

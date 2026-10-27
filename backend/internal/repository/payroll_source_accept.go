@@ -187,6 +187,14 @@ func assertPaySourceOpen(ctx context.Context, tx pgx.Tx, input PaySourceAcceptan
 	if err != nil {
 		return chargeInvalid("Invalid load date")
 	}
+	var movedDate string
+	if err = tx.QueryRow(ctx, `SELECT coalesce((SELECT settlement_date::text FROM gross_board_transfers WHERE driver_id=$1 AND source_date=$2::date AND source_slot=$3 AND active),$2::text)`, input.DriverID, input.Date, input.Slot).Scan(&movedDate); err != nil {
+		return err
+	}
+	date, err = time.Parse(time.DateOnly, movedDate)
+	if err != nil {
+		return err
+	}
 	week := date.AddDate(0, 0, -(int(date.Weekday())+6)%7).Format(time.DateOnly)
 	if err = assertPayrollOpen(ctx, tx, input.DriverID, week); err != nil {
 		return err
@@ -195,7 +203,7 @@ func assertPaySourceOpen(ctx context.Context, tx pgx.Tx, input PaySourceAcceptan
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks w,
  jsonb_array_elements(coalesce(w.report->'loads','[]'::jsonb)) l
  WHERE w.week_start=$1::date AND w.finalized AND l->>'sourceDriverId'=$2
- AND l->>'date'=$3 AND l->>'slot'=$4)`, week, input.DriverID, input.Date, strconv.Itoa(input.Slot)).Scan(&frozen); err != nil {
+ AND coalesce(l->>'sourceDate',l->>'date')=$3 AND coalesce(l->>'sourceSlot',l->>'slot')=$4)`, week, input.DriverID, input.Date, strconv.Itoa(input.Slot)).Scan(&frozen); err != nil {
 		return err
 	}
 	if frozen {

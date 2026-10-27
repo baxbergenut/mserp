@@ -50,28 +50,36 @@ type DriverPayEdits struct {
 	GeneratedCharges     []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
-	LoadTripID         *int     `json:"loadTripId,omitempty"`
-	TripReview         bool     `json:"tripReview,omitempty"`
-	BoardVersion       int      `json:"boardVersion"`
-	SystemOriginalRate string   `json:"systemOriginalRate"`
-	SystemMiles        string   `json:"systemMiles"`
-	SourceDriverID     string   `json:"sourceDriverId,omitempty"`
-	DriverFee          string   `json:"driverFee,omitempty"`
-	Date               string   `json:"date"`
-	Slot               int      `json:"slot"`
-	LoadNumber         string   `json:"loadNumber"`
-	LoadRecordID       *int     `json:"loadRecordId"`
-	CommentKey         string   `json:"commentKey"`
-	PickupDate         string   `json:"pickupDate"`
-	PickupLocation     string   `json:"pickupLocation"`
-	DeliveryLocation   string   `json:"deliveryLocation"`
-	OriginalRate       string   `json:"originalRate"`
-	DriverGross        string   `json:"driverGross"`
-	TotalMiles         string   `json:"totalMiles"`
-	LoadedMiles        string   `json:"loadedMiles"`
-	DeadheadMiles      string   `json:"deadheadMiles"`
-	Fee                string   `json:"fee"`
-	Issues             []string `json:"issues"`
+	PlacementVersion       int      `json:"placementVersion,omitempty"`
+	SourceSlot             int      `json:"sourceSlot"`
+	SourceDate             string   `json:"sourceDate,omitempty"`
+	DispatchDate           string   `json:"dispatchDate,omitempty"`
+	DispatchSlot           int      `json:"dispatchSlot,omitempty"`
+	TransferVersion        int      `json:"transferVersion,omitempty"`
+	CreditedDispatcherID   string   `json:"creditedDispatcherId,omitempty"`
+	CreditedDispatcherName string   `json:"creditedDispatcherName,omitempty"`
+	LoadTripID             *int     `json:"loadTripId,omitempty"`
+	TripReview             bool     `json:"tripReview,omitempty"`
+	BoardVersion           int      `json:"boardVersion"`
+	SystemOriginalRate     string   `json:"systemOriginalRate"`
+	SystemMiles            string   `json:"systemMiles"`
+	SourceDriverID         string   `json:"sourceDriverId,omitempty"`
+	DriverFee              string   `json:"driverFee,omitempty"`
+	Date                   string   `json:"date"`
+	Slot                   int      `json:"slot"`
+	LoadNumber             string   `json:"loadNumber"`
+	LoadRecordID           *int     `json:"loadRecordId"`
+	CommentKey             string   `json:"commentKey"`
+	PickupDate             string   `json:"pickupDate"`
+	PickupLocation         string   `json:"pickupLocation"`
+	DeliveryLocation       string   `json:"deliveryLocation"`
+	OriginalRate           string   `json:"originalRate"`
+	DriverGross            string   `json:"driverGross"`
+	TotalMiles             string   `json:"totalMiles"`
+	LoadedMiles            string   `json:"loadedMiles"`
+	DeadheadMiles          string   `json:"deadheadMiles"`
+	Fee                    string   `json:"fee"`
+	Issues                 []string `json:"issues"`
 }
 type PayPerson struct {
 	ID   string `json:"id"`
@@ -185,20 +193,28 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	if err = setPayDispatchers(ctx, tx, &result); err != nil {
 		return result, err
 	}
-	return overlayPayrollSettlements(ctx, tx, result, driverID)
+	result, err = overlayPayrollSettlements(ctx, tx, result, driverID)
+	if err != nil {
+		return result, err
+	}
+	if err = decorateTransferLoads(ctx, tx, &result); err != nil {
+		return result, err
+	}
+	result.Revision = payrollRevision(result)
+	return result, nil
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	defer db.Phase(ctx, "source")()
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+","+payrollEscrowCapacityCTE+payDriverEligibilitySQL+","+payrollEntriesCTE+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
  d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
- coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
+ coalesce(e.source_date::text,''),coalesce(e.source_slot,0),coalesce(e.dispatch_date,''),coalesce(e.dispatch_slot,0),coalesce(e.transfer_version,0),coalesce(e.credited_dispatcher_id,''),coalesce(e.credited_dispatcher_name,''),coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END)::text,''),coalesce(e.driver_rate::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles,e.miles) END)::text,''),coalesce(e.version,0),coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),
  CASE WHEN e.load_trip_id IS NOT NULL THEN jsonb_set(l.raw_payload,'{trip}',coalesce(trip_source.selected_trip,'null'::jsonb)) ELSE l.raw_payload END,
  e.load_trip_id,coalesce(trip_source.review,false),
- e.load_trip_id IS NOT NULL AND EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` prior WHERE NOT prior.deleted AND prior.day_status='' AND prior.driver_id=e.driver_id AND prior.load_record_id=l.id AND prior.load_trip_id=e.load_trip_id AND (prior.service_date,prior.slot)<(e.service_date,e.slot)),
+ e.load_trip_id IS NOT NULL AND EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` prior WHERE NOT prior.deleted AND prior.day_status='' AND prior.driver_id=e.driver_id AND prior.load_record_id=l.id AND prior.load_trip_id=e.load_trip_id AND (prior.service_date,prior.slot)<(e.source_date,e.source_slot)),
  coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
@@ -223,7 +239,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var raw, comments, adjustments []byte
 		var repeatedTrip bool
 		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.EmploymentType, &d.IsOwnerOperator,
-			&l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw, &l.LoadTripID, &l.TripReview, &repeatedTrip,
+			&l.SourceDate, &l.SourceSlot, &l.DispatchDate, &l.DispatchSlot, &l.TransferVersion, &l.CreditedDispatcherID, &l.CreditedDispatcherName, &l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw, &l.LoadTripID, &l.TripReview, &repeatedTrip,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal, &d.Edits.LayoverExcludedDates); err != nil {
 			return result, err

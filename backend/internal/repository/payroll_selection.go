@@ -81,8 +81,8 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
  (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
  (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
  ), board_entries AS MATERIALIZED (
- SELECT e.driver_id,e.load_record_id,e.load_trip_id,lower(btrim(e.load_number)) number FROM source_weeks w JOIN `+grossBoardEntriesSQL+` e ON e.service_date>=w.week AND e.service_date<w.week+7 WHERE $1<>''
- UNION SELECT driver_id,load_record_id,load_trip_id,lower(btrim(load_number)) number FROM `+grossBoardEntriesSQL+` e WHERE $1=''
+ SELECT e.driver_id,e.load_record_id,e.load_trip_id,lower(btrim(e.load_number)) number FROM source_weeks w JOIN `+payrollBoardEntriesSQL+` e ON e.service_date>=w.week AND e.service_date<w.week+7 WHERE $1<>''
+ UNION SELECT driver_id,load_record_id,load_trip_id,lower(btrim(load_number)) number FROM `+payrollBoardEntriesSQL+` e WHERE $1=''
  ), board_links AS MATERIALIZED (
  SELECT e.driver_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_id END truck_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_unit ELSE trip_source.selected_trip->>'truck__unit_number' END truck_unit FROM board_entries e JOIN loads l ON l.id=e.load_record_id `+loadTripSourceSQL+`
  UNION SELECT e.driver_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_id END,CASE WHEN e.load_trip_id IS NULL THEN l.truck_unit ELSE trip_source.selected_trip->>'truck__unit_number' END FROM board_entries e JOIN loads l ON lower(btrim(l.load_id))=e.number `+loadTripSourceSQL+` WHERE e.load_record_id IS NULL AND e.number<>''

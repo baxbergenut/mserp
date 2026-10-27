@@ -3,8 +3,8 @@
 import { employmentTypeLabel } from "@/app/lib/driverType";
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
-import { AlertTriangle, ChevronDown, RotateCcw, X } from "lucide-react";
-import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad } from "@/app/lib/types";
+import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
+import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { activeLayovers, carryBreakdown, centsAmount, costAmount, costRows, driverTotals, sourceAmountInput, validSourceAmount } from "./pay";
@@ -16,6 +16,7 @@ import { PaySourceCell } from "./PaySourceCell";
 import { copyPayCell, editPayCell, navigatePayGrid, selectPayCell } from "./payGrid";
 import { PayInput } from "./PayInput";
 import styles from "./payGrid.module.css";
+import { LoadTransferDialog } from "./LoadTransferDialog";
 import { CommentButton } from "./CommentButton";
 
 export const payButtonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -34,6 +35,8 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 export type DriverCardProps = {
+ onTransfer?: (load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => Promise<void>;
+ transferDisabled?: boolean;
   detailError?: string;
   onRetryDetails?: () => void;
   onOpenExpense?: (id: string) => void;
@@ -53,7 +56,8 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+  const [transfer, setTransfer] = useState<DriverPayLoad | null>(null);
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -158,9 +162,12 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
               const date = addDays(edits.weekStart, dayIndex);
               const loads = driver.loads.filter(load => load.date === date);
               const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
-              return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
+              return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
+ const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
+ if(onTransfer && !transferDisabled && (day===0 || day===6) && load.loadRecordId!==null && !load.tripReview){event.preventDefault();setTransfer(load);}
+ }} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
                 {index === 0 && <th rowSpan={loads.length} scope="rowgroup" className={`${cell} sticky left-0 z-10 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
-                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: load.sourceDriverId ?? driver.id, date: load.date, slot: String(load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}</div></td>
+                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: load.sourceDriverId ?? driver.id, date: load.dispatchDate || load.date, slot: String(load.transferVersion ? load.dispatchSlot : load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{onTransfer && [0,6].includes(new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay()) && load.loadRecordId!==null && !load.tripReview && <button type="button" disabled={transferDisabled} aria-label={`Move ${load.loadNumber} to next week`} title="Move or change load week" onClick={() => setTransfer(load)} className="shrink-0 rounded text-zinc-500 hover:text-blue-300 disabled:opacity-40"><MoreHorizontal className="h-3.5 w-3.5" /></button>}{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}{!!load.transferVersion && <span className="shrink-0 text-blue-300" aria-label={load.date === load.sourceDate ? "Dispatcher: next week" : "Moved from previous week"} title={`Original: ${load.sourceDate}. Dispatcher gross: ${load.dispatchDate}. Credited to ${load.creditedDispatcherName || "Unassigned"}.`}><ArrowRight className="h-3 w-3" /></span>}</div></td>
                 <td className={`${cell} text-zinc-400`}>{load.pickupDate || "—"}</td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>
@@ -187,6 +194,7 @@ export const DriverCard = memo(function DriverCard({ driver, edits, disabled, op
     </td></tr>}
 
     {menu && onSettlement && <StatementMenu x={menu.x} y={menu.y} label={`${driver.settlement?.finalized ? "Reopen" : "Finalize"} ${investor ? "truck" : "driver"}`} disabled={settlementDisabled} onClose={closeMenu} onSelect={() => onSettlement(!!driver.settlement?.finalized)} />}
+    {transfer && onTransfer && <LoadTransferDialog load={transfer} finalized={!!driver.settlement?.finalized} onClose={() => setTransfer(null)} onTransfer={(mode,reason) => onTransfer(transfer,mode,reason)} />}
     {comment && <Modal title={comment.value.trim() ? "Edit comment" : "Add comment"} description={`${driver.fullName} · ${comment.label}`} isSaving={false} submitLabel="Save comment" onClose={() => setComment(null)} onSubmit={event => {
       event.preventDefault();
       edit(current => comment.key === null ? { ...current, notes: comment.value } : { ...current, comments: { ...current.comments, [comment.key]: comment.value } });

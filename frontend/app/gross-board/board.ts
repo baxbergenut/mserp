@@ -1,6 +1,6 @@
 import type { GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 
-export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[]) {
+export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], entries: GrossBoardEntry[] = []) {
   return drivers.flatMap(driver => {
     const assignments = driver.assignments?.length ? driver.assignments : dates.map(date => ({ ...driver, date }));
     const groups = new Map<string, GrossBoardDriver & { dates: string[] }>();
@@ -15,9 +15,19 @@ export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[]) {
       }
       groups.set(assignment.dispatcherId, group);
     }
+    for (const entry of entries.filter(e => e.driverId === driver.id && e.transferVersion)) {
+      const id=entry.creditedDispatcherId || "";
+      const group=groups.get(id) ?? {...driver,dispatcherId:id,dispatcherName:entry.creditedDispatcherName || "Unassigned",dates:[]};
+      if(!group.dates.includes(entry.date)) group.dates.push(entry.date);
+      groups.set(id,group);
+    }
     return [...groups.values()];
   }).sort((a,b) => a.dispatcherName.localeCompare(b.dispatcherName) || a.dispatcherId.localeCompare(b.dispatcherId) || a.fullName.localeCompare(b.fullName) || a.id.localeCompare(b.id));
 }
+
+export const entryForDispatcher = (entry: GrossBoardEntry, dispatcherId: string, driver?: GrossBoardDriver) => entry.transferVersion
+  ? (entry.creditedDispatcherId || "") === dispatcherId
+  : !driver || (driver.assignments?.length ? driver.assignments.some(a => a.date === entry.date && a.dispatcherId === dispatcherId) : driver.dispatcherId === dispatcherId);
 
 export const dayStatuses: { value: Exclude<GrossBoardDayStatus, "">; aliases: string[]; color: string }[] = [
   { value: "SHOP", aliases: ["in shop", "repair", "maintenance"], color: "bg-amber-500/15 text-amber-300" },

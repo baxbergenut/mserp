@@ -34,6 +34,19 @@ func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 }
 
 func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.DriverPayRepository, fail func(http.ResponseWriter, error)) {
+	r.Post(path+"/transfer-load", func(w http.ResponseWriter, r *http.Request) {
+		var input repository.LoadWeekTransferInput
+		if err := decodeJSON(r, &input); err != nil || !isUUID(input.DriverID) {
+			writeAPIError(w, 400, "Invalid load transfer")
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := repo.TransferLoadWeek(r.Context(), input, session.User.ID); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	r.Post(path+"/undo-system", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			ID string `json:"id"`

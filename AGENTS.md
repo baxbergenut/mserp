@@ -1504,7 +1504,20 @@ assignment lookup lists.
   queued typing after the current request finishes; week navigation flushes pending changes. Memoized day
   cells and a stable edit callback keep typing from re-rendering the whole grid.
 
-- Driver Pay follows Gross Board placement, including unmatched plans, all load
+- Weekend load transfers use migration 159, repository `load_week_transfers.go`
+  and the shared Driver/Investor Pay row action. Separate dispatch/settlement
+  projections retain source coordinates, trip identity, truck and original
+  dispatcher credit. Both modes move Gross Board visually to next Monday and
+  leave a non-counting Late delivered / moved to next week marker. Settlement
+  moves keep driver/investor revenue and hired labor together; dispatcher-only
+  moves preserve frozen monetary reports. Changed crew/investor terms require
+  review. Version checks, reserved slots, the accounting lock, database source
+  guards and immutable history protect edits; restore in payroll before editing
+  transferred Gross Board values. No delivery-time inference or provider writes.
+  See `docs/LOAD_WEEK_TRANSFERS.md`; `TestLoadWeekTransfersDatabase` uses
+  `MSERP_GROSS_BOARD_TEST_DATABASE_URL`, and browser checks use
+  `node scripts/test-load-week-transfers.mjs` against a `/api` build.
+- Driver Pay follows settlement placement (normally Gross Board placement), including unmatched plans, all load
   statuses, and inactive drivers with entries. Driver sections start collapsed.
   Percentage fees use Gross Board driver gross times the current driver profile
   percentage; CPM fees use Gross Board entered/fallback miles times the profile tariff. Exact

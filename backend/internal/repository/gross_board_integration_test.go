@@ -50,7 +50,8 @@ func TestGrossBoardDatabase(t *testing.T) {
 		}
 		t.Log("Checking migration and repository queries as mserp_app")
 	}
-	_, err = pool.Exec(ctx, `CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
+	_, err = pool.Exec(ctx, `CREATE TEMP TABLE gross_board_transfers(driver_id uuid,source_date date,source_slot integer,dispatch_date date,dispatch_slot integer,settlement_date date,dispatcher_id text,dispatcher_name text,truck_id uuid,version integer,active boolean);
+ CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text,dispatcher_id uuid,active boolean);
  CREATE TEMP TABLE trucks(id uuid PRIMARY KEY,unit_number text);
  CREATE TEMP TABLE truck_driver_assignments(driver_id uuid,truck_id uuid,assigned_at timestamptz,unassigned_at timestamptz);

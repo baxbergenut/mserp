@@ -39,7 +39,7 @@ func readDriverPayCostWeek(ctx context.Context, tx pgx.Tx, week time.Time) (Driv
 	if err != nil {
 		return report, err
 	}
-	rows, err = tx.Query(ctx, `SELECT driver_id::text,service_date::text,slot,load_number FROM `+grossBoardEntriesSQL+` e
+	rows, err = tx.Query(ctx, `SELECT driver_id::text,service_date::text,slot,load_number FROM `+payrollBoardEntriesSQL+` e
  WHERE NOT deleted AND load_number<>'' AND (btrim(load_number)<>'' OR day_status='SHOP') AND service_date>=$1::date AND service_date<$1::date+7
  AND ($2::uuid[] IS NULL OR driver_id=ANY($2::uuid[])) ORDER BY driver_id,service_date,slot`, week, payrollDriverIDs(ctx))
 	if err != nil {

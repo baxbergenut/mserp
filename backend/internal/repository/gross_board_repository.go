@@ -24,28 +24,34 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
-	LoadTripID          *int             `json:"loadTripId"`
-	Split               bool             `json:"split"`
-	TripReview          bool             `json:"tripReview"`
-	Trips               []GrossBoardTrip `json:"trips"`
-	Slot                int              `json:"slot"`
-	Deleted             bool             `json:"deleted"`
-	DriverID            string           `json:"driverId"`
-	Date                string           `json:"date"`
-	LoadNumber          string           `json:"loadNumber"`
-	Note                *string          `json:"note,omitempty"` // nil on writes preserves the same load's note for older clients.
-	DayStatus           string           `json:"dayStatus"`
-	LoadRecordID        *int             `json:"loadRecordId"`
-	OriginalRate        string           `json:"originalRate"`
-	DriverRate          string           `json:"driverRate"`
-	Miles               string           `json:"miles"`
-	Version             int              `json:"version"`
-	EnteredOriginalRate string           `json:"enteredOriginalRate"`
-	EnteredMiles        string           `json:"enteredMiles"`
-	SystemOriginalRate  string           `json:"systemOriginalRate"`
-	SystemMiles         string           `json:"systemMiles"`
-	Duplicate           bool             `json:"duplicate"`
-	AcceptSystemValues  bool             `json:"acceptSystemValues,omitempty"`
+	SourceDate             string           `json:"sourceDate,omitempty"`
+	SourceSlot             int              `json:"sourceSlot,omitempty"`
+	TransferVersion        int              `json:"transferVersion,omitempty"`
+	TransferOut            bool             `json:"transferOut,omitempty"`
+	CreditedDispatcherID   string           `json:"creditedDispatcherId,omitempty"`
+	CreditedDispatcherName string           `json:"creditedDispatcherName,omitempty"`
+	LoadTripID             *int             `json:"loadTripId"`
+	Split                  bool             `json:"split"`
+	TripReview             bool             `json:"tripReview"`
+	Trips                  []GrossBoardTrip `json:"trips"`
+	Slot                   int              `json:"slot"`
+	Deleted                bool             `json:"deleted"`
+	DriverID               string           `json:"driverId"`
+	Date                   string           `json:"date"`
+	LoadNumber             string           `json:"loadNumber"`
+	Note                   *string          `json:"note,omitempty"` // nil on writes preserves the same load's note for older clients.
+	DayStatus              string           `json:"dayStatus"`
+	LoadRecordID           *int             `json:"loadRecordId"`
+	OriginalRate           string           `json:"originalRate"`
+	DriverRate             string           `json:"driverRate"`
+	Miles                  string           `json:"miles"`
+	Version                int              `json:"version"`
+	EnteredOriginalRate    string           `json:"enteredOriginalRate"`
+	EnteredMiles           string           `json:"enteredMiles"`
+	SystemOriginalRate     string           `json:"systemOriginalRate"`
+	SystemMiles            string           `json:"systemMiles"`
+	Duplicate              bool             `json:"duplicate"`
+	AcceptSystemValues     bool             `json:"acceptSystemValues,omitempty"`
 }
 
 type GrossBoardDriver struct {
@@ -113,7 +119,7 @@ const grossBoardResolvedLoad = `
 // Entered values take precedence over current source values. Carry uses the same
 // effective entries as the grid, with exact numeric arithmetic. A repeated
 // system load for one driver contributes only on its earliest board date.
-const grossBoardEffective = `WITH resolved AS (
+var grossBoardEffective = `WITH resolved AS (
  SELECT e.*, l.id AS matched_id,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS effective_original,
@@ -121,28 +127,28 @@ const grossBoardEffective = `WITH resolved AS (
  trip_source.original AS system_original, trip_source.miles AS system_miles,
  trip_source.split,trip_source.review AS trip_review,trip_source.options AS trips,
  l.id IS NOT NULL AND row_number() OVER (
-   PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.service_date,e.slot) > 1 AS duplicate
- FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
- WHERE e.service_date < $1::date+7
+   PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
+ FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
+ WHERE e.source_date < $1::date+7
 ), effective AS (
  SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
- FROM resolved
+ FROM resolved WHERE service_date < $1::date+7
 ) `
 
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
  coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
- coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trips`
+ coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	var trips []byte
 	err := row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
 		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
-		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &trips)
+		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName)
 	if err != nil {
 		return err
 	}
@@ -159,8 +165,8 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
- WHERE payroll_driver_at(d.id,$1::date)=d.id AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
- AND e.service_date >= $1::date AND e.service_date < $1::date+7))
+ WHERE payroll_driver_at(d.id,$1::date)=d.id AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
+ AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7))
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
 		return board, err
@@ -215,6 +221,28 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return board, err
+	}
+	markers, err := tx.Query(ctx, `SELECT t.driver_id::text,t.source_date::text,t.source_slot,t.version,t.dispatcher_id,t.dispatcher_name,e.load_number,e.version FROM gross_board_transfers t JOIN `+grossBoardEntriesSQL+` e ON e.driver_id=t.driver_id AND e.service_date=t.source_date AND e.slot=t.source_slot WHERE t.active AND t.source_date >= $1::date AND t.source_date < $1::date+7`, week)
+	if err != nil {
+		return board, err
+	}
+	for markers.Next() {
+		var e GrossBoardEntry
+		e.TransferOut = true
+		e.Duplicate = true
+		if err = markers.Scan(&e.DriverID, &e.Date, &e.Slot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName, &e.LoadNumber, &e.Version); err != nil {
+			markers.Close()
+			return board, err
+		}
+		e.SourceDate = e.Date
+		e.SourceSlot = e.Slot
+		e.Trips = []GrossBoardTrip{}
+		board.Entries = append(board.Entries, e)
+	}
+	err = markers.Err()
+	markers.Close()
 	if err != nil {
 		return board, err
 	}
@@ -311,6 +339,14 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return a.DriverID+a.Date < b.DriverID+b.Date
 	})
 	for index, e := range entries {
+		var transferred bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3)))`, e.DriverID, e.Date, e.Slot).Scan(&transferred); err != nil {
+			return nil, err
+		}
+		if transferred {
+			return nil, chargeInvalid("Manage or restore this transferred load in Driver Pay or Investor Pay before editing it")
+		}
+
 		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
 			empty := ""
 			e.Note = &empty

@@ -138,7 +138,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+grossBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND ($2::uuid[] IS NULL OR e.driver_id=ANY($2::uuid[])) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+payrollBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND ($2::uuid[] IS NULL OR e.driver_id=ANY($2::uuid[])) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}

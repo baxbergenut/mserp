@@ -145,6 +145,13 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				}
 				exec(string(body))
 			}
+			if mode == "migration" {
+				body, readErr := os.ReadFile("../../sql/159_load_week_transfers.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(body))
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)
