@@ -80,7 +80,12 @@ func TestLoadTripsDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			if migrated {
-				exec(strings.TrimSuffix(strings.ReplaceAll(string(init), "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n")))
+				initial := strings.ReplaceAll(string(init), "\r\n", "\n")
+				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
+				if strings.Count(initial, body) != 1 {
+					t.Fatal("expected exactly one trip migration in init.sql")
+				}
+				exec(strings.Replace(initial, body, "", 1))
 			} else {
 				exec(string(init))
 			}
