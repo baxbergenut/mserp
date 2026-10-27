@@ -197,6 +197,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   exposes attribution and Reopen. Revisions fence source/load evidence and review
   versions; routine sync timestamps do not reopen flags. Reviews never alter toll
   amounts, links or statements. POST /tolls/{id}/review requires tolls.link.
+  POST /tolls/reviews/bulk atomically reviews up to 100 explicit linked, unreviewed
+  flags with individual request receipts and source/review version fences. The
+  selection toolbar skips unlinked/already-reviewed rows and preserves their
+  selections. Any stale row rolls back the whole batch; no financial fields change.
   Flag coverage uses exit_date; the list's Posted since filter uses posting_date.
   Legacy dated mappings group by tag
   with exact-unit fallback; never guess equivalent names or strip leading zeros.

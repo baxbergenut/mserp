@@ -27,6 +27,7 @@ tollLinks.mappings = [{ id:'existing-rule', environment:'production', identityKe
 const writes = [];
 let readOnly = false;
 let tollReadOnly = false;
+let bulkReviewFailure = false, holdBulkReview = false, finishBulkReview;
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost'); const path = url.pathname.replace('/lookups/','/');
@@ -34,6 +35,7 @@ const server = createServer(async (req, res) => {
     if (path.startsWith('/api/')) {
       if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['fuel.drivers.create','fuel.drivers.edit','fuel.drivers.delete','fuel.drivers.recover','fuel.drivers.sync', 'tasks.create','tasks.edit','tasks.delete','tasks.review', 'tolls.read', ...(tollReadOnly ? [] : ['tolls.link']), 'weighmytruck.read'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
+      if(path==='/api/feedback/messages/count')return send({count:0});
       if(path==='/api/prepass-fleet')return send({configured:true,accounts:[],vehicles:[],transponders:[],trucks:[],operations:[]});
       if(path==='/api/tolls/truck-links'&&req.method==='GET')return send({...tollLinks,transactions:tollLinks.transactions.filter(t=>!t.reviewed||!t.truckId||url.searchParams.get('includeReviewed')==='true')});
       if(path==='/api/tolls')return send({items:[toll('transaction-view')],total:1,totalPages:1,page:1,pageSize:25,options:{units:[],agencies:[]},summary:{amount:2.5,truckCount:0}});
@@ -43,6 +45,13 @@ const server = createServer(async (req, res) => {
       if (path === '/api/relay-drivers' && req.method === 'GET') return send({ ...data, canLink: !readOnly });
       if (path === '/api/relay-drivers/refresh') { data.refreshedAt = new Date().toISOString(); return send({ refreshed: true }); }
       let body = ''; for await (const chunk of req) body += chunk; const input = body ? JSON.parse(body) : {};
+      if(path==='/api/tolls/reviews/bulk'){
+        writes.push(input);
+        if(bulkReviewFailure){bulkReviewFailure=false;return send({error:'A selected flag changed. Refresh the selection.'},409)}
+        if(holdBulkReview)await new Promise(resolve=>{finishBulkReview=resolve});
+        for(const change of input.changes){const row=tollLinks.transactions.find(t=>t.id===change.tollId);Object.assign(row,{reviewed:true,reviewVersion:change.id,reviewedBy:'Fixture reviewer',reviewedAt:'2026-10-27T12:00:00Z'})}
+        return send({reviewed:input.changes.length});
+      }
       if(path==='/api/tolls/toll-flagged/review'){writes.push(input);const row=tollLinks.transactions.find(t=>t.id==='toll-flagged');if(input.version!==row.reviewVersion)return send({error:'Review changed.'},409);Object.assign(row,{reviewed:input.reviewed,reviewVersion:input.id,reviewedBy:'Fixture reviewer',reviewedAt:'2026-10-27T12:00:00Z'});return send({saved:true})}
       if(path==='/api/relay-drivers/bulk'){
        writes.push(input);const results=input.changes.map(change=>{const e=data.items.find(e=>e.driver.id===change.relayDriverId);if(!e.assignment)return {relayDriverId:e.driver.id,error:'This driver has no policy assignment.'};e.assignment.enabled=false;return {relayDriverId:e.driver.id}});return send({results});
@@ -177,6 +186,28 @@ else {
     await expect(page.getByRole('button',{name:'Mark reviewed',exact:true})).toBeVisible();
     await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).uncheck();
     await expect(page.getByRole('button',{name:'Mark reviewed',exact:true})).toBeVisible();
+    tollLinks.transactions.push(...['bulk-one','bulk-two','bulk-reviewed'].map(id=>({...structuredClone(originalFlaggedToll),id,reviewed:id==='bulk-reviewed'})));
+    await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).check();
+    for(const id of ['bulk-one','bulk-two','bulk-reviewed','toll-one'])await page.getByLabel(`Select transaction ${id}`,{exact:true}).check();
+    await expect(page.getByText('4 selected · 2 flagged',{exact:true})).toBeVisible();
+    bulkReviewFailure=true;
+    await page.getByRole('button',{name:'Mark selected reviewed',exact:true}).click();
+    await expect(page.getByText('A selected flag changed. Refresh the selection.',{exact:true})).toBeVisible();
+    await expect(page.getByLabel('Select transaction bulk-one',{exact:true})).toBeChecked();
+    holdBulkReview=true;
+    await page.getByRole('button',{name:'Mark selected reviewed',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Mark selected reviewed',exact:true})).toBeDisabled();
+    await expect(page.getByLabel('Select transaction toll-one',{exact:true})).toBeDisabled();
+    await expect.poll(()=>typeof finishBulkReview).toBe('function');finishBulkReview();holdBulkReview=false;
+    await expect(page.getByText('2 transactions marked reviewed.',{exact:true})).toBeVisible();
+    if(writes.at(-1).changes.map(t=>t.tollId).join(',')!=='bulk-one,bulk-two'||new Set(writes.at(-1).changes.map(t=>t.id)).size!==2)throw new Error('Bulk review included unlinked/reviewed rows or omitted request receipts');
+    await expect(page.getByLabel('Select transaction toll-one',{exact:true})).toBeChecked();
+    await expect(page.getByLabel('Select transaction bulk-one',{exact:true})).not.toBeChecked();
+    await page.screenshot({path:join(tmpdir(),'mserp-toll-bulk-reviewed.png'),fullPage:true});
+    tollLinks.transactions=tollLinks.transactions.filter(t=>!t.id.startsWith('bulk-'));
+    await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).uncheck();
+    await expect(page.getByLabel('Select transaction bulk-one',{exact:true})).toHaveCount(0);
+    await expect(page.getByLabel('Select transaction toll-one',{exact:true})).not.toBeChecked();
     await page.getByRole('button',{name:'Link truck',exact:true}).first().click();
     await expect(page.getByRole('dialog')).toContainText('Only the selected transactions');
     await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();

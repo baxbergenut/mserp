@@ -748,6 +748,8 @@ export interface DispatcherInput {
   notes: string;
 }
 
+export interface TollFlagReviewChange { tollId: string; id: string; revision: string; version: string }
+
 export interface Toll {
   reviewRevision?: string;
   reviewVersion?: string;

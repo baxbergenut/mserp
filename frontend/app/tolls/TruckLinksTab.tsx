@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "@/app/components/AccessLink";
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
-import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink, reviewTollFlag } from "../lib/api";
+import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink, reviewTollFlag, reviewTollFlagsBulk } from "../lib/api";
 import { usePermissions } from "../lib/access";
 import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckMapping, PrePassTruckPreview, Toll } from "../lib/types";
 import { controlClass, EmptyState, ErrorBanner, Field, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
@@ -50,6 +50,19 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not update review status."); }
     finally { saving.current = false; setBusy(false); }
   }
+  async function markSelectedReviewed() {
+    if (saving.current || flaggedSelected.length === 0 || flaggedSelected.length > 100) return;
+    saving.current = true; setBusy(true); setError("");
+    const changes = flaggedSelected.map(t => ({ tollId: t.id, id: crypto.randomUUID(), revision: t.reviewRevision!, version: t.reviewVersion || "" }));
+    try {
+      const result = await reviewTollFlagsBulk(changes);
+      const completed = new Set(changes.map(t => t.tollId));
+      setSelected(ids => ids.filter(id => !completed.has(id)));
+      setNotice(`${result.reviewed} transaction${result.reviewed === 1 ? "" : "s"} marked reviewed.`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not review selected transactions."); await load(); }
+    finally { saving.current = false; setBusy(false); }
+  }
   async function submit() {
     if (saving.current) return;
     saving.current = true; setBusy(true); setError("");
@@ -64,6 +77,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
     finally { saving.current = false; setBusy(false); }
   }
   const transactions = data?.transactions ?? [];
+  const flaggedSelected = transactions.filter(t => selected.includes(t.id) && t.truckId && t.flag?.status === "review" && !t.reviewed && t.reviewRevision);
   const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const shown = transactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -73,18 +87,18 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   return <section className="space-y-4" aria-label="PrePass truck links">
     <div className="flex flex-wrap items-center gap-3">
       <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" disabled={busy} type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setData(null); setPage(1); }} /></label><label className="flex items-center gap-2 text-[13px] text-zinc-400"><input type="checkbox" disabled={busy} checked={showReviewed} onChange={e => { setShowReviewed(e.target.checked); setSelected([]); setData(null); setPage(1); }} />Show reviewed</label></TableFilters>
-      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected</span><button className="ui-button ui-button-primary" disabled={selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions.</span>}</>}
+      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected · {flaggedSelected.length} flagged</span><button className="ui-button ui-button-primary" disabled={busy || selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" disabled={busy || flaggedSelected.length === 0 || flaggedSelected.length > 100} onClick={() => void markSelectedReviewed()}>Mark selected reviewed</button><button className="ui-button" disabled={busy} onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions per action.</span>}</>}
       <div className="ml-auto">{actions}</div>
     </div>
     {error && !input && !undo && <ErrorBanner message={error} />}
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     <TableShell><table className="w-full min-w-[780px] text-left text-[13px]">
       <thead><tr>
-        {canWrite && <th className="px-3 py-2"><input type="checkbox" aria-label="Select transactions on this page" checked={allSelected} onChange={e => setSelected(ids => e.target.checked ? [...new Set([...ids, ...shown.map(t => t.id)])] : ids.filter(id => !shown.some(t => t.id === id)))} /></th>}
+        {canWrite && <th className="px-3 py-2"><input type="checkbox" disabled={busy} aria-label="Select transactions on this page" checked={allSelected} onChange={e => setSelected(ids => e.target.checked ? [...new Set([...ids, ...shown.map(t => t.id)])] : ids.filter(id => !shown.some(t => t.id === id)))} /></th>}
         {["Post date", "Truck / transponder", "Plaza / route", "Amount", "Needs attention", ""].map((v, i) => <th key={i} className={`px-3 py-2 font-medium text-zinc-500 ${v === "Amount" ? "text-right" : ""}`}>{v}</th>)}
       </tr></thead>
       <tbody className="divide-y divide-zinc-800">{!data ? <tr><td colSpan={canWrite ? 7 : 6} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : !transactions.length ? <tr><td colSpan={canWrite ? 7 : 6}><EmptyState message="No toll transactions need attention in this date range." /></td></tr> : shown.map(t => <tr key={t.id}>
-        {canWrite && <td className="px-3 py-2"><input type="checkbox" aria-label={`Select transaction ${t.id}`} checked={selected.includes(t.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))} /></td>}
+        {canWrite && <td className="px-3 py-2"><input type="checkbox" disabled={busy} aria-label={`Select transaction ${t.id}`} checked={selected.includes(t.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))} /></td>}
         <td className="px-3 py-2 font-mono tabular-nums">{t.postingDate}</td>
         <td className="px-3 py-2"><div>{t.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${t.truckId}`}>{t.truckUnit}</Link> : t.truckUnit || "Unknown"}</div><div className="font-mono text-[11px] text-zinc-500">Transponder {t.prePassTagId || "—"}</div>{t.equipmentUnit !== t.truckUnit && <div className="text-[11px] text-zinc-500">Source unit {t.equipmentUnit || "Unknown"}</div>}</td>
         <td className="px-3 py-2"><div>{[t.entryPlazaName || t.entryPlaza, t.exitPlazaName || t.exitPlaza].filter(Boolean).join(" → ")}</div><div className="text-[11px] text-zinc-500">{t.exitDate} {t.exitTime} · {t.agency}</div></td>

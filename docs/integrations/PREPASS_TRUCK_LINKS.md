@@ -26,6 +26,16 @@ Changed amounts, dates, truck attribution or surrounding load evidence require
 review again, while routine resync timestamps do not. GET `/tolls/truck-links`
 accepts `includeReviewed=true` to include reviewed flags with attribution.
 
+The selection toolbar also offers Mark selected reviewed for up to 100 linked,
+unreviewed spending flags. Unlinked and already-reviewed selections are skipped
+and remain selected for other actions. POST `/tolls/reviews/bulk` requires
+`tolls.link` and `changes` containing each `tollId`, request `id`, evidence
+`revision` and previous review `version`. The save is atomic: any stale or
+ineligible row rejects the entire batch. Locks follow transaction-ID order;
+each reviewed transaction retains its own existing audit/idempotency receipt.
+Replaying a completed batch never reapplies a review subsequently reopened.
+Amounts, truck links, source records and statements remain unchanged.
+
 Select up to 100 transactions, choose one truck, preview, then Link transactions.
 Only the explicit selected IDs change; no future mapping is created. The same
 `/tolls/truck-links/preview` and `/tolls/truck-links` endpoints accept

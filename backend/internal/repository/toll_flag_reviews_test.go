@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"testing"
 	"time"
 
@@ -137,5 +138,69 @@ func testTollFlagReviews(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 	if scalar(`SELECT count(*) FROM toll_flag_review_events WHERE toll_id=$1`, tollID) != "4" {
 		t.Fatal("missing immutable review/reopen receipts")
+	}
+	// Bulk review is atomic, scoped to explicit IDs, and keeps individual receipts.
+	bulkTxns := []prepass.Transaction{makeToll(92010, "REVIEW-TRUCK"), makeToll(92011, "REVIEW-TRUCK"), makeToll(92012, "REVIEW-TRUCK")}
+	if _, err := repo.UpsertDay(ctx, "production", time.Now(), bulkTxns, time.Now(), false); err != nil {
+		t.Fatal(err)
+	}
+	bulkIDs := []string{scalar(`SELECT id FROM tolls WHERE prepass_toll_id=92010`), scalar(`SELECT id FROM tolls WHERE prepass_toll_id=92011`)}
+	changes := []TollFlagReviewChange{}
+	for _, id := range bulkIDs {
+		v := find(id, false)
+		changes = append(changes, TollFlagReviewChange{TollID: id, ID: scalar(`SELECT gen_random_uuid()`), Revision: v.ReviewRevision, Version: v.ReviewVersion})
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].TollID < changes[j].TollID })
+	exec(`UPDATE tolls SET amount=5 WHERE id=$1`, changes[1].TollID)
+	if repo.ReviewTollFlagsBulk(ctx, changes, actor) == nil {
+		t.Fatal("bulk accepted stale evidence")
+	}
+	if scalar(`SELECT count(*) FROM toll_flag_review_events WHERE toll_id=ANY($1::uuid[])`, bulkIDs) != "0" || find(changes[0].TollID, false) == nil {
+		t.Fatal("bulk failure partially reviewed selection")
+	}
+	changes[1].Revision = find(changes[1].TollID, false).ReviewRevision
+	beforeBulk := scalar(`SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id)::text FROM tolls t WHERE id=ANY($1::uuid[])`, bulkIDs)
+	if err := repo.ReviewTollFlagsBulk(ctx, changes, actor); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReviewTollFlagsBulk(ctx, changes, actor); err != nil {
+		t.Fatal("bulk retry", err)
+	}
+	if scalar(`SELECT count(*) FROM toll_flag_review_events WHERE toll_id=ANY($1::uuid[])`, bulkIDs) != "2" {
+		t.Fatal("bulk did not retain exactly one receipt per transaction")
+	}
+	for _, id := range bulkIDs {
+		if find(id, false) != nil || !find(id, true).Reviewed {
+			t.Fatal("bulk flag remained in attention")
+		}
+	}
+	if find(scalar(`SELECT id FROM tolls WHERE prepass_toll_id=92012`), false) == nil {
+		t.Fatal("bulk reviewed an unselected flag")
+	}
+	if scalar(`SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id)::text FROM tolls t WHERE id=ANY($1::uuid[])`, bulkIDs) != beforeBulk {
+		t.Fatal("bulk modified source or financial records")
+	}
+	checked = find(changes[0].TollID, true)
+	if err := repo.ReviewTollFlag(ctx, checked.ID, TollFlagReviewInput{ID: scalar(`SELECT gen_random_uuid()`), Revision: checked.ReviewRevision, Version: checked.ReviewVersion, Reviewed: false}, actor); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReviewTollFlagsBulk(ctx, changes, actor); err != nil {
+		t.Fatal("bulk receipt replay after reopen", err)
+	}
+	if find(checked.ID, false) == nil {
+		t.Fatal("bulk replay reapplied a reopened review")
+	}
+	already := find(changes[1].TollID, true)
+	invalidCases := [][]TollFlagReviewChange{
+		{}, make([]TollFlagReviewChange, 101), {changes[0], changes[0]},
+		{{TollID: changes[0].TollID, ID: changes[0].ID}, {TollID: changes[1].TollID, ID: changes[0].ID}},
+		{{TollID: unlinkedID, ID: scalar(`SELECT gen_random_uuid()`), Revision: in.Revision}},
+		{{TollID: checkID, ID: scalar(`SELECT gen_random_uuid()`), Revision: in.Revision}},
+		{{TollID: already.ID, ID: scalar(`SELECT gen_random_uuid()`), Revision: already.ReviewRevision, Version: already.ReviewVersion}},
+	}
+	for i, selection := range invalidCases {
+		if repo.ReviewTollFlagsBulk(ctx, selection, actor) == nil {
+			t.Fatalf("accepted invalid bulk selection %d", i)
+		}
 	}
 }

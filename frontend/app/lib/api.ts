@@ -639,6 +639,7 @@ export const verifyRelayDriverOperation = (id: string) => apiRequest<void>(`/rel
 import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckPreview } from "./types";
 export const fetchPrePassTruckLinks = (from: string, signal?: AbortSignal, includeReviewed = false) => apiRequest<PrePassTruckLinks>(withQuery("/tolls/truck-links", { from, includeReviewed: includeReviewed ? "true" : undefined }), { signal });
 export const reviewTollFlag = (id: string, input: { id: string; revision: string; version: string; reviewed: boolean }) => apiRequest<{ saved: boolean }>(`/tolls/${id}/review`, { method: "POST", body: JSON.stringify(input) });
+export const reviewTollFlagsBulk = (changes: import("./types").TollFlagReviewChange[]) => apiRequest<{ reviewed: number }>("/tolls/reviews/bulk", { method: "POST", body: JSON.stringify({ changes }) });
 export const previewPrePassTruckLink = (input: PrePassTruckLinkInput) => apiRequest<PrePassTruckPreview>("/tolls/truck-links/preview", { method: "POST", body: JSON.stringify(input) });
 export const savePrePassTruckLink = (input: PrePassTruckLinkInput) => apiRequest<{ saved: boolean }>("/tolls/truck-links", { method: "POST", body: JSON.stringify(input) });
 export const undoPrePassTruckLink = (id: string, version: number) => apiRequest<{ saved: boolean }>(`/tolls/truck-links/${id}/undo`, { method: "POST", body: JSON.stringify({ version }) });

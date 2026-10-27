@@ -25,6 +25,27 @@ func (h tollHandler) registerTruckLinks(r chi.Router) {
 		}
 		writeJSON(w, 200, out)
 	})
+	r.Post("/tolls/reviews/bulk", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Changes []repository.TollFlagReviewChange `json:"changes"`
+		}
+		if decodeJSON(r, &body) != nil || len(body.Changes) == 0 || len(body.Changes) > 100 {
+			writeAPIError(w, 400, "Select between 1 and 100 flagged transactions.")
+			return
+		}
+		for _, change := range body.Changes {
+			if !isUUID(change.TollID) || !isUUID(change.ID) || len(change.Revision) != 64 || change.Version != "" && !isUUID(change.Version) {
+				writeAPIError(w, 400, "Provide the current flagged transactions and review versions.")
+				return
+			}
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := h.repo.ReviewTollFlagsBulk(r.Context(), body.Changes, session.User.ID); err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]int{"reviewed": len(body.Changes)})
+	})
 	r.Post("/tolls/{id}/review", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			ID       string `json:"id"`

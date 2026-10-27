@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +20,47 @@ type TollFlagReviewInput struct {
 	Revision string `json:"revision"`
 	Version  string `json:"version"`
 	Reviewed bool   `json:"reviewed"`
+}
+
+type TollFlagReviewChange struct {
+	TollID   string `json:"tollId"`
+	ID       string `json:"id"`
+	Revision string `json:"revision"`
+	Version  string `json:"version"`
+}
+
+// The entire selection commits together. Each transaction retains its own
+// reviewed evidence, actor and idempotent request receipt.
+func (r *TollRepository) ReviewTollFlagsBulk(ctx context.Context, changes []TollFlagReviewChange, actor string) error {
+	if len(changes) == 0 || len(changes) > 100 {
+		return &TollLinkError{"Select between 1 and 100 flagged transactions."}
+	}
+	ordered := append([]TollFlagReviewChange(nil), changes...)
+	seenTolls, seenRequests := map[string]bool{}, map[string]bool{}
+	for i := range ordered {
+		change := &ordered[i]
+		change.TollID = strings.ToLower(change.TollID)
+		change.ID = strings.ToLower(change.ID)
+		var tollID, requestID pgtype.UUID
+		if len(change.TollID) != 36 || tollID.Scan(change.TollID) != nil || !tollID.Valid || len(change.ID) != 36 || requestID.Scan(change.ID) != nil || !requestID.Valid || seenTolls[change.TollID] || seenRequests[change.ID] {
+			return &TollLinkError{"Select distinct valid transactions and review requests."}
+		}
+		seenTolls[change.TollID] = true
+		seenRequests[change.ID] = true
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].TollID < ordered[j].TollID })
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, change := range ordered {
+		in := TollFlagReviewInput{ID: change.ID, Revision: change.Revision, Version: change.Version, Reviewed: true}
+		if err = reviewTollFlagTx(ctx, tx, change.TollID, in, actor, true); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // Fingerprints exclude routine load sync timestamps. Changed amounts, dates,
@@ -69,16 +112,23 @@ func populateTollReviews(ctx context.Context, tx pgx.Tx, values []Toll) (map[str
 }
 
 func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in TollFlagReviewInput, actor string) error {
-	var request pgtype.UUID
-	raw, err := hex.DecodeString(in.Revision)
-	if request.Scan(in.ID) != nil || !request.Valid || err != nil || len(raw) != 32 {
-		return &TollLinkError{"Refresh the flagged transaction before reviewing it."}
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = reviewTollFlagTx(ctx, tx, tollID, in, actor, false); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func reviewTollFlagTx(ctx context.Context, tx pgx.Tx, tollID string, in TollFlagReviewInput, actor string, requireLinked bool) error {
+	var request pgtype.UUID
+	raw, err := hex.DecodeString(in.Revision)
+	if request.Scan(in.ID) != nil || !request.Valid || err != nil || len(raw) != 32 {
+		return &TollLinkError{"Refresh the flagged transaction before reviewing it."}
+	}
 	// The toll row serializes reviews and links without changing financial data.
 	toll, err := scanToll(tx.QueryRow(ctx, selectTollsSQL+` WHERE t.id=$1 FOR UPDATE OF t`, tollID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -97,6 +147,9 @@ func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in T
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
+	}
+	if requireLinked && toll.TruckID == nil {
+		return &TollLinkError{"Unlinked transactions need a truck link before bulk review."}
 	}
 	flags, err := transactionFlagsTx(ctx, tx, "toll", []string{tollID}, time.Now().UTC())
 	if err != nil {
@@ -118,9 +171,12 @@ func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in T
 	if !in.Reviewed && !toll.Reviewed {
 		return &TollLinkError{"This flag is already open for review."}
 	}
+	if requireLinked && toll.Reviewed {
+		return &TollLinkError{"A selected transaction was already reviewed. Refresh the selection."}
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO toll_flag_review_events(id,toll_id,revision,previous_version,reviewed,evidence,actor_id) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)`, in.ID, tollID, in.Revision, in.Version, in.Reviewed, evidence[tollID], actor)
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }
