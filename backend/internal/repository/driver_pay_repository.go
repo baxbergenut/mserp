@@ -208,8 +208,8 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale)
- AND (d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
+ AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale OR d.pay_reimburse)
+ AND (d.pay_reimburse OR d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
  OR (d.pay_employment_type='owner_operator' AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
  ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx))
 	if err != nil {
@@ -315,6 +315,10 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	if err != nil {
 		return result, err
 	}
+	reimbursements, err := expenseReimbursementCreditsBulk(ctx, tx, ids, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
 	deductions, err := expenseDeductionsBulk(ctx, tx, ids, result.WeekStart)
 	if err != nil {
 		return result, err
@@ -331,6 +335,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	for _, d := range result.Drivers {
 		d.Layovers = layovers[d.ID]
 		d.AutoCharges = append(credits[d.ID], scaleCharges[d.ID]...)
+		d.AutoCharges = append(d.AutoCharges, reimbursements[d.ID]...)
 		if d.AutoCharges == nil {
 			d.AutoCharges = []PayAutoCharge{}
 		}

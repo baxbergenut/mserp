@@ -12,6 +12,7 @@ import (
 var ErrExpenseSettingConflict = errors.New("expense setting changed; reload and try again")
 var ErrExpenseSettingInvalid = errors.New("invalid expense setting")
 var ErrExpensePaymentMethodInvalid = errors.New("select an active payment method from Expense settings")
+var ErrExpenseSettingPermanent = errors.New("Reimburse is a permanent payment method and cannot be edited")
 
 // Existing entries may retain a historical method, but new selections use the catalog.
 func (r *ExpenseRepository) ValidateExpensePaymentMethod(ctx context.Context, method, saved *string) error {
@@ -75,6 +76,15 @@ func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, i
 		return ExpenseSetting{}, ErrExpenseSettingInvalid
 	}
 	var row pgx.Row
+	if id != "" {
+		var permanent bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_settings WHERE id=$1 AND kind='payment_method' AND lower(btrim(name))='reimburse')`, id).Scan(&permanent); err != nil {
+			return ExpenseSetting{}, err
+		}
+		if permanent {
+			return ExpenseSetting{}, ErrExpenseSettingPermanent
+		}
+	}
 	if id == "" {
 		row = r.pool.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only`, input.Kind, input.CategoryID, input.Name, input.Active)
 	} else {

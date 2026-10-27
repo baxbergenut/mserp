@@ -792,6 +792,10 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
 			return
 		case "23514":
+			if postgresError.ConstraintName == "expense_reimbursement" {
+				writeAPIError(w, http.StatusBadRequest, postgresError.Message)
+				return
+			}
 			if postgresError.ConstraintName == "maintenance_work_total" {
 				writeAPIError(w, http.StatusBadRequest, "check the maintenance category, linked truck and saved payment details")
 				return

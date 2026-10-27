@@ -40,6 +40,8 @@ func (h expenseHandler) saveSetting(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pg *pgconn.PgError
 		switch {
+		case errors.Is(err, repository.ErrExpenseSettingPermanent):
+			writeAPIError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, repository.ErrExpenseSettingConflict):
 			writeAPIError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, repository.ErrExpenseSettingInvalid):

@@ -29,6 +29,7 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
  UNION SELECT p.week_start FROM driver_escrow_payments p JOIN driver_escrows e ON e.id=p.escrow_id WHERE e.driver_id=$1
  UNION SELECT date_trunc('week',start_date)::date FROM driver_escrows WHERE driver_id=$1
  UNION SELECT r.week_start FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=$1 AND NOT r.cancelled
+ UNION SELECT date_trunc('week',expense_date)::date FROM expenses WHERE lower(btrim(payment_type))='reimburse' AND amount>0 AND payroll_driver_at(driver_id,expense_date)=$1
  UNION SELECT date_trunc('week',transaction_date)::date FROM weighmytruck_transactions WHERE payroll_driver_at(driver_id,transaction_date)=$1
  UNION SELECT week_start FROM payroll_settlements WHERE driver_id=$1
  UNION SELECT generate_series(start_week,least(coalesce(end_week-7,$2::date),$2::date),'7 days')::date FROM driver_teams WHERE main_driver_id=$1

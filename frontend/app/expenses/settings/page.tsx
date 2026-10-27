@@ -54,6 +54,7 @@ export default function ExpenseSettingsPage() {
   }
   function actions(item: ExpenseSetting) {
     if (item.kind === "payment_method" && item.name.toUpperCase() === "EFS") return <span className="text-xs text-zinc-500">Permanent · $3 per $500</span>;
+    if (item.kind === "payment_method" && item.name.trim().toLowerCase() === "reimburse") return <span className="text-xs text-zinc-500">Permanent · Adds to driver pay</span>;
     return <div className="flex shrink-0 gap-1">
       <button className={buttonClass} disabled={saving} aria-label={`Edit ${labels[item.kind]} ${item.name}`} onClick={() => { setError(""); setDraft(item); }}><Pencil className="h-3.5 w-3.5" /></button>
       <button className={buttonClass} disabled={saving} aria-label={`${item.active ? "Archive" : "Restore"} ${labels[item.kind]} ${item.name}`} onClick={() => item.active ? (setError(""), setArchive(item)) : void save({ ...item, active: true })}>{item.active ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}</button>

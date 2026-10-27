@@ -56,6 +56,9 @@ export async function verifyExpenseSettings(page, base, temp, { sql, schema }) {
   await add('expense type', 'E2E Flight');
   await page.screenshot({ path: join(temp, 'expense-settings-categories.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('tab', { name: 'Payment methods', exact: true }).click();
+  await expect(page.getByText('Permanent · Adds to driver pay', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit payment method Reimburse', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Archive payment method Reimburse', exact: true })).toHaveCount(0);
   await add('payment method', 'E2E Card 1234');
   await page.getByRole('tab', { name: 'Paid by', exact: true }).click();
   await add('payer', 'E2E Accountant');
