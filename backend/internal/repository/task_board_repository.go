@@ -78,8 +78,14 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 
 func (repo *CustomTaskRepository) OpenCount(ctx context.Context, driverRead, truckRead bool) (int, error) {
 	admin, user := taskViewerArgs(ctx)
+	// Badges represent personal assignments, independently of board oversight.
+	// Administrators retain the full board without a sidebar task badge.
+	if admin || user == "" {
+		return 0, nil
+	}
 	var count int
-	err := repo.pool.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible WHERE completed_at IS NULL`, admin, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&count)
+	err := repo.pool.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible WHERE completed_at IS NULL
+ AND (system_task_kind IS NOT NULL OR assigned_to=NULLIF($2,'')::uuid)`, false, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&count)
 	return count, err
 }
 

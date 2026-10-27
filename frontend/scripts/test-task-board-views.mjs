@@ -148,7 +148,7 @@ try {
   await expect(page.getByRole('row').filter({ hasText: 'Follow up' })).toContainText('Test user');
   const links = await page.locator('aside nav > a').evaluateAll(els => els.slice(0, 3).map(el => el.getAttribute('href')));
   expect(links).toEqual(['/driver-board', '/gross-board', '/tasks']);
-  await expect(page.getByLabel('1 open tasks', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('1 assigned tasks', { exact: true })).toBeVisible();
   await expect.poll(() => streams.size).toBe(1);
   // Idle time no longer triggers task availability requests.
   await page.clock.runFor(1000);
@@ -158,7 +158,7 @@ try {
   tasks.push({ id: 'system', title: 'Review Relay account: New driver', notes: '', assigneeName: 'Teammate', assignerName: 'System', systemTaskKind: 'relay_review', completedAt: null, createdAt: '2026-10-08T12:00:00Z' });
   pushTasks(); await page.clock.runFor(1000);
   await expect(page.getByRole('button', { name: 'Review Relay account: New driver', exact: true })).toBeVisible();
-  await expect(page.getByLabel('2 open tasks', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('2 assigned tasks', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Kanban', exact: true }).click();
   const open = page.getByRole('region', { name: 'Open tasks', exact: true });
   const done = page.getByRole('region', { name: 'Completed tasks', exact: true });
@@ -171,7 +171,7 @@ try {
   await expect(inProcess.getByRole('article', { name: 'Follow up', exact: true })).toBeVisible();
   await page.reload();
   await expect(inProcess.getByRole('article', { name: 'Follow up', exact: true })).toBeVisible();
-  await expect(page.getByLabel('2 open tasks', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('2 assigned tasks', { exact: true })).toBeVisible();
   await inProcess.getByRole('article', { name: 'Follow up', exact: true }).dragTo(done);
   await expect(done.getByRole('article', { name: 'Follow up', exact: true })).not.toContainText('Completed by');
   await expect(done.getByRole('button', { name: 'Follow up', exact: true })).toHaveAttribute('title', /Completed by Test user/);

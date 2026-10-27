@@ -976,6 +976,13 @@ browser bundle.
   assignment privacy and include system completion history. Only user-created
   tasks allow generic edits/deletion/status changes. Offboarding completes via
   `POST /tasks/offboarding/{id}/confirm` with equipment/access/settlement checks.
+  Sidebar task counts include only the viewer's direct or role-based assignments,
+  including program/dispatcher overrides; unassigned tasks and tasks assigned to
+  others do not count. Administrators retain full task oversight with no sidebar
+  badges. General Fuel/Tolls/Scale alerts stay on their pages, outside sidebar
+  badges; recipient-only feedback updates still count for non-administrators.
+  The task list shows Age after Assignee, updating each minute and stopping at
+  completion. Browser coverage: `node scripts/test-sidebar-task-badges.mjs`.
 - Financial reporting: `GET /financial-dashboard` (latest qualifying week, or
   `weekStart=YYYY-MM-DD`)
 - Documents: `POST /irp-files`, `GET /files/{id}`

@@ -24,6 +24,15 @@ type Status = TaskStatus | "all";
 const statusLabels = { open: "Open", in_process: "In process", completed: "Completed" };
 const taskStatus = (task: CustomTask): TaskStatus => task.status ?? (task.completedAt ? "completed" : "open");
 const dateTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+function taskAge(task: CustomTask, now: number) {
+  const elapsed = (task.completedAt ? Date.parse(task.completedAt) : now) - Date.parse(task.createdAt);
+  if (!Number.isFinite(elapsed)) return "—";
+  const minutes = Math.max(0, Math.floor(elapsed / 60_000));
+  if (minutes < 1) return "<1m";
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
+  return `${Math.floor(minutes / 1440)}d`;
+}
 
 function taskMetadata(task: CustomTask) {
   return [
@@ -43,6 +52,13 @@ export default function TasksPage() {
 }
 
 function TaskBoard() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const timer = window.setInterval(update, 60_000);
+    window.addEventListener("focus", update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); };
+  }, []);
   const permissions = usePermissions();
   const canWrite = permissions.includes("tasks.edit");
  const canCreate=permissions.includes("tasks.create"),canDelete=permissions.includes("tasks.delete");
@@ -140,10 +156,11 @@ function TaskBoard() {
     {loading && !data && !columns && <p role="status" className="py-8 text-center text-zinc-500">Loading…</p>}
     {view === "list" && data && <>
       <TableShell><table className="w-full min-w-[560px] text-left text-[13px]">
-        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
+        <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", "Age", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
         <tbody className="divide-y divide-zinc-800">{data.items.map(task => <tr key={task.id} className="bg-card hover:bg-zinc-800/20">
           <td className="max-w-sm px-3 py-2">{title(task)}</td><td className="whitespace-nowrap px-3 py-2 text-zinc-400">{statusLabels[taskStatus(task)]}</td>
           <td className="px-3 py-2 text-zinc-400">{task.assigneeName || "Unassigned"}</td>
+          <td className="whitespace-nowrap px-3 py-2 tabular-nums text-zinc-400" title={`${task.completedAt ? "Time from creation to completion" : "Time since creation"} · Created ${dateTime(task.createdAt)} NY`}>{taskAge(task, now)}</td>
           <td className="px-3 py-1">{actions(task)}</td>
         </tr>)}</tbody>
       </table>{data.items.length === 0 && <p className="p-6 text-center text-sm text-zinc-500">No tasks</p>}</TableShell>{pagination(data, setPage)}

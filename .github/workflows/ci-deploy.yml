@@ -204,7 +204,9 @@ jobs:
       - name: Verify task assignments and board views in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend
-        run: node scripts/test-task-board-views.mjs
+        run: |
+          node scripts/test-task-board-views.mjs
+          node scripts/test-sidebar-task-badges.mjs
 
       - name: Verify PrePass management in Chromium
         if: inputs.full_browser_tests == true

@@ -26,7 +26,6 @@ import {
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { usePermissions, canVisitPage, useAdministrator } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
-import { useSidebarCounts } from "./useSidebarCounts";
 import { BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
@@ -84,7 +83,6 @@ const serverViewport = () => false;
 
 export function Sidebar() {
   const { count, feedbackCount } = useTaskUpdates();
-  const alerts = useSidebarCounts();
   const permissions = usePermissions();
   const administrator = useAdministrator();
   const maintenanceAccess = useMaintenanceAccess();
@@ -93,10 +91,7 @@ export function Sidebar() {
   const [collapsePreference, setCollapsed] = useState<boolean | null>(null);
   const collapsed = collapsePreference ?? narrow;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const badgeFor = (href: string): Badge | undefined => href === "/tasks" ? { count, label: feedbackCount ? `${count - feedbackCount} open tasks and ${feedbackCount} unread feedback updates` : `${count} open tasks` }
-    : href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
-    : href === "/weighmytruck" ? { count: alerts.weighMyTruck, label: `${alerts.weighMyTruck} terminated drivers with confirmed or unresolved WeighMyTruck access` }
-    : href === "/tolls" ? { count: alerts.tolls, label: `${alerts.tolls} toll transactions without a linked truck, posted since ${alerts.tollsFrom}` }
+  const badgeFor = (href: string): Badge | undefined => !administrator && href === "/tasks" ? { count, label: feedbackCount ? `${count - feedbackCount} assigned tasks and ${feedbackCount} unread feedback updates` : `${count} assigned tasks` }
     : undefined;
   return (
     <aside

@@ -186,6 +186,28 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			if count.Count != 0 {
 				t.Fatal("private task count leaked")
 			}
+			badgeCount := func(user string) int {
+				t.Helper()
+				var result struct {
+					Count int `json:"count"`
+				}
+				if err := json.Unmarshal(call(user, "GET", "/tasks/count", nil, 200).Body.Bytes(), &result); err != nil {
+					t.Fatal(err)
+				}
+				return result.Count
+			}
+			if badgeCount("assignee") != 1 || badgeCount("assigner") != 0 || badgeCount("admin") != 0 {
+				t.Fatal("badge must count only the employee's own assignments")
+			}
+			unassigned := call("assigner", "POST", "/tasks/custom", map[string]any{"title": "Unassigned visible task"}, 201)
+			var unassignedTask repository.CustomTask
+			if err := json.Unmarshal(unassigned.Body.Bytes(), &unassignedTask); err != nil {
+				t.Fatal(err)
+			}
+			if list("outsider", "/tasks") != 1 || badgeCount("outsider") != 0 || badgeCount("assigner") != 0 || badgeCount("assignee") != 1 {
+				t.Fatal("unassigned visible tasks must not add badges")
+			}
+			call("assigner", "DELETE", "/tasks/custom/"+unassignedTask.ID, nil, 204)
 			path := "/tasks/custom/" + task.ID
 			call("outsider", "PUT", path, map[string]any{"title": "Hijacked"}, 404)
 			call("outsider", "PATCH", path, map[string]any{"completed": true}, 404)
@@ -308,12 +330,16 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 				t.Fatal("completed actor snapshot lost")
 			}
 			// Roles are dynamic memberships, combined with direct assignments without duplicates.
+			beforeRoleCount := badgeCount("assigner")
 			var maintenanceVersion int
 			if err := admin.QueryRow(ctx, `SELECT version FROM system_task_assignments WHERE kind='maintenance_pm'`).Scan(&maintenanceVersion); err != nil {
 				t.Fatal(err)
 			}
 			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{users["assignee"]}, "assigneeRoleIds": []string{roleID}, "version": maintenanceVersion}, 204)
 			exec(`INSERT INTO system_task_records(id,kind,title,notes,created_at) VALUES(gen_random_uuid(),'maintenance_pm','Role maintenance test','',now())`)
+			if badgeCount("assigner") != beforeRoleCount+1 || badgeCount("admin") != 0 || list("admin", "/tasks?search=Role%20maintenance%20test") != 1 {
+				t.Fatal("role assignments must count for employees while administrators retain oversight without badges")
+			}
 			for _, name := range []string{"assigner", "assignee", "outsider"} {
 				if list(name, "/tasks?search=Role%20maintenance%20test") != 1 {
 					t.Fatal("role task missing", name)
@@ -324,6 +350,9 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{}, "version": maintenanceVersion + 1}, 204)
 			if list("assigner", "/tasks?search=Role%20maintenance%20test") != 0 {
 				t.Fatal("removed role retained visibility")
+			}
+			if badgeCount("assigner") != beforeRoleCount {
+				t.Fatal("removed assignment retained badge")
 			}
 			call("admin", "PUT", "/settings/system-tasks/maintenance_pm", map[string]any{"assigneeIds": []string{}, "assigneeRoleIds": []string{roleID}, "version": maintenanceVersion + 2}, 204)
 			var otherRole string

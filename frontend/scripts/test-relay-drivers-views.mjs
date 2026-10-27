@@ -94,11 +94,8 @@ else {
     await expect(rows.first()).toContainText('Terminated Driver');
     await expect(rows.first().getByLabel('Terminated driver is still in Relay.')).toBeVisible();
     const sidebar = page.locator('aside');
-    await expect(sidebar.getByLabel('1 terminated drivers still in Relay', { exact: true })).toHaveText('1');
-    await expect(sidebar.getByLabel('2 terminated drivers with confirmed or unresolved WeighMyTruck access', { exact: true })).toHaveText('2');
-    const tollBadge = sidebar.getByLabel('125 toll transactions without a linked truck, posted since 2026-09-01', { exact: true });
-    await expect(tollBadge).toHaveText('99+');
-    await expect(tollBadge).toHaveAttribute('title', /2026-09-01/);
+    // Provider-wide alerts have no personal assignment and stay on their pages.
+    await expect(sidebar.locator('span[title]')).toHaveCount(0);
     await page.getByLabel('Driver status', { exact: true }).selectOption('no_policy');
     await expect(rows).toHaveCount(1); await expect(rows.first()).toContainText('ELD Driver');
     await page.getByRole('button', { name: 'Link driver', exact: true }).click();
@@ -146,9 +143,7 @@ else {
     await page.screenshot({ path: join(tmpdir(), 'mserp-relay-desktop.png'), fullPage: true });
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
     const costBadge = sidebar.locator('a[title="Operating Costs"] span[aria-label]');
-    await expect(costBadge).toHaveText('99+');
-    await expect(costBadge).toHaveClass(/absolute/);
-    await expect(costBadge).toHaveAttribute('aria-label', /125 toll transactions without a linked truck/);
+    await expect(costBadge).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
