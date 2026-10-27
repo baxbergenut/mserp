@@ -268,7 +268,7 @@ func applyPaySources(ctx context.Context, tx pgx.Tx, drivers, investors *DriverP
 		}
 		d.Edits.SourceCharges = append(d.Edits.SourceCharges, row)
 		if strings.HasPrefix(r.Source, "truck_charge:") || report == drivers {
-			d.AutoCharges = append(d.AutoCharges, PayAutoCharge{r.Name, row.Amount, r.Source})
+			d.AutoCharges = append(d.AutoCharges, PayAutoCharge{Name: r.Name, Amount: row.Amount, Source: r.Source})
 		}
 	}
 	for k, report := range reports {

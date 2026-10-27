@@ -87,6 +87,9 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
 	result := []DriverPayHistoryRow{}
 	for _, w := range selectedWeeks {
 		if d, ok := frozen[w]; ok {
+			if err = populateExpenseReimbursementDates(ctx, tx, []DriverPayDriver{d}); err != nil {
+				return Page[DriverPayHistoryRow]{}, err
+			}
 			result = append(result, DriverPayHistoryRow{w, d})
 			continue
 		}

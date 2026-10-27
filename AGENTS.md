@@ -2748,3 +2748,5 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - See docs/FLEET_STATUSES.md. Run TestTruckStatusesDatabase, TestFleetStatusDatabase, termination/FleetScope, board/team/maintenance/PTI regression suites and frontend/scripts/test-truck-statuses-e2e.mjs plus test-fleet-status-e2e.mjs against disposable local databases.
 
 - Migration 153 makes Reimburse a permanent active expense payment method. Positive linked-driver amounts add to Driver Pay once in the expense's Monday-Sunday week for every driver type/pay tariff, including no-load weeks. Existing dated team routing applies; reimbursements never enter driver/investor expense deductions. Finalized statements stay frozen; source edits require reopening. Unlinked historical entries need identity review. TestExpenseReimbursementsDatabase covers fresh/migrated schemas as mserp_app.
+
+- Reimburse credits expose expenseDate and reuse the ordinary expense label/date and details dialog in Driver Pay. Older frozen reports receive date metadata on read without rewriting stored amounts or snapshots. Browser coverage: test-payroll-expenses.mjs.

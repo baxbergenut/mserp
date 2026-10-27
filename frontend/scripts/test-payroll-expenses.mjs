@@ -23,7 +23,7 @@ try {
     let driver = {
       id: 'statement', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
-      ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
+      ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : { autoCharges: [{ source: 'expense-reimburse:reimbursement', name: 'Parking refund', amount: '42.25', expenseDate: '2026-09-30' }] }),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
@@ -36,16 +36,27 @@ try {
     };
     let beforeSource;
     let writable = true;
-    let expense = { id: 'expense', categoryId: 'category', category: 'Maintenance', expenseDate: '2026-09-28', expenseType: 'Equipment', amount: '100.00', baseAmount: null, paymentFee: '0.00', paymentType: 'Cash', coveredBy: 'Company', paidBy: 'Test', updatedAt: '2026-10-13T12:00:00Z' };
+    let expense = { id: 'expense', categoryId: 'category', category: 'Maintenance', expenseDate: '2026-09-28', expenseType: 'Equipment', amount: '100.00', baseAmount: null, paymentFee: '0.00', paymentType: 'Cash', coveredBy: 'Company', paidBy: 'Test', truckId: null, driverId: null, updatedAt: '2026-10-13T12:00:00Z' };
+    let reimbursement = { ...expense, id: 'reimbursement', expenseType: 'Parking refund', expenseDate: '2026-09-30', amount: '42.25', paymentType: 'Reimburse' };
     let writes = 0;
-    const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
+    const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash','Reimburse'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
     const errors = [];
     const expenseReads = [];
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
-    page.on('pageerror', e => errors.push(e.message));
+    page.on('pageerror', e => { errors.push(e.message); console.error(e); });
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
       if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
+      if (path === '/expenses/reimbursement') {
+        if (request.method() === 'PUT') {
+          const input = request.postDataJSON();
+          expect(input.baseAmount).toBe('55.25');
+          expect(input.updatedAt).toBe(reimbursement.updatedAt);
+          reimbursement = { ...reimbursement, ...input, amount: '55.25', baseAmount: '55.25' };
+          driver.autoCharges[0] = { ...driver.autoCharges[0], amount: '55.25', expenseDate: input.expenseDate };
+        }
+        return route.fulfill({ json: reimbursement });
+      }
       if (path === '/expenses/expense') {
         if (request.method() === 'PUT') {
           const input=request.postDataJSON(); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
@@ -73,6 +84,7 @@ try {
         '/driver-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/investor-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/tasks/count': { count: 0 },
+        '/maintenance/options': { vendors: [], types: [] },
       };
       return route.fulfill({ json: fixtures[path] ?? [] });
     });
@@ -93,6 +105,23 @@ try {
     await escrowRow.getByText('Escrow', {exact:true}).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(expenseReads).toEqual([]);
+
+    if (!investor) {
+      const reimbursementRow = region.getByRole('row').filter({ has: page.getByRole('button', { name: 'Open expense Parking refund', exact: true }) });
+      await expect(reimbursementRow.getByText('09/30', { exact: true })).toBeVisible();
+      await expect(reimbursementRow.locator('td').last()).toHaveText('+$42.25');
+      await expect(reimbursementRow.locator('td').last()).toHaveClass(/text-emerald-300/);
+      await reimbursementRow.getByRole('button').click();
+      const reimbursementModal = page.getByRole('dialog', { name: 'Edit entry' });
+      await expect(reimbursementModal.getByLabel('Amount', { exact: true })).toHaveValue('42.25');
+      await expect(reimbursementModal.getByLabel('Payment method', { exact: true })).toHaveValue('Reimburse');
+      await reimbursementModal.getByLabel('Amount', { exact: true }).fill('55.25');
+      await reimbursementModal.getByLabel('Expense date', { exact: true }).fill('2026-10-01');
+      await reimbursementModal.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(reimbursementModal).toHaveCount(0);
+      await expect(reimbursementRow.getByText('10/01', { exact: true })).toBeVisible();
+      await expect(reimbursementRow.locator('td').last()).toHaveText('+$55.25');
+    }
 
     await expect(region.getByText('09/28', {exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Open expense Equipment',exact:true}).click();
@@ -121,12 +150,20 @@ try {
     await page.screenshot({path:join(tmpdir(), investor ? 'mserp-investor-expense-edit.png':'mserp-driver-expense-edit.png'),fullPage:true,animations:"disabled"});
     await modal.getByRole('button',{name:'Cancel',exact:true}).click();
     writable=false; await page.reload();
+    if (!investor) {
+      await page.getByRole('button', { name: 'Open expense Parking refund', exact: true }).click();
+      const reimbursementDetails = page.getByRole('dialog', { name: 'Expense details' });
+      await expect(reimbursementDetails.getByLabel('Amount', { exact: true })).toHaveValue('55.25');
+      await expect(reimbursementDetails.getByLabel('Amount', { exact: true })).toBeDisabled();
+      await expect(reimbursementDetails.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+      await reimbursementDetails.getByRole('button', { name: 'Close', exact: true }).click();
+    }
     await page.getByRole('button',{name:'Open expense Parking',exact:true}).click();
     modal=page.getByRole('dialog',{name:'Expense details'});
     await expect(modal.getByLabel('Amount',{exact:true})).toBeDisabled();
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
     expect(expenseReads.length).toBeGreaterThan(0);
-    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents'].includes(path))).toBe(true);
+    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents', '/expenses/reimbursement', '/expenses/reimbursement/documents'].includes(path))).toBe(true);
     // Dated non-paying driver classifications hide empty costs, but historical
     // balances remain collectable. Investor statements still show truck costs.
     for (const employmentType of ['company', 'investor_driver']) {

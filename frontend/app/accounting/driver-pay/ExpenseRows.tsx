@@ -5,6 +5,15 @@ import { carryBreakdown, sourceAmountInput } from "./pay";
 import type { DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { decimalDisplay, hundredths, validDecimal } from "@/app/gross-board/board";
 
+export function ExpenseRowLabel({ id, name, date, onOpenExpense, disabled }: {
+  id: string; name: string; date?: string; onOpenExpense?: (id: string) => void; disabled?: boolean;
+}) {
+  return <>
+    <button type="button" disabled={!onOpenExpense || disabled} onClick={() => onOpenExpense?.(id)} className="min-w-0 truncate text-left hover:text-blue-300 hover:underline disabled:text-inherit disabled:no-underline" aria-label={`Open expense ${name}`}>{name}</button>
+    {date && <span className="shrink-0 text-[10px] text-zinc-500">{`${date.slice(5, 7)}/${date.slice(8, 10)}`}</span>}
+  </>;
+}
+
 export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, expenseOpenDisabled }: {
   driver: DriverPayDriver; edits: DriverPayEdits; disabled: boolean;
   onOpenExpense?: (id: string) => void; expenseOpenDisabled?: boolean;
@@ -21,8 +30,7 @@ export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, ex
       return <tr key={row.expenseId}>
         <td className="h-8 border-b border-r border-zinc-800 px-2 text-zinc-300" title={row.name}>
           <div className="flex items-center justify-between gap-1">
-            {isExpense ? <button type="button" disabled={!onOpenExpense || expenseOpenDisabled} onClick={() => onOpenExpense?.(row.expenseId)} className="min-w-0 truncate text-left hover:text-blue-300 hover:underline disabled:text-inherit disabled:no-underline" aria-label={`Open expense ${row.name}`}>{row.name}</button> : <span className="min-w-0 truncate">{row.name}</span>}
-            {isExpense && row.expenseDate && <span className="shrink-0 text-[10px] text-zinc-500">{`${row.expenseDate.slice(5, 7)}/${row.expenseDate.slice(8, 10)}`}</span>}
+            {isExpense ? <ExpenseRowLabel id={row.expenseId} name={row.name} date={row.expenseDate} onOpenExpense={onOpenExpense} disabled={expenseOpenDisabled} /> : <span className="min-w-0 truncate">{row.name}</span>}
             <span className="ml-auto shrink-0 text-[10px] text-zinc-500" title={`Remaining ${left}`}>Left: {left}</span>
           </div>
         </td>

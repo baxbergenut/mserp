@@ -84,6 +84,10 @@ func overlayPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayW
 	if err = rows.Err(); err != nil {
 		return report, err
 	}
+	rows.Close()
+	if err = populateExpenseReimbursementDates(ctx, tx, report.Drivers); err != nil {
+		return report, err
+	}
 	sort.Slice(report.Drivers, func(i, j int) bool {
 		a, b := report.Drivers[i], report.Drivers[j]
 		if a.FullName == b.FullName {

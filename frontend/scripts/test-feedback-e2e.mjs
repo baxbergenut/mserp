@@ -82,6 +82,11 @@ try {
   const feed = await (await context.request.get(access.base + '/api/feedback')).json();
   const post = feed.items.find(p => p.title === editedTitle);
   assert.ok(post); assert.equal(post.votes, 1); assert.equal(post.attachments.length, 2);
+  const article = page.locator('article').filter({ has: page.getByRole('button', { name: editedTitle, exact: true }) });
+  await expect(article.getByText('pasted-screenshot.png', { exact: true })).toHaveCount(0);
+  const media = await article.getByRole('img', { name: 'pasted-screenshot.png', exact: true }).boundingBox();
+  const caption = await article.locator('p').boundingBox();
+  assert.ok(media.width > 300 && caption.y >= media.y + media.height, 'post images should be prominent media above the caption');
   const attachment = await context.request.get(access.base + '/api/feedback/attachments/' + post.attachments[0].id);
   assert.equal(attachment.status(), 200);
   const before = (await attachment.body()).length; assert.ok(before > 0);

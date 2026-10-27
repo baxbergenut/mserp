@@ -202,4 +202,3 @@ export default function Feedback() {
     {composer && <Composer key={composer === "new" ? "new" : composer.id} post={composer === "new" ? undefined : composer} tags={tags} onClose={() => setComposer(null)} onSaved={async id => { refresh(); await open(id); setComposer(null); }} />}
   </div>;
 }
-
