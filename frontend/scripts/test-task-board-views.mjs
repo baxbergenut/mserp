@@ -82,6 +82,8 @@ try {
       await route.fulfill({ json: { weekStart: requested, drivers: [], entries: [], balances: [] } }); return;
     }
     const fixtures = {
+      '/feedback/messages/count': { count: 0 },
+      '/feedback/messages': { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 },
       '/auth/session': { user: { id: 'user', username: 'Test user', theme, permissions: ['tasks.read', 'tasks.create','tasks.edit','tasks.delete','tasks.review', 'drivers.create','drivers.edit','drivers.delete','trucks.create','trucks.edit','trucks.delete','dispatchers.create','dispatchers.edit','dispatchers.delete','updaters.create','updaters.edit','updaters.delete','investors.create','investors.edit','drivers.private.read','drivers.private.edit','driver_compensation.read','driver_compensation.edit','dispatcher_compensation.read','dispatcher_compensation.edit','escrow.read','escrow.create','escrow.edit','escrow.delete', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'access.manage', 'board.read', 'driver_board.read'] }, csrfToken: 'fixture' },
       '/settings/access': { users: users.map(u => ({ id: u.id, username: u.name, email: `${u.id}@example.com`, active: true, roleId: 'role', version: 1 })), roles: [{id:"role",name:"Dispatch team",permissions:[]}], permissions: [] },
       '/settings/system-tasks': assignments,

@@ -15,7 +15,7 @@ export function TaskUpdatesProvider({ children }: { children: React.ReactNode })
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
     let active = true;
-    const load = () => { if (!document.hidden) void fetchFeedbackMessageCount().then(value => { if (active) setFeedbackCount(value.count); }).catch(() => {}); };
+    const load = () => { if (!document.hidden) void fetchFeedbackMessageCount().then(value => { if (active && Number.isFinite(value.count)) setFeedbackCount(value.count); }).catch(() => {}); };
     load();
     const timer = window.setInterval(load, 30000);
     window.addEventListener("focus", load); document.addEventListener("visibilitychange", load);
