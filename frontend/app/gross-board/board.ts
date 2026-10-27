@@ -130,11 +130,27 @@ export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBo
 
 // Follow original pay until the dispatcher has entered a different driver gross.
 export function editAmount(entry: GrossBoardEntry, field: "originalRate" | "driverRate" | "miles", value: string): GrossBoardEntry {
-  return { ...entry, [field]: value, acceptSystemValues: false,
+  const effective = value === "" && entry.loadRecordId !== null && !entry.tripReview
+    ? field === "originalRate" ? entry.systemOriginalRate ?? "" : field === "miles" ? entry.systemMiles ?? "" : value
+    : value;
+  return { ...entry, [field]: effective, acceptSystemValues: false,
     ...(field === "originalRate" ? { enteredOriginalRate: value,
       driverRate: !entry.split && (entry.driverRate === "" || (validDecimal(entry.driverRate) && validDecimal(entry.originalRate) && hundredths(entry.driverRate) === hundredths(entry.originalRate))) ? value : entry.driverRate,
     } : field === "miles" ? { enteredMiles: value } : {}),
   };
+}
+
+// Daily loads is a local draft. An earlier autosave can finish while it is open;
+// apply only this editor's changes, keeping that save's version and metadata.
+// Live updates from other editors stay fenced while the day editor is open.
+export function applyDailyDraft(current: GrossBoardEntry, baseline: GrossBoardEntry | undefined, draft: GrossBoardEntry): GrossBoardEntry {
+  if (!baseline) return { ...draft, version: current.version };
+  const changed = Object.fromEntries(Object.entries(draft).filter(([field, value]) =>
+    field !== "version" && JSON.stringify(value) !== JSON.stringify(baseline[field as keyof GrossBoardEntry])));
+  if (!Object.keys(changed).length) return current;
+  const sameLoad = draft.loadNumber === baseline.loadNumber && draft.loadRecordId === baseline.loadRecordId
+    && draft.loadTripId === baseline.loadTripId && draft.dayStatus === baseline.dayStatus && draft.deleted === baseline.deleted;
+  return { ...(sameLoad ? { ...current, ...changed } : draft), version: current.version };
 }
 
 export function mismatch(entered: string, actual: string) {

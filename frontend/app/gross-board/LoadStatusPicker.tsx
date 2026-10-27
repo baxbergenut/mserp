@@ -126,7 +126,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => { input.current?.focus(); setBrowse(true); setFocused(true); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); }}
           className={`absolute right-0 flex h-8 w-6 items-center justify-center rounded text-zinc-400 hover:bg-white/10 hover:text-zinc-100 focus-visible:ring-1 focus-visible:ring-blue-500 ${status ? "top-12" : "top-0"}`}><ChevronDown className="h-3 w-3" /></button>
-      {needsReview && <button aria-label={`Review rate and miles for ${label}`} title="Entered values differ from the system load" onClick={onReview} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
+      {needsReview && <button type="button" aria-label={`Review rate and miles for ${label}`} title="Entered values differ from the system load" onClick={onReview} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
     </div>
     {open && createPortal(<div ref={menu} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }}
       className="z-[80] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left shadow-2xl"
@@ -150,8 +150,8 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
     {pendingStatus && <BoardDialog title={`Replace this day with ${pendingStatus}?`} onClose={() => setPendingStatus("")}>
       <p className="text-sm text-zinc-300">{label}. This removes the day’s load, rates, and miles from the board and its totals. The system load itself stays unchanged.</p>
       <div className="mt-5 flex justify-end gap-2">
-        <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={() => setPendingStatus("")}>Keep load</button>
-        <button className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white" onClick={() => {
+        <button type="button" className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={() => setPendingStatus("")}>Keep load</button>
+        <button type="button" className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white" onClick={() => {
           onChange(entry.driverId, entry.date, (current) => setDayStatus(current, pendingStatus)); setPendingStatus("");
         }}>Use {pendingStatus}</button>
       </div>

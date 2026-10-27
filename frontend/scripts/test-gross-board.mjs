@@ -143,7 +143,7 @@ assert.equal(indexed.byDriver.get("other").length, 1);
 assert.equal(indexedEntries[0].slot, 2); // Source ordering is unchanged.
 console.log("Board indexing checks passed: driver/day isolation, slots and tombstones.");
 
-const { editAmount } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { editAmount, applyDailyDraft } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 const splitMatch = matchLoad({ ...emptyEntry('split-driver', '2026-10-19'), driverRate: '0' },
   { id: 8101, loadNumber: 'SPLIT-1', originalRate: '1813', miles: '555', driverName: 'Other', pickupDate: '', split: true, trips: [] });
@@ -171,6 +171,24 @@ assert.equal(editAmount(autoGross, "originalRate", "1500").driverRate, "1500");
 assert.equal(editAmount({ ...autoGross, driverRate: "1100" }, "originalRate", "1500").driverRate, "1100");
 assert.equal(editAmount({ ...autoGross, driverRate: "0" }, "originalRate", "1500").driverRate, "0");
 assert.equal(editAmount(match, "miles", "0").enteredMiles, "0");
+assert.equal(editAmount(match, "originalRate", "").originalRate, match.systemOriginalRate);
+assert.equal(editAmount(match, "originalRate", "").enteredOriginalRate, "");
+assert.equal(editAmount(match, "originalRate", "").driverRate, match.driverRate);
+assert.equal(editAmount(match, "miles", "").miles, match.systemMiles);
+assert.equal(editAmount(match, "miles", "").enteredMiles, "");
+assert.equal(editAmount(match, "driverRate", "").driverRate, "");
+assert.equal(editAmount(blank, "originalRate", "").originalRate, "");
+assert.equal(editAmount({ ...match, systemOriginalRate: "0" }, "originalRate", "").originalRate, "0");
+assert.equal(editAmount({ ...splitMatch, systemOriginalRate: "1813" }, "originalRate", "").originalRate, "");
+// An earlier save completing while Daily loads is open cannot revive old versions
+// or resubmit untouched amounts. Only locally edited fields overlay that save.
+const dailyBase = { ...extra, version: 0, originalRate: '250', driverRate: '250' };
+const dailySaved = { ...dailyBase, version: 1, originalRate: '250.00', driverRate: '250.00', loadRecordId: 77, systemOriginalRate: '250.00' };
+assert.equal(applyDailyDraft(dailySaved, dailyBase, dailyBase), dailySaved);
+assert.deepEqual(applyDailyDraft(dailySaved, dailyBase, { ...dailyBase, driverRate: '200' }), { ...dailySaved, driverRate: '200' });
+const replacing = { ...dailyBase, loadNumber: 'REPLACEMENT', loadRecordId: null, originalRate: '', miles: '' };
+assert.deepEqual(applyDailyDraft(dailySaved, dailyBase, replacing), { ...replacing, version: 1 });
+assert.equal(applyDailyDraft({ ...removed, version: 8 }, undefined, { ...extra, version: 0 }).version, 8);
 assert.equal(matchLoad(blank, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).driverRate, "900");
 assert.equal(matchLoad({ ...blank, originalRate: "0", miles: "0" }, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).originalRate, "0");
 const newerGross = editAmount(match, "originalRate", "1400");

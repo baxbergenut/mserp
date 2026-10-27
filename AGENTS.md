@@ -133,6 +133,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   See `docs/integrations/DATATRUCK_LOAD_SPLITS.md`; database checks use
   `TestLoadTripsDatabase` / `MSERP_GROSS_BOARD_TEST_DATABASE_URL` and browser checks
   use `node scripts/test-gross-board-splits.mjs` against a `/api` build.
+  Daily loads retains every removed slot's version when adding/reusing slots and
+  applies only edits since opening, preserving earlier autosave results. Clearing
+  total gross/miles uses the linked source locally; review buttons never submit
+  the enclosing form. `node scripts/test-gross-board-daily-loads.mjs` covers these
+  flows, reload persistence, in-flight saves and genuine concurrency conflicts.
 - `backend/internal/httpapi/file_handlers.go`: IRP/cab-card uploads,
   extraction orchestration, and stored-file downloads.
 - `backend/internal/repository/`: SQL and domain/API structs. `fleet_repository.go`

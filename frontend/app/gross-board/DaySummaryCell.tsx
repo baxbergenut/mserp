@@ -9,7 +9,7 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
-import { additionalLoadEntries, amountDisplay, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
+import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
   readOnly?: boolean;
@@ -24,6 +24,7 @@ type Props = {
 
 export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, entries, driverId, driverName, date, onChange, focusSlot, onReturn }: Props) {
   const [draft, setDraft] = useState<GrossBoardEntry[] | null>(null);
+  const draftBaseline = useRef<GrossBoardEntry[]>([]);
   const [hover, setHover] = useState<{ top: number; left: number } | null>(null);
   const tooltipId = useId();
   const cellId = useId();
@@ -53,7 +54,10 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
   const openEditor = (add = false) => {
     setHover(null);
     const initial = entries.length ? entries : displayed;
-    setDraft(add ? [...initial.filter(entry => !entry.deleted), ...additionalLoadEntries(initial, driverId, date)] : initial);
+    draftBaseline.current = initial;
+    const added = add ? additionalLoadEntries(initial, driverId, date) : [];
+    // Retain every removed slot's version, including slots reused by Add load later.
+    setDraft([...initial.filter(entry => !added.some(next => next.slot === entry.slot)), ...added].sort((a, b) => a.slot - b.slot));
   };
   const editDraft = useCallback((_id: string, _date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => {
     if (readOnly) return;
@@ -78,8 +82,9 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       if (readOnly) { setDraft(null); return true; }
       if (!draft || invalid) return false;
       for (const entry of draft) {
-        const previous = entries.find(saved => saved.slot === entry.slot);
-        if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot, () => entry);
+        const previous = draftBaseline.current.find(saved => saved.slot === entry.slot);
+        if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot,
+          current => applyDailyDraft(current, previous, entry));
       }
       setDraft(null);
       return true;

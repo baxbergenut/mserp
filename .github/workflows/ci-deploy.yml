@@ -157,6 +157,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-dashboard-views.mjs
 
+      - name: Verify Gross Board daily load editing in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-gross-board-daily-loads.mjs
+
       - name: Verify dispatcher profiles in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend
