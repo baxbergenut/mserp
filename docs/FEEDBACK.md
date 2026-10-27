@@ -14,7 +14,7 @@ Administrator can edit any post and change statuses through the detail selector
 or Kanban drag and drop. Status changes retain an append-only author/time history.
 The `access.manage` permission alone does not grant moderation.
 
-On each transition into Completed, migration 157 and `feedback_messages.go`
+On each transition into Completed, migration 158 and `feedback_messages.go`
 save a private completion message for the original author in the same transaction
 as the status/history change. Tasks shows these messages with a View feedback
 link and Mark as read. Unread messages count toward the Tasks sidebar badge;
