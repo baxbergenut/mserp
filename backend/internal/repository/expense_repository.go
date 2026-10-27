@@ -317,7 +317,7 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
-			return nil // Work orders were introduced in migration 096.
+			return r.loadReimbursementBalances(ctx, values) // Work orders were introduced in migration 096.
 		}
 		return err
 	}
@@ -336,7 +336,11 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 			values[i].Category = category
 		}
 	}
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	return r.loadReimbursementBalances(ctx, values)
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {

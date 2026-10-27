@@ -176,3 +176,9 @@ assert.equal(sourceUndo.sourceCharges[0].amount, '-175.00');
 assert.equal(sourceUndo.sourceCharges[0].revision, 'r2');
 assert.equal(reconcilePaySave({driver: {...sourceEdits, sourceCharges: [{...sourceFee, amount: '-30.00'}]}}, sourceEdits, savedSources).driver.sourceCharges[0].revision, 'r2');
 console.log('Truck source deductions: live totals, carry limits, saved undo and in-flight revision reconciliation.');
+
+const payoutEdits = { ...auto, expenseDeductions: [{ source: 'reimburse', expenseId: 'refund', amount: '60.15', available: '100.25', openingBalance: '100.25', name: 'Refund', saved: false }] };
+assert.equal(driverTotals(owner,payoutEdits).payable,driverTotals(owner,auto).payable+6015n);
+assert.equal(normalizedPayEdits(payoutEdits).expenseDeductions[0].apply,true);
+assert.equal(validAdjustments({...payoutEdits,expenseDeductions:[{...payoutEdits.expenseDeductions[0],amount:'100.26'}]}),false);
+console.log('Expense reimbursements add exact positive payouts with ordinary balance limits and autosave.');

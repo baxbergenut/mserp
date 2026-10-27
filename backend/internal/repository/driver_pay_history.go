@@ -19,6 +19,14 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
 	}
 	defer tx.Rollback(ctx)
 	ctx = payrollReadContext(ctx, tx)
+	reimbursementWeeks := ""
+	available, err := reimbursementLedgerAvailable(ctx, tx)
+	if err != nil {
+		return Page[DriverPayHistoryRow]{}, err
+	}
+	if available {
+		reimbursementWeeks = ` UNION SELECT p.week_start FROM expense_reimbursement_payments p JOIN expenses e ON e.id=p.expense_id WHERE payroll_driver_at(e.driver_id,p.week_start)=$1 `
+	}
 	rows, err := tx.Query(ctx, `WITH weeks AS (
  SELECT date_trunc('week',service_date)::date AS week FROM `+grossBoardEntriesSQL+` e WHERE driver_id=$1 AND NOT deleted AND (btrim(load_number)<>'' OR day_status='SHOP')
  UNION SELECT week_start FROM driver_pay_weeks WHERE driver_id=$1
@@ -30,10 +38,11 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
  UNION SELECT date_trunc('week',start_date)::date FROM driver_escrows WHERE driver_id=$1
  UNION SELECT r.week_start FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=$1 AND NOT r.cancelled
  UNION SELECT date_trunc('week',expense_date)::date FROM expenses WHERE lower(btrim(payment_type))='reimburse' AND amount>0 AND payroll_driver_at(driver_id,expense_date)=$1
+ UNION SELECT date_trunc('week',expense_date-3)::date FROM expenses WHERE lower(btrim(payment_type))='reimburse' AND amount>0 AND payroll_driver_at(driver_id,expense_date-3)=$1
  UNION SELECT date_trunc('week',transaction_date)::date FROM weighmytruck_transactions WHERE payroll_driver_at(driver_id,transaction_date)=$1
  UNION SELECT week_start FROM payroll_settlements WHERE driver_id=$1
  UNION SELECT generate_series(start_week,least(coalesce(end_week-7,$2::date),$2::date),'7 days')::date FROM driver_teams WHERE main_driver_id=$1
- ) SELECT week::text FROM weeks WHERE week IS NOT NULL AND week<=$2::date AND payroll_driver_at($1::uuid,week)=$1::uuid ORDER BY week DESC`, driver, ChargeCurrentWeek())
+ `+reimbursementWeeks+`) SELECT week::text FROM weeks WHERE week IS NOT NULL AND week<=$2::date AND payroll_driver_at($1::uuid,week)=$1::uuid ORDER BY week DESC`, driver, ChargeCurrentWeek())
 	if err != nil {
 		return Page[DriverPayHistoryRow]{}, err
 	}

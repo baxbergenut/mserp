@@ -1,6 +1,6 @@
 "use client";
 
-import type { DriverOption, ExpenseApplicant, ExpenseInput, InvestorOption, TruckOption } from "../lib/types";
+import type { ExpenseDriverChoice as DriverOption, ExpenseApplicant, ExpenseInput, ExpenseOwnerChoice as InvestorOption, ExpenseTruckChoice as TruckOption } from "../lib/types";
 import { expenseAssignment } from "./assignments";
 
 export function ExpenseDriverSelect({ value, drivers, applicants = [], trucks, owners, onChange, className, required = false, label = "Driver" }: {

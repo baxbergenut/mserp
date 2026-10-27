@@ -1130,7 +1130,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
-  source?: "escrow";
+  source?: "escrow" | "reimburse";
   category?: ExpenseCategory;
   expenseId: string;
   name: string;
@@ -1522,3 +1522,8 @@ export type FeedbackDetail = FeedbackPost & {
 };
 export type FeedbackInput = { id: string; title: string; body: string; tags: string[]; status?: FeedbackStatus; version?: number };
 export type FeedbackMessage = { id: string; postId: string; title: string; completedBy: string; createdAt: string; readAt: string | null };
+
+export type ExpenseDriverChoice = Pick<DriverOption, "id" | "fullName" | "truckId">;
+export type ExpenseTruckChoice = Pick<TruckOption, "id" | "unitNumber" | "driverId" | "isCompanyOwned"> & { ownerId: string | null };
+export type ExpenseOwnerChoice = Pick<InvestorOption, "id" | "fullName" | "driverId" | "isCompany">;
+export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: ExpenseDriverChoice[]; trucks: ExpenseTruckChoice[]; owners: ExpenseOwnerChoice[]; }

@@ -315,10 +315,6 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	if err != nil {
 		return result, err
 	}
-	reimbursements, err := expenseReimbursementCreditsBulk(ctx, tx, ids, result.WeekStart)
-	if err != nil {
-		return result, err
-	}
 	deductions, err := expenseDeductionsBulk(ctx, tx, ids, result.WeekStart)
 	if err != nil {
 		return result, err
@@ -335,7 +331,6 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	for _, d := range result.Drivers {
 		d.Layovers = layovers[d.ID]
 		d.AutoCharges = append(credits[d.ID], scaleCharges[d.ID]...)
-		d.AutoCharges = append(d.AutoCharges, reimbursements[d.ID]...)
 		if d.AutoCharges == nil {
 			d.AutoCharges = []PayAutoCharge{}
 		}

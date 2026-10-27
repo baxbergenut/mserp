@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Positive amounts are deductions. Suggested rows are read-only until Apply is
-// submitted; a saved zero explicitly defers the expense for that week.
+// Amounts are magnitudes; source=reimburse adds to pay, other rows deduct.
+// Apply persists the allocation; a saved zero explicitly defers this week.
 type ExpenseDeduction struct {
 	Source         string `json:"source,omitempty"`
 	ExpenseID      string `json:"expenseId"`
@@ -61,7 +61,7 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 			continue
 		}
 		var version int
-		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND charge_driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
+		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND CASE WHEN lower(btrim(payment_type))='reimburse' THEN driver_id ELSE charge_driver_id END=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = tx.QueryRow(ctx, `SELECT balance_version FROM driver_escrows WHERE id=$1 AND driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
 		}
@@ -97,6 +97,12 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 			if _, err = tx.Exec(ctx, `INSERT INTO driver_escrow_payments(escrow_id,week_start,amount,updated_by)
     VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid)
     ON CONFLICT(escrow_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now()`, item.ExpenseID, week, item.Amount, actor); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if old.Source == "reimburse" {
+			if _, err = tx.Exec(ctx, `INSERT INTO expense_reimbursement_payments(expense_id,week_start,amount,updated_by) VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid) ON CONFLICT(expense_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now()`, item.ExpenseID, week, item.Amount, actor); err != nil {
 				return nil, err
 			}
 			continue

@@ -1,4 +1,4 @@
-import type { ExpenseInput, InvestorOption, TruckOption } from "../lib/types";
+import type { ExpenseInput, ExpenseOwnerChoice as InvestorOption, ExpenseTruckChoice as TruckOption } from "../lib/types";
 import { expenseResponsibility } from "./assignments";
 
 export function ExpensePaymentMethodSelect({ value, methods, onChange, className, saved = false, label = "Payment method" }: {
