@@ -1504,3 +1504,15 @@ export interface DriverDirectoryFilters {
  assignment?: "" | "assigned" | "unassigned";
 }
 export type { CompanyDashboard, DashboardPeriod, DashboardMetric, DashboardSection, DashboardItem, DashboardLoad, DashboardPerformance, DashboardQuery } from "./dashboardTypes";
+export type FeedbackStatus = "open" | "in_progress" | "completed" | "discarded";
+export type FeedbackAttachment = { id: string; fileName: string; contentType: string; size: number };
+export type FeedbackPost = {
+  id: string; authorId: string | null; authorName: string; title: string; body: string;
+  tags: string[]; status: FeedbackStatus; version: number; votes: number; voted: boolean;
+  commentCount: number; createdAt: string; updatedAt: string; attachments: FeedbackAttachment[];
+};
+export type FeedbackDetail = FeedbackPost & {
+  comments: { id: string; authorName: string; body: string; createdAt: string }[];
+  history: { actorName: string; oldStatus: FeedbackStatus; newStatus: FeedbackStatus; createdAt: string }[];
+};
+export type FeedbackInput = { id: string; title: string; body: string; tags: string[]; status?: FeedbackStatus; version?: number };

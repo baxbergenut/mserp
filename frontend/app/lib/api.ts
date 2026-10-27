@@ -710,3 +710,16 @@ export const fetchPTIHistory = (week:string,truck:string,signal?:AbortSignal) =>
 export const fetchCompanyDashboard = (query: import("./dashboardTypes").DashboardQuery, signal?: AbortSignal) => apiRequest<import("./dashboardTypes").CompanyDashboard>(withQuery("/dashboard/summary", { ...query }), { signal });
 export const fetchDashboardLoads = (query: import("./dashboardTypes").DashboardQuery & { dispatcherId?: string; inclusion?: string; page: number; pageSize: number }, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./dashboardTypes").DashboardLoad>>(withQuery("/dashboard/loads", { ...query }), { signal });
 export const fetchDashboardCostReview = (query: import("./dashboardTypes").DashboardQuery & { kind: "fuel" | "tolls"; page: number; pageSize: number }, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./dashboardTypes").DashboardCostReview>>(withQuery("/dashboard/cost-review", { ...query }), { signal });
+export const fetchFeedback = (query: { page?: number; pageSize?: number; search?: string; tag?: string; status?: string; sort?: string }, signal?: AbortSignal) =>
+  apiRequest<import("./types").PaginatedResponse<import("./types").FeedbackPost>>(withQuery("/feedback", query), { signal });
+export const fetchFeedbackDetail = (id: string) => apiRequest<import("./types").FeedbackDetail>(`/feedback/${id}`);
+export const fetchFeedbackTags = () => apiRequest<string[]>("/feedback/tags");
+export const createFeedback = (input: import("./types").FeedbackInput, files: File[]) => {
+  const body = new FormData(); body.append("post", JSON.stringify(input));
+  files.forEach(file => body.append("files", file));
+  return apiRequest<{ id: string }>("/feedback", { method: "POST", body });
+};
+export const updateFeedback = (input: import("./types").FeedbackInput) => apiRequest<void>(`/feedback/${input.id}`, { method: "PUT", body: JSON.stringify(input) });
+export const voteFeedback = (id: string, voted: boolean) => apiRequest<void>(`/feedback/${id}/vote`, { method: "PUT", body: JSON.stringify({ voted }) });
+export const commentFeedback = (id: string, input: { id: string; body: string }) => apiRequest<void>(`/feedback/${id}/comments`, { method: "POST", body: JSON.stringify(input) });
+export const feedbackAttachmentURL = (id: string, download = false) => `${API_BASE}/feedback/attachments/${id}${download ? "?download=1" : ""}`;

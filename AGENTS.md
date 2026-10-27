@@ -334,6 +334,19 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- `/feedback` is available to every signed-in user, immediately above Settings.
+  Migration 155 and repository/httpapi `feedback*.go` own its shared feed,
+  comments, unique per-user votes, custom tags and paginated Kanban statuses.
+  Authors edit content; only the built-in Administrator moderates statuses,
+  with optimistic versions and append-only status history. Creation atomically
+  stores up to five attachments (10 MB each, 20 MB combined), including pasted
+  screenshots. Feedback's authenticated file endpoint never exposes public URLs;
+  sniffed images alone render inline, other types download sandboxed. Retained
+  UUIDs/content hashes protect retries. No operational Tasks/provider writes.
+  See `docs/FEEDBACK.md`; `TestFeedbackDatabase` uses disposable local
+  `MSERP_FEEDBACK_TEST_DATABASE_URL` with fresh/migrated app-role checks.
+  Browser validation: `node scripts/test-feedback-e2e.mjs` against review-local.
+
 - Section tabs share the theme-aware underline contract in globals.css through
   role=tab and aria-selected. Tasks, Status Board and Gross Board use live updates;
   routine Reload controls are omitted, with retry controls retained on errors.

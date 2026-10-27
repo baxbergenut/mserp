@@ -21,6 +21,7 @@ import {
   Settings,
   Scale,
   LayoutDashboard,
+  MessageSquare,
 } from "lucide-react";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { usePermissions, canVisitPage, useAdministrator } from "@/app/lib/access";
@@ -61,6 +62,7 @@ const NAV_ITEMS = [
     { href: "/updaters", label: "Updaters", icon: Headset },
     { href: "/investors", label: "Investors", icon: Landmark },
   ] },
+  { href: "/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

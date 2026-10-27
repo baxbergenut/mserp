@@ -166,6 +166,7 @@ func NewRouter(
 	registerDriverIntakeRoutes(protected, logger, fleetRepo, wmtRepo)
 	registerFleetSyncRoutes(protected, logger, repository.NewFleetSyncRepository(pool, fleetScopeOption.Sync))
 	registerCustomTaskRoutes(protected, logger, customTaskRepo)
+	registerFeedbackRoutes(protected, logger, repository.NewFeedbackRepository(pool))
 	registerTaskBoardRoutes(protected, logger, customTaskRepo)
 	events := newTaskEvents(pool, logger)
 	protected.Get("/tasks/events", events.serve(auth))
