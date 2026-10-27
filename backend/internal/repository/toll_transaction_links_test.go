@@ -27,6 +27,7 @@ func testSelectedTollLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	}
 	source := scalar(`INSERT INTO trucks(unit_number) VALUES('TX-SOURCE') RETURNING id`)
 	target := scalar(`INSERT INTO trucks(unit_number) VALUES('TX-TARGET') RETURNING id`)
+	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit,pickup_time,delivery_time) VALUES(991000,'PAST-SOURCE','delivered',100,100,'TX-SOURCE','2026-09-01','2026-09-02')`)
 	repo := NewTollRepository(pool)
 	makeToll := func(n int64, unit string) prepass.Transaction {
 		return prepass.Transaction{TollID: n, AccountNumber: json.Number("1"), PostDateTime: "2026-10-05T12:00:00", ExitDateTime: "2026-10-03T12:00:00", VehicleNumber: unit, PPDeviceID: "SELECTED-TAG", DeviceNumber: "different-device-number", TollCharge: json.Number("2.50")}
@@ -160,4 +161,5 @@ func testSelectedTollLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 			t.Fatal("accepted invalid selection", ids)
 		}
 	}
+	testTollFlagReviews(t, ctx, pool, actor)
 }

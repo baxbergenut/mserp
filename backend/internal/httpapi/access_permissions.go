@@ -252,6 +252,7 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/tolls/truck-links", "tolls.link"},
 	{"POST", "/tolls/truck-links/{id}/undo", "tolls.link"},
 	{"POST", "/tolls/truck-links/preview", "tolls.link"},
+	{"POST", "/tolls/{id}/review", "tolls.link"},
 	{"GET", "/truck-charges", "charges.read"},
 	{"PUT", "/truck-charges/recurring", "charges.edit"},
 	{"PUT", "/truck-charges/recurring/bulk", "charges.edit"},

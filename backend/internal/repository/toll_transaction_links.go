@@ -14,8 +14,13 @@ import (
 )
 
 // Attention uses the same coverage assessment as Transactions, before pagination.
-func (r *TollRepository) attentionTolls(ctx context.Context, from string) ([]Toll, error) {
-	rows, err := r.pool.Query(ctx, selectTollsSQL+` WHERE t.posting_date >= $1::date ORDER BY t.posting_date DESC,t.exit_date DESC,t.exit_time DESC,t.id`, from)
+func (r *TollRepository) attentionTolls(ctx context.Context, from string, includeReviewed ...bool) ([]Toll, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, selectTollsSQL+` WHERE t.posting_date >= $1::date ORDER BY t.posting_date DESC,t.exit_date DESC,t.exit_time DESC,t.id`, from)
 	if err != nil {
 		return nil, err
 	}
@@ -35,18 +40,25 @@ func (r *TollRepository) attentionTolls(ctx context.Context, from string) ([]Tol
 	if err != nil {
 		return nil, err
 	}
-	flags, err := transactionFlags(ctx, r.pool, "toll", ids, time.Now().UTC())
+	flags, err := transactionFlagsTx(ctx, tx, "toll", ids, time.Now().UTC())
 	if err != nil {
+		return nil, err
+	}
+	for i := range values {
+		if flag := flags[values[i].ID]; flag != nil && flag.Status == "review" {
+			values[i].Flag = flag
+		}
+	}
+	if _, err = populateTollReviews(ctx, tx, values); err != nil {
 		return nil, err
 	}
 	out := []Toll{}
 	for _, value := range values {
-		value.Flag = flags[value.ID]
-		if value.TruckID == nil || value.Flag != nil {
+		if value.TruckID == nil || value.Flag != nil && (!value.Reviewed || len(includeReviewed) > 0 && includeReviewed[0]) {
 			out = append(out, value)
 		}
 	}
-	return out, nil
+	return out, tx.Commit(ctx)
 }
 
 func validateTollSelection(ids []string) error {

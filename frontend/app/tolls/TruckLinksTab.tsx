@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "@/app/components/AccessLink";
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
-import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink } from "../lib/api";
+import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink, reviewTollFlag } from "../lib/api";
 import { usePermissions } from "../lib/access";
-import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckMapping, PrePassTruckPreview } from "../lib/types";
+import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckMapping, PrePassTruckPreview, Toll } from "../lib/types";
 import { controlClass, EmptyState, ErrorBanner, Field, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
 
 const money = (value: string | number) => Number(value).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -17,6 +17,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   const canWrite = permissions.includes("tolls.link"), canProfile = permissions.includes("trucks.read");
   const [data, setData] = useState<PrePassTruckLinks | null>(null);
   const [from, setFrom] = useState("");
+  const [showReviewed, setShowReviewed] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,15 +30,25 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   const [preview, setPreview] = useState<PrePassTruckPreview | null>(null);
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const result = await fetchPrePassTruckLinks(from, signal);
+      const result = await fetchPrePassTruckLinks(from, signal, showReviewed);
       if (!signal?.aborted) { setData(result); setSelected(ids => ids.filter(id => result.transactions.some(t => t.id === id))); }
     } catch (e) { if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load tolls."); }
-  }, [from]);
+  }, [from, showReviewed]);
   useEffect(() => { const c = new AbortController(); const timer = setTimeout(() => void load(c.signal), 0); return () => { clearTimeout(timer); c.abort(); }; }, [load]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 5000); return () => clearTimeout(timer); }, [notice]);
   function open(ids: string[]) {
     setError(""); setPreview(null);
     setInput({ id: crypto.randomUUID(), transactionIds: ids, environment: "", identityKey: "", truckId: "", from: "", to: "", revision: "" });
+  }
+  async function markReviewed(toll: Toll) {
+    if (saving.current || !toll.reviewRevision) return;
+    saving.current = true; setBusy(true); setError("");
+    try {
+      await reviewTollFlag(toll.id, { id: crypto.randomUUID(), revision: toll.reviewRevision, version: toll.reviewVersion || "", reviewed: !toll.reviewed });
+      setNotice(toll.reviewed ? "Reopened for review." : toll.truckId ? "Marked reviewed." : "Marked reviewed. This transaction still needs a truck link.");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not update review status."); }
+    finally { saving.current = false; setBusy(false); }
   }
   async function submit() {
     if (saving.current) return;
@@ -61,7 +72,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   const allSelected = shown.length > 0 && shown.every(t => selected.includes(t.id));
   return <section className="space-y-4" aria-label="PrePass truck links">
     <div className="flex flex-wrap items-center gap-3">
-      <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setData(null); setPage(1); }} /></label></TableFilters>
+      <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" disabled={busy} type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setData(null); setPage(1); }} /></label><label className="flex items-center gap-2 text-[13px] text-zinc-400"><input type="checkbox" disabled={busy} checked={showReviewed} onChange={e => { setShowReviewed(e.target.checked); setSelected([]); setData(null); setPage(1); }} />Show reviewed</label></TableFilters>
       {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected</span><button className="ui-button ui-button-primary" disabled={selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions.</span>}</>}
       <div className="ml-auto">{actions}</div>
     </div>
@@ -78,8 +89,8 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
         <td className="px-3 py-2"><div>{t.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${t.truckId}`}>{t.truckUnit}</Link> : t.truckUnit || "Unknown"}</div><div className="font-mono text-[11px] text-zinc-500">Transponder {t.prePassTagId || "—"}</div>{t.equipmentUnit !== t.truckUnit && <div className="text-[11px] text-zinc-500">Source unit {t.equipmentUnit || "Unknown"}</div>}</td>
         <td className="px-3 py-2"><div>{[t.entryPlazaName || t.entryPlaza, t.exitPlazaName || t.exitPlaza].filter(Boolean).join(" → ")}</div><div className="text-[11px] text-zinc-500">{t.exitDate} {t.exitTime} · {t.agency}</div></td>
         <td className="px-3 py-2 text-right font-mono tabular-nums">{money(t.amount)}</td>
-        <td className="px-3 py-2"><div className="flex items-center gap-1">{!t.truckId && <span className="text-amber-400">Unlinked</span>}<TransactionFlagIcon flag={t.flag} kind="toll" />{t.flag && <span className="text-zinc-400">{t.flag.status === "review" ? "Flagged" : "Check data"}</span>}</div></td>
-        <td className="px-3 py-2">{canWrite && <button className="ui-button" onClick={() => open([t.id])}>Link truck</button>}</td>
+        <td className="px-3 py-2"><div className="flex items-center gap-1">{!t.truckId && <span className="text-amber-400">Unlinked</span>}{t.flag?.status === "review" && <><TransactionFlagIcon flag={t.flag} kind="toll" /><span className={t.reviewed ? "text-emerald-400" : "text-zinc-400"} title={t.reviewed ? `Reviewed by ${t.reviewedBy || "a user"} at ${t.reviewedAt}` : undefined}>{t.reviewed ? "Reviewed" : "Flagged"}</span></>}</div></td>
+        <td className="px-3 py-2">{canWrite && <div className="flex flex-wrap gap-2"><button className="ui-button" disabled={busy} onClick={() => open([t.id])}>Link truck</button>{t.flag?.status === "review" && t.reviewRevision && <button className="ui-button" disabled={busy} onClick={() => void markReviewed(t)}>{t.reviewed ? "Reopen" : "Mark reviewed"}</button>}</div>}</td>
       </tr>)}</tbody>
     </table></TableShell>
     {data && <TablePagination page={currentPage} pageSize={pageSize} totalItems={transactions.length} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />}

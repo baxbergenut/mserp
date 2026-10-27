@@ -21,6 +21,8 @@ const tollLinks={dateFrom:'2026-09-01',groups:[{environment:'production',identit
 const originalGroup=structuredClone(tollLinks.groups[0]);
 const toll = (id, truckId = null, flag) => ({ id, truckId, truckUnit: truckId ? '001' : '01', postingDate: '2026-10-05', invoiceDate: '2026-10-05', exitDate: '2026-10-01', exitTime: '12:00:00', equipmentUnit: '01', prePassTagId: '777780673', transponderOrPlate: '00413749983', readType: 'DEVICE', amount: 2.5, agency: 'NJ', exitPlaza: 'Exit Plaza', entryPlaza:null, miles:null, tollClass:'5', flag });
 tollLinks.transactions = [toll('toll-one'), toll('toll-flagged', 'truck-001', {status:'review', reason:'No recorded truck load covers this transaction.', truckUnit:'001', transactionDate:'2026-10-01', bufferDays:1}), toll('toll-unselected')];
+Object.assign(tollLinks.transactions[1],{reviewRevision:'c'.repeat(64),reviewVersion:'',reviewed:false});
+const originalFlaggedToll=structuredClone(tollLinks.transactions[1]);
 tollLinks.mappings = [{ id:'existing-rule', environment:'production', identityKey:'tag:777780673', truckId:'truck-01', unit:'01.', from:'2026-09-01', to:'', count:41, version:1 }];
 const writes = [];
 let readOnly = false;
@@ -33,7 +35,7 @@ const server = createServer(async (req, res) => {
       if (path === '/api/auth/session') return send({ user: { id: 'relay-fixture-user', username: 'Relay test', theme: 'default', permissions: ['fuel.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['fuel.drivers.create','fuel.drivers.edit','fuel.drivers.delete','fuel.drivers.recover','fuel.drivers.sync', 'tasks.create','tasks.edit','tasks.delete','tasks.review', 'tolls.read', ...(tollReadOnly ? [] : ['tolls.link']), 'weighmytruck.read'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
       if(path==='/api/prepass-fleet')return send({configured:true,accounts:[],vehicles:[],transponders:[],trucks:[],operations:[]});
-      if(path==='/api/tolls/truck-links'&&req.method==='GET')return send(tollLinks);
+      if(path==='/api/tolls/truck-links'&&req.method==='GET')return send({...tollLinks,transactions:tollLinks.transactions.filter(t=>!t.reviewed||!t.truckId||url.searchParams.get('includeReviewed')==='true')});
       if(path==='/api/tolls')return send({items:[toll('transaction-view')],total:1,totalPages:1,page:1,pageSize:25,options:{units:[],agencies:[]},summary:{amount:2.5,truckCount:0}});
       if(path==='/api/toll-dashboard')return send({error:'Outside fixture'},503);
       if (path === '/api/fuel-dashboard') return send({ error: 'Overview is outside this local driver fixture.' }, 503);
@@ -41,6 +43,7 @@ const server = createServer(async (req, res) => {
       if (path === '/api/relay-drivers' && req.method === 'GET') return send({ ...data, canLink: !readOnly });
       if (path === '/api/relay-drivers/refresh') { data.refreshedAt = new Date().toISOString(); return send({ refreshed: true }); }
       let body = ''; for await (const chunk of req) body += chunk; const input = body ? JSON.parse(body) : {};
+      if(path==='/api/tolls/toll-flagged/review'){writes.push(input);const row=tollLinks.transactions.find(t=>t.id==='toll-flagged');if(input.version!==row.reviewVersion)return send({error:'Review changed.'},409);Object.assign(row,{reviewed:input.reviewed,reviewVersion:input.id,reviewedBy:'Fixture reviewer',reviewedAt:'2026-10-27T12:00:00Z'});return send({saved:true})}
       if(path==='/api/relay-drivers/bulk'){
        writes.push(input);const results=input.changes.map(change=>{const e=data.items.find(e=>e.driver.id===change.relayDriverId);if(!e.assignment)return {relayDriverId:e.driver.id,error:'This driver has no policy assignment.'};e.assignment.enabled=false;return {relayDriverId:e.driver.id}});return send({results});
       }
@@ -163,6 +166,17 @@ else {
     await page.getByRole('button',{name:'Review transaction: No recorded truck load covers this transaction.'}).click();
     await expect(page.getByRole('dialog',{name:'Review transaction',exact:true})).toContainText('No recorded truck load');
     await page.getByRole('dialog',{name:'Review transaction',exact:true}).getByLabel('Close',{exact:true}).click();
+    await expect(page.getByText('Check data',{exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:'Mark reviewed',exact:true}).click();
+    await expect(page.getByLabel('Select transaction toll-flagged',{exact:true})).toHaveCount(0);
+    if(writes.at(-1).reviewed!==true||writes.at(-1).revision!=='c'.repeat(64))throw new Error('Reviewed flag snapshot not sent');
+    await page.reload();await expect(page.getByLabel('Select transaction toll-flagged',{exact:true})).toHaveCount(0);
+    await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).check();
+    await expect(page.getByText('Reviewed',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Reopen',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Mark reviewed',exact:true})).toBeVisible();
+    await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).uncheck();
+    await expect(page.getByRole('button',{name:'Mark reviewed',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Link truck',exact:true}).first().click();
     await expect(page.getByRole('dialog')).toContainText('Only the selected transactions');
     await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
@@ -190,8 +204,11 @@ else {
     await page.screenshot({path:join(tmpdir(),'mserp-prepass-trucks.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    tollLinks.transactions.push(structuredClone(originalFlaggedToll));
     tollReadOnly=true; await page.reload();
+    await expect(page.getByText('Flagged',{exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Mark reviewed',exact:true})).toHaveCount(0);
     await expect(page.getByRole('checkbox',{name:'Select transactions on this page'})).toHaveCount(0);
     await page.getByRole('tab',{name:'Transactions',exact:true}).click();
     await expect(page.getByRole('cell').filter({hasText:'Transponder 777780673'})).toBeVisible();

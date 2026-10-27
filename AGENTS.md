@@ -191,6 +191,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and both source/destination finalized-statement guards. Explicit links survive
   sync and legacy mapping undo; future mapping rules stay unchanged. Transactions
   shows PPDeviceID as Transponder below Truck, never the separate deviceNumber.
+  Migration 156 adds auditable Mark reviewed/Reopen decisions for actual spending
+  flags (status=review). Needs attention excludes linked Check data hints; unlinked
+  rows remain for truck linking. Reviewed flags hide by default; Show reviewed
+  exposes attribution and Reopen. Revisions fence source/load evidence and review
+  versions; routine sync timestamps do not reopen flags. Reviews never alter toll
+  amounts, links or statements. POST /tolls/{id}/review requires tolls.link.
+  Flag coverage uses exit_date; the list's Posted since filter uses posting_date.
   Legacy dated mappings group by tag
   with exact-unit fallback; never guess equivalent names or strip leading zeros.
   Date-bounded reviewed mappings resolve unlinked tolls and future imports;

@@ -51,7 +51,7 @@ type PrePassTruckLinks struct {
 	Mappings     []PrePassTruckMapping `json:"mappings"`
 }
 
-func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string) (PrePassTruckLinks, error) {
+func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string, includeReviewed ...bool) (PrePassTruckLinks, error) {
 	out := PrePassTruckLinks{DateFrom: from, Groups: []PrePassTruckGroup{}, Trucks: []PrePassTruckChoice{}, Mappings: []PrePassTruckMapping{}}
 	if from == "" {
 		if err := r.pool.QueryRow(ctx, `SELECT (date_trunc('month',now() AT TIME ZONE 'America/New_York')-interval '1 month')::date::text`).Scan(&out.DateFrom); err != nil {
@@ -61,7 +61,7 @@ func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string) (Pr
 	if _, err := time.Parse(time.DateOnly, out.DateFrom); err != nil {
 		return out, &TollLinkError{"Select a valid posting date."}
 	}
-	transactions, err := r.attentionTolls(ctx, out.DateFrom)
+	transactions, err := r.attentionTolls(ctx, out.DateFrom, includeReviewed...)
 	if err != nil {
 		return out, err
 	}
