@@ -42,11 +42,12 @@ No migration or additional environment variable is required.
 - Dispatcher attribution uses the existing daily historical assignment rule,
   with an explicit Unassigned group. No truck denominator or productivity ranking
   is introduced. Current fleet and attention counts are independent of dates.
-- Trucks and drivers appear as pie charts with counts, percentages and linked
-  status legends. Truck totals include Ready, In use, Shop and OOS, excluding
+- Trucks and drivers appear as pie charts with linked count/percentage labels
+  around their slices and connector lines. Names and totals sit above each card
+  (for example, Trucks 117). Truck totals include Ready, In use, Shop and OOS, excluding
   Terminated. Driver totals include Active (including New driver), Home and Vacation;
   other availability and overlapping assignment counts are omitted. Zero counts
-  remain in legends without slices, and empty charts show a no-data message.
+  have no slice or callout, and empty charts show a no-data message.
   Trailers are not queried or shown on the dashboard.
   Active driver drill-down uses `availability=active_or_new`, a directory filter
   combining both recorded statuses without changing driver profiles or lifecycle.

@@ -81,9 +81,9 @@ try {
   await expect(truckChart).toBeVisible(); await expect(driverChart).toBeVisible();
   await expect(truckChart.locator('.recharts-pie-sector')).toHaveCount(4);
   await expect(driverChart.locator('.recharts-pie-sector')).toHaveCount(3);
-  await expect(page.getByLabel('Trucks status legend').getByRole('link',{name:'In use: 136, 86.1%',exact:true})).toBeVisible();
-  await expect(page.getByLabel('Drivers status legend').getByRole('link')).toHaveCount(3);
-  await expect(page.getByLabel('Drivers status legend').getByRole('link',{name:'Active: 128, 91.4%',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Trucks status labels').getByRole('link',{name:'In use: 136, 86.1%',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Drivers status labels').getByRole('link')).toHaveCount(3);
+  await expect(page.getByLabel('Drivers status labels').getByRole('link',{name:'Active: 128, 91.4%',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:/Terminated|Without truck|Family issue|Health issue|New driver|Reset|Rest:/})).toHaveCount(0);
   await page.screenshot({path:join(output,'dashboard-current.png'),fullPage:true});
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
@@ -94,11 +94,11 @@ try {
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'Gross',exact:true}).click();
   await page.screenshot({ path: join(output, 'dashboard-light.png'), fullPage: true });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
-  await page.getByLabel('Drivers status legend').getByRole('link',{name:/^Active:/}).click();
+  await page.getByLabel('Drivers status labels').getByRole('link',{name:/^Active:/}).click();
   await expect.poll(() => requested.some(r => r.path === '/driver-directory' && r.query.availability === 'active_or_new' && r.query.employment === 'active')).toBe(true);
   await expect(page.getByLabel('Availability',{exact:true})).toHaveValue('active_or_new');
   await page.goBack();
-  await expect(page.getByLabel('Drivers status legend')).toBeVisible();
+  await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
   await page.getByRole('button', { name: 'Reconcile totals →' }).click();
   await expect(page.getByRole('dialog')).toContainText('Raw load-row gross');
@@ -116,10 +116,10 @@ try {
   }
   await page.evaluate(() => { sessionStorage.setItem('mserp-navigation-v1:dashboard-fixture:/trucks:view:page:search', JSON.stringify('HIDDEN SAVED FILTER')); });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
-  await page.locator('section').filter({has: page.getByRole('heading',{name:'Trucks',exact:true})}).getByRole('link').filter({hasText:'Shop'}).click();
+  await page.locator('section').filter({has: page.getByRole('heading',{name:/^Trucks \d/})}).getByRole('link').filter({hasText:'Shop'}).click();
   await expect.poll(() => requested.some(r => r.path === '/trucks' && r.query.status === 'shop' && !r.query.search)).toBe(true);
   await page.goBack();
-  await expect(page.getByLabel('Drivers status legend')).toBeVisible();
+  await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
   await expect(page.getByLabel('Week of')).toHaveValue('2026-09-07');
 
@@ -137,6 +137,10 @@ try {
   await page.screenshot({ path: join(output, 'dashboard-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await expect(page.getByRole('button',{name:'Expand sidebar'})).toBeVisible(); await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true); await page.screenshot({ path: join(output,'dashboard-mobile.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('tab',{name:'Right now',exact:true}).click();
+  await expect(page.getByLabel('Trucks status labels')).toBeVisible();
+  await page.screenshot({ path: join(output,'dashboard-current-mobile.png'), fullPage: true });
+  await page.getByRole('tab',{name:'Weekly',exact:true}).click();
   waterfallMode='negative'; await page.reload();
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('-$18,750.00');
   waterfallMode='review'; await page.reload();
@@ -149,14 +153,14 @@ try {
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
   fleetMode = 'single'; await page.reload();
   await expect(page.getByRole('img',{name:'Trucks status distribution: 5 total'}).locator('.recharts-pie-sector')).toHaveCount(1);
-  await expect(page.getByLabel('Trucks status legend').getByRole('link',{name:'In use: 5, 100%',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Trucks status labels').getByRole('link',{name:'In use: 5, 100%',exact:true})).toBeVisible();
   fleetMode = 'zero'; await page.reload();
   await expect(page.getByText('No trucks in these statuses.',{exact:true})).toBeVisible();
   await expect(page.getByText('No drivers in these statuses.',{exact:true})).toBeVisible();
   await expect(page.getByRole('img',{name:/status distribution/})).toHaveCount(0);
   fleetMode = 'normal';
   allowed = ['trucks.read']; revision++; await page.reload();
-  await expect(page.getByRole('heading',{name:'Trucks',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:/^Trucks \d/})).toBeVisible();
   await expect(page.getByRole('button',{name:/Original Gross/})).toHaveCount(0); await expect(page.getByRole('heading',{name:'Recorded costs'})).toHaveCount(0);
   allowed = []; revision++; await page.reload(); await expect(page.getByText(/No dashboard sections are available/)).toBeVisible();
   await page.goto(`${base}/`); await expect(page).toHaveURL(/\/dashboard$/);
