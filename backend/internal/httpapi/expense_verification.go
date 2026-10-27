@@ -9,10 +9,7 @@ import (
 )
 
 func expenseVerificationRole(user repository.AuthUser) string {
-	if user.Administrator {
-		return "admin"
-	}
-	if repository.HasPermission(user, "expenses.accounting.verify") {
+	if user.Administrator || repository.HasPermission(user, "expenses.accounting.verify") {
 		return "accountant"
 	}
 	return ""

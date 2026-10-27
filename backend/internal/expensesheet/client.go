@@ -309,14 +309,14 @@ func (c *Client) Deliver(ctx context.Context, e Entry, t Tab) error {
 		}
 	}
 	requests := []any{}
-	for _, span := range [][2]int{{1, accountant}, {t.IDColumn, len(cells)}} {
+	for _, span := range [][2]int{{1, accountant - 1}, {t.IDColumn, len(cells)}} {
 		left, right := span[0], span[1]
 		if row > 1 {
 			requests = append(requests, map[string]any{"copyPaste": map[string]any{"source": grid(t.ID, row-1, row, left, right), "destination": grid(t.ID, row, row+1, left, right), "pasteType": "PASTE_FORMAT"}})
 		}
 		requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, left, right)}}, map[string]any{"updateCells": map[string]any{"range": grid(t.ID, row, row+1, left, right), "rows": []any{map[string]any{"values": cells[left:right]}}, "fields": "userEnteredValue"}})
 	}
-	requests = append(requests, map[string]any{"setDataValidation": map[string]any{"range": grid(t.ID, row, row+1, accountant-1, accountant), "rule": map[string]any{"condition": map[string]any{"type": "BOOLEAN"}, "strict": true}}}, map[string]any{"createDeveloperMetadata": map[string]any{"developerMetadata": map[string]any{"metadataId": metadataID(e.ID), "metadataKey": metadataKey, "metadataValue": e.ID, "visibility": "DOCUMENT", "location": map[string]any{"dimensionRange": map[string]any{"sheetId": t.ID, "dimension": "ROWS", "startIndex": row, "endIndex": row + 1}}}}})
+	requests = append(requests, map[string]any{"createDeveloperMetadata": map[string]any{"developerMetadata": map[string]any{"metadataId": metadataID(e.ID), "metadataKey": metadataKey, "metadataValue": e.ID, "visibility": "DOCUMENT", "location": map[string]any{"dimensionRange": map[string]any{"sheetId": t.ID, "dimension": "ROWS", "startIndex": row, "endIndex": row + 1}}}}})
 
 	if err = c.request(ctx, http.MethodPost, url.PathEscape(e.Spreadsheet)+":batchUpdate", map[string]any{"requests": requests}, nil); err != nil {
 		return err
@@ -344,7 +344,7 @@ func (c *Client) verifyWritten(ctx context.Context, e Entry, t Tab, row int) err
 	}
 	accountant := len(baseHeaders(t.Compact)) - 1
 	for col, cell := range expected {
-		if col == 0 || (col >= accountant && col < t.IDColumn) {
+		if col == 0 || (col >= accountant-1 && col < t.IDColumn) {
 			continue
 		}
 		value := cell.(map[string]any)["userEnteredValue"]
@@ -401,13 +401,13 @@ func entryCells(e Entry, t Tab) ([]any, error) {
 	}
 	var cells []any
 	if t.Compact {
-		cells = []any{stringCell(""), stringCell(week), stringCell(date.Format("01/02/2006")), stringCell(get("unit_number")), stringCell(get("driver_name")), numberCell(get("amount")), stringCell(get("payment_type")), stringCell(get("expense_type")), stringCell(description), stringCell(get("covered_by")), stringCell(get("paid_by")), boolCell(v["manager_verified"] == true), boolCell(v["accounting_verified"] == true)}
+		cells = []any{stringCell(""), stringCell(week), stringCell(date.Format("01/02/2006")), stringCell(get("unit_number")), stringCell(get("driver_name")), numberCell(get("amount")), stringCell(get("payment_type")), stringCell(get("expense_type")), stringCell(description), stringCell(get("covered_by")), stringCell(get("paid_by")), map[string]any{}, boolCell(v["accounting_verified"] == true)}
 	} else {
 		category := "Other"
 		if m != nil {
 			category = "Maintenance"
 		}
-		cells = []any{stringCell(""), stringCell(category), stringCell(week), stringCell(date.Format("01/02/2006")), stringCell(get("unit_number")), stringCell(get("driver_name")), numberCell(get("amount")), stringCell(get("payment_type")), stringCell(get("expense_type")), stringCell(get("reference_number")), stringCell(description), stringCell(get("covered_by")), stringCell(get("paid_by")), boolCell(v["manager_verified"] == true), boolCell(v["accounting_verified"] == true)}
+		cells = []any{stringCell(""), stringCell(category), stringCell(week), stringCell(date.Format("01/02/2006")), stringCell(get("unit_number")), stringCell(get("driver_name")), numberCell(get("amount")), stringCell(get("payment_type")), stringCell(get("expense_type")), stringCell(get("reference_number")), stringCell(description), stringCell(get("covered_by")), stringCell(get("paid_by")), map[string]any{}, boolCell(v["accounting_verified"] == true)}
 	}
 	for len(cells) < t.IDColumn {
 		cells = append(cells, map[string]any{})

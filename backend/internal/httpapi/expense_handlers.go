@@ -74,7 +74,6 @@ type expenseRequest struct {
 	Description        string          `json:"description"`
 	CoveredBy          string          `json:"coveredBy"`
 	PaidBy             string          `json:"paidBy"`
-	ManagerVerified    bool            `json:"managerVerified"`
 	AccountingVerified bool            `json:"accountingVerified"`
 }
 
@@ -243,7 +242,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
 		ExpenseType: optionalString(request.ExpenseType), ReferenceNumber: optionalString(request.ReferenceNumber),
 		Description: optionalString(request.Description), CoveredBy: optionalString(request.CoveredBy),
-		PaidBy: optionalString(request.PaidBy), ManagerVerified: false,
+		PaidBy:             optionalString(request.PaidBy),
 		AccountingVerified: false,
 	}, nil
 }
@@ -314,19 +313,14 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	adminVerified, err := parseExpenseVerificationFilter(r.URL.Query().Get("adminVerified"))
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	if categoryID != "" && (!isUUID(categoryID) || !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, categoryID, "view")) {
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to view that category")
 		return
 	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
-		AccountantVerified: accountantVerified, AdminVerified: adminVerified,
-		Pagination:     pagination,
-		ChargeDriverID: chargeDriverID, Responsibility: responsibility,
+		AccountantVerified: accountantVerified,
+		Pagination:         pagination,
+		ChargeDriverID:     chargeDriverID, Responsibility: responsibility,
 		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
 		CategoryID: categoryID, VisibleCategoryIDs: visible, AccessibleCategoryIDs: accessible,
 

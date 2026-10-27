@@ -11,14 +11,14 @@ import (
 var ErrExpenseVerificationForbidden = errors.New("only Administrators can remove another person’s verification; accounting verification permission is required to remove your own")
 
 func CanRevokeExpenseVerification(actor AuthUser, verification ExpenseVerification) bool {
-	return actor.Administrator || (verification.UserID != nil && *verification.UserID == actor.ID && verification.Role == "accountant" && HasPermission(actor, "expenses.accounting.verify"))
+	return verification.Role == "accountant" && (actor.Administrator || (verification.UserID != nil && *verification.UserID == actor.ID && verification.Role == "accountant" && HasPermission(actor, "expenses.accounting.verify")))
 }
 
 // Lock the expense first for every operation. Approval checks the displayed
 // content version; cancellation targets an immutable approval ID so it cannot
-// accidentally remove a newer approval or touch the other role's check.
+// accidentally remove a newer approval or touch another check.
 func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, role string, updatedAt time.Time, actor AuthUser) (Expense, error) {
-	if role != "admin" && role != "accountant" {
+	if role != "accountant" || (!actor.Administrator && !HasPermission(actor, "expenses.accounting.verify")) {
 		return Expense{}, ErrExpenseVerificationForbidden
 	}
 	tx, err := r.pool.Begin(ctx)
@@ -28,7 +28,7 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	defer tx.Rollback(ctx)
 	var lockedID string
 	err = tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 AND category_id=$2 AND updated_at=$3
- AND NOT CASE WHEN $4='admin' THEN manager_verified ELSE accounting_verified END FOR UPDATE`, id, categoryID, updatedAt, role).Scan(&lockedID)
+ AND NOT accounting_verified FOR UPDATE`, id, categoryID, updatedAt).Scan(&lockedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Expense{}, ErrAccessConflict
 	}
@@ -39,7 +39,7 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	if err != nil {
 		return Expense{}, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE expenses SET manager_verified=manager_verified OR $2='admin',accounting_verified=accounting_verified OR $2='accountant',updated_at=now() WHERE id=$1`, id, role)
+	_, err = tx.Exec(ctx, `UPDATE expenses SET accounting_verified=true,updated_at=now() WHERE id=$1`, id)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -64,7 +64,7 @@ func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID,
 		return Expense{}, err
 	}
 	var verification ExpenseVerification
-	err = tx.QueryRow(ctx, `SELECT id::text,verifier_role,user_id::text FROM expense_verifications WHERE id=$1 AND expense_id=$2 AND revoked_at IS NULL FOR UPDATE`, verificationID, id).Scan(&verification.ID, &verification.Role, &verification.UserID)
+	err = tx.QueryRow(ctx, `SELECT id::text,verifier_role,user_id::text FROM expense_verifications WHERE id=$1 AND expense_id=$2 AND verifier_role='accountant' AND revoked_at IS NULL FOR UPDATE`, verificationID, id).Scan(&verification.ID, &verification.Role, &verification.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Expense{}, ErrAccessConflict
 	}
@@ -78,7 +78,7 @@ func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID,
 	if err != nil {
 		return Expense{}, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE expenses SET manager_verified=manager_verified AND $2<>'admin',accounting_verified=accounting_verified AND $2<>'accountant',updated_at=now() WHERE id=$1`, id, verification.Role)
+	_, err = tx.Exec(ctx, `UPDATE expenses SET accounting_verified=false,updated_at=now() WHERE id=$1`, id)
 	if err != nil {
 		return Expense{}, err
 	}

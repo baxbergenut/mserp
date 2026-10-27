@@ -81,16 +81,15 @@ function formatDate(value: string | null) {
 }
 
 function verificationLabel(verification: ExpenseVerification) {
-  const role = verification.role === "admin" ? "Administrator" : "Accountant";
+  const role = "Accountant";
   return role + ": " + (verification.userName || "Verifier not recorded");
 }
 
 function Verification({ expense, onClick }: { expense: Expense; onClick: () => void }) {
-  const label = (expense.verifications ?? []).map(verificationLabel).join("; ") || [expense.accountingVerified && "Accountant: verifier not recorded", expense.managerVerified && "Administrator: verifier not recorded"].filter(Boolean).join("; ");
+  const label = (expense.verifications ?? []).map(verificationLabel).join("; ") || (expense.accountingVerified ? "Accountant: verifier not recorded" : "");
   return label ? <button type="button" onClick={onClick} title={label} aria-label={"View verification: " + label} className="inline-flex h-8 min-w-8 items-center justify-center rounded hover:bg-zinc-800/50 focus-visible:outline-2 focus-visible:outline-blue-500">
     <span aria-label={label} role="img" className="relative inline-block h-5 w-[26px] shrink-0">
       {expense.accountingVerified && <Check strokeWidth={3} className="absolute left-0 top-0 h-5 w-5 text-blue-500" />}
-      {expense.managerVerified && <Check strokeWidth={3} className={"absolute h-5 w-5 text-emerald-500 " + (expense.accountingVerified ? "left-1.5 top-0" : "left-0 top-0")} />}
     </span>
   </button> : null;
 }
@@ -111,7 +110,6 @@ export default function ExpensesPage() {
   const [coveredBy, setCoveredBy] = useViewState("page:coveredBy", "");
   const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
   const [accountantVerified, setAccountantVerified] = useViewState("page:accountantVerified", "");
-  const [adminVerified, setAdminVerified] = useViewState("page:adminVerified", "");
   const [dateTo, setDateTo] = useViewState("page:dateTo", "");
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
@@ -138,11 +136,12 @@ export default function ExpensesPage() {
   const saveLock=useRef(false);
   const [currentUser, setCurrentUser] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
+  const [administrator, setAdministrator] = useState(false);
   const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
   const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
   const verificationBusy = useRef(false);
   const [verificationNotice, setVerificationNotice] = useState("");
-  const [verificationRole, setVerificationRole] = useState<"admin" | "accountant" | "">("");
+  const [verificationRole, setVerificationRole] = useState<"accountant" | "">("");
   const [verifying, setVerifying] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
@@ -153,11 +152,12 @@ export default function ExpensesPage() {
     if (showLoading) setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
+        page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
       setCurrentUserId(session.user.id);
       setVerificationRole(session.user.expenseVerificationRole ?? "");
+      setAdministrator(session.user.administrator);
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -171,7 +171,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, adminVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
+  }, [setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -234,7 +234,7 @@ export default function ExpensesPage() {
   function completeEntry() {setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
   function closeEntry(){setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
   function changeForm(next:ExpenseInput){ setForm(next); }
-  const hasFilters = Boolean(truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified || adminVerified);
+  const hasFilters = Boolean(truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified);
 
   function openCreate() {
     const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds[0] ?? "";
@@ -315,7 +315,7 @@ export default function ExpensesPage() {
       if (stamp) verificationUndo.current.push({ expenseId: expense.id, verificationId: stamp.id });
       setVerificationNotice("Verified. Press Ctrl+Z to undo.");
       setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
-      if (accountantVerified || adminVerified) await loadData(false);
+      if (accountantVerified) await loadData(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not verify entry");
     } finally { setVerifying(null); verificationBusy.current = false; }
@@ -329,14 +329,14 @@ export default function ExpensesPage() {
     try {
       const updated = await unverifyExpense(expenseId, verificationId);
       setExpenses(items => items.map(item => item.id === updated.id ? updated : item));
-      if (accountantVerified || adminVerified) await loadData(false);
+      if (accountantVerified) await loadData(false);
       setVerificationDetails(current => current?.id === updated.id ? updated : current);
       verificationUndo.current = verificationUndo.current.filter(item => item.verificationId !== verificationId);
       setVerificationNotice("Verification removed.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not remove verification");
     } finally { setVerifying(null); verificationBusy.current = false; }
-  }, [accountantVerified, adminVerified, loadData]);
+  }, [accountantVerified, loadData]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -358,7 +358,7 @@ export default function ExpensesPage() {
   }, [verificationNotice]);
 
   function canCancelVerification(stamp: ExpenseVerification) {
-    return verificationRole === "admin" || (stamp.userId === currentUserId && verificationRole === "accountant" && stamp.role === "accountant");
+    return administrator || (stamp.userId === currentUserId && verificationRole === "accountant" && stamp.role === "accountant");
   }
 
   function clearFilters() {
@@ -370,7 +370,6 @@ export default function ExpensesPage() {
     setDateFrom("");
     setDateTo("");
     setAccountantVerified("");
-    setAdminVerified("");
     setPage(1);
   }
 
@@ -406,7 +405,7 @@ export default function ExpensesPage() {
         </select>
           <select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
           <select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
-          <select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select><select aria-label="Admin verification" value={adminVerified} onChange={e => { setAdminVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any admin status</option><option value="false">Unverified by admin</option><option value="true">Verified by admin</option></select>
+          <select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select>
         </TableFilters>
 
 
@@ -480,7 +479,7 @@ export default function ExpensesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <Verification expense={expense} onClick={() => { setError(""); setVerificationDetails(expense); }} />
-                      {verificationRole && !(verificationRole === "admin" ? expense.managerVerified : expense.accountingVerified) && <button type="button" className="ui-button" disabled={verifying !== null} onClick={() => void verify(expense)}>{verifying === expense.id ? "Verifying…" : "Verify"}</button>}
+                      {verificationRole && !(expense.accountingVerified) && <button type="button" className="ui-button" disabled={verifying !== null} onClick={() => void verify(expense)}>{verifying === expense.id ? "Verifying…" : "Verify"}</button>}
                     </div>
                   </td>
                 </tr>
@@ -534,8 +533,8 @@ export default function ExpensesPage() {
         {error && <ErrorBanner message={error} />}
         <div className="space-y-3">
           {(verificationDetails.verifications ?? []).map(stamp => <div key={stamp.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 p-3">
-            <div><p className="flex items-center gap-2 text-sm"><Check className={stamp.role === "admin" ? "h-4 w-4 text-emerald-500" : "h-4 w-4 text-blue-500"} />{verificationLabel(stamp)}</p>{stamp.verifiedAt && <p className="mt-1 text-xs text-zinc-500">{new Date(stamp.verifiedAt).toLocaleString()}</p>}</div>
-            {canCancelVerification(stamp) && <button type="button" className="ui-button text-red-400" disabled={!!verifying} onClick={() => void cancelVerification(verificationDetails.id, stamp.id)}>Remove {stamp.role === "admin" ? "Administrator" : "Accountant"} verification</button>}
+            <div><p className="flex items-center gap-2 text-sm"><Check className={"h-4 w-4 text-blue-500"} />{verificationLabel(stamp)}</p>{stamp.verifiedAt && <p className="mt-1 text-xs text-zinc-500">{new Date(stamp.verifiedAt).toLocaleString()}</p>}</div>
+            {canCancelVerification(stamp) && <button type="button" className="ui-button text-red-400" disabled={!!verifying} onClick={() => void cancelVerification(verificationDetails.id, stamp.id)}>Remove Accountant verification</button>}
           </div>)}
           {!verificationDetails.verifications?.length && <p className="text-sm text-zinc-400">No active verifications.</p>}
         </div>

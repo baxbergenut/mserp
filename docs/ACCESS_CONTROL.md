@@ -8,7 +8,7 @@ The application uses one role per user. Grants apply to all records in the permi
 
 Drivers, Trucks, Dispatchers, Updaters and Investors have independent grants. Sensitive driver addresses, emergency contacts and CDL details require `drivers.private.read/edit`. CDL and IRP metadata/downloads use `drivers.documents.read/edit` and `trucks.documents.read/edit`. Driver rates, dispatcher commission rates and investor terms have separate read/edit capabilities. Driver Pay, Investor Pay and Dispatcher Pay have independent View grants; driver/investor reports have separate Edit, Finalize and Reopen grants. Escrow has separate Add, Edit and cancellation (Delete) grants; cancellation cannot change a release’s amount or week. Operational Gross Board amounts remain visible with board access.
 
-`expenses.accounting.verify` authorizes blue accounting verification together with category View. Role names have no authorization meaning. Only Administrators add green manager verification or cancel somebody else's verification. An accounting verifier can remove their own check while they retain verification and category View access. Existing approval IDs, authors, timestamps and colours remain unchanged.
+`expenses.accounting.verify` authorizes blue accounting verification together with category View. Role names have no authorization meaning. Administrators also use accounting verification and alone can cancel somebody else's verification. Manager verification is retired; its historical approval records are deleted. An accounting verifier can remove their own check while they retain verification and category View access. Existing approval IDs, authors, timestamps and colours remain unchanged.
 
 ## Enforcement
 

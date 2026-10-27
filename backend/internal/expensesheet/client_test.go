@@ -226,7 +226,7 @@ func TestDeliveryUsesNextBlankRowAndLeavesAccountingAndSideListsAlone(t *testing
 										if g.StartColumnIndex == 0 {
 											t.Error("request touches the sheet's company column", kind, name)
 										}
-										if !(g.EndColumnIndex <= accountant || g.StartColumnIndex >= tab.IDColumn) {
+										if !(g.EndColumnIndex <= accountant-1 || g.StartColumnIndex >= tab.IDColumn) {
 											t.Error("request touches accounting or side-list columns", kind, name)
 										}
 										if name != "source" && (g.StartRowIndex != 5 || g.EndRowIndex != 6) {

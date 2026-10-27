@@ -139,7 +139,6 @@ function Get-ExpenseRows {
             Description = ConvertTo-SqlText $row.Description
             CoveredBy = ConvertTo-SqlText $row.'Who will cover'
             PaidBy = ConvertTo-SqlText $row.'Paid By'
-            ManagerVerified = ConvertTo-SqlBoolean $row.'Manager Verification'
             AccountingVerified = ConvertTo-SqlBoolean $row.'Accounting Verification'
             SourceSpreadsheetID = ConvertTo-SqlText $spreadsheetId
             SourceSheet = ConvertTo-SqlText $Sheet
@@ -173,7 +172,7 @@ if ($AllowLegacyUnassignedTruckOwnerBefore) {
 $columns = @(
     'category', 'category_id', 'expense_date', 'truck_id', 'driver_id', 'owner_id', 'unit_number', 'driver_name', 'amount',
     'payment_type', 'expense_type', 'reference_number', 'description', 'covered_by',
-    'paid_by', 'manager_verified', 'accounting_verified', 'source_spreadsheet_id',
+    'paid_by', 'accounting_verified', 'source_spreadsheet_id',
     'source_sheet', 'source_row'
 ) -join ', '
 
@@ -186,7 +185,7 @@ for ($offset = 0; $offset -lt $records.Count; $offset += 250) {
         $truckID = "(SELECT id FROM trucks WHERE upper(regexp_replace(btrim(unit_number), '\s+', ' ', 'g')) = $normalizedUnit LIMIT 1)"
         $driverID = "(SELECT id FROM drivers WHERE normalized_name = lower(regexp_replace(btrim($($row.DriverName)::text), '\s+', ' ', 'g')) LIMIT 1)"
         $ownerID = "CASE WHEN lower(btrim($($row.CoveredBy)::text)) = 'truck owner' THEN (SELECT owner_id FROM trucks WHERE upper(regexp_replace(btrim(unit_number), '\s+', ' ', 'g')) = $normalizedUnit LIMIT 1) ELSE NULL END"
-        $tuples.Add("($($row.Category), (SELECT id FROM expense_settings WHERE kind = 'category' AND active AND name = $($row.Category)), $($row.ExpenseDate), $truckID, $driverID, $ownerID, $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.ManagerVerified), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
+        $tuples.Add("($($row.Category), (SELECT id FROM expense_settings WHERE kind = 'category' AND active AND name = $($row.Category)), $($row.ExpenseDate), $truckID, $driverID, $ownerID, $($row.UnitNumber), $($row.DriverName), $($row.Amount), $($row.PaymentType), $($row.ExpenseType), $($row.ReferenceNumber), $($row.Description), $($row.CoveredBy), $($row.PaidBy), $($row.AccountingVerified), $($row.SourceSpreadsheetID), $($row.SourceSheet), $($row.SourceRow))")
     }
     $lines.Add("INSERT INTO expenses ($columns) VALUES")
     $lines.Add(($tuples -join ",`n"))
@@ -213,11 +212,6 @@ DO UPDATE SET
 
 $lines.Add(@"
 -- Imported historical checks have no recorded verifier or timestamp.
-INSERT INTO expense_verifications(expense_id, verifier_role)
-SELECT id, 'admin' FROM expenses
-WHERE source_spreadsheet_id = '$spreadsheetId' AND manager_verified
-ON CONFLICT (expense_id, verifier_role) WHERE revoked_at IS NULL DO NOTHING;
-
 INSERT INTO expense_verifications(expense_id, verifier_role)
 SELECT id, 'accountant' FROM expenses
 WHERE source_spreadsheet_id = '$spreadsheetId' AND accounting_verified

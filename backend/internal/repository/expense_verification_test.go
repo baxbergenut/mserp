@@ -25,7 +25,7 @@ func TestExpenseVerificationCancellationRoles(t *testing.T) {
 		{"same accountant role", AuthUser{ID: "other", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, "accountant", false},
 		{"accountant cannot remove admin", AuthUser{ID: "other", RoleName: "Renamed finance", Permissions: []string{"expenses.accounting.verify"}}, "admin", false},
 		{"admin removes accountant", AuthUser{ID: "other", Administrator: true}, "accountant", true},
-		{"admin removes admin", AuthUser{ID: "other", Administrator: true}, "admin", true},
+		{"retired manager verification cannot be removed", AuthUser{ID: "other", Administrator: true}, "admin", false},
 		{"own with explicit grant", AuthUser{ID: owner, Permissions: []string{"expenses.accounting.verify"}}, "accountant", true},
 		{"ordinary viewer", AuthUser{ID: "other"}, "accountant", false},
 	} {
@@ -60,7 +60,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	migration, err := os.ReadFile("../../sql/085_expense_verification.sql")
+	migration, err := os.ReadFile("../../sql/151_retire_expense_manager_verification.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,27 +79,43 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				_, _ = admin.Exec(context.Background(), `SET search_path TO public; DROP SCHEMA `+quoted+` CASCADE`)
 			}()
 			if mode == "migration" {
-				before, _, ok := strings.Cut(string(source), "-- Expense verification attribution and cancellation (migration 085).")
+				before, _, ok := strings.Cut(string(source), "-- Retire expense manager verification (migration 151).")
 				if !ok {
 					t.Fatal("missing migration boundary")
 				}
 				exec(before)
-				exec(`INSERT INTO expenses(company,category_id,category,expense_date,amount,expense_type,manager_verified) SELECT 'MS Express',id,name,'2026-10-12',25,'Legacy check',true FROM expense_settings WHERE kind='category' AND name='Other'`)
+				exec(`INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,manager_verified,accounting_verified) SELECT id,name,'2026-10-12',25,'Legacy check',true,false FROM expense_settings WHERE kind='category' AND name='Other'`)
+				exec(`INSERT INTO expense_verifications(expense_id,verifier_role,user_name,verified_at,revoked_at)
+ SELECT id,'admin','Former manager','2026-10-12 12:00:00Z',NULL FROM expenses WHERE expense_type='Legacy check';
+ INSERT INTO expense_verifications(expense_id,verifier_role,user_name,verified_at,revoked_at)
+ SELECT id,'admin','Former manager','2026-10-11 12:00:00Z','2026-10-11 13:00:00Z' FROM expenses WHERE expense_type='Legacy check';
+ INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,accounting_verified)
+ SELECT id,name,'2026-10-12',40,'Accounting legacy check',true FROM expense_settings WHERE kind='category' AND name='Other';
+ INSERT INTO expense_verifications(expense_id,verifier_role,user_name,verified_at)
+ SELECT id,'accountant','Saved accountant','2026-10-12 14:00:00Z' FROM expenses WHERE expense_type='Accounting legacy check';
+ INSERT INTO expense_sheet_exports(expense_id,spreadsheet_id,sheet_id,payload,delivered_at)
+ SELECT id,'fixture',7,jsonb_build_object('expense',to_jsonb(e),'nested',jsonb_build_array(jsonb_build_object('managerVerified',true,'accountingVerified',true))),'2026-10-12 15:00:00Z'
+ FROM expenses e WHERE expense_type='Legacy check'`)
 				exec(string(migration))
-				for _, path := range []string{"../../sql/087_retire_expense_company.sql", "../../sql/088_drop_expense_company.sql", "../../sql/089_expense_efs.sql", "../../sql/095_expense_cost_breakdown.sql", "../../sql/106_driver_only_penalties.sql", "../../sql/103_fleetscope_fleet_sync.sql", "../../sql/134_fleetscope_applicants.sql"} {
-					next, err := os.ReadFile(path)
-					if err != nil {
-						t.Fatal(err)
-					}
-					exec(string(next))
+				var remaining int
+				if err := admin.QueryRow(ctx, `SELECT count(*) FROM expense_verifications WHERE verifier_role='admin'`).Scan(&remaining); err != nil || remaining != 0 {
+					t.Fatal("historical manager approvals remain", err)
 				}
-				var unknown bool
-				if e := admin.QueryRow(ctx, `SELECT user_id IS NULL AND user_name='' AND verified_at IS NULL FROM expense_verifications`).Scan(&unknown); e != nil || !unknown {
-					t.Fatalf("invented legacy attribution: %v", e)
+				var accounting bool
+				if err := admin.QueryRow(ctx, `SELECT accounting_verified FROM expenses WHERE expense_type='Legacy check'`).Scan(&accounting); err != nil || accounting {
+					t.Fatal("manager approval became accounting approval", err)
+				}
+				var preserved bool
+				if err := admin.QueryRow(ctx, `SELECT e.accounting_verified AND e.amount=40 AND v.user_name='Saved accountant' AND v.verified_at='2026-10-12 14:00:00Z' AND v.revoked_at IS NULL FROM expenses e JOIN expense_verifications v ON v.expense_id=e.id WHERE e.expense_type='Accounting legacy check'`).Scan(&preserved); err != nil || !preserved {
+					t.Fatal("accounting verification changed during removal", err)
+				}
+				if err := admin.QueryRow(ctx, `SELECT NOT (payload->'expense' ? 'manager_verified') AND NOT (payload->'nested'->0 ? 'managerVerified') AND (payload->'nested'->0->>'accountingVerified')::boolean AND (payload->'expense'->>'amount')::numeric=25 AND spreadsheet_id='fixture' AND sheet_id=7 AND delivered_at='2026-10-12 15:00:00Z' FROM expense_sheet_exports`).Scan(&preserved); err != nil || !preserved {
+					t.Fatal("export snapshot cleanup lost accounting data or delivery receipts", err)
 				}
 			} else {
 				exec(string(source))
 			}
+
 			var runtimeOwner bool
 			if e := admin.QueryRow(ctx, `SELECT tableowner = 'mserp_app' FROM pg_tables WHERE schemaname = $1 AND tablename = 'expense_verifications'`, schema).Scan(&runtimeOwner); e != nil || !runtimeOwner {
 				t.Fatalf("verification table must belong to the runtime role before test grants: %v", e)
@@ -137,24 +153,14 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				t.Fatal("missing verification attribution")
 			}
 			first := entry.Verifications[0].ID
-			if _, e = repo.VerifyExpense(ctx, id, entry.CategoryID, "admin", stale, actors[0]); !errors.Is(e, ErrAccessConflict) {
+			if _, e = repo.VerifyExpense(ctx, id, entry.CategoryID, "accountant", stale, actors[0]); !errors.Is(e, ErrAccessConflict) {
 				t.Fatalf("stale verification: %v", e)
 			}
-			entry, e = repo.VerifyExpense(ctx, id, entry.CategoryID, "admin", entry.UpdatedAt, actors[0])
-			if e != nil {
-				t.Fatal(e)
+			if _, e = repo.VerifyExpense(ctx, id, entry.CategoryID, "admin", entry.UpdatedAt, actors[0]); !errors.Is(e, ErrExpenseVerificationForbidden) {
+				t.Fatalf("retired manager verification accepted: %v", e)
 			}
-			var adminStamp string
-			for _, v := range entry.Verifications {
-				if v.Role == "admin" {
-					adminStamp = v.ID
-				}
-			}
-			for _, bad := range []struct {
-				actor AuthUser
-				stamp string
-			}{{actors[1], adminStamp}, {actors[3], first}} {
-				if _, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, bad.stamp, bad.actor); !errors.Is(e, ErrExpenseVerificationForbidden) {
+			for _, actor := range []AuthUser{actors[2], actors[3]} {
+				if _, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, first, actor); !errors.Is(e, ErrExpenseVerificationForbidden) {
 					t.Fatalf("cancellation permission: %v", e)
 				}
 			}
@@ -162,8 +168,8 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if entry.AccountingVerified || !entry.ManagerVerified {
-				t.Fatal("cancellation touched the other role")
+			if entry.AccountingVerified || len(entry.Verifications) != 0 {
+				t.Fatal("cancellation left an active accounting check")
 			}
 			entry, e = repo.VerifyExpense(ctx, id, entry.CategoryID, "accountant", entry.UpdatedAt, actors[1])
 			if e != nil {
@@ -182,34 +188,27 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			entry, e = repo.UnverifyExpense(ctx, id, entry.CategoryID, adminStamp, actors[0])
-			if e != nil {
-				t.Fatal(e)
-			}
-			if entry.ManagerVerified || entry.AccountingVerified || len(entry.Verifications) != 0 {
+			if entry.AccountingVerified || len(entry.Verifications) != 0 {
 				t.Fatal("checks remain after cancellation")
 			}
 			var count int
-			if e = admin.QueryRow(ctx, `SELECT count(*) FROM expense_verifications WHERE expense_id=$1 AND revoked_at IS NOT NULL AND revoked_by IS NOT NULL`, id).Scan(&count); e != nil || count != 3 {
+			if e = admin.QueryRow(ctx, `SELECT count(*) FROM expense_verifications WHERE expense_id=$1 AND revoked_at IS NOT NULL AND revoked_by IS NOT NULL`, id).Scan(&count); e != nil || count != 2 {
 				t.Fatalf("cancellation audit: %d %v", count, e)
 			}
-			exec(`INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,accounting_verified,manager_verified)
- SELECT s.id,s.name,v.day,v.amount,'Filter fixture',v.accountant,v.admin
- FROM expense_settings s CROSS JOIN (VALUES (date '2026-10-12',10,false,false),(date '2026-10-12',20,true,false),(date '2026-10-12',30,false,true),(NULL::date,40,true,true)) v(day,amount,accountant,admin)
+			exec(`INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,accounting_verified)
+ SELECT s.id,s.name,v.day,v.amount,'Filter fixture',v.accountant
+ FROM expense_settings s CROSS JOIN (VALUES (date '2026-10-12',10,false),(date '2026-10-12',20,true),(date '2026-10-12',30,false),(NULL::date,40,true)) v(day,amount,accountant)
  WHERE s.kind='category' AND s.name IN ('Other','Maintenance')`)
 			boolPtr := func(v bool) *bool { return &v }
 			for _, tc := range []struct {
-				accountant, administrator *bool
-				total                     int
-				amount                    string
-				incomplete                int
+				accountant *bool
+				total      int
+				amount     string
+				incomplete int
 			}{
-				{nil, nil, 4, "100.00", 1}, {boolPtr(false), nil, 2, "40.00", 0}, {boolPtr(true), nil, 2, "60.00", 1},
-				{nil, boolPtr(false), 2, "30.00", 0}, {nil, boolPtr(true), 2, "70.00", 1},
-				{boolPtr(true), boolPtr(false), 1, "20.00", 0}, {boolPtr(false), boolPtr(true), 1, "30.00", 0},
-				{boolPtr(true), boolPtr(true), 1, "40.00", 1}, {boolPtr(false), boolPtr(false), 1, "10.00", 0},
+				{nil, 4, "100.00", 1}, {boolPtr(false), 2, "40.00", 0}, {boolPtr(true), 2, "60.00", 1},
 			} {
-				page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{Search: "Filter fixture", VisibleCategoryIDs: []string{entry.CategoryID}, AccessibleCategoryIDs: []string{entry.CategoryID}, AccountantVerified: tc.accountant, AdminVerified: tc.administrator, Pagination: Pagination{Page: 99, PageSize: 1}})
+				page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{Search: "Filter fixture", VisibleCategoryIDs: []string{entry.CategoryID}, AccessibleCategoryIDs: []string{entry.CategoryID}, AccountantVerified: tc.accountant, Pagination: Pagination{Page: 99, PageSize: 1}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -217,7 +216,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 					t.Fatalf("verification filtering/pagination/category scope mismatch: %+v", page)
 				}
 				for _, item := range page.Items {
-					if tc.accountant != nil && item.AccountingVerified != *tc.accountant || tc.administrator != nil && item.ManagerVerified != *tc.administrator {
+					if tc.accountant != nil && item.AccountingVerified != *tc.accountant {
 						t.Fatal("row does not match verification filters")
 					}
 				}

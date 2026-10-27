@@ -51,7 +51,6 @@ function toInput(draft: AIExpenseDraft): ExpenseInput {
     description: draft.description,
     coveredBy: draft.coveredBy,
     paidBy: draft.paidBy,
-    managerVerified: false,
     accountingVerified: false,
   };
 }

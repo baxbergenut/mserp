@@ -61,6 +61,9 @@ jobs:
           PGPASSWORD: postgres
         run: psql -h 127.0.0.1 -U postgres -d mserp_assignment_history_test -v ON_ERROR_STOP=1 -c 'CREATE ROLE mserp_app; CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public'
 
+      - name: Check deployment compatibility guards
+        run: bash deploy/test-permissions-cutover.sh
+
       - name: Test backend
         working-directory: backend
         env:

@@ -10,7 +10,7 @@ func TestExpenseVerificationRole(t *testing.T) {
 		user repository.AuthUser
 		want string
 	}{
-		{repository.AuthUser{Administrator: true}, "admin"},
+		{repository.AuthUser{Administrator: true}, "accountant"},
 		{repository.AuthUser{RoleName: "Accountant"}, ""},
 		{repository.AuthUser{RoleName: "Renamed role", Permissions: []string{"expenses.accounting.verify"}}, "accountant"},
 		{repository.AuthUser{RoleName: "Manager"}, ""},
@@ -42,11 +42,11 @@ func TestExpenseVerificationFilters(t *testing.T) {
 
 func TestExpenseFormCannotSetVerification(t *testing.T) {
 	input, err := (expenseRequest{CategoryID: testExpenseCategoryID,
-		ExpenseDate: "2026-10-12", Amount: "25", ExpenseType: "Parking", ManagerVerified: true, AccountingVerified: true}).validate()
+		ExpenseDate: "2026-10-12", Amount: "25", ExpenseType: "Parking", AccountingVerified: true}).validate()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if input.ManagerVerified || input.AccountingVerified {
+	if input.AccountingVerified {
 		t.Fatal("form payload bypassed role verification")
 	}
 }

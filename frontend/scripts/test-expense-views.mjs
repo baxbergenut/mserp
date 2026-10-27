@@ -30,7 +30,7 @@ const writes = [];
 const applicants = [{ id: 'applicant-001', fullName: 'Hiring Applicant', status: 'applied' }];
 let applicantReads = 0;
 const receiptUploads = [];
-let entries = [], verificationRole = "admin";
+let entries = [], verificationRole = "accountant", administrator = true;
 const verified = [];
 const cancelled = [];
 const server = createServer(async (req, res) => {
@@ -61,7 +61,7 @@ try {
       const id = path.split('/')[2];
       const item = entries.find(e => e.id === id);
       expect(route.request().postDataJSON()).toEqual({ updatedAt: item.updatedAt });
-      item[verificationRole === 'admin' ? 'managerVerified' : 'accountingVerified'] = true;
+      item.accountingVerified = true;
       item.verifications.push({ id: 'verification-' + verified.length, role: verificationRole, userId: 'user', userName: 'Entry User', verifiedAt: '2026-10-13T12:00:00Z' });
       verified.push(id);
       await route.fulfill({ json: item }); return;
@@ -69,17 +69,16 @@ try {
     if (path.endsWith('/unverify')) {
       const item = entries.find(e => e.id === path.split('/')[2]);
       const id = route.request().postDataJSON().verificationId;
-      const stamp = item.verifications.find(v => v.id === id);
-      item[stamp.role === 'admin' ? 'managerVerified' : 'accountingVerified'] = false;
+            item.accountingVerified = false;
       item.verifications = item.verifications.filter(v => v.id !== id);
       cancelled.push(id);
       await route.fulfill({ json: item }); return;
     }
     const q = new URL(route.request().url()).searchParams;
     if (path === '/expenses') applicantReads++;
-    const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')) && (!q.get('adminVerified') || e.managerVerified === (q.get('adminVerified') === 'true')));
+    const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')));
     const fixtures = {
-      '/auth/session': { user: { id: 'user', username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', administrator, username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
       '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants, settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/maintenance/options': {vendors:[],types:[],programs:[]}, '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
@@ -168,7 +167,7 @@ try {
   await expect(page.getByRole('button', { name: 'Browse', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  entries = Array.from({ length: 4 }, (_, i) => ({ ...blankDraft, company: 'MS Express', id: 'expense-' + i, expenseType: 'Repair ' + i, category: 'Maintenance', managerVerified: i === 2 || i === 3, accountingVerified: i === 1 || i === 3, verifications: [...(i === 1 || i === 3 ? [{ id: 'accountant-' + i, role: 'accountant', userId: 'other-accountant', userName: 'Avery Accountant', verifiedAt: '2026-10-12T11:00:00Z' }] : []), ...(i === 2 || i === 3 ? [{ id: 'admin-' + i, role: 'admin', userId: 'other-admin', userName: 'Alex Administrator', verifiedAt: '2026-10-12T12:00:00Z' }] : [])], updatedAt: '2026-10-12T12:00:00Z', paidAmount: '5.00', remainingAmount: '7.50' }));
+  entries = Array.from({ length: 4 }, (_, i) => ({ ...blankDraft, company: 'MS Express', id: 'expense-' + i, expenseType: 'Repair ' + i, category: 'Maintenance', accountingVerified: i === 1 || i === 3, verifications: [...(i === 1 || i === 3 ? [{ id: 'accountant-' + i, role: 'accountant', userId: 'other-accountant', userName: 'Avery Accountant', verifiedAt: '2026-10-12T11:00:00Z' }] : [])], updatedAt: '2026-10-12T12:00:00Z', paidAmount: '5.00', remainingAmount: '7.50' }));
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.reload();
   await expect(page.getByRole('columnheader')).toHaveCount(7);
@@ -185,7 +184,7 @@ try {
   await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))));
   const tableBefore = await page.locator('table').boundingBox();
   await row.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(row.getByRole('img', { name: 'Administrator: Entry User', exact: true })).toBeVisible();
+  await expect(row.getByRole('img', { name: 'Accountant: Entry User', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const notice = page.getByRole('status').filter({ hasText: 'Verified. Press Ctrl+Z to undo.' });
   await expect(notice).toBeVisible();
@@ -193,29 +192,33 @@ try {
   expect(Math.abs((await notice.boundingBox()).y - (await page.getByRole('button', { name: 'Add entry', exact: true }).boundingBox()).y)).toBeLessThan(4);
   const accountantRow = page.getByRole('row', { name: 'Open Repair 1', exact: true });
   await expect(accountantRow.getByRole('img', { name: 'Accountant: Avery Accountant', exact: true })).toBeVisible();
+  await expect(accountantRow.getByRole('button', { name: 'Verify', exact: true })).toHaveCount(0);
+  await accountantRow.getByRole('button', { name: 'View verification: Accountant: Avery Accountant', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove Accountant verification', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await accountantRow.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(accountantRow.getByRole('img', { name: 'Accountant: Avery Accountant; Administrator: Entry User' })).toBeVisible();
+  await expect(accountantRow.getByRole('img', { name: 'Accountant: Entry User', exact: true })).toBeVisible();
   await page.keyboard.press('Control+z');
-  await expect(accountantRow.getByRole('img', { name: 'Accountant: Avery Accountant', exact: true })).toBeVisible();
   await expect(accountantRow.getByRole('button', { name: 'Verify', exact: true })).toBeVisible();
-  expect(cancelled).toHaveLength(1);
+  expect(cancelled).toHaveLength(2);
+  entries[1] = { ...entries[1], accountingVerified: true, verifications: [{ id: 'restored-accountant', role: 'accountant', userId: 'other-accountant', userName: 'Avery Accountant' }] };
   await row.focus(); await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog', { name: 'Edit entry' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Delete entry' })).toBeVisible();
   await expect(page.getByText('Manager verified', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  verificationRole = 'accountant'; await page.reload();
+  administrator = false; await page.reload();
   await page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('img', { name: 'Administrator: Alex Administrator; Accountant: Entry User' })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('img', { name: 'Accountant: Entry User' })).toBeVisible();
   await accountantRow.getByRole('button', { name: 'View verification: Accountant: Avery Accountant', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('button', { name: 'View verification: Administrator: Alex Administrator; Accountant: Entry User', exact: true }).click();
+  await page.getByRole('row', { name: 'Open Repair 2', exact: true }).getByRole('button', { name: 'View verification: Accountant: Entry User', exact: true }).click();
   await page.getByRole('button', { name: 'Remove Accountant verification', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await row.getByRole('button', { name: 'View verification: Administrator: Entry User', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Remove Administrator verification', exact: true })).toHaveCount(0);
+  await row.getByRole('button', { name: 'View verification: Accountant: Entry User', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Remove Accountant verification', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('row', { name: 'Open Repair 3', exact: true }).getByRole('button', { name: /View verification:/ }).click();
   await expect(page.getByRole('button', { name: 'Remove Administrator verification', exact: true })).toHaveCount(0);
@@ -226,20 +229,20 @@ try {
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   // Filter fixtures are independent of which user's verification was cancelled.
+  entries[0] = { ...entries[0], accountingVerified: false, verifications: [] };
   entries[1] = { ...entries[1], accountingVerified: false, verifications: [] };
   entries[2] = { ...entries[2], accountingVerified: true, verifications: [...entries[2].verifications, { id: 'filter-accountant', role: 'accountant', userId: 'user', userName: 'Entry User' }] };
   await page.reload();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('true');
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(2);
-  await page.getByLabel('Admin verification', { exact: true }).selectOption('false');
-  await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Admin verification', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('false');
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
   await page.getByRole('row', { name: 'Open Repair 1', exact: true }).getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toHaveCount(0);
   await page.keyboard.press('Control+z');
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Clear', exact: true }).click();

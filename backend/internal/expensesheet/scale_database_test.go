@@ -36,6 +36,10 @@ func TestScaleOutboxDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	retirement, err := os.ReadFile("../../sql/151_retire_expense_manager_verification.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("scale_sheet_%d", time.Now().UnixNano())
@@ -49,11 +53,13 @@ func TestScaleOutboxDatabase(t *testing.T) {
 			defer conn.Exec(ctx, "RESET ROLE; SET search_path TO public; DROP SCHEMA "+schema+" CASCADE")
 			s := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if upgrade {
+				s = strings.Replace(s, strings.ReplaceAll(string(retirement), "\r\n", "\n"), "", 1)
 				s = strings.Replace(s, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
 			}
 			exec(s)
 			if upgrade {
 				exec(string(migration))
+				exec(string(retirement))
 			}
 			exec("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + schema + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + schema + " TO mserp_app")
 			exec("SET ROLE mserp_app")

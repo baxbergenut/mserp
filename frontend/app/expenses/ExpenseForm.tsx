@@ -32,7 +32,6 @@ export const emptyExpenseInput: ExpenseInput = {
   description: "",
   coveredBy: "Company",
   paidBy: "",
-  managerVerified: false,
   accountingVerified: false,
 };
 
@@ -58,7 +57,6 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     description: expense.maintenance ? Array.from(new Set([expense.workOrderDescription?.trim(), expense.description?.trim()].filter(Boolean))).join("\n\n") : expense.description ?? "",
     coveredBy: expense.coveredBy ?? "",
     paidBy: expense.paidBy ?? "",
-    managerVerified: expense.managerVerified,
     accountingVerified: expense.accountingVerified,
   };
 }

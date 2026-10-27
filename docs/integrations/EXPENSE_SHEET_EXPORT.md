@@ -43,12 +43,13 @@ because MSERP no longer records that field. Existing literal company labels on
 otherwise blank template rows are preserved and do not block delivery; formulas
 still hold the row for review. The old category label `Maintenance` is used for work
 orders. New text is written as literal strings, never interpreted as formulas.
-Only the original entry columns after Company through Manager Verification and
-the dedicated MSERP columns are written. Accounting Verification (O on Maintenance, M on HR/Safety)
+Only the original entry columns after Company through Paid By and
+the dedicated MSERP columns are written. The retired Manager Verification column
+and Accounting Verification (O on Maintenance, M on HR/Safety)
 is excluded from every value, validation and formatting request; its protection
 and existing blank/unchecked value remain untouched. Side-list columns between
 the entry and MSERP columns are also untouched. Safe spans copy the preceding
-entry format and retain the manager checkbox, while obsolete dropdown constraints
+entry format, while obsolete dropdown constraints
 on those new cells are cleared. The exact target row is re-read with FORMULA
 rendering immediately before writing; existing data, formulas, entry IDs or an
 already-checked accounting box hold the entry for review. Sheets offers no

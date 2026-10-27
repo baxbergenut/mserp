@@ -43,7 +43,7 @@ export function PermissionMatrix({ role, catalog, onChange }: { role: AccessRole
     <details className="rounded-lg border border-zinc-800 p-3 text-xs" open><summary className="cursor-pointer font-medium">Effective access · {role.permissions.length} capabilities</summary>
       <ul className="mt-3 space-y-1 text-zinc-400">{groups.filter(group => catalog.some(p => p.group === group && role.permissions.includes(p.key))).map(group => <li key={group}><span className="text-zinc-200">{group}:</span> {catalog.filter(p => p.group === group && role.permissions.includes(p.key)).map(p => p.label).join(" · ")}</li>)}</ul>
       {role.permissions.includes("drivers.create") && <p className="mt-3 text-amber-300">{setupMissing.length ? `Driver setup also requires: ${setupMissing.map(label).join(", ")}.` : "Standard driver setup is available."} Creating a truck, setting up a team, or enrolling services additionally requires that operation’s permissions.</p>}
-      <p className="mt-3 text-zinc-500">Manager verification and cancelling another person’s verification are Administrator-only. Accounting verification also requires category View.</p>
+      <p className="mt-3 text-zinc-500">Cancelling another person’s verification is Administrator-only. Accounting verification also requires category View.</p>
     </details>
   </section>;
 }

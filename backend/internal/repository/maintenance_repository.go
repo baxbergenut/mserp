@@ -585,7 +585,7 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 	var expenseJSON []byte
 	if old.ExpenseID != nil {
 		var paid bool
-		if err := tx.QueryRow(ctx, `SELECT driver_settled OR EXISTS(SELECT 1 FROM expense_payments WHERE expense_id=e.id) OR manager_verified OR accounting_verified FROM expenses e WHERE id=$1 FOR UPDATE`, *old.ExpenseID).Scan(&paid); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT driver_settled OR EXISTS(SELECT 1 FROM expense_payments WHERE expense_id=e.id) OR accounting_verified FROM expenses e WHERE id=$1 FOR UPDATE`, *old.ExpenseID).Scan(&paid); err != nil {
 			return err
 		}
 		if paid {

@@ -62,13 +62,13 @@ func testVoidConfirmedWorkOrders(t *testing.T, ctx context.Context, admin *pgx.C
 				}
 			}
 			// Confirmation does not bypass independent accounting verification guards.
-			if _, err := admin.Exec(ctx, `UPDATE expenses SET manager_verified=true WHERE id=$1`, *m.ExpenseID); err != nil {
+			if _, err := admin.Exec(ctx, `UPDATE expenses SET accounting_verified=true WHERE id=$1`, *m.ExpenseID); err != nil {
 				t.Fatal(err)
 			}
 			if err := repo.Void(ctx, id, m.Version, "Duplicate work order", "Fleet employee"); !errors.Is(err, ErrMaintenanceInvalid) {
 				t.Fatal("void bypassed invoice verification", err)
 			}
-			if _, err := admin.Exec(ctx, `UPDATE expenses SET manager_verified=false WHERE id=$1`, *m.ExpenseID); err != nil {
+			if _, err := admin.Exec(ctx, `UPDATE expenses SET accounting_verified=false WHERE id=$1`, *m.ExpenseID); err != nil {
 				t.Fatal(err)
 			}
 			var invoiceBefore []byte

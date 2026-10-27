@@ -638,22 +638,26 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and frontend/scripts/test-maintenance-expenses-e2e.mjs against review-local.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover
   payment balances, row-click editing and modal deletion; review-first AI entry.
-  POST `/expenses/{id}/verify` takes the displayed updatedAt. Built-in Administrators
-  add the green managerVerified check; `expenses.accounting.verify` adds the blue
-  accountingVerified check. Category View is required. Ordinary single/batch
-  creation cannot set checks; edits preserve them. Verification is version-checked
-  and adds only the caller role’s check, without overwriting the other role.
-  Migration 085 records verifier IDs, name snapshots and timestamps, plus
-  cancellation actor/time. Historical checks have unknown authors. POST
-  `/expenses/{id}/unverify` takes the exact verificationId; own accounting checks with the current verification grant, and both roles
-  for Administrators can be removed. Cancelling another person’s check is Administrator-only. Category
-  View remains required. Old IDs cannot cancel a newer approval. Click the tick
-  for details/removal; Ctrl+Z/Cmd+Z undoes this page session’s own approvals
-  without intercepting form typing. Hover lists each verifier.
-  The session exposes expenseVerificationRole, derived server-side.
-  GET `/expenses` accepts optional accountantVerified/adminVerified (`true` or
-  `false`, omitted for all). Both combine with category/search/date filters before
-  summary totals and pagination. Verify/cancel refresh the filtered result.
+  POST `/expenses/{id}/verify` takes the displayed updatedAt and adds the blue
+  accountingVerified check for Administrators or `expenses.accounting.verify`.
+  Category View is required. Ordinary single/batch creation cannot set checks;
+  edits preserve them. Verifications retain verifier IDs, name snapshots and times.
+  POST `/expenses/{id}/unverify` takes the exact verificationId; accounting verifiers
+  may remove their own check while retaining the grant, and Administrators may
+  remove another person's check. Category View remains required. Old IDs cannot
+  cancel a newer approval. Click the tick for details/removal; Ctrl+Z/Cmd+Z undoes
+  this page session's own approvals without intercepting form typing.
+  The session exposes expenseVerificationRole (accountant or empty), derived server-side.
+  GET `/expenses` accepts accountantVerified (true/false, omitted for all), applied
+  before summary totals and pagination. Verify/cancel refresh the filtered result.
+  Migration 151 removes manager verification from the expense/API/UI/import contract
+  and work-order void guards. Existing and historical manager approvals are deleted, including their field
+  in export and work-order snapshots; they never become accounting approvals. Sheet exports leave both legacy
+  verification columns untouched and preserve receipt/column positions.
+  This removal is a schema cutover: install the updated deploy helper first.
+  It stops the API/active exporter for migration 151 and refuses releases that
+  still require manager_verified once that column is gone. Recovery requires a
+  compatible release; prior records are not recreated by application rollback.
 - `frontend/app/investors/`: truck owners, independent investors and driver-linked
   investors. The company is hidden by default with a Show company filter.
   The directory includes driver-linked owners regardless of truck count.

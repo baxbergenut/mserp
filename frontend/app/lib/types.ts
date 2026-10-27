@@ -803,7 +803,7 @@ export interface TollDashboard {
 
 export interface ExpenseVerification {
   id: string;
-  role: "admin" | "accountant";
+  role: "accountant";
   userId: string | null;
   userName: string;
   verifiedAt: string | null;
@@ -894,7 +894,6 @@ export interface Expense {
   workOrderDescription?: string | null;
   coveredBy: string | null;
   paidBy: string | null;
-  managerVerified: boolean;
   accountingVerified: boolean;
   sourceSpreadsheetId: string | null;
   sourceSheet: string | null;
@@ -941,7 +940,6 @@ export interface ExpenseInput {
   description: string;
   coveredBy: string;
   paidBy: string;
-  managerVerified: boolean;
   accountingVerified: boolean;
 }
 
@@ -963,7 +961,7 @@ export interface ExpensePage extends PaginatedResponse<Expense> {
   };
 }
 
-export interface AIExpenseDraft extends Omit<ExpenseInput, "managerVerified" | "accountingVerified" | "maintenance"> {
+export interface AIExpenseDraft extends Omit<ExpenseInput, "accountingVerified" | "maintenance"> {
   maintenance?: MaintenanceAIDetails | null;
   category: ExpenseCategory;
   confidence: number;
@@ -977,7 +975,7 @@ export interface ExpenseExtraction {
 export interface AuthUser {
   administrator: boolean;
   accessRevision?: string;
-  expenseVerificationRole: "admin" | "accountant" | "";
+  expenseVerificationRole: "accountant" | "";
   theme: string;
   id: string;
   username: string;

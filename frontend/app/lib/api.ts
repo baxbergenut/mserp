@@ -500,7 +500,6 @@ export const syncTolls = () =>
 export const fetchExpensesPage = (query: PageQuery & {
   scope?: "general";
   accountantVerified?: string;
-  adminVerified?: string;
   responsibility?: "non_personal";
   chargeDriverId?: string;
   categoryId?: string;

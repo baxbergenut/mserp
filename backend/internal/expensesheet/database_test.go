@@ -47,6 +47,10 @@ func TestOutboxDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	retirement, err := os.ReadFile("../../sql/151_retire_expense_manager_verification.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("expense_sheet_%d", time.Now().UnixNano())
@@ -60,6 +64,7 @@ func TestOutboxDatabase(t *testing.T) {
 			defer func() { conn.Exec(ctx, "RESET ROLE; SET search_path TO public; DROP SCHEMA "+schema+" CASCADE") }()
 			source := strings.ReplaceAll(string(schemaSource), "\r\n", "\n")
 			if upgrade {
+				source = strings.Replace(source, strings.ReplaceAll(string(retirement), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(maintenanceMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(scaleMigration), "\r\n", "\n"), "", 1)
 				source = strings.Replace(source, strings.ReplaceAll(string(notifyMigration), "\r\n", "\n"), "", 1)
@@ -71,6 +76,7 @@ func TestOutboxDatabase(t *testing.T) {
 				exec(string(notifyMigration))
 				exec(string(scaleMigration))
 				exec(string(maintenanceMigration))
+				exec(string(retirement))
 			}
 			exec("SET ROLE mserp_app")
 			count := func(want int) {
@@ -113,7 +119,7 @@ func TestOutboxDatabase(t *testing.T) {
 			count(4)
 			var oldPaid, boundaryPaid, verified bool
 			var target int
-			if err := conn.QueryRow(ctx, `SELECT (payload->'expense'->>'driver_settled')::boolean,(payload->'expense'->>'manager_verified')::boolean,sheet_id FROM expense_sheet_exports WHERE expense_id='66666666-6666-4666-8666-666666666666'`).Scan(&oldPaid, &verified, &target); err != nil || !oldPaid || verified || target != 752928518 {
+			if err := conn.QueryRow(ctx, `SELECT (payload->'expense'->>'driver_settled')::boolean,(payload->'expense') ? 'manager_verified',sheet_id FROM expense_sheet_exports WHERE expense_id='66666666-6666-4666-8666-666666666666'`).Scan(&oldPaid, &verified, &target); err != nil || !oldPaid || verified || target != 752928518 {
 				t.Fatalf("oldPaid=%t verified=%t target=%d err=%v", oldPaid, verified, target, err)
 			}
 			if err := conn.QueryRow(ctx, `SELECT driver_settled FROM expenses WHERE id='77777777-7777-4777-8777-777777777777'`).Scan(&boundaryPaid); err != nil || boundaryPaid {

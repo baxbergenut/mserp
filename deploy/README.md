@@ -50,6 +50,13 @@ application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
+Migration 151 removes manager verification and its historical records. Install
+the updated deployment helper before releasing it. It stops the API and any
+active expense-sheet exporter before the cutover and restarts them on the new
+release. After the field is removed, releases without migration 151 cannot be
+activated or restored automatically. Recovery requires a compatible release;
+application rollback alone cannot restore the deleted records.
+
 Migration 112 is a permission-model cutover. Install the updated deployment
 helper before releasing it. The helper stops the API before applying 112 and
 refuses an older release after the cutover. If activation fails and the previous
