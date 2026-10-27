@@ -109,9 +109,10 @@ Status Board provider choices stay unchanged. No history table, new polling job,
 provider requests, status writes or migration is added.
 
 Both warnings are suppressed while every currently employed assigned operator
-is on Vacation. Current team operators use the same assignment resolver as truck
-status; an employed team partner not on Vacation keeps the truck eligible.
-Returning from Vacation restores the warning if its GPS data still qualifies.
+is Home or on Vacation. Current team operators use the same assignment resolver
+as truck status; an employed team partner outside Home/Vacation keeps the truck
+eligible. Returning from Home/Vacation restores the warning if its GPS data
+still qualifies.
 The truck stays In use throughout, and its last report remains visible.
 
 GET /trucks accepts `gpsAlert=overdue|missing`. Paginated responses include
