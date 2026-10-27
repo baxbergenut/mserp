@@ -13,7 +13,7 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 		q = "SELECT fleet_truck_operating_status(id),count(*) FROM trucks WHERE status<>'terminated' GROUP BY 1"
 		path = "/trucks"
 	case "trailers":
-		q = "SELECT data->>'status',count(*) FROM fleet_trailers GROUP BY 1"
+		q = "SELECT data->>'status',count(*) FROM fleet_trailers WHERE data->>'status'<>'terminated' GROUP BY 1"
 		path = "/fleet/trailers"
 	case "drivers":
 		q = "SELECT CASE WHEN availability_status='new_driver' THEN 'active' ELSE availability_status END,count(*) FROM drivers WHERE active AND availability_status IN ('active','new_driver','home','vacation') GROUP BY 1"
@@ -44,7 +44,7 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 		return nil, err
 	}
 	keys := []string{"ready", "in_use", "shop", "out_of_service", "terminated"}
-	if kind == "trucks" {
+	if kind == "trucks" || kind == "trailers" {
 		keys = []string{"ready", "in_use", "shop", "out_of_service"}
 	}
 	labels := map[string]string{"ready": "Ready", "in_use": "In use", "shop": "Shop", "out_of_service": "OOS", "terminated": "Terminated", "active": "Active", "home": "Home", "vacation": "Vacation", "rest": "Rest", "reset": "Reset", "family_issue": "Family issue", "health_issue": "Health issue", "new_driver": "New driver", "unassigned": "Without truck", "overdue": "GPS update overdue", "missing": "No GPS data"}

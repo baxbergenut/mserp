@@ -17,6 +17,7 @@ type companyDashboardSource interface {
 	DashboardCounts(context.Context, string) ([]repository.DashboardItem, error)
 	DashboardCost(context.Context, string, repository.DashboardPeriod, []string) ([]repository.DashboardItem, error)
 	DashboardLoads(context.Context, repository.DashboardPeriod, string, string, repository.Pagination) (repository.Page[repository.DashboardLoad], error)
+	DashboardCostReview(context.Context, repository.DashboardPeriod, string, repository.Pagination) (repository.Page[repository.DashboardCostReview], error)
 }
 
 type dashboardTaskSource interface {
@@ -93,7 +94,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 				return repository.DashboardSection{Waterfall: &v}, err
 			}})
 		}
-		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"drivers", "drivers.read", "Drivers"}, {"gps", "trucks.read", "GPS attention"}} {
+		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"drivers", "drivers.read", "Drivers"}, {"trailers", "trailers.read", "Trailers"}, {"gps", "trucks.read", "GPS attention"}} {
 			if has(v.permission) {
 				kind := "fleet"
 				if v.key == "gps" {
@@ -207,6 +208,35 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		wg.Wait()
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, 200, result)
+	})
+	r.Get("/dashboard/cost-review", func(w http.ResponseWriter, r *http.Request) {
+		if !administrator(w, r) || !requireCapabilities(w, r, "board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read") {
+			return
+		}
+		p, ok := period(w, r)
+		if !ok {
+			return
+		}
+		kind := r.URL.Query().Get("kind")
+		if kind != "fuel" && kind != "tolls" {
+			writeAPIError(w, 400, "choose fuel or tolls")
+			return
+		}
+		pagination, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		value, err := repo.DashboardCostReview(ctx, p, kind, pagination)
+		if err != nil {
+			logger.Error("dashboard cost review failed", "error", err)
+			writeAPIError(w, 500, "Unresolved transactions could not be loaded")
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, 200, value)
 	})
 	r.Get("/dashboard/loads", func(w http.ResponseWriter, r *http.Request) {
 		if !administrator(w, r) {

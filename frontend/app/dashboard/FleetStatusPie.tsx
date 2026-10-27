@@ -11,7 +11,7 @@ const colors: Record<string, string> = {
   active: "#3b82f6", home: "#ef4444", vacation: "#f59e0b",
 };
 
-export function FleetStatusPie({ section, kind }: { section: DashboardSection; kind: "trucks" | "drivers" }) {
+export function FleetStatusPie({ section, kind }: { section: DashboardSection; kind: "trucks" | "drivers" | "trailers" }) {
   const [width, setWidth] = useState(320);
   const visibleStatuses = kind === "drivers" ? ["active", "home", "vacation"] : ["ready", "in_use", "shop", "out_of_service"];
   const statuses = section.items.filter(item => visibleStatuses.includes(item.id)).map(item => {
@@ -71,7 +71,7 @@ export function FleetStatusPie({ section, kind }: { section: DashboardSection; k
             </Link>
           </div>)}
         </div>
-      </div> : <p className="py-6 text-center text-sm text-zinc-500">{kind === "drivers" ? "No drivers in these statuses." : "No trucks in these statuses."}</p>)}
+      </div> : <p className="py-6 text-center text-sm text-zinc-500">No {kind} in these statuses.</p>)}
     </div>
   </section>;
 }

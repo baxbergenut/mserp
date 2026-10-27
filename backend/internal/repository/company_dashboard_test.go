@@ -253,11 +253,18 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	beforeTrailers, err := repo.DashboardCounts(ctx, "trailers")
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Fixtures are confined to this run's disposable schema.
 	_, err = pool.Exec(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,availability_status,active,status)
  SELECT 'Dashboard status fixture '||n,'dashboard status fixture '||n,'cpm',0,availability,employed,CASE WHEN employed THEN 'active' ELSE 'terminated' END
  FROM (VALUES(1,'active',true),(2,'new_driver',true),(3,'home',true),(4,'vacation',true),(5,'rest',true),(6,'new_driver',false)) v(n,availability,employed);
- INSERT INTO trucks(unit_number,status,status_reason) VALUES('DASH-STATUS-READY','available',''),('DASH-STATUS-ENDED','terminated','Synthetic test fixture');`)
+ INSERT INTO trucks(unit_number,status,status_reason) VALUES('DASH-STATUS-READY','available',''),('DASH-STATUS-ENDED','terminated','Synthetic test fixture');
+ INSERT INTO fleet_trailers(id,data) VALUES
+ (gen_random_uuid(),'{"unitNumber":"DASH-TRAILER-READY","status":"ready","active":true}'),
+ (gen_random_uuid(),'{"unitNumber":"DASH-TRAILER-ENDED","status":"terminated","active":false,"statusReason":"Synthetic test fixture"}');`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,6 +287,10 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	trucks, err := repo.DashboardCounts(ctx, "trucks")
 	if err != nil || len(trucks) != 4 || trucks[0].Count-beforeTrucks[0].Count != 1 {
 		t.Fatalf("truck grouping: %+v %v", trucks, err)
+	}
+	trailers, err := repo.DashboardCounts(ctx, "trailers")
+	if err != nil || len(trailers) != 4 || trailers[0].Count-beforeTrailers[0].Count != 1 || trailers[0].Href != "/fleet/trailers?dashboard=1&status=ready" {
+		t.Fatalf("trailer grouping and drill-down: %+v %v", trailers, err)
 	}
 	directory, err := NewFleetRepository(pool).ListDriverDirectory(ctx, Pagination{Page: 1, PageSize: 25}, "Dashboard status fixture", false, DriverDirectoryFilters{Employment: "active", Availability: "active_or_new"})
 	if err != nil || directory.Total != 2 {

@@ -127,6 +127,7 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/financial-dashboard", "reports.read"},
 	{"GET", "/dashboard/summary", "authenticated"},
 	{"GET", "/dashboard/loads", "board.read"},
+	{"GET", "/dashboard/cost-review", "authenticated"},
 	{"GET", "/fleetscope-sync", "fleetscope.read"},
 	{"POST", "/fleetscope-sync/activate", "fleetscope.reconcile"},
 	{"POST", "/fleetscope-sync/baseline", "fleetscope.reconcile"},

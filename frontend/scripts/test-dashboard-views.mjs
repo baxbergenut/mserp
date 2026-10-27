@@ -22,7 +22,7 @@ const dispatcher = '00000000-0000-0000-0000-000000000010';
 const permissions = ['board.read', 'trucks.read', 'drivers.read', 'trailers.read', 'fuel.read', 'tolls.read', 'weighmytruck.read', 'expenses.read', 'tasks.read', 'driver_pay.read', 'investor_pay.read'];
 let administrator = true;
 let allowed = [...permissions], theme = 'default-light', revision = 1, fail = false, partial = false, empty = false, fleetMode = 'normal';
-let waterfallMode = 'normal';
+let waterfallMode = 'normal', costReviewFails = false;
 const requested = [];
 const section = (kind, title, items, extra = {}) => ({ kind, title, items, updatedAt: '2026-10-26T20:00:00Z', ...extra });
 function dashboard(query) {
@@ -38,10 +38,10 @@ function dashboard(query) {
   for (const [key,permission,label,path,amount] of [['diesel','fuel.read','Diesel','/fuel','25200.45'],['tolls','tolls.read','Tolls','/tolls','3100.25'],['scale','weighmytruck.read','Scale tickets','/weighmytruck','650.00'],['expenses','expenses.read','Maintenance','/expenses','8500.00']]) {
     if (allowed.includes(permission)) sections[key] = section('cost', key === 'expenses' ? 'Expenses by category' : label, [{ id: key, label, count: 32, amount, previousAmount: '1000.00', href: `${path}?dashboard=1&tab=transactions&dateFrom=${dateFrom}&dateTo=${dateTo}${key === 'diesel' ? '&category=fuel' : key === 'expenses' ? '&categoryId=maintenance' : ''}`, note: 'Recorded transactions; not company payment responsibility.' }]);
   }
-  for (const kind of ['trucks','drivers']) if (sections[kind] && fleetMode !== 'normal') {
+  for (const kind of ['trucks','drivers','trailers']) if (sections[kind] && fleetMode !== 'normal') {
     sections[kind].items = sections[kind].items.map(item => ({...item, count: fleetMode === 'single' && ['active','in_use'].includes(item.id) ? 5 : 0}));
   }
-  if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'}]:[]}});
+  if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'},{id:'tolls',label:'Unresolved tolls ownership',count:1,href:'/tolls?dashboard=1&tab=transactions'}]:[]}});
   for (const [key,value] of Object.entries(sections)) if (query.get('view') === 'weekly' ? ['fleet','attention'].includes(value.kind) : query.get('view') === 'current' && !['fleet','attention'].includes(value.kind)) delete sections[key];
   return { period, sections };
 }
@@ -55,6 +55,15 @@ try {
     const url = new URL(route.request().url()); const path = url.pathname.slice(4); requested.push({ path, query: Object.fromEntries(url.searchParams) });
     if (path === '/auth/session' || path === '/auth/login') return route.fulfill({ json: { user: { administrator, id: 'dashboard-fixture', username: 'Dashboard review', theme, accessRevision: revision, permissions: allowed, expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true }] }, csrfToken: 'fixture' } });
     if (path === '/dashboard/summary') return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });
+    if (path === '/dashboard/cost-review') {
+      if (costReviewFails) return route.fulfill({status:500,json:{error:'Synthetic cost review failure'}});
+      const kind=url.searchParams.get('kind');
+      const items=kind==='fuel' ? [
+        {id:'fuel-1',reference:'RELAY-REVIEW-1',date:'2026-09-07',ownershipDate:'2026-09-07',truckId:'',truckUnit:'Unmatched unit',driverName:'Review Driver',assignedUnits:['701'],amount:'250.00',reason:'Reported truck number is missing or not uniquely linked'},
+        {id:'fuel-2',reference:'RELAY-REVIEW-2',date:'2026-09-08',ownershipDate:'2026-09-08',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'300.00',reason:'No ownership recorded for the transaction date'}
+      ] : [{id:'toll-1',reference:'TOLL-REVIEW-1',date:'2026-09-09',ownershipDate:'2026-09-07',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'15.00',reason:'No ownership recorded for the transaction date'}];
+      return route.fulfill({json:{items,total:items.length,page:1,pageSize:25,totalPages:1}});
+    }
     if (path === '/dashboard/loads') return route.fulfill({ json: { items: [{ driverId: driver, driverName: 'Example Driver', date: '2026-10-20', slot: 0, loadNumber: 'LOAD-101', loadRecordId: 101, gross: '2500.00', driverGross: '2200.00', miles: '800.00', dispatcherId: dispatcher, dispatcherName: 'Dispatch East', inclusion: url.searchParams.get('inclusion') || 'included' }], total: 1, page: 1, pageSize: 25, totalPages: 1 } });
     if (path === '/trucks') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, statusCounts: {ready:12,in_use:136,shop:8,out_of_service:2,terminated:14}, gpsAlertCounts: {overdue:3,missing:0} } });
     if (path === '/driver-directory') return route.fulfill({json:{items:[],total:0,page:1,pageSize:25,totalPages:1}});
@@ -81,6 +90,8 @@ try {
   await expect(truckChart).toBeVisible(); await expect(driverChart).toBeVisible();
   await expect(truckChart.locator('.recharts-pie-sector')).toHaveCount(4);
   await expect(driverChart.locator('.recharts-pie-sector')).toHaveCount(3);
+  await expect(page.getByRole('heading',{name:'Trailers 158',exact:true})).toBeVisible();
+  await expect(page.getByRole('img',{name:'Trailers status distribution: 158 total',exact:true}).locator('.recharts-pie-sector')).toHaveCount(4);
   await expect(page.getByLabel('Trucks status labels').getByRole('link',{name:'In use: 136, 86.1%',exact:true})).toBeVisible();
   await expect(page.getByLabel('Drivers status labels').getByRole('link')).toHaveCount(3);
   await expect(page.getByLabel('Drivers status labels').getByRole('link',{name:'Active: 128, 91.4%',exact:true})).toBeVisible();
@@ -94,6 +105,11 @@ try {
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'Gross',exact:true}).click();
   await page.screenshot({ path: join(output, 'dashboard-light.png'), fullPage: true });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
+  await page.getByLabel('Trailers status labels').getByRole('link',{name:/^Ready:/}).click();
+  await expect(page).toHaveURL(/\/fleet\/trailers\?dashboard=1&status=ready/);
+  await expect.poll(() => requested.some(r => r.path === '/trailers' && r.query.status === 'ready' && !r.query.search && !r.query.storage)).toBe(true);
+  await page.goBack();
+  await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByLabel('Drivers status labels').getByRole('link',{name:/^Active:/}).click();
   await expect.poll(() => requested.some(r => r.path === '/driver-directory' && r.query.availability === 'active_or_new' && r.query.employment === 'active')).toBe(true);
   await expect(page.getByLabel('Availability',{exact:true})).toHaveValue('active_or_new');
@@ -145,7 +161,25 @@ try {
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('-$18,750.00');
   waterfallMode='review'; await page.reload();
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('Needs review');
-  await expect(page.getByRole('link',{name:'2 unresolved fuel ownership'})).toBeVisible();
+  await page.getByRole('button',{name:'2 unresolved fuel ownership'}).click();
+  await expect(page.getByRole('dialog')).toContainText('RELAY-REVIEW-1');
+  await expect(page.getByRole('dialog')).toContainText('Review Driver');
+  await expect(page.getByRole('dialog')).toContainText('Assigned at purchase: 701');
+  await expect(page.getByRole('dialog')).toContainText('Reported truck number is missing or not uniquely linked');
+  await expect(page.getByRole('dialog')).toContainText('No ownership recorded for the transaction date');
+  await expect(page.getByRole('dialog').getByRole('link',{name:'702',exact:true})).toHaveAttribute('href','/trucks/detail?id=review-truck');
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(requested.some(r=>r.path==='/dashboard/cost-review' && r.query.kind==='fuel' && r.query.dateFrom==='2026-09-07' && r.query.dateTo==='2026-09-13')).toBe(true);
+  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
+  costReviewFails=true;
+  await page.getByRole('button',{name:'1 unresolved tolls ownership'}).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Synthetic cost review failure');
+  costReviewFails=false;
+  await page.getByRole('dialog').getByRole('button',{name:'Retry',exact:true}).click();
+  await expect(page.getByRole('dialog')).toContainText('TOLL-REVIEW-1');
+  await expect(page.getByRole('dialog')).toContainText('Ownership date: 2026-09-07');
+  await page.screenshot({path:join(output,'dashboard-cost-review-mobile.png'),fullPage:true});
+  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
   waterfallMode='error'; await page.reload();
   await expect(page.getByText('This section could not be loaded',{exact:true})).toBeVisible();
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
@@ -157,11 +191,13 @@ try {
   fleetMode = 'zero'; await page.reload();
   await expect(page.getByText('No trucks in these statuses.',{exact:true})).toBeVisible();
   await expect(page.getByText('No drivers in these statuses.',{exact:true})).toBeVisible();
+  await expect(page.getByText('No trailers in these statuses.',{exact:true})).toBeVisible();
   await expect(page.getByRole('img',{name:/status distribution/})).toHaveCount(0);
   fleetMode = 'normal';
   allowed = ['trucks.read']; revision++; await page.reload();
   await expect(page.getByRole('heading',{name:/^Trucks \d/})).toBeVisible();
   await expect(page.getByRole('button',{name:/Original Gross/})).toHaveCount(0); await expect(page.getByRole('heading',{name:'Recorded costs'})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:/^Trailers \d/})).toHaveCount(0);
   allowed = []; revision++; await page.reload(); await expect(page.getByText(/No dashboard sections are available/)).toBeVisible();
   await page.goto(`${base}/`); await expect(page).toHaveURL(/\/dashboard$/);
   // Broad permissions do not grant dashboard access without Administrator status.

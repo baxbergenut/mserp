@@ -48,6 +48,44 @@ func (f *dashboardFake) DashboardCost(_ context.Context, key string, _ repositor
 func (f *dashboardFake) DashboardLoads(context.Context, repository.DashboardPeriod, string, string, repository.Pagination) (repository.Page[repository.DashboardLoad], error) {
 	return repository.Page[repository.DashboardLoad]{Items: []repository.DashboardLoad{}}, f.call("loads")
 }
+func (f *dashboardFake) DashboardCostReview(_ context.Context, _ repository.DashboardPeriod, kind string, _ repository.Pagination) (repository.Page[repository.DashboardCostReview], error) {
+	return repository.Page[repository.DashboardCostReview]{Items: []repository.DashboardCostReview{}}, f.call("costReview:" + kind)
+}
+
+func TestCompanyDashboardCostReviewAccess(t *testing.T) {
+	permissions := []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read"}
+	for _, tc := range []struct {
+		name, kind  string
+		admin       bool
+		permissions []string
+		status      int
+	}{
+		{"fuel", "fuel", true, permissions, 200}, {"tolls", "tolls", true, permissions, 200},
+		{"invalid kind", "expenses", true, permissions, 400},
+		{"non administrator", "fuel", false, permissions, 403},
+		{"missing waterfall access", "fuel", true, []string{"fuel.read"}, 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &dashboardFake{}
+			r := chi.NewRouter()
+			r.Use(requirePermission)
+			registerCompanyDashboardRoutes(r, slog.New(slog.NewTextHandler(io.Discard, nil)), fake, fake, fake, fake, fake, fake)
+			req := httptest.NewRequest("GET", "/dashboard/cost-review?preset=week&dateFrom=2026-10-05&kind="+tc.kind, nil)
+			req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: tc.admin, Permissions: tc.permissions}}))
+			out := httptest.NewRecorder()
+			r.ServeHTTP(out, req)
+			if out.Code != tc.status {
+				t.Fatalf("status %d body %s", out.Code, out.Body.String())
+			}
+			if tc.status != 200 && len(fake.calls) != 0 {
+				t.Fatal("rejected review executed database read")
+			}
+			if tc.status == 200 && (len(fake.calls) != 1 || fake.calls[0] != "costReview:"+tc.kind || out.Header().Get("Cache-Control") != "no-store") {
+				t.Fatalf("unexpected review %v", fake.calls)
+			}
+		})
+	}
+}
 func (f *dashboardFake) CategoryID(context.Context) (string, error) {
 	return "maintenance", f.call("category")
 }
@@ -74,7 +112,7 @@ func TestCompanyDashboardAccess(t *testing.T) {
 		sections    int
 	}{
 		{"none", nil, 0}, {"board", []string{"board.read"}, 1}, {"trucks", []string{"trucks.read"}, 2}, {"expenses without categories", []string{"expenses.read"}, 0}, {"costs", []string{"fuel.read", "tolls.read", "weighmytruck.read"}, 6}, {"tasks", []string{"tasks.read"}, 1},
-		{"trailers are omitted", []string{"trailers.read"}, 0},
+		{"trailers", []string{"trailers.read"}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &dashboardFake{}

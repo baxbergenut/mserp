@@ -42,13 +42,15 @@ No migration or additional environment variable is required.
 - Dispatcher attribution uses the existing daily historical assignment rule,
   with an explicit Unassigned group. No truck denominator or productivity ranking
   is introduced. Current fleet and attention counts are independent of dates.
-- Trucks and drivers appear as pie charts with linked count/percentage labels
+- Trucks, drivers and trailers appear as pie charts with linked count/percentage labels
   around their slices and connector lines. Names and totals sit above each card
   (for example, Trucks 117). Truck totals include Ready, In use, Shop and OOS, excluding
   Terminated. Driver totals include Active (including New driver), Home and Vacation;
   other availability and overlapping assignment counts are omitted. Zero counts
   have no slice or callout, and empty charts show a no-data message.
-  Trailers are not queried or shown on the dashboard.
+  Trailers use Ready, In use, Shop and OOS with terminated records excluded.
+  Truck/trailer In use and driver Active are blue; Shop/Vacation are orange,
+  Ready is black, and driver Home is red. The three cards form a responsive row.
   Active driver drill-down uses `availability=active_or_new`, a directory filter
   combining both recorded statuses without changing driver profiles or lifecycle.
 - Costs stay separate by source: diesel line items excluding DEF/other purchases,
@@ -75,6 +77,13 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
   matching payroll classification; an unknown start is not an unknown owner.
   Missing or conflicting ownership blocks profit instead of treating the
   transaction as owner-paid. Fuel and tolls do not wait for payroll finalization.
+  Clicking unresolved fuel/tolls opens a paginated list of the exact transactions,
+  amounts, truck identities and reasons. Toll posting and ownership (exit) dates
+  are shown separately. Known trucks link to their profiles; review never edits
+  sources or infers a payer. The list shares the waterfall's attribution query.
+  Fuel review also shows its linked driver and exact-purchase-time truck
+  assignments as context; those assignments never replace an unmatched source
+  truck number automatically.
 - Driver/owner pay and investor pay reuse routed weekly payroll and its frozen
   statements: load fees, enabled layovers and signed manual weekly adjustments.
   Investor shares deduct their hired-driver earnings so labor is counted once.
@@ -95,7 +104,9 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
 `thisMonth`, `lastMonth`, or `custom&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`.
 It also accepts `week&dateFrom=YYYY-MM-DD` and `view=weekly|current`. Hidden view
 jobs are not executed; omitting view retains the combined legacy response.
-Both dashboard endpoints require the server-confirmed Administrator flag;
+`GET /dashboard/cost-review?kind=fuel|tolls` accepts the same period parameters
+and standard page/pageSize pagination. It requires the waterfall's five read
+permissions. All dashboard endpoints require the server-confirmed Administrator flag;
 `access.manage` or other permissions alone do not grant access. Session responses
 expose `user.administrator` for navigation and login decisions. Within that
 boundary, the response also omits unauthorized sections entirely:
@@ -105,6 +116,7 @@ boundary, the response also omits unauthorized sections entirely:
 | Gross, trend, dispatcher breakdown, reconciliation | `board.read` |
 | Weekly waterfall | all of `board.read`, `fuel.read`, `tolls.read`, `driver_pay.read`, `investor_pay.read` |
 | Trucks / GPS | `trucks.read` |
+| Trailers | `trailers.read` |
 | Drivers | `drivers.read` |
 | Diesel / Relay attention | `fuel.read` |
 | Tolls / missing truck links | `tolls.read` |

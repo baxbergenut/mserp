@@ -438,7 +438,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Both dashboard APIs require the actual Administrator flag; `/dashboard/loads`
   also requires board.read. Session `user.administrator` gates navigation/login;
   ordinary access.manage permission never substitutes for Administrator status.
-  Dashboard fleet pies omit trailers and terminated trucks; drivers show only
+  Dashboard fleet pies show trucks, drivers and trailers in one responsive group,
+  omitting terminated trucks/trailers; drivers show only
   Active/Home/Vacation, with New driver grouped under Active. Directory drill-down
   uses the validated `active_or_new` availability filter; profiles stay unchanged.
   Totals and percentages use those displayed statuses.
@@ -454,6 +455,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Unknown ownership/terms, excluded gross or unreconciled earnings leave profit null.
   Ownership baselines with start_known=false have an open start, matching payroll;
   their recorded ends still apply. Fuel/tolls never wait for payroll finalization.
+  Unresolved fuel/tolls open a paginated transaction review at /dashboard/cost-review,
+  sharing the waterfall attribution query and its Administrator plus five-read
+  permission gate. Show missing truck links, missing/conflicting dated ownership,
+  or missing amounts; never infer ownership or mutate sources on review.
   All five board/fuel/tolls/driver_pay/investor_pay read permissions are required.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
   See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.

@@ -26,18 +26,19 @@ type DashboardWaterfall struct {
 // start_known=false denotes an imported baseline with an open start, as in
 // payroll ownership classification. Its recorded end still bounds the owner;
 // missing or conflicting owners remain unresolved.
-const dashboardCompanyCostsSQL = `WITH aliases AS (
+const dashboardCompanyCostsCTE = `WITH aliases AS (
  SELECT unit_key,(array_agg(DISTINCT truck_id))[1] truck_id FROM truck_unit_aliases
  GROUP BY unit_key HAVING count(DISTINCT truck_id)=1
 ), costs AS (
- SELECT 'fuel' kind,f.id::text id,f.purchased_on cost_date,a.truck_id,sum(i.total_amount_paid) amount
+ SELECT 'fuel' kind,f.id::text id,f.purchased_on cost_date,a.truck_id,sum(i.total_amount_paid) amount,
+ f.purchased_on report_date,array_to_string(f.reported_truck_units,', ') source_unit,f.relay_transaction_id reference
  FROM fuel_transactions f JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id
  LEFT JOIN aliases a ON cardinality(f.reported_truck_units)=1 AND a.unit_key=f.reported_truck_units[1]
  WHERE f.relay_environment='production' AND i.item_kind='fuel'
  AND f.purchased_on BETWEEN $1::date AND $2::date
  GROUP BY f.id,a.truck_id
  UNION ALL
- SELECT 'tolls',t.id::text,t.exit_date,t.truck_id,t.amount FROM tolls t
+ SELECT 'tolls',t.id::text,t.exit_date,t.truck_id,t.amount,t.posting_date,t.equipment_unit,t.id::text FROM tolls t
  WHERE (t.prepass_environment IS NULL OR t.prepass_environment='production')
  AND t.posting_date BETWEEN $1::date AND $2::date
 ), attributed AS (
@@ -48,7 +49,9 @@ const dashboardCompanyCostsSQL = `WITH aliases AS (
    AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.cost_date)
    AND (h.unassigned_at IS NULL OR c.cost_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
  ) o ON true LEFT JOIN investors i ON i.id=o.owner_id
-) SELECT kind,coalesce(sum(amount) FILTER(WHERE owners=1 AND is_company),0)::text,
+)`
+
+const dashboardCompanyCostsSQL = dashboardCompanyCostsCTE + ` SELECT kind,coalesce(sum(amount) FILTER(WHERE owners=1 AND is_company),0)::text,
  count(*) FILTER(WHERE owners<>1 OR is_company IS NULL OR amount IS NULL)
  FROM attributed GROUP BY kind`
 

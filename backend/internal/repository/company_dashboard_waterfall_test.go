@@ -127,10 +127,35 @@ func testDashboardWaterfall(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	if err != nil || fuelErr != nil || tollsErr != nil || fuel != 0 || tolls != 0 || got.Profit != nil || len(got.Review) == 0 {
 		t.Fatalf("conflicting ownership must stay unresolved: %+v %v", got, err)
 	}
+	tollReview, err := repo.DashboardCostReview(ctx, p, "tolls", Pagination{Page: 1, PageSize: 25})
+	if err != nil || tollReview.Total != 1 || len(tollReview.Items) != 1 || tollReview.Items[0].Reason != "Conflicting owners on the transaction date" || tollReview.Items[0].Date != "2026-10-20" || tollReview.Items[0].OwnershipDate == nil || *tollReview.Items[0].OwnershipDate != "2026-10-19" {
+		t.Fatalf("toll review attribution: %+v %v", tollReview, err)
+	}
 	exec(`DELETE FROM truck_ownership_history WHERE id='40000000-0000-0000-0000-000000000001';`)
 	exec(`UPDATE fuel_transactions SET prompts='[]' WHERE relay_transaction_id='company';`)
 	got, err = repo.Waterfall(ctx, p)
 	if err != nil || got.Profit != nil || len(got.Review) == 0 {
 		t.Fatalf("unresolved ownership must block profit: %+v %v", got, err)
+	}
+	fuelReview, err := repo.DashboardCostReview(ctx, p, "fuel", Pagination{Page: 1, PageSize: 25})
+	if err != nil || fuelReview.Total != 1 || len(fuelReview.Items) != 1 || fuelReview.Items[0].Reference != "company" || fuelReview.Items[0].TruckID != "" || fuelReview.Items[0].Reason != "Reported truck number is missing or not uniquely linked" {
+		t.Fatalf("missing truck review: %+v %v", fuelReview, err)
+	}
+	if fuelReview.Items[0].DriverName != "Flow company" || len(fuelReview.Items[0].AssignedUnits) != 1 || fuelReview.Items[0].AssignedUnits[0] != "FLOW-1" {
+		t.Fatalf("linked driver and dated assignment context: %+v", fuelReview.Items[0])
+	}
+	exec(`UPDATE fuel_transactions SET prompts='[]' WHERE relay_transaction_id='def';`)
+	first, err := repo.DashboardCostReview(ctx, p, "fuel", Pagination{Page: 1, PageSize: 1})
+	if err != nil || first.Total != 2 || first.TotalPages != 2 || len(first.Items) != 1 {
+		t.Fatalf("review pagination: %+v %v", first, err)
+	}
+	second, err := repo.DashboardCostReview(ctx, p, "fuel", Pagination{Page: 2, PageSize: 1})
+	if err != nil || second.Total != 2 || len(second.Items) != 1 || first.Items[0].ID == second.Items[0].ID {
+		t.Fatalf("review second page: %+v %v", second, err)
+	}
+	exec(`DELETE FROM truck_ownership_history WHERE truck_unit='FLOW-3';`)
+	tollReview, err = repo.DashboardCostReview(ctx, p, "tolls", Pagination{Page: 1, PageSize: 25})
+	if err != nil || tollReview.Total != 1 || tollReview.Items[0].TruckUnit != "FLOW-3" || tollReview.Items[0].Reason != "No ownership recorded for the transaction date" {
+		t.Fatalf("missing dated ownership review: %+v %v", tollReview, err)
 	}
 }
