@@ -62,7 +62,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   return <section className="space-y-4" aria-label="PrePass truck links">
     <div className="flex flex-wrap items-center gap-3">
       <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setData(null); setPage(1); }} /></label></TableFilters>
-      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected</span><button className="ui-button-primary" disabled={selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions.</span>}</>}
+      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected</span><button className="ui-button ui-button-primary" disabled={selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions.</span>}</>}
       <div className="ml-auto">{actions}</div>
     </div>
     {error && !input && !undo && <ErrorBanner message={error} />}
