@@ -28,11 +28,52 @@ func registerFeedbackRoutes(r chi.Router, logger *slog.Logger, repo *repository.
 	r.Get("/feedback", h.list)
 	r.Post("/feedback", h.create)
 	r.Get("/feedback/tags", h.tags)
+	r.Get("/feedback/messages", h.messages)
+	r.Get("/feedback/messages/count", h.messageCount)
+	r.Put("/feedback/messages/{id}/read", h.readMessage)
 	r.Get("/feedback/attachments/{id}", h.attachment)
 	r.Get("/feedback/{id}", h.detail)
 	r.Put("/feedback/{id}", h.update)
 	r.Put("/feedback/{id}/vote", h.vote)
 	r.Post("/feedback/{id}/comments", h.comment)
+}
+
+func (h feedbackHandler) messages(w http.ResponseWriter, r *http.Request) {
+	pagination, err := parsePagination(r)
+	if err != nil {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	result, err := h.repo.Messages(r.Context(), session.User.ID, pagination)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	writeJSON(w, 200, result)
+}
+func (h feedbackHandler) messageCount(w http.ResponseWriter, r *http.Request) {
+	session, _ := authSessionFromContext(r.Context())
+	count, err := h.repo.UnreadMessageCount(r.Context(), session.User.ID)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	writeJSON(w, 200, map[string]int{"count": count})
+}
+func (h feedbackHandler) readMessage(w http.ResponseWriter, r *http.Request) {
+	id, ok := feedbackID(w, r)
+	if !ok {
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if err := h.repo.ReadMessage(r.Context(), id, session.User.ID); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.WriteHeader(204)
 }
 func validFeedbackStatus(s string) bool {
 	return slices.Contains([]string{"open", "in_progress", "completed", "discarded"}, s)

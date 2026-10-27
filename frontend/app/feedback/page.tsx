@@ -2,6 +2,7 @@
 
 import { useCallback, useContext, useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
 import { ArrowUp, Columns3, List, MessageSquare, Paperclip, Pencil, Plus, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { CurrentUserIDContext, useAdministrator } from "../lib/access";
 import { commentFeedback, createFeedback, feedbackAttachmentURL, fetchFeedback, fetchFeedbackDetail, fetchFeedbackTags, updateFeedback, voteFeedback } from "../lib/api";
 import type { FeedbackAttachment, FeedbackDetail, FeedbackInput, FeedbackPost, FeedbackStatus, PaginatedResponse } from "../lib/types";
@@ -102,6 +103,7 @@ function Composer({ post, tags, onClose, onSaved }: { post?: FeedbackPost; tags:
 }
 
 export default function Feedback() {
+  const linkedPost = useSearchParams().get("post");
   const administrator = useAdministrator(), userID = useContext(CurrentUserIDContext);
   const [view, setView] = useState<"feed" | "kanban">("feed");
   const [search, setSearch] = useState(""), query = useDebouncedValue(search, 250);
@@ -114,6 +116,12 @@ export default function Feedback() {
   const [detail, setDetail] = useState<FeedbackDetail | null>(null), [detailError, setDetailError] = useState("");
   const [comment, setComment] = useState(""), [busy, setBusy] = useState("");
   const pending = useRef(false), detailRequest = useRef(0), commentID = useRef("");
+  useEffect(() => {
+    if (!linkedPost) return;
+    let active = true; const request = ++detailRequest.current;
+    fetchFeedbackDetail(linkedPost).then(value => { if (active && request === detailRequest.current) { setDetail(value); setDetailError(""); } }).catch(e => { if (active && request === detailRequest.current) setError(message(e)); });
+    return () => { active = false; };
+  }, [linkedPost]);
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   const resetPages = () => { setPage(1); setColumnPages({ open: 1, in_progress: 1, completed: 1, discarded: 1 }); };
   useEffect(() => { const focus = () => { if (document.visibilityState === "visible") refresh(); }; const timer = window.setInterval(focus, 30000); window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus); return () => { clearInterval(timer); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); }; }, [refresh]);
@@ -166,13 +174,14 @@ export default function Feedback() {
     </article>;
   }
   return <div className="space-y-4">
-    <ManagementHeader icon={MessageSquare} title="Feedback" actionLabel="Share feedback" onAction={() => setComposer("new")} />
+    <ManagementHeader icon={MessageSquare} title="Feedback" />
     <div className="flex flex-wrap items-center gap-2">
       <div role="tablist" aria-label="Feedback view" className="mr-2 flex gap-3"><button type="button" role="tab" aria-selected={view === "feed"} onClick={() => setView("feed")} className="flex items-center gap-1.5 px-1 py-2"><List className="h-4 w-4" />Feed</button><button type="button" role="tab" aria-selected={view === "kanban"} onClick={() => setView("kanban")} className="flex items-center gap-1.5 px-1 py-2"><Columns3 className="h-4 w-4" />Kanban</button></div>
-      <ManagementSearch value={search} onChange={value => { setSearch(value); resetPages(); }} placeholder="Search feedback…" />
+      <div className="min-w-40 flex-1"><ManagementSearch value={search} onChange={value => { setSearch(value); resetPages(); }} placeholder="Search feedback…" /></div>
       <select aria-label="Filter by tag" className={`${controlClass} !w-auto`} value={tag} onChange={e => { setTag(e.target.value); resetPages(); }}><option value="">All tags</option>{tags.map(t => <option key={t} value={t}>{tagLabel(t)}</option>)}</select>
-      {view === "feed" && <select aria-label="Filter by status" className={`${controlClass} !w-auto`} value={status} onChange={e => { setStatus(e.target.value); resetPages(); }}><option value="">All statuses</option>{statuses.map(s => <option key={s} value={s}>{labels[s]}</option>)}</select>}
+      {view === "feed" && <select aria-label="Filter by status" className={`${controlClass} !w-auto`} value={status} onChange={e => { setStatus(e.target.value); resetPages(); }}><option value="">All statuses</option>{statuses.filter(s => s !== "discarded").map(s => <option key={s} value={s}>{labels[s]}</option>)}</select>}
       <select aria-label="Sort feedback" className={`${controlClass} !w-auto`} value={sort} onChange={e => { setSort(e.target.value); resetPages(); }}><option value="newest">Newest first</option><option value="top">Most upvoted</option></select>
+      <div className="ml-auto shrink-0"><ManagementHeader hideTitle icon={MessageSquare} title="Feedback" actionLabel="Share feedback" onAction={() => setComposer("new")} /></div>
     </div>
     {error && <div><ErrorBanner message={error} /><button type="button" className="ui-button mt-2" onClick={refresh}>Try again</button></div>}
     {loading && !data && !Object.keys(columns).length && <p role="status" className="text-zinc-500">Loading feedback…</p>}

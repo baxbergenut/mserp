@@ -84,7 +84,7 @@ func scanFeedback(row pgx.Row) (FeedbackPost, error) {
 	return p, err
 }
 func (repo *FeedbackRepository) List(ctx context.Context, userID string, q FeedbackQuery) (Page[FeedbackPost], error) {
-	where := ` FROM feedback_posts p WHERE $1::uuid IS NOT NULL AND ($2='' OR strpos(lower(p.title||' '||p.body),lower($2))>0) AND ($3='' OR p.status=$3) AND ($4='' OR $4=ANY(p.tags))`
+	where := ` FROM feedback_posts p WHERE $1::uuid IS NOT NULL AND ($2='' OR strpos(lower(p.title||' '||p.body),lower($2))>0) AND (($3='' AND p.status<>'discarded') OR p.status=$3) AND ($4='' OR $4=ANY(p.tags))`
 	var total int
 	if err := repo.pool.QueryRow(ctx, `SELECT count(*)`+where, userID, q.Search, q.Status, q.Tag).Scan(&total); err != nil {
 		return Page[FeedbackPost]{}, err
@@ -245,6 +245,12 @@ func (repo *FeedbackRepository) Update(ctx context.Context, id string, in Feedba
 	}
 	if status != in.Status {
 		if _, err = tx.Exec(ctx, `INSERT INTO feedback_status_history(post_id,actor_name,old_status,new_status) VALUES($1,$2,$3,$4)`, id, user.Username, status, in.Status); err != nil {
+			return err
+		}
+	}
+	if status != "completed" && in.Status == "completed" && author != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO feedback_messages(post_id,recipient_id,post_version,title,completed_by)
+ VALUES($1,$2,$3,$4,$5) ON CONFLICT(post_id,post_version) DO NOTHING`, id, *author, version+1, in.Title, user.Username); err != nil {
 			return err
 		}
 	}

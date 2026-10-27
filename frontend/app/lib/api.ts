@@ -723,3 +723,6 @@ export const updateFeedback = (input: import("./types").FeedbackInput) => apiReq
 export const voteFeedback = (id: string, voted: boolean) => apiRequest<void>(`/feedback/${id}/vote`, { method: "PUT", body: JSON.stringify({ voted }) });
 export const commentFeedback = (id: string, input: { id: string; body: string }) => apiRequest<void>(`/feedback/${id}/comments`, { method: "POST", body: JSON.stringify(input) });
 export const feedbackAttachmentURL = (id: string, download = false) => `${API_BASE}/feedback/attachments/${id}${download ? "?download=1" : ""}`;
+export const fetchFeedbackMessages = (page = 1, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").FeedbackMessage>>(`/feedback/messages?page=${page}&pageSize=10`, { signal });
+export const fetchFeedbackMessageCount = () => apiRequest<{ count: number }>("/feedback/messages/count");
+export const readFeedbackMessage = (id: string) => apiRequest<void>(`/feedback/messages/${id}/read`, { method: "PUT" });

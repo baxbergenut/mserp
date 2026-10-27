@@ -3,7 +3,9 @@
 `/feedback` is shared by every signed-in Clustie user and appears immediately
 above Settings. No extra role permission is required. Feed is the default view;
 Kanban shows Open, In progress, Completed and Discarded in separate paginated
-columns. Search, tag filtering and newest/most-upvoted sorting run on the server.
+columns. Discarded requests are excluded from the feed and its status filter;
+they remain available in Kanban. The Share feedback action sits at the right of
+the view/search/filter toolbar. Search, tag filtering and newest/most-upvoted sorting run on the server.
 The visible feed refreshes every 30 seconds and when returning to the tab.
 
 Everyone can post, comment, add tags to their own posts, and upvote/unvote once
@@ -11,6 +13,20 @@ per post. Authors can edit their title, details and tags. The built-in
 Administrator can edit any post and change statuses through the detail selector
 or Kanban drag and drop. Status changes retain an append-only author/time history.
 The `access.manage` permission alone does not grant moderation.
+
+On each transition into Completed, migration 157 and `feedback_messages.go`
+save a private completion message for the original author in the same transaction
+as the status/history change. Tasks shows these messages with a View feedback
+link and Mark as read. Unread messages count toward the Tasks sidebar badge;
+visible pages refresh within 30 seconds and on focus. Read messages remain in
+history. Re-saving Completed or retrying a stale save never duplicates a message.
+Reopening and completing again creates a new dated update. Historical completions
+are not backfilled. No email is sent.
+
+Every signed-in user can open Tasks for their personal feedback messages.
+Operational tasks and their API permissions/privacy are unchanged; users without
+`tasks.read` never fetch or see that board. Even Administrators cannot read or
+acknowledge another user's personal messages through these endpoints.
 
 The composer requests detailed reproduction steps, expected/actual results,
 affected pages, impact and examples. It accepts file selection, drag/drop and
@@ -35,6 +51,8 @@ API routes (all session protected, mutations require CSRF):
 
 - `GET/POST /feedback`
 - `GET /feedback/tags`
+- `GET /feedback/messages` and `/feedback/messages/count` (current user only)
+- `PUT /feedback/messages/{id}/read` (current recipient only)
 - `GET/PUT /feedback/{id}`
 - `PUT /feedback/{id}/vote`
 - `POST /feedback/{id}/comments`

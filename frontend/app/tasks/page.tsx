@@ -17,6 +17,7 @@ import { TaskForm } from "./TaskForm";
 import { FiveELDTruckReviewModal } from "./FiveELDTruckReview";
 import { EscrowTaskReview } from "./EscrowTaskReview";
 import { RelayReview } from "./RelayReview";
+import { FeedbackMessages } from "./FeedbackMessages";
 
 type TaskPage = PaginatedResponse<CustomTask>;
 type Status = TaskStatus | "all";
@@ -33,6 +34,15 @@ function taskMetadata(task: CustomTask) {
 }
 
 export default function TasksPage() {
+  const canReadTasks = usePermissions().includes("tasks.read");
+  return <div className="space-y-4">
+    {!canReadTasks && <ManagementHeader icon={ListChecks} title="Tasks" />}
+    <FeedbackMessages showEmpty={!canReadTasks} />
+    {canReadTasks && <TaskBoard />}
+  </div>;
+}
+
+function TaskBoard() {
   const permissions = usePermissions();
   const canWrite = permissions.includes("tasks.edit");
  const canCreate=permissions.includes("tasks.create"),canDelete=permissions.includes("tasks.delete");

@@ -1516,3 +1516,4 @@ export type FeedbackDetail = FeedbackPost & {
   history: { actorName: string; oldStatus: FeedbackStatus; newStatus: FeedbackStatus; createdAt: string }[];
 };
 export type FeedbackInput = { id: string; title: string; body: string; tags: string[]; status?: FeedbackStatus; version?: number };
+export type FeedbackMessage = { id: string; postId: string; title: string; completedBy: string; createdAt: string; readAt: string | null };

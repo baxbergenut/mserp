@@ -83,7 +83,7 @@ const narrowViewport = () => window.matchMedia("(max-width: 639px)").matches;
 const serverViewport = () => false;
 
 export function Sidebar() {
-  const { count } = useTaskUpdates();
+  const { count, feedbackCount } = useTaskUpdates();
   const alerts = useSidebarCounts();
   const permissions = usePermissions();
   const administrator = useAdministrator();
@@ -93,7 +93,7 @@ export function Sidebar() {
   const [collapsePreference, setCollapsed] = useState<boolean | null>(null);
   const collapsed = collapsePreference ?? narrow;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const badgeFor = (href: string): Badge | undefined => href === "/tasks" ? { count, label: `${count} open tasks` }
+  const badgeFor = (href: string): Badge | undefined => href === "/tasks" ? { count, label: feedbackCount ? `${count - feedbackCount} open tasks and ${feedbackCount} unread feedback updates` : `${count} open tasks` }
     : href === "/fuel" ? { count: alerts.fuel, label: `${alerts.fuel} terminated drivers still in Relay` }
     : href === "/weighmytruck" ? { count: alerts.weighMyTruck, label: `${alerts.weighMyTruck} terminated drivers with confirmed or unresolved WeighMyTruck access` }
     : href === "/tolls" ? { count: alerts.tolls, label: `${alerts.tolls} toll transactions without a linked truck, posted since ${alerts.tollsFrom}` }

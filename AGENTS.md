@@ -337,6 +337,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `/feedback` is available to every signed-in user, immediately above Settings.
   Migration 155 and repository/httpapi `feedback*.go` own its shared feed,
   comments, unique per-user votes, custom tags and paginated Kanban statuses.
+  Default feed queries exclude Discarded; explicit status queries retain that
+  Kanban column. Share feedback sits at the right of the view/filter toolbar.
+  Migration 157 records private completion messages atomically on transitions to
+  Completed. Tasks shows the author's messages and unread badge even without
+  tasks.read; operational Task APIs and board visibility remain permission-gated.
+  Messages are recipient-only (including for Administrators), retain read history,
+  link directly to feedback, and never send email or backfill old completions.
   Authors edit content; only the built-in Administrator moderates statuses,
   with optimistic versions and append-only status history. Creation atomically
   stores up to five attachments (10 MB each, 20 MB combined), including pasted

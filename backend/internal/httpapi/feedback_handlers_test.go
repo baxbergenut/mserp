@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ import (
 )
 
 func TestFeedbackValidationAndPolicies(t *testing.T) {
-	for _, tc := range []struct{ method, path string }{{"GET", "/feedback"}, {"POST", "/feedback"}, {"GET", "/feedback/tags"}, {"GET", "/feedback/id"}, {"PUT", "/feedback/id"}, {"PUT", "/feedback/id/vote"}, {"POST", "/feedback/id/comments"}, {"GET", "/feedback/attachments/id"}} {
+	for _, tc := range []struct{ method, path string }{{"GET", "/feedback"}, {"POST", "/feedback"}, {"GET", "/feedback/tags"}, {"GET", "/feedback/messages"}, {"GET", "/feedback/messages/count"}, {"PUT", "/feedback/messages/id/read"}, {"GET", "/feedback/id"}, {"PUT", "/feedback/id"}, {"PUT", "/feedback/id/vote"}, {"POST", "/feedback/id/comments"}, {"GET", "/feedback/attachments/id"}} {
 		if got := routePermission(tc.method, tc.path); got != "authenticated" {
 			t.Fatalf("%v: %s", tc, got)
 		}
@@ -97,10 +98,29 @@ func TestFeedbackDatabase(t *testing.T) {
 				exec(normalized[:cut])
 				exec(`INSERT INTO app_users(username,password_hash) VALUES('Legacy feedback user','$2test')`)
 				exec(string(migration))
+				exec(`INSERT INTO feedback_posts(id,author_name,title,body,status,submission_hash) VALUES('15500000-0000-0000-0000-000000000099','Legacy','Legacy completed','History','completed','legacy')`)
+				paths, e := filepath.Glob("../../sql/[0-9][0-9][0-9]_*.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				for _, path := range paths {
+					if filepath.Base(path)[:3] > "155" {
+						body, e := os.ReadFile(path)
+						if e != nil {
+							t.Fatal(e)
+						}
+						exec(string(body))
+					}
+				}
+				var historicalMessages int
+				if e := admin.QueryRow(ctx, `SELECT count(*) FROM feedback_messages`).Scan(&historicalMessages); e != nil || historicalMessages != 0 {
+					t.Fatal("migration must not notify historical completions", e)
+				}
+				exec(`DELETE FROM feedback_posts WHERE id='15500000-0000-0000-0000-000000000099'`)
 			} else {
 				exec(normalized)
 			}
-			for _, table := range []string{"feedback_posts", "feedback_votes", "feedback_comments", "feedback_attachments", "feedback_status_history"} {
+			for _, table := range []string{"feedback_posts", "feedback_votes", "feedback_comments", "feedback_attachments", "feedback_status_history", "feedback_messages"} {
 				var owner string
 				if e := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=$1 AND tablename=$2`, schema, table).Scan(&owner); e != nil || owner != "mserp_app" {
 					t.Fatal("runtime table ownership", table, owner, e)
@@ -257,7 +277,47 @@ func TestFeedbackDatabase(t *testing.T) {
 			if d := get("other"); len(d.History) != 4 || d.History[0].ActorName != "admin" || d.Status != "open" {
 				t.Fatal("status audit", d)
 			}
-			res := jsonCall("other", "GET", "/feedback?status=completed&search=repro", nil, 200)
+			call("", "GET", "/feedback/messages", nil, "", false, 401)
+			var messages repository.Page[repository.FeedbackMessage]
+			messageResponse := jsonCall("author", "GET", "/feedback/messages", nil, 200)
+			if e := json.Unmarshal(messageResponse.Body.Bytes(), &messages); e != nil || messages.Total != 1 || messages.Items[0].PostID != id || messages.Items[0].Title != edit.Title || messages.Items[0].CompletedBy != "admin" || messages.Items[0].ReadAt != nil {
+				t.Fatal("completion message not delivered to author", messageResponse.Body.String(), e)
+			}
+			for _, viewer := range []string{"other", "admin", "manager"} {
+				res := jsonCall(viewer, "GET", "/feedback/messages?recipientId="+users["author"], nil, 200)
+				if !strings.Contains(res.Body.String(), `"total":0`) {
+					t.Fatal("private completion message leaked", viewer, res.Body.String())
+				}
+				jsonCall(viewer, "PUT", "/feedback/messages/"+messages.Items[0].ID+"/read", nil, 404)
+			}
+			res := jsonCall("author", "GET", "/feedback/messages/count", nil, 200)
+			if !strings.Contains(res.Body.String(), `"count":1`) {
+				t.Fatal("unread count", res.Body.String())
+			}
+			call("author", "PUT", "/feedback/messages/"+messages.Items[0].ID+"/read", nil, "", false, 403)
+			for i := 0; i < 2; i++ {
+				jsonCall("author", "PUT", "/feedback/messages/"+messages.Items[0].ID+"/read", nil, 204)
+			}
+			res = jsonCall("author", "GET", "/feedback/messages/count", nil, 200)
+			if !strings.Contains(res.Body.String(), `"count":0`) {
+				t.Fatal("mark read not idempotent", res.Body.String())
+			}
+			edit.Status = "discarded"
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 204)
+			for _, path := range []string{"/feedback", "/feedback?search=repro&tag=ux&sort=top"} {
+				res := jsonCall("other", "GET", path, nil, 200)
+				if !strings.Contains(res.Body.String(), `"total":0`) {
+					t.Fatal("discarded feedback leaked into feed", res.Body.String())
+				}
+			}
+			res = jsonCall("other", "GET", "/feedback?status=discarded", nil, 200)
+			if !strings.Contains(res.Body.String(), `"total":1`) {
+				t.Fatal("discarded feedback missing from Kanban", res.Body.String())
+			}
+			edit.Version++
+			edit.Status = "open"
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 204)
+			res = jsonCall("other", "GET", "/feedback?status=completed&search=repro", nil, 200)
 			if !strings.Contains(res.Body.String(), `"total":0`) {
 				t.Fatal("status filtering")
 			}
@@ -265,6 +325,20 @@ func TestFeedbackDatabase(t *testing.T) {
 			if !strings.Contains(res.Body.String(), `"total":1`) {
 				t.Fatal("search and tag filtering", res.Body.String())
 			}
+			edit.Version++
+			edit.Status = "completed"
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 204)
+			edit.Version++
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 204) // Saving an already-completed post must not notify again.
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 409) // An uncertain/stale retry must not notify again.
+			res = jsonCall("author", "GET", "/feedback/messages", nil, 200)
+			if e := json.Unmarshal(res.Body.Bytes(), &messages); e != nil || messages.Total != 2 {
+				t.Fatal("completion message duplication", res.Body.String(), e)
+			}
+			edit.Version++
+			edit.Status = "open"
+			jsonCall("admin", "PUT", "/feedback/"+id, edit, 204)
+			jsonCall("author", "GET", "/tasks", nil, 403) // Personal updates never grant operational task access.
 			jsonCall("other", "GET", "/feedback?status=invalid", nil, 400)
 			jsonCall("other", "GET", "/feedback/tags", nil, 200)
 			jsonCall("other", "GET", "/feedback/not-uuid", nil, 400)

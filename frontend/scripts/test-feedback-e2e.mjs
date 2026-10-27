@@ -24,6 +24,8 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addCookies([{ name: 'mserp_session', value: token, url: access.base, httpOnly: true, sameSite: 'Strict' }]);
   const page = await context.newPage(), errors = [];
+  const operationalRequests = [];
+  page.on('request', request => { if (/\/api\/tasks(?:\/|\?|$)/.test(request.url())) operationalRequests.push(request.url()); });
   debugPage = page; page.setDefaultTimeout(10000);
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(access.base + '/feedback');
@@ -31,6 +33,10 @@ try {
   await expect(page.getByRole('link', { name: 'Feedback', exact: true })).toBeVisible();
   const nav = await page.locator('nav a').allTextContents();
   assert.deepEqual(nav.slice(-2), ['Feedback', 'Settings']);
+  const shareBox = await page.getByRole('button', { name: 'Share feedback', exact: true }).boundingBox();
+  const feedBox = await page.getByRole('tab', { name: 'Feed', exact: true }).boundingBox();
+  const sortBox = await page.getByLabel('Sort feedback').boundingBox();
+  assert.ok(Math.abs(shareBox.y + shareBox.height / 2 - feedBox.y - feedBox.height / 2) < 8 && shareBox.x > sortBox.x, 'Share feedback should sit on the right of the same toolbar row');
   await page.getByRole('button', { name: 'Share feedback', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('More detail helps');
@@ -127,6 +133,29 @@ try {
     await expect(adminPage.getByLabel('Request status')).toBeEnabled();
     await expect.poll(async () => (await (await admin.request.get(access.base + '/api/feedback/' + post.id)).json()).status).toBe(value);
   }
+  // Discarded feedback remains in Kanban, while the feed excludes it.
+  await page.goto(access.base + '/feedback');
+  await expect(page.getByRole('button', { name: post.title, exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Filter by status').locator('option[value="discarded"]')).toHaveCount(0);
+  const messageResult = await (await context.request.get(access.base + '/api/feedback/messages')).json();
+  assert.equal(messageResult.total, 1); assert.equal(messageResult.items[0].postId, post.id);
+  assert.equal((await (await second.request.get(access.base + '/api/feedback/messages')).json()).total, 0);
+  assert.equal((await (await admin.request.get(access.base + '/api/feedback/messages')).json()).total, 0);
+  assert.equal((await context.request.get(access.base + '/api/tasks')).status(), 403);
+  await page.locator('nav a[href="/tasks"]').click();
+  const updates = page.getByRole('region', { name: 'Feedback updates' });
+  await expect(updates).toContainText(post.title);
+  await expect(updates).toContainText('has been completed');
+  await expect(page.getByRole('button', { name: 'Add task', exact: true })).toHaveCount(0);
+  await updates.getByRole('link', { name: 'View feedback', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: post.title })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.locator('nav a[href="/tasks"]').click();
+  await updates.getByRole('button', { name: 'Mark as read', exact: true }).click();
+  await expect(updates.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
+  await expect(updates).toContainText(' · Read');
+  await expect.poll(async () => (await (await context.request.get(access.base + '/api/feedback/messages/count')).json()).count).toBe(0);
+  assert.deepEqual(operationalRequests, [], 'personal messages must not fetch operational tasks');
   await adminPage.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last().click();
   await adminPage.getByRole('tab', { name: 'Kanban', exact: true }).click();
   const discarded = adminPage.getByRole('region', { name: 'Discarded', exact: true });
@@ -141,7 +170,7 @@ try {
   assert.equal((await anonymous.request.get(access.base + '/api/feedback')).status(), 401);
   assert.equal((await anonymous.request.get(access.base + '/api/feedback/attachments/' + post.attachments[0].id)).status(), 401);
   assert.deepEqual(errors, []);
-  console.log('Feedback real API/browser checks passed: no-permission members, shared feed, paste/files, retry, comments, voting, author edits, filters, admin statuses/drag, mobile and anonymous boundaries.');
+  console.log('Feedback real API/browser checks passed: shared feed/media, toolbar, uploads, retry, comments/votes, discarded filtering, private completion messages in Tasks, read state/deep links, admin status/drag, mobile and access boundaries.');
   console.log('Screenshots: ' + artifacts);
 } catch (error) {
   if (debugPage) { console.log('Failure URL:', debugPage.url()); console.log((await debugPage.locator('body').innerText()).slice(-5000)); await debugPage.screenshot({ path: join(artifacts, 'failure.png'), fullPage: true }); }

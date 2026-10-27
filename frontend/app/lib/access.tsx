@@ -16,6 +16,7 @@ export const ExpenseCategoryAccessContext = createContext<ExpenseCategoryAccess[
 export const useExpenseCategoryAccess = () => useContext(ExpenseCategoryAccessContext);
 
 export function pagePermission(path: string): string {
+  if (path === "/tasks") return ""; // Personal feedback updates; operational APIs still require tasks.read.
   if (path === "/feedback" || path.startsWith("/feedback/")) return "";
   if (path.startsWith("/fleet/weekly-pti")) return "pti.read";
   if (path.startsWith("/fleet/inventory")) return "inventory.read";
