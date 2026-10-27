@@ -43,7 +43,7 @@ var payDriverEligibilitySQL = `, eligible_pay_drivers AS MATERIALIZED (
  SELECT d.*,
  (d.active AND (` + weeklyDriverStartedSQL + ` OR EXISTS(SELECT 1 FROM driver_teams dt WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR $1::date<dt.end_week)))) pay_enabled,
  EXISTS(SELECT 1 FROM driver_escrow_releases r JOIN driver_escrows x ON x.id=r.escrow_id WHERE x.driver_id=d.id AND r.week_start=$1::date AND NOT r.cancelled) pay_release,
- EXISTS(SELECT 1 FROM expenses x WHERE x.driver_id=d.id AND lower(btrim(x.payment_type))='reimburse' AND x.expense_date >= $1::date AND x.expense_date < $1::date+7 AND x.amount>0) pay_reimburse,
+ EXISTS(SELECT 1 FROM expenses x WHERE x.driver_id=d.id AND lower(btrim(x.payment_type))='reimburse' AND x.expense_date < $1::date+10 AND x.amount>0) pay_reimburse,
  EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE payroll_driver_at(wt.driver_id,wt.transaction_date)=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7) pay_scale,
  EXISTS(SELECT 1 FROM driver_charge_schedules cs WHERE cs.driver_id=d.id AND cs.start_week<=$1::date) pay_charge,
  EXISTS(SELECT 1 FROM expenses x WHERE x.charge_driver_id=d.id AND NOT x.driver_settled AND x.expense_date<$1::date+10) pay_expense,

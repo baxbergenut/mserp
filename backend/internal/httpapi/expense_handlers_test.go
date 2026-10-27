@@ -27,6 +27,14 @@ func TestExpenseMaintenanceRequestValidation(t *testing.T) {
 	}
 }
 
+func TestExpenseFormChoicesRequireCategoryAccess(t *testing.T) {
+	w := httptest.NewRecorder()
+	expenseHandler{}.formChoices(w, httptest.NewRequest("GET", "/expenses/form-choices", nil))
+	if w.Code != 403 {
+		t.Fatalf("unscoped form choices returned %d", w.Code)
+	}
+}
+
 func TestExpensePersonMustBeSelected(t *testing.T) {
 	name, id := "Manual candidate", "00000000-0000-4000-8000-000000000001"
 	input := repository.ExpenseInput{DriverName: &name}

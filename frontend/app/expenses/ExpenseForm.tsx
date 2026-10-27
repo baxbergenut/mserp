@@ -1,5 +1,5 @@
 "use client";
-import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
+import type { ExpenseDriverChoice as DriverOption, ExpenseTruckChoice as TruckOption, ExpenseOwnerChoice as InvestorOption } from "@/app/lib/types";
 
 import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { ExpenseDriverSelect } from "./ExpenseDriverSelect";

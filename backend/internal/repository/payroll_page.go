@@ -127,6 +127,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		}
 		for _, a := range d.Edits.ExpenseDeductions {
 			n, _ := chargeCents(a.Amount)
+			if a.Source == "reimburse" {
+				n = -n
+			}
 			payable -= n
 		}
 		payable += payPageCosts(*d)

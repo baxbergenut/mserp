@@ -1,4 +1,4 @@
-import type { DriverOption, ExpenseInput, InvestorOption, TruckOption } from "@/app/lib/types";
+import type { ExpenseDriverChoice as DriverOption, ExpenseInput, ExpenseOwnerChoice as InvestorOption, ExpenseTruckChoice as TruckOption } from "@/app/lib/types";
 
 export function expenseResponsibility(value: ExpenseInput, trucks: TruckOption[], owners: InvestorOption[]) {
   const truck = trucks.find(t => t.id === value.truckId);

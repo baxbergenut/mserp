@@ -45,6 +45,13 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	if err != nil {
 		return nil, err
 	}
+	credits, err := expenseReimbursementDeductionsBulk(ctx, tx, drivers, week)
+	if err != nil {
+		return nil, err
+	}
+	for id, entries := range credits {
+		result[id] = append(result[id], entries...)
+	}
 	escrows, err := escrowDeductionsBulk(ctx, tx, drivers, week)
 	for id, entries := range escrows {
 		result[id] = append(result[id], entries...)

@@ -57,7 +57,7 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
   const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []).map(row => ({ ...row, amount: edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? row.amount })), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
-  const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + (row.source === "reimburse" ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));
   const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses };
   if (driver.summary) return { ...totals, fee: hundredths(driver.summary.fee), payable: hundredths(driver.summary.payable), missingFees: driver.summary.missingFees, review: driver.summary.review };
   return totals;

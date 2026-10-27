@@ -23,7 +23,7 @@ try {
     let driver = {
       id: 'statement', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
-      ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : { autoCharges: [{ source: 'expense-reimburse:reimbursement', name: 'Parking refund', amount: '42.25', expenseDate: '2026-09-30' }] }),
+      ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
@@ -34,6 +34,7 @@ try {
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
       },
     };
+    if (!investor) driver.edits.expenseDeductions.push({source:'reimburse',expenseId:'reimbursement',name:'Parking refund',expenseDate:'2026-09-30',amount:'42.25',total:'42.25',available:'42.25',openingBalance:'42.25',remaining:'42.25',version:1,saved:false});
     let beforeSource;
     let writable = true;
     let expense = { id: 'expense', categoryId: 'category', category: 'Maintenance', expenseDate: '2026-09-28', expenseType: 'Equipment', amount: '100.00', baseAmount: null, paymentFee: '0.00', paymentType: 'Cash', coveredBy: 'Company', paidBy: 'Test', truckId: null, driverId: null, updatedAt: '2026-10-13T12:00:00Z' };
@@ -41,11 +42,12 @@ try {
     let writes = 0;
     const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash','Reimburse'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
     const errors = [];
-    const expenseReads = [];
+    const expenseReads = []; const expensiveLookups=[];
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
     page.on('pageerror', e => { errors.push(e.message); console.error(e); });
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
+      if (request.url().includes('/api/lookups/')) expensiveLookups.push(path);
       if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
       if (path === '/expenses/reimbursement') {
         if (request.method() === 'PUT') {
@@ -53,7 +55,7 @@ try {
           expect(input.baseAmount).toBe('55.25');
           expect(input.updatedAt).toBe(reimbursement.updatedAt);
           reimbursement = { ...reimbursement, ...input, amount: '55.25', baseAmount: '55.25' };
-          driver.autoCharges[0] = { ...driver.autoCharges[0], amount: '55.25', expenseDate: input.expenseDate };
+          const credit=driver.edits.expenseDeductions.find(row=>row.expenseId==='reimbursement'); Object.assign(credit,{amount:'55.25',total:'55.25',available:'55.25',openingBalance:'55.25',expenseDate:input.expenseDate});
         }
         return route.fulfill({ json: reimbursement });
       }
@@ -65,6 +67,7 @@ try {
         }
         return route.fulfill({json:expense});
       }
+      if (path === '/expenses/form-choices') return route.fulfill({json:{options,drivers:[],trucks:[],owners:[]}});
       if (path === '/expenses') return route.fulfill({json:{items:[],total:0,page:1,pageSize:1,totalPages:1,options}});
       if (request.method() === 'PUT') {
         const input = request.postDataJSON();
@@ -109,8 +112,8 @@ try {
     if (!investor) {
       const reimbursementRow = region.getByRole('row').filter({ has: page.getByRole('button', { name: 'Open expense Parking refund', exact: true }) });
       await expect(reimbursementRow.getByText('09/30', { exact: true })).toBeVisible();
-      await expect(reimbursementRow.locator('td').last()).toHaveText('+$42.25');
-      await expect(reimbursementRow.locator('td').last()).toHaveClass(/text-emerald-300/);
+      await expect(reimbursementRow.getByRole('textbox')).toHaveValue('+42.25');
+      await expect(reimbursementRow.getByRole('textbox')).toHaveClass(/text-emerald-300/);
       await reimbursementRow.getByRole('button').click();
       const reimbursementModal = page.getByRole('dialog', { name: 'Edit entry' });
       await expect(reimbursementModal.getByLabel('Amount', { exact: true })).toHaveValue('42.25');
@@ -120,7 +123,7 @@ try {
       await reimbursementModal.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(reimbursementModal).toHaveCount(0);
       await expect(reimbursementRow.getByText('10/01', { exact: true })).toBeVisible();
-      await expect(reimbursementRow.locator('td').last()).toHaveText('+$55.25');
+      await expect(reimbursementRow.getByRole('textbox')).toHaveValue('+55.25');
     }
 
     await expect(region.getByText('09/28', {exact:true})).toBeVisible();
@@ -163,7 +166,8 @@ try {
     await expect(modal.getByLabel('Amount',{exact:true})).toBeDisabled();
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
     expect(expenseReads.length).toBeGreaterThan(0);
-    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents', '/expenses/reimbursement', '/expenses/reimbursement/documents'].includes(path))).toBe(true);
+    expect(expensiveLookups).toEqual([]);
+    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents', '/expenses/reimbursement', '/expenses/reimbursement/documents', '/expenses/form-choices'].includes(path))).toBe(true);
     // Dated non-paying driver classifications hide empty costs, but historical
     // balances remain collectable. Investor statements still show truck costs.
     for (const employmentType of ['company', 'investor_driver']) {

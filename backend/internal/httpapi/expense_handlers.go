@@ -39,6 +39,7 @@ func registerExpenseRoutes(
 	r.Post("/expense-settings", handler.saveSetting)
 	r.Put("/expense-settings/{id}", handler.saveSetting)
 	r.Get("/expenses", handler.listExpenses)
+	r.Get("/expenses/form-choices", handler.formChoices)
 	r.Get("/expenses/{id}", handler.getExpense)
 	r.Get("/expenses/{id}/documents", handler.listDocuments)
 	r.Post("/expenses/{id}/documents", handler.uploadDocument)
@@ -245,6 +246,21 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		PaidBy:             optionalString(request.PaidBy),
 		AccountingVerified: false,
 	}, nil
+}
+
+func (handler expenseHandler) formChoices(w http.ResponseWriter, r *http.Request) {
+	session, _ := authSessionFromContext(r.Context())
+	visible, accessible := expenseCategoryIDs(session.User.ExpenseCategoryAccess)
+	if len(accessible) == 0 {
+		permissionDenied(w)
+		return
+	}
+	value, err := handler.repo.ExpenseFormChoices(r.Context(), visible, accessible)
+	if err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
 }
 
 func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Request) {

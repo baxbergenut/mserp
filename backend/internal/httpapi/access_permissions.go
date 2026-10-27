@@ -120,6 +120,7 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/expense-settings", "expense_settings.manage"},
 	{"PUT", "/expense-settings/{id}", "expense_settings.manage"},
 	{"GET", "/expenses", "authenticated"},
+	{"GET", "/expenses/form-choices", "authenticated"},
 	{"POST", "/expenses", "authenticated"},
 	{"DELETE", "/expenses/{id}", "authenticated"},
 	{"GET", "/expenses/{id}", "authenticated"},
