@@ -81,19 +81,20 @@ type ServiceProgram struct {
 
 type ProgramTruck struct {
 	MaintenanceDue
-	ProgramID         string `json:"programId"`
-	ProgramName       string `json:"programName"`
-	Active            bool   `json:"active"`
-	Enrolled          bool   `json:"enrolled"`
-	MemberVersion     int    `json:"memberVersion"`
-	RecordVersion     int    `json:"recordVersion"`
-	BaselineVersion   int    `json:"baselineVersion"`
-	CurrentSource     string `json:"currentSource"`
-	MilesSinceService *int   `json:"milesSinceService"`
-	OverrideInterval  bool   `json:"overrideInterval"`
-	IntervalMiles     *int   `json:"intervalMiles"`
-	IntervalDays      *int   `json:"intervalDays"`
-	IntervalMonths    *int   `json:"intervalMonths"`
+	ProgramID            string `json:"programId"`
+	ProgramName          string `json:"programName"`
+	TruckOperatingStatus string `json:"truckOperatingStatus"`
+	Active               bool   `json:"active"`
+	Enrolled             bool   `json:"enrolled"`
+	MemberVersion        int    `json:"memberVersion"`
+	RecordVersion        int    `json:"recordVersion"`
+	BaselineVersion      int    `json:"baselineVersion"`
+	CurrentSource        string `json:"currentSource"`
+	MilesSinceService    *int   `json:"milesSinceService"`
+	OverrideInterval     bool   `json:"overrideInterval"`
+	IntervalMiles        *int   `json:"intervalMiles"`
+	IntervalDays         *int   `json:"intervalDays"`
+	IntervalMonths       *int   `json:"intervalMonths"`
 }
 
 type ProgramTruckInput struct {
@@ -235,7 +236,7 @@ func programTrucks(ctx context.Context, q chargeQuery, program, truck string, to
 	for _, p := range programs {
 		byID[p.ID] = p
 	}
-	rows, err := q.Query(ctx, `SELECT p.id,p.name,t.id,t.unit_number,t.active,member.active,member.version,m.id::text,m.record_version,m.baseline_version,m.service_date::text,m.odometer,m.cycle_id::text,r.reading_date::text,r.mileage,r.reported_at,coalesce(r.source,''),
+	rows, err := q.Query(ctx, `SELECT p.id,p.name,t.id,t.unit_number,t.active,fleet_truck_operating_status(t.id),member.active,member.version,m.id::text,m.record_version,m.baseline_version,m.service_date::text,m.odometer,m.cycle_id::text,r.reading_date::text,r.mileage,r.reported_at,coalesce(r.source,''),
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN true ELSE member.override_interval END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.interval_miles ELSE member.interval_miles END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.interval_days ELSE member.interval_days END,
@@ -254,7 +255,7 @@ func programTrucks(ctx context.Context, q chargeQuery, program, truck string, to
 		var v ProgramTruck
 		var enabled bool
 		var warningMiles, warningDays *int
-		if err = rows.Scan(&v.ProgramID, &v.ProgramName, &v.TruckID, &v.UnitNumber, &v.Active, &v.Enrolled, &v.MemberVersion, &v.LastRecordID, &v.RecordVersion, &v.BaselineVersion, &v.LastDate, &v.LastMiles, &v.CycleID, &v.CurrentDate, &v.CurrentMiles, &v.CurrentReportedAt, &v.CurrentSource, &v.OverrideInterval, &v.IntervalMiles, &v.IntervalDays, &v.IntervalMonths, &enabled, &warningMiles, &warningDays); err != nil {
+		if err = rows.Scan(&v.ProgramID, &v.ProgramName, &v.TruckID, &v.UnitNumber, &v.Active, &v.TruckOperatingStatus, &v.Enrolled, &v.MemberVersion, &v.LastRecordID, &v.RecordVersion, &v.BaselineVersion, &v.LastDate, &v.LastMiles, &v.CycleID, &v.CurrentDate, &v.CurrentMiles, &v.CurrentReportedAt, &v.CurrentSource, &v.OverrideInterval, &v.IntervalMiles, &v.IntervalDays, &v.IntervalMonths, &enabled, &warningMiles, &warningDays); err != nil {
 			return nil, err
 		}
 		p := byID[v.ProgramID]

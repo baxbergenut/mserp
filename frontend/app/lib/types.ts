@@ -1485,6 +1485,7 @@ export interface ServiceProgram {
 }
 export interface ProgramTruck extends MaintenanceDue {
  programId:string; programName:string; active:boolean; enrolled:boolean;
+ truckOperatingStatus:TruckOperatingStatus;
  memberVersion:number; recordVersion:number; baselineVersion:number; currentSource:string;
  milesSinceService:number|null; overrideInterval:boolean;
  intervalMiles:number|null; intervalDays:number|null; intervalMonths:number|null;

@@ -6,6 +6,7 @@ import { CalendarRange, Pencil, Plus, Settings } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { fetchMaintenanceAccess, fetchMaintenanceOptions, fetchProgramTrucks, fetchServicePrograms } from "@/app/lib/api";
 import type { ExpenseCategoryAccess, MaintenanceOptions, ProgramTruck, ServiceProgram } from "@/app/lib/types";
+import { FleetStatusBadge } from "@/app/components/FleetStatusBadge";
 import { ErrorBanner, ManagementHeader, ManagementSearch, TablePagination, TableShell } from "@/app/components/management/ManagementUI";
 import { OdometerSourcePicker } from "@/app/maintenance/OdometerSourcePicker";
 import { MaintenanceExpenseModal } from "@/app/maintenance/MaintenanceExpenseModal";
@@ -41,7 +42,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   useEffect(() => { const update = () => { if (!document.hidden) {setClock(Date.now());setRevision(v => v + 1);} }; const timer = setInterval(update, 30000); window.addEventListener("focus", update); return () => { clearInterval(timer); window.removeEventListener("focus", update); }; }, []);
   const program = programs.find(p => p.id === selected);
   const chooseProgram = (id: string) => { setSelected(id); setMembers([]); setPage(1); setLoading(true); setSearch(""); if (!truckId) { const url = new URL(window.location.href); if (id) url.searchParams.set("program", id); else url.searchParams.set("program", ""); window.history.replaceState(null, "", url); } };
-  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && t.active && (statusFilter !== "due" || t.status === "due" || t.status === "overdue") && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
+  const rows = members.filter(t => (!selected || t.programId === selected) && t.enrolled && (t.active || t.truckOperatingStatus === "out_of_service") && (statusFilter !== "due" || t.status === "due" || t.status === "overdue") && `${t.unitNumber} ${t.programName}`.toLowerCase().includes(search.toLowerCase()));
   const visible = rows.slice((page - 1) * size, page * size);
   const listed = programs.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   const serviceProgram = service && programs.find(p => p.id === service.truck.programId);
@@ -67,7 +68,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
           <th className="px-3 py-2 text-right font-medium">Actions</th>
         </tr></thead><tbody>
           {visible.map(t => { const fresh = (t.currentSource === "five_eld" || t.currentSource === "samsara") ? !!t.currentReportedAt && clock - Date.parse(t.currentReportedAt) <= 3600000 : !!t.currentDate && Date.parse(today())-Date.parse(t.currentDate)<=7*86400000; return <tr key={`${t.programId}:${t.truckId}`} data-service-status={t.status} className={`border-b border-zinc-800/60 ${t.status === "due" || t.status === "overdue" ? "bg-red-500/10" : t.status === "upcoming" ? "bg-amber-500/10" : ""}`}>
-            {!truckId && <td className="px-3 py-2"><Link className="text-blue-400" href={`/trucks/detail?id=${t.truckId}`}>{t.unitNumber}</Link>{!t.active && <span className="block text-xs text-zinc-500">Inactive</span>}{!t.enrolled && <span className="block text-xs text-zinc-500">Removed</span>}</td>}
+            {!truckId && <td className="px-3 py-2"><div className="flex items-center gap-2"><Link className="text-blue-400" href={`/trucks/detail?id=${t.truckId}`}>{t.unitNumber}</Link>{(t.truckOperatingStatus === "shop" || t.truckOperatingStatus === "out_of_service") && <FleetStatusBadge status={t.truckOperatingStatus} />}</div>{!t.active && t.truckOperatingStatus !== "out_of_service" && <span className="block text-xs text-zinc-500">Inactive</span>}{!t.enrolled && <span className="block text-xs text-zinc-500">Removed</span>}</td>}
             {!selected && <td className="px-3 py-2"><Link className="text-blue-400" href={`/fleet/service-programs?program=${t.programId}`}>{t.programName}</Link></td>}
             <td className="px-3 py-2">{t.lastRecordId ? <button type="button" className="text-blue-400" onClick={() => setRecordId(t.lastRecordId)}>{t.lastDate || "Unknown date"}</button> : t.lastDate ?? "No recorded service"}</td>
             <td className="px-3 py-2 tabular-nums">{number(t.lastMiles)}</td>

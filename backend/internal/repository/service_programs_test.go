@@ -105,6 +105,13 @@ func testServicePrograms(t *testing.T, ctx context.Context, admin *pgx.Conn, poo
 	if err != nil || len(values) != 1 || values[0].Status != "missing_information" || values[0].LastDate != nil {
 		t.Fatal("enrollment invented completion", values, err)
 	}
+	for _, tc := range []struct{ stored, want string }{{"maintenance", "shop"}, {"out_of_service", "out_of_service"}, {"available", "ready"}} {
+		exec(`UPDATE trucks SET status=$2,status_reason=$2 || ' test' WHERE id=$1`, truck, tc.stored)
+		got, err := repo.ProgramTrucks(ctx, p.ID, truck)
+		if err != nil || len(got) != 1 || got[0].TruckOperatingStatus != tc.want {
+			t.Fatalf("program truck status: got %+v, want %s: %v", got, tc.want, err)
+		}
+	}
 	if err = repo.SaveProgramTrucks(ctx, OilChangeProgramID, []ProgramTruckInput{{TruckID: truck, Active: true}}, ""); err != nil {
 		t.Fatal(err)
 	}

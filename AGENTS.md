@@ -2541,6 +2541,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   next-due odometer. Status/reminders still use configured intervals. Calendar
   months clamp to month end. Work-order Settings retains types/vendors; interval
   configuration lives in programs.
+- Service-program truck rows show Shop and OOS badges using the current derived
+  fleet operating status returned by the program-trucks API. OOS trucks remain
+  visible even though their operational active flag is false.
 - maintenance_pm remains the migrated oil task kind; custom programs use
   maintenance_program. Reminder uniqueness is per truck/program. Task list/count
   visibility applies effective per-program people/roles or inherited PM defaults.
