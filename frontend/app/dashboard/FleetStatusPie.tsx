@@ -7,8 +7,8 @@ import type { DashboardSection } from "@/app/lib/dashboardTypes";
 import { number, SectionError } from "./display";
 
 const colors: Record<string, string> = {
-  ready: "#10b981", in_use: "#3b82f6", shop: "#f59e0b", out_of_service: "#ef4444",
-  active: "#10b981", home: "#3b82f6", vacation: "#8b5cf6",
+  ready: "#000000", in_use: "#3b82f6", shop: "#f59e0b", out_of_service: "#ef4444",
+  active: "#3b82f6", home: "#ef4444", vacation: "#f59e0b",
 };
 
 export function FleetStatusPie({ section, kind }: { section: DashboardSection; kind: "trucks" | "drivers" }) {
