@@ -46,6 +46,19 @@ func testTollFlagReviews(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 		if err != nil {
 			t.Fatal(err)
 		}
+		for pageIndex := 1; pageIndex <= max(1, len(values)); pageIndex++ {
+			page, e := repo.AttentionTolls(ctx, "2026-09-01", showReviewed, Pagination{Page: pageIndex, PageSize: 1})
+			if e != nil || page.Total != len(values) {
+				t.Fatal("attention pagination count", page, e)
+			}
+			if len(values) > 0 {
+				a, _ := json.Marshal(values[pageIndex-1])
+				b, _ := json.Marshal(page.Items[0])
+				if string(a) != string(b) {
+					t.Fatal("attention pagination changed evidence", string(a), string(b))
+				}
+			}
+		}
 		for _, v := range values {
 			if v.ID == id {
 				return &v

@@ -86,12 +86,14 @@ export default function TollsPage() {
   } | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (activeTab !== "transactions") return;
     setIsLoading(true);
     try {
       const response = await fetchTollsPage({
         page, pageSize, search: debouncedSearch, unit, agency, postFrom, postTo, unlinked, productionOnly,
-      });
+      },signal);
+      if (signal?.aborted) return;
       setTolls(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -102,15 +104,17 @@ export default function TollsPage() {
       setDisplayedTrucks(response.summary.truckCount);
       setLoadError("");
     } catch (reason) {
+      if (signal?.aborted) return;
       setLoadError(reason instanceof Error ? reason.message : "Failed to load tolls");
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
-  }, [setPage, agency, debouncedSearch, page, pageSize, postFrom, postTo, unit, unlinked, productionOnly]);
+  }, [activeTab, setPage, agency, debouncedSearch, page, pageSize, postFrom, postTo, unit, unlinked, productionOnly]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void loadData(), 0);
-    return () => window.clearTimeout(timeout);
+    const controller=new AbortController();
+    const timeout = window.setTimeout(() => void loadData(controller.signal), 0);
+    return () => {window.clearTimeout(timeout);controller.abort();};
   }, [loadData]);
   const hasFilters = Boolean(search || unit || agency || postFrom || postTo || unlinked || productionOnly);
 

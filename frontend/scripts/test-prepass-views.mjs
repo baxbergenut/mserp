@@ -29,7 +29,8 @@ const server = createServer(async (req, res) => {
       if (p === '/api/feedback/messages/count') return send({ count: 0 });
       if (p === '/api/toll-dashboard') return send({ totals: { spend: 0, transactionCount: 0, truckCount: 0 }, monthly: [], weekly: [], trucks: [], states: [], agencies: [] });
       if (p === '/api/tolls') return send({ items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, summary: { amount: 0, trucks: 0 }, options: { units: [], agencies: [] } });
-      if (p === '/api/tolls/truck-links') return send({ dateFrom: '2026-09-01', transactions: [], groups: [], trucks: [], mappings: [] });
+      if (p === '/api/tolls/attention') return send({ dateFrom: '2026-09-01', items: [], total:0, page:1, pageSize:25, totalPages:1 });
+      if (p === '/api/tolls/truck-link-options' || p === '/api/tolls/truck-links') return send({ dateFrom: '2026-09-01', transactions: [], groups: [], trucks: [], mappings: [] });
       if (p === '/api/prepass-fleet' && req.method === 'GET') return send(data);
       let raw = ''; for await (const c of req) raw += c;
       const input = raw ? JSON.parse(raw) : {};

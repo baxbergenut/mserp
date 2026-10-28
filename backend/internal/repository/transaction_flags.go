@@ -254,6 +254,7 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 	}
 	transactions := make([]coverageTransaction, 0, len(ids))
 	units, driverIDs := []string{}, []string{}
+	seenUnits, seenDrivers := map[string]bool{}, map[string]bool{}
 	for rows.Next() {
 		t := coverageTransaction{kind: kind}
 		if err := rows.Scan(&t.id, &t.units, &t.driverID, &t.date, &t.dateValid, &t.positiveCharge, &t.production); err != nil {
@@ -262,9 +263,14 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 		}
 		transactions = append(transactions, t)
 		for _, unit := range t.units {
-			units = append(units, normalizeTruckUnit(unit))
+			unit = normalizeTruckUnit(unit)
+			if !seenUnits[unit] {
+				units = append(units, unit)
+				seenUnits[unit] = true
+			}
 		}
-		if t.driverID != "" {
+		if t.driverID != "" && !seenDrivers[t.driverID] {
+			seenDrivers[t.driverID] = true
 			driverIDs = append(driverIDs, t.driverID)
 		}
 	}
@@ -274,22 +280,24 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 	// Team drivers use a name in DataTruck. Only unique exact canonical name
 	// matches are allowed; today's truck assignments are never used here.
 	nameIDs := map[string]string{}
-	rows, err = tx.Query(ctx, `SELECT normalized_name, CASE WHEN count(*) = 1 THEN min(id::text) ELSE '' END FROM drivers GROUP BY normalized_name`)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var name, id string
-		if err := rows.Scan(&name, &id); err != nil {
-			rows.Close()
+	if len(driverIDs) > 0 {
+		rows, err = tx.Query(ctx, `SELECT normalized_name, CASE WHEN count(*) = 1 THEN min(id::text) ELSE '' END FROM drivers GROUP BY normalized_name`)
+		if err != nil {
 			return nil, err
 		}
-		if id != "" {
-			nameIDs[name] = id
+		for rows.Next() {
+			var name, id string
+			if err := rows.Scan(&name, &id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if id != "" {
+				nameIDs[name] = id
+			}
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	driverNames := []string{}
 	for name, id := range nameIDs {
@@ -339,8 +347,20 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 	if err := tx.QueryRow(ctx, `SELECT max(synced_at) FROM loads`).Scan(&syncedAt); err != nil {
 		return nil, err
 	}
+	type classificationKey struct {
+		units, driver               string
+		date                        time.Time
+		valid, positive, production bool
+	}
+	classified := map[classificationKey]*TransactionFlag{}
 	for _, t := range transactions {
-		flags[t.id] = classifyTransaction(t, byUnit, byDriver, syncedAt, now)
+		key := classificationKey{strings.Join(t.units, "\x00"), t.driverID, t.date, t.dateValid, t.positiveCharge, t.production}
+		flag, ok := classified[key]
+		if !ok {
+			flag = classifyTransaction(t, byUnit, byDriver, syncedAt, now)
+			classified[key] = flag
+		}
+		flags[t.id] = flag
 	}
 	return flags, nil
 }

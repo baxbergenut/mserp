@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "@/app/components/AccessLink";
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { TransactionFlagIcon } from "../components/TransactionFlagIcon";
-import { fetchPrePassTruckLinks, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink, reviewTollFlag, reviewTollFlagsBulk } from "../lib/api";
+import { fetchTollAttention, fetchTollLinkOptions, previewPrePassTruckLink, savePrePassTruckLink, undoPrePassTruckLink, reviewTollFlag, reviewTollFlagsBulk } from "../lib/api";
 import { usePermissions } from "../lib/access";
 import type { PrePassTruckLinks, PrePassTruckLinkInput, PrePassTruckMapping, PrePassTruckPreview, Toll } from "../lib/types";
 import { controlClass, EmptyState, ErrorBanner, Field, Modal, TablePagination, TableShell } from "../components/management/ManagementUI";
@@ -15,7 +15,10 @@ const identity = (key: string) => key.startsWith("tag:") ? `Tag ${key.slice(4)}`
 export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   const permissions = usePermissions();
   const canWrite = permissions.includes("tolls.link"), canProfile = permissions.includes("trucks.read");
-  const [data, setData] = useState<PrePassTruckLinks | null>(null);
+  const [snapshot, setSnapshot] = useState<{key: string; value: Awaited<ReturnType<typeof fetchTollAttention>>} | null>(null);
+  const [options, setOptions] = useState<PrePassTruckLinks | null>(null);
+  const [selectedRows,setSelectedRows] = useState(new Map<string,Toll>());
+  const generation = useRef(0);
   const [from, setFrom] = useState("");
   const [showReviewed, setShowReviewed] = useState(false);
   const [error, setError] = useState("");
@@ -28,12 +31,23 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   const [undo, setUndo] = useState<PrePassTruckMapping | null>(null);
   const [input, setInput] = useState<PrePassTruckLinkInput | null>(null);
   const [preview, setPreview] = useState<PrePassTruckPreview | null>(null);
+  const queryKey = JSON.stringify([from,showReviewed,page,pageSize]);
+  const data = snapshot?.key === queryKey ? snapshot.value : null;
+  const loadOptions = useCallback(async (signal?: AbortSignal) => {
+    try { const result = await fetchTollLinkOptions(signal); if (!signal?.aborted) setOptions(result); }
+    catch(e) {if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load mapping choices.");}
+  },[]);
+  useEffect(() => {const c = new AbortController(); const timer=setTimeout(() => void loadOptions(c.signal),0);return () => {clearTimeout(timer);c.abort();};},[loadOptions]);
   const load = useCallback(async (signal?: AbortSignal) => {
+    const current = ++generation.current;
     try {
-      const result = await fetchPrePassTruckLinks(from, signal, showReviewed);
-      if (!signal?.aborted) { setData(result); setSelected(ids => ids.filter(id => result.transactions.some(t => t.id === id))); }
+      const result = await fetchTollAttention(from,showReviewed,page,pageSize,signal);
+      if (!signal?.aborted && current === generation.current) {
+        setSelectedRows(previous => {const next=new Map(previous);for(const t of result.items)next.set(t.id,t);return next;});
+        setSnapshot({key:queryKey,value:result}); setError("");
+      }
     } catch (e) { if (!signal?.aborted) setError(e instanceof Error ? e.message : "Could not load tolls."); }
-  }, [from, showReviewed]);
+  }, [from, showReviewed, page, pageSize, queryKey]);
   useEffect(() => { const c = new AbortController(); const timer = setTimeout(() => void load(c.signal), 0); return () => { clearTimeout(timer); c.abort(); }; }, [load]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 5000); return () => clearTimeout(timer); }, [notice]);
   function open(ids: string[]) {
@@ -45,6 +59,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
     saving.current = true; setBusy(true); setError("");
     try {
       await reviewTollFlag(toll.id, { id: crypto.randomUUID(), revision: toll.reviewRevision, version: toll.reviewVersion || "", reviewed: !toll.reviewed });
+      if (!toll.reviewed && toll.truckId) setSelected(ids => ids.filter(id => id !== toll.id));
       setNotice(toll.reviewed ? "Reopened for review." : toll.truckId ? "Marked reviewed." : "Marked reviewed. This transaction still needs a truck link.");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not update review status."); }
@@ -60,33 +75,33 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
       setSelected(ids => ids.filter(id => !completed.has(id)));
       setNotice(`${result.reviewed} transaction${result.reviewed === 1 ? "" : "s"} marked reviewed.`);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not review selected transactions."); await load(); }
+    } catch (e) { await load(); await loadOptions(); setError(e instanceof Error ? e.message : "Could not review selected transactions."); }
     finally { saving.current = false; setBusy(false); }
   }
   async function submit() {
     if (saving.current) return;
     saving.current = true; setBusy(true); setError("");
     try {
-      if (undo) { await undoPrePassTruckLink(undo.id, undo.version); setUndo(null); setNotice("Mapping undone."); await load(); }
+      if (undo) { await undoPrePassTruckLink(undo.id, undo.version); setUndo(null); setNotice("Mapping undone."); await load(); await loadOptions(); }
       else if (input && !preview) setPreview(await previewPrePassTruckLink(input));
       else if (input && preview && !preview.closed && preview.count > 0) {
         await savePrePassTruckLink({ ...input, revision: preview.revision });
-        setInput(null); setPreview(null); setSelected([]); setNotice("Saved."); await load();
+        setInput(null); setPreview(null); setSelected([]); setNotice("Saved."); await load(); await loadOptions();
       }
     } catch (e) { setError(e instanceof Error ? e.message : "Could not link tolls."); setPreview(null); }
     finally { saving.current = false; setBusy(false); }
   }
-  const transactions = data?.transactions ?? [];
-  const flaggedSelected = transactions.filter(t => selected.includes(t.id) && t.truckId && t.flag?.status === "review" && !t.reviewed && t.reviewRevision);
-  const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const shown = transactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const truck = data?.trucks.find(t => t.id === input?.truckId);
-  const reviewed = transactions.filter(t => input?.transactionIds?.includes(t.id));
+  const transactions = data?.items ?? [];
+  const flaggedSelected = selected.flatMap(id => selectedRows.get(id) ?? []).filter(t => selected.includes(t.id) && t.truckId && t.flag?.status === "review" && !t.reviewed && t.reviewRevision);
+  const totalPages = data?.totalPages ?? 1;
+  const currentPage = data?.page ?? page;
+  const shown = transactions;
+  const truck = options?.trucks.find(t => t.id === input?.truckId);
+  const reviewed = (input?.transactionIds ?? []).flatMap(id => selectedRows.get(id) ?? []);
   const allSelected = shown.length > 0 && shown.every(t => selected.includes(t.id));
   return <section className="space-y-4" aria-label="PrePass truck links">
     <div className="flex flex-wrap items-center gap-3">
-      <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" disabled={busy} type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setData(null); setPage(1); }} /></label><label className="flex items-center gap-2 text-[13px] text-zinc-400"><input type="checkbox" disabled={busy} checked={showReviewed} onChange={e => { setShowReviewed(e.target.checked); setSelected([]); setData(null); setPage(1); }} />Show reviewed</label></TableFilters>
+      <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" disabled={busy} type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setSnapshot(null); setSelectedRows(new Map()); setPage(1); }} /></label><label className="flex items-center gap-2 text-[13px] text-zinc-400"><input type="checkbox" disabled={busy} checked={showReviewed} onChange={e => { setShowReviewed(e.target.checked); setSelected([]); setSnapshot(null); setSelectedRows(new Map()); setPage(1); }} />Show reviewed</label></TableFilters>
       {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected · {flaggedSelected.length} flagged</span><button className="ui-button ui-button-primary" disabled={busy || selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" disabled={busy || flaggedSelected.length === 0 || flaggedSelected.length > 100} onClick={() => void markSelectedReviewed()}>Mark selected reviewed</button><button className="ui-button" disabled={busy} onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions per action.</span>}</>}
       <div className="ml-auto">{actions}</div>
     </div>
@@ -107,11 +122,11 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
         <td className="px-3 py-2">{canWrite && <div className="flex flex-wrap gap-2"><button className="ui-button" disabled={busy} onClick={() => open([t.id])}>Link truck</button>{t.flag?.status === "review" && t.reviewRevision && <button className="ui-button" disabled={busy} onClick={() => void markReviewed(t)}>{t.reviewed ? "Reopen" : "Mark reviewed"}</button>}</div>}</td>
       </tr>)}</tbody>
     </table></TableShell>
-    {data && <TablePagination page={currentPage} pageSize={pageSize} totalItems={transactions.length} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />}
-    {!!data?.mappings.length && <><h2 className="text-sm font-medium text-zinc-300">Saved truck mappings</h2><TableShell><table className="w-full text-left text-[13px]"><thead><tr>{["PrePass identity", "Truck", "Travel dates", "Linked tolls", ""].map((v, i) => <th key={i} className="px-3 py-2 font-medium text-zinc-500">{v}</th>)}</tr></thead><tbody className="divide-y divide-zinc-800">{data.mappings.map(m => <tr key={m.id}><td className="px-3 py-2">{identity(m.identityKey)}</td><td className="px-3 py-2">{canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${m.truckId}`}>{m.unit}</Link> : m.unit}</td><td className="px-3 py-2">{m.from} → {m.to || "Ongoing"}</td><td className="px-3 py-2">{m.count}</td><td className="px-3 py-2">{canWrite && <button className="ui-button" onClick={() => { setError(""); setUndo(m); }}>Undo mapping</button>}</td></tr>)}</tbody></table></TableShell></>}
+    {data && <TablePagination page={currentPage} pageSize={pageSize} totalItems={data.total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />}
+    {!!options?.mappings.length && <><h2 className="text-sm font-medium text-zinc-300">Saved truck mappings</h2><TableShell><table className="w-full text-left text-[13px]"><thead><tr>{["PrePass identity", "Truck", "Travel dates", "Linked tolls", ""].map((v, i) => <th key={i} className="px-3 py-2 font-medium text-zinc-500">{v}</th>)}</tr></thead><tbody className="divide-y divide-zinc-800">{options.mappings.map(m => <tr key={m.id}><td className="px-3 py-2">{identity(m.identityKey)}</td><td className="px-3 py-2">{canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${m.truckId}`}>{m.unit}</Link> : m.unit}</td><td className="px-3 py-2">{m.from} → {m.to || "Ongoing"}</td><td className="px-3 py-2">{m.count}</td><td className="px-3 py-2">{canWrite && <button className="ui-button" onClick={() => { setError(""); setUndo(m); }}>Undo mapping</button>}</td></tr>)}</tbody></table></TableShell></>}
     {input && <Modal title={`Link ${input.transactionIds?.length} transaction${input.transactionIds?.length === 1 ? "" : "s"}`} isSaving={busy} submitLabel={preview ? "Link transactions" : "Preview selected tolls"} submitDisabled={!!preview && (preview.closed || preview.count === 0)} onClose={() => { setInput(null); setPreview(null); }} onSubmit={e => { e.preventDefault(); void submit(); }}><fieldset disabled={busy} className="space-y-4">
       {error && <ErrorBanner message={error} />}
-      <Field label="Truck"><select required className={controlClass} value={input.truckId} onChange={e => { setInput({ ...input, truckId: e.target.value }); setPreview(null); setError(""); }}><option value="">Select truck</option>{data?.trucks.map(t => <option key={t.id} value={t.id}>{t.unit}{t.vin ? ` · ${t.vin}` : ""}{t.plate ? ` · ${t.plate}` : ""}</option>)}</select></Field>
+      <Field label="Truck"><select required className={controlClass} value={input.truckId} onChange={e => { setInput({ ...input, truckId: e.target.value }); setPreview(null); setError(""); }}><option value="">Select truck</option>{options?.trucks.map(t => <option key={t.id} value={t.id}>{t.unit}{t.vin ? ` · ${t.vin}` : ""}{t.plate ? ` · ${t.plate}` : ""}</option>)}</select></Field>
       {truck && <p className="text-[13px] text-zinc-400">VIN: {truck.vin || "Not recorded"} · Plate: {truck.plate || "Not recorded"}</p>}
       <div className="max-h-48 overflow-y-auto text-[12px] text-zinc-400">{reviewed.map(t => <p key={t.id}>{t.exitDate} {t.exitTime} · {t.truckUnit || "Unknown"} · Transponder {t.prePassTagId || "—"} · {money(t.amount)}</p>)}</div>
       <p className="text-[12px] text-zinc-500">Only the selected transactions will be linked. Future imports keep their existing mapping rules. Load coverage flags are reassessed after linking.</p>

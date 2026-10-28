@@ -493,7 +493,7 @@ export const fetchTollsPage = (query: PageQuery & {
   agency?: string;
   postFrom?: string;
   postTo?: string;
-}) => paginatedRequest<TollPage>(withQuery("/tolls", query));
+}, signal?: AbortSignal) => paginatedRequest<TollPage>(withQuery("/tolls", query),signal);
 export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
@@ -734,3 +734,7 @@ export const readFeedbackMessage = (id: string) => apiRequest<void>(`/feedback/m
 
 export const fetchExternalSettlements=(id:string,signal?:AbortSignal)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{signal});
 export const recordExternalSettlement=(id:string,data:import('./types').ExternalExpenseSettlement)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{method:'POST',body:JSON.stringify(data)});
+
+
+export const fetchTollAttention = (from: string, includeReviewed: boolean, page: number, pageSize: number, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").Toll> & {dateFrom: string}>(withQuery("/tolls/attention",{from,includeReviewed:includeReviewed ? "true" : undefined,page,pageSize}),{signal});
+export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePassTruckLinks>("/tolls/truck-link-options",{signal});

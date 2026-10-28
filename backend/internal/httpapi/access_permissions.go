@@ -257,6 +257,8 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/toll-dashboard", "tolls.read"},
 	{"GET", "/tolls", "tolls.read"},
 	{"GET", "/tolls/truck-links", "tolls.read"},
+	{"GET", "/tolls/attention", "tolls.read"},
+	{"GET", "/tolls/truck-link-options", "tolls.read"},
 	{"POST", "/tolls/truck-links", "tolls.link"},
 	{"POST", "/tolls/truck-links/{id}/undo", "tolls.link"},
 	{"POST", "/tolls/truck-links/preview", "tolls.link"},
