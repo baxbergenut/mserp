@@ -115,13 +115,6 @@ func TestPayrollPerformance(t *testing.T) {
  ANALYZE;
  `)
 	exec("GRANT USAGE ON SCHEMA " + schema + " TO mserp_app; GRANT ALL ON ALL TABLES IN SCHEMA " + schema + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + schema + " TO mserp_app")
-	if os.Getenv("MSERP_PAYROLL_PERF_CUTOVER") == "1" {
-		// Synthetic fixture activation only. Product activation is covered by
-		// TestAccountingCutoverDatabase and the browser test, never bypassed live.
-		exec(`INSERT INTO accounting_legacy_sources(kind,source_id) SELECT 'escrow',id FROM driver_escrows;
- INSERT INTO accounting_rate_openings(driver_id,amount,reference) SELECT id,0,'Synthetic reviewed zero' FROM drivers;
- UPDATE accounting_cutover SET active=true,week_start='2026-10-05',version=version+1,activated_at=now(),receipt='{"synthetic":true}';`)
-	}
 	cfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 	cfg.ConnConfig.RuntimeParams["role"] = "mserp_app"
 	cfg.ConnConfig.RuntimeParams["jit"] = "off"

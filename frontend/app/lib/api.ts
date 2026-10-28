@@ -732,11 +732,5 @@ export const fetchFeedbackMessages = (page = 1, signal?: AbortSignal) => apiRequ
 export const fetchFeedbackMessageCount = () => apiRequest<{ count: number }>("/feedback/messages/count");
 export const readFeedbackMessage = (id: string) => apiRequest<void>(`/feedback/messages/${id}/read`, { method: "PUT" });
 
-export const fetchAccountingCutover=(signal?:AbortSignal)=>apiRequest<import('./types').AccountingCutover>('/accounting/cutover',{signal});
-export const saveAccountingCutover=(data:import('./types').AccountingCutover)=>apiRequest<import('./types').AccountingCutover>('/accounting/cutover',{method:'PUT',body:JSON.stringify({version:data.version,weekStart:data.weekStart,backupReference:data.backupReference,sheetsReference:data.sheetsReference,openings:data.openings,legacyExpenseIds:data.legacyExpenseIds})});
-export const previewAccountingCutover=()=>apiRequest<import('./types').CutoverPreview>('/accounting/cutover/preview',{method:'POST'});
-export const activateAccountingCutover=(previewId:string)=>apiRequest<import('./types').AccountingCutover>('/accounting/cutover/activate',{method:'POST',body:JSON.stringify({previewId,reviewed:true})});
 export const fetchExternalSettlements=(id:string,signal?:AbortSignal)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{signal});
 export const recordExternalSettlement=(id:string,data:import('./types').ExternalExpenseSettlement)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{method:'POST',body:JSON.stringify(data)});
-
-export const correctRateOpening = (input: { id:string;driverId:string;amount:string;reference:string;expectedAmount:string|null }) => apiRequest<import("./types").AccountingCutover>("/accounting/cutover/openings", {method:"POST",body:JSON.stringify(input)});

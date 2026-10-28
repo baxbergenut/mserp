@@ -55,8 +55,15 @@ deployment helper first. It briefly stops the API and expense-sheet writer while
 registering revision triggers, preventing DDL/write deadlocks. Releases without
 migration 160 cannot be restored after
 it is installed, because they ignore external settlements and the accounting
-boundary. Activation is a separate reviewed administrator action. See
-`docs/ACCOUNTING_CUTOVER.md` for backup/Sheets references, preview and activation.
+boundary.
+
+Migration 161 retires the unused Accounting cutover workflow. Install the updated
+helper before deployment: it pauses API and expense-sheet writers while removing
+cutoff-specific triggers, then restarts them. The migration refuses activated or
+populated cutover data, preserves migration-160 compatibility tables and external
+settlements, and blocks future activation even on a compatible older release.
+It does not repeat the separately authorized production data cleanup. See
+`docs/ACCOUNTING_CUTOVER.md`.
 
 Migration 151 removes manager verification and its historical records. Install
 the updated deployment helper before releasing it. It stops the API and any

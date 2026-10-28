@@ -110,9 +110,6 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 	} else if err := decorateTransferLoads(ctx, tx, report); err != nil {
 		return err
 	}
-	if err := cutoverPayrollNotices(ctx, tx, report); err != nil {
-		return err
-	}
 	snapshot, err := payrollCacheSnapshot(ctx, tx)
 	if err != nil {
 		return err

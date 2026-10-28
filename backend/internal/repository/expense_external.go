@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 	"time"
 )
@@ -36,7 +37,7 @@ func (r *ExpenseRepository) ExternalSettlements(ctx context.Context, id string) 
 	return out, rows.Err()
 }
 func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, actor string, x ExternalExpenseSettlement) error {
-	if _, err := cutoverUUID(x.ID); err != nil {
+	if _, err := externalSettlementUUID(x.ID); err != nil {
 		return chargeInvalid("Provide a unique request ID")
 	}
 	n, err := chargeCents(x.Amount)
@@ -47,7 +48,7 @@ func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, ac
 		return chargeInvalid("Provide the actual settlement date")
 	}
 	if x.ReversesID != "" {
-		if _, err = cutoverUUID(x.ReversesID); err != nil {
+		if _, err = externalSettlementUUID(x.ReversesID); err != nil {
 			return chargeInvalid("Invalid reversal receipt")
 		}
 	}
@@ -84,4 +85,10 @@ func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, ac
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func externalSettlementUUID(s string) (pgtype.UUID, error) {
+	var u pgtype.UUID
+	err := u.Scan(s)
+	return u, err
 }

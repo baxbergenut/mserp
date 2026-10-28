@@ -566,9 +566,6 @@ func (r *DriverPayRepository) InvestorStatement(ctx context.Context, week time.T
 }
 
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
-	if archived, ok, err := archivedPayroll(ctx, tx, "investor", week); err != nil || ok {
-		return archived, err
-	}
 	defer db.Phase(ctx, "investor_calculation")()
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	if err := payrollQueryPlans(ctx, tx); err != nil {

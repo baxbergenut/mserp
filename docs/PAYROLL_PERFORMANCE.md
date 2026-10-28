@@ -1,6 +1,10 @@
 # Payroll latency work
 
-## Accounting cutover measurements — October 28, 2026
+## Historical measurements — October 28, 2026
+
+The cutover workflow was subsequently retired by migration 161. These measurements
+describe the original fixture; the summary/detail and cache improvements remain.
+New benchmark fixtures use ordinary accounting without activating a cutoff.
 
 Migration 160 installs inactive. Active accounting bounds historical ledger and
 legacy-override reconstruction at the reviewed start week. Prior source collections

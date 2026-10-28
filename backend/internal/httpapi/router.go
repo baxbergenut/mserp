@@ -196,7 +196,6 @@ func NewRouter(
 	registerDriverBoardRoutes(protected, logger, boardRepo)
 	payRepo := repository.NewDriverPayRepository(pool)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
-	registerAccountingCutoverRoutes(protected, logger, payRepo)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
 	registerInvestorPayRoutes(protected, logger, payRepo, repository.NewDriverChargeRepository(pool))
 	registerTollRoutes(protected, logger, tollJob, tollRepo)

@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import {useAdministrator} from "@/app/lib/access";
 import { Settings, ShieldCheck, Users, KeyRound, Pencil, RefreshCw, ListChecks, Palette } from "lucide-react";
 import { PermissionMatrix } from "./PermissionMatrix";
 import { FleetScopeSync } from "./FleetScopeSync";
@@ -29,7 +27,6 @@ function updateCategoryAccess(role: AccessRole, categoryId: string, key: keyof O
 }
 
 export default function SettingsPage() {
- const administrator=useAdministrator();
   const permissions = usePermissions();
   const canManage = permissions.includes("access.manage");
   const canFleetScope = permissions.includes("fleetscope.read") && permissions.includes("trucks.read") && permissions.includes("drivers.read");
@@ -71,7 +68,7 @@ export default function SettingsPage() {
 
   return <div className="space-y-5 animate-fade-in">
 
-    <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">{administrator&&<Link className={button} href="/settings/accounting-cutover">Accounting cutover</Link>}{([['appearance', Palette, 'Appearance'], ['users', Users, 'Users'], ['roles', ShieldCheck, 'Roles & permissions'], ['tasks', ListChecks, 'System tasks'], ['payroll', Settings, 'Driver Pay'], ['fleetscope', RefreshCw, 'FleetScope']] as const).filter(([value]) => value === "appearance" || (value === "fleetscope" ? canFleetScope : canManage)).map(([value, Icon, label]) => <button key={value} role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={`${button} ${tab === value ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : ''}`}><Icon className="h-4 w-4" />{label}</button>)}<div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={Settings} title="Settings"  count={tab === "fleetscope" || tab === "appearance" || tab === "payroll" ? undefined : tab === "tasks" ? 4 : tab === "users" ? data?.users.length ?? 0 : data?.roles.length ?? 0} actionLabel={tab === "fleetscope" || tab === "appearance" || tab === "tasks" || tab === "payroll" ? undefined : tab === "users" ? "Add user" : "Create role"} onAction={tab === "fleetscope" || tab === "appearance" || tab === "tasks" || tab === "payroll" ? undefined : () => { if (busy || !data) return; setError(""); if (tab === "users") setUser(newUser()); else setRole(newRole()); }} secondaryAction={tab !== "fleetscope" && tab !== "appearance" && tab !== "payroll" && <button className={button} disabled={busy || loading} onClick={() => void refresh()}><RefreshCw className="h-3.5 w-3.5" />Refresh</button>} /></div></div>
+    <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">{([['appearance', Palette, 'Appearance'], ['users', Users, 'Users'], ['roles', ShieldCheck, 'Roles & permissions'], ['tasks', ListChecks, 'System tasks'], ['payroll', Settings, 'Driver Pay'], ['fleetscope', RefreshCw, 'FleetScope']] as const).filter(([value]) => value === "appearance" || (value === "fleetscope" ? canFleetScope : canManage)).map(([value, Icon, label]) => <button key={value} role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={`${button} ${tab === value ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : ''}`}><Icon className="h-4 w-4" />{label}</button>)}<div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={Settings} title="Settings"  count={tab === "fleetscope" || tab === "appearance" || tab === "payroll" ? undefined : tab === "tasks" ? 4 : tab === "users" ? data?.users.length ?? 0 : data?.roles.length ?? 0} actionLabel={tab === "fleetscope" || tab === "appearance" || tab === "tasks" || tab === "payroll" ? undefined : tab === "users" ? "Add user" : "Create role"} onAction={tab === "fleetscope" || tab === "appearance" || tab === "tasks" || tab === "payroll" ? undefined : () => { if (busy || !data) return; setError(""); if (tab === "users") setUser(newUser()); else setRole(newRole()); }} secondaryAction={tab !== "fleetscope" && tab !== "appearance" && tab !== "payroll" && <button className={button} disabled={busy || loading} onClick={() => void refresh()}><RefreshCw className="h-3.5 w-3.5" />Refresh</button>} /></div></div>
     {tab !== "appearance" && error && <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
     {tab !== "appearance" && notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</p>}
     {tab === "fleetscope" ? <FleetScopeSync /> : tab === "appearance" ? <Appearance /> : tab === "payroll" ? <DriverPaySettings /> : loading && !data ? <p role="status" className="text-sm text-zinc-500">Loading access settings…</p> : data && <>

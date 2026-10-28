@@ -14,6 +14,11 @@ import (
 
 func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 	t.Helper()
+	retired, e := os.ReadFile("../../sql/161_retire_accounting_cutover.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	source = strings.Replace(source, strings.ReplaceAll(string(retired), "\r\n", "\n"), "", 1)
 	body, e := os.ReadFile("../../sql/160_accounting_cutover.sql")
 	if e != nil {
 		t.Fatal(e)
@@ -48,9 +53,16 @@ func applyAccountingCutoverMigration(t *testing.T, ctx context.Context, conn *pg
 	if _, e = conn.Exec(ctx, string(body)); e != nil {
 		t.Fatal(e)
 	}
+	retirement, e := os.ReadFile("../../sql/161_retire_accounting_cutover.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = conn.Exec(ctx, string(retirement)); e != nil {
+		t.Fatal(e)
+	}
 }
 
-func TestAccountingCutoverDatabase(t *testing.T) {
+func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_CUTOVER_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("local disposable database required")
@@ -81,7 +93,7 @@ func TestAccountingCutoverDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			m, e := os.ReadFile("../../sql/160_accounting_cutover.sql")
+			m, e := os.ReadFile("../../sql/161_retire_accounting_cutover.sql")
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -92,6 +104,12 @@ func TestAccountingCutoverDatabase(t *testing.T) {
 					t.Fatal("migration missing from init")
 				}
 				exec(strings.Replace(base, old, "", 1))
+				// Retirement must not silently disable an activated installation.
+				exec("BEGIN; UPDATE accounting_cutover SET active=true")
+				if _, e = admin.Exec(ctx, string(m)); e == nil {
+					t.Fatal("retired an activated accounting ledger")
+				}
+				exec("ROLLBACK")
 				exec(string(m))
 			} else {
 				exec(string(source))
@@ -121,105 +139,27 @@ func TestAccountingCutoverDatabase(t *testing.T) {
 			exec(`INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,opening_paid) VALUES($1,'Opening Driver','2026-10-26',1000,100)`, driver)
 			repo := NewDriverPayRepository(pool)
 			expenses := NewExpenseRepository(pool)
-			draft, e := repo.AccountingCutover(ctx)
-			if e != nil {
-				t.Fatal(e)
+			if _, e = pool.Exec(ctx, "UPDATE accounting_cutover SET active=true"); e == nil {
+				t.Fatal("retired cutover can activate")
 			}
-			if draft.Active {
-				t.Fatal("migration activated cutoff")
-			}
-			draft.BackupReference = "test backup"
-			draft.SheetsReference = "dated test Sheets copy"
-			draft.Openings = []AccountingOpening{{DriverID: driver, Amount: "350.00", Reference: "Driver Board opening"}}
-			draft, e = repo.SaveAccountingCutover(ctx, draft.AccountingCutoverDraft)
-			if e != nil {
-				t.Fatal(e)
-			}
-			preview, e := repo.PreviewAccountingCutover(ctx, actor)
-			if e != nil {
-				t.Fatal(e)
-			}
-			exec(`UPDATE expenses SET description='changed during preview' WHERE id=$1`, currentExpense)
-			if _, e = repo.ActivateAccountingCutover(ctx, preview.ID, actor); e == nil {
-				t.Fatal("accepted stale preview")
-			}
-			exec(`INSERT INTO expense_payments(expense_id,week_start,amount) VALUES($1,'2026-10-26',25)`, oldExpense)
-			preview, e = repo.PreviewAccountingCutover(ctx, actor)
-			if e != nil {
-				t.Fatal(e)
-			}
-			blocked := false
-			for _, i := range preview.Items {
-				blocked = blocked || i.Blocking
-			}
-			if !blocked {
-				t.Fatal("legacy payment did not block")
-			}
-			if _, e = repo.ActivateAccountingCutover(ctx, preview.ID, actor); e == nil {
-				t.Fatal("activated blocked preview")
-			}
-			exec(`UPDATE expense_payments SET amount=0 WHERE expense_id=$1`, oldExpense)
-			exec(`INSERT INTO gross_board_transfers(driver_id,source_date,source_slot,dispatch_date,dispatch_slot,settlement_date,dispatcher_id,dispatcher_name) VALUES($1,'2026-10-25',0,'2026-10-26',0,'2026-10-25','','')`, driver)
-			preview, e = repo.PreviewAccountingCutover(ctx, actor)
-			if e != nil {
-				t.Fatal(e)
-			}
-			crossing := false
-			for _, item := range preview.Items {
-				if item.Kind == "transfer" && item.Blocking {
-					crossing = true
-				}
-			}
-			if !crossing {
-				t.Fatal("dispatch-only crossing was not reviewed")
-			}
-			exec(`DELETE FROM gross_board_transfers WHERE driver_id=$1`, driver)
-			preview, e = repo.PreviewAccountingCutover(ctx, actor)
-			if e != nil {
-				t.Fatal(e)
-			}
-			activated, e := repo.ActivateAccountingCutover(ctx, preview.ID, actor)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if !activated.Active {
-				t.Fatal("not active")
-			}
-			if _, e = pool.Exec(ctx, `INSERT INTO gross_board_transfers(driver_id,source_date,source_slot,dispatch_date,dispatch_slot,settlement_date,dispatcher_id,dispatcher_name) VALUES($1,'2026-10-25',0,'2026-10-26',0,'2026-10-26','','')`, driver); e == nil {
-				t.Fatal("post-activation historical transfer allowed")
-			}
-			if scalar(`SELECT count(*)::text FROM expenses`) != "2" {
-				t.Fatal("history was deleted")
-			}
-			if _, e = pool.Exec(ctx, `UPDATE gross_board_entries SET driver_rate=0 WHERE service_date='2026-10-20'`); e == nil {
-				t.Fatal("historical board write allowed")
-			}
-			if _, e = pool.Exec(ctx, `UPDATE expenses SET description='rewrite' WHERE id=$1`, oldExpense); e == nil {
-				t.Fatal("historical expense write allowed")
+			if scalar("SELECT coalesce(accounting_cutover_date()::text,'none')") != "none" {
+				t.Fatal("retired cutoff still active")
 			}
 			week, _ := time.Parse(time.DateOnly, "2026-10-26")
 			report, e := repo.Get(ctx, week)
 			if e != nil {
 				t.Fatal(e)
 			}
-			if len(report.Drivers) != 1 {
-				t.Fatalf("unexpected report %+v", report)
-			}
-			for _, d := range report.Drivers[0].Edits.ExpenseDeductions {
-				if d.ExpenseID == oldExpense || d.Source == "escrow" {
-					t.Fatal("legacy obligation leaked", d)
+			foundOld := false
+			for _, driver := range report.Drivers {
+				for _, d := range driver.Edits.ExpenseDeductions {
+					if d.ExpenseID == oldExpense {
+						foundOld = true
+					}
 				}
 			}
-			archived, e := repo.Get(ctx, week.AddDate(0, 0, -7))
-			if e != nil || !archived.ManagedInSheets {
-				t.Fatal("archive unavailable", e)
-			}
-			board, e := NewGrossBoardRepository(pool).Get(ctx, week)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if len(board.Balances) != 1 || board.Balances[0].OpeningBalance != "350.00" {
-				t.Fatal("incorrect rate opening", board.Balances)
+			if !foundOld {
+				t.Fatal("ordinary unpaid history was silently excluded")
 			}
 			invoice, e := expenses.GetExpense(ctx, currentExpense)
 			if e != nil {
@@ -283,31 +223,6 @@ func TestAccountingCutoverDatabase(t *testing.T) {
 			if string(a) != string(b) {
 				t.Fatalf("detail differs\n%s\n%s", a, b)
 			}
-			correction := RateOpeningCorrection{ID: scalar(`SELECT gen_random_uuid()::text`), DriverID: driver, Amount: "-25.00", Reference: "Reviewed Sheets correction", ExpectedAmount: payTestString("350.00")}
-			if _, e = repo.CorrectRateOpening(ctx, correction, actor); e != nil {
-				t.Fatal(e)
-			}
-			if _, e = repo.CorrectRateOpening(ctx, correction, actor); e != nil {
-				t.Fatal("opening retry", e)
-			}
-			board, e = NewGrossBoardRepository(pool).Get(ctx, week)
-			if e != nil || board.Balances[0].OpeningBalance != "325.00" {
-				t.Fatal("opening correction", board, e)
-			}
-			correction.ID = scalar(`SELECT gen_random_uuid()::text`)
-			if _, e = repo.CorrectRateOpening(ctx, correction, actor); e == nil {
-				t.Fatal("accepted stale opening")
-			}
-			corrected, e := repo.Get(ctx, week)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if summarizePayStatement(corrected.Drivers[0]).Summary.Payable != summarizePayStatement(full.Drivers[0]).Summary.Payable {
-				t.Fatal("rate correction changed payroll")
-			}
-			if _, e = repo.Settle(ctx, week, driver, got.Revision, actor, "", false, true); e != ErrDriverPayConflict {
-				t.Fatal("stale compact token accepted", e)
-			}
 			// New obligations continue carrying after the fixed boundary.
 			exec(`INSERT INTO expense_payments(expense_id,week_start,amount) VALUES($1,'2026-10-26',75)`, currentExpense)
 			next, e := repo.Get(ctx, week.AddDate(0, 0, 7))
@@ -335,18 +250,6 @@ func TestAccountingCutoverDatabase(t *testing.T) {
 			overspend := ExternalExpenseSettlement{ID: scalar(`SELECT gen_random_uuid()::text`), Amount: "126.00", SettledOn: "2026-10-26", Reference: "Over reserved", Version: invoice.BalanceVersion}
 			if e = expenses.RecordExternalSettlement(ctx, currentExpense, actor, overspend); e == nil {
 				t.Fatal("external settlement ignored saved reservation")
-			}
-			if _, e = pool.Exec(ctx, `UPDATE driver_escrows SET amount=5000 WHERE driver_id=$1`, driver); e == nil {
-				t.Fatal("managed escrow mutated")
-			}
-			if _, e = pool.Exec(ctx, `UPDATE accounting_cutover SET week_start='2026-11-02'`); e == nil {
-				t.Fatal("active cutoff moved")
-			}
-			// A late historical source remains visible as a cutover review notice.
-			exec(`INSERT INTO tolls(posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint) VALUES('2026-10-27','2026-10-27','test','test','test','test','test','test','test','2026-10-25','12:00','test',15,repeat('z',64))`)
-			late, e := repo.Get(ctx, week)
-			if e != nil || len(late.Notices) == 0 {
-				t.Fatal("late historical toll lacks review notice", e)
 			}
 			// Finalized source statements reject subsequent external edits.
 			finalPage, e := repo.PayrollPage(ctx, "driver", week, PayPageQuery{Summary: true})

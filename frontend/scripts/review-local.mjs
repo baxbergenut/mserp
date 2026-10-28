@@ -36,7 +36,7 @@ process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
 try {
  if (retainedPayrollFixture) {
-  sql(`SET search_path TO ${schema},public; DO $$ BEGIN IF (SELECT count(*) FROM drivers WHERE full_name LIKE 'Perf Driver %')<>176 OR NOT coalesce((SELECT active AND receipt->>'synthetic'='true' FROM accounting_cutover),false) THEN RAISE EXCEPTION 'Expected active synthetic payroll fixture'; END IF; END $$;`);
+  sql(`SET search_path TO ${schema},public; DO $$ BEGIN IF (SELECT count(*) FROM drivers WHERE full_name LIKE 'Perf Driver %')<>176 THEN RAISE EXCEPTION 'Expected active synthetic payroll fixture'; END IF; END $$;`);
   ownsSchema=true;
   sql(`SET search_path TO ${schema},public; INSERT INTO app_users(username,password_hash,email,role_id) VALUES('Local Review',crypt('${password}',gen_salt('bf')),'${email}',(SELECT id FROM app_roles WHERE system_role));`);
  } else {

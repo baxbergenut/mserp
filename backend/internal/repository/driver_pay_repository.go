@@ -158,12 +158,6 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 	return result, tx.Commit(ctx)
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
-	if archived, ok, err := archivedPayroll(ctx, tx, "driver", week); err != nil || ok {
-		if driverID != "" {
-			archived = selectPayDriver(archived, driverID)
-		}
-		return archived, err
-	}
 	defer db.Phase(ctx, "driver_calculation")()
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	if err := payrollQueryPlans(ctx, tx); err != nil {

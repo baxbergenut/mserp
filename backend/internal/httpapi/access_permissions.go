@@ -12,11 +12,6 @@ type routeAccess struct{ method, path, permission string }
 var routeAccessPolicies = []routeAccess{
 	{"GET", "/expenses/{id}/external-settlements", "authenticated"},
 	{"POST", "/expenses/{id}/external-settlements", "expenses.settle"},
-	{"GET", "/accounting/cutover", "authenticated"},
-	{"PUT", "/accounting/cutover", "authenticated"},
-	{"POST", "/accounting/cutover/preview", "authenticated"},
-	{"POST", "/accounting/cutover/activate", "authenticated"},
-	{"POST", "/accounting/cutover/openings", "authenticated"},
 	{"GET", "/feedback", "authenticated"},
 	{"POST", "/feedback", "authenticated"},
 	{"GET", "/feedback/tags", "authenticated"},

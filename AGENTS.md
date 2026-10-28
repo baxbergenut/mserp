@@ -48,19 +48,18 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
-- Accounting cutover uses migration 160, repository/httpapi accounting_cutover.go,
-  expense_external.go and Settings > Accounting cutover. Deployment is inactive.
-  A versioned administrator draft/preview and atomic activation retain immutable
-  receipts and read-only historical reports; October 26, 2026 is the initial
-  boundary. Sheets owns old debt and all existing escrow/installments. New debt
-  still carries normally. Reviewed Gross Board openings/corrections affect only
-  rate balance. Referenced Sheets adjustments and statement CSVs preserve legacy
-  collections explicitly. expenses.settle plus category View protects external
-  settlement/reversal receipts, reservations and finalized statements. Late-posted
-  pre-cutover toll crossings are excluded with an accounting review notice.
-  See docs/ACCOUNTING_CUTOVER.md; TestAccountingCutoverDatabase uses local
-  MSERP_CUTOVER_TEST_DATABASE_URL. Browser: scripts/test-accounting-cutover.mjs
-  against review-local. Deploy helper rollback compatibility requires migration160.
+- Accounting cutover was retired by migration 161. Its Settings page, draft,
+  preview, activation and opening-correction APIs are removed. The migration
+  refuses populated/activated cutovers, disables activation and removes cutoff
+  write guards; empty migration-160 tables and constant SQL predicates remain
+  solely for release/schema compatibility. Ordinary unpaid balances carry normally.
+  External expense settlements/reversals remain available with expenses.settle
+  and category View permissions, immutable receipts, reservation limits and
+  finalized-statement guards. Referenced Sheets adjustments remain optional.
+  TestAccountingCutoverRetiredDatabase (MSERP_CUTOVER_TEST_DATABASE_URL) covers
+  fresh/migrated databases, external settlements and payroll calculator parity.
+  Browser: scripts/test-accounting-retirement.mjs against review-local.
+  See docs/ACCOUNTING_CUTOVER.md. Deploy helper pauses writers for 160 and 161.
   Compact payroll summaries and selected details have separate committed-revision
   caches; current/future ledger rows remain exact while older rows are grouped.
   Migration 160 enrolls later tables in payroll_cache_revisions. Future untracked

@@ -1553,7 +1553,4 @@ export type ExpenseTruckChoice = Pick<TruckOption, "id" | "unitNumber" | "driver
 export type ExpenseOwnerChoice = Pick<InvestorOption, "id" | "fullName" | "driverId" | "isCompany">;
 export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: ExpenseDriverChoice[]; trucks: ExpenseTruckChoice[]; owners: ExpenseOwnerChoice[]; }
 
-export interface AccountingOpening {driverId:string;name?:string;amount:string;reference:string}
-export interface AccountingCutover {version:number;weekStart:string;backupReference:string;sheetsReference:string;openings:AccountingOpening[];legacyExpenseIds:string[];active:boolean;activatedAt?:string;receipt?:unknown;drivers:{id:string;name:string}[]}
-export interface CutoverPreview {id:string;version:number;revision:string;archivedWeeks:number;items:{kind:string;id:string;week:string;description:string;blocking:boolean}[]}
 export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:string;reference:string;reversesId?:string;version:number;actor?:string;createdAt?:string}
