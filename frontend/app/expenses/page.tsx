@@ -1,5 +1,5 @@
 "use client";
-import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
+import type { ExpenseDriverChoice, ExpenseTruckChoice, ExpenseOwnerChoice } from "@/app/lib/types";
 
 import { applyExpenseCategoryRules } from "./catalog";
 
@@ -20,9 +20,7 @@ import {
   fetchExpense,
 
   fetchAuthSession,
-  fetchDriverOptions,
-  fetchInvestorOptions,
-  fetchTruckOptions,
+  fetchExpenseFormChoices,
   updateExpense,
   verifyExpense,
   unverifyExpense,
@@ -123,9 +121,9 @@ export default function ExpensesPage() {
     .filter(item => item.kind === "category" && item.active && categoryAccess.some(access => access.categoryId === item.id && access.canCreate))
     .map(item => item.id);
   const [choicesLoaded,setChoicesLoaded]=useState(false);
-  const [drivers, setDrivers] = useState<DriverOption[]>([]);
-  const [owners, setOwners] = useState<InvestorOption[]>([]);
-  const [trucks, setTrucks] = useState<TruckOption[]>([]);
+  const [drivers, setDrivers] = useState<ExpenseDriverChoice[]>([]);
+  const [owners, setOwners] = useState<ExpenseOwnerChoice[]>([]);
+  const [trucks, setTrucks] = useState<ExpenseTruckChoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
@@ -189,13 +187,10 @@ export default function ExpensesPage() {
       request?.abort();
       const controller = new AbortController();
       request = controller;
-      void Promise.all([
-        fetchExpensesPage({ page: 1, pageSize: 1 }, controller.signal),
-        fetchDriverOptions(), fetchTruckOptions(), fetchInvestorOptions(),
-      ]).then(([response, driverValues, truckValues, ownerValues]) => {
+      void fetchExpenseFormChoices(controller.signal).then(response => {
         if (controller.signal.aborted) return;
-        setOptions(current => ({ ...current, applicants: response.options.applicants }));
-        setDrivers(driverValues); setTrucks(truckValues); setOwners(ownerValues); setChoicesLoaded(true);
+        setOptions(current => ({ ...response.options, filters: current.filters }));
+        setDrivers(response.drivers); setTrucks(response.trucks); setOwners(response.owners); setChoicesLoaded(true);
       }).catch(reason => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Failed to refresh driver choices");
       });
