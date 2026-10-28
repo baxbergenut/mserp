@@ -159,12 +159,21 @@ func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 }
 
 func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBoard, error) {
-	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return GrossBoard{}, err
+	}
+	defer tx.Rollback(ctx)
+	board, err := readGrossBoard(ctx, tx, week)
 	if err != nil {
 		return board, err
 	}
-	defer tx.Rollback(ctx)
+	return board, tx.Commit(ctx)
+}
+
+// Payroll projections share the exact board resolution and transaction snapshot.
+func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard, error) {
+	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}}
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
@@ -260,7 +269,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	for i := range board.Drivers {
 		board.Drivers[i].Assignments = assignments[board.Drivers[i].ID]
 	}
-	return board, tx.Commit(ctx)
+	return board, nil
 }
 
 func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID string, week time.Time) ([]GrossBoardBalanceLine, error) {

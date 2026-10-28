@@ -163,7 +163,6 @@ export default function DispatchersPage() {
               <th className="px-4 py-3 font-medium">Dispatcher</th>
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Main updater</th><th className="px-4 py-3 font-medium">After hours updater</th>
-              {permissions.includes("dispatcher_compensation.read") && <th className="px-4 py-3 font-medium">Commission</th>}
               <th className="px-4 py-3 font-medium">Drivers</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -173,7 +172,6 @@ export default function DispatchersPage() {
                 <td className="px-4 py-3 font-medium text-zinc-200"><Link href={`/dispatchers/detail?id=${dispatcher.id}`}>{dispatcher.fullName}</Link>{dispatcher.extension == null ? "" : ` (${dispatcher.extension})`}</td>
                 <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(dispatcher.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-600">{dispatcher.email ?? "No email"}</div></td>
                 {[dispatcher.mainUpdaterId, dispatcher.afterHoursUpdaterId].map((id, index) => { const updater = updaterChoices.find(u => u.id === id); return <td key={index} className="px-4 py-3 text-zinc-400">{updater ? `${updater.fullName}${updater.extension == null ? "" : ` (${updater.extension})`}` : "—"}</td>; })}
-                {permissions.includes("dispatcher_compensation.read") && <td className="px-4 py-3 font-mono tabular-nums text-zinc-300">{dispatcher.payPercentage == null ? "—" : `${dispatcher.payPercentage.toFixed(2)}%`}</td>}
                 <td className="px-4 py-3"><span className="rounded-full bg-zinc-800/60 px-2 py-1 text-[11px] text-zinc-400">{dispatcher.driverCount} {dispatcher.driverCount === 1 ? "driver" : "drivers"}</span></td>
                 <td className="px-4 py-3"><StatusBadge active={dispatcher.active} /></td>
                 <td className="px-4 py-3"><RowActions onEdit={() => void openEdit(dispatcher)} onDelete={() => setPendingDelete(dispatcher)} /></td>

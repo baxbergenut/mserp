@@ -2007,10 +2007,17 @@ assignment lookup lists.
   contribution is the retained gross percentage. CPM owner-operators do not pay
   fuel or tolls, so those costs remain company expenses, as they do for company
   drivers.
-- Dispatcher pay is calculated weekly as the dispatcher's configured commission
-  percentage multiplied by managed gross for qualified loads in that Monday–
-  Sunday pickup-date week. Unassigned loads and dispatchers without a configured
-  percentage remain visible but do not contribute to calculated dispatcher pay.
+- Dispatcher Pay uses migration 163 and repository/httpapi `dispatcher_pay*.go`.
+  Gross Board effective Total Gross / Total Miles drive workbook-style weekly
+  driver gross tiers, weighted RPM brackets and actual-gross commission. Approved
+  home days add tier-only credit, capped at one promotion by default; promotion
+  CAN reduce pay. Dated dispatcher credit and transfers allocate each load once.
+  Immutable editable rule revisions apply from their effective Monday; weekly
+  inputs are versioned, finalization freezes rules/amounts and reopening requires
+  a reason. New dispatcher_pay.edit/rules/finalize/reopen permissions require View.
+  Legacy dispatcher percentages are retained only for compatibility. See
+  docs/DISPATCHER_PAY.md and TestDispatcherPayDatabase with disposable local
+  MSERP_DISPATCHER_PAY_TEST_DATABASE_URL; browser: test-dispatcher-pay-e2e.mjs.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.

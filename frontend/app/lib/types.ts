@@ -1,3 +1,54 @@
+export interface DispatcherCommissionRules {
+  homeDayCredit: number;
+  maxTierPromotion: number;
+  tiers: { minGross: number; brackets: { minRPM: number; percent: number }[] }[];
+}
+export interface DispatcherCommissionRuleVersion {
+  id: number;
+  effectiveWeek: string;
+  rules: DispatcherCommissionRules;
+  createdAt: string;
+}
+export interface DispatcherCommissionRow {
+  driverId: string;
+  driverName: string;
+  truckUnits: string[];
+  homeDays: number;
+  note: string;
+  version: number;
+  gross: number;
+  creditedGross: number;
+  miles: number;
+  rpm: number;
+  adjustedGross: number;
+  actualTier: number;
+  selectedTier: number;
+  rate: number;
+  pay: number;
+  loadCount: number;
+  issues: string[];
+}
+export interface DispatcherCommissionStatement {
+  dispatcherId: string;
+  dispatcherName: string;
+  rows: DispatcherCommissionRow[];
+  gross: number;
+  pay: number;
+  loadCount: number;
+  rule: DispatcherCommissionRuleVersion | null;
+  revision: string;
+  finalized: boolean;
+  sourceChanged: boolean;
+  version: number;
+  finalizedAt?: string;
+}
+export interface DispatcherCommissionReport {
+  weekStart: string;
+  availableWeeks: string[];
+  rule: DispatcherCommissionRuleVersion | null;
+  statements: DispatcherCommissionStatement[];
+}
+
 export interface Load {
   ID: number;
   LoadID: string;

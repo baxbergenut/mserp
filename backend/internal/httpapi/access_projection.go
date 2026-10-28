@@ -24,7 +24,7 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	value = projectExpenseEditAccess(value, s.User)
 	path := w.request.URL.Path
 	// These endpoints deliberately return their own authorized financial data.
-	if strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || path == "/dispatcher-pay" || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history") || strings.HasSuffix(path, "/settlement-history") {
+	if strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || strings.HasPrefix(path, "/dispatcher-pay") || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history") || strings.HasSuffix(path, "/settlement-history") {
 		return value
 	}
 	raw, err := json.Marshal(value)

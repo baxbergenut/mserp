@@ -380,48 +380,28 @@ func (r *DashboardRepository) loadDispatcherFinancials(
 	query FinancialDashboardQuery,
 	dashboard *FinancialDashboard,
 ) error {
-	rows, err := r.pool.Query(ctx, dispatcherFinancialsSQL,
-		query.DateFrom,
-		query.DateTo,
-	)
+	report, err := NewDispatcherPayRepository(r.pool).Get(ctx, query.DateFrom.Format(time.DateOnly))
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var dispatcher DispatcherFinancialBreakdown
-		if err := rows.Scan(
-			&dispatcher.DispatcherID,
-			&dispatcher.DispatcherName,
-			&dispatcher.Gross,
-			&dispatcher.DriverCount,
-			&dispatcher.LoadCount,
-			&dispatcher.PayPercentage,
-			&dispatcher.Pay,
-		); err != nil {
-			return err
+	for _, statement := range report.Statements {
+		dispatcher := DispatcherFinancialBreakdown{DispatcherName: statement.DispatcherName, Gross: statement.Gross, DriverCount: len(statement.Rows), LoadCount: statement.LoadCount}
+		if statement.DispatcherID != "" {
+			id := statement.DispatcherID
+			dispatcher.DispatcherID = &id
+			valid := statement.Rule != nil
+			for _, row := range statement.Rows {
+				valid = valid && len(row.Issues) == 0
+			}
+			if valid {
+				pay := statement.Pay
+				dispatcher.Pay = &pay
+			}
 		}
 		dashboard.Dispatchers = append(dashboard.Dispatchers, dispatcher)
 	}
-	return rows.Err()
+	return nil
 }
-
-var dispatcherFinancialsSQL = financialDashboardBaseSQL + `
-		SELECT pl.dispatcher_id,
-			COALESCE(NULLIF(MAX(pl.dispatcher_name), ''), 'Unassigned') AS dispatcher_name,
-			SUM(pl.total_pay)::float8 AS gross,
-			COUNT(DISTINCT pl.driver_id)::int AS driver_count,
-			COUNT(*)::int AS load_count,
-			d.pay_percentage::float8,
-			CASE
-				WHEN d.pay_percentage IS NULL THEN NULL
-				ELSE (SUM(pl.total_pay) * d.pay_percentage / 100)::float8
-			END AS pay
-		FROM period_loads pl
-		LEFT JOIN dispatchers d ON d.id = pl.dispatcher_id
-		GROUP BY pl.dispatcher_id, d.pay_percentage
-		ORDER BY gross DESC, dispatcher_name`
 
 var financialDashboardBaseSQL = `
 WITH load_events AS (

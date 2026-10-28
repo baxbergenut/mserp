@@ -102,25 +102,7 @@ export function DispatcherForm({
             placeholder="dispatcher@company.com"
           />
         </Field>
-        {permissions.includes("dispatcher_compensation.read") && <fieldset className="contents" disabled={!permissions.includes("dispatcher_compensation.edit")}><Field
-          label="Commission from gross (%)"
-          hint="Optional dispatcher compensation percentage, from 0 to 100."
-        >
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            value={value.payPercentage ?? ""}
-            onChange={(event) =>
-              set(
-                "payPercentage",
-                event.target.value === "" ? null : Number(event.target.value),
-              )
-            }
-            className={controlClass}
-          />
-        </Field></fieldset>}
+        {permissions.includes("dispatcher_pay.read") && <div className="text-xs text-zinc-400">Commission rules are managed in <a className="text-blue-400 hover:underline" href="/accounting/dispatcher-pay">Dispatcher Pay</a>.</div>}
       </FormSection>
 
       <FormSection title="Assigned updaters">
