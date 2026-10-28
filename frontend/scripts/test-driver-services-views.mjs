@@ -25,6 +25,7 @@ const server=createServer(async(req,res)=>{
    if(['/api/lookups/trucks','/api/lookups/dispatchers'].includes(p))return send([]);
    if(p==='/api/auth/session')return send({user:{id:'test-user',username:'Test User',theme:'default',permissions:['drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read','fuel.read','weighmytruck.read','tasks.read',...(readOnly?[]:['drivers.create','drivers.edit','drivers.delete','trucks.create','trucks.edit','trucks.delete','dispatchers.create','dispatchers.edit','dispatchers.delete','updaters.create','updaters.edit','updaters.delete','investors.create','investors.edit','drivers.private.read','drivers.private.edit','driver_compensation.read','driver_compensation.edit','dispatcher_compensation.read','dispatcher_compensation.edit','escrow.read','escrow.create','escrow.edit','escrow.delete','fuel.drivers.create','fuel.drivers.edit','fuel.drivers.delete','fuel.drivers.recover','fuel.drivers.sync','weighmytruck.create','weighmytruck.delete','weighmytruck.sync','weighmytruck.link','weighmytruck.recover','tasks.create','tasks.edit','tasks.delete','tasks.review'])]},csrfToken:'fixture'});
    if(p==='/api/sidebar-counts')return send({fuel:0,weighMyTruck:0,tolls:0,tollsFrom:'2026-09-01'});
+   if(p==='/api/feedback/messages/count')return send({count:0});
    if(p==='/api/maintenance/access')return send({});
    if(p==='/api/tasks/events'){res.writeHead(200,{'Content-Type':'text/event-stream'});res.write(': fixture\n\n');return;}
    if(p==='/api/tasks/count')return send({count:1});

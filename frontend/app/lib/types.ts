@@ -1523,7 +1523,7 @@ export interface DriverServiceState {
 }
 export interface DriverServiceSetup {
   driverId: string; name: string; driverStatus: string; tomorrow: string; items: DriverServiceState[];
-  policies: RelayDriverPolicy[]; canLinkRelay: boolean; environment: string; checkedAt: string;
+  policies: RelayDriverPolicy[] | null; canLinkRelay: boolean; environment: string; checkedAt: string;
 }
 
 export interface FiveELDTruckReview { id: string; vin: string; unitNumber: string; version: number; completed: boolean }
