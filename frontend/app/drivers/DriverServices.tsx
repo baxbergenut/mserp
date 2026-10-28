@@ -106,7 +106,8 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
   const verificationKey = item.state === "unconfirmed" ? JSON.stringify([item.membership?.id, item.membership?.version, item.operations.map(op => op.id)]) : candidate;
   const verified = Boolean(verifiedKey) && verifiedKey === verificationKey;
   const working = ["queued", "running"].includes(item.state);
-  const policy = data.policies.find(p => p.id === policyId);
+  const policies = data.policies ?? [];
+  const policy = policies.find(p => p.id === policyId);
   const nonELD = policy?.name.trim().toLowerCase() === "non eld policy";
   async function act(fn: () => Promise<unknown>) {
     if (latch.current) return;
@@ -134,7 +135,7 @@ function ServiceCard({ item, data, refresh, allowReminders }: { item: DriverServ
       </div>}
       {permissions.includes("fuel.drivers.edit") && item.relay && item.state === "needs_setup" && <div className="space-y-3">
         {item.relay.assignment && !item.relay.assignment.enabled && <button type="button" className={button} onClick={() => void act(() => changeRelayDriver({ requestId: crypto.randomUUID(), action: "enable", relayDriverId: item.relay!.driver.id, revision: item.relay!.revision }))}>Enable existing policy</button>}
-        <Field label="Relay policy"><select className={controlClass} value={policyId} onChange={e => { setPolicyId(e.target.value); setPin(""); }}><option value="">Choose policy</option>{data.policies.map(p => <option key={p.id} value={p.id} disabled={p.id === item.relay?.assignment?.policy_id}>{p.name}</option>)}</select></Field>
+        <Field label="Relay policy"><select className={controlClass} value={policyId} onChange={e => { setPolicyId(e.target.value); setPin(""); }}><option value="">Choose policy</option>{policies.map(p => <option key={p.id} value={p.id} disabled={p.id === item.relay?.assignment?.policy_id}>{p.name}</option>)}</select></Field>
         {item.relay.assignment && policy && <p className="text-xs text-amber-300">Changing policy resets usage counters. Enable the current policy to keep its usage.</p>}
         {policy && (nonELD ? <><Field label="Driver PIN" hint="Required by Non ELD Policy. Leave blank only if already set in Relay."><input type="password" autoComplete="new-password" maxLength={100} className={controlClass} value={pin} onChange={e => setPin(e.target.value)} /></Field><Field label="Truck number" hint="Leave blank to keep the existing Relay value."><input maxLength={100} className={controlClass} value={truck} onChange={e => setTruck(e.target.value)} /></Field></> : <p className="text-xs leading-5 text-zinc-400">Uses the driver’s existing ELD connection. If missing, have the driver log into their ELD app and check the connection in Relay.</p>)}
         <button type="button" className={`${button} ui-button-primary`} disabled={!policyId} onClick={() => void act(() => changeRelayDriver({ requestId: crypto.randomUUID(), action: "assign", relayDriverId: item.relay!.driver.id, revision: item.relay!.revision, policyId, driverPin: nonELD ? pin : "", truckNumber: nonELD ? truck : "" }))}>Assign policy</button>

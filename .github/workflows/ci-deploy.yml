@@ -170,6 +170,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-dispatcher-views.mjs
 
+      - name: Verify restricted driver profiles in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-driver-profile-access.mjs
+
       - name: Verify fleet inventory and stored trailers in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend
