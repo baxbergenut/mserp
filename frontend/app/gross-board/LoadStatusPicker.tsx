@@ -102,7 +102,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           setActive(0); setBrowse(false); setFocused(true); setSearchError("");
           if (exact && !hasAmounts(entry)) setFocused(false);
           onChange(entry.driverId, entry.date, (current) => exact && !hasAmounts(current) ? setDayStatus(current, exact.value) :
-            ({ ...current, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, trips: [],
+            ({ ...current, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
               note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
@@ -126,7 +126,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => { input.current?.focus(); setBrowse(true); setFocused(true); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); }}
           className={`absolute right-0 flex h-8 w-6 items-center justify-center rounded text-zinc-400 hover:bg-white/10 hover:text-zinc-100 focus-visible:ring-1 focus-visible:ring-blue-500 ${status ? "top-12" : "top-0"}`}><ChevronDown className="h-3 w-3" /></button>
-      {needsReview && <button type="button" aria-label={`Review rate and miles for ${label}`} title="Entered values differ from the system load" onClick={onReview} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
+      {needsReview && <button type="button" aria-label={`Review rate and miles for ${label}`} title={entry.tripReviewReason || "Entered values differ from the system load"} onClick={onReview} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
     </div>
     {open && createPortal(<div ref={menu} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }}
       className="z-[80] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left shadow-2xl"

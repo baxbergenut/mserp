@@ -65,7 +65,7 @@ func TestDispatcherCommissionBoardAttribution(t *testing.T) {
 		{DriverID: "driver", Date: "2026-10-27", TransferOut: true, LoadNumber: "4", OriginalRate: "9999", Miles: "1"},
 	}}
 	rule := &CommissionRuleVersion{Rules: workbookCommissionRules()}
-	out := buildDispatcherCommissions(board, nil, rule)
+	out := buildDispatcherCommissions(board, map[string]DispatcherPayInput{"driver": {HomeDays: 0}}, rule)
 	if len(out) != 2 {
 		t.Fatal(out)
 	}
@@ -85,12 +85,12 @@ func TestDispatcherCommissionBoardAttribution(t *testing.T) {
 	board.Entries[0].TransferVersion = 1
 	board.Entries[0].CreditedDispatcherID = "b"
 	board.Entries[0].CreditedDispatcherName = "Second"
-	out = buildDispatcherCommissions(board, nil, rule)
+	out = buildDispatcherCommissions(board, map[string]DispatcherPayInput{"driver": {HomeDays: 0}}, rule)
 	if len(out) != 1 || out[0].Pay != 100 || out[0].LoadCount != 2 {
 		t.Fatal("transfer lost original credit", out)
 	}
 	board.Entries[0].TripReview = true
-	out = buildDispatcherCommissions(board, nil, rule)
+	out = buildDispatcherCommissions(board, map[string]DispatcherPayInput{"driver": {HomeDays: 0}}, rule)
 	if out[0].Pay != 0 || len(out[0].Rows[0].Issues) == 0 {
 		t.Fatal("review split was paid", out)
 	}
@@ -132,6 +132,30 @@ func TestDispatcherCommissionSignedCorrections(t *testing.T) {
 	}
 }
 
+func TestDispatcherHomeDaysFromGrossBoard(t *testing.T) {
+	board := GrossBoard{WeekStart: "2026-10-26", Drivers: []GrossBoardDriver{{ID: "d", Assignments: []DailyAssignment{{Date: "2026-10-26", DispatcherID: "a"}}}}, Entries: []GrossBoardEntry{
+		{DriverID: "d", Date: "2026-10-26", LoadNumber: "1", OriginalRate: "8000", Miles: "3200"},
+		{DriverID: "d", Date: "2026-10-27", DayStatus: "HOME"},
+		{DriverID: "d", Date: "2026-10-27", Slot: 1, DayStatus: "HOME"},
+		{DriverID: "d", Date: "2026-10-28", DayStatus: "HOME", Deleted: true},
+		{DriverID: "d", Date: "2026-10-29", DayStatus: "SHOP"},
+		{DriverID: "d", Date: "2026-11-02", DayStatus: "HOME"},
+	}}
+	rule := &CommissionRuleVersion{Rules: workbookCommissionRules()}
+	auto := buildDispatcherCommissions(board, nil, rule)[0]
+	if !auto.Rows[0].AutoHomeDays || auto.Rows[0].HomeDays != 1 || auto.Rows[0].BoardHomeDays != 1 || auto.Pay != 80 {
+		t.Fatal("unique HOME dates should automatically qualify the tier", auto)
+	}
+	manual := buildDispatcherCommissions(board, map[string]DispatcherPayInput{"d": {HomeDays: 0}}, rule)[0]
+	if manual.Rows[0].AutoHomeDays || manual.Rows[0].HomeDays != 0 || manual.Rows[0].BoardHomeDays != 1 || manual.Pay != 100 {
+		t.Fatal("explicit manual overrides, including zero, must be preserved", manual)
+	}
+	again := buildDispatcherCommissions(board, map[string]DispatcherPayInput{"d": {HomeDays: 7, AutoHomeDays: true}}, rule)[0]
+	if again.Rows[0].HomeDays != 1 {
+		t.Fatal("automatic days must use live board evidence", again)
+	}
+}
+
 func TestDispatcherPayDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_DISPATCHER_PAY_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -151,6 +175,14 @@ func TestDispatcherPayDatabase(t *testing.T) {
 	}
 	initial := strings.ReplaceAll(string(source), "\r\n", "\n")
 	body := strings.TrimSpace(strings.ReplaceAll(string(migration), "\r\n", "\n"))
+	homeMigration, err := os.ReadFile("../../sql/164_dispatcher_home_days.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	homeBody := strings.TrimSpace(strings.ReplaceAll(string(homeMigration), "\r\n", "\n"))
+	if strings.Count(initial, homeBody) != 1 {
+		t.Fatal("home-day init and migration must agree")
+	}
 	if strings.Count(initial, body) != 1 {
 		t.Fatal("init and migration must agree")
 	}
@@ -184,8 +216,15 @@ func TestDispatcherPayDatabase(t *testing.T) {
 				}
 			}
 			if upgrade {
-				exec(strings.Replace(initial, body, "", 1))
+				exec(strings.Replace(strings.Replace(initial, body, "", 1), homeBody, "", 1))
 				exec(string(migration))
+				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('93000000-0000-0000-0000-000000000003','Legacy Home Driver','legacy home driver','cpm',1); INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days) VALUES('2099-01-05','93000000-0000-0000-0000-000000000003',2)`)
+				exec(string(homeMigration))
+				var automatic bool
+				var days int
+				if err = pool.QueryRow(ctx, `SELECT auto_home_days,home_days FROM dispatcher_pay_inputs WHERE driver_id='93000000-0000-0000-0000-000000000003'`).Scan(&automatic, &days); err != nil || automatic || days != 2 {
+					t.Fatal("migration changed an existing manual home-day decision", err, automatic, days)
+				}
 			} else {
 				exec(initial)
 			}
@@ -317,6 +356,20 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			reopened := get()
 			if reopened.Statements[0].Finalized || reopened.Statements[0].Pay != 137.5 {
 				t.Fatal("reopen did not calculate", reopened)
+			}
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2099-01-06','HOME')`, driver)
+			exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status) VALUES($1,'2099-01-06',1,'HOME')`, driver)
+			if err = repo.SaveInput(ctx, "2099-01-05", DispatcherPayInput{DriverID: driver, Version: 1, HomeDays: 7, AutoHomeDays: true}, "test"); err != nil {
+				t.Fatal(err)
+			}
+			automaticRow := get().Statements[0].Rows[0]
+			if !automaticRow.AutoHomeDays || automaticRow.HomeDays != 1 || automaticRow.BoardHomeDays != 1 {
+				t.Fatal("reset must derive unique board days, not caller-supplied days", automaticRow)
+			}
+			exec(`DELETE FROM gross_board_entries WHERE driver_id=$1 AND day_status='HOME'`, driver)
+			exec(`DELETE FROM gross_board_extra_entries WHERE driver_id=$1 AND day_status='HOME'`, driver)
+			if get().Statements[0].Rows[0].HomeDays != 0 {
+				t.Fatal("automatic days did not follow later Gross Board changes")
 			}
 			// Audit and rules are immutable even as the application owner.
 			if _, err = pool.Exec(ctx, `UPDATE dispatcher_commission_rules SET actor_id='changed'`); err == nil {

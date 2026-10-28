@@ -48,10 +48,11 @@ type CommissionRuleChange struct {
 	Rules            CommissionRules `json:"rules"`
 }
 type DispatcherPayInput struct {
-	DriverID string `json:"driverId"`
-	HomeDays int    `json:"homeDays"`
-	Note     string `json:"note"`
-	Version  int    `json:"version"`
+	DriverID     string `json:"driverId"`
+	HomeDays     int    `json:"homeDays"`
+	AutoHomeDays bool   `json:"autoHomeDays,omitempty"`
+	Note         string `json:"note"`
+	Version      int    `json:"version"`
 }
 type DispatcherCommissionRow struct {
 	DispatcherPayInput
@@ -62,6 +63,7 @@ type DispatcherCommissionRow struct {
 	RPM           float64  `json:"rpm"`
 	CreditedGross float64  `json:"creditedGross"`
 	CreditedMiles *float64 `json:"creditedMiles,omitempty"`
+	BoardHomeDays int      `json:"boardHomeDays,omitempty"`
 	AdjustedGross float64  `json:"adjustedGross"`
 	ActualTier    float64  `json:"actualTier"`
 	SelectedTier  float64  `json:"selectedTier"`
@@ -248,14 +250,17 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		counts       map[string]int
 		credit       map[string]int64
 		creditMiles  map[string]int64
+		homeDates    map[string]bool
 		names        map[string]string
 	}
 	totals := map[string]*bucket{}
 	drivers := map[string]GrossBoardDriver{}
 	for _, d := range board.Drivers {
 		drivers[d.ID] = d
-		totals[d.ID] = &bucket{units: map[string]bool{}, counts: map[string]int{}, credit: map[string]int64{}, creditMiles: map[string]int64{}, names: map[string]string{}}
+		totals[d.ID] = &bucket{units: map[string]bool{}, counts: map[string]int{}, credit: map[string]int64{}, creditMiles: map[string]int64{}, homeDates: map[string]bool{}, names: map[string]string{}}
 	}
+	week, _ := time.Parse(time.DateOnly, board.WeekStart)
+	weekEnd := week.AddDate(0, 0, 7).Format(time.DateOnly)
 	for _, e := range board.Entries {
 		if e.Deleted || e.Duplicate || e.TransferOut {
 			continue
@@ -265,6 +270,9 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 			continue
 		}
 		d := drivers[e.DriverID]
+		if e.DayStatus == "HOME" && e.Date >= board.WeekStart && e.Date < weekEnd {
+			b.homeDates[e.Date] = true
+		}
 		if e.DayStatus != "" || (strings.TrimSpace(e.LoadNumber) == "" && e.OriginalRate == "" && e.Miles == "") {
 			continue
 		}
@@ -313,9 +321,15 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 			continue
 		}
 		d := drivers[id]
-		in := inputs[id]
+		in, saved := inputs[id]
+		if !saved {
+			in.AutoHomeDays = true
+		}
+		if in.AutoHomeDays {
+			in.HomeDays = len(b.homeDates)
+		}
 		in.DriverID = id
-		row := DispatcherCommissionRow{DispatcherPayInput: in, DriverName: d.FullName, TruckUnits: []string{}, Gross: commissionMoney(b.gross), Miles: commissionMoney(b.miles), Issues: append([]string{}, b.issues...)}
+		row := DispatcherCommissionRow{DispatcherPayInput: in, BoardHomeDays: len(b.homeDates), DriverName: d.FullName, TruckUnits: []string{}, Gross: commissionMoney(b.gross), Miles: commissionMoney(b.miles), Issues: append([]string{}, b.issues...)}
 		if b.miles > 0 {
 			row.RPM = float64(b.gross) / float64(b.miles)
 		} else {
@@ -377,6 +391,8 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		revision.Rows = append([]DispatcherCommissionRow{}, s.Rows...)
 		for i := range revision.Rows {
 			revision.Rows[i].CreditedMiles = nil
+			revision.Rows[i].AutoHomeDays = false
+			revision.Rows[i].BoardHomeDays = 0
 		}
 		s.Revision = commissionHash(struct {
 			Week      string
@@ -409,14 +425,14 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 	if err != nil {
 		return out, err
 	}
-	rows, err := tx.Query(ctx, `SELECT driver_id::text,home_days,note,version FROM dispatcher_pay_inputs WHERE week_start=$1`, week)
+	rows, err := tx.Query(ctx, `SELECT driver_id::text,home_days,note,version,auto_home_days FROM dispatcher_pay_inputs WHERE week_start=$1`, week)
 	if err != nil {
 		return out, err
 	}
 	inputs := map[string]DispatcherPayInput{}
 	for rows.Next() {
 		var v DispatcherPayInput
-		if err = rows.Scan(&v.DriverID, &v.HomeDays, &v.Note, &v.Version); err != nil {
+		if err = rows.Scan(&v.DriverID, &v.HomeDays, &v.Note, &v.Version, &v.AutoHomeDays); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -509,7 +525,7 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 		return err
 	}
 	in.Note = strings.TrimSpace(in.Note)
-	if in.HomeDays < 0 || in.HomeDays > 7 || len([]rune(in.Note)) > 1000 || in.Version < 0 {
+	if (!in.AutoHomeDays && (in.HomeDays < 0 || in.HomeDays > 7)) || len([]rune(in.Note)) > 1000 || in.Version < 0 {
 		return chargeInvalid("Home days must be 0–7 and comments at most 1,000 characters")
 	}
 	tx, err := r.pool.Begin(ctx)
@@ -537,6 +553,9 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 		for _, row := range s.Rows {
 			if row.DriverID == in.DriverID {
 				found = true
+				if in.AutoHomeDays {
+					in.HomeDays = row.BoardHomeDays
+				}
 			}
 		}
 	}
@@ -553,8 +572,8 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 		return ErrDispatcherPayConflict
 	}
 	var after json.RawMessage
-	err = tx.QueryRow(ctx, `INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days,note) VALUES($1,$2,$3,$4)
- ON CONFLICT(week_start,driver_id) DO UPDATE SET home_days=excluded.home_days,note=excluded.note,version=dispatcher_pay_inputs.version+1 RETURNING to_jsonb(dispatcher_pay_inputs)`, w, in.DriverID, in.HomeDays, in.Note).Scan(&after)
+	err = tx.QueryRow(ctx, `INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days,note,auto_home_days) VALUES($1,$2,$3,$4,$5)
+ ON CONFLICT(week_start,driver_id) DO UPDATE SET home_days=excluded.home_days,note=excluded.note,auto_home_days=excluded.auto_home_days,version=dispatcher_pay_inputs.version+1 RETURNING to_jsonb(dispatcher_pay_inputs)`, w, in.DriverID, in.HomeDays, in.Note, in.AutoHomeDays).Scan(&after)
 	if err != nil {
 		return err
 	}

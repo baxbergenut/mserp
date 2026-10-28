@@ -254,7 +254,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			exec(`UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{trips,0,total_load_pay}','501') WHERE id=8101`)
+			exec(`UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{trips,0,total_load_pay}','700') WHERE id=8101`)
 			mismatch, err := repo.Get(ctx, week)
 			if err != nil {
 				t.Fatal(err)
@@ -263,6 +263,16 @@ func TestLoadTripsDatabase(t *testing.T) {
 				if !e.TripReview || e.SystemOriginalRate != "" {
 					t.Fatal("unreconciled trips accepted", e)
 				}
+				if !strings.Contains(e.TripReviewReason, "$2,013.00") || !strings.Contains(e.TripReviewReason, "$1,813.00") {
+					t.Fatal("missing actionable allocation mismatch", e.TripReviewReason)
+				}
+			}
+			matches, err := repo.SearchLoads(ctx, "SPLIT-1")
+			if err != nil || len(matches) != 1 || matches[0].TripReviewReason == "" {
+				t.Fatal("load search must retain invalid allocation reason", err, matches)
+			}
+			if _, err = repo.SaveEntries(ctx, []GrossBoardEntry{board.Entries[0]}); err == nil || !strings.Contains(err.Error(), "$2,013.00") {
+				t.Fatal("stale selection must explain the source mismatch", err)
 			}
 			exec(`UPDATE loads SET raw_payload=$1::jsonb WHERE id=8101`, splitFixture)
 			// Financial history stays frozen; deletion cannot bypass the guard.

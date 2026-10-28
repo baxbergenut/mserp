@@ -53,9 +53,16 @@ Thresholds, bracket percentages, home-day credit and promotion limit are editabl
 Thresholds must increase, with positive gross tiers, 1–10 tiers, 1–20 brackets per
 tier, at most two decimals and rates between 0 and 100 percent.
 
-Weekly home days (whole 0–7) and comments are versioned per driver-week. They are
-entered explicitly, not inferred from planned leave or the driver's current
-status. Editing is blocked while any affected dispatcher statement is finalized.
+Weekly home days default to the driver's unique, non-deleted HOME dates in that
+Gross Board week. Multiple HOME slots on one date count once; blank days, SHOP,
+RESET and planned/current fleet leave do not count. Qualification uses the full
+driver-week even when dispatchers change. Migration 164 preserves existing saved
+home-day inputs as manual overrides, including zero. Unsaved weeks automatically
+follow the board. The weekly input form can override the count or restore
+"Use Gross Board home days"; comments remain independent. Saving automatic mode
+records the current source count, and later reads derive the live count again.
+Manual days (whole 0–7) and comments are versioned per driver-week. Editing is
+blocked while any affected dispatcher statement is finalized.
 Inputs, finalizations and reason-required reopenings have append-only history.
 
 Finalization checks the reviewed calculation's revision and statement version
@@ -94,7 +101,7 @@ Older split snapshots without recorded own mileage display a dash for that field
 - GET /dispatcher-pay?weekStart=YYYY-MM-DD (defaults current New York week)
 - GET /dispatcher-pay/rules
 - POST /dispatcher-pay/rules (expectedRevision, effectiveWeek, rules)
-- PUT /dispatcher-pay/inputs (weekStart, driverId, homeDays, note, version)
+- PUT /dispatcher-pay/inputs (weekStart, driverId, homeDays, autoHomeDays, note, version)
 - POST /dispatcher-pay/finalize or /reopen (weekStart, dispatcherId, revision,
   version; reopening also requires reason)
 

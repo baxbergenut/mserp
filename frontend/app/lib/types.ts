@@ -14,6 +14,8 @@ export interface DispatcherCommissionRow {
   driverName: string;
   truckUnits: string[];
   homeDays: number;
+  autoHomeDays?: boolean;
+  boardHomeDays?: number;
   note: string;
   version: number;
   gross: number;
@@ -1090,6 +1092,7 @@ export interface GrossBoardEntry {
   loadTripId?: number | null;
   split?: boolean;
   tripReview?: boolean;
+  tripReviewReason?: string;
   trips?: GrossBoardTrip[];
   note?: string;
   slot: number;
@@ -1141,6 +1144,7 @@ export interface GrossBoardBalanceLine {
 }
 
 export interface GrossBoardLoad {
+  tripReviewReason?: string;
   trips?: GrossBoardTrip[];
   split?: boolean;
   id: number;

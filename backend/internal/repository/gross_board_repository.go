@@ -33,6 +33,7 @@ type GrossBoardEntry struct {
 	LoadTripID             *int             `json:"loadTripId"`
 	Split                  bool             `json:"split"`
 	TripReview             bool             `json:"tripReview"`
+	TripReviewReason       string           `json:"tripReviewReason,omitempty"`
 	Trips                  []GrossBoardTrip `json:"trips"`
 	Slot                   int              `json:"slot"`
 	Deleted                bool             `json:"deleted"`
@@ -92,14 +93,15 @@ type GrossBoardBalanceLine struct {
 }
 
 type GrossBoardLoad struct {
-	Trips        []GrossBoardTrip `json:"trips"`
-	Split        bool             `json:"split"`
-	ID           int              `json:"id"`
-	LoadNumber   string           `json:"loadNumber"`
-	OriginalRate string           `json:"originalRate"`
-	Miles        string           `json:"miles"`
-	DriverName   string           `json:"driverName"`
-	PickupDate   string           `json:"pickupDate"`
+	Trips            []GrossBoardTrip `json:"trips"`
+	Split            bool             `json:"split"`
+	TripReviewReason string           `json:"tripReviewReason,omitempty"`
+	ID               int              `json:"id"`
+	LoadNumber       string           `json:"loadNumber"`
+	OriginalRate     string           `json:"originalRate"`
+	Miles            string           `json:"miles"`
+	DriverName       string           `json:"driverName"`
+	PickupDate       string           `json:"pickupDate"`
 }
 
 // Slot zero preserves compatibility with the original daily entry table.
@@ -128,7 +130,7 @@ var grossBoardEffective = `WITH resolved AS (
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
  trip_source.original AS system_original, trip_source.miles AS system_miles,
- trip_source.split,trip_source.review AS trip_review,trip_source.options AS trips,
+ trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips,
  l.id IS NOT NULL AND row_number() OVER (
    PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
  FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
@@ -144,14 +146,14 @@ const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
  coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
- coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name`
+ coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trip_review_reason,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	var trips []byte
 	err := row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
 		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
-		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName)
+		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &e.TripReviewReason, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName)
 	if err != nil {
 		return err
 	}
@@ -297,7 +299,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
- coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split
+ coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason
  FROM loads l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
@@ -308,7 +310,7 @@ func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) (
 	for rows.Next() {
 		var l GrossBoardLoad
 		var trips []byte
-		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate, &trips, &l.Split); err != nil {
+		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate, &trips, &l.Split, &l.TripReviewReason); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(trips, &l.Trips); err != nil {
@@ -419,18 +421,22 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		}
 		original, miles := e.OriginalRate, e.Miles
 		split, review := false, false
+		reviewReason := ""
 		if loadID != nil {
 			// Lock the source before comparing the displayed allocation.
 			if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, *loadID); err != nil {
 				return nil, err
 			}
-			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review)
+			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review,trip_source.review_reason FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review, &reviewReason)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if e.LoadTripID != nil {
 			if loadID == nil || review {
+				if reviewReason != "" {
+					return nil, chargeInvalid("%s", reviewReason)
+				}
 				return nil, ErrGrossBoardTrip
 			}
 			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
@@ -441,7 +447,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 				return nil, err
 			}
 			if occupied {
-				return nil, ErrGrossBoardTrip
+				return nil, chargeInvalid("This trip is already selected for another driver. Choose the trip performed by this driver.")
 			}
 			if (previousTrip == nil || *previousTrip != *e.LoadTripID) && !e.AcceptSystemValues {
 				return nil, ErrGrossBoardTrip
@@ -451,6 +457,9 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			enteredOriginal, enteredMiles = original, miles
 		} else if e.AcceptSystemValues {
 			if review {
+				if reviewReason != "" {
+					return nil, chargeInvalid("%s", reviewReason)
+				}
 				return nil, ErrGrossBoardTrip
 			}
 			var unchanged bool

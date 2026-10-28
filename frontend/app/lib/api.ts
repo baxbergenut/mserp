@@ -698,7 +698,7 @@ export type DispatcherPayReport = import("./types").DispatcherCommissionReport;
 export const fetchDispatcherPay = (query: {weekStart?: string}, signal?: AbortSignal) => apiRequest<DispatcherPayReport>(withQuery("/dispatcher-pay", query), {signal});
 export const fetchDispatcherCommissionRules = () => apiRequest<import("./types").DispatcherCommissionRuleVersion[]>("/dispatcher-pay/rules");
 export const saveDispatcherCommissionRules = (input: {expectedRevision: number; effectiveWeek: string; rules: import("./types").DispatcherCommissionRules}) => apiRequest<{saved: boolean}>("/dispatcher-pay/rules", {method: "POST", body: JSON.stringify(input)});
-export const saveDispatcherPayInput = (input: {weekStart: string; driverId: string; homeDays: number; note: string; version: number}) => apiRequest<{saved: boolean}>("/dispatcher-pay/inputs", {method: "PUT", body: JSON.stringify(input)});
+export const saveDispatcherPayInput = (input: {weekStart: string; driverId: string; homeDays: number; autoHomeDays?: boolean; note: string; version: number}) => apiRequest<{saved: boolean}>("/dispatcher-pay/inputs", {method: "PUT", body: JSON.stringify(input)});
 export const changeDispatcherPayStatement = (action: "finalize" | "reopen", input: {weekStart: string; dispatcherId: string; revision: string; version: number; reason: string}) => apiRequest<{saved: boolean}>(`/dispatcher-pay/${action}`, {method: "POST", body: JSON.stringify(input)});
 
 export const saveMaintenancePM = (input: Pick<import("./types").PreventativeTruck, "truckId" | "lastDate" | "lastMiles" | "recordId" | "recordVersion" | "baselineVersion">) => apiRequest<void>(`/maintenance/preventative/${input.truckId}`, {method:"PUT",body:JSON.stringify(input)});

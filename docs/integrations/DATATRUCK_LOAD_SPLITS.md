@@ -24,6 +24,12 @@ The source `split_expected` flag retains prior split evidence when a later
 response omits trips, including before any driver has selected a trip.
 Selecting a stale/invalid source fails atomically. Ordinary single-trip orders
 continue using parent totals; differing single-trip pay does not establish a split.
+Gross Board and load search expose tripReviewReason for invalid source allocations,
+including the trip/order totals that differ. The Split dialog disables acceptance
+until those allocations reconcile. Save rechecks the reason under the source lock
+and distinguishes an already-claimed trip from invalid totals. A rejected autosave
+retains its draft and exposes explicit Discard unsaved changes, so the user can
+restore the saved board and leave without bypassing financial checks.
 
 Gross Board balances and totals, Driver Pay, Investor Pay, source acceptance and
 dashboard reconciliation use the same trip projection. Loaded/empty mileage and

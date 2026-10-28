@@ -74,12 +74,12 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
         {entry.split && <div className="mb-4 space-y-2">
           <p className="text-sm text-zinc-300">Choose the trip performed by {driverName}. Driver gross stays as entered.</p>
-          {entry.tripReview && <p role="status" className="text-xs text-amber-400">Select a trip. Missing or inconsistent source allocations require review.</p>}
+          {entry.tripReviewReason ? <p role="alert" className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">{entry.tripReviewReason}</p> : entry.tripReview && <p role="status" className="text-xs text-amber-400">Select a trip. Missing or inconsistent source allocations require review.</p>}
           {(entry.trips ?? []).map((trip, index) => <div key={`${trip.id}:${index}`} className="flex items-center justify-between gap-3 rounded border border-zinc-700 p-2 text-sm">
             <div><div>{trip.driverName || "Unassigned"} · {trip.number || "Unknown trip"}</div>
               <div className="text-xs text-zinc-400">{trip.startDate} → {trip.endDate} · Truck {trip.truckUnit || "—"}</div>
               <div>{amountDisplay(trip.originalRate, true) || "—"} · {amountDisplay(trip.miles) || "—"} mi</div></div>
-            <button type="button" disabled={disabled || !trip.id || trip.originalRate === "" || trip.miles === ""} className="shrink-0 rounded bg-blue-600 px-3 py-1 disabled:opacity-50" onClick={() => {
+            <button type="button" disabled={disabled || !!entry.tripReviewReason || !trip.id || trip.originalRate === "" || trip.miles === ""} className="shrink-0 rounded bg-blue-600 px-3 py-1 disabled:opacity-50" onClick={() => {
               onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, loadTripId: trip.id, acceptSystemValues: true,
                 tripReview: false, originalRate: trip.originalRate, enteredOriginalRate: trip.originalRate, systemOriginalRate: trip.originalRate,
                 miles: trip.miles, enteredMiles: trip.miles, systemMiles: trip.miles })); setReviewing(false);
@@ -103,7 +103,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
-  && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
+  && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && previous.entry.note === next.entry.note
   && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date

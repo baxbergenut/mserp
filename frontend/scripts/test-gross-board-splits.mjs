@@ -27,6 +27,8 @@ let entries = drivers.map((d, i) => ({ driverId: d.id, date: week, slot: 0, dele
   loadTripId: null, split: true, tripReview: true, trips, originalRate: '', miles: '', driverRate: i ? '1000' : '200', enteredOriginalRate: '1813', enteredMiles: '555', systemOriginalRate: '', systemMiles: '', version: 1, duplicate: false }));
 let readOnly = false;
 let saves = 0;
+let rejectNextSave = false;
+const mismatchReason = 'Trip gross totals $2,013.00 but the load total is $1,813.00. Correct the DataTruck totals before selecting a trip.';
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   await page.clock.setFixedTime(new Date("2026-10-20T12:00:00Z"));
@@ -35,6 +37,11 @@ try {
   await page.route('**/api/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname.slice(4);
     if (req.method() === 'PUT' && path === '/gross-board') {
+      if (rejectNextSave) {
+        rejectNextSave = false;
+        entries = entries.map(e => ({ ...e, tripReview: true, tripReviewReason: mismatchReason, originalRate: '', miles: '', systemOriginalRate: '', systemMiles: '' }));
+        return route.fulfill({ status: 409, json: { error: mismatchReason } });
+      }
       const changes = req.postDataJSON().entries.map(e => ({ ...e, version: e.version + 1, acceptSystemValues: false }));
       for (const c of changes) {
         const before = entries.find(e => e.driverId === c.driverId);
@@ -48,6 +55,7 @@ try {
       '/auth/session': { user: { id: 'split-test', username: 'Split Test', theme: 'original', permissions: ['board.read', 'loads.read', 'drivers.read', 'trucks.read', 'dispatchers.read', ...(readOnly ? [] : ['board.write'])] }, csrfToken: 'fixture' },
       '/gross-board': { weekStart: week, entries, drivers, balances: [] },
       '/sidebar-counts': {}, '/tasks/count': { count: 0 },
+      '/loads': { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, statuses: [] },
     };
     return route.fulfill({ json: fixtures[path] ?? [] });
   });
@@ -65,11 +73,36 @@ try {
   }
   expect(entries.reduce((sum, e) => sum + Number(e.originalRate), 0)).toBe(1813);
   expect(entries.reduce((sum, e) => sum + Number(e.miles), 0)).toBe(555);
+  // A source-total mismatch is visible before any selection, never queued as
+  // an unsavable edit. Closing review leaves the saved board navigable.
+  const acceptedSaves = saves;
+  entries = entries.map(e => ({ ...e, tripReview: true, tripReviewReason: mismatchReason, originalRate: '', miles: '', systemOriginalRate: '', systemMiles: '' }));
+  await page.reload();
+  await page.getByRole('button', { name: 'Split load SPLIT-1 for Split First', exact: true }).click();
+  let review = page.getByRole('dialog', { name: 'Review load SPLIT-1', exact: true });
+  await expect(review.getByRole('alert')).toContainText('$2,013.00');
+  for (const option of await review.getByRole('button', { name: /^Use (this )?trip$/ }).all()) await expect(option).toBeDisabled();
+  await review.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(review).toHaveCount(0);expect(saves).toBe(acceptedSaves);
+  // A provider correction arriving after review opened can still reject the
+  // stale selection. Explicit discard must release the navigation guard.
+  entries = entries.map((e,i) => ({ ...e, tripReview: false, tripReviewReason: '', originalRate: trips[i].originalRate, miles: trips[i].miles, systemOriginalRate: trips[i].originalRate, systemMiles: trips[i].miles }));
+  await page.reload();await page.getByRole('button', { name: 'Split load SPLIT-1 for Split First', exact: true }).click();
+  review = page.getByRole('dialog', { name: 'Review load SPLIT-1', exact: true });rejectNextSave = true;
+  await review.getByRole('button', { name: 'Use this trip', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: mismatchReason })).toBeVisible();
+  await page.locator('aside').getByRole('link', { name: 'Loads', exact: true }).click();
+  await expect(page.getByText('Saving edits before leaving this week…', { exact: false })).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.getByRole('button', { name: 'Discard unsaved changes', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
+  await page.locator('aside').getByRole('link', { name: 'Loads', exact: true }).click();await page.waitForURL('**/loads');
+  await page.goto(`${base}/gross-board?weekStart=${week}`);
   const before = saves; readOnly = true; await page.reload();
   await page.getByRole('button', { name: 'Split load SPLIT-1 for Split First', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Review load SPLIT-1', exact: true });
   await expect(dialog.getByRole('button', { name: 'Use this trip', exact: true })).toBeDisabled();
   await expect(dialog.getByRole('button', { name: 'Use trip', exact: true })).toBeDisabled();
   expect(saves).toBe(before); expect(errors).toEqual([]);
-  console.log('Split UI passed: explicit trip choices, separate allocations, preserved driver gross, autosave, and read-only protection.');
+  console.log('Split UI passed: explicit trips, source-mismatch blocking, stale rejection/discard recovery, navigation, autosave and read-only protection.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

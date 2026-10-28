@@ -2024,6 +2024,10 @@ assignment lookup lists.
   deep-link Gross Board using driverId + weekStart. Dispatcher payPercentage is
   retired from native profiles/requests; its old column/permission keys remain
   inert for rollback compatibility and the Access group is hidden.
+  Migration 164 derives home days from unique Gross Board HOME dates by default;
+  prior saved inputs remain explicit overrides, including zero. Inputs can restore
+  automatic mode. Blank/other statuses and planned leave are not counted. Frozen
+  statements retain their saved days and amounts.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.
