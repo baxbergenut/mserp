@@ -27,6 +27,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
   const [selected, setSelected] = useState(truckId ? "" : defaultProgram), [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [total,setTotal] = useState(0), [totalPages,setTotalPages] = useState(1);
+  const [visiblePage, setVisiblePage] = useState(1);
   const [allMembers,setAllMembers] = useState<ProgramTruck[] | null>(null);
   const [statusFilter, setStatusFilter] = useViewState("programs:status", "");
   const [page, setPage] = useState(1), [size, setSize] = useState(25), [revision, setRevision] = useState(0);
@@ -43,7 +44,7 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
     if (!access?.canView) return;
     const abort = new AbortController();
     void fetchServiceProgramWorkspace({program:selected,truckId,search:debouncedSearch,status:statusFilter,page,pageSize:size},abort.signal).then(result => {
-      if (!abort.signal.aborted) { setPrograms(result.programs); setMembers(result.trucks.items); setMembersKey(requestKey); setTotal(result.trucks.total); setTotalPages(result.trucks.totalPages); setError(""); setLoading(false); }
+      if (!abort.signal.aborted) { setPrograms(result.programs); setMembers(result.trucks.items); setMembersKey(requestKey); setVisiblePage(result.trucks.page); setTotal(result.trucks.total); setTotalPages(result.trucks.totalPages); setError(""); setLoading(false); }
     }).catch(e => { if (!abort.signal.aborted) { setError(e.message); setLoading(false); } });
     return () => { abort.abort(); };
   }, [access, selected, truckId, revision, debouncedSearch, statusFilter, page, size, requestKey]);
@@ -92,9 +93,9 @@ export function ServiceProgramsWorkspace({ truckId }: { truckId?: string }) {
             <td className="px-3 py-2 tabular-nums" data-miles-since-service>{number(t.milesSinceService)}</td>
             <td className="px-3 py-2">{access?.canEdit && <div className="flex items-center justify-end gap-2">{t.enrolled && programs.find(p => p.id === t.programId)?.active && <button type="button" className="ui-button" onClick={() => setService({ truck: t, baseline: false })}>Record service</button>}<button type="button" className="ui-button" aria-label={`Program settings for ${t.unitNumber} ${t.programName}`} onClick={() => setTruckSettings(t)}><Settings className="h-4 w-4" /></button></div>}</td>
           </tr>; })}
-          {!visible.length && <tr><td colSpan={5 + (!truckId ? 1 : 0) + (!selected ? 1 : 0)} className="p-8 text-center text-zinc-500">{loading ? "Loading trucks…" : "No matching assigned trucks."}</td></tr>}
+          {!visible.length && <tr><td colSpan={5 + (!truckId ? 1 : 0) + (!selected ? 1 : 0)} className="p-8 text-center text-zinc-500">{loading || !error && membersKey !== requestKey ? "Loading trucks…" : "No matching assigned trucks."}</td></tr>}
         </tbody></table></TableShell>
-        <TablePagination page={page} pageSize={size} totalItems={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={v => { setSize(v); setPage(1); }} />
+        <TablePagination page={visiblePage} pageSize={size} totalItems={total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={v => { setSize(v); setPage(1); }} />
       </>}
     </>}
     {needsOptions && (!options || adding && !allMembers) && <p role="status" className="text-sm text-zinc-500">Loading editor…</p>}
