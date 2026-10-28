@@ -81,6 +81,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 				t.Fatal("company column must be removed", err)
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
+			applyAccountingExpenseTestSchema(t, ctx, admin)
 			config := cfg.Copy()
 			config.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			config.ConnConfig.RuntimeParams["role"] = "mserp_app"

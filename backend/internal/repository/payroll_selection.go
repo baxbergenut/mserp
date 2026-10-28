@@ -74,10 +74,10 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 	}
 	rows, err := tx.Query(ctx, `WITH source_weeks AS MATERIALIZED (
  SELECT nullif($1,'')::date week
- UNION SELECT w.week_start FROM driver_pay_weeks w WHERE (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
+ UNION SELECT w.week_start FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)
  AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized)
- UNION SELECT w.week_start FROM investor_pay_weeks w WHERE NOT w.finalized AND (
+ UNION SELECT w.week_start FROM investor_pay_weeks w WHERE accounting_live_date(w.week_start) AND NOT w.finalized AND (
  (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
  (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
  ), board_entries AS MATERIALIZED (
@@ -100,8 +100,8 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
  UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
  UNION SELECT 'driver:'||f.driver_id,'truck:'||a.truck_id FROM (SELECT f.driver_id,f.reported_truck_units FROM source_weeks w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7 WHERE f.driver_id IS NOT NULL AND $1<>''
  UNION SELECT driver_id,reported_truck_units FROM fuel_transactions WHERE driver_id IS NOT NULL AND $1='') f CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key
- UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM pay_source_collections
- UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM pay_source_collections
+ UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM pay_source_collections WHERE accounting_live_date(week_start)
+ UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM pay_source_collections WHERE accounting_live_date(week_start)
  ) SELECT a,b FROM edges WHERE a IS NOT NULL AND b IS NOT NULL`, week)
 	if err != nil {
 		return ctx, err
@@ -151,4 +151,9 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 		}
 	}
 	return context.WithValue(ctx, payrollSelectionKey{}, s), nil
+}
+
+func payrollContextWeek(ctx context.Context) string {
+	w, _ := ctx.Value(payrollWeekKey{}).(string)
+	return w
 }

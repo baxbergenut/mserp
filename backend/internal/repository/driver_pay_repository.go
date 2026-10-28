@@ -28,11 +28,12 @@ func NewDriverPayRepository(pool *pgxpool.Pool) *DriverPayRepository {
 }
 
 type DriverPayAdjustment struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Name   string `json:"name"`
-	Note   string `json:"note"`
-	Amount string `json:"amount"`
+	LegacySheets bool   `json:"legacySheets,omitempty"`
+	ID           string `json:"id"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Note         string `json:"note"`
+	Amount       string `json:"amount"`
 }
 type DriverPayEdits struct {
 	SourceCharges        []PaySourceCharge     `json:"sourceCharges,omitempty"`
@@ -115,12 +116,14 @@ type DriverPayDriver struct {
 	Edits            DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
-	Pagination    *PayPageInfo         `json:"pagination,omitempty"`
-	SetupRequired []InvestorTruckSetup `json:"setupRequired,omitempty"`
-	Issues        []string             `json:"issues,omitempty"`
-	Revision      string               `json:"revision"`
-	WeekStart     string               `json:"weekStart"`
-	Drivers       []DriverPayDriver    `json:"drivers"`
+	ManagedInSheets bool                 `json:"managedInSheets,omitempty"`
+	Pagination      *PayPageInfo         `json:"pagination,omitempty"`
+	SetupRequired   []InvestorTruckSetup `json:"setupRequired,omitempty"`
+	Issues          []string             `json:"issues,omitempty"`
+	Notices         []string             `json:"notices,omitempty"`
+	Revision        string               `json:"revision"`
+	WeekStart       string               `json:"weekStart"`
+	Drivers         []DriverPayDriver    `json:"drivers"`
 }
 
 type InvestorTruckSetup struct {
@@ -155,6 +158,12 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 	return result, tx.Commit(ctx)
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	if archived, ok, err := archivedPayroll(ctx, tx, "driver", week); err != nil || ok {
+		if driverID != "" {
+			archived = selectPayDriver(archived, driverID)
+		}
+		return archived, err
+	}
 	defer db.Phase(ctx, "driver_calculation")()
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	if err := payrollQueryPlans(ctx, tx); err != nil {
@@ -197,10 +206,9 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	if err != nil {
 		return result, err
 	}
-	if err = decorateTransferLoads(ctx, tx, &result); err != nil {
+	if err = finishPayrollRead(ctx, tx, "driver", &result); err != nil {
 		return result, err
 	}
-	result.Revision = payrollRevision(result)
 	return result, nil
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
@@ -212,10 +220,10 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END)::text,''),coalesce(e.driver_rate::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles,e.miles) END)::text,''),coalesce(e.version,0),coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),
- CASE WHEN e.load_trip_id IS NOT NULL THEN jsonb_set(l.raw_payload,'{trip}',coalesce(trip_source.selected_trip,'null'::jsonb)) ELSE l.raw_payload END,
+ CASE WHEN l.id IS NOT NULL THEN jsonb_build_object('stops',l.raw_payload->'stops','trip',CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip ELSE l.raw_payload->'trip' END) END,
  e.load_trip_id,coalesce(trip_source.review,false),
  e.load_trip_id IS NOT NULL AND EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` prior WHERE NOT prior.deleted AND prior.day_status='' AND prior.driver_id=e.driver_id AND prior.load_record_id=l.id AND prior.load_trip_id=e.load_trip_id AND (prior.service_date,prior.slot)<(e.source_date,e.source_slot)),
- coalesce(w.notes,''),coalesce(w.comments,'{}'::jsonb),coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
+ CASE WHEN $4::boolean THEN '' ELSE coalesce(w.notes,'') END,CASE WHEN $4::boolean THEN '{}'::jsonb ELSE coalesce(w.comments,'{}'::jsonb) END,coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
  AND (btrim(e.load_number)<>'' OR e.day_status='SHOP')
@@ -227,7 +235,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale OR d.pay_reimburse)
  AND (d.pay_reimburse OR d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
  OR (d.pay_employment_type='owner_operator' AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
- ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx))
+ ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx), payrollSummaryOnly(ctx))
 	if err != nil {
 		return result, err
 	}
@@ -278,6 +286,9 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if l.LoadRecordID != nil && (l.PickupDate == "" || l.PickupLocation == "" || l.DeliveryLocation == "" || l.TotalMiles == "" || l.LoadedMiles == "" || l.DeadheadMiles == "") {
 			l.Issues = append(l.Issues, "Source details incomplete — refresh load details")
 		}
+		if payrollSummaryOnly(ctx) {
+			l.PickupLocation, l.DeliveryLocation, l.LoadedMiles, l.DeadheadMiles, l.SystemOriginalRate, l.SystemMiles = "", "", "", "", "", ""
+		}
 		basis := l.DriverGross
 		if d.PayType == "cpm" {
 			basis = l.TotalMiles
@@ -291,7 +302,14 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		}
 		i, ok := index[d.ID]
 		if !ok {
-			if err := json.Unmarshal(comments, &d.Edits.Comments); err != nil {
+			if err := func() error {
+				if payrollSummaryOnly(ctx) {
+					d.Edits.Notes = ""
+					d.Edits.Comments = map[string]string{}
+					return nil
+				}
+				return json.Unmarshal(comments, &d.Edits.Comments)
+			}(); err != nil {
 				return result, err
 			}
 			if err := json.Unmarshal(adjustments, &d.Edits.Adjustments); err != nil {

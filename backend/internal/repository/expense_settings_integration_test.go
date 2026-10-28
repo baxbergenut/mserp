@@ -108,6 +108,7 @@ func TestExpenseSettingsDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyExpenseApplicantTestSchema(t, ctx, admin)
 			}
+			applyAccountingExpenseTestSchema(t, ctx, admin)
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)

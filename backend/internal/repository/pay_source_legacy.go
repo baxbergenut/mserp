@@ -12,23 +12,26 @@ import (
 // Existing investor overrides were stored before operating-cost carry existed.
 // Resolve their historical source (or frozen report) without writing on GET.
 func readLegacyInvestorSources(ctx context.Context, tx pgx.Tx, result []paySourceRecord) ([]paySourceRecord, error) {
-	rows, err := tx.Query(ctx, `SELECT truck_id::text,owner_id::text,week_start::text,edits,report,finalized FROM investor_pay_weeks w
-	WHERE ($1::uuid[] IS NULL OR w.owner_id=ANY($1::uuid[])) AND ((edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
+	rows, err := tx.Query(ctx, `SELECT truck_id::text,owner_id::text,week_start::text,edits,report,finalized,
+ EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'),
+ EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll') FROM investor_pay_weeks w
+	WHERE accounting_live_date(w.week_start) AND ($1::uuid[] IS NULL OR w.owner_id=ANY($1::uuid[])) AND ((edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
 	OR (edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))  ) ORDER BY week_start,truck_id`, payrollOwnerIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
 	type legacy struct {
-		id, owner, week string
-		edits           DriverPayEdits
-		card            DriverPayDriver
-		closed          bool
+		id, owner, week        string
+		edits                  DriverPayEdits
+		card                   DriverPayDriver
+		closed                 bool
+		fuelStored, tollStored bool
 	}
 	old := []legacy{}
 	for rows.Next() {
 		var v legacy
 		var body, frozen []byte
-		if err = rows.Scan(&v.id, &v.owner, &v.week, &body, &frozen, &v.closed); err != nil {
+		if err = rows.Scan(&v.id, &v.owner, &v.week, &body, &frozen, &v.closed, &v.fuelStored, &v.tollStored); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -97,7 +100,7 @@ func readLegacyInvestorSources(ctx context.Context, tx pgx.Tx, result []paySourc
 				continue
 			}
 			source := "investor_cost:" + v.id + ":" + strings.ToLower(cost.name)
-			stored := false
+			stored := (cost.name == "Fuel" && v.fuelStored) || (cost.name == "Toll" && v.tollStored)
 			for _, r := range result {
 				if r.Source == source && r.Owner == v.owner && r.Week == v.week {
 					stored = true

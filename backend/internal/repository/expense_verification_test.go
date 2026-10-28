@@ -121,6 +121,7 @@ func TestExpenseVerificationDatabase(t *testing.T) {
 				t.Fatalf("verification table must belong to the runtime role before test grants: %v", e)
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
+			applyAccountingExpenseTestSchema(t, ctx, admin)
 			testCfg := cfg.Copy()
 			testCfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			testCfg.ConnConfig.RuntimeParams["role"] = "mserp_app"

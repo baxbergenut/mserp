@@ -46,7 +46,7 @@ func payrollRevision(report DriverPayWeek) string {
 }
 func overlayPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayWeek, driver string) (DriverPayWeek, error) {
 	rows, err := tx.Query(ctx, `SELECT s.driver_id,s.finalized,s.version,s.finalized_at,coalesce(u.username,''),s.reopened_at,s.reason,s.report
- FROM payroll_settlements s LEFT JOIN app_users u ON u.id=s.finalized_by WHERE s.week_start=$1::date AND ($2='' OR s.driver_id::text=$2)`, report.WeekStart, driver)
+ FROM payroll_settlements s LEFT JOIN app_users u ON u.id=s.finalized_by WHERE s.week_start=$1::date AND ($2='' OR s.driver_id::text=$2) AND ($3::uuid[] IS NULL OR s.driver_id=ANY($3::uuid[]))`, report.WeekStart, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return report, err
 	}
@@ -95,7 +95,6 @@ func overlayPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayW
 		}
 		return a.FullName < b.FullName
 	})
-	report.Revision = payrollRevision(report)
 	return report, nil
 }
 func assertPayrollOpen(ctx context.Context, tx pgx.Tx, driver, week string) error {

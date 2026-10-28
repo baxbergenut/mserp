@@ -15,24 +15,31 @@ const dsn = process.env.MSERP_REVIEW_TEST_DATABASE_URL;
 if (!dsn) throw new Error('Set MSERP_REVIEW_TEST_DATABASE_URL to a local disposable _test database');
 const database = new URL(dsn);
 if (!['localhost', '127.0.0.1'].includes(database.hostname) || !database.pathname.endsWith('_test')) throw new Error('Only local _test databases are permitted');
-const schema = `review_${randomBytes(8).toString('hex')}`;
+const retainedPayrollFixture = process.env.MSERP_REVIEW_PAYROLL_PERF_SCHEMA;
+if (retainedPayrollFixture && !/^payroll_perf_[0-9]+$/.test(retainedPayrollFixture)) throw new Error('Expected an isolated payroll_perf_ test schema');
+const schema = retainedPayrollFixture || `review_${randomBytes(8).toString('hex')}`;
 const temp = await mkdtemp(join(tmpdir(), 'mserp-review-'));
 const password = randomBytes(18).toString('base64url');
 const email = 'review@example.test';
 const apiPort = Number(process.env.MSERP_REVIEW_API_PORT || 18570), port = Number(process.env.MSERP_REVIEW_PORT || 13570);
 const base = `http://127.0.0.1:${port}`;
 const sql = input => execFileSync(process.env.PSQL_PATH || 'psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-let api, server, stopping = false;
+let api, server, stopping = false, ownsSchema = !retainedPayrollFixture;
 async function stop() {
   if (stopping) return;
   stopping = true;
   if (server) await new Promise(done => server.close(done));
   if (api && api.exitCode === null) { const exited = new Promise(done => api.once('exit', done)); api.kill(); await exited; }
-  sql(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  if(ownsSchema)sql(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
 try {
+ if (retainedPayrollFixture) {
+  sql(`SET search_path TO ${schema},public; DO $$ BEGIN IF (SELECT count(*) FROM drivers WHERE full_name LIKE 'Perf Driver %')<>176 OR NOT coalesce((SELECT active AND receipt->>'synthetic'='true' FROM accounting_cutover),false) THEN RAISE EXCEPTION 'Expected active synthetic payroll fixture'; END IF; END $$;`);
+  ownsSchema=true;
+  sql(`SET search_path TO ${schema},public; INSERT INTO app_users(username,password_hash,email,role_id) VALUES('Local Review',crypt('${password}',gen_salt('bf')),'${email}',(SELECT id FROM app_roles WHERE system_role));`);
+ } else {
   const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
   sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public; ALTER EXTENSION pgcrypto SET SCHEMA public; CREATE SCHEMA ${schema}; SET search_path TO ${schema},public;\n${init}\n
     GRANT USAGE ON SCHEMA ${schema} TO mserp_app;
@@ -59,6 +66,7 @@ try {
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-10-05',100 FROM expenses;
   `);
   seedProfileFixture(sql, schema);
+ }
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);

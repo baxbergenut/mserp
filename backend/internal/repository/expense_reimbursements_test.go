@@ -63,7 +63,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 				if strings.Count(initial, body) != 1 {
 					t.Fatal("missing reimbursement migration")
 				}
-				initial = strings.Replace(initial, body, "", 1)
+				initial = withoutAccountingCutoverMigration(t, strings.Replace(initial, body, "", 1))
 			}
 			exec(initial)
 			var legacyExpense, legacyDriver string
@@ -78,6 +78,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 					t.Fatal("old frozen credit not reserved")
 				}
 			}
+			applyAccountingCutoverMigration(t, ctx, admin)
 			exec("GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + quoted + " TO mserp_app")
 			cfg, e := pgxpool.ParseConfig(dsn)
 			if e != nil {

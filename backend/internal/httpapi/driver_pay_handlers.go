@@ -87,6 +87,9 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 		a := &e.Adjustments[i]
 		a.ID = strings.ToLower(strings.TrimSpace(a.ID))
 		a.Name = strings.TrimSpace(a.Name)
+		if a.LegacySheets && strings.TrimSpace(a.Note) == "" {
+			return errors.New("Sheets adjustments require a Sheets reference")
+		}
 		a.Amount = strings.TrimSpace(a.Amount)
 		if !isUUID(a.ID) || seen[a.ID] {
 			return errors.New("adjustments need unique valid ids")
@@ -202,13 +205,15 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, queryErr.Error())
 			return
 		}
-		result, err := repo.Get(r.Context(), week)
+		var result repository.DriverPayWeek
+		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+			result, err = repo.PayrollPage(r.Context(), "driver", week, query)
+		} else {
+			result, err = repo.Get(r.Context(), week)
+		}
 		if err != nil {
 			fail(w, err)
 			return
-		}
-		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
-			result = repository.PaginatePay(result, query)
 		}
 		writeJSON(w, 200, result)
 	})

@@ -23,6 +23,7 @@ type payrollCache struct {
 // dependency, including newly tracked tables and financial audit inputs. Changes
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
+	"accounting_cutover_previews", "accounting_payroll_archives",
 	"driver_board_driver_order",
 	"driver_board_dispatcher_order",
 	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
@@ -35,26 +36,8 @@ var payrollUnrelatedTables = []string{
 // report's repeatable-read snapshot preserves concurrent-commit safety while
 // allowing cache reuse across unrelated session activity. Writers never use this.
 func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind string, week time.Time, read func() (DriverPayWeek, error)) (DriverPayWeek, error) {
-	var snapshot string
-	var revisionTable *string
-	if err := tx.QueryRow(ctx, `SELECT to_regclass('payroll_cache_revisions')::text`).Scan(&revisionTable); err != nil {
-		return DriverPayWeek{}, err
-	}
-	query := `SELECT pg_current_snapshot()::text`
-	var args []any
-	if revisionTable != nil {
-		// A future table must opt into change tracking. Until then, conservatively
-		// fall back to MVCC invalidation instead of risking an untracked input.
-		query = `SELECT CASE WHEN EXISTS (
- SELECT 1 FROM pg_tables t WHERE t.schemaname=current_schema()
- AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
- AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
-) THEN 'snapshot:' || pg_current_snapshot()::text
- ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),'') END
- FROM payroll_cache_revisions`
-		args = []any{payrollUnrelatedTables}
-	}
-	if err := tx.QueryRow(ctx, query, args...).Scan(&snapshot); err != nil {
+	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	if err != nil {
 		return DriverPayWeek{}, err
 	}
 	key := kind + ":" + week.Format(time.DateOnly) + ":" + ChargeCurrentWeek() + ":" + snapshot
@@ -135,4 +118,31 @@ func selectPayDriver(report DriverPayWeek, id string) DriverPayWeek {
 	report.Drivers = selected
 	report.Revision = payrollRevision(report)
 	return report
+}
+
+// Shared by cache keys and summary finalization tokens; untracked inputs fall back to MVCC.
+func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
+	var snapshot string
+	var revisionTable *string
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('payroll_cache_revisions')::text`).Scan(&revisionTable); err != nil {
+		return "", err
+	}
+	query := `SELECT 'snapshot:' || pg_current_snapshot()::text`
+	var args []any
+	if revisionTable != nil {
+		// A future table must opt into change tracking. Until then, conservatively
+		// fall back to MVCC invalidation instead of risking an untracked input.
+		query = `SELECT CASE WHEN EXISTS (
+ SELECT 1 FROM pg_tables t WHERE t.schemaname=current_schema()
+ AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
+ AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
+) THEN 'snapshot:' || pg_current_snapshot()::text
+ ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),'') END
+ FROM payroll_cache_revisions`
+		args = []any{payrollUnrelatedTables}
+	}
+	if err := tx.QueryRow(ctx, query, args...).Scan(&snapshot); err != nil {
+		return "", err
+	}
+	return snapshot, nil
 }

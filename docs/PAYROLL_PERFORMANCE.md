@@ -1,5 +1,79 @@
 # Payroll latency work
 
+## Accounting cutover measurements — October 28, 2026
+
+Migration 160 installs inactive. Active accounting bounds historical ledger and
+legacy-override reconstruction at the reviewed start week. Prior source collections
+are grouped in SQL; only current/future receipts retain individual buckets. No
+historical week is finalized for performance. Activation retains immutable archive
+reports, including unfinished drafts, which subsequent archived reads serve directly.
+
+Current pagination uses a compact calculation sharing the authoritative routing,
+carry and frozen-report rules. It omits source notes/comments, retained load display
+fields, transfer decoration and full-report JSON hashing. It still calculates every
+participant's financial dependencies before pagination; it is not a visible-row-only
+total. Detailed statements hydrate only the requested connected driver/team/owner set.
+Summaries and details use separate caches with committed input revisions, including
+cutover and external receipts, and concurrent-request deduplication. Migration 160
+also enrolls tables introduced after the original revision registry; their absence
+previously forced every payroll cache to use the global database snapshot.
+
+Current reports use a whole-input revision token instead of hashing rendered report
+JSON. Finalization still performs an uncached complete calculation under the financial
+lock, and rejects a changed input token. Untracked tables conservatively fall back to
+the database snapshot for cache invalidation and the original full-report hash for
+finalization. Archived reports keep their retained revisions. Compact/full
+totals, filters, metadata and revisions and selected/full statement JSON are tested.
+
+The full synthetic fixture on a Windows workstation/PostgreSQL 17 produced these
+repository p95 timings. There are 20 samples per ordinary action, 100 for concurrent
+actions, and no errors. Concurrent summary reads include ten committed synthetic
+load updates. The fixture cutover is October 5 to exercise its four-week history;
+the product default remains October 26. These are **not production browser p95s**.
+
+| Action | Driver Pay | Investor Pay |
+| --- | ---: | ---: |
+| Cold compact summary | 204.48 ms | 209.49 ms |
+| Cached summary | 12.07 ms | 11.23 ms |
+| Summary after financial change | 247.60 ms | 189.06 ms |
+| Selected detailed calculation | 79.39 ms | 71.09 ms |
+| Individual save | 75.37 ms | 80.69 ms |
+| Five simultaneous saves | 520.80 ms | 444.92 ms |
+| Five summary readers with source updates | 208.21 ms | 201.12 ms |
+
+Raw p50/p95/p99/max and fixture scope are in
+[the October 28 artifact](performance/payroll-2026-10-28.json). Cold calculations
+still perform whole-fleet financial routing; this stage does not implement a separate
+SQL-only totals engine. Further batching and narrower invalidation require measured
+plans and parity coverage. No speculative financial indexes or weaker locks were used.
+
+A read-only production baseline built from the deployed `3b07bbc` measured full
+Driver Pay at 668.79/511.61 ms (57 queries) and Investor Pay at 384.99/150.73 ms
+(39 queries). Two samples are a diagnostic baseline, not a p95 claim. No payroll
+writes or stress tests ran against production.
+
+The real browser check used all 176 synthetic drivers, five distinct signed-in
+accounts and committed load updates, with 175 ms added to each API response.
+Conservative automation-to-visible-result p95 was 1,575 ms for full cached page
+navigation, 109 ms for expansion (mostly already-fetched details; first cold
+expansion reached 1,011 ms), 316 ms for filtering, 990 ms for individual saves and
+1,909 ms for concurrent saves. First page load was one 1,594 ms sample. Ordinary
+cases have 20 samples and concurrent saves have 100. These measurements shared
+the workstation with other local regression work, and full navigation includes
+authentication/rendering. They are retained as limits, not a clean production
+comparison. **The 300 ms browser p95 target remains unmet**, including filtering,
+saves and cold expansion. Further performance work remains necessary.
+
+To reproduce the repository run, set the disposable test DSN and
+`MSERP_PAYROLL_PERF=1`, `MSERP_PAYROLL_PERF_CUTOVER=1`,
+`MSERP_PAYROLL_PERF_SUMMARY=1`, `MSERP_PAYROLL_PERF_RUNS=20` before running
+`go test ./internal/repository -run '^TestPayrollPerformance$' -count=1 -v`.
+For full-size browser checks, create that fixture with
+`MSERP_PAYROLL_KEEP_FIXTURE=1`, pass the printed schema to
+`MSERP_REVIEW_PAYROLL_PERF_SCHEMA` when starting `frontend/scripts/review-local.mjs`,
+and use `MSERP_PERF_WEEK_START=2026-10-05` with `measure-cutover-payroll.mjs`.
+The launcher validates the synthetic fixture and drops it when stopped normally.
+
 ## Release gate
 
 Routine Driver Pay and Investor Pay actions must finish below 300 ms at p95,

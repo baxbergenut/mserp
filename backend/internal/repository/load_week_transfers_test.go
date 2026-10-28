@@ -59,7 +59,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				if strings.Count(body, mig) != 1 {
 					t.Fatal("migration missing from init")
 				}
-				body = strings.Replace(body, mig, "", 1)
+				body = withoutAccountingCutoverMigration(t, strings.Replace(body, mig, "", 1))
 			}
 			exec(body)
 			const driver = "91000000-0000-0000-0000-000000000001"
@@ -75,6 +75,11 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			exec(`INSERT INTO loads(id,load_id,status,total_pay,load_pay,total_miles,truck_id,raw_payload) VALUES(9101,'MOVE-SUN','delivered',3000,3000,600,$1,'{}'),(9102,'MONDAY','dispatched',1000,1000,100,$1,'{}');INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($2,'2026-10-25','MOVE-SUN',9101,2800),($2,'2026-10-26','MONDAY',9102,900)`, truck, driver)
 			if migrated {
 				exec(mig)
+				cutover, e := os.ReadFile("../../sql/160_accounting_cutover.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(cutover))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;SET ROLE mserp_app`)
 			pay := NewDriverPayRepository(pool)

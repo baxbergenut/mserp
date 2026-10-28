@@ -34,7 +34,15 @@ type paySourceRecord struct {
 func sourceKey(source, owner string) string { return source + "|" + owner }
 func readPaySources(ctx context.Context, tx pgx.Tx) ([]paySourceRecord, error) {
 	defer db.Phase(ctx, "source_ledger")()
-	rows, err := tx.Query(ctx, `SELECT source,owner_id::text,week_start::text,kind,statement_id::text,truck_id::text,name,base::text,amount::text,version,statement FROM pay_source_collections WHERE ($1::uuid[] IS NULL OR owner_id=ANY($1::uuid[])) ORDER BY week_start,source,owner_id`, payrollOwnerIDs(ctx))
+	rows, err := tx.Query(ctx, `WITH relevant AS (
+ SELECT *,CASE WHEN week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket
+ FROM pay_source_collections WHERE accounting_live_date(week_start) AND ($1::uuid[] IS NULL OR owner_id=ANY($1::uuid[]))
+ ), grouped AS (SELECT *,sum(base) OVER(PARTITION BY source,owner_id,bucket) total_base,
+ sum(amount) OVER(PARTITION BY source,owner_id,bucket) total_amount,
+ sum(version) OVER(PARTITION BY source,owner_id,bucket) total_version FROM relevant), latest AS (
+ SELECT DISTINCT ON(source,owner_id,bucket) * FROM grouped ORDER BY source,owner_id,bucket,week_start DESC)
+ SELECT source,owner_id::text,bucket,kind,statement_id::text,truck_id::text,name,total_base::text,total_amount::text,total_version::integer,statement
+ FROM latest ORDER BY bucket,source,owner_id`, payrollOwnerIDs(ctx), payrollContextWeek(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +329,7 @@ func setInvestorSourceCosts(d *DriverPayDriver) {
 }
 
 func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *DriverPayEdits, kind, actor string) error {
+	ctx = payrollWeekContext(ctx, edits.WeekStart)
 	defer db.Phase(ctx, "source_validation_write")()
 	if len(d.Edits.SourceCharges) == 0 && len(edits.SourceCharges) == 0 {
 		edits.SourceCharges = []PaySourceCharge{}

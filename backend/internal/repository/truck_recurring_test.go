@@ -70,7 +70,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				}
 				prior := strings.ReplaceAll(string(source), "\r\n", "\n")
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
-				exec(withoutTruckRecurringMigration(t, prior))
+				exec(withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, prior)))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
     INSERT INTO driver_charge_types(id,name,direction,amount,amounts) VALUES('81000000-0000-0000-0000-000000000002','charge','charge',25,ARRAY[25]::numeric[]);
     INSERT INTO driver_charge_schedules(id,driver_id,type_id,kind,name,direction,start_week,eligibility) VALUES('81000000-0000-0000-0000-000000000003','81000000-0000-0000-0000-000000000001','81000000-0000-0000-0000-000000000002','recurring','charge','charge','2026-10-05','calendar');
@@ -100,6 +100,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal("retirement audit missing", count, e)
 				}
 			}
+			applyAccountingCutoverMigration(t, ctx, admin)
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()
 			app.ConnConfig.RuntimeParams["search_path"] = schema + ",public"

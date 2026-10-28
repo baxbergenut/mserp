@@ -69,14 +69,14 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT s.id::text,s.driver_id::text,d.full_name,s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count FROM driver_charge_schedules s JOIN drivers d ON d.id=s.driver_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY d.full_name,s.name,s.id`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT s.id::text,s.driver_id::text,d.full_name,s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count,(s.kind='installment' AND NOT accounting_live_source('installment',s.id,s.start_week)) FROM driver_charge_schedules s JOIN drivers d ON d.id=s.driver_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY d.full_name,s.name,s.id`, driver, payrollDriverIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
 	index := map[string]int{}
 	for rows.Next() {
 		var s ChargeSchedule
-		if err = rows.Scan(&s.ID, &s.DriverID, &s.DriverName, &s.TypeID, &s.Kind, &s.Name, &s.Direction, &s.StartWeek, &s.EndWeek, &s.Eligibility, &s.Total, &s.Version, &s.InstallmentCount); err != nil {
+		if err = rows.Scan(&s.ID, &s.DriverID, &s.DriverName, &s.TypeID, &s.Kind, &s.Name, &s.Direction, &s.StartWeek, &s.EndWeek, &s.Eligibility, &s.Total, &s.Version, &s.InstallmentCount, &s.ManagedInSheets); err != nil {
 			rows.Close()
 			return data, loads, err
 		}

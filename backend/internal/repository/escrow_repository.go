@@ -18,6 +18,7 @@ type EscrowPayment struct {
 }
 
 type Escrow struct {
+	ManagedInSheets bool            `json:"managedInSheets,omitempty"`
 	HeldAmount      string          `json:"heldAmount"`
 	ReleasedAmount  string          `json:"releasedAmount"`
 	Releases        []EscrowRelease `json:"releases"`
@@ -56,7 +57,7 @@ type EscrowPage struct {
 	Summary EscrowSummary `json:"summary"`
 }
 
-const escrowBalancesSQL = `SELECT e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
+const escrowBalancesSQL = `SELECT NOT accounting_live_source('escrow',e.id,e.start_date) managed_in_sheets,e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
  coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
  e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0) remaining_amount,
@@ -87,14 +88,14 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 		return EscrowPage{}, err
 	}
 	page := q.Pagination.Normalize(total)
-	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $6 OFFSET $7`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group, page.PageSize, page.Offset())
+	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text,managed_in_sheets FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $6 OFFSET $7`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group, page.PageSize, page.Offset())
 	if err != nil {
 		return EscrowPage{}, err
 	}
 	items := []Escrow{}
 	for rows.Next() {
 		var e Escrow
-		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version, &e.HeldAmount, &e.ReleasedAmount); err != nil {
+		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version, &e.HeldAmount, &e.ReleasedAmount, &e.ManagedInSheets); err != nil {
 			rows.Close()
 			return EscrowPage{}, err
 		}
@@ -137,6 +138,7 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 				releases.Close()
 				return EscrowPage{}, releaseErr
 			}
+			release.Editable = release.Editable && !items[i].ManagedInSheets
 			items[i].Releases = append(items[i].Releases, release)
 		}
 		releaseErr = releases.Err()

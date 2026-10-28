@@ -65,7 +65,10 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	if memo != nil && memo.costsLoaded {
 		return memo.costs, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT driver_id::text,week_start::text,fuel_base::text,toll_base::text,fuel_amount::text,toll_amount::text FROM driver_pay_cost_collections WHERE ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[])) ORDER BY week_start,driver_id`, payrollDriverIDs(ctx))
+	rows, err := tx.Query(ctx, `SELECT driver_id::text,CASE WHEN week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket,
+ sum(fuel_base)::text,sum(toll_base)::text,sum(fuel_amount)::text,sum(toll_amount)::text
+ FROM driver_pay_cost_collections WHERE accounting_live_date(week_start) AND ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[]))
+ GROUP BY driver_id,bucket ORDER BY bucket,driver_id`, payrollDriverIDs(ctx), payrollContextWeek(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +88,7 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	}
 	// Existing overrides predate the collection ledger. Resolve their actual
 	// routed source report (or frozen settlement), preserving historical amounts.
-	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text,s.report FROM driver_pay_weeks w LEFT JOIN payroll_settlements s ON s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized WHERE ($1::uuid[] IS NULL OR w.driver_id=ANY($1::uuid[])) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`, payrollDriverIDs(ctx))
+	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text,s.report FROM driver_pay_weeks w LEFT JOIN payroll_settlements s ON s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized WHERE accounting_live_date(w.week_start) AND ($1::uuid[] IS NULL OR w.driver_id=ANY($1::uuid[])) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +249,7 @@ func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) 
 }
 
 func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits DriverPayEdits, actor string) error {
+	ctx = payrollWeekContext(ctx, edits.WeekStart)
 	state := d.Edits.Costs
 	if state == nil {
 		return ErrDriverPayConflict
@@ -305,7 +309,7 @@ func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits
 	// Pin pre-ledger sources when a new collection relies on them. Frozen legacy
 	// settlements already supply immutable source/amount snapshots on reads.
 	for _, old := range records {
-		if old.Driver != d.ID || old.Week >= r.Week {
+		if old.Week == "" || old.Driver != d.ID || old.Week >= r.Week {
 			continue
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO driver_pay_cost_collections(driver_id,week_start,fuel_base,toll_base,fuel_amount,toll_amount,updated_by)

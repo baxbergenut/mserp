@@ -37,7 +37,7 @@ const truckColumnStyle = { left: `max(${columnWidths[0]}px, ${columnWidths[0] / 
 const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
 
 export default function GrossBoardPage() {
-  const canEdit = usePermissions().includes("board.write");
+  const hasEditPermission = usePermissions().includes("board.write");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
@@ -55,6 +55,7 @@ export default function GrossBoardPage() {
     return () => clearTimeout(timer);
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
+  const canEdit=hasEditPermission&&!board?.managedInSheets;
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -306,7 +307,7 @@ export default function GrossBoardPage() {
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={live.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${live.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{live.connected ? "Live" : "Connecting…"}</span>
-          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{!canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
+          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{board?.managedInSheets ? "Managed in Sheets · read only" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
         </div></div></div>
 
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
@@ -378,7 +379,7 @@ export default function GrossBoardPage() {
       </BoardScrollArea>}
       <GrossPresence peers={live.peers} />
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
-        opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
+        openingReference={openings.get(selectedDriver.id)?.openingReference} opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
         entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}
     </div>
   );

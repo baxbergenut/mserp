@@ -33,15 +33,18 @@ expense_exporter_stopped=false
 previous_release=$(readlink -f "$current_link" 2>/dev/null || true)
 permissions_migration=112_permissions_v2.sql
 manager_verification_migration=151_retire_expense_manager_verification.sql
+accounting_cutover_migration=160_accounting_cutover.sql
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
-    local applied manager_removed
+    local applied manager_removed accounting_installed
     # Detect the committed schema even if recording the migration ledger failed.
     applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
     manager_removed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='expenses' AND column_name='manager_verified')") || return 1
-    [[ $manager_removed == f ]] || { [[ $manager_removed == t ]] && [[ -f $1/migrations/$manager_verification_migration ]]; }
+    [[ $manager_removed == f ]] || { [[ $manager_removed == t ]] && [[ -f $1/migrations/$manager_verification_migration ]]; } || return 1
+    accounting_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.accounting_cutover') IS NOT NULL") || return 1
+    [[ $accounting_installed == f ]] || { [[ $accounting_installed == t ]] && [[ -f $1/migrations/$accounting_cutover_migration ]]; }
 }
 activate_release() {
     local target=$1

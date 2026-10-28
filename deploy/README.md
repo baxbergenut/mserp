@@ -50,6 +50,12 @@ application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
+Migration 160 installs Accounting cutover **inactive**. Install the updated
+deployment helper first: releases without migration 160 cannot be restored after
+it is installed, because they ignore external settlements and the accounting
+boundary. Activation is a separate reviewed administrator action. See
+`docs/ACCOUNTING_CUTOVER.md` for backup/Sheets references, preview and activation.
+
 Migration 151 removes manager verification and its historical records. Install
 the updated deployment helper before releasing it. It stops the API and any
 active expense-sheet exporter before the cutover and restarts them on the new

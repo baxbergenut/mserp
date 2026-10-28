@@ -6,8 +6,8 @@ import type { GrossBoardBalanceLine, GrossBoardEntry } from "@/app/lib/types";
 import { BoardDialog } from "./BoardDialog";
 import { balanceLabel, decimalDisplay, hundredths, incompleteRates, rateBalance, rateChange, signedMoney } from "./board";
 
-export function BalanceDetails({ driverId, driverName, week, opening, openingIncomplete, entries, onClose }: {
-  driverId: string; driverName: string; week: string; opening: string; openingIncomplete: number;
+export function BalanceDetails({ driverId, driverName, week, opening, openingReference, openingIncomplete, entries, onClose }: {
+  driverId: string; driverName: string; week: string; opening: string; openingReference?: string; openingIncomplete: number;
   entries: GrossBoardEntry[]; onClose: () => void;
 }) {
   const [history, setHistory] = useState<GrossBoardBalanceLine[]>([]);
@@ -40,7 +40,8 @@ export function BalanceDetails({ driverId, driverName, week, opening, openingInc
           <div className="mt-1 font-mono text-sm">{signedMoney(value as bigint)}</div>
         </div>)}
     </div>
-    <p className="mt-3 text-xs text-zinc-400">{balanceLabel(balance)} · Positive balances are available for later load additions; negative balances still need to be offset. History starts with the first saved board entry.</p>
+    <p className="mt-3 text-xs text-zinc-400">{balanceLabel(balance)} · Positive balances are available for later load additions; negative balances still need to be offset.</p>
+    {openingReference && <p className="mt-2 text-xs text-zinc-400">Reviewed Sheets opening · {openingReference}. This rate balance does not change payroll earnings or debt.</p>}
     {incomplete > 0 && <p className="mt-3 text-xs text-amber-300">{incomplete} incomplete {incomplete === 1 ? "entry is" : "entries are"} excluded until a load number, total gross, and driver rate are entered.</p>}
     {error && <p role="alert" className="mt-4 text-red-300">{error} <button className="underline" onClick={() => setAttempt((value) => value + 1)}>Retry history</button></p>}
     {loading ? <p role="status" className="mt-5 text-zinc-500">Loading history…</p> : !error && <div className="mt-5 overflow-x-auto">

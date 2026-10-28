@@ -869,6 +869,7 @@ export interface ExpenseApplicant { id: string; fullName: string; status: "appli
 export interface ExpenseMaintenance { recordId?: string; version?: number; odometer: number | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string; oilType: string; }
 
 export interface Expense {
+ managedInSheets?:boolean; balanceVersion:number;
   maintenance?: ExpenseMaintenance;
   canEdit?: boolean;
   applicantId?: string | null;
@@ -1072,10 +1073,11 @@ export interface GrossBoardDriver {
 }
 
 export interface GrossBoard {
+ managedInSheets?: boolean; cutoverWeek?: string;
   weekStart: string;
   drivers: GrossBoardDriver[];
   entries: GrossBoardEntry[];
-  balances: { driverId: string; openingBalance: string; openingIncomplete: number }[];
+  balances: { driverId: string; openingBalance: string; openingIncomplete: number; openingReference?:string }[];
 }
 
 export interface GrossBoardBalanceLine {
@@ -1131,6 +1133,7 @@ export interface TaskUser { id: string; name: string }
 export interface SystemTaskAssignment { assigneeRoleIds?: string[]; kind: "maintenance_pm" | "five_eld_truck" | "driver_onboarding" | "driver_offboarding" | "relay_review" | "escrow_release" | "relay_setup" | "weighmytruck_setup" | "datatruck_setup"; assigneeId: string | null; assigneeIds?: string[]; version: number }
 
 export interface DriverPayAdjustment {
+ legacySheets?:boolean;
   id: string;
   kind: "reimbursement" | "addition" | "deduction";
   name: string;
@@ -1265,6 +1268,8 @@ export interface PayPageInfo {
   payable: string;
 }
 export interface DriverPayWeek {
+ notices?: string[];
+ managedInSheets?:boolean;
   pagination?: PayPageInfo;
   setupRequired?: { truckId: string; truckUnit: string; ownerId: string; ownerName: string; driverId?: string; driverName?: string; dispatcherId?: string; dispatcherName?: string }[];
  issues?: string[];
@@ -1336,6 +1341,7 @@ export interface ChargeOccurrence {
   version: number; scheduleVersion: number; typeVersion: number; reset?: boolean;
 }
 export interface ChargeSchedule {
+  managedInSheets?: boolean;
   typeVersion: number;
   installmentCount: number;
   id: string; driverId: string; driverName: string; typeId: string | null; kind: "recurring" | "installment";
@@ -1384,6 +1390,7 @@ export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckCha
 export interface EscrowRelease { id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
 export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
 export interface Escrow {
+  managedInSheets?: boolean;
   heldAmount: string;
   releasedAmount: string;
   releases: EscrowRelease[];
@@ -1545,3 +1552,8 @@ export type ExpenseDriverChoice = Pick<DriverOption, "id" | "fullName" | "truckI
 export type ExpenseTruckChoice = Pick<TruckOption, "id" | "unitNumber" | "driverId" | "isCompanyOwned"> & { ownerId: string | null };
 export type ExpenseOwnerChoice = Pick<InvestorOption, "id" | "fullName" | "driverId" | "isCompany">;
 export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: ExpenseDriverChoice[]; trucks: ExpenseTruckChoice[]; owners: ExpenseOwnerChoice[]; }
+
+export interface AccountingOpening {driverId:string;name?:string;amount:string;reference:string}
+export interface AccountingCutover {version:number;weekStart:string;backupReference:string;sheetsReference:string;openings:AccountingOpening[];legacyExpenseIds:string[];active:boolean;activatedAt?:string;receipt?:unknown;drivers:{id:string;name:string}[]}
+export interface CutoverPreview {id:string;version:number;revision:string;archivedWeeks:number;items:{kind:string;id:string;week:string;description:string;blocking:boolean}[]}
+export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:string;reference:string;reversesId?:string;version:number;actor?:string;createdAt?:string}

@@ -115,6 +115,13 @@ func TestPayrollPerformance(t *testing.T) {
  ANALYZE;
  `)
 	exec("GRANT USAGE ON SCHEMA " + schema + " TO mserp_app; GRANT ALL ON ALL TABLES IN SCHEMA " + schema + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + schema + " TO mserp_app")
+	if os.Getenv("MSERP_PAYROLL_PERF_CUTOVER") == "1" {
+		// Synthetic fixture activation only. Product activation is covered by
+		// TestAccountingCutoverDatabase and the browser test, never bypassed live.
+		exec(`INSERT INTO accounting_legacy_sources(kind,source_id) SELECT 'escrow',id FROM driver_escrows;
+ INSERT INTO accounting_rate_openings(driver_id,amount,reference) SELECT id,0,'Synthetic reviewed zero' FROM drivers;
+ UPDATE accounting_cutover SET active=true,week_start='2026-10-05',version=version+1,activated_at=now(),receipt='{"synthetic":true}';`)
+	}
 	cfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 	cfg.ConnConfig.RuntimeParams["role"] = "mserp_app"
 	cfg.ConnConfig.RuntimeParams["jit"] = "off"
@@ -144,6 +151,19 @@ func TestPayrollPerformance(t *testing.T) {
 			}
 			if e != nil {
 				t.Fatal(e)
+			}
+			// The compact calculation must preserve totals, search, metadata and
+			// the whole-input revision before any detailed statement is requested.
+			for _, q := range []PayPageQuery{{Pagination: Pagination{Page: 1, PageSize: 25}, Summary: true}, {Pagination: Pagination{Page: 2, PageSize: 25}, Summary: true}, {Pagination: Pagination{Page: 1, PageSize: 25}, Summary: true, Search: "Owner"}} {
+				want, _ := json.Marshal(PaginatePay(full, q))
+				page, err := repo.PayrollPage(ctx, kind, week, q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, _ := json.Marshal(page)
+				if string(want) != string(got) {
+					t.Fatalf("%s compact calculation differs\n%s\n%s", kind, want, got)
+				}
 			}
 			for _, d := range full.Drivers {
 				var selected DriverPayWeek
@@ -228,6 +248,9 @@ func TestPayrollPerformance(t *testing.T) {
 				if os.Getenv("MSERP_PAYROLL_PERF_QUICK") == "1" {
 					runs = 3
 				}
+				if n, _ := strconv.Atoi(os.Getenv("MSERP_PAYROLL_PERF_RUNS")); n > 0 {
+					runs = n
+				}
 				errors := 0
 				for n := 0; n < runs; n++ {
 					if mode == "changed" {
@@ -254,7 +277,11 @@ func TestPayrollPerformance(t *testing.T) {
 						if mode == "cold" {
 							r = NewDriverPayRepository(pool)
 						}
-						_, e = read(c, r)
+						if os.Getenv("MSERP_PAYROLL_PERF_SUMMARY") == "1" {
+							_, e = r.PayrollPage(c, kind, week, PayPageQuery{Pagination: Pagination{Page: 1, PageSize: 25}, Summary: true})
+						} else {
+							_, e = read(c, r)
+						}
 					}
 					samples = append(samples, float64(time.Since(start).Microseconds())/1000)
 					if e != nil {
@@ -299,6 +326,9 @@ func TestPayrollPerformance(t *testing.T) {
 			if os.Getenv("MSERP_PAYROLL_PERF_QUICK") == "1" {
 				runs = 3
 			}
+			if n, _ := strconv.Atoi(os.Getenv("MSERP_PAYROLL_PERF_RUNS")); n > 0 {
+				runs = n
+			}
 			var mu sync.Mutex
 			var wg sync.WaitGroup
 			var samples []float64
@@ -333,6 +363,43 @@ func TestPayrollPerformance(t *testing.T) {
 			close(start)
 			wg.Wait()
 			payrollPerfSummary(t, samples, errors)
+		})
+		t.Run(kind+"/summary5sync", func(t *testing.T) {
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			var samples []float64
+			failures := 0
+			for worker := 0; worker < 5; worker++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for n := 0; n < 20; n++ {
+						start := time.Now()
+						_, e := repo.PayrollPage(ctx, kind, week, PayPageQuery{Pagination: Pagination{Page: 1, PageSize: 25}, Summary: true})
+						mu.Lock()
+						samples = append(samples, float64(time.Since(start).Microseconds())/1000)
+						if e != nil {
+							failures++
+							t.Log(e)
+						}
+						mu.Unlock()
+					}
+				}()
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for n := 0; n < 10; n++ {
+					if _, e := pool.Exec(ctx, `UPDATE loads SET total_pay=total_pay+0.01 WHERE id=100`); e != nil {
+						mu.Lock()
+						failures++
+						mu.Unlock()
+					}
+					time.Sleep(30 * time.Millisecond)
+				}
+			}()
+			wg.Wait()
+			payrollPerfSummary(t, samples, failures)
 		})
 
 	}

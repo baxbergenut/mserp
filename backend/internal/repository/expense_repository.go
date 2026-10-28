@@ -37,6 +37,8 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
+	ManagedInSheets      bool                  `json:"managedInSheets"`
+	BalanceVersion       int                   `json:"balanceVersion"`
 	Maintenance          *ExpenseMaintenance   `json:"maintenance,omitempty"`
 	CreatorRoleID        string                `json:"-"`
 	CanEdit              bool                  `json:"canEdit"`
@@ -105,6 +107,7 @@ type ExpenseInput struct {
 }
 
 type ExpensePageQuery struct {
+	History               bool
 	PaymentType           string
 	PaidBy                string
 	CoveredBy             string
@@ -179,11 +182,11 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
  AND ($12='' OR e.paid_by=$12)
  AND ($13='' OR e.covered_by=$13)
  AND ($14='' OR COALESCE(t.unit_number,e.unit_number)=$14)
- AND ($15='' OR COALESCE(d.full_name,e.driver_name)=$15)`
+ AND ($15='' OR COALESCE(d.full_name,e.driver_name)=$15) AND ($16 OR accounting_live_source('expense',e.id,e.expense_date))`
 	args := []any{
 		query.Search, query.VisibleCategoryIDs, query.CategoryID, query.PaymentType, query.DateFrom, query.DateTo,
 		query.TruckID, query.DriverID, query.ChargeDriverID, query.Responsibility,
-		query.AccountantVerified, query.PaidBy, query.CoveredBy, query.UnitNumber, query.DriverName,
+		query.AccountantVerified, query.PaidBy, query.CoveredBy, query.UnitNumber, query.DriverName, query.History,
 	}
 
 	var total int
@@ -203,7 +206,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
 		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		LIMIT $16 OFFSET $17`, pageArgs...)
+		LIMIT $17 OFFSET $18`, pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -619,13 +622,13 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
 	e.accounting_verified, e.source_spreadsheet_id,
 	e.source_sheet, e.source_row, e.created_at, e.updated_at,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
-   CASE WHEN e.driver_settled THEN e.amount ELSE coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+   CASE WHEN e.driver_settled THEN e.amount ELSE expense_external_total(e.id)+coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
-   CASE WHEN e.driver_settled THEN 0 ELSE ` + expenseSettlementTotalSQL + `-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+   CASE WHEN e.driver_settled THEN 0 ELSE ` + expenseSettlementTotalSQL + `-expense_external_total(e.id)-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)
-, e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),'')
+, e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),''), NOT coalesce(accounting_live_source('expense',e.id,e.expense_date),false),e.balance_version
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
@@ -640,7 +643,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID, &value.ManagedInSheets, &value.BalanceVersion,
 	)
 	return value, err
 }

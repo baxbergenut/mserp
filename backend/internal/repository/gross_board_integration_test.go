@@ -97,6 +97,24 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(migration)); err != nil {
 		t.Fatal(err)
 	}
+	cutoverSQL, e := os.ReadFile("../../sql/160_accounting_cutover.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, cutoverFunctions, ok := strings.Cut(string(cutoverSQL), "CREATE FUNCTION accounting_cutover_date()")
+	if !ok {
+		t.Fatal("cutover functions missing")
+	}
+	cutoverFunctions, _, ok = strings.Cut(cutoverFunctions, "CREATE FUNCTION protect_accounting_cutover()")
+	if !ok {
+		t.Fatal("cutover function boundary missing")
+	}
+	if _, err = pool.Exec(ctx, `CREATE TEMP TABLE accounting_cutover(id boolean,active boolean,week_start date);
+ CREATE TEMP TABLE accounting_legacy_sources(kind text,source_id uuid);
+ CREATE TEMP TABLE accounting_rate_openings(driver_id uuid,amount numeric,reference text); CREATE TEMP TABLE accounting_rate_corrections(driver_id uuid,amount numeric,reference text,created_at timestamptz);
+ CREATE FUNCTION accounting_cutover_date()`+cutoverFunctions); err != nil {
+		t.Fatal(err)
+	}
 	repo := NewGrossBoardRepository(pool)
 	statusMigration, err := os.ReadFile("../../sql/028_add_gross_board_day_status.sql")
 	if err != nil {

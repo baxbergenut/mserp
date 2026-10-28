@@ -152,6 +152,9 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				}
 				exec(string(body))
 			}
+			if mode == "migration" {
+				applyAccountingCutoverMigration(t, ctx, admin)
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)
