@@ -40,7 +40,9 @@ the customer explicitly confirmed. There is no earnings protection or fallback
 to the previous tier. Commission is rounded half up to cents per dispatcher /
 driver row and summed in cents. Missing gross/miles and unresolved split trips
 show Review and prevent statement finalization. Explicit zero gross is valid;
-zero weekly miles requires review.
+zero or negative weekly miles requires review. Signed Gross Board corrections
+remain in gross/mileage totals and reduce credited commission where applicable;
+positive and negative commission amounts round symmetrically.
 
 ## Rules, inputs and frozen history
 

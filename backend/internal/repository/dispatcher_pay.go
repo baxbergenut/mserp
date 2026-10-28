@@ -216,6 +216,13 @@ func commissionCalculation(gross, miles int64, home int, rules CommissionRules) 
 	return
 }
 func commissionMoney(cents int64) float64 { return float64(cents) / 100 }
+func roundedCommission(gross, rate int64) int64 {
+	value := gross * rate
+	if value < 0 {
+		return -((-value + 5000) / 10000)
+	}
+	return (value + 5000) / 10000
+}
 func commissionHash(v any) string {
 	raw, _ := json.Marshal(v)
 	sum := sha256.Sum256(raw)
@@ -285,11 +292,11 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		if e.TripReview {
 			b.issues = appendIssue(b.issues, "Resolve split-trip selection in Gross Board")
 		}
-		if ge != nil || g < 0 {
+		if ge != nil {
 			b.issues = appendIssue(b.issues, "Missing or invalid Gross Board total gross")
 			g = 0
 		}
-		if me != nil || m < 0 {
+		if me != nil {
 			b.issues = appendIssue(b.issues, "Missing or invalid Gross Board miles")
 			m = 0
 		}
@@ -338,7 +345,7 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 			part.CreditedGross = commissionMoney(b.credit[dispatcher])
 			part.LoadCount = count
 			if len(part.Issues) == 0 && dispatcher != "" {
-				part.Pay = commissionMoney((b.credit[dispatcher]*int64(math.Round(part.Rate*100)) + 5000) / 10000)
+				part.Pay = commissionMoney(roundedCommission(b.credit[dispatcher], int64(math.Round(part.Rate*100))))
 			}
 			s.Rows = append(s.Rows, part)
 			s.LoadCount += count

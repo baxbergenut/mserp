@@ -104,6 +104,27 @@ func TestDispatcherCommissionRuleValidation(t *testing.T) {
 	}
 }
 
+func TestDispatcherCommissionSignedCorrections(t *testing.T) {
+	if roundedCommission(-50050, 125) != -626 || roundedCommission(50050, 125) != 626 {
+		t.Fatal("positive and negative commissions must round symmetrically to cents")
+	}
+	board := GrossBoard{WeekStart: "2026-10-26", Drivers: []GrossBoardDriver{{ID: "d", Assignments: []DailyAssignment{{Date: "2026-10-26", DispatcherID: "a"}, {Date: "2026-10-27", DispatcherID: "b"}}}}, Entries: []GrossBoardEntry{
+		{DriverID: "d", Date: "2026-10-26", LoadNumber: "1", OriginalRate: "5000", Miles: "1000"},
+		{DriverID: "d", Date: "2026-10-27", LoadNumber: "2", OriginalRate: "-500", Miles: "1000"},
+	}}
+	out := buildDispatcherCommissions(board, map[string]DispatcherPayInput{"d": {HomeDays: 3}}, &CommissionRuleVersion{Rules: workbookCommissionRules()})
+	var pay float64
+	for _, s := range out {
+		pay += s.Pay
+		if s.Rows[0].Gross != 4500 || len(s.Rows[0].Issues) != 0 {
+			t.Fatal("Gross Board corrections must stay in weekly totals", s)
+		}
+	}
+	if pay != 45 {
+		t.Fatal("corrections must reduce commission", out)
+	}
+}
+
 func TestDispatcherPayDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_DISPATCHER_PAY_TEST_DATABASE_URL")
 	if dsn == "" {
