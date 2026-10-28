@@ -113,13 +113,18 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 400, queryErr.Error())
 			return
 		}
-		v, err := pay.InvestorPay(r.Context(), week, target)
+		var v repository.DriverPayWeek
+		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+			if target != "" {
+				query.ID = target
+			}
+			v, err = pay.PayrollPage(r.Context(), "investor", week, query)
+		} else {
+			v, err = pay.InvestorPay(r.Context(), week, target)
+		}
 		if err != nil {
 			fail(w, err)
 			return
-		}
-		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
-			v = repository.PaginatePay(v, query)
 		}
 		writeJSON(w, 200, v)
 	})

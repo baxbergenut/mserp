@@ -56,6 +56,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			if mode == "migration" {
+				sql = withoutAccountingCutoverMigration(t, sql)
+			}
 			transferMigration, readErr := os.ReadFile("../../sql/159_load_week_transfers.sql")
 			if readErr != nil {
 				t.Fatal(readErr)
@@ -200,6 +203,9 @@ func TestDriverPayDatabase(t *testing.T) {
 				if _, err = admin.Exec(ctx, string(transferMigration)); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if mode == "migration" {
+				applyAccountingCutoverMigration(t, ctx, admin)
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

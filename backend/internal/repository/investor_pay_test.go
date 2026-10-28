@@ -70,7 +70,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			identityInit = strings.TrimSpace(strings.TrimSuffix(identityInit, "COMMIT;\n"))
 			sql := strings.ReplaceAll(string(init), "\r\n", "\n")
 			if mode == "migration" {
-				sql = withoutTruckRecurringMigration(t, sql)
+				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
@@ -109,6 +109,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyTruckRecurringMigration(t, ctx, admin)
 			}
+			applyAccountingCutoverMigration(t, ctx, admin)
 			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,gross_board_extra_entries,driver_pay_weeks,app_users,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}

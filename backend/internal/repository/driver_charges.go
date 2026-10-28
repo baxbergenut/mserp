@@ -101,6 +101,7 @@ type ChargeOccurrence struct {
 	Reset           bool       `json:"reset,omitempty"`
 }
 type ChargeSchedule struct {
+	ManagedInSheets  bool               `json:"managedInSheets,omitempty"`
 	TypeVersion      int                `json:"typeVersion"`
 	TypeRules        []ChargeTypeRule   `json:"-"`
 	InstallmentCount int                `json:"installmentCount"`

@@ -466,7 +466,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 }
 
 func frozenDriverPay(ctx context.Context, tx pgx.Tx, week string) (map[string]DriverPayDriver, error) {
-	rows, err := tx.Query(ctx, `SELECT report FROM payroll_settlements WHERE week_start=$1::date AND finalized`, week)
+	rows, err := tx.Query(ctx, `SELECT report FROM payroll_settlements WHERE week_start=$1::date AND finalized AND ($2::uuid[] IS NULL OR driver_id=ANY($2::uuid[]))`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +566,9 @@ func (r *DriverPayRepository) InvestorStatement(ctx context.Context, week time.T
 }
 
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
+	if archived, ok, err := archivedPayroll(ctx, tx, "investor", week); err != nil || ok {
+		return archived, err
+	}
 	defer db.Phase(ctx, "investor_calculation")()
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	if err := payrollQueryPlans(ctx, tx); err != nil {
@@ -581,7 +584,7 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 		return result, err
 	}
 	// Retain frozen investor weeks even if source corrections change routing.
-	rows, err := tx.Query(ctx, `SELECT report FROM investor_pay_weeks WHERE week_start=$1::date AND finalized`, result.WeekStart)
+	rows, err := tx.Query(ctx, `SELECT report FROM investor_pay_weeks WHERE week_start=$1::date AND finalized AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[]))`, result.WeekStart, payrollTruckIDs(ctx))
 	if err != nil {
 		return result, err
 	}
@@ -657,9 +660,8 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	for i := range result.Drivers {
 		result.Drivers[i].TruckInactive = !active[result.Drivers[i].ID]
 	}
-	if err = decorateTransferLoads(ctx, tx, &result); err != nil {
+	if err = finishPayrollRead(ctx, tx, "investor", &result); err != nil {
 		return result, err
 	}
-	result.Revision = payrollRevision(result)
 	return result, nil
 }

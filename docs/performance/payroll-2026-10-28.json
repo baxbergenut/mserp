@@ -1,0 +1,181 @@
+{
+  "date": "2026-10-28",
+  "environment": "Windows workstation, isolated PostgreSQL 17, synthetic history, active fixture cutover 2026-10-05",
+  "fixture": {
+    "drivers": 176,
+    "trucks": 176,
+    "loads": 4928,
+    "expenses": 6000,
+    "tolls": 6000,
+    "fuelTransactions": 11449,
+    "escrows": 132
+  },
+  "units": "milliseconds",
+  "note": "Repository measurements exclude network and browser time. Expand measures selected calculator. Full/compact and selected/full parity passed. Cold cases clear application cache, not database buffers.",
+  "results": {
+    "driver/cold": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 195.93,
+      "p95": 204.48,
+      "p99": 204.69,
+      "max": 204.69
+    },
+    "driver/warm": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 10.79,
+      "p95": 12.07,
+      "p99": 191.8,
+      "max": 191.8
+    },
+    "driver/changed": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 196.04,
+      "p95": 247.6,
+      "p99": 263.75,
+      "max": 263.75
+    },
+    "driver/expand": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 71.43,
+      "p95": 79.39,
+      "p99": 120.15,
+      "max": 120.15
+    },
+    "driver/save": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 71.29,
+      "p95": 75.37,
+      "p99": 84.26,
+      "max": 84.26
+    },
+    "driver/save5": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 389.99,
+      "p95": 520.8,
+      "p99": 712.8,
+      "max": 915.95
+    },
+    "driver/summary5sync": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 21.97,
+      "p95": 208.21,
+      "p99": 294.28,
+      "max": 294.8
+    },
+    "investor/cold": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 183.6,
+      "p95": 209.49,
+      "p99": 240.1,
+      "max": 240.1
+    },
+    "investor/warm": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 10.49,
+      "p95": 11.23,
+      "p99": 182.26,
+      "max": 182.26
+    },
+    "investor/changed": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 182.62,
+      "p95": 189.06,
+      "p99": 190.7,
+      "max": 190.7
+    },
+    "investor/expand": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 67.79,
+      "p95": 71.09,
+      "p99": 72.62,
+      "max": 72.62
+    },
+    "investor/save": {
+      "samples": 20,
+      "errors": 0,
+      "p50": 68.98,
+      "p95": 80.69,
+      "p99": 108.92,
+      "max": 108.92
+    },
+    "investor/save5": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 361.16,
+      "p95": 444.92,
+      "p99": 536.54,
+      "max": 544.98
+    },
+    "investor/summary5sync": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 18.85,
+      "p95": 201.12,
+      "p99": 212.76,
+      "max": 213.28
+    }
+  },
+  "browser": {
+    "synthetic": true,
+    "week": "2026-10-05",
+    "distinctConcurrentUsers": 5,
+    "driverCount": 176,
+    "addedAPIRoundTripMs": 175,
+    "results": {
+      "firstLoad": {
+        "samples": 1,
+        "p50": 1593.5844000000002,
+        "p95": 1593.5844000000002,
+        "max": 1593.5844000000002,
+        "targetMet": false
+      },
+      "cachedLoad": {
+        "samples": 20,
+        "p50": 946.9027999999998,
+        "p95": 1574.6153000000013,
+        "max": 1690.0989,
+        "targetMet": false
+      },
+      "expansion": {
+        "samples": 20,
+        "p50": 85.76059999999961,
+        "p95": 108.54969999999958,
+        "max": 1010.5574999999999,
+        "targetMet": true
+      },
+      "filtering": {
+        "samples": 20,
+        "p50": 285.6111000000001,
+        "p95": 316.39010000000053,
+        "max": 316.5024999999987,
+        "targetMet": false
+      },
+      "save": {
+        "samples": 20,
+        "p50": 822.0346999999965,
+        "p95": 990.1210999999967,
+        "max": 1035.8771999999954,
+        "targetMet": false
+      },
+      "fiveUsersWithSync": {
+        "samples": 100,
+        "p50": 1363.3604999999952,
+        "p95": 1908.9214999999967,
+        "max": 2708.4059999999954,
+        "targetMet": false
+      }
+    },
+    "note": "Conservative automation-to-visible-result timings with 175 ms added to each API response on the same workstation during other local regression work. Cached load includes full navigation/auth/render. Expansion mostly reuses already-fetched details. First load is one sample, not p95. Writes only target the isolated synthetic schema."
+  }
+}

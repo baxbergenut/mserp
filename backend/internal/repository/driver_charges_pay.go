@@ -10,6 +10,9 @@ import (
 func generatedForWeek(data ChargeData, loads map[string]map[string]bool, week string) (map[string][]ChargeOccurrence, error) {
 	out := map[string][]ChargeOccurrence{}
 	for _, s := range data.Schedules {
+		if s.ManagedInSheets {
+			continue
+		}
 		rows, err := projectCharges(s, week, loads[s.DriverID], false)
 		if err != nil {
 			return nil, err
@@ -43,7 +46,7 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 				break
 			}
 		}
-		if s == nil || s.Version != input.ScheduleVersion || s.TypeVersion != input.TypeVersion {
+		if s == nil || s.ManagedInSheets || s.Version != input.ScheduleVersion || s.TypeVersion != input.TypeVersion {
 			return nil, ErrChargeConflict
 		}
 		rows, err := projectCharges(*s, week, loads[driver], false)

@@ -14,6 +14,7 @@ type PayPageQuery struct {
 }
 
 type PayStatementSummary struct {
+	SearchText  string `json:"searchText,omitempty"`
 	Loads       int    `json:"loads"`
 	MissingFees int    `json:"missingFees"`
 	Review      int    `json:"review"`
@@ -23,8 +24,21 @@ type PayStatementSummary struct {
 
 // Summaries come from the same routed, frozen report as expanded statements.
 func summarizePayStatement(d DriverPayDriver) DriverPayDriver {
+	if d.Summary != nil {
+		return d
+	}
 	page := PaginatePay(DriverPayWeek{Drivers: []DriverPayDriver{d}}, PayPageQuery{})
-	summary := &PayStatementSummary{Loads: len(d.Loads), Review: page.Pagination.Review, Fee: page.Pagination.Fee, Payable: page.Pagination.Payable}
+	searchText := d.FullName + " " + d.TruckUnit
+	for _, l := range d.Loads {
+		searchText += " " + l.LoadNumber
+	}
+	for _, p := range d.OperatingDrivers {
+		searchText += " " + p.Name
+	}
+	for _, p := range d.TeamDrivers {
+		searchText += " " + p.Name
+	}
+	summary := &PayStatementSummary{SearchText: searchText, Loads: len(d.Loads), Review: page.Pagination.Review, Fee: page.Pagination.Fee, Payable: page.Pagination.Payable}
 	for _, load := range d.Loads {
 		if load.Fee == "" {
 			summary.MissingFees++
@@ -92,6 +106,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		for _, person := range d.TeamDrivers {
 			text += " " + person.Name
 		}
+		if d.Summary != nil {
+			text = d.Summary.SearchText
+		}
 		matched := matches(d.ID, d.DispatcherID, text)
 		for _, p := range d.Dispatchers {
 			matched = matched || matches(d.ID, p.ID, text)
@@ -100,6 +117,15 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 			continue
 		}
 		rows = append(rows, row{d.FullName, d.TruckUnit, d, nil})
+		if d.Summary != nil {
+			info.Loads += d.Summary.Loads
+			info.Review += d.Summary.Review
+			f, _ := chargeCents(d.Summary.Fee)
+			p, _ := chargeCents(d.Summary.Payable)
+			fee += f
+			payable += p
+			continue
+		}
 		info.Loads += len(d.Loads)
 		info.Review += len(d.Issues)
 		for _, l := range d.Loads {

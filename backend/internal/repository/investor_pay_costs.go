@@ -64,6 +64,7 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 	rows, err = tx.Query(ctx, `WITH toll_days AS MATERIALIZED (
  SELECT truck_id,exit_date,sum(amount) amount FROM tolls WHERE truck_id IS NOT NULL
  AND (prepass_environment IS NULL OR prepass_environment='production') AND posting_date>=$1::date AND posting_date<$1::date+7
+ AND (accounting_cutover_date() IS NULL OR exit_date >= accounting_cutover_date())
  AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) GROUP BY truck_id,exit_date
  ), attributed AS (
  SELECT t.truck_id,t.exit_date,t.amount,CASE WHEN count(DISTINCT a.driver_id)=1 THEN (array_agg(DISTINCT a.driver_id))[1] END driver_id
@@ -118,13 +119,13 @@ func routeTruckDriverCosts(report *DriverPayWeek, groups map[string]*truckPayGro
 }
 
 func investorExpenseDeductions(ctx context.Context, tx pgx.Tx, truck, owner, week string, ownerOnly bool) ([]ExpenseDeduction, error) {
-	rows, err := tx.Query(ctx, `WITH relevant_expenses AS (SELECT e.*, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE e.truck_id=$1 AND e.owner_id=$2) SELECT e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.settlement_total::text,
- (e.settlement_total-coalesce(p.other,0))::text,coalesce(w.amount,e.settlement_total-coalesce(p.other,0))::text,
- (e.settlement_total-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.settlement_total-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
+	rows, err := tx.Query(ctx, `WITH relevant_expenses AS (SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE e.truck_id=$1 AND e.owner_id=$2) SELECT e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.settlement_total::text,
+ (e.settlement_total-e.external_paid-coalesce(p.other,0))::text,coalesce(w.amount,e.settlement_total-e.external_paid-coalesce(p.other,0))::text,
+ (e.settlement_total-e.external_paid-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.settlement_total-e.external_paid-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
  FROM relevant_expenses e LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$3::date
  LEFT JOIN LATERAL(SELECT sum(amount) FILTER(WHERE week_start<>$3::date) other,sum(amount) FILTER(WHERE week_start<$3::date) prior FROM expense_payments WHERE expense_id=e.id) p ON true
- WHERE e.truck_id=$1 AND e.owner_id=$2 AND lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND NOT e.driver_settled AND e.amount>=0
- AND e.expense_date<$3::date+10 AND (w.expense_id IS NOT NULL OR e.settlement_total>coalesce(p.other,0))
+ WHERE e.truck_id=$1 AND e.owner_id=$2 AND lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND NOT e.driver_settled AND e.amount>=0
+ AND e.expense_date<$3::date+10 AND (w.expense_id IS NOT NULL OR e.settlement_total-e.external_paid>coalesce(p.other,0))
  AND (w.expense_id IS NULL OR ($4 AND w.investor_truck_id IS NULL) OR (NOT $4 AND w.investor_truck_id=$1))
  ORDER BY e.expense_date,e.id`, truck, owner, week, ownerOnly)
 	if err != nil {

@@ -106,6 +106,7 @@ var Permissions = []Permission{
 	{Key: "fleetscope.reconcile", Label: "Review and activate FleetScope", Group: "FleetScope", Action: "reconcile", Requires: []string{"fleetscope.read"}, Sensitive: false},
 	{Key: "reports.read", Label: "View Financial reports", Group: "Financial reports", Action: "read", Requires: []string{}, Sensitive: true},
 	{Key: "expense_settings.manage", Label: "Manage Expense settings", Group: "Expense settings", Action: "manage", Requires: []string{}, Sensitive: false},
+	{Key: "expenses.settle", Label: "Record external expense settlements", Group: "Accounting verification", Action: "settle", Requires: []string{}, Sensitive: true},
 	{Key: "expenses.accounting.verify", Label: "Verify Accounting verification", Group: "Accounting verification", Action: "verify", Requires: []string{}, Sensitive: false},
 	{Key: "access.manage", Label: "Manage Access administration", Group: "Access administration", Action: "manage", Requires: []string{}, Sensitive: false},
 }

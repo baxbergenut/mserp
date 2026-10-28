@@ -341,6 +341,7 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		CategoryID: categoryID, VisibleCategoryIDs: visible, AccessibleCategoryIDs: accessible,
 
 		PaymentType: strings.TrimSpace(r.URL.Query().Get("paymentType")),
+		History:     r.URL.Query().Get("history") == "1",
 		PaidBy:      strings.TrimSpace(r.URL.Query().Get("paidBy")),
 		CoveredBy:   strings.TrimSpace(r.URL.Query().Get("coveredBy")),
 		UnitNumber:  strings.TrimSpace(r.URL.Query().Get("unitNumber")),

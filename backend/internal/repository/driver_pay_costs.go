@@ -22,6 +22,7 @@ var driverPayCostsSQL = `WITH weekly_fuel AS (
  SELECT truck_id,exit_date,sum(amount) amount FROM tolls
  WHERE (prepass_environment IS NULL OR prepass_environment='production')
  AND posting_date >= $1::date AND posting_date < $1::date+7
+ AND (accounting_cutover_date() IS NULL OR exit_date >= accounting_cutover_date())
  AND ($3::uuid[] IS NULL OR truck_id IN (SELECT truck_id FROM truck_driver_assignments WHERE driver_id=ANY($3::uuid[])))
  GROUP BY truck_id,exit_date
 ), toll_assignments AS MATERIALIZED (

@@ -46,6 +46,7 @@ import {
 } from "./ExpenseForm";
 import { ExpenseAIImport } from "./ExpenseAIImport";
 import { ReceiptUpload } from "../components/ReceiptUpload";
+import { ExternalSettlements } from "./ExternalSettlements";
 import { ExpenseDocuments } from "./ExpenseDocuments";
 import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
 import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
@@ -137,6 +138,7 @@ export default function ExpensesPage() {
   const [currentUser, setCurrentUser] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [administrator, setAdministrator] = useState(false);
+  const [showHistory,setShowHistory]=useState(false);
   const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
   const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
   const verificationBusy = useRef(false);
@@ -152,7 +154,7 @@ export default function ExpensesPage() {
     if (showLoading) setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
+        history:showHistory?"1":"",page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
       setCurrentUserId(session.user.id);
@@ -171,7 +173,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
+  }, [showHistory,setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -403,7 +405,7 @@ export default function ExpensesPage() {
           <option value="">All categories</option>
           {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select>
-          <select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
+          <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={showHistory} onChange={e=>{setShowHistory(e.target.checked);setPage(1)}}/>Show historical</label><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
           <select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
           <select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select>
         </TableFilters>
@@ -468,7 +470,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.paymentType || "—"}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">Paid by {expense.paidBy || "—"}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-600">{expense.managedInSheets?"Managed in Sheets":`Paid by ${expense.paidBy || "—"}`}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
@@ -502,8 +504,8 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
-          submitDisabled={!!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))}
-          footerStart={editing && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
+          submitDisabled={!!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}
+          footerStart={editing && !editing.managedInSheets && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving || aiBusy}
           submitLabel={pendingUploadId ? "Retry receipt upload" : editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
           onClose={closeEntry}
@@ -523,8 +525,9 @@ export default function ExpensesPage() {
             </div>
           )}
           {review && <p className="mb-4 text-xs text-zinc-500">Review entry {review.index+1} of {review.entries.length}. Each item is saved separately.</p>}
-          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
+          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
           <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))} onChange={setAttachment} onError={setError} />
+          {editing && <ExternalSettlements expense={editing} onSaved={async()=>{const updated=await fetchExpense(editing.id);setEditing(updated);setForm(expenseToInput(updated));await loadData(false)}}/>}
           {editing && <ExpenseDocuments key={editing.id} id={editing.id} />}
         </Modal>
       )}

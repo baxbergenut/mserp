@@ -122,18 +122,18 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
 		return v, nil
 	}
 	rows, e = tx.Query(ctx, `WITH terms AS (SELECT DISTINCT ON(truck_id) truck_id,owner_id FROM truck_settlement_terms WHERE week_start<=$1::date AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) ORDER BY truck_id,week_start DESC), relevant_expenses AS MATERIALIZED (
- SELECT e.*, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
- WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND NOT e.driver_settled AND e.amount>=0 AND e.expense_date<$1::date+10
+ SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
+ WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND NOT e.driver_settled AND e.amount>=0 AND e.expense_date<$1::date+10
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$1::date) other,sum(p.amount) FILTER(WHERE p.week_start<$1::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id)
  SELECT e.truck_id::text,w.investor_truck_id::text,e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.settlement_total::text,
- (e.settlement_total-coalesce(p.other,0))::text,coalesce(w.amount,e.settlement_total-coalesce(p.other,0))::text,
- (e.settlement_total-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.settlement_total-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
+ (e.settlement_total-e.external_paid-coalesce(p.other,0))::text,coalesce(w.amount,e.settlement_total-e.external_paid-coalesce(p.other,0))::text,
+ (e.settlement_total-e.external_paid-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.settlement_total-e.external_paid-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
  FROM relevant_expenses e
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$1::date
  LEFT JOIN payments p ON p.expense_id=e.id
- WHERE (w.expense_id IS NOT NULL OR e.settlement_total>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
+ WHERE (w.expense_id IS NOT NULL OR e.settlement_total-e.external_paid>coalesce(p.other,0)) ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
 	if e != nil {
 		return v, e
 	}

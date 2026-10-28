@@ -66,13 +66,16 @@ type GrossBoardDriver struct {
 }
 
 type GrossBoard struct {
-	WeekStart string              `json:"weekStart"`
-	Drivers   []GrossBoardDriver  `json:"drivers"`
-	Entries   []GrossBoardEntry   `json:"entries"`
-	Balances  []GrossBoardBalance `json:"balances"`
+	ManagedInSheets bool                `json:"managedInSheets,omitempty"`
+	CutoverWeek     string              `json:"cutoverWeek,omitempty"`
+	WeekStart       string              `json:"weekStart"`
+	Drivers         []GrossBoardDriver  `json:"drivers"`
+	Entries         []GrossBoardEntry   `json:"entries"`
+	Balances        []GrossBoardBalance `json:"balances"`
 }
 
 type GrossBoardBalance struct {
+	OpeningReference  string `json:"openingReference,omitempty"`
 	DriverID          string `json:"driverId"`
 	OpeningBalance    string `json:"openingBalance"`
 	OpeningIncomplete int    `json:"openingIncomplete"`
@@ -134,7 +137,7 @@ var grossBoardEffective = `WITH resolved AS (
  SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
- FROM resolved WHERE service_date < $1::date+7
+ FROM resolved WHERE service_date < $1::date+7 AND ($1::date<accounting_cutover_date() OR accounting_live_date(service_date))
 ) `
 
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
@@ -250,6 +253,51 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	for _, d := range board.Drivers {
 		ids = append(ids, d.ID)
 	}
+	if err = tx.QueryRow(ctx, `SELECT coalesce(accounting_cutover_date()::text,''),coalesce($1::date<accounting_cutover_date(),false)`, week).Scan(&board.CutoverWeek, &board.ManagedInSheets); err != nil {
+		return board, err
+	}
+	if board.CutoverWeek != "" && !board.ManagedInSheets {
+		openings, e := tx.Query(ctx, `SELECT driver_id::text,sum(amount)::text,string_agg(reference,'; ' ORDER BY created_at) FROM (SELECT driver_id,amount,reference,'-infinity'::timestamptz created_at FROM accounting_rate_openings UNION ALL SELECT driver_id,amount,reference,created_at FROM accounting_rate_corrections) s GROUP BY driver_id`)
+		if e != nil {
+			return board, e
+		}
+		byID := map[string]int{}
+		for i, b := range board.Balances {
+			byID[b.DriverID] = i
+		}
+		confirmed := map[string]bool{}
+		for openings.Next() {
+			var id, amount, ref string
+			if e = openings.Scan(&id, &amount, &ref); e != nil {
+				openings.Close()
+				return board, e
+			}
+			confirmed[id] = true
+			n, _ := chargeCents(amount)
+			if i, ok := byID[id]; ok {
+				prior, _ := chargeCents(board.Balances[i].OpeningBalance)
+				board.Balances[i].OpeningBalance = chargeMoney(prior + n)
+				board.Balances[i].OpeningReference = ref
+			} else {
+				byID[id] = len(board.Balances)
+				board.Balances = append(board.Balances, GrossBoardBalance{DriverID: id, OpeningBalance: amount, OpeningReference: ref})
+			}
+		}
+		e = openings.Err()
+		openings.Close()
+		if e != nil {
+			return board, e
+		}
+		for _, d := range board.Drivers {
+			if !confirmed[d.ID] {
+				if i, ok := byID[d.ID]; ok {
+					board.Balances[i].OpeningIncomplete++
+				} else {
+					board.Balances = append(board.Balances, GrossBoardBalance{DriverID: d.ID, OpeningBalance: "0.00", OpeningIncomplete: 1})
+				}
+			}
+		}
+	}
 	assignments, err := readDailyAssignments(ctx, tx, board.WeekStart, ids)
 	if err != nil {
 		return board, err
@@ -264,7 +312,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 	rows, err := r.pool.Query(ctx, grossBoardEffective+`SELECT service_date::text, display_number,
  coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(balance_change::text,''),
- coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0)::text, duplicate
+ (coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0)+CASE WHEN $1::date>=accounting_cutover_date() THEN coalesce((SELECT sum(amount) FROM (SELECT amount FROM accounting_rate_openings WHERE driver_id=$2 UNION ALL SELECT amount FROM accounting_rate_corrections WHERE driver_id=$2) opening),0) ELSE 0 END)::text, duplicate
  FROM effective WHERE driver_id=$2 AND NOT deleted AND day_status='' AND
  (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL)
  ORDER BY service_date,slot`, week, driverID)

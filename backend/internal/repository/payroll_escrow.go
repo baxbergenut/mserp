@@ -5,7 +5,7 @@ package repository
 // checkpoint in that same week must be evaluated before the release. The target
 // week's existing collection is excluded while checking replacement capacity.
 const payrollEscrowCapacityCTE = `pay_escrows AS MATERIALIZED (
- SELECT * FROM driver_escrows WHERE start_date<$1::date+7 AND ($3::uuid[] IS NULL OR driver_id=ANY($3::uuid[]))
+ SELECT * FROM driver_escrows WHERE accounting_live_source('escrow',id,start_date) AND start_date<$1::date+7 AND ($3::uuid[] IS NULL OR driver_id=ANY($3::uuid[]))
 ), pay_escrow_events AS MATERIALIZED (
  SELECT e.id,p.week_start,0 phase,-sum(CASE WHEN p.week_start<>$1::date THEN p.amount ELSE 0 END) delta,p.week_start>=$1::date checkpoint
  FROM pay_escrows e JOIN driver_escrow_payments p ON p.escrow_id=e.id GROUP BY e.id,p.week_start

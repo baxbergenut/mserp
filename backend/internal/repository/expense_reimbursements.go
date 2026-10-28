@@ -24,7 +24,7 @@ func (r *ExpenseRepository) loadReimbursementBalances(ctx context.Context, value
 	if !available {
 		return nil
 	}
-	rows, err := r.pool.Query(ctx, `SELECT e.id::text,coalesce(sum(p.amount),0)::text,(e.amount-coalesce(sum(p.amount),0))::text,
+	rows, err := r.pool.Query(ctx, `SELECT e.id::text,(expense_external_total(e.id)+coalesce(sum(p.amount),0))::text,(e.amount-expense_external_total(e.id)-coalesce(sum(p.amount),0))::text,
  coalesce(jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FILTER(WHERE p.expense_id IS NOT NULL),'[]'::jsonb)
  FROM expenses e LEFT JOIN expense_reimbursement_payments p ON p.expense_id=e.id WHERE e.id=ANY($1::uuid[]) GROUP BY e.id`, ids)
 	if err != nil {
@@ -63,13 +63,13 @@ func expenseReimbursementDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers 
 		return result, err
 	}
 	rows, err := tx.Query(ctx, `WITH relevant AS MATERIALIZED (
- SELECT e.* FROM expenses e WHERE driver_id=ANY($1::uuid[]) AND lower(btrim(payment_type))='reimburse' AND expense_date<$2::date+10 AND amount>=0
+ SELECT e.*,expense_external_total(e.id) external_paid FROM expenses e WHERE accounting_live_source('expense',e.id,e.expense_date) AND driver_id=ANY($1::uuid[]) AND lower(btrim(payment_type))='reimburse' AND expense_date<$2::date+10 AND amount>=0
  ), payments AS (SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior FROM expense_reimbursement_payments p JOIN relevant e ON e.id=p.expense_id GROUP BY p.expense_id)
  SELECT e.driver_id::text,e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,e.expense_date::text,e.amount::text,
- (e.amount-coalesce(p.other,0))::text,coalesce(w.amount,e.amount-coalesce(p.other,0))::text,
- (e.amount-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.amount-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
+ (e.amount-e.external_paid-coalesce(p.other,0))::text,coalesce(w.amount,e.amount-e.external_paid-coalesce(p.other,0))::text,
+ (e.amount-e.external_paid-coalesce(p.prior,0)-coalesce(w.amount,0))::text,(e.amount-e.external_paid-coalesce(p.prior,0))::text,e.balance_version,w.expense_id IS NOT NULL
  FROM relevant e LEFT JOIN payments p ON p.expense_id=e.id LEFT JOIN expense_reimbursement_payments w ON w.expense_id=e.id AND w.week_start=$2::date
- WHERE w.expense_id IS NOT NULL OR e.amount>coalesce(p.other,0) ORDER BY e.expense_date,e.id`, drivers, week)
+ WHERE w.expense_id IS NOT NULL OR e.amount-e.external_paid>coalesce(p.other,0) ORDER BY e.expense_date,e.id`, drivers, week)
 	if err != nil {
 		return nil, err
 	}

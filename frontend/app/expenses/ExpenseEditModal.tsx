@@ -1,4 +1,5 @@
 "use client";
+import { ExternalSettlements } from "./ExternalSettlements";
 import type { ExpenseFormChoices } from "@/app/lib/types";
 
 
@@ -18,7 +19,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
   const [form, setForm] = useState<ExpenseInput | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const canEdit = !!data && (data.expense.canEdit ?? access.some(a => a.categoryId === data.expense.categoryId && a.canEdit));
+  const canEdit = !!data && !data.expense.managedInSheets && (data.expense.canEdit ?? access.some(a => a.categoryId === data.expense.categoryId && a.canEdit));
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -45,6 +46,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
     {error && <ErrorBanner message={error} />}
     {!data && !error && <p role="status" className="text-zinc-500">Loading expense…</p>}
     {data && form && <fieldset disabled={!canEdit || saving}><ExpenseForm value={form} onChange={setForm} options={data.options} originalCategory={{ id: data.expense.categoryId, name: data.expense.category }} allowedCategoryIds={Array.from(new Set([data.expense.categoryId, ...access.filter(a => a.canCreate).map(a => a.categoryId)]))} drivers={data.drivers} trucks={data.trucks} owners={data.owners} /></fieldset>}
+    {data && <ExternalSettlements expense={data.expense} onSaved={async()=>{const expense=await fetchExpense(id);setData({...data,expense});setForm(expenseToInput(expense));await onSaved()}}/>}
     {data && <ExpenseDocuments key={id} id={id} />}
   </Modal>;
 }

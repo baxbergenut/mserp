@@ -167,7 +167,7 @@ try {
     await expect(modal.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);
     expect(expenseReads.length).toBeGreaterThan(0);
     expect(expensiveLookups).toEqual([]);
-    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents', '/expenses/reimbursement', '/expenses/reimbursement/documents', '/expenses/form-choices'].includes(path))).toBe(true);
+    expect(expenseReads.every(path => ['/expenses/expense', '/expenses/expense/documents', '/expenses/expense/external-settlements', '/expenses/reimbursement', '/expenses/reimbursement/documents', '/expenses/reimbursement/external-settlements', '/expenses/form-choices'].includes(path))).toBe(true);
     // Dated non-paying driver classifications hide empty costs, but historical
     // balances remain collectable. Investor statements still show truck costs.
     for (const employmentType of ['company', 'investor_driver']) {
