@@ -1,9 +1,0 @@
-"use client";
-import { useState } from "react";
-import { Modal,controlClass,Field } from "@/app/components/management/ManagementUI";
-import type { DriverPayAdjustment } from "@/app/lib/types";
-
-export function SheetsAdjustment({disabled,onAdd}:{disabled:boolean;onAdd:(value:DriverPayAdjustment)=>void}){
- const [open,setOpen]=useState(false),[amount,setAmount]=useState(""),[reference,setReference]=useState(""),[kind,setKind]=useState<"deduction"|"reimbursement">("deduction");
- return <><button type="button" disabled={disabled} className="px-2 py-1 text-[11px] text-blue-400 disabled:opacity-40" onClick={()=>setOpen(true)}>Sheets adjustment</button>{open&&<Modal isSaving={false} title="Sheets balance adjustment" submitLabel="Add to statement" onClose={()=>setOpen(false)} onSubmit={e=>{e.preventDefault();if(!/^\d+(\.\d{1,2})?$/.test(amount)||Number(amount)<=0||!reference.trim())return;onAdd({id:crypto.randomUUID(),kind,name:kind==="deduction"?"Sheets balance collection":"Sheets balance credit",note:reference.trim(),amount,legacySheets:true});setOpen(false);setAmount("");setReference("")}}><p className="mb-3 text-sm text-zinc-400">Sheets continues tracking the old balance. Record the same collection or credit there after finalizing this statement.</p><Field label="Direction"><select className={controlClass} value={kind} onChange={e=>setKind(e.target.value as typeof kind)}><option value="deduction">Collect from this paycheck</option><option value="reimbursement">Credit this paycheck</option></select></Field><Field label="Amount"><input required className={controlClass} inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" value={amount} onChange={e=>setAmount(e.target.value)}/></Field><Field label="Sheets reference"><input required maxLength={2000} className={controlClass} value={reference} onChange={e=>setReference(e.target.value)}/></Field></Modal>}</>;
-}

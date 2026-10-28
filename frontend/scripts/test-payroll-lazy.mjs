@@ -66,6 +66,8 @@ try {
     await expand.click();
     await expect(page.getByText('Loading statement…',{exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();expect(detailReads).toBe(1);
+    await expect(page.getByRole('button',{name:'Export statement',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Sheets adjustment',exact:true})).toHaveCount(0);
     await expand.click();await expand.click();expect(detailReads).toBe(1);
     await expect(page.getByLabel('Grid Test, Fuel, amount',{exact:true})).toHaveValue('-40.00');
     await expand.click();

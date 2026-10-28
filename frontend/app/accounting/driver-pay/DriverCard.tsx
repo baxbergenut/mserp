@@ -1,12 +1,9 @@
 "use client";
 
-import { downloadStatement } from "./statementExport";
-
 import { employmentTypeLabel } from "@/app/lib/driverType";
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
-import { SheetsAdjustment } from "./SheetsAdjustment";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
@@ -94,7 +91,6 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
   const fixedChargeRows = layovers.length + visibleCostRows.length + (driver.autoCharges?.length ?? 0) + (edits.expenseDeductions?.length ?? 0) + (edits.generatedCharges?.length ?? 0);
   const adjustmentCells = open ? <td colSpan={2} rowSpan={weekRowCount} className="pay-adjustment-span relative border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="absolute inset-0 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
-      <SheetsAdjustment disabled={disabled} onAdd={value=>edit(current=>({...current,adjustments:[...current.adjustments.filter(a=>a.name||a.amount),value]}))}/>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
         <tbody>{layovers.map(row => <tr key={`layover:${row.date}`}>
           <td className={`${cell} text-zinc-300`}><div className="flex items-center justify-between gap-1"><span title={`Shop on ${row.date} · driver bonus`}>Layover · {shortDate(row.date)}</span><button type="button" disabled={disabled} aria-label={`${driver.fullName}, remove layover for ${row.date}`} title="Remove this day's layover from this week" onClick={() => edit(current => ({ ...current, layoverExcludedDates: [...(current.layoverExcludedDates ?? []), row.date] }))} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-300 disabled:opacity-40"><X className="h-4 w-4" /></button></div></td>
@@ -152,7 +148,6 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
       <div id={`driver-${driver.id}`}>
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
-        <button type="button" className="px-3 py-2 text-xs text-blue-400" onClick={()=>downloadStatement(driver,edits)}>Export statement</button>
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>

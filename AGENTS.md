@@ -55,7 +55,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   solely for release/schema compatibility. Ordinary unpaid balances carry normally.
   External expense settlements/reversals remain available with expenses.settle
   and category View permissions, immutable receipts, reservation limits and
-  finalized-statement guards. Referenced Sheets adjustments remain optional.
+  finalized-statement guards. The special Sheets adjustment and Export statement
+  controls are removed from both payroll pages; existing adjustment data remains.
   TestAccountingCutoverRetiredDatabase (MSERP_CUTOVER_TEST_DATABASE_URL) covers
   fresh/migrated databases, external settlements and payroll calculator parity.
   Browser: scripts/test-accounting-retirement.mjs against review-local.

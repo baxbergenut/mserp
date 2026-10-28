@@ -45,20 +45,12 @@ try {
  await page.getByRole('button',{name:'Reverse',exact:true}).click();await page.getByLabel('External settlement reference').fill('Correction TEST-50');await page.getByRole('button',{name:'Record reversal',exact:true}).click();
  await expect(page.getByText(/Reversed 50.00/)).toBeVisible();assert.equal((await get('/expenses/'+current)).remainingAmount,'200.00');
  await page.screenshot({path:join(artifacts,'external-settlement.png'),fullPage:true});
- // Referenced adjustment uses ordinary autosave and survives CSV export.
- await page.goto(access.base+'/accounting/driver-pay?weekStart=2026-10-26&driverId='+driver);
- await page.getByRole('button',{name:'Sheets adjustment',exact:true}).click();
- const modal=page.getByRole('dialog',{name:'Sheets balance adjustment'});
- await modal.getByLabel('Amount',{exact:true}).fill('150');await modal.getByLabel('Sheets reference',{exact:true}).fill('Legacy sheet / Alex / row 17');await modal.getByRole('button',{name:'Add to statement'}).click();
- await expect.poll(async()=>sql(`SELECT count(*) FROM driver_pay_weeks w,jsonb_array_elements(w.adjustments) a WHERE w.driver_id='${driver}' AND a->>'legacySheets'='true' AND a->>'note'='Legacy sheet / Alex / row 17'`)).toBe('1');
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export statement'}).click();const file=await download;const body=await readFile(await file.path(),'utf8');assert.ok(body.includes('Sheets balance collection'));assert.ok(body.includes('Legacy sheet / Alex / row 17'));assert.ok(body.includes('-150.00'));
- await page.screenshot({path:join(artifacts,'statement.png'),fullPage:true});
  // Ordinary signed-in accounts cannot read/activate cutover or settle expenses.
  const role=randomUUID(),user=randomUUID(),token=randomBytes(32).toString('base64url'),csrf=randomBytes(32).toString('base64url');
  sql(`INSERT INTO app_roles(id,name,permissions) VALUES('${role}','Cutover unprivileged','{}');INSERT INTO app_users(id,username,password_hash,role_id) VALUES('${user}','Cutover ordinary','$2test','${role}');INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) VALUES('${user}','${createHash('sha256').update(token).digest('hex')}','${csrf}',now()+interval '1 hour')`);
  const ordinary=await browser.newContext();await ordinary.addCookies([{name:'mserp_session',value:token,url:access.base,httpOnly:true,sameSite:'Strict'}]);
  for(const [method,path,data] of [['POST','/expenses/'+current+'/external-settlements',{}]]){const r=await ordinary.request.fetch(access.base+'/api'+path,{method,data,headers:{'X-CSRF-Token':csrf,'Origin':access.base}});assert.equal(r.status(),403,path)}
  await ordinary.close();assert.deepEqual(errors,[]);
- await writeFile(join(artifacts,'verification.json'),JSON.stringify({passed:true,checks:['cutover screen removed','all cutover endpoints removed','ordinary history retained','external partial settlement','reversal','referenced adjustment autosave','CSV reference','unauthorized settlement rejected'],artifacts},null,2));
+ await writeFile(join(artifacts,'verification.json'),JSON.stringify({passed:true,checks:['cutover screen removed','all cutover endpoints removed','ordinary history retained','external partial settlement','reversal','unauthorized settlement rejected'],artifacts},null,2));
  console.log(JSON.stringify({passed:true,artifacts}));
 }catch(e){if(page)await page.screenshot({path:join(artifacts,'failure.png'),fullPage:true});throw e}finally{await browser.close()}

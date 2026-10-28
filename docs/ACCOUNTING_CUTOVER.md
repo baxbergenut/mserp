@@ -14,8 +14,10 @@ payroll queries and compatible rollback releases remain safe. Applied migration
 160 is not edited or reversed: it also supplies external expense settlement
 receipts and financial cache revision tracking that are still used.
 
-Ordinary partial-payment carry, finalized-statement protection, external settlement
-and reversal APIs, named Sheets adjustments and CSV references remain available.
+Ordinary partial-payment carry, finalized-statement protection, and external
+settlement and reversal APIs remain available. The special Sheets adjustment and
+Export statement controls were also removed from both payroll pages. Existing
+adjustment amounts and references remain stored and visible in ordinary rows.
 No ongoing date cutoff discards later expenses or debt. Payroll summary/detail
 caching and grouped balance queries remain in place; see PAYROLL_PERFORMANCE.md.
 
