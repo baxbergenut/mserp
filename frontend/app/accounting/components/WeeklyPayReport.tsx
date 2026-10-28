@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Banknote, CircleDollarSign, Headset, Pencil, Plus, Route, UsersRound } from "lucide-react";
+import { Banknote, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Headset, Pencil, Plus, Route, UsersRound } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { IntentLink } from "@/app/components/IntentLink";
+import { useViewState } from "@/app/lib/viewMemory";
+import { addDays, shortDate } from "@/app/gross-board/board";
+import { currentChargeWeek } from "../driver-charges/charges";
+import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
@@ -14,20 +20,13 @@ const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const button = "inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-zinc-800 px-3 text-[13px] text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-50";
 function weekLabel(week: string) { const start = new Date(week + "T12:00:00"); const end = new Date(start); end.setDate(end.getDate() + 6); return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`; }
 function message(error: unknown) { return error instanceof Error ? error.message : "The request could not be completed."; }
-function rpmTier(row: DispatcherCommissionRow, rule: DispatcherCommissionRuleVersion | null) {
-  const brackets = rule?.rules.tiers.find(tier => tier.minGross === row.selectedTier)?.brackets;
-  if (!brackets?.length) return "No tier";
-  const index = brackets.findLastIndex(bracket => row.rpm >= bracket.minRPM);
-  if (index < 0) return `Below $${brackets[0].minRPM.toFixed(2)}`;
-  const lower = `$${brackets[index].minRPM.toFixed(2)}`;
-  return index + 1 < brackets.length ? `${lower}–<$${brackets[index + 1].minRPM.toFixed(2)}` : `${lower}+`;
-}
-
 export function WeeklyPayReport() {
   const permissions = usePermissions();
+  const router = useRouter();
   const [report, setReport] = useState<DispatcherCommissionReport | null>(null);
   const [rules, setRules] = useState<DispatcherCommissionRuleVersion[]>([]);
-  const [week, setWeek] = useState("");
+  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek());
+  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [tab, setTab] = useState("pay");
   const [dispatcher, setDispatcher] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,6 +73,10 @@ export function WeeklyPayReport() {
   function changeBracket(tier: number, bracket: number, field: "minRPM" | "percent", value: number) {
     setRuleDraft(old => old && ({ ...old, tiers: old.tiers.map((t, i) => i === tier ? { ...t, brackets: t.brackets.map((b, j) => j === bracket ? { ...b, [field]: value } : b) } : t) }));
   }
+  function switchWeek(next: string) {
+    if (next === week || busy || loading) return;
+    setLoading(true); setReport(null); setError(""); setNotice(""); setOpened(new Set()); setWeek(next);
+  }
   const statements = report?.statements ?? [];
   const visible = statements.filter(s => !dispatcher || s.dispatcherId === dispatcher);
   const currentWeek = report?.weekStart ?? week;
@@ -86,7 +89,7 @@ export function WeeklyPayReport() {
     <PageHeader><div className="flex items-center gap-2"><Headset className="h-5 w-5 text-violet-400" /><h1 className="font-semibold">Dispatcher pay</h1></div></PageHeader>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard label="Dispatcher commission" value={money.format(total("pay"))} icon={Banknote} loading={loading} />
-      <MetricCard label="Gross Board credited gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
+      <MetricCard label="Gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
       <MetricCard label="Dispatchers" value={String(statements.filter(s => s.dispatcherId).length)} icon={UsersRound} loading={loading} />
       <MetricCard label="Loads" value={number.format(total("loadCount"))} icon={Route} loading={loading} />
     </div>
@@ -95,40 +98,40 @@ export function WeeklyPayReport() {
         <button role="tab" aria-selected={tab === "pay"} onClick={() => setTab("pay")}>Weekly pay</button>
         <button role="tab" aria-selected={tab === "rules"} onClick={() => setTab("rules")}>Commission rules</button>
       </div>
-      <label className="ml-auto flex items-center gap-2 whitespace-nowrap text-xs">Week starting<input type="date" aria-label="Week starting" className={controlClass} value={week || currentWeek} disabled={busy || loading} onChange={e => { if (e.target.value) { setLoading(true); setWeek(e.target.value); } }} /></label>
+      <div className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={button} aria-label="Previous week" disabled={busy || loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm" title={weekLabel(week)}>{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={button} aria-label="Next week" disabled={busy || loading || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
+      <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={button} disabled={busy || loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
       {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} max-w-64`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}
     {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
     {loading && <div aria-label="Loading dispatcher pay" className="h-40 animate-pulse rounded-lg bg-zinc-800/40" />}
     {!loading && report && tab === "pay" && <>
-      <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400"><span>{weekLabel(report.weekStart)}</span><span>{report.rule ? `Rules effective ${report.rule.effectiveWeek}` : "No rules apply to this week"}</span>{permissions.includes("board.read") && <a className="text-blue-400 hover:underline" href="/gross-board">Open Gross Board</a>}</div>
-      {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Some rows need review. Commission totals include calculated rows only; resolve the flagged rows before finalizing.</p>}
+      {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Review flagged rows before finalizing.</p>}
       {visible.length === 0 && <div className="ui-card py-10 text-center text-zinc-400">No Gross Board loads in this week.</div>}
-      {visible.map(s => <section key={s.dispatcherId || "unassigned"} className="overflow-hidden rounded-lg border border-zinc-800">
-        <div className="flex flex-wrap items-center gap-3 bg-card p-4">
-          <h2 className="font-semibold">{s.dispatcherName}</h2><span className={s.finalized ? "text-emerald-400" : "text-zinc-400"}>{s.finalized ? "Finalized" : "Draft"}</span>
-          <span className="text-xs text-zinc-400">Gross tiers: {[...new Set(s.rows.map(row => row.selectedTier ? money.format(row.selectedTier) : "No tier"))].join(", ")}</span>
-          <span className="text-xs text-zinc-400">RPM tiers: {[...new Set(s.rows.map(row => rpmTier(row, s.rule)))].join(", ")}</span>
-          <span className="text-xs text-zinc-400">{s.rule ? `Rules from ${s.rule.effectiveWeek}` : "No commission rules"}{s.finalizedAt ? ` · ${new Date(s.finalizedAt).toLocaleString()}` : ""}</span>
-          <strong className="ml-auto font-mono tabular-nums">{money.format(s.pay)}</strong>
+      {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <section key={key} aria-label={s.dispatcherName} className="overflow-hidden rounded-lg border border-zinc-800">
+        <div className="flex items-center gap-3 bg-card px-3 py-2">
+          <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 min-w-0 flex-1 items-center gap-3 text-left hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}>
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="min-w-0 flex-1 truncate font-semibold">{s.dispatcherName}</span>
+            <span className="hidden text-xs text-zinc-400 sm:inline">{s.rows.length} {s.rows.length === 1 ? "driver" : "drivers"}</span><span className="hidden text-xs text-zinc-400 sm:inline">{s.loadCount} {s.loadCount === 1 ? "load" : "loads"}</span><span className="hidden w-28 text-right font-mono tabular-nums text-zinc-400 md:inline">{money.format(s.gross)}</span><strong className="w-24 text-right font-mono tabular-nums">{money.format(s.pay)}</strong>
+          </button>
+          {s.finalized && <span className="text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}
           {s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setReason(""); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}
         </div>
-        {s.sourceChanged && <p className="border-t border-amber-500/20 bg-amber-500/5 px-4 py-2 text-amber-400">Gross Board, weekly inputs or rules have changed. This finalized statement retains its saved amounts.</p>}
-        {!s.dispatcherId && <p className="px-4 py-2 text-amber-400">Assign dispatcher credit in Gross Board to calculate pay for these loads.</p>}
-        <div className="overflow-x-auto"><table className="w-full min-w-[1250px] text-left text-[13px]">
-          <thead className="bg-zinc-900/60 text-xs text-zinc-400"><tr>{["Driver / truck", "Weekly gross", "Miles", "RPM", "Home days", "Adjusted gross", "Actual gross tier", "Selected gross tier", "RPM tier", "Rate", "Credited gross", "Commission", ""].map((label, i) => <th key={i} className={`px-3 py-2 font-medium ${i > 0 && i < 12 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-          <tbody>{s.rows.map(row => <tr key={row.driverId} className="border-t border-zinc-800/60 align-top">
-            <td className="px-3 py-2"><div>{row.driverName}</div><div className="text-xs text-zinc-400">{row.truckUnits.join(", ") || "No assigned truck"} · {row.loadCount} loads</div>{row.note && <div className="max-w-64 whitespace-pre-wrap text-xs text-zinc-400">{row.note}</div>}{row.issues.map(issue => <div key={issue} className="text-xs text-amber-400">{issue}</div>)}</td>
-            {[money.format(row.gross), number.format(row.miles), `$${row.rpm.toFixed(3)}`, row.homeDays, money.format(row.adjustedGross), row.actualTier ? money.format(row.actualTier) : "No tier", row.selectedTier ? money.format(row.selectedTier) : "No tier", rpmTier(row, s.rule), `${number.format(row.rate)}%`, money.format(row.creditedGross), row.issues.length ? "Review" : money.format(row.pay)].map((value, i) => <td key={i} className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums">{value}</td>)}
+        {s.sourceChanged && <p className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</p>}
+        {open && <div id={`dispatcher-${key}`}>
+        {!s.dispatcherId && <p className="px-3 py-2 text-amber-400">Assign a dispatcher in Gross Board.</p>}
+        <div className="overflow-x-auto"><table className="w-full min-w-[960px] text-left text-[13px]">
+          <thead className="bg-zinc-900/60 text-xs text-zinc-400"><tr>{["Driver / truck", "Gross", "Miles", "RPM", "Home days", "Gross tier", "RPM tier", "Rate", "Commission", ""].map((label, i) => <th key={i} className={`px-3 py-2 font-medium ${i > 0 && i < 9 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+          <tbody>{s.rows.map(row => { const href = `/gross-board?${new URLSearchParams({ driverId: row.driverId, weekStart: currentWeek })}`; const miles = row.creditedMiles ?? (row.gross === row.creditedGross ? row.miles : null); return <tr key={row.driverId} className={`border-t border-zinc-800/60 align-top ${permissions.includes("board.read") ? "cursor-pointer hover:bg-zinc-800/30" : ""}`} onClick={event => { if (!permissions.includes("board.read") || (event.target instanceof Element && event.target.closest("a,button,input,textarea,select,[tabindex]"))) return; if (event.ctrlKey || event.metaKey) window.open(href, "_blank", "noopener"); else router.push(href); }}>
+            <td className="px-3 py-2"><div>{permissions.includes("board.read") ? <IntentLink href={href} className="hover:text-blue-300 hover:underline">{row.driverName}</IntentLink> : row.driverName}</div><div className="text-xs text-zinc-400">{row.truckUnits.join(", ") || "—"} · {row.loadCount} {row.loadCount === 1 ? "load" : "loads"}</div>{row.note && <div className="max-w-64 whitespace-pre-wrap text-xs text-zinc-400">{row.note}</div>}{row.issues.map(issue => <div key={issue} className="text-xs text-amber-400">{issue}</div>)}</td>
+            <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums">{money.format(row.creditedGross)}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{miles === null ? "—" : number.format(miles)}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{miles && miles > 0 ? `$${(row.creditedGross / miles).toFixed(3)}` : "—"}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{row.homeDays}</td><td className="px-3 py-2 text-right"><TierMedal kind="gross" row={row} rule={s.rule} /></td><td className="px-3 py-2 text-right"><TierMedal kind="rpm" row={row} rule={s.rule} /></td><td className="px-3 py-2 text-right font-mono tabular-nums">{number.format(row.rate)}%</td><td className="px-3 py-2 text-right font-mono tabular-nums">{row.issues.length ? "Review" : money.format(row.pay)}</td>
             <td className="px-3 py-2">{permissions.includes("dispatcher_pay.edit") && <button aria-label={`Edit home days for ${row.driverName}`} className={button} disabled={busy || lockedDrivers.has(row.driverId)} title={lockedDrivers.has(row.driverId) ? "Reopen this driver's finalized dispatcher statements first" : "Edit weekly home days and comment"} onClick={() => { setEditing(row); setHomeDays(String(row.homeDays)); setNote(row.note); setError(""); }}><Pencil className="h-4 w-4" /></button>}</td>
-          </tr>)}</tbody>
+          </tr>; })}</tbody>
         </table></div>
-      </section>)}
-      <p className="text-xs text-zinc-400">Gross and miles use counted Gross Board entries. Weekly driver gross ÷ weekly miles determines RPM; dated dispatcher credit determines payable gross. Home-day credit affects the tier only and can reduce commission. Commission equals actual credited gross × rate.</p>
+        </div>}
+      </section>; })}
     </>}
     {tab === "rules" && <div className="space-y-4">
-      <p className="text-xs text-zinc-400">The latest revision with an effective starting week on or before the report week applies. New revisions recalculate draft statements; finalized statements retain their saved rules.</p>
       {rules.length === 0 && <p className="text-zinc-400">Loading commission rules…</p>}
       {selectedRules.map(version => <section key={version.id} className="ui-card space-y-3">
         <div className="flex flex-wrap items-center gap-3"><h2 className="font-semibold">Effective {version.effectiveWeek}</h2><span className="text-xs text-zinc-400">Revision {version.id} · saved {new Date(version.createdAt).toLocaleString()}</span>{permissions.includes("dispatcher_pay.rules") && <button className={`${button} ml-auto`} disabled={busy} onClick={() => editRule(version)}><Pencil className="h-4 w-4" />Edit / schedule rules</button>}</div>

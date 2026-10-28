@@ -94,7 +94,6 @@ func projectFields(value any, user repository.AuthUser, path string) {
 		_, driver := v["payType"]
 		_, cdl := v["cdlFileId"]
 		_, truck := v["unitNumber"]
-		_, dispatcher := v["payPercentage"]
 		remove := func(fields []string) {
 			for _, key := range fields {
 				delete(v, key)
@@ -113,9 +112,6 @@ func projectFields(value any, user repository.AuthUser, path string) {
 		}
 		if truck && !repository.HasPermission(user, "trucks.documents.read") {
 			remove(truckDocumentFields)
-		}
-		if dispatcher && !repository.HasPermission(user, "dispatcher_compensation.read") {
-			delete(v, "payPercentage")
 		}
 		if strings.HasPrefix(path, "/truck-charges") && !repository.HasPermission(user, "investor_terms.read") {
 			delete(v, "terms")
@@ -153,8 +149,6 @@ func decodeProtectedProfile(w http.ResponseWriter, r *http.Request, destination 
 		}
 	case "trucks":
 		add([]string{"irpFileId"}, "trucks.documents.edit")
-	case "dispatchers":
-		add([]string{"payPercentage"}, "dispatcher_compensation.edit")
 	}
 	// encoding/json accepts case-insensitive field aliases. Apply authorization
 	// before decoding those aliases, and require canonical names for valid writes.
@@ -196,7 +190,7 @@ func decodeProtectedProfile(w http.ResponseWriter, r *http.Request, destination 
 					}
 					raw, _ = json.Marshal(date)
 				}
-				if string(raw) == "null" && key != "cdlFileId" && key != "irpFileId" && key != "payPercentage" {
+				if string(raw) == "null" && key != "cdlFileId" && key != "irpFileId" {
 					raw = []byte(`""`)
 				}
 				incoming[key] = raw

@@ -75,7 +75,6 @@ type DispatcherFinancialBreakdown struct {
 	Gross          float64  `json:"gross"`
 	DriverCount    int      `json:"driverCount"`
 	LoadCount      int      `json:"loadCount"`
-	PayPercentage  *float64 `json:"payPercentage"`
 	Pay            *float64 `json:"pay"`
 }
 

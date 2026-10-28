@@ -18,6 +18,7 @@ export interface DispatcherCommissionRow {
   version: number;
   gross: number;
   creditedGross: number;
+  creditedMiles?: number;
   miles: number;
   rpm: number;
   adjustedGross: number;
@@ -263,7 +264,6 @@ export interface FinancialDashboard {
     gross: number;
     driverCount: number;
     loadCount: number;
-    payPercentage: number | null;
     pay: number | null;
   }>;
   methodology: {
@@ -776,7 +776,6 @@ export interface Dispatcher {
   email: string | null;
   /** Ten ASCII digits without the +1 country code, or null when not recorded. */
   phone: string | null;
-  payPercentage?: number | null;
   active: boolean;
   notes: string | null;
   driverCount: number;
@@ -794,7 +793,6 @@ export interface DispatcherInput {
   email: string;
   /** Optional phone: ten ASCII digits, or an empty string. */
   phone: string;
-  payPercentage: number | null;
   driverIds: string[];
   active: boolean;
   notes: string;

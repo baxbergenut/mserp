@@ -7,7 +7,8 @@ import { controlClass } from "../components/management/ManagementUI";
 const actions = ["read", "create", "edit", "delete"];
 export function PermissionMatrix({ role, catalog, onChange }: { role: AccessRole; catalog: PermissionDefinition[]; onChange: (role: AccessRole) => void }) {
   const [search, setSearch] = useState("");
-  const groups = [...new Set(catalog.map(p => p.group))];
+  const visibleCatalog = catalog.filter(p => !p.key.startsWith("dispatcher_compensation."));
+  const groups = [...new Set(visibleCatalog.map(p => p.group))];
   const missing = (p: PermissionDefinition) => p.requires.filter(key => !role.permissions.includes(key));
   const label = (key: string) => catalog.find(p => p.key === key)?.label ?? key;
   function toggle(permission: PermissionDefinition, checked: boolean) {
@@ -33,7 +34,7 @@ export function PermissionMatrix({ role, catalog, onChange }: { role: AccessRole
     <div className="max-h-[50vh] overflow-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[700px] text-left text-xs">
       <thead className="sticky top-0 bg-zinc-900"><tr>{["Page / section", "View", "Add", "Edit", "Delete", "Other actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
       <tbody>{groups.filter(group => catalog.some(p => p.group === group && `${p.group} ${p.label} ${p.key}`.toLowerCase().includes(search.toLowerCase()))).map(group => {
-        const permissions = catalog.filter(p => p.group === group);
+        const permissions = visibleCatalog.filter(p => p.group === group);
         return <tr key={group} className="border-t border-zinc-800"><td className="px-3 py-3">{group}{permissions.some(p => p.sensitive) && <span className="ml-2 text-amber-300">Sensitive</span>}</td>
           {actions.map(action => <td key={action} className="px-3 py-3">{permissions.filter(p => p.action === action || (action === "edit" && p.action === "write")).map(p => checkbox(p))}</td>)}
           <td className="px-3 py-3"><div className="flex flex-wrap gap-3">{permissions.filter(p => !actions.includes(p.action) && p.action !== "write").map(p => checkbox(p, true))}</div></td>

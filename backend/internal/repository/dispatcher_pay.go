@@ -61,6 +61,7 @@ type DispatcherCommissionRow struct {
 	Miles         float64  `json:"miles"`
 	RPM           float64  `json:"rpm"`
 	CreditedGross float64  `json:"creditedGross"`
+	CreditedMiles *float64 `json:"creditedMiles,omitempty"`
 	AdjustedGross float64  `json:"adjustedGross"`
 	ActualTier    float64  `json:"actualTier"`
 	SelectedTier  float64  `json:"selectedTier"`
@@ -246,13 +247,14 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		units        map[string]bool
 		counts       map[string]int
 		credit       map[string]int64
+		creditMiles  map[string]int64
 		names        map[string]string
 	}
 	totals := map[string]*bucket{}
 	drivers := map[string]GrossBoardDriver{}
 	for _, d := range board.Drivers {
 		drivers[d.ID] = d
-		totals[d.ID] = &bucket{units: map[string]bool{}, counts: map[string]int{}, credit: map[string]int64{}, names: map[string]string{}}
+		totals[d.ID] = &bucket{units: map[string]bool{}, counts: map[string]int{}, credit: map[string]int64{}, creditMiles: map[string]int64{}, names: map[string]string{}}
 	}
 	for _, e := range board.Entries {
 		if e.Deleted || e.Duplicate || e.TransferOut {
@@ -303,6 +305,7 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		b.gross += g
 		b.miles += m
 		b.credit[dispatcher] += g
+		b.creditMiles[dispatcher] += m
 	}
 	statements := map[string]*DispatcherCommissionStatement{}
 	for id, b := range totals {
@@ -343,6 +346,8 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 			}
 			part := row
 			part.CreditedGross = commissionMoney(b.credit[dispatcher])
+			miles := commissionMoney(b.creditMiles[dispatcher])
+			part.CreditedMiles = &miles
 			part.LoadCount = count
 			if len(part.Issues) == 0 && dispatcher != "" {
 				part.Pay = commissionMoney(roundedCommission(b.credit[dispatcher], int64(math.Round(part.Rate*100))))
@@ -366,10 +371,17 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 		}
 		s.Gross = commissionMoney(gross)
 		s.Pay = commissionMoney(pay)
+		// Per-dispatcher mileage is display detail added after the original
+		// snapshot contract. Keep existing financial revision hashes comparable.
+		revision := *s
+		revision.Rows = append([]DispatcherCommissionRow{}, s.Rows...)
+		for i := range revision.Rows {
+			revision.Rows[i].CreditedMiles = nil
+		}
 		s.Revision = commissionHash(struct {
 			Week      string
 			Statement *DispatcherCommissionStatement
-		}{board.WeekStart, s})
+		}{board.WeekStart, &revision})
 		out = append(out, *s)
 	}
 	sort.Slice(out, func(i, j int) bool {

@@ -75,6 +75,21 @@ these automatically; custom roles must be explicitly granted them in Access.
 No broader driver private or compensation permissions are needed to view this
 dedicated report. Legacy dispatcher percentages remain stored for compatibility
 and are removed from operational dispatcher forms and directories.
+The dispatcher profile/request/financial API contracts no longer expose or accept
+payPercentage; native dispatcher queries never read or write it. Its database
+column and legacy permission keys remain inert for schema/rollback compatibility;
+the retired permission group is hidden from Access.
+
+The weekly page uses collapsible dispatcher sections and Driver Pay's previous /
+next / This week controls. Gross, miles and displayed RPM belong to that
+dispatcher's own loads. Full-week gross, adjusted gross and RPM still qualify the
+driver's tiers; numbered medal tooltips show that basis and the saved rule's
+thresholds. Gross tier is the selected tier; the actual tier and duplicate gross
+columns are omitted. Row clicks link to Gross Board by driver UUID and Monday
+weekStart, clearing remembered filters and showing that driver under every dated
+dispatcher. Per-dispatcher mileage is additional display detail and is excluded
+from financial revision hashes, preserving comparisons to older frozen snapshots.
+Older split snapshots without recorded own mileage display a dash for that field.
 
 - GET /dispatcher-pay?weekStart=YYYY-MM-DD (defaults current New York week)
 - GET /dispatcher-pay/rules

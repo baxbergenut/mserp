@@ -71,6 +71,13 @@ func TestDispatcherCommissionBoardAttribution(t *testing.T) {
 	}
 	for _, s := range out {
 		row := s.Rows[0]
+		miles := float64(1000)
+		if s.DispatcherID == "b" {
+			miles = 3000
+		}
+		if row.CreditedMiles == nil || *row.CreditedMiles != miles {
+			t.Fatal("dispatcher mileage must use only its own loads", row)
+		}
 		if s.Pay != 50 || s.Gross != 5000 || row.Gross != 10000 || row.Miles != 4000 || row.RPM != 2.5 || row.Rate != 1 || row.LoadCount != 1 {
 			t.Fatalf("driver-week weighted RPM and credited gross differ: %+v", s)
 		}
@@ -223,9 +230,22 @@ func TestDispatcherPayDatabase(t *testing.T) {
 				t.Fatalf("not Gross Board source: %+v", report)
 			}
 			exec(`UPDATE dispatchers SET pay_percentage=99 WHERE id=$1`, dispatcher)
+			fleet := NewFleetRepository(pool)
+			created, err := fleet.CreateDispatcher(ctx, DispatcherInput{FullName: "Profile Without Commission", Active: true})
+			if err != nil {
+				t.Fatal("create dispatcher without retired commission", err)
+			}
+			updated, err := fleet.UpdateDispatcher(ctx, created.ID, DispatcherInput{FullName: "Updated Profile Without Commission", Active: true})
+			if err != nil || updated.FullName != "Updated Profile Without Commission" {
+				t.Fatal("update dispatcher without retired commission", err, updated.FullName)
+			}
+			profileJSON, _ := json.Marshal(updated)
+			if strings.Contains(string(profileJSON), "payPercentage") {
+				t.Fatal("dispatcher profiles must not expose retired commission")
+			}
 			period, _ := dispatcherWeek("2099-01-05")
 			legacy := FinancialDashboard{Dispatchers: []DispatcherFinancialBreakdown{}}
-			if err = NewDashboardRepository(pool).loadDispatcherFinancials(ctx, FinancialDashboardQuery{DateFrom: &period}, &legacy); err != nil || len(legacy.Dispatchers) != 1 || legacy.Dispatchers[0].Pay == nil || *legacy.Dispatchers[0].Pay != 85 || legacy.Dispatchers[0].PayPercentage != nil {
+			if err = NewDashboardRepository(pool).loadDispatcherFinancials(ctx, FinancialDashboardQuery{DateFrom: &period}, &legacy); err != nil || len(legacy.Dispatchers) != 1 || legacy.Dispatchers[0].Pay == nil || *legacy.Dispatchers[0].Pay != 85 {
 				t.Fatal("financial report must share Gross Board commissions", err, legacy.Dispatchers)
 			}
 			input := DispatcherPayInput{DriverID: driver, HomeDays: 1, Note: "Reviewed home day"}
@@ -254,6 +274,11 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			frozen := get()
 			if !frozen.Statements[0].Finalized || frozen.Statements[0].SourceChanged {
 				t.Fatal("invalid snapshot", frozen)
+			}
+			// Simulate a snapshot saved before credited mileage was introduced.
+			exec(`UPDATE dispatcher_pay_statements SET report=jsonb_set(report,'{rows,0}',(report->'rows'->0)-'creditedMiles')`)
+			if get().Statements[0].SourceChanged {
+				t.Fatal("display-only mileage must not invalidate an older financial snapshot")
 			}
 			input.Version = 1
 			if err = repo.SaveInput(ctx, "2099-01-05", input, "test"); err == nil {

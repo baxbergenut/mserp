@@ -304,7 +304,6 @@ function profilePayload(path: string, body: BodyInit | null | undefined) {
     omit("drivers.documents.edit", ["cdlFileId"]); omit(path === "/drivers" ? "escrow.create" : "escrow.edit", ["escrowAmount"]);
   }
   if (path.startsWith("/trucks")) omit("trucks.documents.edit", ["irpFileId"]);
-  if (path.startsWith("/dispatchers")) omit("dispatcher_compensation.edit", ["payPercentage"]);
   return JSON.stringify(data);
 }
 function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {

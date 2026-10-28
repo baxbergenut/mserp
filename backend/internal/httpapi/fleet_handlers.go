@@ -413,7 +413,6 @@ type dispatcherRequest struct {
 	FullName       string                         `json:"fullName"`
 	Email          string                         `json:"email"`
 	Phone          string                         `json:"phone"`
-	PayPercentage  *float64                       `json:"payPercentage"`
 	DriverIDs      []string                       `json:"driverIds"`
 	Active         bool                           `json:"active"`
 	Notes          string                         `json:"notes"`
@@ -444,9 +443,6 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 	if err != nil {
 		return repository.DispatcherInput{}, err
 	}
-	if request.PayPercentage != nil && (*request.PayPercentage < 0 || *request.PayPercentage > 100) {
-		return repository.DispatcherInput{}, errors.New("pay percentage must be between 0 and 100")
-	}
 	seenDriverIDs := make(map[string]struct{}, len(request.DriverIDs))
 	for _, id := range request.DriverIDs {
 		if !isUUID(id) {
@@ -463,8 +459,8 @@ func (request dispatcherRequest) validate() (repository.DispatcherInput, error) 
 		Extension:      extension, ExtensionSet: len(request.Extension) > 0, Updaters: request.Updaters,
 		AssignmentWeek: request.AssignmentWeek,
 		FullName:       request.FullName, Email: optionalString(request.Email), Phone: optionalString(normalizedPhone),
-		PayPercentage: request.PayPercentage, DriverIDs: driverIDs,
-		Active: request.Active, Notes: optionalString(request.Notes),
+		DriverIDs: driverIDs,
+		Active:    request.Active, Notes: optionalString(request.Notes),
 	}, nil
 }
 

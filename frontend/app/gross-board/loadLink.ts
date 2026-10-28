@@ -1,5 +1,15 @@
 import { addDays } from "./board";
 
+export function parseBoardDriverTarget(search: string) {
+  const params = new URLSearchParams(search);
+  const driverId = params.get("driverId") ?? "", week = params.get("weekStart") ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(driverId)
+    || !/^\d{4}-\d{2}-\d{2}$/.test(week) || week < "2000-01-03" || week > "2100-12-27") return null;
+  const date = new Date(`${week}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== week || date.getUTCDay() !== 1) return null;
+  return { driverId, week };
+}
+
 export function parseBoardLoadTarget(search: string) {
   const params = new URLSearchParams(search);
   const driverId = params.get("driverId") ?? "";

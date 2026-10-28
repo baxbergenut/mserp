@@ -20,7 +20,6 @@ export const emptyDispatcherInput: DispatcherInput = {
   fullName: "",
   email: "",
   phone: "",
-  payPercentage: null,
   driverIds: [],
   active: true,
   notes: "",
@@ -36,7 +35,6 @@ export function dispatcherToInput(
     fullName: dispatcher.fullName,
     email: dispatcher.email ?? "",
     phone: dispatcher.phone ?? "",
-    payPercentage: dispatcher.payPercentage ?? null,
     driverIds: drivers
       .filter((driver) => driver.dispatcherId === dispatcher.id)
       .map((driver) => driver.id),

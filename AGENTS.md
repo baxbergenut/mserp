@@ -2018,6 +2018,12 @@ assignment lookup lists.
   Legacy dispatcher percentages are retained only for compatibility. See
   docs/DISPATCHER_PAY.md and TestDispatcherPayDatabase with disposable local
   MSERP_DISPATCHER_PAY_TEST_DATABASE_URL; browser: test-dispatcher-pay-e2e.mjs.
+  Dispatcher sections collapse like Driver Pay and share its week navigation.
+  Gross/miles/display RPM use each dispatcher's loads; numbered medal tooltips
+  explain the full-week qualification and saved rule requirements. Driver rows
+  deep-link Gross Board using driverId + weekStart. Dispatcher payPercentage is
+  retired from native profiles/requests; its old column/permission keys remain
+  inert for rollback compatibility and the Access group is hidden.
 - Relay fuel sync records completed UTC dates and never marks the current UTC
   date complete. Driver identity is persisted in `relay_driver_links`; fuel,
   DEF, other products, fees, reporting dimensions, and raw payloads are stored.

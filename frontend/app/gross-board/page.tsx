@@ -21,7 +21,7 @@ import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSk
 import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch } from "@/app/components/management/ManagementUI";
 import { BoardFilter } from "@/app/components/management/BoardFilter";
-import { parseBoardLoadTarget } from "./loadLink";
+import { parseBoardDriverTarget, parseBoardLoadTarget } from "./loadLink";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
@@ -41,17 +41,18 @@ export default function GrossBoardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
-  const [week, setWeek] = useState(() => loadTarget?.week ?? currentChargeWeek());
+  const [driverTarget, setDriverTarget] = useState(() => parseBoardDriverTarget(searchParams.toString()));
+  const [week, setWeek] = useState(() => loadTarget?.week ?? driverTarget?.week ?? currentChargeWeek());
   // Keep the old key so remembered single-dispatcher views become checked choices.
-  const [dispatcher, setDispatcher] = useViewState<string[] | null | string>("page:dispatcher", null, loadTarget ? null : undefined);
+  const [dispatcher, setDispatcher] = useViewState<string[] | null | string>("page:dispatcher", null, loadTarget || driverTarget ? null : undefined);
   const selectedDispatchers = useMemo(() => typeof dispatcher === "string" ? dispatcher === "all" ? null : [dispatcher] : dispatcher, [dispatcher]);
-  const [search, setSearch] = useViewState("page:search", "", loadTarget ? "" : undefined);
+  const [search, setSearch] = useViewState("page:search", "", loadTarget || driverTarget ? "" : undefined);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
   useEffect(() => {
-    const target = parseBoardLoadTarget(searchParams.toString());
-    if (!target) return;
-    const timer = setTimeout(() => { setLoadTarget(target); setWeek(target.week); setDispatcher(null); setSearch(""); }, 0);
+    const load = parseBoardLoadTarget(searchParams.toString()), driver = parseBoardDriverTarget(searchParams.toString());
+    const target = load ?? driver;
+    const timer = setTimeout(() => { setLoadTarget(load); setDriverTarget(driver); if (target) { setWeek(target.week); setDispatcher(null); setSearch(""); } }, 0);
     return () => clearTimeout(timer);
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
@@ -162,7 +163,7 @@ export default function GrossBoardPage() {
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
   const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates, board?.entries ?? []), [board, dates]);
-  const drivers = useMemo(() => rows.filter((driver) => (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [rows, selectedDispatchers, search]);
+  const drivers = useMemo(() => rows.filter((driver) => (!driverTarget || driver.id === driverTarget.driverId) && (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [rows, selectedDispatchers, search, driverTarget]);
   const dispatchers = useMemo(() => Array.from(new Map(rows.map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [rows]);
   const shownEntries = useMemo(() => {
     return Object.values(allEntries).filter(entry => drivers.some(driver => driver.id === entry.driverId && driver.dates.includes(entry.date) && entryForDispatcher(entry,driver.dispatcherId,driver)));
@@ -303,6 +304,7 @@ export default function GrossBoardPage() {
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers…" /></div>
+        {driverTarget && <button className={buttonClass} onClick={() => { setDriverTarget(null); router.replace("/gross-board", { scroll: false }); }}>All drivers</button>}
         <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">

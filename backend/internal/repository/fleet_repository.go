@@ -204,7 +204,6 @@ type Dispatcher struct {
 	FullName            string    `json:"fullName"`
 	Email               *string   `json:"email"`
 	Phone               *string   `json:"phone"`
-	PayPercentage       *float64  `json:"payPercentage"`
 	Active              bool      `json:"active"`
 	Notes               *string   `json:"notes"`
 	DriverCount         int       `json:"driverCount"`
@@ -223,7 +222,6 @@ type DispatcherInput struct {
 	FullName            string
 	Email               *string
 	Phone               *string
-	PayPercentage       *float64
 	DriverIDs           []string
 	Active              bool
 	Notes               *string
@@ -965,10 +963,10 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 	displayName := formatPersonName(input.FullName)
 	err = tx.QueryRow(ctx, `
  INSERT INTO dispatchers (
-			full_name, normalized_name, email, phone, pay_percentage, active, notes, extension,user_account_id
- ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,$9) RETURNING id`,
+			full_name, normalized_name, email, phone, active, notes, extension,user_account_id
+ ) VALUES ($1, $2, $3, $4, $5, $6, $7,$8) RETURNING id`,
 		displayName, normalizeName(displayName), input.Email, input.Phone,
-		input.PayPercentage, input.Active, input.Notes, input.Extension, accountID,
+		input.Active, input.Notes, input.Extension, accountID,
 	).Scan(&id)
 	if err != nil {
 		return Dispatcher{}, err
@@ -1006,11 +1004,11 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 	displayName := formatPersonName(input.FullName)
 	command, err := tx.Exec(ctx, `
 		UPDATE dispatchers SET full_name = $2, normalized_name = $3, email = $4,
-			phone = $5, pay_percentage = CASE WHEN 'payPercentage'=ANY($11::text[]) THEN pay_percentage ELSE $6 END, active = $7, notes = $8,
- extension = CASE WHEN $9 THEN $10::int ELSE extension END,
+			phone = $5, active = $6, notes = $7,
+ extension = CASE WHEN $8 THEN $9::int ELSE extension END,
 			updated_at = now()
 		WHERE id = $1`, id, displayName, normalizeName(displayName),
-		input.Email, input.Phone, input.PayPercentage, input.Active, input.Notes, input.ExtensionSet, input.Extension, input.PreserveFields)
+		input.Email, input.Phone, input.Active, input.Notes, input.ExtensionSet, input.Extension)
 	if err != nil {
 		return Dispatcher{}, err
 	}
@@ -1065,7 +1063,7 @@ func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string, actor
 }
 
 const selectDispatchersSQL = `
-SELECT dp.id, dp.full_name, dp.email, dp.phone, dp.pay_percentage,
+SELECT dp.id, dp.full_name, dp.email, dp.phone,
 	dp.active, dp.notes, COUNT(d.id)::int, dp.created_at, dp.updated_at, dp.extension,
  (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='main'),
  (SELECT updater_id FROM dispatcher_updaters WHERE dispatcher_id=dp.id AND shift='after_hours'),dp.user_account_id
@@ -1075,7 +1073,7 @@ LEFT JOIN drivers d ON d.dispatcher_id = dp.id`
 func scanDispatcher(row rowScanner) (Dispatcher, error) {
 	var value Dispatcher
 	err := row.Scan(&value.ID, &value.FullName, &value.Email, &value.Phone,
-		&value.PayPercentage, &value.Active, &value.Notes, &value.DriverCount,
+		&value.Active, &value.Notes, &value.DriverCount,
 		&value.CreatedAt, &value.UpdatedAt, &value.Extension, &value.MainUpdaterID, &value.AfterHoursUpdaterID, &value.UserAccountID)
 	value.FullName = formatPersonName(value.FullName)
 	return value, err
