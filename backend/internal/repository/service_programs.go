@@ -232,17 +232,21 @@ func programTrucks(ctx context.Context, q chargeQuery, program, truck string, to
 	if err != nil {
 		return nil, err
 	}
+	return programTrucksWithPrograms(ctx, q, program, truck, today, programs)
+}
+
+func programTrucksWithPrograms(ctx context.Context, q chargeQuery, program, truck string, today time.Time, programs []ServiceProgram) ([]ProgramTruck, error) {
 	byID := map[string]ServiceProgram{}
 	for _, p := range programs {
 		byID[p.ID] = p
 	}
-	rows, err := q.Query(ctx, `SELECT p.id,p.name,t.id,t.unit_number,t.active,fleet_truck_operating_status(t.id),member.active,member.version,m.id::text,m.record_version,m.baseline_version,m.service_date::text,m.odometer,m.cycle_id::text,r.reading_date::text,r.mileage,r.reported_at,coalesce(r.source,''),
+	rows, err := q.Query(ctx, `SELECT p.id,p.name,t.id,t.unit_number,t.active,fleet_read.operating_status,member.active,member.version,m.id::text,m.record_version,m.baseline_version,m.service_date::text,m.odometer,m.cycle_id::text,r.reading_date::text,r.mileage,r.reported_at,coalesce(r.source,''),
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN true ELSE member.override_interval END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.interval_miles ELSE member.interval_miles END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.interval_days ELSE member.interval_days END,
  CASE WHEN p.legacy_pm AND s.id IS NOT NULL THEN s.interval_months ELSE member.interval_months END,
  coalesce(s.enabled,true),s.warning_miles,s.warning_days
- FROM service_program_trucks member JOIN service_programs p ON p.id=member.program_id JOIN trucks t ON t.id=member.truck_id
+ FROM service_program_trucks member JOIN service_programs p ON p.id=member.program_id JOIN trucks t ON t.id=member.truck_id JOIN fleet_truck_read_state fleet_read ON fleet_read.id=t.id
  `+programCycleJoin+maintenanceCurrentReadingJoin+`
  LEFT JOIN maintenance_schedules s ON p.legacy_pm AND s.truck_id=t.id AND s.service_code='pm'
  WHERE ($1='' OR p.id=NULLIF($1,'')::uuid) AND ($2='' OR t.id=NULLIF($2,'')::uuid) ORDER BY lower(p.name),t.unit_number,t.id`, program, truck)

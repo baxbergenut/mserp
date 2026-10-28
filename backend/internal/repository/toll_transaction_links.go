@@ -15,50 +15,117 @@ import (
 
 // Attention uses the same coverage assessment as Transactions, before pagination.
 func (r *TollRepository) attentionTolls(ctx context.Context, from string, includeReviewed ...bool) ([]Toll, error) {
+	page, err := r.attentionTollPage(ctx, from, len(includeReviewed) > 0 && includeReviewed[0], nil)
+	return page.Items, err
+}
+
+type TollAttentionPage struct {
+	Page[Toll]
+	DateFrom string `json:"dateFrom"`
+}
+
+func (r *TollRepository) AttentionTolls(ctx context.Context, from string, reviewed bool, pagination Pagination) (TollAttentionPage, error) {
+	if from == "" {
+		zone, _ := time.LoadLocation("America/New_York")
+		now := time.Now().In(zone)
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, zone).AddDate(0, -1, 0).Format(time.DateOnly)
+	}
+	out := TollAttentionPage{DateFrom: from}
+	if _, err := time.Parse(time.DateOnly, from); err != nil {
+		return out, &TollLinkError{"Select a valid posting date."}
+	}
+	page, err := r.attentionTollPage(ctx, from, reviewed, &pagination)
+	out.Page = page
+	return out, err
+}
+
+func (r *TollRepository) attentionTollPage(ctx context.Context, from string, reviewed bool, pagination *Pagination) (Page[Toll], error) {
+	out := Page[Toll]{}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, selectTollsSQL+` WHERE t.posting_date >= $1::date ORDER BY t.posting_date DESC,t.exit_date DESC,t.exit_time DESC,t.id`, from)
+	// Classify all candidate identities before counting or paginating. Large source
+	// payloads and display joins are fetched only for the resulting page.
+	rows, err := tx.Query(ctx, `SELECT id::text,truck_id::text FROM tolls WHERE posting_date >= $1::date ORDER BY posting_date DESC,exit_date DESC,exit_time DESC,id`, from)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	values := []Toll{}
 	ids := []string{}
 	for rows.Next() {
-		value, e := scanToll(rows)
-		if e != nil {
+		var v Toll
+		if err = rows.Scan(&v.ID, &v.TruckID); err != nil {
 			rows.Close()
-			return nil, e
+			return out, err
 		}
-		values = append(values, value)
-		ids = append(ids, value.ID)
+		values = append(values, v)
+		ids = append(ids, v.ID)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	flags, err := transactionFlagsTx(ctx, tx, "toll", ids, time.Now().UTC())
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	for i := range values {
-		if flag := flags[values[i].ID]; flag != nil && flag.Status == "review" {
-			values[i].Flag = flag
+		if f := flags[values[i].ID]; f != nil && f.Status == "review" {
+			values[i].Flag = f
 		}
 	}
 	if _, err = populateTollReviews(ctx, tx, values); err != nil {
-		return nil, err
+		return out, err
 	}
-	out := []Toll{}
-	for _, value := range values {
-		if value.TruckID == nil || value.Flag != nil && (!value.Reviewed || len(includeReviewed) > 0 && includeReviewed[0]) {
-			out = append(out, value)
+	eligible := []Toll{}
+	for _, v := range values {
+		if v.TruckID == nil || v.Flag != nil && (!v.Reviewed || reviewed) {
+			eligible = append(eligible, v)
 		}
 	}
-	return out, tx.Commit(ctx)
+	p := Pagination{Page: 1, PageSize: max(1, len(eligible))}
+	if pagination != nil {
+		p = *pagination
+	}
+	p = p.Normalize(len(eligible))
+	selected := eligible[p.Offset():min(p.Offset()+p.PageSize, len(eligible))]
+	ids = []string{}
+	byID := map[string]Toll{}
+	for _, v := range selected {
+		ids = append(ids, v.ID)
+		byID[v.ID] = v
+	}
+	items := []Toll{}
+	if len(ids) > 0 {
+		rows, err = tx.Query(ctx, selectTollsSQL+` WHERE t.id=ANY($1::uuid[]) ORDER BY t.posting_date DESC,t.exit_date DESC,t.exit_time DESC,t.id`, ids)
+		if err != nil {
+			return out, err
+		}
+		for rows.Next() {
+			v, e := scanToll(rows)
+			if e != nil {
+				rows.Close()
+				return out, e
+			}
+			state := byID[v.ID]
+			v.Flag = state.Flag
+			v.Reviewed = state.Reviewed
+			v.ReviewRevision = state.ReviewRevision
+			v.ReviewVersion = state.ReviewVersion
+			v.ReviewedAt = state.ReviewedAt
+			v.ReviewedBy = state.ReviewedBy
+			items = append(items, v)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return out, err
+		}
+	}
+	return NewPage(items, len(eligible), p), tx.Commit(ctx)
 }
 
 func validateTollSelection(ids []string) error {

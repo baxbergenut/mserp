@@ -54,6 +54,7 @@ const server = createServer(async (request, response) => {
       if (request.method === 'GET') reads.push(path);
       if (path === '/api/auth/session') return send({ user: { id: id(500), username: 'Fleet Reviewer', theme: 'default', permissions: trailerOnly ? ['trailers.read'] : ['inventory.read', 'trailers.read', 'tolls.read', ...(truckAccess ? ['trucks.read'] : []), ...(readOnly ? [] : ['inventory.manage', 'trailers.manage', 'inventory.import'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0 });
+      if (path === '/api/feedback/messages/count') return send({ count: 0 });
       if (path === '/api/tasks/count') return send({ count: 0 });
       if (path === '/api/maintenance/access') return send({ canView: false, canCreate: false });
       if (path === '/api/lookups/trucks') return send(trucks);
@@ -131,7 +132,7 @@ try {
   await expect(page.getByRole('cell', { name: 'No matching records.', exact: true })).toHaveAttribute('colspan', '7');
   await page.getByLabel('Assignment Filter').selectOption('');
   await search().fill('+1 (904) 921-7936'); await expect(page.getByRole('button', { name: 'Samsung · Tab A9', exact: true })).toBeVisible(); await search().fill('');
-  assert.equal(writes.length, 0);
+  assert.equal(writes.length, 0, JSON.stringify(writes));
   await page.getByRole('button', { name: 'Add Tablet', exact: true }).click();
   let dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Installation Status').locator('option[value="verified_installed"]')).toHaveJSProperty('disabled', true);
@@ -332,7 +333,7 @@ try {
   await expect(page.getByRole('button', { name: 'Edit trailer', exact: true })).toHaveCount(0);
   for (const name of ['Change status','Return to service','Assign truck','Change assignment']) await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(tmpdir(), 'mserp-trailer-detail-mobile.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -345,7 +346,7 @@ try {
   await expect(page.getByRole('checkbox').first()).toHaveJSProperty('disabled', true);
   await expect(page.getByRole('button', { name: 'Add Supply', exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(tmpdir(), 'mserp-inventory-supplies-mobile.png'), animations: 'disabled' });
   await page.goto(origin + '/fleet/inventory?tab=phones');
@@ -380,7 +381,7 @@ try {
   await expect(trailerPage.getByText('No trailers match your search or filters.', { exact: true })).toBeVisible();
   await trailerPage.getByPlaceholder('Search trailers…').fill('');
   await trailerPage.setViewportSize({ width: 390, height: 844 });
-  await trailerPage.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(trailerPage.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   assert.equal(await trailerPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.equal(reads.slice(trailerReadStart).some(path => path === '/api/inventory' || path === '/api/lookups/trucks'), false);
   await trailerPage.close();

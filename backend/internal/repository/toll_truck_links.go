@@ -86,7 +86,15 @@ func (r *TollRepository) PrePassTruckLinks(ctx context.Context, from string, inc
 	if err != nil {
 		return out, err
 	}
-	rows, err = r.pool.Query(ctx, `SELECT id::text,unit_number,coalesce(vin,''),coalesce(license_plate,'') FROM trucks ORDER BY unit_number,id`)
+	options, err := r.PrePassTruckLinkOptions(ctx)
+	out.Trucks = options.Trucks
+	out.Mappings = options.Mappings
+	return out, err
+}
+
+func (r *TollRepository) PrePassTruckLinkOptions(ctx context.Context) (PrePassTruckLinks, error) {
+	out := PrePassTruckLinks{Trucks: []PrePassTruckChoice{}, Mappings: []PrePassTruckMapping{}, Transactions: []Toll{}, Groups: []PrePassTruckGroup{}}
+	rows, err := r.pool.Query(ctx, `SELECT id::text,unit_number,coalesce(vin,''),coalesce(license_plate,'') FROM trucks ORDER BY unit_number,id`)
 	if err != nil {
 		return out, err
 	}

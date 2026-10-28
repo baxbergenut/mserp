@@ -1,5 +1,5 @@
 "use client";
-import type { DriverOption, TruckOption, InvestorOption } from "@/app/lib/types";
+import type { ExpenseDriverChoice, ExpenseTruckChoice, ExpenseOwnerChoice } from "@/app/lib/types";
 
 import { applyExpenseCategoryRules } from "./catalog";
 
@@ -20,9 +20,7 @@ import {
   fetchExpense,
 
   fetchAuthSession,
-  fetchDriverOptions,
-  fetchInvestorOptions,
-  fetchTruckOptions,
+  fetchExpenseFormChoices,
   updateExpense,
   verifyExpense,
   unverifyExpense,
@@ -122,9 +120,10 @@ export default function ExpensesPage() {
   const createCategoryIds = options.settings
     .filter(item => item.kind === "category" && item.active && categoryAccess.some(access => access.categoryId === item.id && access.canCreate))
     .map(item => item.id);
-  const [drivers, setDrivers] = useState<DriverOption[]>([]);
-  const [owners, setOwners] = useState<InvestorOption[]>([]);
-  const [trucks, setTrucks] = useState<TruckOption[]>([]);
+  const [choicesLoaded,setChoicesLoaded]=useState(false);
+  const [drivers, setDrivers] = useState<ExpenseDriverChoice[]>([]);
+  const [owners, setOwners] = useState<ExpenseOwnerChoice[]>([]);
+  const [trucks, setTrucks] = useState<ExpenseTruckChoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
@@ -180,25 +179,6 @@ export default function ExpensesPage() {
     return () => window.clearTimeout(timeout);
   }, [loadData]);
 
-  useEffect(() => {
-    if (!canLoadFleetSelectors) return;
-    let cancelled = false;
-    Promise.all([fetchDriverOptions(), fetchTruckOptions(), fetchInvestorOptions()])
-      .then(([driverValues, truckValues, ownerValues]) => {
-        if (!cancelled) {
-          setDrivers(driverValues);
-          setTrucks(truckValues);
-          setOwners(ownerValues);
-        }
-      })
-      .catch((reason) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Failed to load fleet assignments");
-        }
-      });
-    return () => { cancelled = true; };
-  }, [canLoadFleetSelectors]);
-
   const expenseOpen = editing !== undefined;
   useEffect(() => {
     if (!expenseOpen || !canLoadFleetSelectors) return;
@@ -207,13 +187,10 @@ export default function ExpensesPage() {
       request?.abort();
       const controller = new AbortController();
       request = controller;
-      void Promise.all([
-        fetchExpensesPage({ page: 1, pageSize: 1 }, controller.signal),
-        fetchDriverOptions(),
-      ]).then(([response, driverValues]) => {
+      void fetchExpenseFormChoices(controller.signal).then(response => {
         if (controller.signal.aborted) return;
-        setOptions(current => ({ ...current, applicants: response.options.applicants }));
-        setDrivers(driverValues);
+        setOptions(current => ({ ...response.options, filters: current.filters }));
+        setDrivers(response.drivers); setTrucks(response.trucks); setOwners(response.owners); setChoicesLoaded(true);
       }).catch(reason => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Failed to refresh driver choices");
       });
@@ -504,7 +481,7 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
-          submitDisabled={!!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}
+          submitDisabled={!choicesLoaded || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}
           footerStart={editing && !editing.managedInSheets && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving || aiBusy}
           submitLabel={pendingUploadId ? "Retry receipt upload" : editing ? "Save changes" : review && review.index+1<review.entries.length ? "Save & review next" : "Create entry"}
@@ -525,7 +502,7 @@ export default function ExpensesPage() {
             </div>
           )}
           {review && <p className="mb-4 text-xs text-zinc-500">Review entry {review.index+1} of {review.entries.length}. Each item is saved separately.</p>}
-          <fieldset disabled={isSaving || aiBusy || !!pendingUploadId || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
+          <fieldset disabled={!choicesLoaded || isSaving || aiBusy || !!pendingUploadId || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
           <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))} onChange={setAttachment} onError={setError} />
           {editing && <ExternalSettlements expense={editing} onSaved={async()=>{const updated=await fetchExpense(editing.id);setEditing(updated);setForm(expenseToInput(updated));await loadData(false)}}/>}
           {editing && <ExpenseDocuments key={editing.id} id={editing.id} />}

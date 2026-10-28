@@ -10,7 +10,7 @@ func (r *DashboardRepository) DashboardCounts(ctx context.Context, kind string) 
 	q, path, param := "", "", "status"
 	switch kind {
 	case "trucks":
-		q = "SELECT fleet_truck_operating_status(id),count(*) FROM trucks WHERE status<>'terminated' GROUP BY 1"
+		q = "SELECT operating_status,count(*) FROM fleet_truck_read_state WHERE operating_status<>'terminated' GROUP BY 1"
 		path = "/trucks"
 	case "trailers":
 		q = "SELECT data->>'status',count(*) FROM fleet_trailers WHERE data->>'status'<>'terminated' GROUP BY 1"

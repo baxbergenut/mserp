@@ -32,3 +32,15 @@ func TestCompactBoardPreservesDifferentSnapshots(t *testing.T) {
 		t.Fatal("embedded full arrays leaked into transport")
 	}
 }
+
+func TestBoardOverviewPreservesLiveEvidence(t *testing.T) {
+	p := BoardLoad{PlanID: "plan", Number: "load", Stops: []BoardStop{{Key: "stop"}}}
+	full := DriverBoard{Loads: map[string]BoardLoads{"driver": {Current: &p, Week: []BoardLoad{p}, Next: []BoardLoad{p}, Earlier: []BoardLoad{p}, Hidden: []BoardLoad{p}, Unavailable: []BoardLoad{p}, Revision: "fence", StopKey: "stop"}}}
+	overview := BoardOverview(full).Loads["driver"]
+	if overview.Current != &p || len(overview.Week) != 1 || len(overview.Next) != 1 || overview.StopKey != "stop" || overview.Revision != "fence" || !overview.DetailsOmitted || len(overview.Hidden)+len(overview.Earlier)+len(overview.Unavailable) != 0 {
+		t.Fatal("overview lost live editing evidence", overview)
+	}
+	if len(full.Loads["driver"].Earlier) != 1 {
+		t.Fatal("overview mutated full detail response")
+	}
+}

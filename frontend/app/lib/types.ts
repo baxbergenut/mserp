@@ -512,6 +512,7 @@ export interface BoardLoad {
   sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
+  detailsOmitted?: boolean;
   resolutionWarning?: string;
   automation?: BoardAutomation;
   week: BoardLoad[];
@@ -1554,3 +1555,5 @@ export type ExpenseOwnerChoice = Pick<InvestorOption, "id" | "fullName" | "drive
 export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: ExpenseDriverChoice[]; trucks: ExpenseTruckChoice[]; owners: ExpenseOwnerChoice[]; }
 
 export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:string;reference:string;reversesId?:string;version:number;actor?:string;createdAt?:string}
+
+export interface ServiceProgramWorkspace { programs: ServiceProgram[]; trucks: PaginatedResponse<ProgramTruck> }

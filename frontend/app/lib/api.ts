@@ -6,7 +6,7 @@ export const changeTruckCondition = (id:string,input:import("./types").FleetStat
 export const fetchTruckDataTruck = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DataTruckEnrollment>(`/trucks/${id}/datatruck`, {signal});
 export const retryTruckDataTruck = (id: string, version: number) => apiRequest<void>(`/trucks/${id}/datatruck`, {method:"POST",body:JSON.stringify({version})});
 import type { InventoryCollection, InventoryData, InventoryRecord, InventoryEvent, InventoryMovement, InventorySnapshot, InventoryImport } from "./inventoryTypes";
-export const fetchInventory = (signal?: AbortSignal) => apiRequest<InventoryData>("/inventory", { signal });
+export const fetchInventory = (signal?: AbortSignal, view?: "devices" | "supplies" | "locations") => apiRequest<InventoryData>(withQuery("/inventory", {view}), { signal });
 export const fetchTrailers = (signal?: AbortSignal) => apiRequest<InventoryRecord[]>("/trailers", { signal });
 export const fetchTrailer = (id: string, signal?: AbortSignal) => apiRequest<InventoryRecord>(`/trailers/${id}`, {signal});
 export const fetchTrailersPage = (query: PageQuery & {status?:string;storage?:string;truckId?:string}, signal?:AbortSignal) => paginatedRequest<import("./types").TrailerPage>(withQuery("/trailers",query),signal);
@@ -187,7 +187,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
   return () => stream.close();
 }
 export const fetchDriverBoard = (weekStart: string) =>
-  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart })).then(expandBoard);
+  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1" })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>
@@ -200,7 +200,7 @@ export const updateBoardPresence = (clientId: string, driverId: string, column: 
 export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
-  const stream = new EventSource(`${API_BASE}/driver-board/events`, { withCredentials: true });
+  const stream = new EventSource(`${API_BASE}/driver-board/events?overview=1`, { withCredentials: true });
   stream.addEventListener("open", () => connection(true));
   stream.addEventListener("error", () => connection(false));
   stream.addEventListener("changed", () => changed());
@@ -214,7 +214,7 @@ export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field =
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before, field }));
 // The server clamps the optional upcoming cutoff to today in New York; older unfinished plans are returned separately.
 // Includes all weekly match candidates separately from the today-forward queue.
-export const fetchBoardLoads = (driverId: string, from?: string) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }));
+export const fetchBoardLoads = (driverId: string, from?: string, signal?: AbortSignal) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }), { signal });
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>
@@ -270,7 +270,7 @@ export const fetchFuelTransactionsPage = (query: PageQuery & {
   category?: string;
   dateFrom?: string;
   dateTo?: string;
-}) => paginatedRequest<FuelTransactionPage>(withQuery("/fuel-transactions", query));
+}, signal?: AbortSignal) => paginatedRequest<FuelTransactionPage>(withQuery("/fuel-transactions", query),signal);
 export const fetchFuelDashboard = (query: {
   dateFrom?: string;
   dateTo?: string;
@@ -493,7 +493,7 @@ export const fetchTollsPage = (query: PageQuery & {
   agency?: string;
   postFrom?: string;
   postTo?: string;
-}) => paginatedRequest<TollPage>(withQuery("/tolls", query));
+}, signal?: AbortSignal) => paginatedRequest<TollPage>(withQuery("/tolls", query),signal);
 export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
@@ -734,3 +734,9 @@ export const readFeedbackMessage = (id: string) => apiRequest<void>(`/feedback/m
 
 export const fetchExternalSettlements=(id:string,signal?:AbortSignal)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{signal});
 export const recordExternalSettlement=(id:string,data:import('./types').ExternalExpenseSettlement)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{method:'POST',body:JSON.stringify(data)});
+
+
+export const fetchTollAttention = (from: string, includeReviewed: boolean, page: number, pageSize: number, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").Toll> & {dateFrom: string}>(withQuery("/tolls/attention",{from,includeReviewed:includeReviewed ? "true" : undefined,page,pageSize}),{signal});
+export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePassTruckLinks>("/tolls/truck-link-options",{signal});
+
+export const fetchServiceProgramWorkspace = (query: {program: string; truckId?: string; search: string; status: string; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").ServiceProgramWorkspace>(withQuery("/maintenance/program-workspace",query),{signal});

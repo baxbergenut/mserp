@@ -157,6 +157,27 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 	if err != nil {
 		return out, err
 	}
+	// Read open mappings once, including their earliest effective date per identity.
+	type mappingKey struct{ account, vin, truck, identity string }
+	mappings := map[mappingKey]string{}
+	rows, err = r.pool.Query(ctx, `SELECT coalesce(account_number,''),coalesce(fleet_vin,''),truck_id::text,identity_key,min(effective_from)::text FROM prepass_truck_mappings WHERE active AND effective_to IS NULL AND environment=$1 GROUP BY account_number,fleet_vin,truck_id,identity_key`, r.prepassEnvironment)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var k mappingKey
+		var from string
+		if err = rows.Scan(&k.account, &k.vin, &k.truck, &k.identity, &from); err != nil {
+			rows.Close()
+			return out, err
+		}
+		mappings[k] = from
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return out, err
+	}
 	for _, v := range snap.Vehicles {
 		e := PrePassFleetEntry{Vehicle: v, TruckID: links[prepassKey(v.AccountNumber, v.VIN)], Suggestions: []string{}}
 		e.Revision = prepassRevision(v, e.TruckID)
@@ -182,10 +203,16 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		}
 		keys := fleetTollKeys(v)
 		if e.TruckID != "" && len(keys) > 0 {
-			var count int
-			if err = r.pool.QueryRow(ctx, `SELECT count(DISTINCT identity_key),coalesce(min(effective_from)::text,'') FROM prepass_truck_mappings WHERE active AND effective_to IS NULL AND environment=$1 AND account_number=$2 AND fleet_vin=$3 AND truck_id=$4 AND identity_key=ANY($5::text[])`, r.prepassEnvironment, v.AccountNumber, v.VIN, e.TruckID, keys).Scan(&count, &e.TollFrom); err != nil {
-				return out, err
+			matched := map[string]bool{}
+			for _, identity := range keys {
+				if from, ok := mappings[mappingKey{v.AccountNumber, v.VIN, e.TruckID, identity}]; ok {
+					matched[identity] = true
+					if e.TollFrom == "" || from < e.TollFrom {
+						e.TollFrom = from
+					}
+				}
 			}
+			count := len(matched)
 			e.TollsLinked = count == len(keys)
 			if !e.TollsLinked && e.Warning == "" {
 				e.Warning = "Toll linking needs a start date"

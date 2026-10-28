@@ -17,6 +17,27 @@ func (h tollHandler) registerTruckLinks(r chi.Router) {
 		h.logger.Error("PrePass truck link failed", "error", err)
 		writeAPIError(w, 500, "Could not update PrePass truck links.")
 	}
+	r.Get("/tolls/attention", func(w http.ResponseWriter, r *http.Request) {
+		p, err := parsePagination(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		out, err := h.repo.AttentionTolls(r.Context(), r.URL.Query().Get("from"), r.URL.Query().Get("includeReviewed") == "true", p)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	})
+	r.Get("/tolls/truck-link-options", func(w http.ResponseWriter, r *http.Request) {
+		out, err := h.repo.PrePassTruckLinkOptions(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, out)
+	})
 	r.Get("/tolls/truck-links", func(w http.ResponseWriter, r *http.Request) {
 		out, err := h.repo.PrePassTruckLinks(r.Context(), r.URL.Query().Get("from"), r.URL.Query().Get("includeReviewed") == "true")
 		if err != nil {

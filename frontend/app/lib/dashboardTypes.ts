@@ -13,6 +13,6 @@ export interface DashboardWaterfall { gross: string; fuel: string; tolls: string
 export interface DashboardSection { kind: "performance" | "fleet" | "cost" | "attention" | "waterfall"; title: string; updatedAt: string; error?: string; items: DashboardItem[]; performance?: DashboardPerformance; waterfall?: DashboardWaterfall }
 export interface CompanyDashboard { period: DashboardPeriod; sections: Record<string, DashboardSection> }
 export interface DashboardLoad { driverId: string; driverName: string; date: string; slot: number; loadNumber: string; loadRecordId: number | null; gross: string | null; driverGross: string | null; miles: string | null; dispatcherId: string; dispatcherName: string; inclusion: "included" | "provisional" | "conflict" | "repeat" }
-export interface DashboardQuery { preset?: DashboardPreset; dateFrom?: string; dateTo?: string; view?: "weekly" | "current" }
+export interface DashboardQuery { preset?: DashboardPreset; dateFrom?: string; dateTo?: string; view?: "weekly" | "current"; sections?: string }
 export type DashboardReviewKind = "fuel" | "tolls" | "ownership";
 export interface DashboardCostReview { id: string; reference: string; date: string; ownershipDate: string | null; truckId: string; truckUnit: string; driverName: string; assignedUnits: string[]; amount: string | null; reason: string }

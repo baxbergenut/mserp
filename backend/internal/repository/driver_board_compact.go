@@ -62,3 +62,18 @@ func CompactBoard(board DriverBoard) CompactDriverBoard {
 	}
 	return out
 }
+
+// BoardOverview retains all live editing/automation evidence. Historical picker
+// groups remain available through the per-driver Loads endpoint.
+func BoardOverview(board DriverBoard) DriverBoard {
+	loads := make(map[string]BoardLoads, len(board.Loads))
+	for id, v := range board.Loads {
+		v.Earlier = []BoardLoad{}
+		v.Hidden = []BoardLoad{}
+		v.Unavailable = []BoardLoad{}
+		v.DetailsOmitted = true
+		loads[id] = v
+	}
+	board.Loads = loads
+	return board
+}

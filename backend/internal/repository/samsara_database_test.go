@@ -44,6 +44,11 @@ func TestSamsaraDatabase(t *testing.T) {
 	}
 	choiceUpgrade := strings.ReplaceAll(string(choiceMigration), "\r\n", "\n")
 	upgrade := strings.ReplaceAll(string(migration), "\r\n", "\n")
+	readSource, err := os.ReadFile("../../sql/162_fleet_read_performance.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUpgrade := strings.ReplaceAll(string(readSource), "\r\n", "\n")
 	if !strings.Contains(init, upgrade) {
 		t.Fatal("init/migration mismatch")
 	}
@@ -60,9 +65,10 @@ func TestSamsaraDatabase(t *testing.T) {
 			exec("CREATE SCHEMA " + quoted + "; SET search_path TO " + quoted + ",public; GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app")
 			defer admin.Exec(context.Background(), "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE")
 			if mode == "upgrade" {
-				exec(strings.Replace(strings.Replace(init, choiceUpgrade, "", 1), upgrade, "", 1))
+				exec(strings.Replace(strings.Replace(strings.Replace(init, readUpgrade, "", 1), choiceUpgrade, "", 1), upgrade, "", 1))
 				exec(upgrade)
 				exec(choiceUpgrade)
+				exec(readUpgrade)
 			} else {
 				exec(init)
 			}

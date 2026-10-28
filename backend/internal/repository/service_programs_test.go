@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -100,6 +101,16 @@ func testServicePrograms(t *testing.T, ctx context.Context, admin *pgx.Conn, poo
 	}
 	if err = repo.SaveProgramTrucks(ctx, p.ID, members, ""); !errors.Is(err, ErrMaintenanceConflict) {
 		t.Fatal("stale membership accepted", err)
+	}
+	allRows, e := repo.ProgramTrucks(ctx, p.ID, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	for i, want := range allRows {
+		workspace, e := repo.ProgramWorkspace(ctx, p.ID, "", "", "", Pagination{Page: i + 1, PageSize: 1})
+		if e != nil || workspace.Trucks.Total != len(allRows) || len(workspace.Trucks.Items) != 1 || !reflect.DeepEqual(workspace.Trucks.Items[0], want) {
+			t.Fatal("workspace pagination changed due evidence", workspace, e)
+		}
 	}
 	values, err := repo.ProgramTrucks(ctx, p.ID, truck)
 	if err != nil || len(values) != 1 || values[0].Status != "missing_information" || values[0].LastDate != nil {

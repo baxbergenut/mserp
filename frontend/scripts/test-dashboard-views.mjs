@@ -24,6 +24,8 @@ let administrator = true;
 let allowed = [...permissions], theme = 'default-light', revision = 1, fail = false, partial = false, empty = false, fleetMode = 'normal';
 let waterfallMode = 'normal', costReviewFails = false;
 const requested = [];
+let releaseProfit;
+let holdProfit = new Promise(resolve => { releaseProfit=resolve; });
 const section = (kind, title, items, extra = {}) => ({ kind, title, items, updatedAt: '2026-10-26T20:00:00Z', ...extra });
 function dashboard(query) {
   const dateFrom = query.get('dateFrom') || '2026-10-19', dateTo = new Date(Date.parse(dateFrom+'T12:00:00Z') + 6*86400000).toISOString().slice(0,10);
@@ -43,6 +45,7 @@ function dashboard(query) {
   }
   if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'},{id:'tolls',label:'Unresolved tolls ownership',count:1,href:'/tolls?dashboard=1&tab=transactions'},{id:'ownership',label:'Load ownership or investor terms need review',count:1,href:'/accounting/investor-pay'}]:[]}});
   for (const [key,value] of Object.entries(sections)) if (query.get('view') === 'weekly' ? ['fleet','attention'].includes(value.kind) : query.get('view') === 'current' && !['fleet','attention'].includes(value.kind)) delete sections[key];
+  if(query.has("sections")) for(const key of Object.keys(sections)) if(!query.get("sections").split(",").includes(key)) delete sections[key];
   return { period, sections };
 }
 let browser;
@@ -54,7 +57,7 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); const path = url.pathname.slice(4); requested.push({ path, query: Object.fromEntries(url.searchParams) });
     if (path === '/auth/session' || path === '/auth/login') return route.fulfill({ json: { user: { administrator, id: 'dashboard-fixture', username: 'Dashboard review', theme, accessRevision: revision, permissions: allowed, expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true }] }, csrfToken: 'fixture' } });
-    if (path === '/dashboard/summary') return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });
+    if (path === '/dashboard/summary') {if(url.searchParams.get('sections')==='waterfall' && holdProfit) await holdProfit; return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });}
     if (path === '/dashboard/cost-review') {
       if (costReviewFails) return route.fulfill({status:500,json:{error:'Synthetic cost review failure'}});
       const kind=url.searchParams.get('kind');
@@ -76,6 +79,9 @@ try {
   });
   await page.goto(`${base}/dashboard`);
   await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
+  await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
+  await expect(page.getByText('Loading weekly profit…',{exact:true})).toBeVisible();
+  releaseProfit(); holdProfit=null;
   await expect(page.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('$31,250.00');
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();

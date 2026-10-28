@@ -37,6 +37,12 @@ const server = createServer(async (req, res) => {
       if (path === '/api/sidebar-counts') return send({ fuel: data.items.filter(e => e.status === 'terminated').length, weighMyTruck: 2, tolls: 125, tollsFrom: '2026-09-01' });
       if(path==='/api/feedback/messages/count')return send({count:0});
       if(path==='/api/prepass-fleet')return send({configured:true,accounts:[],vehicles:[],transponders:[],trucks:[],operations:[]});
+      if(path==='/api/tolls/truck-link-options') return send({...tollLinks,transactions:[]});
+      if(path==='/api/tolls/attention') {
+        const rows=tollLinks.transactions.filter(t=>!t.reviewed||!t.truckId||url.searchParams.get('includeReviewed')==='true');
+        const pageSize=Number(url.searchParams.get('pageSize')||25),page=Math.min(Number(url.searchParams.get('page')||1),Math.max(1,Math.ceil(rows.length/pageSize)));
+        return send({dateFrom:tollLinks.dateFrom,items:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,page,pageSize,totalPages:Math.max(1,Math.ceil(rows.length/pageSize))});
+      }
       if(path==='/api/tolls/truck-links'&&req.method==='GET')return send({...tollLinks,transactions:tollLinks.transactions.filter(t=>!t.reviewed||!t.truckId||url.searchParams.get('includeReviewed')==='true')});
       if(path==='/api/tolls')return send({items:[toll('transaction-view')],total:1,totalPages:1,page:1,pageSize:25,options:{units:[],agencies:[]},summary:{amount:2.5,truckCount:0}});
       if(path==='/api/toll-dashboard')return send({error:'Outside fixture'},503);
@@ -200,9 +206,23 @@ else {
     await expect(page.getByLabel('Select transaction bulk-one',{exact:true})).not.toBeChecked();
     await page.screenshot({path:join(tmpdir(),'mserp-toll-bulk-reviewed.png'),fullPage:true});
     tollLinks.transactions=tollLinks.transactions.filter(t=>!t.id.startsWith('bulk-'));
+    tollLinks.transactions.push(...Array.from({length:30},(_,i)=>toll(`paged-${i}`)));
     await page.getByRole('checkbox',{name:'Show reviewed',exact:true}).uncheck();
     await expect(page.getByLabel('Select transaction bulk-one',{exact:true})).toHaveCount(0);
     await expect(page.getByLabel('Select transaction toll-one',{exact:true})).not.toBeChecked();
+    await page.getByLabel('Select transaction toll-one',{exact:true}).check();
+    await page.getByRole('button',{name:'Next page',exact:true}).click();
+    await page.getByLabel('Select transaction paged-29',{exact:true}).check();
+    await expect(page.getByText('2 selected · 0 flagged',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Link selected',exact:true}).click();
+    await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-01');
+    await page.getByRole('dialog').getByRole('button',{name:'Preview selected tolls',exact:true}).click();
+    if(writes.at(-1).transactionIds.join(',')!=='toll-one,paged-29')throw new Error('Cross-page selection was lost');
+    await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.getByRole('button',{name:'Clear selection',exact:true}).click();
+    tollLinks.transactions=tollLinks.transactions.filter(t=>!t.id.startsWith('paged-'));
+    await page.getByRole('button',{name:'Previous page',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(3);
     await page.getByRole('button',{name:'Link truck',exact:true}).first().click();
     await expect(page.getByRole('dialog')).toContainText('Only the selected transactions');
     await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();

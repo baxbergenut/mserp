@@ -42,6 +42,7 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
   const trackedAssignments = useRef(new Set<string>());
 
   const load = useCallback(async (signal?: AbortSignal) => {
+    if (view === "attention") return;
     const current = ++generation.current;
     try {
       const result = await fetchPrePassFleet(signal);
@@ -53,7 +54,7 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
       return result;
     } catch (e) { if (!signal?.aborted && current === generation.current) setError(e instanceof Error ? e.message : "Could not load PrePass."); }
     finally { if (!signal?.aborted && current === generation.current) setLoading(false); }
-  }, []);
+  }, [view]);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => void load(controller.signal), 0);
@@ -159,8 +160,8 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
         </TableFilters>
 
       </>
-    <div className="ml-auto flex flex-wrap gap-2"><button hidden={!permissions.includes("tolls.fleet.sync")} className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button>{canCreate && view === "trucks" && <button className="ui-button ui-button-primary" disabled={locked || !data?.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add truck</button>}</div></div>}
-    {view === "attention" ? <TruckLinksTab actions={<div className="ml-auto flex flex-wrap gap-2"><button hidden={!permissions.includes("tolls.fleet.sync")} className="ui-button" disabled={busy || !data?.configured} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button></div>} /> : <>
+    <div className="ml-auto flex flex-wrap gap-2"><button hidden={!permissions.includes("tolls.fleet.sync")} className="ui-button" disabled={busy || data?.configured === false} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button>{canCreate && view === "trucks" && <button className="ui-button ui-button-primary" disabled={locked || !data?.refreshedAt} onClick={() => open("add")}><Plus className="h-4 w-4" />Add truck</button>}</div></div>}
+    {view === "attention" ? <TruckLinksTab actions={<div className="ml-auto flex flex-wrap gap-2"><button hidden={!permissions.includes("tolls.fleet.sync")} className="ui-button" disabled={busy || data?.configured === false} onClick={() => void run(refreshPrePassFleet, "PrePass roster refreshed.")}><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />Refresh PrePass</button></div>} /> : <>
     <TableShell>{view === "trucks" ? <table className="w-full min-w-[900px] text-left text-[13px]">
       <thead><tr className="border-b border-zinc-800 text-zinc-500">{["Truck", "VIN", "Plate", "Transponder", "Toll linking", "Actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
       <tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownTrucks.slice(offset, offset + pageSize).map(e => <tr key={`${e.vehicle.accountNumber}:${e.vehicle.vin}`} className="border-b border-zinc-800/60">

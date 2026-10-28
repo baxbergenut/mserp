@@ -114,6 +114,7 @@ func lateBoardStop(s boardLoadState, current BoardLoad, status, destination stri
 }
 
 type BoardLoads struct {
+	DetailsOmitted    bool             `json:"detailsOmitted,omitempty"`
 	ResolutionWarning string           `json:"resolutionWarning,omitempty"`
 	Automation        *BoardAutomation `json:"automation,omitempty"`
 	Current           *BoardLoad       `json:"current"`

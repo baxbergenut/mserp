@@ -42,26 +42,28 @@ export function InventoryWorkspace({ trailers = false, truckId = "" }: { trailer
   const [assigning, setAssigning] = useState(false), [chosenAsset, setChosenAsset] = useState(""), [chosenTruck, setChosenTruck] = useState(truckId);
   const context: InventoryContext = { data, trucks };
   const load = useCallback(async (signal?: AbortSignal) => {
+    if (!trailers && (tab === "transponders" || tab === "imports")) return;
     setLoading(true);
     try {
       if (trailers) { const records = await fetchTrailers(signal); if (!signal?.aborted) setTrailerRows(records); }
-      else { const result = await fetchInventory(signal); if (!signal?.aborted) setData({ ...emptyInventory, ...result }); }
-      if (canTrucks && !trailers) { const choices = await fetchTruckOptions(); if (!signal?.aborted) setTrucks(choices); }
+      else { const result = await fetchInventory(signal,tab === "supplies" ? "supplies" : tab === "locations" ? "locations" : "devices"); if (!signal?.aborted) setData({ ...emptyInventory, ...result }); }
       if (!signal?.aborted) setError("");
     } catch (reason) { if (!signal?.aborted) setError(reason instanceof Error ? reason.message : "Unable to load inventory"); }
     finally { if (!signal?.aborted) setLoading(false); }
-  }, [trailers, canTrucks]);
+  }, [trailers,tab]);
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      if (!trailers && !truckId) {
-        const selected = new URLSearchParams(window.location.search).get("tab");
-        setTab(startingTab(selected)); if (selected === "samsara-cameras") setBrand("Samsara");
-      }
-      void load(controller.signal);
-    }, 0);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [load, trailers, truckId]);
+    const timer=setTimeout(() => {if (!trailers && !truckId) {
+      const selected=new URLSearchParams(window.location.search).get("tab");setTab(startingTab(selected));if(selected==="samsara-cameras")setBrand("Samsara");
+    }},0);return () => clearTimeout(timer);
+  },[trailers,truckId]);
+  useEffect(() => {const controller=new AbortController();const timer=setTimeout(() => void load(controller.signal),0);return () => {clearTimeout(timer);controller.abort();};},[load]);
+  // Truck labels and editor choices load independently from the inventory rows.
+  useEffect(() => {
+    if (!canTrucks || trailers) return;
+    let active = true;
+    void fetchTruckOptions().then(choices => {if(active)setTrucks(choices);}).catch(e => {if(active)setError(e.message);});
+    return () => {active=false;};
+  },[canTrucks,trailers]);
   const changeTab = (next: Tab) => {
     setTab(next); setPage(1); setSearch(""); setAssigned(""); setLocation(""); setBrand(""); setStatus("record:active");
     if (!truckId) window.history.replaceState(null, "", window.location.pathname + "?tab=" + next);

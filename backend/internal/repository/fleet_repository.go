@@ -555,6 +555,9 @@ SELECT d.id, d.full_name, d.first_name, d.last_name, (driver_employment_type(d.i
 	d.created_at, d.updated_at, d.status, d.termination_date,
 	driver_employment_type(d.id),coalesce(team.role,''),team.partner_id,team.partner_name,d.team_version,CASE WHEN d.active THEN team.truck_id END,CASE WHEN d.active THEN team.truck_unit END,team.start_week,
  CASE WHEN d.active THEN 'active' ELSE 'terminated' END,d.availability_status,d.status_version,coalesce(fleet_truck_operating_status(CASE WHEN d.active THEN fleet_status_driver_truck(d.id) ELSE a.truck_id END),''),d.date_of_birth
+` + driverProfileJoinsSQL
+
+const driverProfileJoinsSQL = `
 FROM drivers d
 LEFT JOIN LATERAL (SELECT CASE WHEN dt.main_driver_id=d.id THEN 'main' ELSE 'team' END role,
  p.id::text partner_id,p.full_name partner_name,m.dispatcher_id main_dispatcher_id,dt.start_week::text start_week,
@@ -611,7 +614,7 @@ func (r *FleetRepository) ListTrucks(ctx context.Context, filters ...TruckFilter
 	if len(filters) > 0 {
 		filter = filters[0]
 	}
-	rows, err := r.pool.Query(ctx, selectTrucksSQL+" WHERE ($1='' OR fleet_truck_operating_status(t.id)=$1) AND ($2='' OR gps_health.alert=$2) ORDER BY t.unit_number, t.id", filter.Status, filter.GPSAlert)
+	rows, err := r.pool.Query(ctx, selectTrucksSQL+" WHERE ($1='' OR fleet_read.operating_status=$1) AND ($2='' OR gps_health.alert=$2) ORDER BY t.unit_number, t.id", filter.Status, filter.GPSAlert)
 	if err != nil {
 		return nil, err
 	}
@@ -647,11 +650,11 @@ func (r *FleetRepository) ListTrucksPage(
 	const searchWhere = `
 WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	t.license_plate, d.full_name) ILIKE '%' || $1 || '%')`
-	const where = searchWhere + ` AND ($2='' OR fleet_truck_operating_status(t.id)=$2) AND ($3='' OR gps_health.alert=$3)`
+	const where = searchWhere + ` AND ($2='' OR fleet_read.operating_status=$2) AND ($3='' OR gps_health.alert=$3)`
 	counts := map[string]int{"ready": 0, "shop": 0, "in_use": 0, "out_of_service": 0, "terminated": 0}
 	gpsCounts := map[string]int{"overdue": 0, "missing": 0}
 	countRows, err := r.pool.Query(ctx, `
-		SELECT fleet_truck_operating_status(t.id), gps_health.alert, count(*)
+		SELECT fleet_read.operating_status, gps_health.alert, count(*)
 		FROM trucks t
 		LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 		LEFT JOIN drivers d ON d.id = a.driver_id`+truckGPSJoinSQL+searchWhere+` GROUP BY 1,2`, search)
@@ -681,7 +684,7 @@ WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectTrucksSQL+where+`
-		ORDER BY CASE fleet_truck_operating_status(t.id) WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $4 OFFSET $5`,
+		ORDER BY CASE fleet_read.operating_status WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $4 OFFSET $5`,
 		search, filter.Status, filter.GPSAlert, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return TruckPage{}, err
@@ -855,7 +858,7 @@ SELECT t.owner_id, coalesce(od.full_name,oi.full_name), t.id, t.unit_number, t.v
 	t.irp_file_id, f.file_name, f.content_type, f.size_bytes,
 	t.created_at, t.updated_at,
 	(SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
-	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_truck_operating_status(t.id),t.status_version,fleet_truck_status_reason(t.id),gps.reported_at,gps.source,gps_health.alert
+	coalesce((SELECT md5(row_to_json(h)::text) FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),''),fleet_read.operating_status,t.status_version,fleet_read.reason,gps.reported_at,gps.source,gps_health.alert
 FROM trucks t
 LEFT JOIN truck_driver_assignments a ON a.truck_id = t.id AND a.unassigned_at IS NULL
 LEFT JOIN drivers d ON d.id = a.driver_id

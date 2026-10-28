@@ -29,9 +29,9 @@ func registerLookupRoutes(r chi.Router, repo *repository.FleetRepository) {
 			var err error
 			switch kind {
 			case "drivers":
-				rows, err = repo.ListDrivers(r.Context())
+				rows, err = repo.DriverOptions(r.Context())
 			case "trucks":
-				rows, err = repo.ListTrucks(r.Context())
+				rows, err = repo.TruckOptions(r.Context())
 			case "dispatchers":
 				rows, err = repo.ListDispatchers(r.Context())
 			case "updaters":

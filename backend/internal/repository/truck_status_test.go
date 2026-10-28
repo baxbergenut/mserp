@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +60,11 @@ func TestTruckStatusesDatabase(t *testing.T) {
 				execAdmin(prefix)
 				execAdmin(`INSERT INTO trucks(unit_number,active,status,notes) VALUES ('OLD-INACTIVE',false,'available','Keep historical note'),('OLD-HOLD',true,'hold','Waiting for parts'),('OLD-OOS',true,'out_of_service','Engine damaged');`)
 				execAdmin(string(migration))
+				readMigration, e := os.ReadFile("../../sql/162_fleet_read_performance.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				execAdmin(string(readMigration))
 				for unit, want := range map[string]string{"OLD-INACTIVE": "terminated", "OLD-HOLD": "shop", "OLD-OOS": "out_of_service"} {
 					var got, reason string
 					if e := admin.QueryRow(ctx, `SELECT fleet_truck_operating_status(id),status_reason FROM trucks WHERE unit_number=$1`, unit).Scan(&got, &reason); e != nil || got != want || reason == "" {
@@ -110,6 +117,11 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		must(e)
 		if v.OperatingStatus != status || v.Active != active || (v.DriverID != nil) != assigned {
 			t.Fatalf("status=%s active=%v driver=%v; want %s %v %v", v.OperatingStatus, v.Active, v.DriverID, status, active, assigned)
+		}
+		var oldStatus, oldReason string
+		must(pool.QueryRow(ctx, `SELECT fleet_truck_operating_status($1),fleet_truck_status_reason($1)`, truck.ID).Scan(&oldStatus, &oldReason))
+		if v.OperatingStatus != oldStatus || v.StatusReason != oldReason {
+			t.Fatal("fleet view changed status semantics", v, oldStatus, oldReason)
 		}
 		return v
 	}
@@ -248,4 +260,33 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	if scalar(`SELECT count(*)::text FROM fleet_status_history`) != before {
 		t.Fatal("read wrote history")
 	}
+	compareLookup := func(full, compact any, fields string) {
+		t.Helper()
+		a, _ := json.Marshal(full)
+		b, _ := json.Marshal(compact)
+		var oldRows, newRows []map[string]any
+		must(json.Unmarshal(a, &oldRows))
+		must(json.Unmarshal(b, &newRows))
+		if len(oldRows) != len(newRows) {
+			t.Fatal("lookup row count changed")
+		}
+		for i := range oldRows {
+			for _, field := range strings.Fields(fields) {
+				if !reflect.DeepEqual(oldRows[i][field], newRows[i][field]) {
+					t.Fatalf("lookup field %s changed: %v vs %v", field, oldRows[i][field], newRows[i][field])
+				}
+			}
+		}
+	}
+	fullTrucks, e := fleet.ListTrucks(ctx)
+	must(e)
+	compactTrucks, e := fleet.TruckOptions(ctx)
+	must(e)
+	compareLookup(fullTrucks, compactTrucks, "id unitNumber status operatingStatus active driverId driverName ownerId ownerName ownerSince ownershipVersion isCompanyOwned year make model")
+	fullDrivers, e := fleet.ListDrivers(ctx)
+	must(e)
+	compactDrivers, e := fleet.DriverOptions(ctx)
+	must(e)
+	compareLookup(fullDrivers, compactDrivers, "id fullName active status employmentType driverType isOwnerOperator phone email dispatcherId dispatcherName truckId truckUnit teamRole teamPartnerId teamPartnerName teamVersion teamTruckId teamTruckUnit teamStartWeek")
+
 }

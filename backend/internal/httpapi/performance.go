@@ -47,7 +47,21 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(&timedWriter{ResponseWriter: counted, start: start, metrics: m}, r.WithContext(ctx))
 			route := chi.RouteContext(r.Context()).RoutePattern()
 			phases, _ := m.Details()
-			logger.Info("http performance", "phases_ms", phases, "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
+			scenario := "default"
+			if route == "/dashboard/summary" {
+				switch r.URL.Query().Get("view") {
+				case "current":
+					scenario = "current"
+				case "weekly":
+					scenario = "weekly"
+				}
+				if r.URL.Query().Get("sections") == "waterfall" {
+					scenario = "weekly_profit"
+				} else if r.URL.Query().Get("sections") != "" {
+					scenario += "_primary"
+				}
+			}
+			logger.Info("http performance", "scenario", scenario, "phases_ms", phases, "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
 		})
 	}
 }
