@@ -1,6 +1,7 @@
 "use client";
 
 
+import dynamic from "next/dynamic";
 import { Fragment, memo, useContext, useMemo, useState } from "react";
 import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
@@ -18,7 +19,7 @@ import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
 import { LocationCell, formatCoordinates } from "./LocationCell";
-import { DriverLeaveDialog } from "./DriverLeaveDialog";
+const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog));
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
 import { StatusCell } from "./StatusCell";
 import type { DriverBoardEntry } from "@/app/lib/types";
@@ -26,12 +27,12 @@ import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/boa
 import { statuses, statusColor, previewCurrentLoad } from "./board";
 import { ETACell } from "./ETACell";
 import { useDriverBoard } from "./useDriverBoard";
-import { BoardHistory } from "./BoardHistory";
+const BoardHistory = dynamic(() => import("./BoardHistory").then(m => m.BoardHistory));
 import { BoardFilter } from "@/app/components/management/BoardFilter";
 import { TrailerCell } from "./TrailerCell";
-import { BoardLoads } from "./BoardLoads";
+const BoardLoads = dynamic(() => import("./BoardLoads").then(m => m.BoardLoads));
 import { CurrentLoadInput } from "./CurrentLoadInput";
-import { ETAEditor } from "./ETAEditor";
+const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor));
 import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
 import { useDriverRowDrag } from "./useDriverRowDrag";

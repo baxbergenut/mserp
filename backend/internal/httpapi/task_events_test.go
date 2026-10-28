@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,7 +94,10 @@ func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 	board.cancel = func() {}
 	presence.cancel = func() {}
 	board.snapshotEvent = "board"
-	board.snapshot = func(context.Context) ([]byte, error) { return []byte(`{"entries":[]}`), nil }
+	var sourceRevision atomic.Int32
+	board.snapshot = func(context.Context) ([]byte, error) {
+		return []byte(fmt.Sprintf(`{"entries":[],"sourceRevision":%d}`, sourceRevision.Load())), nil
+	}
 	presence.snapshotEvent = "peers"
 	presence.snapshot = func(context.Context) ([]byte, error) { return []byte(`[]`), nil }
 	defer board.shutdown()
@@ -128,6 +132,7 @@ func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 	event("peers")
 	presence.publish()
 	event("peers")
+	sourceRevision.Add(1)
 	board.publish()
 	event("board")
 	// Publish synchronizes the revocation with the handler's next auth read.

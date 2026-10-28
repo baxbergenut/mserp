@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ type taskEvents struct {
 	shutdownContext context.Context
 	stopSnapshots   context.CancelFunc
 }
+
+type boardOverviewContext struct{}
 
 type eventSnapshot struct {
 	revision uint64
@@ -158,6 +161,20 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 			path = "/gross-board/events"
 		}
 		projectFields(value, session.User, path)
+		if h.snapshotEvent == "board" && ctx.Value(boardOverviewContext{}) == true {
+			if board, ok := value.(map[string]any); ok {
+				if loads, ok := board["loads"].(map[string]any); ok {
+					for _, raw := range loads {
+						if load, ok := raw.(map[string]any); ok {
+							load["earlier"] = []any{}
+							load["hidden"] = []any{}
+							load["unavailable"] = []any{}
+							load["detailsOmitted"] = true
+						}
+					}
+				}
+			}
+		}
 		body, _ = json.Marshal(value)
 	}
 	return "event: " + h.snapshotEvent + "\ndata: " + string(body) + "\n\n"
@@ -207,6 +224,9 @@ func (h *taskEvents) receive(ctx context.Context) error {
 
 func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("overview") == "1" {
+			r = r.WithContext(context.WithValue(r.Context(), boardOverviewContext{}, true))
+		}
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
 			return
@@ -237,7 +257,8 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			// before waiting: an expired HTTP write deadline cannot be extended.
 			return controller.SetWriteDeadline(time.Time{}) == nil
 		}
-		if !send("retry: 5000\n" + h.frame(r.Context(), "changed")) {
+		lastFrame := h.frame(r.Context(), "changed")
+		if !send("retry: 5000\n" + lastFrame) {
 			return
 		}
 		if presenceChanges != nil && !send(presence[0].frame(r.Context(), "presence")) {
@@ -262,6 +283,24 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			case <-presenceChanges:
 				presenceChanged = true
 			}
+			if changed {
+				// A commit may notify once for each row. Collapse that short burst.
+				timer := time.NewTimer(100 * time.Millisecond)
+				select {
+				case <-r.Context().Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+			drain:
+				for {
+					select {
+					case <-changes:
+					default:
+						break drain
+					}
+				}
+			}
 			// Role changes, disabled accounts and revoked/expired sessions take effect
 			// on this connection too. Every data fetch also performs normal authorization.
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -275,8 +314,13 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 				return
 			}
 			if changed {
-				if !send(h.frame(context.WithValue(r.Context(), authContextKey{}, session), "changed")) {
-					return
+				frame := h.frame(context.WithValue(r.Context(), authContextKey{}, session), "changed")
+				// Invalidation-only events must always reach clients; snapshots may be identical.
+				if h.snapshot == nil || frame != lastFrame || strings.HasPrefix(frame, "event: changed\n") {
+					if !send(frame) {
+						return
+					}
+					lastFrame = frame
 				}
 			} else if presenceChanged {
 				if !send(presence[0].frame(r.Context(), "presence")) {

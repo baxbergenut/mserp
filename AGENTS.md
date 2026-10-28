@@ -2821,3 +2821,36 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Migration 157 stores expense_reimbursement_payments as payout receipts, separate from expense debt collections. Reimburse uses the ordinary expense window (expense_date < week_start + 10), zero deferral, partial payouts and cross-week reservations. Source=reimburse in expenseDeductions adds to payable; clients cannot change the source direction. Frozen legacy auto-credit snapshots seed receipts without changing stored reports, preventing repayment. Driver/team routing stays personal and independent of truck-owner responsibility and Investor Pay. TestExpenseReimbursementsDatabase covers fresh/migrated schemas, cutoff, carry, limits, team routing, frozen guards and legacy receipts.
 - GET /expenses/form-choices returns category-scoped settings and compact identity/assignment DTOs for the ordinary expense modal. It does not calculate expense totals or full driver/truck/GPS profiles. ExpenseEditModal fetches the expense and this bundle in parallel and cancels on close; saved invoice/identity values and the existing category/record permissions remain authoritative.
+
+## Page performance reads (162)
+
+- `fleet_truck_read_state` is a security-invoker read projection for operating
+  status, reasons and GPS health. It evaluates active crews and normalized VIN
+  uniqueness once per fleet read. Status writer functions and their locks remain
+  authoritative; duplicate VIN and provider ambiguity rules remain unchanged.
+  Driver/truck lookup endpoints use compact SQL with the existing field grants.
+- `GET /tolls/attention` classifies evidence and review visibility before counting
+  and pagination. Full toll records are hydrated only for the selected page.
+  `/tolls/truck-link-options` loads choices and saved mappings independently;
+  legacy `/tolls/truck-links` retains its response. Cross-page actions send only
+  explicitly selected IDs, with the existing revision/receipt/financial guards.
+- `/maintenance/program-workspace` returns program summaries and a filtered,
+  paginated member list from one repeatable-read calculation. Editors load their
+  choices and complete membership versions when opened.
+- Dashboard `sections` is an optional allowlisted selector; omission keeps the
+  legacy response. Weekly profit is requested separately after primary data and
+  uses the unchanged calculation. Performance logs distinguish current/weekly
+  primary requests and weekly profit without recording raw query parameters.
+- Status Board `overview=1` omits historical/hidden load groups in GET/SSE;
+  current/next loads, stops, automation and edit versions remain. Load dialogs
+  fetch full details before editing. SSE coalesces short bursts and suppresses
+  identical authorized snapshots while retaining invalidations and reconnects.
+- Inventory's optional `view=devices|supplies|locations` selects active-view
+  collections; omission retains the full legacy response. Fuel and Tolls load
+  transaction pages only on their Transactions tabs. Editor-only expense and
+  service choices do not block their directories.
+- `python backend/scripts/page-performance-history.py --host <ssh-host> --output
+  <artifact-stem>` saves sanitized CSV/JSON from the active release's HTTP logs.
+  Compare separate release windows and retain failures/sample counts. These are
+  observed API timings, not browser load p99; sparse samples cannot establish
+  the one-second tail target. Payroll pages/calculations are outside this work.

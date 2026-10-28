@@ -125,12 +125,14 @@ export default function FuelPage() {
   } | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (activeTab !== "transactions") return;
     setIsLoading(true);
     try {
       const response = await fetchFuelTransactionsPage({
         page, pageSize, search: debouncedSearch, driver, state, category, dateFrom, dateTo,
-      });
+      },signal);
+      if (signal?.aborted) return;
       setTransactions(response.items);
       setPage(response.page);
       setTotal(response.total);
@@ -139,18 +141,20 @@ export default function FuelPage() {
       setStates(response.options.states);
       setTotals(response.summary);
     } catch (reason) {
+      if (signal?.aborted) return;
       setMessage({
         type: "error",
         text: reason instanceof Error ? reason.message : "Failed to load fuel transactions.",
       });
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
-  }, [setPage, category, dateFrom, dateTo, debouncedSearch, driver, page, pageSize, state]);
+  }, [activeTab, setPage, category, dateFrom, dateTo, debouncedSearch, driver, page, pageSize, state]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void loadData(), 0);
-    return () => window.clearTimeout(timeout);
+    const controller=new AbortController();
+    const timeout = window.setTimeout(() => void loadData(controller.signal), 0);
+    return () => {window.clearTimeout(timeout);controller.abort();};
   }, [loadData]);
 
   const hasFilters = Boolean(

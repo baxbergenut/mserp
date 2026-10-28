@@ -512,6 +512,7 @@ export interface BoardLoad {
   sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
+  detailsOmitted?: boolean;
   resolutionWarning?: string;
   automation?: BoardAutomation;
   week: BoardLoad[];

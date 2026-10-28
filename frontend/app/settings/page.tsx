@@ -42,7 +42,7 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const refresh = useCallback(async () => { setLoading(true); try { setData(await fetchAccess()); } catch (e) { setError(e instanceof Error ? e.message : "Could not load access settings"); } finally { setLoading(false); } }, []);
-  useEffect(() => { if (!canManage) return; let active = true; fetchAccess().then(value => { if (active) setData(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load access settings"); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [canManage]);
+  useEffect(() => { if (!canManage || (tab !== "roles" && tab !== "tasks")) return; let active = true; fetchAccess().then(value => { if (active) setData(value); }).catch(e => { if (active) setError(e instanceof Error ? e.message : "Could not load access settings"); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [canManage, tab]);
   useEffect(() => {
     if (!canManage || tab !== "users") return;
     let active = true, running = false;

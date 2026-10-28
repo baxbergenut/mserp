@@ -58,8 +58,21 @@ func (h inventoryHandler) list(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{}
 	collections := []string{"assets", "lines", "locations", "supplies", "equipment"}
 	session, _ := authSessionFromContext(r.Context())
-	if repository.HasPermission(session.User, "tolls.read") {
+	view := r.URL.Query().Get("view")
+	if view == "" && repository.HasPermission(session.User, "tolls.read") {
 		collections = append(collections, "transponder-notes")
+	}
+	switch view {
+	case "":
+	case "devices":
+		collections = []string{"assets", "lines", "locations"}
+	case "supplies":
+		collections = []string{"supplies", "equipment"}
+	case "locations":
+		collections = []string{"locations"}
+	default:
+		writeAPIError(w, 400, "Choose a valid inventory view")
+		return
 	}
 	for _, collection := range collections {
 		records, err := h.repo.List(r.Context(), collection)
@@ -68,6 +81,10 @@ func (h inventoryHandler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		result[collection] = records
+	}
+	if view != "" {
+		writeJSON(w, 200, result)
+		return
 	}
 	balances, err := h.repo.Stock(r.Context())
 	if err != nil {
