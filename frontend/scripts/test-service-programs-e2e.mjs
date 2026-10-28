@@ -17,6 +17,7 @@ const previousService = new Date(Date.parse(today + 'T12:00:00Z') - 21*86400000)
 const oil = '00000000-0000-4000-8000-000000000020';
 const browser = await chromium.launch();
 try {
+ checks: {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(15000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -43,7 +44,9 @@ try {
   await page.getByRole('checkbox', { name: otherUnit, exact: true }).check();
   await page.getByRole('button', { name: 'Add 2 trucks', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  const searchLoaded=page.waitForResponse(r=>r.url().includes('/maintenance/program-workspace') && new URL(r.url()).searchParams.get('search')===unit);
   await page.getByPlaceholder('Search trucks or programs…').fill(unit);
+  await searchLoaded;
   const row = page.locator('tbody tr').filter({ has: page.getByRole('link', { name: unit, exact: true }) });
   await expect(row).toHaveAttribute('data-service-status', 'missing_information');
   await expect(page.getByRole('columnheader')).toHaveText(['Truck', 'Last service', 'Service odometer', 'Current odometer', 'Miles since service', 'Actions']);
@@ -85,6 +88,14 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   clutch = (await api('get', `/maintenance/programs/${p.id}/trucks`)).find(t => t.truckId === truck);
   expect(clutch.lastMiles).toBe(100000); expect(clutch.milesSinceService).toBe(49500);
+  if (process.argv.includes('--workspace-only')) {
+    await page.goto(access.base + '/trucks/detail?id=' + truck);
+    await page.getByRole('tab',{name:'Service programs',exact:true}).click();
+    await expect(page.locator('tbody')).toContainText(name);
+    await expect(page.locator('tbody')).toContainText('Oil change 20k');
+    console.log('Service workspace browser checks passed: program creation, enrollment, server search, intervals, manual service evidence, lazy editor choices and truck profile.');
+    break checks;
+  }
   // An Oil change work order resets only its linked program, with no checkbox.
   await page.goto(access.base + '/maintenance');
   await page.getByRole('button', { name: 'Add work order', exact: true }).click();
@@ -200,4 +211,5 @@ try {
   await page.waitForURL(u => u.pathname === '/fleet/service-programs' && u.searchParams.get('program') === oil);
   expect(errors).toEqual([]);
   console.log('Service programs E2E passed: program setup, resetting-type dropdown with multiple selections, unlink and shared settings, bulk enrollment, independent completions and automatic resets, exact mileage difference, overrides, stale edits, truck profile, view-only access, legacy redirect and mobile layout.');
+}
 } finally { await browser.close(); }

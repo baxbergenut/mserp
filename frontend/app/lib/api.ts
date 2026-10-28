@@ -738,3 +738,5 @@ export const recordExternalSettlement=(id:string,data:import('./types').External
 
 export const fetchTollAttention = (from: string, includeReviewed: boolean, page: number, pageSize: number, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").Toll> & {dateFrom: string}>(withQuery("/tolls/attention",{from,includeReviewed:includeReviewed ? "true" : undefined,page,pageSize}),{signal});
 export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePassTruckLinks>("/tolls/truck-link-options",{signal});
+
+export const fetchServiceProgramWorkspace = (query: {program: string; truckId?: string; search: string; status: string; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").ServiceProgramWorkspace>(withQuery("/maintenance/program-workspace",query),{signal});

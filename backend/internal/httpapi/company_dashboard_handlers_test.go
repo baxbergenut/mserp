@@ -236,3 +236,30 @@ func TestCompanyDashboardRequiresAdministrator(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardSectionSelection(t *testing.T) {
+	for _, tc := range []struct {
+		query    string
+		status   int
+		expected string
+	}{
+		{"performance", 200, "performance"}, {"waterfall", 200, "waterfall"}, {"unknown", 400, ""}, {"", 400, ""}, {"performance,unknown", 400, ""},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			fake := &dashboardFake{}
+			r := chi.NewRouter()
+			r.Use(requirePermission)
+			registerCompanyDashboardRoutes(r, slog.New(slog.NewTextHandler(io.Discard, nil)), fake, fake, fake, fake, fake, fake)
+			req := httptest.NewRequest("GET", "/dashboard/summary?preset=week&view=weekly&sections="+tc.query, nil)
+			req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: true, Permissions: []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read"}}}))
+			out := httptest.NewRecorder()
+			r.ServeHTTP(out, req)
+			if out.Code != tc.status {
+				t.Fatal(out.Code, out.Body.String())
+			}
+			if tc.expected != "" && (len(fake.calls) != 1 || fake.calls[0] != tc.expected) {
+				t.Fatal("unselected work ran", fake.calls)
+			}
+		})
+	}
+}

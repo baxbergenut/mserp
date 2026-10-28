@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"mserp/internal/db"
 	"mserp/internal/repository"
 )
 
@@ -61,6 +63,17 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		if view != "" && view != "weekly" && view != "current" {
 			writeAPIError(w, 400, "choose a valid dashboard view")
 			return
+		}
+		selected := map[string]bool{}
+		if raw, present := r.URL.Query()["sections"]; present {
+			allowed := ",performance,waterfall,trucks,drivers,trailers,gps,diesel,tolls,scale,expenses,tasks,relayAccess,scaleAccess,unlinkedTolls,service,"
+			for _, key := range strings.Split(strings.Join(raw, ","), ",") {
+				if key == "" || !strings.Contains(allowed, ","+key+",") {
+					writeAPIError(w, 400, "choose valid dashboard sections")
+					return
+				}
+				selected[key] = true
+			}
 		}
 		session, ok := authSessionFromContext(r.Context())
 		if !ok {
@@ -134,7 +147,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 			})
 		}
 		// Read category identity only when the user has at least one viewable category.
-		if has("expenses.read") && len(visible) > 0 {
+		if has("expenses.read") && len(visible) > 0 && view != "weekly" && (len(selected) == 0 || selected["service"]) {
 			category, err := maintenance.CategoryID(r.Context())
 			if err == nil && hasExpenseCategoryAction(user.ExpenseCategoryAccess, category, "view") {
 				add("service", "attention", "Service programs", func(ctx context.Context) ([]repository.DashboardItem, error) {
@@ -166,6 +179,9 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		var wg sync.WaitGroup
 		gate := make(chan struct{}, 3)
 		for _, j := range jobs {
+			if len(selected) > 0 && !selected[j.key] {
+				continue
+			}
 			if view == "weekly" && (j.kind == "fleet" || j.kind == "attention") || view == "current" && (j.kind == "performance" || j.kind == "cost" || j.kind == "waterfall") {
 				continue
 			}
@@ -183,7 +199,9 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 					}
 					ctx, cancel := context.WithTimeout(r.Context(), limit)
 					defer cancel()
+					done := db.Phase(ctx, "dashboard_"+j.key)
 					section, err = j.run(ctx)
+					done()
 				case <-r.Context().Done():
 					err = r.Context().Err()
 				}

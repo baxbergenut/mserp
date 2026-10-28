@@ -184,3 +184,26 @@ func (h maintenanceHandler) programAssignees(w http.ResponseWriter, r *http.Requ
 	}
 	writeJSON(w, 200, map[string]any{"people": people, "roles": roles})
 }
+
+func (h maintenanceHandler) programWorkspace(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.allowed(w, r, "view"); !ok {
+		return
+	}
+	q := r.URL.Query()
+	program, truck, status := q.Get("program"), q.Get("truckId"), q.Get("status")
+	if program != "" && !isUUID(program) || truck != "" && !isUUID(truck) || status != "" && status != "due" {
+		writeAPIError(w, 400, "select a valid program, truck and status")
+		return
+	}
+	p, err := parsePagination(r)
+	if err != nil {
+		writeAPIError(w, 400, err.Error())
+		return
+	}
+	out, err := h.repo.ProgramWorkspace(r.Context(), program, truck, q.Get("search"), status, p)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
