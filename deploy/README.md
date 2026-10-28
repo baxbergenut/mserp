@@ -51,7 +51,9 @@ reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
 Migration 160 installs Accounting cutover **inactive**. Install the updated
-deployment helper first: releases without migration 160 cannot be restored after
+deployment helper first. It briefly stops the API and expense-sheet writer while
+registering revision triggers, preventing DDL/write deadlocks. Releases without
+migration 160 cannot be restored after
 it is installed, because they ignore external settlements and the accounting
 boundary. Activation is a separate reviewed administrator action. See
 `docs/ACCOUNTING_CUTOVER.md` for backup/Sheets references, preview and activation.

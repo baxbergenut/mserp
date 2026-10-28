@@ -159,11 +159,11 @@ for migration in "${migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
-    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" ]]; then
+    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" ]]; then
         # No old application may write between a contract cutover and activation.
         cutover_started=true
         systemctl stop mserp-api.service
-        if [[ $migration_name == "$manager_verification_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
+        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi

@@ -66,6 +66,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Migration 160 enrolls later tables in payroll_cache_revisions. Future untracked
   tables force conservative cache/full-report fallback; new financial tables must
   register revision triggers. Finalization always validates uncached under lock.
+  The deploy helper pauses API/export writers while installing migration 160 to
+  avoid DDL/write deadlocks, then restarts them with the compatible release.
   Uncached saves retain financial locks. See docs/PAYROLL_PERFORMANCE.md for
   measured limits; a cache-hit timing does not prove the 300 ms browser target.
 
