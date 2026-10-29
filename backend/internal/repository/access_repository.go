@@ -33,6 +33,10 @@ type ExpenseAccessCategory struct {
 	Active bool   `json:"active"`
 }
 type ManagedUser struct {
+	FirstName   string     `json:"firstName"`
+	LastName    string     `json:"lastName"`
+	DateOfBirth *string    `json:"dateOfBirth,omitempty"`
+	Phone       *string    `json:"phone,omitempty"`
 	LastLoginAt *time.Time `json:"lastLoginAt"`
 	Online      bool       `json:"online"`
 	ID          string     `json:"id"`
@@ -71,13 +75,13 @@ func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
 	categoryRows.Close()
 	rows, err := r.pool.Query(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),coalesce(u.role_id::text,''),u.active,u.version,a.last_login_at,
 		u.active AND u.role_id IS NOT NULL AND EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.last_seen_at>now()-interval '2 minutes')
-		FROM app_users u LEFT JOIN user_login_activity a ON a.user_id=u.id ORDER BY lower(u.username),u.id`)
+		,u.first_name,u.last_name,u.date_of_birth::text,u.phone FROM app_users u LEFT JOIN user_login_activity a ON a.user_id=u.id ORDER BY lower(u.username),u.id`)
 	if err != nil {
 		return data, err
 	}
 	for rows.Next() {
 		var u ManagedUser
-		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version, &u.LastLoginAt, &u.Online); err != nil {
+		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version, &u.LastLoginAt, &u.Online, &u.FirstName, &u.LastName, &u.DateOfBirth, &u.Phone); err != nil {
 			rows.Close()
 			return data, err
 		}
@@ -169,6 +173,13 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if err = accessLock(ctx, tx, actor); err != nil {
 		return "", err
 	}
+	var administrator bool
+	if err = tx.QueryRow(ctx, `SELECT r.system_role FROM app_users u JOIN app_roles r ON r.id=u.role_id WHERE u.id=$1`, actor).Scan(&administrator); err != nil {
+		return "", err
+	}
+	if !administrator && (input.DateOfBirth != nil || input.Phone != nil) {
+		return "", chargeInvalid("Only Administrators can edit DOB and phone")
+	}
 	var dispatcherRole bool
 	if err = tx.QueryRow(ctx, `SELECT dispatcher_role FROM app_roles WHERE id=$1`, input.RoleID).Scan(&dispatcherRole); err != nil {
 		return "", err
@@ -204,6 +215,12 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if err != nil {
 		return "", err
 	}
+	_, err = tx.Exec(ctx, `UPDATE app_users SET first_name=$2,last_name=$3,
+	 date_of_birth=CASE WHEN $4::text IS NULL THEN date_of_birth ELSE NULLIF($4,'')::date END,
+	 phone=coalesce($5,phone) WHERE id=$1`, id, input.FirstName, input.LastName, input.DateOfBirth, input.Phone)
+	if err != nil {
+		return "", err
+	}
 	var admins int
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM app_users u JOIN app_roles r ON r.id=u.role_id WHERE u.active AND r.system_role`).Scan(&admins)
 	if err != nil {
@@ -212,6 +229,8 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if admins == 0 {
 		return "", ErrAccessConflict
 	}
+	// Private profile values must not leak through the general access audit.
+	input.DateOfBirth, input.Phone = nil, nil
 	if err = accessAudit(ctx, tx, actor, "save_user", id, input); err != nil {
 		return "", err
 	}

@@ -369,6 +369,19 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Settings > Users stores optional reviewed first/last names for legacy accounts
+  (both required for new accounts), with private DOB and phone visible/editable
+  only to the built-in Administrator. Migration 165 preserves old display names.
+  Private values are omitted from general access audits and non-admin responses.
+  POST /auth/birthday is authenticated/CSRF-protected, uses Asia/Tashkent regardless
+  of PC timezone, and atomically claims one greeting per user/year across devices.
+  It returns only greeting/countdown eligibility and server time, never DOB/age/phone.
+  The shared shell greets on login/activity. Before a birthday midnight, a visible,
+  focused window with activity in the last minute shows a black 5-to-0 countdown;
+  inactive users receive the greeting on return. Confetti respects reduced motion.
+  February 29 matches leap years only. Tests: TestUserProfilesDatabase with local
+  MSERP_ACCESS_TEST_DATABASE_URL and scripts/test-user-birthdays.mjs after /api build.
+
 - Settings > Roles & permissions uses compact clickable rows in `RoleList.tsx`.
   Access percentages count catalog permissions shown by the editor plus four
   actions per expense category; retired dispatcher-compensation keys are excluded.

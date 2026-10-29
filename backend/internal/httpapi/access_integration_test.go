@@ -92,6 +92,11 @@ func TestAccessDatabase(t *testing.T) {
 				exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at,created_at) SELECT id,repeat('e',64),repeat('f',43),now()-interval '1 day',now()-interval '2 days' FROM app_users WHERE username='legacy'`)
 				exec(string(activity))
 				exec(`ALTER TABLE app_roles ADD COLUMN dispatcher_role boolean NOT NULL DEFAULT false`)
+				profileMigration, e := os.ReadFile("../../sql/165_user_profiles_birthdays.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(profileMigration))
 				var backfilled bool
 				if e = admin.QueryRow(ctx, `SELECT a.last_login_at=s.created_at FROM user_login_activity a JOIN auth_sessions s ON s.user_id=a.user_id`).Scan(&backfilled); e != nil || !backfilled {
 					t.Fatalf("existing login not preserved: %v", e)
@@ -264,12 +269,12 @@ func TestAccessDatabase(t *testing.T) {
 			}
 			status(call("POST", "/settings/users", repository.ManagedUser{Username: "No email", RoleID: viewerRole, Active: true, Password: password}, sessionCookie, session.CSRFToken), 400)
 			status(call("POST", "/settings/users", repository.ManagedUser{Username: "No password", Email: "nopass@example.com", RoleID: viewerRole, Active: true}, sessionCookie, session.CSRFToken), 400)
-			created := call("POST", "/settings/users", repository.ManagedUser{Username: "Viewer", Email: "VIEWER@example.com", RoleID: viewerRole, Active: true, Password: password}, sessionCookie, session.CSRFToken)
+			created := call("POST", "/settings/users", repository.ManagedUser{Username: "Viewer", FirstName: "Test", LastName: "Viewer", Email: "VIEWER@example.com", RoleID: viewerRole, Active: true, Password: password}, sessionCookie, session.CSRFToken)
 			status(created, 200)
 			var createdID map[string]string
 			_ = json.Unmarshal(created.Body.Bytes(), &createdID)
 			viewerID := createdID["id"]
-			status(call("POST", "/settings/users", repository.ManagedUser{Username: "Duplicate", Email: "viewer@example.com", RoleID: viewerRole, Active: true, Password: password}, sessionCookie, session.CSRFToken), 409)
+			status(call("POST", "/settings/users", repository.ManagedUser{Username: "Duplicate", FirstName: "Duplicate", LastName: "Viewer", Email: "viewer@example.com", RoleID: viewerRole, Active: true, Password: password}, sessionCookie, session.CSRFToken), 409)
 			viewer := login("viewer@example.com", password, true)
 			status(viewer, 200)
 			viewerCookie := viewer.Result().Cookies()[0]
