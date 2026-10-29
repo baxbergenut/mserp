@@ -14,6 +14,16 @@ without contributing gross, mileage or balance. Next Monday contains the load
 once, under its original dispatcher, even after a Monday assignment change.
 The moved cell shows its original date. Transferred board entries are read-only;
 restore the transfer in payroll before changing their underlying load values.
+The day's **+** action remains available to users with board write permission,
+including when its only entry is transferred or is a moved-out marker. Other
+loads can be added without editing the transferred entry.
+
+A cleared native Monday row or removed extra slot remains stored for versioned
+restore, but is omitted from the display/settlement projections while an active
+transfer reserves that slot. Each visible destination has one entry. Live
+reconciliation compares row versions only within the same source and placement;
+move/restore/removal snapshots can replace entries with independent versions.
+Transfer transactions publish the Gross Board change notification on commit.
 
 This is a manual accounting decision. Monday 3 p.m. is not evaluated against
 provider schedules, inferred delivery times or document upload times. Deployment

@@ -22,7 +22,9 @@ func boardPlacementSQL(payroll bool) string {
  e.service_date source_date,e.slot source_slot,coalesce(t.version,0) transfer_version,
  coalesce(t.dispatch_date::text,'') dispatch_date,coalesce(t.dispatch_slot,e.slot) dispatch_slot,
  coalesce(t.dispatcher_id,'') credited_dispatcher_id,coalesce(t.dispatcher_name,'') credited_dispatcher_name,t.truck_id transfer_truck_id
- FROM ` + grossBoardEntriesSQL + ` e LEFT JOIN gross_board_transfers t ON t.driver_id=e.driver_id AND t.source_date=e.service_date AND t.source_slot=e.slot AND t.active)`
+ FROM ` + grossBoardEntriesSQL + ` e LEFT JOIN gross_board_transfers t ON t.driver_id=e.driver_id AND t.source_date=e.service_date AND t.source_slot=e.slot AND t.active
+ WHERE NOT ((e.deleted OR (btrim(e.load_number)='' AND e.day_status='' AND e.original_rate IS NULL AND e.driver_rate IS NULL AND e.miles IS NULL))
+ AND EXISTS(SELECT 1 FROM gross_board_transfers reserved WHERE reserved.active AND reserved.driver_id=e.driver_id AND reserved.dispatch_date=e.service_date AND reserved.dispatch_slot=e.slot)))`
 }
 
 var dispatchBoardEntriesSQL = boardPlacementSQL(false)
@@ -161,6 +163,11 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 		return err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO gross_board_transfer_history(actor_id,reason,before_value,after_value) VALUES($1,$2,$3,$4)`, actor, input.Reason, before, after); err != nil {
+		return err
+	}
+	// Transfer metadata does not update the source board row, so announce its
+	// placement change explicitly. PostgreSQL delivers this only after commit.
+	if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_gross_board','')`); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

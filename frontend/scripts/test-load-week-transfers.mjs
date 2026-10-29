@@ -87,5 +87,47 @@ try{
  await expect(page.getByRole('row',{name:'New Dispatcher totals'}).getByText('$1,000.00',{exact:true})).toBeVisible();
  await expect(page.getByText(`From ${source}`,{exact:true})).toBeVisible();
  await page.close();
+ // A single transferred Monday cell stays read-only while its day can add
+ // another load. A view-only user still cannot see an add action.
+ {
+  const addPage=await browser.newPage({viewport:{width:1800,height:1100}});
+  await addPage.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));
+  let editable=true;
+  const writes=[];
+  const moved={driverId:'add-driver',date:next,sourceDate:source,sourceSlot:0,slot:0,version:2,transferVersion:1,creditedDispatcherId:'old',creditedDispatcherName:'Old Dispatcher',deleted:false,loadNumber:'WEEKEND',loadRecordId:9101,dayStatus:'',originalRate:'3000',driverRate:'2800',miles:'600',enteredOriginalRate:'',enteredMiles:'',duplicate:false};
+  let entries=[moved];
+  await addPage.route('**/api/**',async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname.slice(4);
+   if(request.method()==='PUT'&&path==='/gross-board'){
+    const changes=request.postDataJSON().entries;writes.push(changes);
+    expect(changes.every(e=>!e.transferVersion&&e.slot===1)).toBe(true);
+    const committed=changes.map(e=>({...e,version:e.version+1}));
+    entries=[...entries.filter(e=>!committed.some(c=>c.date===e.date&&c.slot===e.slot)),...committed];
+    return route.fulfill({json:committed});
+   }
+   const fixtures={
+    '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['board.read',...(editable?['board.write']:[])]},csrfToken:'fixture'},
+    '/gross-board':{weekStart:next,drivers:[{id:'add-driver',fullName:'Add Driver',active:true,dispatcherId:'old',dispatcherName:'Old Dispatcher',truckUnit:'T1'}],entries,balances:[]},'/tasks/count':{count:0},
+   };return route.fulfill({json:fixtures[path]??[]});
+  });
+  await addPage.goto(`${base}/gross-board?weekStart=${next}`);
+  await addPage.getByRole('button',{name:`Add Driver, ${next}, add another load`,exact:true}).click();
+  const day=addPage.getByRole('dialog',{name:'Daily loads',exact:true});
+  const field=(slot,name)=>day.locator(`[data-gross-slot="${slot}"]`).getByLabel(`Add Driver, ${next}, ${name}`,{exact:true});
+  await expect(field(0,'load number or status')).toBeDisabled();
+  await expect(field(0,'total gross')).toBeDisabled();
+  await field(1,'load number or status').fill('ADDED-MONDAY');
+  await field(1,'total gross').fill('250');
+  await field(1,'miles').fill('125');
+  await day.getByRole('button',{name:'Apply changes',exact:true}).click();
+  await expect.poll(()=>entries.find(e=>e.slot===1)?.loadNumber).toBe('ADDED-MONDAY');
+  expect(writes).toHaveLength(1);expect(entries.find(e=>e.slot===0)).toEqual(moved);
+  await addPage.reload();
+  await expect(addPage.getByRole('row',{name:'Old Dispatcher totals'}).getByText('$3,250.00',{exact:true})).toBeVisible();
+  editable=false;await addPage.reload();
+  await expect(addPage.getByRole('row',{name:'Old Dispatcher totals'})).toBeVisible();
+  await expect(addPage.getByRole('button',{name:`Add Driver, ${next}, add another load`,exact:true})).toHaveCount(0);
+  await addPage.close();
+ }
  console.log('Load week transfers passed: both pay pages, both modes, original dispatcher totals, stale errors, restore, finalized and read-only controls.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

@@ -117,7 +117,31 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				}
 				return out
 			}
+			listener, listenErr := pgx.Connect(ctx, dsn)
+			if listenErr != nil {
+				t.Fatal(listenErr)
+			}
+			defer listener.Close(context.Background())
+			if _, listenErr = listener.Exec(ctx, `LISTEN mserp_gross_board`); listenErr != nil {
+				t.Fatal(listenErr)
+			}
+			var publisher uint32
+			if listenErr = pool.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&publisher); listenErr != nil {
+				t.Fatal(listenErr)
+			}
 			transfer()
+			notificationCtx, stopNotifications := context.WithTimeout(ctx, 3*time.Second)
+			for {
+				notice, waitErr := listener.WaitForNotification(notificationCtx)
+				if waitErr != nil {
+					stopNotifications()
+					t.Fatal("transfer did not announce its committed Gross Board change", waitErr)
+				}
+				if notice.PID == publisher {
+					break
+				}
+			}
+			stopNotifications()
 			for _, investor := range []bool{false, true} {
 				if l := find(read(investor, week), "MOVE-SUN"); l == nil || l.Date != "2026-10-25" || l.TransferVersion != 1 {
 					t.Fatal("settlement should stay", investor, l)
@@ -234,6 +258,73 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			extra.Mode = "restore"
 			if e = pay.TransferLoadWeek(ctx, extra, "accountant"); e != nil {
 				t.Fatal(e)
+			}
+			// Reusing an empty/cleared destination must produce one projected
+			// entry while retaining its raw version for a later restore.
+			for i, kind := range []string{"cleared base", "deleted extra", "empty extra"} {
+				sourceDay := next.AddDate(0, 0, 6+7*i)
+				mondayDay := sourceDay.AddDate(0, 0, 1)
+				targetSlot := 0
+				number := fmt.Sprintf("EMPTY-DEST-%d", i)
+				recordID := 9201 + i
+				exec(`INSERT INTO loads(id,load_id,status,total_pay,load_pay,total_miles,truck_id,raw_payload) VALUES($1,$2,'delivered',500,500,100,$3,'{}');INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($4,$5,$2,$1,400)`, recordID, number, truck, driver, sourceDay)
+				if i == 0 {
+					exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,version,note) VALUES($1,$2,'',25,'Cleared draft')`, driver, mondayDay)
+				} else {
+					targetSlot = 1
+					exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,$2,'SHOP');INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,deleted,version,note) VALUES($1,$2,1,'',$3,25,'Cleared draft')`, driver, mondayDay, i == 1)
+				}
+				move := LoadWeekTransferInput{DriverID: driver, Date: sourceDay.Format(time.DateOnly), Slot: 0, BoardVersion: 1, Mode: "everyone", Reason: kind}
+				if e = pay.TransferLoadWeek(ctx, move, "accountant"); e != nil {
+					t.Fatal(kind, e)
+				}
+				projected, readErr := board.Get(ctx, mondayDay)
+				if readErr != nil {
+					t.Fatal(kind, readErr)
+				}
+				count := 0
+				for _, entry := range projected.Entries {
+					if entry.Date == mondayDay.Format(time.DateOnly) && entry.Slot == targetSlot {
+						count++
+						if entry.LoadNumber != number || entry.Deleted || entry.TransferVersion == 0 {
+							t.Fatal(kind, "placeholder hid transfer", entry)
+						}
+					}
+				}
+				if count != 1 {
+					t.Fatal(kind, "duplicate projected destination", count)
+				}
+				for _, investor := range []bool{false, true} {
+					l := find(read(investor, mondayDay), number)
+					if l == nil || l.Date != mondayDay.Format(time.DateOnly) {
+						t.Fatal(kind, "settlement missing", investor, l)
+					}
+				}
+				additional := GrossBoardEntry{DriverID: driver, Date: mondayDay.Format(time.DateOnly), Slot: targetSlot + 1, LoadNumber: "ADDED-LOAD", OriginalRate: "100", DriverRate: "90", Miles: "10"}
+				if e = board.Save(ctx, []GrossBoardEntry{additional}); e != nil {
+					t.Fatal(kind, "cannot add beside transfer", e)
+				}
+				move.Mode = "restore"
+				move.TransferVersion = 1
+				if e = pay.TransferLoadWeek(ctx, move, "accountant"); e != nil {
+					t.Fatal(kind, e)
+				}
+				restored, readErr := board.Get(ctx, mondayDay)
+				if readErr != nil {
+					t.Fatal(kind, readErr)
+				}
+				count = 0
+				for _, entry := range restored.Entries {
+					if entry.Date == mondayDay.Format(time.DateOnly) && entry.Slot == targetSlot {
+						count++
+						if entry.LoadNumber != "" || entry.Version != 25 || entry.TransferVersion != 0 || entry.Note == nil || *entry.Note != "Cleared draft" || entry.Deleted != (i == 1) {
+							t.Fatal(kind, "restore lost raw placeholder", entry)
+						}
+					}
+				}
+				if count != 1 {
+					t.Fatal(kind, "restore destination count", count)
+				}
 			}
 			// A pre-existing frozen original statement can receive dispatcher-only
 			// placement without rewriting its stored report.

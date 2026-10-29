@@ -1557,7 +1557,11 @@ assignment lookup lists.
   moves preserve frozen monetary reports. Changed crew/investor terms require
   review. Version checks, reserved slots, the accounting lock, database source
   guards and immutable history protect edits; restore in payroll before editing
-  transferred Gross Board values. No delivery-time inference or provider writes.
+  transferred Gross Board values. Reserved cleared/tombstoned Monday rows are
+  hidden by projections without losing their restore versions. The day's Add
+  action remains available beside protected transfers. Transfers notify Gross
+  Board after commit; live merges compare versions only for the same source
+  placement. No delivery-time inference or provider writes.
   See `docs/LOAD_WEEK_TRANSFERS.md`; `TestLoadWeekTransfersDatabase` uses
   `MSERP_GROSS_BOARD_TEST_DATABASE_URL`, and browser checks use
   `node scripts/test-load-week-transfers.mjs` against a `/api` build.

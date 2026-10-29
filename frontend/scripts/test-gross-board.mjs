@@ -219,3 +219,19 @@ const daily=dates.map(date=>({...emptyEntry('moving',date),loadNumber:date,origi
 assert.equal(split.reduce((sum,d)=>sum+totals(daily.filter(e=>d.dates.includes(e.date))).original,0n),totals(daily).original);
 assert.equal(totals(daily.filter(e=>split[1].dates.includes(e.date))).original,30000n);
 assert.equal(dispatcherRows([{...movingDriver,assignments:undefined}],dates).length,1);
+
+// A projected transfer and a native slot have independent version sequences.
+const liveSource = readFileSync(new URL("../app/gross-board/liveMerge.ts", import.meta.url), "utf8");
+const liveCode = ts.transpileModule(liveSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText.replace('import { entryKey } from "./board";', `const entryKey = ${entryKey.toString()};`);
+const { mergeGrossLive } = await import(`data:text/javascript;base64,${Buffer.from(liveCode).toString("base64")}`);
+const liveEmpty = { ...emptyEntry("transfer-driver", "2026-10-26"), version: 25, sourceDate: "2026-10-26", sourceSlot: 0 };
+const liveMoved = { ...liveEmpty, version: 2, sourceDate: "2026-10-25", transferVersion: 1, loadNumber: "82H5939", originalRate: "1433", driverRate: "1433", miles: "453" };
+const liveBoard = entries => ({ weekStart: "2026-10-26", entries, drivers: [], balances: [] });
+assert.deepEqual(mergeGrossLive(liveBoard([liveEmpty]),liveBoard([liveMoved]),new Set(),new Set()).entries,[liveMoved],"cleared destination version must not hide a transferred source");
+assert.deepEqual(mergeGrossLive(liveBoard([{...liveMoved,version:30}]),liveBoard([liveEmpty]),new Set(),new Set()).entries,[liveEmpty],"restore must replace a transfer with the native slot's lower version");
+assert.deepEqual(mergeGrossLive(liveBoard([liveMoved]),liveBoard([]),new Set(),new Set()).entries,[],"restored/removed transfers must not remain as ghost loads");
+assert.deepEqual(mergeGrossLive(liveBoard([liveEmpty]),liveBoard([{...liveEmpty,version:24}]),new Set(),new Set()).entries,[liveEmpty],"normal optimistic versions remain protected");
+assert.deepEqual(mergeGrossLive(liveBoard([liveMoved]),liveBoard([{...liveMoved,version:1}]),new Set(),new Set()).entries,[liveMoved],"same source/placement versions remain protected");
+assert.deepEqual(mergeGrossLive(liveBoard([liveEmpty]),liveBoard([liveMoved]),new Set([entryKey(liveEmpty.driverId,liveEmpty.date,liveEmpty.slot)]),new Set()).entries,[liveEmpty],"typing remains protected even while placement changes");
+assert.deepEqual(mergeGrossLive(liveBoard([liveMoved]),liveBoard([]),new Set(),new Set([`${liveMoved.driverId}:${liveMoved.date}`])).entries,[liveMoved],"open day editors retain their source snapshot");
+console.log("Transfer live reconciliation passed: independent source versions, restore, removals and editor protection.");
