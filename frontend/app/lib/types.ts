@@ -1261,6 +1261,7 @@ export interface DriverPayLoad {
   issues: string[];
 }
 export interface DriverPayDriver {
+  homeWeek?: boolean;
   dayStatuses?: { date: string; status: Exclude<GrossBoardDayStatus, ""> }[];
   dispatchers?: { id: string; name: string }[];
   summary?: { loads: number; missingFees: number; review: number; fee: string; payable: string };

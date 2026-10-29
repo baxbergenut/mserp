@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -9,6 +10,58 @@ import (
 type PayDayStatus struct {
 	Date   string `json:"date"`
 	Status string `json:"status"`
+}
+
+// Require an explicit Home record on every day of the selected week, with no
+// conflicting statuses or loads. Missing days never imply time at home.
+func payHomeWeek(week string, d DriverPayDriver) bool {
+	if len(d.Loads) > 0 || d.Summary != nil && d.Summary.Loads > 0 {
+		return false
+	}
+	start, err := time.Parse(time.DateOnly, week)
+	if err != nil {
+		return false
+	}
+	days := map[string]bool{}
+	for _, s := range d.DayStatuses {
+		if s.Date < week || s.Date >= start.AddDate(0, 0, 7).Format(time.DateOnly) {
+			continue
+		}
+		if s.Status != "HOME" {
+			return false
+		}
+		days[s.Date] = true
+	}
+	return len(days) == 7
+}
+
+// Decorate only the selected no-load page rows, retaining compact summaries.
+// The existing day-status projection supplies dated truck/team routing and
+// preserves frozen statement labels. No financial values are changed.
+func decoratePayHomeWeeks(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
+	metadata := DriverPayWeek{WeekStart: report.WeekStart}
+	for _, d := range report.Drivers {
+		if d.Summary != nil && d.Settlement != nil && d.Settlement.Finalized {
+			continue
+		}
+		if len(d.Loads) == 0 && (d.Summary == nil || d.Summary.Loads == 0) {
+			metadata.Drivers = append(metadata.Drivers, d)
+		}
+	}
+	if err := decoratePayDayStatuses(ctx, tx, kind, &metadata); err != nil {
+		return err
+	}
+	home := map[string]bool{}
+	for _, d := range metadata.Drivers {
+		home[d.ID] = payHomeWeek(report.WeekStart, d)
+	}
+	for i := range report.Drivers {
+		if report.Drivers[i].Summary != nil && report.Drivers[i].Settlement != nil && report.Drivers[i].Settlement.Finalized {
+			continue
+		}
+		report.Drivers[i].HomeWeek = home[report.Drivers[i].ID]
+	}
+	return nil
 }
 
 // Day labels are display metadata, never loads or payable amounts. Resolve the

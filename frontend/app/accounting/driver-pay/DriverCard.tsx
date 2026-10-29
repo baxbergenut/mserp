@@ -69,6 +69,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const loadCount = driver.summary?.loads ?? driver.loads.length;
+  const homeBadge = driver.homeWeek && loadCount === 0 ? <span title="Home every day of this week, with no loads" className="shrink-0 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-300">Home</span> : null;
   const allFeesMissing = loadCount > 0 && totals.missingFees === loadCount;
   const incomplete = totals.review > 0;
   const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses;
@@ -130,13 +131,13 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
           <button type="button" aria-label={investor ? `${statementName} ${driver.truckUnit}` : statementName} aria-expanded={open} aria-controls={`driver-${driver.id}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500">
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
           </button>
-          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
+          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
           {!investor && driver.teamDrivers?.map(person => <Link key={person.id} title={`Team driver: ${person.name}. This statement uses the main driver's tariff.`} href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()} className="truncate text-[10px] text-blue-400">+ {person.name}</Link>)}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
         </div>
       </th>
       <td className="border-b border-zinc-800 px-3">{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} onClick={event => event.stopPropagation()} className="font-mono underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
-      <td className="border-b border-zinc-800 px-3">{investor ? operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—" : employmentTypeLabel(driver.employmentType ?? (driver.isOwnerOperator ? "owner_operator" : "company"))}</td>
+      <td className="border-b border-zinc-800 px-3">{investor ? <div className="flex items-center gap-2">{operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—"}{operatingDrivers.length > 0 && homeBadge}</div> : employmentTypeLabel(driver.employmentType ?? (driver.isOwnerOperator ? "owner_operator" : "company"))}</td>
       {!investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName || "—"}</td>
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}

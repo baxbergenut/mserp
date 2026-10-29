@@ -21,12 +21,14 @@ try {
     const page = await browser.newPage();
     const errors = [], unexpected = [];
     let serviceReads = 0;
+    let driverStatus = { active: true, availabilityStatus: 'active' };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname.slice(4);
       let data;
       if (path === '/auth/session') data = { user: { id: 'dispatcher', username: 'Dispatcher', permissions, expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
-      else if (path === '/drivers/driver') data = { id: 'driver', fullName: 'Profile Driver', active: true, status: 'active', employmentType: 'company', updatedAt: '2026-10-28T12:00:00Z' };
+      else if (path === '/auth/birthday') data = { eligible: false, serverTime: new Date().toISOString() };
+      else if (path === '/drivers/driver') data = { id: 'driver', fullName: 'Profile Driver', status: 'active', employmentType: 'company', updatedAt: '2026-10-28T12:00:00Z', ...driverStatus };
       else if (path === '/driver-services/driver') {
         serviceReads++;
         // The API deliberately hides Relay policies and other service cards.
@@ -41,6 +43,17 @@ try {
     });
     await page.goto(`${base}/drivers/detail?id=driver`);
     await expect(page.getByRole('heading', { name: 'Profile Driver', exact: true })).toBeVisible();
+    const title = page.locator('[data-page-header]');
+    for (const [availabilityStatus, label] of [['vacation', 'Vacation'], ['home', 'Home'], ['rest', 'Rest'], ['reset', '34 Reset'], ['family_issue', 'Family issue'], ['health_issue', 'Health issue'], ['new_driver', 'New driver'], ['active', 'Active'], [undefined, 'Active']]) {
+      driverStatus = { active: true, availabilityStatus };
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expect(title.getByText(label, { exact: true })).toBeVisible();
+      await expect(page.locator('dl > div').filter({ has: page.locator('dt', { hasText: /^Availability$/ }) }).locator('dd')).toHaveText(label);
+    }
+    driverStatus = { active: false, availabilityStatus: 'vacation' };
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(title.getByText('Terminated', { exact: true })).toBeVisible();
+    await expect(title.getByText('Vacation', { exact: true })).toHaveCount(0);
     await expect(page.getByLabel('DataTruck setup')).toContainText('DataTruck ID: 123');
     await expect(page.getByLabel('Relay setup')).toHaveCount(0);
     await expect(page.getByText('License & documents', { exact: true })).toHaveCount(0);
@@ -54,7 +67,7 @@ try {
     expect(unexpected).toEqual([]);
     await page.close();
   }
-  console.log('Driver profile access passed: View Drivers alone and dispatcher editing grants, null Relay policies, service refresh, document/payroll isolation.');
+  console.log('Driver profile access passed: availability headers and refresh, termination precedence, View Drivers alone and dispatcher editing grants, null Relay policies, service refresh, document/payroll isolation.');
 } finally {
   await browser.close();
   server.closeAllConnections();

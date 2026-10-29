@@ -2883,6 +2883,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Page performance reads (162)
 
+- Driver/Investor Pay compact rows retain display-only `homeWeek` badges when all
+  seven selected-week days explicitly record HOME and the statement has no loads.
+  Missing/conflicting days never qualify; dated team/truck routing and frozen
+  labels remain authoritative. Checks: TestPayHomeWeek, TestDriverPayLayoverDatabase
+  and frontend/scripts/test-payroll-home-views.mjs. Driver profile header badges
+  show availability, with termination taking precedence over saved availability.
+
 - Driver Pay and Investor Pay expanded day rows show recorded Gross Board day
   statuses with the shared colors and centered labels, falling back to No load
   only for unrecorded days. `payroll_day_statuses.go` adds display-only metadata

@@ -4,9 +4,41 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestPayHomeWeek(t *testing.T) {
+	const week = "2026-10-05"
+	start, _ := time.Parse(time.DateOnly, week)
+	d := DriverPayDriver{Edits: DriverPayEdits{WeekStart: week}}
+	for i := 0; i < 7; i++ {
+		d.DayStatuses = append(d.DayStatuses, PayDayStatus{start.AddDate(0, 0, i).Format(time.DateOnly), "HOME"})
+	}
+	if !payHomeWeek(week, d) || !summarizePayStatement(d).HomeWeek {
+		t.Fatal("full no-load Home week must survive compact summaries")
+	}
+	for _, test := range []struct {
+		name   string
+		change func(*DriverPayDriver)
+	}{
+		{"partial week", func(d *DriverPayDriver) { d.DayStatuses = d.DayStatuses[:6] }},
+		{"duplicate day", func(d *DriverPayDriver) { d.DayStatuses[6] = d.DayStatuses[0] }},
+		{"conflicting status", func(d *DriverPayDriver) { d.DayStatuses = append(d.DayStatuses, PayDayStatus{week, "SHOP"}) }},
+		{"actual load", func(d *DriverPayDriver) { d.Loads = []DriverPayLoad{{Date: week}} }},
+		{"compact loads", func(d *DriverPayDriver) { d.Summary = &PayStatementSummary{Loads: 1} }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			value := d
+			value.DayStatuses = append([]PayDayStatus{}, d.DayStatuses...)
+			test.change(&value)
+			if payHomeWeek(week, value) {
+				t.Fatal("must not show Home")
+			}
+		})
+	}
+}
 
 func testPayrollDayStatusRouting(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
@@ -47,6 +79,30 @@ func testPayrollDayStatusRouting(t *testing.T, ctx context.Context, pool *pgxpoo
 	}
 	if summarizePayStatement(driverReport.Drivers[0]).DayStatuses != nil {
 		t.Fatal("summary includes day labels")
+	}
+	homeDriver := id(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Home Week','home week','cpm',0.75) RETURNING id`)
+	homeTruck := id(`INSERT INTO trucks(unit_number) VALUES('STATUS-HOME') RETURNING id`)
+	exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-10-01 00:00-04')`, homeTruck, homeDriver)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) SELECT $1,day::date,'HOME' FROM generate_series('2026-10-05'::date,'2026-10-11'::date,'1 day') day`, homeDriver)
+	for _, kind := range []string{"driver", "investor"} {
+		entityID := homeDriver
+		if kind == "investor" {
+			entityID = homeTruck
+		}
+		page := DriverPayWeek{WeekStart: "2026-10-05", Drivers: []DriverPayDriver{{ID: entityID, Summary: &PayStatementSummary{Loads: 0}}}}
+		if err := decoratePayHomeWeeks(ctx, tx, kind, &page); err != nil {
+			t.Fatal(err)
+		}
+		if !page.Drivers[0].HomeWeek || page.Drivers[0].DayStatuses != nil {
+			t.Fatalf("%s compact Home week: %+v", kind, page)
+		}
+		page.Drivers[0].Summary.Loads = 1
+		if err := decoratePayHomeWeeks(ctx, tx, kind, &page); err != nil {
+			t.Fatal(err)
+		}
+		if page.Drivers[0].HomeWeek {
+			t.Fatal("load week marked Home")
+		}
 	}
 	investorReport := DriverPayWeek{WeekStart: "2026-10-05", Drivers: []DriverPayDriver{{ID: oldTruck}, {ID: newTruck}}}
 	if err := decoratePayDayStatuses(ctx, tx, "investor", &investorReport); err != nil {
