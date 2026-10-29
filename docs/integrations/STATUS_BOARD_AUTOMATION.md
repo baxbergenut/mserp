@@ -60,8 +60,11 @@ The first queued load's pickup label is separately clickable and highlighted on
 hover/focus. Its popup saves/clears the manual pickup time through the existing
 audited `stop_time` action with explicit `planId` and `stopKey`. The server checks
 the board version, source revision, first queued load and first pickup stop;
-stale or changed targets are rejected. The load number and remaining cell open
-the queue. A known pickup without a source schedule shows `PU —`; unmatched loads
+stale or changed targets are rejected. Routine `syncedAt` updates are excluded
+from the source revision in all load groups, so an unchanged import does not block
+saving/clearing an open editor. Actual identity, stop/schedule, queue and
+board-version changes still invalidate stale edits. The load number and remaining
+cell open the queue. A known pickup without a source schedule shows `PU —`; unmatched loads
 cannot be edited. Overrides use the imported-load/stop identity, survive source
 refresh and promotion to current, and clearing restores the current source time.
 This action changes no current-load selection, ETA, progress or provider data.

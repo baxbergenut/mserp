@@ -83,6 +83,33 @@ func TestBoardWindowDeadlines(t *testing.T) {
 	}
 }
 
+func TestBoardLoadsRevisionFreshness(t *testing.T) {
+	id := 99116
+	load := BoardLoad{PlanID: "plan", LoadID: &id, SyncedAt: "old", Stops: []BoardStop{{Key: "pickup", Type: "pickup", Schedule: &BoardSchedule{Label: "PU 02:00 FRI"}}}}
+	view := BoardLoads{Current: &load, Week: []BoardLoad{load}, Next: []BoardLoad{load}, Earlier: []BoardLoad{load}, Hidden: []BoardLoad{load}, Unavailable: []BoardLoad{load}}
+	state := boardLoadState{ManualStopTimes: map[string]string{"load:99116/pickup": "03:00 FRI"}}
+	before, _ := json.Marshal(view)
+	revision := boardLoadsRevision(view, state, 1)
+	after, _ := json.Marshal(view)
+	if string(before) != string(after) {
+		t.Fatal("revision stripped freshness from response")
+	}
+	view.Current.SyncedAt = "new"
+	for _, list := range [][]BoardLoad{view.Week, view.Next, view.Earlier, view.Hidden, view.Unavailable} {
+		list[0].SyncedAt = "new"
+	}
+	if boardLoadsRevision(view, state, 1) != revision {
+		t.Fatal("freshness-only update invalidated load revision")
+	}
+	if boardLoadsRevision(view, state, 2) == revision {
+		t.Fatal("board version change was not fenced")
+	}
+	view.Next[0].Stops[0].Schedule.Label = "PU 04:00 FRI"
+	if boardLoadsRevision(view, state, 1) == revision {
+		t.Fatal("changed stop schedule was not fenced")
+	}
+}
+
 func testNextPickupTimesDatabase(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {
 	t.Helper()
 	d, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Next Pickup Driver", PayType: "cpm", PayRate: 0.6, Active: true})
@@ -140,6 +167,22 @@ func testNextPickupTimesDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("undo did not restore source schedule", err)
 	}
 	edit.Version, edit.Revision = undone.Version, view.Revision
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// While the popup is still open, an ordinary source refresh must not make
+	// clearing the manual time stale when the actual load/stop data is unchanged.
+	_, err = pool.Exec(ctx, `UPDATE loads SET synced_at=synced_at+interval '1 minute' WHERE id=99116`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit.Version, edit.Revision, edit.ManualStopTime = result.Entry.Version, result.Loads.Revision, ""
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil || result.Loads.Next[0].Stops[0].Schedule.Label != "PU 02:00 FRI" {
+		t.Fatal("unchanged source refresh blocked clearing queued pickup time", err)
+	}
+	edit.Version, edit.Revision, edit.ManualStopTime = result.Entry.Version, result.Loads.Revision, "03:00 FRI"
 	result, err = repo.ChangeLoads(ctx, edit, "")
 	if err != nil {
 		t.Fatal(err)

@@ -316,6 +316,39 @@ func defaultBoardStop(stops []BoardStop) *BoardStop {
 	return nil
 }
 
+// Source sync timestamps are freshness metadata. A routine refresh must not
+// invalidate an open editor when the actual load plans/stops are unchanged.
+// Copy the view to preserve those timestamps in API responses and saved details.
+func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) string {
+	withoutSync := func(load BoardLoad) BoardLoad {
+		load.SyncedAt = ""
+		return load
+	}
+	list := func(loads []BoardLoad) []BoardLoad {
+		if loads == nil {
+			return nil
+		}
+		out := make([]BoardLoad, len(loads))
+		for i, load := range loads {
+			out[i] = withoutSync(load)
+		}
+		return out
+	}
+	if view.Current != nil {
+		current := withoutSync(*view.Current)
+		view.Current = &current
+	}
+	view.Week, view.Next, view.Earlier = list(view.Week), list(view.Next), list(view.Earlier)
+	view.Hidden, view.Unavailable = list(view.Hidden), list(view.Unavailable)
+	raw, _ := json.Marshal(struct {
+		View    BoardLoads
+		State   boardLoadState
+		Version int
+	}{view, state, version})
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(hash[:])
+}
+
 // Read-only reconciliation: no calendar or upstream status can promote a load.
 func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (map[string]BoardLoads, error) {
 	day, _ := time.Parse(time.DateOnly, from)
@@ -501,13 +534,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			}
 			return a < b
 		})
-		raw, _ := json.Marshal(struct {
-			View    BoardLoads
-			State   boardLoadState
-			Version int
-		}{view, states[id], entries[id].Version})
-		hash := sha256.Sum256(raw)
-		view.Revision = hex.EncodeToString(hash[:])
+		view.Revision = boardLoadsRevision(view, states[id], entries[id].Version)
 		for i := range view.Next {
 			view.Next[i] = boardStopTimes(view.Next[i], s.ManualStopTimes)
 		}

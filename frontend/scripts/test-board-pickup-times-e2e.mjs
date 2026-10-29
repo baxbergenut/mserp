@@ -50,6 +50,16 @@ try {
   await editor.getByRole('button', { name: 'Save time', exact: true }).click();
   await expect(pickup).toHaveText('PU 03:00 FRI');
   expect((await read()).next[0].stops[0].manualStopTime).toBe('03:00 FRI');
+  // Reproduce the reported failure: refresh the provider timestamp while this
+  // popup retains its source revision, then clear without closing/reloading.
+  sql("UPDATE loads SET synced_at=synced_at+interval '1 minute' WHERE id=989123;");
+  await editor.getByLabel('Manual pickup time', { exact: true }).fill('');
+  await editor.getByRole('button', { name: 'Save time', exact: true }).click();
+  await expect(pickup).toHaveText('PU 02:00 FRI');
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+  await editor.getByLabel('Manual pickup time', { exact: true }).fill('03:00 FRI');
+  await editor.getByRole('button', { name: 'Save time', exact: true }).click();
+  await expect(pickup).toHaveText('PU 03:00 FRI');
   await editor.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload();
   await expect(pickup).toHaveText('PU 03:00 FRI');

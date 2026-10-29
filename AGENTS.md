@@ -671,6 +671,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   retain 24/7. The pickup time has a separate hover-highlighted editor using the
   versioned stop_time action with explicit first-queued plan/stop keys. Clearing
   restores the source schedule; overrides follow the imported load into current.
+  Load revision checks exclude freshness-only syncedAt changes in every load
+  group; source identities, stops/schedules, queue state and versions remain fenced.
   Clicking the number/rest of the cell opens the full queue. Known pickup stops
   without schedules show PU — for manual entry; unresolved loads remain locked.
   Loads > Add next load saves an exact number in the audited load-state JSON,
