@@ -505,7 +505,9 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		}
 		for _, x := range edits.ExpenseDeductions {
 			if x.Apply && !allowed[x.ExpenseID] {
-				return edits, chargeInvalid("This expense belongs to another settlement; reload payroll")
+				// The principal may have been collected in another week or moved to
+				// another payer since this tab loaded. Treat both as stale payroll.
+				return edits, ErrDriverPayConflict
 			}
 		}
 		edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)

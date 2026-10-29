@@ -167,7 +167,7 @@ func TestExpensePayerCorrectionsDatabase(t *testing.T) {
 		if _, err = repo.UpdateExpense(ctx, expense.ID, stale); !errors.Is(err, ErrExpenseSettingConflict) {
 			t.Fatal("stale edit accepted", err)
 		}
-		if _, err = pay.Save(ctx, stalePay); err == nil {
+		if _, err = pay.Save(ctx, stalePay); !errors.Is(err, ErrDriverPayConflict) {
 			t.Fatal("stale payroll restored old payer", err)
 		}
 		for _, week := range []string{"2026-10-19", "2026-10-26", "2026-11-02"} {
