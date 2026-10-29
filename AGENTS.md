@@ -711,7 +711,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `node scripts/test-status-board-layout.mjs` checks ETA persistence and wheel,
   touch, reverse, horizontal and resize behavior with isolated browser fixtures.
   Dispatcher and status dropdowns retain checked selections (intersection),
-  including previous My view selections. Notes precedes ETA. Trailer cells use
+  including previous My view selections. Notes follows Next load. Trailer cells use
   right-click Add/Edit/Delete note and hover previews with corner markers;
   replacing the trailer clears its note. Migration 111 stores/audits trailerNote.
   Right-click editable dispatch cells for driver/column history; the history

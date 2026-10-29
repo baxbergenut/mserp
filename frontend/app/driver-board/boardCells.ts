@@ -1,4 +1,4 @@
-export const boardCellKeys = ["currentLoad", "driver", "truck", "trailerNumber", "originalGross", "driverGross", "phone", "status", "destination", "notes", "eta", "loadPlan", "homeTime"];
+export const boardCellKeys = ["currentLoad", "driver", "truck", "trailerNumber", "originalGross", "driverGross", "phone", "status", "destination", "eta", "loadPlan", "notes", "homeTime"];
 
 export function selectedBoardCell(target: EventTarget | null) {
   if (!(target instanceof Element)) return null;
