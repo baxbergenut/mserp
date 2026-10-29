@@ -369,6 +369,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Settings > Roles & permissions uses compact clickable rows in `RoleList.tsx`.
+  Access percentages count catalog permissions shown by the editor plus four
+  actions per expense category; retired dispatcher-compensation keys are excluded.
+  Administrator is always 100% and opens a read-only modal. Other rows open the
+  existing versioned role editor. Browser check: `node scripts/test-role-list.mjs`.
+
 - `/feedback` is available to every signed-in user, immediately above Settings.
   Migration 155 and repository/httpapi `feedback*.go` own its shared feed,
   comments, unique per-user votes, custom tags and paginated Kanban statuses.

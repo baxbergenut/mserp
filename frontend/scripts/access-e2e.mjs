@@ -19,7 +19,7 @@ export async function runAccessE2E({ page, base, temp }) {
   await page.getByLabel('Maintenance Add', { exact: true }).check();
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Loads viewer', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Loads viewer, \d+% access$/ })).toBeVisible();
   await page.getByRole('button', { name: 'Users', exact: true }).click();
   await page.getByRole('button', { name: 'Add user', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Access viewer');
