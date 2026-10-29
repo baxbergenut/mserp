@@ -177,6 +177,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `lastName` alongside `fullName`. Hire intake retains the supplied parts and
   prefills setup; legacy full-name-only events still require a reviewed split,
   never guessed token positions. Deploy the receiver before the updated sender.
+  Hire webhooks also accept optional `dateOfBirth` (`YYYY-MM-DD`, 1900 through
+  today), retain it in the private intake, and prefill both setup entry points.
+  Missing/legacy DOBs stay blank; applicant and termination payloads exclude DOB.
   Migration 114 adds optional truck `color` (maximum 30 characters). Truck forms
   and details expose it; omitted/null API input preserves an existing color,
   while an explicit empty string clears it. Portal batch submission saves the

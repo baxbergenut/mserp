@@ -17,6 +17,7 @@ async function loadSetup(id: string, canCreateTruck: boolean) {
     newTruck: canCreateTruck ? { ...truckForm.emptyTruckInput } : undefined,
     escrowAmount: defaults.escrowAmount, fullName: source.fullName, hireDate: source.hireDate,
     firstName: source.firstName ?? "", lastName: source.lastName ?? "",
+    dateOfBirth: source.dateOfBirth ?? "",
     phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
     city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",
     licenseNumber: source.licenseNumber ?? "", licenseState: source.licenseState ?? "", licenseExpires: source.licenseExpires ?? "",

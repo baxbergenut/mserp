@@ -146,7 +146,7 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(ctx, `INSERT INTO app_users(id,username,password_hash) VALUES($1,'intake-test','$2test')`, userID); err != nil {
 		t.Fatal(err)
 	}
-	event := fleetscope.Event{Version: 1, Type: "driver.hired", EventID: "00000000-0000-0000-0000-000000000002", CompanyID: "00000000-0000-0000-0000-000000000003", OccurredAt: time.Now(), Driver: fleetscope.Driver{ID: "00000000-0000-0000-0000-000000000004", FullName: "Test New Hire", FirstName: "Test New", LastName: "Hire", DriverType: "company", HireDate: "2026-09-28", Email: "hire@example.test"}}
+	event := fleetscope.Event{Version: 1, Type: "driver.hired", EventID: "00000000-0000-0000-0000-000000000002", CompanyID: "00000000-0000-0000-0000-000000000003", OccurredAt: time.Now(), Driver: fleetscope.Driver{ID: "00000000-0000-0000-0000-000000000004", FullName: "Test New Hire", FirstName: "Test New", LastName: "Hire", DriverType: "company", HireDate: "2026-09-28", DateOfBirth: "1990-02-03", Email: "hire@example.test"}}
 	var wg sync.WaitGroup
 	results := make(chan IntakeResult, 6)
 	failures := make(chan error, 6)
@@ -192,7 +192,7 @@ func testFleetScopeLifecycle(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("same driver retry: %+v %v", result, err)
 	}
 	page, err := repo.ListDriverIntake(ctx, Pagination{Page: 1, PageSize: 25})
-	if err != nil || page.Total != 1 || page.Items[0].Driver.FullName != event.Driver.FullName || page.Items[0].Driver.FirstName != event.Driver.FirstName || page.Items[0].Driver.LastName != event.Driver.LastName {
+	if err != nil || page.Total != 1 || page.Items[0].Driver.FullName != event.Driver.FullName || page.Items[0].Driver.FirstName != event.Driver.FirstName || page.Items[0].Driver.LastName != event.Driver.LastName || page.Items[0].Driver.DateOfBirth != event.Driver.DateOfBirth {
 		t.Fatalf("snapshot changed: %+v %v", page, err)
 	}
 	assertDriverCount := func(want int) {

@@ -44,7 +44,7 @@ const server=createServer(async(req,res)=>{
    if(p==='/api/drivers'&&req.method==='GET')return send(drivers);
    if(p.startsWith('/api/drivers/')&&req.method==='GET')return send(drivers.find(d=>p.endsWith(d.id)));
    if(p==='/api/driver-intake/intake-1')return send({id:'intake-1',driver:{fullName:'Onboard Browser',hireDate:'2026-10-12',driverType:'company',phone:'5551234567',email:'onboard@example.test'},candidates:[]});
-   if(p==='/api/driver-intake/intake-2')return send({id:'intake-2',driver:{fullName:'Another Mary de la Cruz',firstName:'Another Mary',lastName:'de la Cruz',hireDate:'2026-10-13',driverType:'company'},candidates:[]});
+   if(p==='/api/driver-intake/intake-2')return send({id:'intake-2',driver:{fullName:'Another Mary de la Cruz',firstName:'Another Mary',lastName:'de la Cruz',dateOfBirth:'1990-02-03',hireDate:'2026-10-13',driverType:'company'},candidates:[]});
    if(p.startsWith('/api/driver-services/')&&req.method==='GET')return send({...setups.get(p.split('/').at(-1)),checkedAt:new Date().toISOString()});
    let body='';for await(const c of req)body+=c;const input=body?JSON.parse(body):{};
    writes.push({path:p,input});
@@ -151,10 +151,12 @@ try{
  await expect(dialog).toHaveAttribute('aria-label','Set up Another Mary de la Cruz');
  await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('Another Mary');
  await expect(dialog.getByLabel('Last name',{exact:true})).toHaveValue('de la Cruz');
+ await expect(dialog.getByLabel('Date of birth',{exact:true})).toHaveValue('1990-02-03');
  await page.evaluate(()=>window.history.pushState(null,'','/drivers?setup=intake-1'));
  await expect(dialog).toHaveAttribute('aria-label','Set up Onboard Browser');
  await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');
  await expect(dialog.getByLabel('Last name',{exact:true})).toHaveValue('');
+ await expect(dialog.getByLabel('Date of birth',{exact:true})).toHaveValue('');
  await dialog.getByLabel('First name',{exact:true}).fill('Onboard');
  await dialog.getByLabel('Last name',{exact:true}).fill('Browser');
  await dialog.getByLabel('City',{exact:true}).fill('Louisville');

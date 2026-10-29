@@ -45,6 +45,7 @@ type Driver struct {
 	Phone          string `json:"phone,omitempty"`
 	DriverType     string `json:"driverType"`
 	HireDate       string `json:"hireDate"`
+	DateOfBirth    string `json:"dateOfBirth,omitempty"`
 	Address        string `json:"address,omitempty"`
 	City           string `json:"city,omitempty"`
 	State          string `json:"state,omitempty"`
@@ -83,7 +84,7 @@ func (e *Event) Validate() error {
 	e.EventID = strings.ToLower(e.EventID)
 	e.Driver.ID = strings.ToLower(e.Driver.ID)
 	for field, max := range map[*string]int{
-		&e.Driver.FullName: 200, &e.Driver.Email: 254, &e.Driver.Phone: 50,
+		&e.Driver.FullName: 200, &e.Driver.Email: 254, &e.Driver.Phone: 50, &e.Driver.DateOfBirth: 10,
 		&e.Driver.Address: 500, &e.Driver.City: 100, &e.Driver.State: 2,
 		&e.Driver.PostalCode: 20, &e.Driver.LicenseNumber: 100, &e.Driver.LicenseState: 2,
 	} {
@@ -166,6 +167,12 @@ func (e *Event) Validate() error {
 	}
 	if _, err := time.Parse(time.DateOnly, e.Driver.HireDate); err != nil {
 		return errors.New("hireDate must use YYYY-MM-DD")
+	}
+	if e.Driver.DateOfBirth != "" {
+		dob, err := time.Parse(time.DateOnly, e.Driver.DateOfBirth)
+		if err != nil || dob.Year() < 1900 || dob.After(time.Now().UTC()) {
+			return errors.New("dateOfBirth must use YYYY-MM-DD, from 1900 through today")
+		}
 	}
 	if e.Driver.LicenseExpires != "" {
 		if _, err := time.Parse(time.DateOnly, e.Driver.LicenseExpires); err != nil {

@@ -171,6 +171,7 @@ function DriversContent() {
     const source = hire.driver;
     setForm({ ...emptyDriverInput, newTruck: permissions.includes("trucks.create") ? { ...emptyTruckInput } : undefined, escrowAmount: "", fullName: source.fullName,
       firstName: source.firstName ?? "", lastName: source.lastName ?? "",
+      dateOfBirth: source.dateOfBirth ?? "",
       hireDate: source.hireDate,
       phone: source.phone ?? "", email: source.email ?? "", address: source.address ?? "",
       city: source.city ?? "", state: source.state ?? "", postalCode: source.postalCode ?? "",

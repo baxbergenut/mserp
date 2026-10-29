@@ -65,6 +65,22 @@ func TestEventValidation(t *testing.T) {
 	}
 }
 
+func TestHireDateOfBirth(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		valid bool
+	}{
+		{"", true}, {"1992-02-29", true}, {"1900-01-01", true},
+		{"1991-02-29", false}, {"1899-12-31", false}, {"2999-01-01", false},
+		{"1990-2-3", false}, {"1990-02-03T00:00:00Z", false},
+	} {
+		e := Event{Version: 1, Type: "driver.hired", EventID: "00000000-0000-0000-0000-000000000001", CompanyID: "00000000-0000-0000-0000-000000000002", OccurredAt: time.Now(), Driver: Driver{ID: "00000000-0000-0000-0000-000000000003", FullName: "Test Driver", DriverType: "company", HireDate: "2026-09-28", DateOfBirth: tc.value}}
+		if err := e.Validate(); (err == nil) != tc.valid {
+			t.Fatalf("DOB validation: %v, want valid=%v", err, tc.valid)
+		}
+	}
+}
+
 func TestTerminationValidation(t *testing.T) {
 	valid := Event{Version: 1, Type: "driver.terminated", EventID: "00000000-0000-0000-0000-000000000001", CompanyID: "00000000-0000-0000-0000-000000000002", OccurredAt: time.Now(), TerminationDate: "2026-01-01", Driver: Driver{ID: "00000000-0000-0000-0000-000000000003", FullName: "Test Driver"}}
 	if err := valid.Validate(); err != nil {
@@ -78,6 +94,7 @@ func TestTerminationValidation(t *testing.T) {
 		func(e *Event) { e.Driver.ID = "invalid" },
 		func(e *Event) { e.Driver.Email = "extra@example.test" },
 		func(e *Event) { e.Driver.HireDate = "2026-01-01" },
+		func(e *Event) { e.Driver.DateOfBirth = "1990-02-03" },
 	} {
 		event := valid
 		mutate(&event)
