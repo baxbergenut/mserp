@@ -786,6 +786,10 @@ func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categor
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpensePayerCorrection) {
+		writeAPIError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), repository.ErrExpensePayerCorrection.Error()+": "))
+		return
+	}
 	if errors.Is(err, repository.ErrMaintenanceInvalid) {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return

@@ -297,7 +297,7 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if err = setBoardActor(ctx, tx, in.ActorID, "work_order"); err != nil {
 		return MaintenanceRecord{}, err
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
+	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return MaintenanceRecord{}, err
 	}
 	var old MaintenanceRecord

@@ -97,6 +97,10 @@ func (h maintenanceHandler) allowedRecordEdit(w http.ResponseWriter, r *http.Req
 	return record.CategoryID, true
 }
 func (h maintenanceHandler) fail(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpensePayerCorrection) {
+		writeAPIError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), repository.ErrExpensePayerCorrection.Error()+": "))
+		return
+	}
 	if errors.Is(err, repository.ErrNotFound) {
 		writeAPIError(w, 404, "maintenance record not found")
 		return

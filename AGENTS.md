@@ -1817,7 +1817,13 @@ assignment lookup lists.
   update time; expense balance versions reject stale cross-week edits. Payment
   writes and payroll autosave commit atomically. Expenses show total, paid and
   remaining; company expenses have no driver balance. Expense identity, date,
-  responsibility and total cannot change once payroll rows exist; deletion is
+  total cannot change once payroll rows exist. Responsible-person corrections on
+  open statements atomically move every saved deduction (same week and amount,
+  including partial/zero rows) between Driver Pay and Investor Pay, recording an
+  access_audit receipt. Finalized source/target statements, actual external
+  settlements, historical paid entries and reimbursement receipts remain protected.
+  No-agreement historical investor weeks show an expense-only review statement;
+  no earnings percentage or ownership agreement is inferred. Deletion is
   restricted. Legacy settled totals/responsibility cannot be repurposed.
   Use a new expense for an additional charge. Tests run as mserp_app against the
   disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL and the driver charges E2E flow.
@@ -2595,6 +2601,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   observation dates, not acquisition dates. Fleet/financial locks and affected
   finalized driver/investor statements guard corrections. Investor agreement
   percentages and dates remain separate; correcting ownership never invents terms.
+  Ownership saves clear recurring-fee allocations attributed to the wrong owner
+  from the selected date's Monday onward, using the existing week-end ownership
+  rule. Earlier debt remains personal; later collections are bounded by corrected
+  debt. Same-date saves repair stale allocations, with truck_settlement_events
+  receipts and finalized-statement guards. Truck charge phases continue for the
+  correct owner. See docs/PAYROLL_CORRECTIONS.md and TestOwnershipFeeCorrectionsDatabase,
+  TestExpensePayerCorrectionsDatabase; browser: test-driver-charges-e2e.mjs
+  --payer-corrections-only against a disposable local database and /api build.
 
 ## Five ELD truck reviews (migration 094)
 

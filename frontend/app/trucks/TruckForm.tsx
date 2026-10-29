@@ -238,6 +238,7 @@ export function TruckForm({
         </Field>
         <Field label="Ownership effective date">
           <input aria-label="Ownership effective date" type="date" min="1900-01-01" max={today} value={value.ownershipEffectiveDate ?? ""} onChange={event => set("ownershipEffectiveDate", event.target.value)} className={controlClass} />
+          <p className="mt-1 text-xs text-zinc-500">Recurring fees follow the owner for this week onward. Incorrect fees saved for the previous owner are cleared; earlier unpaid balances stay with that owner.</p>
         </Field>
       </FormSection>
 

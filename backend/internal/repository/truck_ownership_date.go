@@ -32,6 +32,9 @@ func setDatedTruckOwner(ctx context.Context, tx pgx.Tx, truck string, input Truc
 	}
 	changed := input.OwnerID != nil && *input.OwnerID != owner
 	if !changed && (day == "" || (known && day == start.In(loc).Format(time.DateOnly))) {
+		if day != "" {
+			return correctOwnershipFees(ctx, tx, truck, day, input.StatusActor)
+		}
 		return nil
 	}
 	if day == "" {
@@ -104,5 +107,8 @@ func setDatedTruckOwner(ctx context.Context, tx pgx.Tx, truck string, input Truc
 		}
 	}
 	_, err := tx.Exec(ctx, `UPDATE truck_ownership_history SET assigned_at=$2,start_known=true WHERE id=$1`, current, boundary)
-	return err
+	if err != nil {
+		return err
+	}
+	return correctOwnershipFees(ctx, tx, truck, from, input.StatusActor)
 }

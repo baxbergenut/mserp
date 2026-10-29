@@ -9,6 +9,7 @@ import (
 type truckPayMetadata struct {
 	unit, name, ownerDriver string
 	conflict, ownerFullWeek bool
+	feeOwnerMatches         bool
 }
 type truckPayPerson struct {
 	person                       PayPerson
@@ -41,7 +42,11 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
  WHERE a.assigned_at<(($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
  AND (a.unassigned_at IS NULL OR a.unassigned_at>=(($1::date+7)::timestamp AT TIME ZONE 'America/New_York')) GROUP BY a.truck_id)
  SELECT s.truck_id::text,t.unit_number,coalesce(d.full_name,i.full_name),coalesce(i.driver_id::text,''),
- c.truck_id IS NOT NULL,coalesce(a.members=1 AND a.driver_id=i.driver_id AND d.active,false)
+ c.truck_id IS NOT NULL,coalesce(a.members=1 AND a.driver_id=i.driver_id AND d.active,false),
+ coalesce((SELECT h.owner_id=s.owner_id FROM truck_ownership_history h WHERE h.truck_id=s.truck_id
+ AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<$1::date+7)
+ AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>=$1::date+7)
+ ORDER BY h.assigned_at DESC LIMIT 1),true)
  FROM terms s JOIN trucks t ON t.id=s.truck_id JOIN investors i ON i.id=s.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
  LEFT JOIN conflicts c ON c.truck_id=s.truck_id LEFT JOIN full_week a ON a.truck_id=s.truck_id`, week, payrollTruckIDs(ctx))
 	if e != nil {
@@ -51,7 +56,7 @@ func readTruckPayInputs(ctx context.Context, tx pgx.Tx, week string) (truckPayIn
 		var id string
 		var m truckPayMetadata
 		var ownerFull *bool
-		if e = rows.Scan(&id, &m.unit, &m.name, &m.ownerDriver, &m.conflict, &ownerFull); e != nil {
+		if e = rows.Scan(&id, &m.unit, &m.name, &m.ownerDriver, &m.conflict, &ownerFull, &m.feeOwnerMatches); e != nil {
 			rows.Close()
 			return v, e
 		}

@@ -303,6 +303,11 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			g.ownerOnly = inputs.metadata[id].ownerFullWeek
 		}
 		_, savedInvestor := inputs.edits[id]
+		for _, expense := range inputs.expenses[id] {
+			if expense.destination != nil && *expense.destination == id {
+				savedInvestor = true
+			}
+		}
 		if savedInvestor || len(scaleCharges[id]) > 0 {
 			g.ownerOnly = false
 		}
@@ -311,7 +316,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 				g.card.Issues = append(g.card.Issues, "Owner driving earnings already appear in a finalized Driver Pay statement; reopen and reconcile before settling this truck")
 			}
 		}
-		g.card.AutoCharges = append(truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0), scaleCharges[id]...)
+		if inputs.metadata[id].feeOwnerMatches {
+			g.card.AutoCharges = truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
+		}
+		g.card.AutoCharges = append(g.card.AutoCharges, scaleCharges[id]...)
 		seenLoads := map[string]bool{}
 		for _, l := range g.card.Loads {
 			if l.LoadRecordID != nil {
@@ -623,13 +631,19 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	if err != nil {
 		return result, err
 	}
+	statementTrucks := map[string]bool{}
+	for _, d := range result.Drivers {
+		statementTrucks[d.ID] = true
+	}
 	for setup.Next() {
 		var v InvestorTruckSetup
 		if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName, &v.DriverID, &v.DriverName, &v.DispatcherID, &v.DispatcherName); err != nil {
 			setup.Close()
 			return result, err
 		}
-		result.SetupRequired = append(result.SetupRequired, v)
+		if !statementTrucks[v.TruckID] {
+			result.SetupRequired = append(result.SetupRequired, v)
+		}
 	}
 	err = setup.Err()
 	setup.Close()

@@ -32,6 +32,8 @@ func (r *DriverPayRepository) InvestorHistory(ctx context.Context, owner string,
  ), weeks AS (
  SELECT generate_series(week_start,least(coalesce(next_week-7,$2::date),$2::date),'7 days')::date AS week FROM terms WHERE owner_id=$1
  UNION SELECT week_start FROM investor_pay_weeks WHERE owner_id=$1
+ UNION SELECT p.week_start FROM expense_payments p JOIN expenses e ON e.id=p.expense_id
+ WHERE e.owner_id=$1 AND p.investor_truck_id IS NOT NULL
  UNION SELECT $2::date
  ) SELECT week::text FROM weeks ORDER BY week DESC`, owner, ChargeCurrentWeek())
 	if err != nil {

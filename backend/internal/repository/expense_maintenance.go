@@ -38,8 +38,7 @@ func prepareExpenseMaintenance(ctx context.Context, tx pgx.Tx, in ExpenseInput) 
 	if err = setBoardActor(ctx, tx, in.CreatedBy, "expense"); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`)
-	return err
+	return lockTruckAccounting(ctx, tx)
 }
 
 func syncExpenseMaintenance(ctx context.Context, tx pgx.Tx, id string, in ExpenseInput, previous *Expense) error {

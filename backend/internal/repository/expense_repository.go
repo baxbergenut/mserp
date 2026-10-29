@@ -532,6 +532,9 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 	if err = prepareExpenseMaintenance(ctx, tx, input); err != nil {
 		return Expense{}, err
 	}
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return Expense{}, err
+	}
 	previous, err := scanExpense(tx.QueryRow(ctx, selectExpensesSQL+" WHERE e.id=$1 FOR UPDATE OF e", id))
 	if err != nil {
 		return Expense{}, mapNotFound(err)
@@ -548,14 +551,16 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 	return r.GetExpense(ctx, id)
 }
 
-func updateExpenseRow(ctx context.Context, exec interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-}, id string, input ExpenseInput) error {
+func updateExpenseRow(ctx context.Context, tx pgx.Tx, id string, input ExpenseInput) error {
+	correction, err := prepareExpensePayerCorrection(ctx, tx, id, input)
+	if err != nil {
+		return err
+	}
 	breakdown, err := expenseCostJSON(input.CostBreakdown)
 	if err != nil {
 		return err
 	}
-	command, err := exec.Exec(ctx, `
+	command, err := tx.Exec(ctx, `
 		UPDATE expenses SET
 			category_id = $2, category = CASE WHEN category_id=$2::uuid THEN category ELSE (SELECT name FROM expense_settings WHERE id=$2 AND kind='category' AND active) END, expense_date = $3, truck_id = $4, driver_id = $5,
 			unit_number = CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT unit_number FROM trucks WHERE id = $4) END,
@@ -578,7 +583,7 @@ func updateExpenseRow(ctx context.Context, exec interface {
 		}
 		return ErrNotFound
 	}
-	return nil
+	return finishExpensePayerCorrection(ctx, tx, id, input, correction)
 }
 
 func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors ...string) error {

@@ -1,4 +1,5 @@
 import { runPaySourceE2E } from "./pay-source-e2e.mjs";
+import { runPayerCorrectionsE2E } from "./payer-corrections-e2e.mjs";
 import { runTruckRecurringE2E } from "./truck-recurring-e2e.mjs";
 // Requires a disposable local _test database, psql, Go, and a /api frontend build.
 // Uses a temporary schema, a real API process, and real browser authentication.
@@ -76,13 +77,14 @@ try {
   expect((await page.request.get(`${base}/api/driver-charges`)).status()).toBe(401);
   expect((await page.request.get(`${base}/api/expense-settings`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/accounting/driver-charges`);
-  await page.getByLabel('Email or existing username', { exact: true }).fill('charges-e2e@example.com');
+  await page.getByLabel('Email', { exact: true }).fill('charges-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
-  if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
-  if (!process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only")) {
+  if (process.argv.includes("--payer-corrections-only")) { await runPayerCorrectionsE2E({page,base,temp,sql,schema}); }
+  else if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
+  if (!process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
   await verifyExpenseSettings(page, base, temp, { sql, schema });
   await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
   await page.getByRole('button', { name: 'New installment plan', exact: true }).click();
@@ -421,7 +423,7 @@ try {
   expect(errors).toEqual([]);
   }
   expect(errors).toEqual([]);
-  console.log(`${process.argv.includes('--pay-source-only') ? 'Shared payroll sources' : process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
+  console.log(`${process.argv.includes('--payer-corrections-only') ? 'Payer corrections' : process.argv.includes('--pay-source-only') ? 'Shared payroll sources' : process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];
   if (page) { await page.screenshot({ path: join(temp, 'failure.png'), fullPage: true }); console.error('Failure screenshot:', join(temp, 'failure.png')); console.error((await page.locator('body').innerText()).slice(-5000)); }

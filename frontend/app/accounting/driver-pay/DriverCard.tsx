@@ -23,6 +23,7 @@ export const payButtonClass = "inline-flex items-center justify-center gap-2 rou
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const amount = (value: string, money = false) => value === "" ? "—" : decimalDisplay(hundredths(value), money);
 export const tariffLabel = (driver: DriverPayDriver) => {
+  if (!driver.payRate) return "Setup required";
   const rate = driver.payRate.includes(".") ? driver.payRate.replace(/0+$/, "").replace(/\.$/, "") : driver.payRate;
   return driver.payType === "cpm" ? `$${rate}/mile` : `${rate}% of driver gross`;
 };

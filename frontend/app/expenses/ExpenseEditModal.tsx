@@ -45,6 +45,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
   return <Modal title={canEdit ? "Edit entry" : "Expense details"} isSaving={saving} submitLabel="Save changes" hideSubmit={!canEdit} onClose={onClose} onSubmit={event => { event.preventDefault(); void save(); }}>
     {error && <ErrorBanner message={error} />}
     {!data && !error && <p role="status" className="text-zinc-500">Loading expense…</p>}
+    {canEdit && data && form && data.expense.payments?.length > 0 && (form.coveredBy !== data.expense.coveredBy || form.ownerId !== data.expense.ownerId || form.driverId !== data.expense.driverId) && <p role="status" className="text-sm text-zinc-500">Saving transfers the saved deductions to the responsible person’s statements, keeping their weeks and amounts. Finalized statements must be reopened first.</p>}
     {data && form && <fieldset disabled={!canEdit || saving}><ExpenseForm value={form} onChange={setForm} options={data.options} originalCategory={{ id: data.expense.categoryId, name: data.expense.category }} allowedCategoryIds={Array.from(new Set([data.expense.categoryId, ...access.filter(a => a.canCreate).map(a => a.categoryId)]))} drivers={data.drivers} trucks={data.trucks} owners={data.owners} /></fieldset>}
     {data && <ExternalSettlements expense={data.expense} onSaved={async()=>{const expense=await fetchExpense(id);setData({...data,expense});setForm(expenseToInput(expense));await onSaved()}}/>}
     {data && <ExpenseDocuments key={id} id={id} />}
