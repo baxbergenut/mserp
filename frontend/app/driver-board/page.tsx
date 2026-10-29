@@ -189,7 +189,7 @@ export default function DriverBoardPage() {
                 <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
                   <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
                     <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
-                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="ml-auto min-w-0 truncate text-right text-[11px] text-blue-200/80">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
+                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater ml-auto min-w-0 truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
                   </div>
                 </th>
                 <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.original, true)}</td>
@@ -197,7 +197,7 @@ export default function DriverBoardPage() {
                 <td colSpan={2} className="border-b border-zinc-700" />
                 <td colSpan={columns.length - 8} className="border-b border-zinc-700 px-3 text-[11px]">
                   <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
-                    {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="min-w-0 truncate text-blue-200/80">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
+                    {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="status-board-updater min-w-0 truncate">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
                     <span className="ml-auto text-zinc-400">{decimalDisplay(group.miles)} mi</span>
                   </div>
                 </td>
