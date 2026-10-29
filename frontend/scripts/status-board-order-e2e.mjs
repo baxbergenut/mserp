@@ -137,8 +137,38 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   sql(`SET search_path TO ${schema},public; INSERT INTO fleetscope_driver_intake(id,company_id,fleetscope_driver_id,driver_data,normalized_name,occurred_at) VALUES('${intake}',gen_random_uuid(),gen_random_uuid(),'{"fullName":"Order New Hire","phone":"4703344443"}','order new hire',now());`);
   const pending=page.locator(`tr[data-pending-intake-id="${intake}"]`);
   await expect(pending.getByText('New driver',{exact:true})).toBeVisible();
-  await expect(pending.getByRole('link',{name:'Needs setup',exact:true})).toHaveAttribute('href',`/drivers?setup=${intake}`);
-  await expect(pending.locator('button')).toHaveCount(0);
+  const setupButton=pending.getByRole('button',{name:'Needs setup',exact:true});
+  await expect(setupButton).toBeVisible();
+  await expect(pending.getByRole('button',{name:/Move/})).toHaveCount(0);
+  let navigations=0;
+  const navigation=frame=>{if(frame===page.mainFrame())navigations++;};
+  page.on('framenavigated',navigation);
+  const dialog=page.getByRole('dialog',{name:'Set up Order New Hire',exact:true});
+  let releaseSetup, setupRequested, setupFinished;
+  const setupGate=new Promise(resolve=>{releaseSetup=resolve;});
+  const setupRequest=new Promise(resolve=>{setupRequested=resolve;});
+  const setupDone=new Promise(resolve=>{setupFinished=resolve;});
+  await page.route(`**/api/driver-intake/${intake}`,async route=>{
+    try {const response=await route.fetch();setupRequested();await setupGate;await route.fulfill({response});}
+    finally {setupFinished();}
+  },{times:1});
+  try {
+    await setupButton.click();
+    // Opening must not wait for the intake or navigate away from the board.
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Loading setup options…');
+    expect(page.url()).toBe(`${base}/driver-board`);expect(navigations).toBe(0);
+    await setupRequest;
+    await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  } finally {releaseSetup();await setupDone;await page.unrouteAll({behavior:'wait'});}
+  await expect(dialog).toHaveCount(0);
+  await page.route(`**/api/driver-intake/${intake}`,route=>route.fulfill({status:503,json:{error:'Setup temporarily unavailable'}}),{times:1});
+  await setupButton.click();await expect(dialog.getByText('Setup temporarily unavailable',{exact:true})).toBeVisible();
+  await dialog.getByRole('button',{name:'Retry setup',exact:true}).click();
+  await expect(dialog.getByLabel('First name',{exact:true})).toBeVisible();
+  await dialog.getByLabel('First name',{exact:true}).fill('Canceled draft');
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(page.getByLabel('Search Status Board',{exact:true})).toHaveValue('Order ');
   await page.getByLabel('Dispatcher filter',{exact:true}).click();
   await page.getByRole('checkbox',{name:'Unassigned',exact:true}).uncheck();await page.keyboard.press('Escape');
   await expect(page.locator('tr[data-dispatcher-id=""]')).toHaveCount(0);
@@ -151,8 +181,6 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.screenshot({path:join(temp,'status-board-pending-hire.png'),fullPage:true});
   expect((await (await viewer.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).pendingDrivers).toEqual([]);
   await expect(viewer.locator('[data-pending-intake-id]')).toHaveCount(0);
-  sql(`SET search_path TO ${schema},public; UPDATE fleetscope_driver_intake SET terminated_at=now() WHERE id='${intake}';`);
-  await expect(pending).toHaveCount(0);
   // Unassigned stays pinned, while ordinary dispatcher ordering still works.
   await page.getByLabel('Dispatcher filter',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Move Unassigned',exact:true})).toHaveCount(0);
@@ -161,6 +189,33 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect.poll(()=>order(page)).toEqual([ids[3],ids[2],ids[0],ids[1]]);
   expect((await read()).entries.find(e=>e.driverId===ids[0]).notes).toBe('Keep dispatch notes');
   await page.screenshot({path:join(temp,'status-board-driver-order.png'),fullPage:true});
+  // Complete the real setup without leaving the board or contacting providers.
+  await setupButton.click();
+  await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');
+  await dialog.getByLabel('First name',{exact:true}).fill('Order');
+  await dialog.getByLabel('Last name',{exact:true}).fill('New Hire');
+  const next=()=>dialog.getByRole('button',{name:'Continue',exact:true}).click();
+  await next();
+  await dialog.getByLabel('Truck',{exact:true}).selectOption('');
+  await dialog.getByLabel('Rate per mile ($)',{exact:true}).fill('0.65');
+  await next();
+  await dialog.getByRole('button',{name:'Undo',exact:true}).click();
+  await next();
+  await dialog.getByLabel('Driver started working',{exact:true}).fill(week);
+  await page.route(`**/api/driver-intake/${intake}/complete`,route=>route.fulfill({status:503,json:{error:'Setup save temporarily unavailable'}}),{times:1});
+  await dialog.getByRole('button',{name:'Complete setup',exact:true}).click();
+  await expect(dialog.getByText('Setup save temporarily unavailable',{exact:true})).toBeVisible();
+  await expect(dialog.getByLabel('Driver started working',{exact:true})).toHaveValue(week);
+  await page.screenshot({path:join(temp,'status-board-inline-setup.png'),fullPage:true});
+  await dialog.getByRole('button',{name:'Complete setup',exact:true}).click();
+  await expect(dialog).toHaveCount(0);await expect(pending).toHaveCount(0);
+  const newDriver=page.locator('tr[data-driver-id]').filter({hasText:'Order New Hire'});
+  await expect(newDriver).toBeVisible();
+  await expect(viewer.locator('tr[data-driver-id]').filter({hasText:'Order New Hire'})).toBeVisible();
+  await expect(page.getByLabel('Search Status Board',{exact:true})).toHaveValue('Order ');
+  expect((await read()).entries.find(e=>e.driverId===ids[0]).notes).toBe('Keep dispatch notes');
+  expect(page.url()).toBe(`${base}/driver-board`);expect(navigations).toBe(0);
+  page.off('framenavigated',navigation);
   await page.getByLabel('Search Status Board',{exact:true}).fill('');
-  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire live visibility, and pinned group.');
+  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire visibility, pinned group, and inline setup with immediate loading, cancel/retry, retained save drafts and no navigation.');
 }

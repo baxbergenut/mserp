@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Fragment, memo, useContext, useMemo, useState } from "react";
 import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
+import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
 import type {Driver} from "@/app/lib/types";
 import {useEffect} from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } from "lucide-react";
@@ -14,7 +15,7 @@ import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
 import { controlClass, Modal, Field } from "@/app/components/management/ManagementUI";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { readMemory, ViewMemoryContext, useViewState } from "@/app/lib/viewMemory";
-import { usePermissions } from "@/app/lib/access";
+import { canCreateDriver, usePermissions } from "@/app/lib/access";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
@@ -60,6 +61,7 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
 });
 
 export default function DriverBoardPage() {
+  const [setupDriver, setSetupDriver] = useState<{ intakeId: string; fullName: string } | null>(null);
   const [restriction,setRestriction]=useState<{id:string;name:string;status:string}|null>(null);
  const [restrictionReason,setRestrictionReason]=useState("");
  const [terminating,setTerminating]=useState<Driver|null>(null);
@@ -201,7 +203,7 @@ export default function DriverBoardPage() {
             <td colSpan={5} className={cellClass} />
             <td className={`${cellClass} px-1.5 ${statusColor("NEW DRIVER")}`}>New driver</td>
             <td colSpan={columns.length - 8} className={`${cellClass} px-3 text-amber-300`}>
-              {permissions.includes("drivers.create") && permissions.includes("tasks.review") ? <Link href={`/drivers?setup=${d.intakeId}`} className="hover:underline">Needs setup</Link> : "Needs setup"}
+              {canCreateDriver(permissions) && permissions.includes("tasks.review") ? <button type="button" onClick={() => setSetupDriver(d)} className="hover:underline">Needs setup</button> : "Needs setup"}
             </td>
           </tr>)}
           {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.map((d, i) => {
@@ -279,6 +281,7 @@ export default function DriverBoardPage() {
     }} onClose={() => setPickupEditor(null)} onApply={() => setPickupEditor(null)} />}
     {restriction&&<Modal title={`Shop · ${restriction.name}`} isSaving={false} submitLabel="Apply status" onClose={()=>setRestriction(null)} onSubmit={e=>{e.preventDefault();if(!restrictionReason.trim())return;edit(restriction.id,"status",restriction.status,{statusReason:restrictionReason.trim()});setRestriction(null);}}><Field label="Reason"><textarea aria-label="Truck status reason" required maxLength={1000} className={controlClass} value={restrictionReason} onChange={e=>setRestrictionReason(e.target.value)}/></Field><p className="mt-3 text-xs text-zinc-500">The truck will be marked Shop and cannot receive new dispatch until explicitly returned to service.</p></Modal>}
     {leaveEditor && <DriverLeaveDialog name={leaveEditor.name} initial={entries[leaveEditor.id]?.leavePlan} status={leaveEditor.status} changingStatus={leaveEditor.changingStatus} onClose={() => setLeaveEditor(null)} onApply={plan => { edit(leaveEditor.id, leaveEditor.changingStatus ? "status" : "homeTime", leaveEditor.changingStatus ? leaveEditor.status : "", { leavePlan: plan, homeTime: "" }); setLeaveEditor(null); }} />}
+    {setupDriver && <DriverIntakeSetup key={setupDriver.intakeId} intakeId={setupDriver.intakeId} name={setupDriver.fullName} onClose={() => setSetupDriver(null)} onSaved={() => { setSetupDriver(null); setOrderNotice("Saved."); state.refresh(); }} />}
     {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
     {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}

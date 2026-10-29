@@ -355,5 +355,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, [saving, dirty, error]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, undo, changeLoads, reorderDrivers, reorderDispatchers, ...live, leaving: !!pendingLink };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, reorderDispatchers, ...live, leaving: !!pendingLink };
 }

@@ -656,6 +656,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Migration 168 invalidates the live board on intake changes. Pending hires appear
   under Unassigned as New driver / Needs setup, using existing onboarding task
   visibility and setup permissions; they cannot be dispatched before setup.
+  Needs setup opens the shared driver wizard in place through DriverIntakeSetup,
+  with an immediate cancellable shell, deferred options/modules and retryable errors.
+  Completion uses the existing intake API and a draft-preserving board refresh;
+  it never navigates to Drivers. The board-order browser test covers this flow.
   Board SSE shares its expensive snapshot across viewers, then projects pending
   hires with each subscriber's current task visibility; names never bypass access.
   Cross-group drops clear pointer transforms immediately and preview ordinary table
