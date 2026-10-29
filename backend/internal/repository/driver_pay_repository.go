@@ -88,6 +88,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	DayStatuses      []PayDayStatus       `json:"dayStatuses"`
 	Summary          *PayStatementSummary `json:"summary,omitempty"`
 	Layovers         []DriverPayLayover   `json:"layovers,omitempty"`
 	TeamNotice       string               `json:"teamNotice,omitempty"`

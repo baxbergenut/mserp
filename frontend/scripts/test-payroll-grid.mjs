@@ -23,6 +23,7 @@ try {
     let driver = {
       id: 'statement', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
+      dayStatuses: [{ date: '2026-09-28', status: 'SHOP' }, { date: '2026-09-29', status: 'HOME' }, { date: '2026-09-30', status: 'IN TRANSIT' }, { date: '2026-10-01', status: 'RESET' }, { date: '2026-10-01', status: 'STUCK' }],
       ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
@@ -68,6 +69,17 @@ try {
     expect(geometry.height).toBe(320);
     expect(geometry.scroll).toBe(geometry.height);
     const loads = page.getByRole('region', { name: 'Grid Test weekly loads' });
+    for (const [status, color] of [['HOME', 'violet'], ['IN TRANSIT', 'blue']]) {
+      const label = loads.getByRole('cell', { name: status, exact: true });
+      await expect(label).toBeVisible();
+      await expect(label).toHaveClass(new RegExp(`bg-${color}-500/15`));
+      expect(await label.evaluate(el => getComputedStyle(el).textAlign)).toBe('center');
+      expect(await label.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+    }
+    await expect(loads.getByText('RESET', { exact: true })).toBeVisible();
+    await expect(loads.getByText('STUCK', { exact: true })).toBeVisible();
+    await expect(loads.getByText('SHOP', { exact: true })).toHaveCount(0); // Real loads take precedence.
+    await expect(loads.getByRole('cell', { name: 'No load', exact: true })).toHaveCount(3);
     await expect.poll(() => loads.locator('table').first().evaluate(table => [...table.tBodies[0].rows].map(row => Math.round(row.getBoundingClientRect().height * 100) / 100))).toEqual(Array(10).fill(32));
     expect(await loads.locator('[data-pay-totals] > th').evaluate(cell => getComputedStyle(cell).borderTopWidth)).toBe('1px');
     expect(await region.locator('tr:last-child > td').first().evaluate(cell => getComputedStyle(cell).borderBottomWidth)).toBe('1px');

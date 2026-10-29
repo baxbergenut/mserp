@@ -110,6 +110,11 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 	} else if err := decorateTransferLoads(ctx, tx, report); err != nil {
 		return err
 	}
+	if !payrollSummaryOnly(ctx) {
+		if err := decoratePayDayStatuses(ctx, tx, kind, report); err != nil {
+			return err
+		}
+	}
 	snapshot, err := payrollCacheSnapshot(ctx, tx)
 	if err != nil {
 		return err

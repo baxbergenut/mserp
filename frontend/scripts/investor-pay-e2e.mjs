@@ -21,11 +21,15 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   sql(`SET search_path TO ${schema},public;
     INSERT INTO trucks(id,unit_number,owner_id) VALUES('${extraTruck}','PAY-EXTRA','${investor}');
     INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${extraTruck}','${hired}','2026-01-01');
+    UPDATE truck_ownership_history SET assigned_at='2026-01-01',start_known=true WHERE truck_id IN ('${ownTruck}','${extraTruck}');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,truck_unit,pickup_time,raw_payload) VALUES
     (8891,'PAY-OWN-LOAD','delivered',2000,2000,500,'PAY-OWN','2026-09-28 00:01+00','{"trip":{"mile":450,"empty_mile":50},"stops":[{"stop_type":"pickup","ordering":1,"location":{"city":"Dallas","state":"TX"}},{"stop_type":"delivery","ordering":2,"location":{"city":"Columbus","state":"OH"}}]}'),
     (8892,'PAY-EXTRA-LOAD','delivered',10000,10000,1000,'PAY-EXTRA','2026-09-28 00:01+00','{"trip":{"mile":900,"empty_mile":100},"stops":[{"stop_type":"pickup","ordering":1,"location":{"city":"Dallas","state":"TX"}},{"stop_type":"delivery","ordering":2,"location":{"city":"Columbus","state":"OH"}}]}');
     INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES
       ('${owner}','2026-09-28','PAY-OWN-LOAD',8891,2000),('${hired}','2026-09-28','PAY-EXTRA-LOAD',8892,10000);
+    INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES
+      ('${owner}','2026-09-29','HOME'),('${owner}','2026-09-30','IN TRANSIT'),
+      ('${hired}','2026-09-29','HOME'),('${hired}','2026-09-30','IN TRANSIT');
   `);
   directory = await (await page.request.get(`${base}/api/investors?page=1&pageSize=100`)).json();
   expect(directory.items.some(i => i.id === investor)).toBe(true);
@@ -53,6 +57,11 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('button', { name: 'Payroll Hector PAY-EXTRA', exact: true }).click();
   await expect(page.getByRole('link', { name: 'PAY-EXTRA-LOAD', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'PAY-OWN-LOAD', exact: true })).toHaveCount(0);
+  for (const status of ['HOME', 'IN TRANSIT']) {
+    const label = page.getByRole('region', { name: 'Payroll Hector weekly loads' }).getByRole('cell', { name: status, exact: true });
+    await expect(label).toBeVisible();
+    expect(await label.evaluate(el => getComputedStyle(el).textAlign)).toBe('center');
+  }
   await expect(page.getByText('Driver earnings · Payroll Employee', { exact: true })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Weekly investor pay' })).toContainText('8,200.00');
   await expect(page.getByText('Truck admin', { exact: true })).toBeVisible();
@@ -79,6 +88,8 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/accounting/driver-pay?weekStart=2026-09-28`);
   await page.getByRole('button', { name: 'Payroll Hector', exact: true }).click();
   await expect(page.getByRole('link', { name: 'PAY-OWN-LOAD', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Payroll Hector weekly loads' }).getByRole('cell', { name: 'HOME', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Payroll Hector weekly loads' }).getByRole('cell', { name: 'IN TRANSIT', exact: true })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Weekly driver pay' })).toContainText('1,760.00');
   console.log('Investor payroll E2E passed: single-truck owner discovery, additional-truck inclusion, truck charges, shared load table, CPM earnings deduction, autosave, finalize/reopen, separate owner-operator pay.');
 }

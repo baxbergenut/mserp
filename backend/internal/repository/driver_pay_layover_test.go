@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,7 @@ func TestDriverPayLayoverDatabase(t *testing.T) {
 			}
 			defer pool.Close()
 			verifyDriverPayLayovers(t, ctx, pool)
+			testPayrollDayStatusRouting(t, ctx, pool)
 		})
 	}
 }
@@ -123,6 +125,9 @@ func verifyDriverPayLayovers(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		return r
 	}
 	report := read()
+	if want := []PayDayStatus{{"2026-10-05", "SHOP"}, {"2026-10-06", "SHOP"}, {"2026-10-07", "HOME"}}; !reflect.DeepEqual(report.Drivers[0].DayStatuses, want) {
+		t.Fatalf("dated display statuses: got %+v, want %+v", report.Drivers[0].DayStatuses, want)
+	}
 	if len(report.Drivers) != 1 || len(report.Drivers[0].Loads) != 0 || len(report.Drivers[0].Layovers) != 2 || driverLayoverTotal(report.Drivers[0]) != 20000 {
 		t.Fatalf("distinct Shop-only days: %+v", report)
 	}

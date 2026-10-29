@@ -2861,6 +2861,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Page performance reads (162)
 
+- Driver Pay and Investor Pay expanded day rows show recorded Gross Board day
+  statuses with the shared colors and centered labels, falling back to No load
+  only for unrecorded days. `payroll_day_statuses.go` adds display-only metadata
+  after financial routing, using dated team/truck assignments for investor rows.
+  Duplicate statuses collapse; actual loads retain precedence. Compact summaries
+  omit labels; new finalized statements freeze them, and legacy snapshots receive
+  read-only metadata without changing financial values.
+
 - `fleet_truck_read_state` is a security-invoker read projection for operating
   status, reasons and GPS health. It evaluates active crews and normalized VIN
   uniqueness once per fleet read. Status writer functions and their locks remain

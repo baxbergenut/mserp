@@ -103,11 +103,13 @@ try {
   const base = `http://127.0.0.1:${webPort}`;
   expect((await page.request.get(`${base}/api/investors`)).status()).toBe(401);
   await page.goto(`${base}/login?next=/investors`);
-  await page.getByLabel('Email or existing username', { exact: true }).fill('investor-e2e@example.com');
+  await page.getByLabel('Email', { exact: true }).fill('investor-e2e@example.com');
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--payroll-override-only')) {
+  if (process.argv.includes('--investor-pay-only')) {
+    await runInvestorPayE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--payroll-override-only')) {
     await runPayrollOverrideE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--expense-window-only')) {
     await runExpenseWindowE2E({ page, base, sql, schema, temp });

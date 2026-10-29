@@ -6,7 +6,7 @@ import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
-import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
+import { addDays, dayStatuses, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { activeLayovers, carryBreakdown, centsAmount, costAmount, costRows, driverTotals, sourceAmountInput, validSourceAmount } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
 import { SourceChargeRows } from "./SourceChargeRows";
@@ -161,6 +161,8 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
             <tbody>{weekdays.map((day, dayIndex) => {
               const date = addDays(edits.weekStart, dayIndex);
               const loads = driver.loads.filter(load => load.date === date);
+              const statuses = [...new Set((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => item.status))];
+              const statusColor = statuses.length === 1 ? dayStatuses.find(item => item.value === statuses[0])?.color : undefined;
               const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
               return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
  const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
@@ -180,7 +182,9 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
                 {dayIndex === 0 && index === 0 && adjustmentCells}
                 <td className={`${cell} !px-1 text-center`}><CommentButton label={`${driver.fullName}, ${load.loadNumber}, ${load.date}, comment`} value={edits.comments[load.commentKey] ?? ""} disabled={disabled}
                   onClick={() => setComment({ key: load.commentKey, label: `${load.loadNumber} · ${load.date}`, value: edits.comments[load.commentKey] ?? "" })} /></td>
-              </tr>) : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-zinc-600`}>No load</td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
+              </tr>) : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-center ${statusColor ?? "text-zinc-600"}`}>
+                {statuses.length === 1 ? statuses[0] : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${dayStatuses.find(item => item.value === status)?.color ?? ""}`}>{status}</span>)}</div> : "No load"}
+              </td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
             })}</tbody>
             <tbody>
               <tr data-pay-totals className="font-mono text-zinc-200"><th colSpan={5} className={`${cell} text-left font-sans font-medium`}>Weekly totals{incomplete ? " · provisional" : ""}</th>
