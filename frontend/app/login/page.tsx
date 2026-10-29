@@ -12,14 +12,13 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [trust, setTrust] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setSubmitting(true);
     try {
-      const session = await login(email, password, trust);
+      const session = await login(email, password);
       const next = searchParams.get("next");
       const allowed = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") && next.split("?")[0] !== "/login" && canVisitPage(session.user.permissions, next.split("?")[0], session.user.administrator);
       router.replace(allowed ? next! : firstAllowedPage(session.user.permissions,session.user.administrator));
@@ -38,7 +37,6 @@ export default function LoginPage() {
         <fieldset disabled={submitting} className="space-y-5 disabled:opacity-60">
           <input name="email" aria-label="Email" placeholder="Email" autoComplete="username" autoFocus required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className={controlClass} />
           <input name="password" aria-label="Password" placeholder="Password" type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={e => setPassword(e.target.value)} className={controlClass} />
-          <label className="flex items-center gap-3 text-sm text-zinc-300"><input type="checkbox" checked={trust} onChange={e => setTrust(e.target.checked)} className="accent-blue-500" /><span>Trust this device for 30 days</span></label>
         </fieldset>
         {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-300" role="alert">{error}</p>}
         <button type="submit" disabled={submitting} className="flex h-11 w-full items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60">{submitting ? "Signing in…" : "Sign in"}</button>
