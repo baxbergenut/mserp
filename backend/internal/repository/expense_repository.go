@@ -15,6 +15,8 @@ type ExpenseRepository struct {
 	pool *pgxpool.Pool
 }
 
+var ErrExpenseFinalized = errors.New("reopen the affected Driver Pay or Investor Pay statement before deleting this expense")
+
 func NewExpenseRepository(pool *pgxpool.Pool) *ExpenseRepository {
 	return &ExpenseRepository{pool: pool}
 }
@@ -608,14 +610,54 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 			return err
 		}
 	}
-	command, err := r.pool.Exec(ctx, "DELETE FROM expenses WHERE id = $1", id)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return err
+	}
+	var expenseID string
+	if err = tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 FOR UPDATE`, id).Scan(&expenseID); err != nil {
+		return mapNotFound(err)
+	}
+	// Saved allocations are drafts until finalization. Check frozen snapshots as
+	// well as ledgers, including legacy reimbursements without payout receipts.
+	var finalized bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND (
+ s.report @> jsonb_build_object('edits',jsonb_build_object('expenseDeductions',jsonb_build_array(jsonb_build_object('expenseId',$1::text))))
+ OR s.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','expense-reimburse:'||$1::text)))
+ OR EXISTS(SELECT 1 FROM expense_payments p JOIN expenses e ON e.id=p.expense_id
+   WHERE p.expense_id=$1::uuid AND p.investor_truck_id IS NULL AND p.week_start=s.week_start
+   AND s.driver_id=payroll_driver_at(e.charge_driver_id,p.week_start))
+ OR EXISTS(SELECT 1 FROM expense_reimbursement_payments p JOIN expenses e ON e.id=p.expense_id
+   WHERE p.expense_id=$1::uuid AND p.week_start=s.week_start AND s.driver_id=payroll_driver_at(e.driver_id,p.week_start))))
+ OR EXISTS(SELECT 1 FROM investor_pay_weeks s WHERE s.finalized AND (
+ s.report @> jsonb_build_object('edits',jsonb_build_object('expenseDeductions',jsonb_build_array(jsonb_build_object('expenseId',$1::text))))
+ OR EXISTS(SELECT 1 FROM expense_payments p WHERE p.expense_id=$1::uuid AND p.week_start=s.week_start AND p.investor_truck_id=s.truck_id)))`, id).Scan(&finalized)
+	if err != nil {
+		return err
+	}
+	if finalized {
+		return ErrExpenseFinalized
+	}
+	// Keep the parent while deleting allocations so existing database guards can
+	// resolve driver/team/truck identity. Any later failure restores every row.
+	if _, err = tx.Exec(ctx, `DELETE FROM expense_payments WHERE expense_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM expense_reimbursement_payments WHERE expense_id=$1`, id); err != nil {
+		return err
+	}
+	command, err := tx.Exec(ctx, "DELETE FROM expenses WHERE id = $1", id)
 	if err != nil {
 		return err
 	}
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 const selectExpensesSQL = `

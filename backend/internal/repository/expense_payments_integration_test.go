@@ -290,9 +290,6 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if _, err = expenses.UpdateExpense(ctx, e.ID, input); err == nil {
 				t.Fatal("payroll principal mutated")
 			}
-			if err = expenses.DeleteExpense(ctx, e.ID); err == nil {
-				t.Fatal("payroll expense deleted")
-			}
 			// Stale weekly version rolls back all payment writes too.
 			old := read(week)
 			old.ExpenseDeductions[0].Amount = "0"
@@ -352,6 +349,12 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			var collected string
 			if err := pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, concurrentExpense.ID).Scan(&collected); err != nil || collected != "125.50" {
 				t.Fatalf("concurrent principal collected %s: %v", collected, err)
+			}
+			if err = expenses.DeleteExpense(ctx, e.ID); err != nil {
+				t.Fatal("open statement must allow expense deletion", err)
+			}
+			if _, err = expenses.GetExpense(ctx, e.ID); !errors.Is(err, ErrNotFound) {
+				t.Fatal("deleted draft expense remains", err)
 			}
 		})
 	}

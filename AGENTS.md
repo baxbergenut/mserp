@@ -122,6 +122,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
+  Ordinary expense deletion removes saved draft deductions/reimbursement payouts
+  atomically under the payroll financial lock. Finalized Driver/Investor Pay
+  snapshots (including dated teams and legacy credits) still require reopening;
+  retained external settlement receipts and maintenance void rules stay enforced.
+  TestExpenseDraftDeletionDatabase covers deletion, frozen guards and rollback
+  with local MSERP_DRIVER_CHARGES_TEST_DATABASE_URL as mserp_app.
   Expense Driver is a searchable selection dropdown for hired drivers and synced
   FleetScope applicants. It uses the standard native select; new unlinked names cannot be saved.
   Drivers and applicants share one case-insensitive alphabetical order by name.
