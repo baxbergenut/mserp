@@ -1046,6 +1046,7 @@ export interface AuthUser {
 }
 
 export interface ManagedUser {
+  firstName?: string; lastName?: string; dateOfBirth?: string; phone?: string;
   id: string; username: string; email: string; roleId: string;
   active: boolean; version: number; password?: string;
   lastLoginAt?: string | null; online?: boolean;

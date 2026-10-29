@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -39,6 +41,12 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		if err != nil {
 			fail(w, err)
 			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if !session.User.Administrator {
+			for i := range data.Users {
+				data.Users[i].DateOfBirth, data.Users[i].Phone = nil, nil
+			}
 		}
 		writeJSON(w, http.StatusOK, data)
 	})
@@ -94,6 +102,15 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		}
 		in.ID = chi.URLParam(r, "id")
 		in.Username = strings.TrimSpace(in.Username)
+		if err := normalizeUserProfile(&in, h.now()); err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if !session.User.Administrator && (in.DateOfBirth != nil || in.Phone != nil) {
+			writeAPIError(w, http.StatusForbidden, "Only Administrators can edit DOB and phone")
+			return
+		}
 		in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 		if in.Username == "" || len(in.Username) > 200 || !validEmail(in.Email) || !isUUID(in.RoleID) || (in.ID != "" && !isUUID(in.ID)) {
 			writeAPIError(w, http.StatusBadRequest, "name, valid email and role are required")
@@ -113,7 +130,6 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 			hash = string(value)
 		}
 		in.Password = "" // Never put plaintext passwords into audit records.
-		session, _ := authSessionFromContext(r.Context())
 		id, err := repo.SaveUser(r.Context(), session.User.ID, in, hash)
 		if err != nil {
 			fail(w, err)
@@ -163,4 +179,28 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+func normalizeUserProfile(in *repository.ManagedUser, now time.Time) error {
+	in.FirstName, in.LastName = strings.TrimSpace(in.FirstName), strings.TrimSpace(in.LastName)
+	if utf8.RuneCountInString(in.FirstName) > 50 || utf8.RuneCountInString(in.LastName) > 50 || (in.FirstName == "") != (in.LastName == "") || (in.ID == "" && in.FirstName == "") {
+		return errors.New("Provide both first and last name, up to 50 characters each")
+	}
+	if in.FirstName != "" {
+		in.Username = in.FirstName + " " + in.LastName
+	}
+	if in.Phone != nil {
+		phone := strings.TrimSpace(*in.Phone)
+		if utf8.RuneCountInString(phone) > 40 || strings.ContainsAny(phone, "\r\n\t") {
+			return errors.New("Provide a phone number up to 40 characters")
+		}
+		in.Phone = &phone
+	}
+	if in.DateOfBirth != nil && *in.DateOfBirth != "" {
+		date, err := time.Parse("2006-01-02", *in.DateOfBirth)
+		if err != nil || date.Year() < 1900 || date.Format("2006-01-02") > now.In(birthdayLocation).Format("2006-01-02") {
+			return errors.New("Provide a valid DOB between 1900 and today")
+		}
+	}
+	return nil
 }

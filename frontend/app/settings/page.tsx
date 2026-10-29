@@ -7,7 +7,7 @@ import { PermissionMatrix } from "./PermissionMatrix";
 import { FleetScopeSync } from "./FleetScopeSync";
 import { Appearance } from "./Appearance";
 import { DriverPaySettings } from "./DriverPaySettings";
-import { usePermissions } from "@/app/lib/access";
+import { useAdministrator, usePermissions } from "@/app/lib/access";
 import { SystemTasks } from "./SystemTasks";
 import { fetchAccess, saveUser, saveRole, revokeUserAccess } from "@/app/lib/api";
 import type { AccessData, ManagedUser, AccessRole, ExpenseCategoryAccess } from "@/app/lib/types";
@@ -15,7 +15,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { ManagementHeader, ManagementSearch, Modal, Field, controlClass } from "@/app/components/management/ManagementUI";
 
 const button = "inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
-const newUser = (): ManagedUser => ({ id: "", username: "", email: "", roleId: "", active: true, password: "", version: 0 });
+const newUser = (): ManagedUser => ({ id: "", username: "", firstName: "", lastName: "", email: "", roleId: "", active: true, password: "", version: 0 });
 const newRole = (): AccessRole => ({ id: "", name: "", permissions: [], expenseCategoryAccess: [], system: false, version: 0 });
 
 function updateCategoryAccess(role: AccessRole, categoryId: string, key: keyof Omit<ExpenseCategoryAccess, "categoryId">, checked: boolean): AccessRole {
@@ -29,6 +29,7 @@ function updateCategoryAccess(role: AccessRole, categoryId: string, key: keyof O
 
 export default function SettingsPage() {
   const permissions = usePermissions();
+  const administrator = useAdministrator();
   const canManage = permissions.includes("access.manage");
   const canFleetScope = permissions.includes("fleetscope.read") && permissions.includes("trucks.read") && permissions.includes("drivers.read");
   const [data, setData] = useState<AccessData | null>(null);
@@ -79,7 +80,7 @@ export default function SettingsPage() {
       </> : <RoleList data={data} busy={busy} onOpen={r => { setError(""); setRole({ ...r, permissions: [...r.permissions], expenseCategoryAccess: r.expenseCategoryAccess.map(item => ({ ...item })) }); }} />}
     </>}
     {user && <Modal title={user.id ? "Edit user" : "Add user"} description="Email and role are required. Set a password for new accounts or enter a replacement to reset it. Saving signs the user out on every device." isSaving={busy} submitLabel={user.id ? "Save changes" : "Create user"} onClose={() => setUser(null)} onSubmit={e => { e.preventDefault(); void perform(async () => { const created = !user.id; await saveUser(user); setUser(null); await refresh(); setNotice(created ? "User created. Share the credentials with them securely." : "User updated. Existing sessions revoked."); }); }}>
-      <div className="grid gap-4"><Field label="Name"><input className={controlClass} required maxLength={200} value={user.username} onChange={e => setUser({ ...user, username: e.target.value })} /></Field><Field label="Email"><input className={controlClass} required type="email" maxLength={254} value={user.email} onChange={e => setUser({ ...user, email: e.target.value })} /></Field><Field label={user.id ? "New password (optional)" : "Password"}><input className={controlClass} type="password" autoComplete="new-password" required={!user.id} minLength={12} maxLength={72} value={user.password ?? ""} onChange={e => setUser({ ...user, password: e.target.value })} /></Field><Field label="Role"><select aria-label="Role" className={controlClass} required value={user.roleId} onChange={e => setUser({ ...user, roleId: e.target.value })}><option value="">Select role</option>{data?.roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field><label className="flex gap-2 text-sm text-zinc-300"><input type="checkbox" checked={user.active} onChange={e => setUser({ ...user, active: e.target.checked })} />Active account</label>{error && <p role="alert" className="text-sm text-red-300">{error}</p>}</div>
+      <div className="grid gap-4"><div className="grid grid-cols-2 gap-4"><Field label="First name"><input className={controlClass} required={!user.id || !!user.lastName} autoComplete="given-name" maxLength={50} value={user.firstName ?? ""} onChange={e => setUser({ ...user, firstName: e.target.value })} /></Field><Field label="Last name"><input className={controlClass} required={!user.id || !!user.firstName} autoComplete="family-name" maxLength={50} value={user.lastName ?? ""} onChange={e => setUser({ ...user, lastName: e.target.value })} /></Field></div>{user.id && !user.firstName && !user.lastName && <p className="text-xs text-zinc-500">Current name: {user.username}. Enter both name parts to update it.</p>}{administrator && <div className="grid grid-cols-2 gap-4"><Field label="Date of birth"><input aria-label="Date of birth" className={controlClass} type="date" min="1900-01-01" value={user.dateOfBirth ?? ""} onChange={e => setUser({ ...user, dateOfBirth: e.target.value })} /></Field><Field label="Phone number"><input className={controlClass} type="tel" autoComplete="tel" maxLength={40} value={user.phone ?? ""} onChange={e => setUser({ ...user, phone: e.target.value })} /></Field><p className="col-span-2 text-xs text-zinc-500">DOB and phone are visible only to Administrators.</p></div>}<Field label="Email"><input className={controlClass} required type="email" maxLength={254} value={user.email} onChange={e => setUser({ ...user, email: e.target.value })} /></Field><Field label={user.id ? "New password (optional)" : "Password"}><input className={controlClass} type="password" autoComplete="new-password" required={!user.id} minLength={12} maxLength={72} value={user.password ?? ""} onChange={e => setUser({ ...user, password: e.target.value })} /></Field><Field label="Role"><select aria-label="Role" className={controlClass} required value={user.roleId} onChange={e => setUser({ ...user, roleId: e.target.value })}><option value="">Select role</option>{data?.roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field><label className="flex gap-2 text-sm text-zinc-300"><input type="checkbox" checked={user.active} onChange={e => setUser({ ...user, active: e.target.checked })} />Active account</label>{error && <p role="alert" className="text-sm text-red-300">{error}</p>}</div>
     </Modal>}
     {role?.system ? <Modal title={role.name} description="Full access · 100%" isSaving={false} submitLabel="" hideSubmit cancelLabel="Close" onClose={() => setRole(null)} onSubmit={event => event.preventDefault()}>
       <p className="text-sm text-zinc-400">This built-in role has full access and cannot be edited. At least one active administrator must remain.</p>

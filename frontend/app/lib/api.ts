@@ -386,10 +386,11 @@ export const fetchDriverPaySettings = () => apiRequest<import("./types").DriverP
 export const saveDriverPaySettings = (settings: import("./types").DriverPaySettings) => apiRequest<import("./types").DriverPaySettings>("/settings/driver-pay", { method: "PUT", body: JSON.stringify(settings) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
 export const saveTheme = (theme: string) => apiRequest<void>("/auth/theme", { method: "PUT", body: JSON.stringify({ theme }) });
+export const claimBirthday = () => apiRequest<{ celebrate: boolean; name?: string; countdownAt?: string; serverNow: string }>("/auth/birthday", { method: "POST" });
 export const fetchSystemTaskAssignments = () => apiRequest<SystemTaskAssignment[]>("/settings/system-tasks");
 export const saveSystemTaskAssignment = (input: SystemTaskAssignment) => apiRequest<void>(`/settings/system-tasks/${input.kind}`, { method: "PUT", body: JSON.stringify(input) });
 export const fetchTaskUsers = () => apiRequest<TaskUser[]>("/tasks/users");
-export const saveUser = (user: ManagedUser) => apiRequest<{id: string}>(`/settings/users${user.id ? `/${user.id}` : ""}`, { method: user.id ? "PUT" : "POST", body: JSON.stringify({ id: user.id, username: user.username, email: user.email, roleId: user.roleId, active: user.active, version: user.version, password: user.password }) });
+export const saveUser = (user: ManagedUser) => apiRequest<{id: string}>(`/settings/users${user.id ? `/${user.id}` : ""}`, { method: user.id ? "PUT" : "POST", body: JSON.stringify({ id: user.id, username: user.username, firstName: user.firstName, lastName: user.lastName, dateOfBirth: user.dateOfBirth, phone: user.phone, email: user.email, roleId: user.roleId, active: user.active, version: user.version, password: user.password }) });
 export const saveRole = (role: AccessRole) => apiRequest<void>(`/settings/roles${role.id ? `/${role.id}` : ""}`, { method: role.id ? "PUT" : "POST", body: JSON.stringify(role) });
 export const revokeUserAccess = (id: string) => apiRequest<void>(`/settings/users/${id}/revoke`, { method: "POST" });
 

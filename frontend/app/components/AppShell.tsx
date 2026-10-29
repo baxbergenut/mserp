@@ -10,6 +10,7 @@ import { TaskUpdatesProvider } from "./TaskUpdatesProvider";
 import { TopBar } from "./TopBar";
 import { ThemeProvider } from "./ThemeProvider";
 import { PageHeaderProvider } from "./PageHeader";
+import { BirthdayGreeting } from "./BirthdayGreeting";
 import Link from "@/app/components/AccessLink";
 import { AdministratorContext, PermissionCatalogContext, CurrentUserIDContext, ExpenseCategoryAccessContext, PermissionsContext, canVisitPage, firstAllowedPage } from "@/app/lib/access";
 
@@ -70,6 +71,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     <TaskUpdatesProvider key={accessKey}>
     <div className="mserp-ui flex h-full">
       <Sidebar />
+      <BirthdayGreeting key={session.user.id} userId={session.user.id} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PageHeaderProvider key={`${pathname}?${query}`}>
         <TopBar key={pathname + query} username={session.user.username} />
