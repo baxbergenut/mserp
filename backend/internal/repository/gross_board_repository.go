@@ -300,7 +300,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
  coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason
- FROM loads l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
+ FROM clustie_loads l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err

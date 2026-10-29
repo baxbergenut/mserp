@@ -131,6 +131,9 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal("failed to isolate legacy schema")
 				}
 			}
+			if mode == "migration" {
+				sql = withoutClustieLoadAssignments(t, sql)
+			}
 			if _, err := admin.Exec(ctx, sql); err != nil {
 				t.Fatal(err)
 			}
@@ -206,6 +209,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
+				applyClustieLoadAssignments(t, ctx, admin)
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

@@ -149,13 +149,13 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if len(v.Unavailable) != 1 {
 		t.Fatal("delivered/reassigned queue candidates", v)
 	}
-	foundMismatch := false
+	foundNativePlan := false
 	for _, p := range v.Next {
-		if p.LoadID != nil && *p.LoadID == 88002 && strings.Contains(p.Warning, "another driver") {
-			foundMismatch = true
+		if p.LoadID != nil && *p.LoadID == 88002 && !strings.Contains(p.Warning, "another driver") && p.SourceDriver == d.ID {
+			foundNativePlan = true
 		}
 	}
-	if !foundMismatch {
+	if !foundNativePlan {
 		t.Fatal("Gross Board plan disappeared due to stale DataTruck assignment")
 	}
 	var sum string

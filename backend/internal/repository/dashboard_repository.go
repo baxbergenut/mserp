@@ -419,7 +419,7 @@ WITH load_events AS (
 			l.pickup_time,
 			l.pickup_appointment_time
 		) AT TIME ZONE 'UTC')::date AS activity_date
-	FROM loads l
+	FROM clustie_loads l
 	WHERE lower(trim(l.status)) IN ('invoiced', 'delivered')
 	  AND COALESCE(
 			l.delivery_time,

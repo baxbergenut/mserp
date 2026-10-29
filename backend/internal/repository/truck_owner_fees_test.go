@@ -31,6 +31,9 @@ func TestOwnerTruckFeesLoadConflictDatabase(t *testing.T) {
 		truck := mustID(`INSERT INTO trucks(unit_number,owner_id) VALUES('OWNER-001',$1) RETURNING id`, investor)
 		exec(`UPDATE truck_ownership_history SET assigned_at='2026-09-01',start_known=true WHERE truck_id=$1`, truck)
 		exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-09-01')`, truck, owner)
+		// Legacy contradictory local history must still surface a real owner
+		// conflict; provider labels alone no longer establish the truck.
+		exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at,unassigned_at) VALUES($1,$2,'2026-09-29 00:00-04','2026-09-30 00:00-04')`, truck, other)
 		const week = "2026-09-28"
 		date, _ := time.Parse(time.DateOnly, week)
 		charges := NewDriverChargeRepository(pool)
@@ -141,14 +144,14 @@ func TestOwnerTruckFeesLoadConflictDatabase(t *testing.T) {
 			}
 			assertFees(report, idleFees, "")
 		}
-		// Source work attributed to the idle truck is a real discrepancy;
-		// preserve the review guard and working-week fees in that case.
+		// A stale provider label cannot give the idle truck work or create a
+		// warning when Clustie assigns the owner to a different truck.
 		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($1,'2026-09-30','CONFLICT-1',91001,1000)`, owner)
 		report, err = pay.GetDriverWeek(ctx, date, owner)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertFees(report, workingFees, "recorded loads without a full-week owner-driver assignment")
+		assertFees(report, idleFees, "")
 		investorReport, err := pay.InvestorPay(ctx, date)
 		if err != nil || len(investorReport.Drivers) != 0 {
 			t.Fatalf("fees duplicated in Investor Pay: %+v %v", investorReport, err)

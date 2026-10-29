@@ -22,7 +22,7 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 		return result, nil
 	}
 	rows, err := tx.Query(ctx, `SELECT id,load_id,status,coalesce(driver_id::text,''),synced_at::text,raw_payload
- FROM loads WHERE lower(btrim(load_id))=ANY($1::text[]) ORDER BY id`, numbers)
+ FROM clustie_loads WHERE lower(btrim(load_id))=ANY($1::text[]) ORDER BY id`, numbers)
 	if err != nil {
 		return nil, err
 	}

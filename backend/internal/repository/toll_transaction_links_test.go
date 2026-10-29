@@ -27,7 +27,10 @@ func testSelectedTollLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	}
 	source := scalar(`INSERT INTO trucks(unit_number) VALUES('TX-SOURCE') RETURNING id`)
 	target := scalar(`INSERT INTO trucks(unit_number) VALUES('TX-TARGET') RETURNING id`)
+	driver := scalar(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Selected Toll Driver','selected toll driver','cpm',0.7) RETURNING id`)
+	exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01')`, source, driver)
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit,pickup_time,delivery_time) VALUES(991000,'PAST-SOURCE','delivered',100,100,'TX-SOURCE','2026-09-01','2026-09-02')`)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-01','PAST-SOURCE',991000)`, driver)
 	repo := NewTollRepository(pool)
 	makeToll := func(n int64, unit string) prepass.Transaction {
 		return prepass.Transaction{TollID: n, AccountNumber: json.Number("1"), PostDateTime: "2026-10-05T12:00:00", ExitDateTime: "2026-10-03T12:00:00", VehicleNumber: unit, PPDeviceID: "SELECTED-TAG", DeviceNumber: "different-device-number", TollCharge: json.Number("2.50")}
@@ -81,8 +84,6 @@ func testSelectedTollLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 		t.Fatal("changed finalized destination statement")
 	}
 	exec(`UPDATE investor_pay_weeks SET finalized=false WHERE truck_id=$1`, target)
-	driver := scalar(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Selected Toll Driver','selected toll driver','cpm',0.7) RETURNING id`)
-	exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01')`, source, driver)
 	exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,'2026-10-05','{}')`, driver)
 	if repo.LinkPrePassTruck(ctx, in, actor) == nil {
 		t.Fatal("changed finalized source driver statement")
@@ -135,6 +136,9 @@ func testSelectedTollLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	}
 	// Corrected attribution reassesses coverage without rewriting source units.
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit,pickup_time,delivery_time) VALUES(991001,'COVER-TARGET','delivered',100,100,'TX-TARGET','2026-10-02','2026-10-04')`)
+	exec(`UPDATE truck_driver_assignments SET unassigned_at='2026-10-02 00:00-04' WHERE driver_id=$1 AND unassigned_at IS NULL`, driver)
+	exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-10-02 00:00-04')`, target, driver)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-10-02','COVER-TARGET',991001)`, driver)
 	flags, e := transactionFlags(ctx, pool, "toll", []string{second}, time.Now().UTC())
 	if e != nil || flags[second] != nil {
 		t.Fatalf("corrected truck coverage: %+v %v", flags, e)

@@ -49,8 +49,8 @@ func payrollIncludesTruck(ctx context.Context, id string) bool {
 }
 
 // Select a conservative connected component, rather than the current assignment.
-// Source edges use the requested week plus uncollected, unfrozen legacy weeks.
-// Historical owners, teams, ambiguous load candidates, fuel identities and saved
+// Cost edges use the requested week plus uncollected, unfrozen legacy weeks.
+// Historical owners, teams, native assignments, fuel identities and saved
 // destinations can affect the same principal. Including the complete component
 // keeps corrections across weeks equivalent to a full-fleet calculation.
 func selectPayrollContext(ctx context.Context, tx pgx.Tx, kind, id string) (context.Context, error) {
@@ -80,12 +80,6 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
  UNION SELECT w.week_start FROM investor_pay_weeks w WHERE accounting_live_date(w.week_start) AND NOT w.finalized AND (
  (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
  (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
- ), board_entries AS MATERIALIZED (
- SELECT e.driver_id,e.load_record_id,e.load_trip_id,lower(btrim(e.load_number)) number FROM source_weeks w JOIN `+payrollBoardEntriesSQL+` e ON e.service_date>=w.week AND e.service_date<w.week+7 WHERE $1<>''
- UNION SELECT driver_id,load_record_id,load_trip_id,lower(btrim(load_number)) number FROM `+payrollBoardEntriesSQL+` e WHERE $1=''
- ), board_links AS MATERIALIZED (
- SELECT e.driver_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_id END truck_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_unit ELSE trip_source.selected_trip->>'truck__unit_number' END truck_unit FROM board_entries e JOIN loads l ON l.id=e.load_record_id `+loadTripSourceSQL+`
- UNION SELECT e.driver_id,CASE WHEN e.load_trip_id IS NULL THEN l.truck_id END,CASE WHEN e.load_trip_id IS NULL THEN l.truck_unit ELSE trip_source.selected_trip->>'truck__unit_number' END FROM board_entries e JOIN loads l ON lower(btrim(l.load_id))=e.number `+loadTripSourceSQL+` WHERE e.load_record_id IS NULL AND e.number<>''
  ), edges(a,b) AS MATERIALIZED (
  SELECT 'driver:'||driver_id,'truck:'||truck_id FROM truck_driver_assignments
  UNION SELECT 'driver:'||main_driver_id,'driver:'||team_driver_id FROM driver_teams
@@ -95,8 +89,6 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_settlement_terms
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM investor_pay_weeks
  UNION SELECT 'driver:'||charge_driver_id,'truck:'||truck_id FROM expenses WHERE charge_driver_id IS NOT NULL AND truck_id IS NOT NULL
- UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM board_links WHERE truck_id IS NOT NULL
- UNION SELECT 'driver:'||l.driver_id,'truck:'||a.truck_id FROM board_links l JOIN truck_unit_aliases a ON a.unit_key=upper(btrim(l.truck_unit)) WHERE l.truck_id IS NULL
  UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
  UNION SELECT 'driver:'||f.driver_id,'truck:'||a.truck_id FROM (SELECT f.driver_id,f.reported_truck_units FROM source_weeks w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7 WHERE f.driver_id IS NOT NULL AND $1<>''
  UNION SELECT driver_id,reported_truck_units FROM fuel_transactions WHERE driver_id IS NOT NULL AND $1='') f CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key

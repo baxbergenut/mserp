@@ -79,12 +79,17 @@ func TestLoadTripsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			assignmentView, err := os.ReadFile("../../sql/167_clustie_load_assignments.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if migrated {
 				initial := strings.ReplaceAll(string(init), "\r\n", "\n")
 				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 				if strings.Count(initial, body) != 1 {
 					t.Fatal("expected exactly one trip migration in init.sql")
 				}
+				initial = strings.Replace(initial, strings.ReplaceAll(string(assignmentView), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(initial, body, "", 1))
 			} else {
 				exec(string(init))
@@ -96,9 +101,13 @@ func TestLoadTripsDatabase(t *testing.T) {
 			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,entered_original_rate,entered_miles,driver_rate) VALUES($1,'2026-10-19','SPLIT-1',8101,1813,555,200),($2,'2026-10-20','SPLIT-1',8101,1813,555,1000)`, a, b)
 			if migrated {
 				exec(string(migration))
+				exec(string(assignmentView))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; SET ROLE mserp_app`)
 			exec(`INSERT INTO trucks(id,unit_number) VALUES('82000000-0000-0000-0000-000000000001','S-A'),('82000000-0000-0000-0000-000000000002','S-B');UPDATE loads SET truck_id='82000000-0000-0000-0000-000000000002',truck_unit='S-B' WHERE id=8101`)
+			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES
+ ('82000000-0000-0000-0000-000000000001',$1,'2026-10-01 00:00-04'),
+ ('82000000-0000-0000-0000-000000000002',$2,'2026-10-01 00:00-04')`, a, b)
 			week, _ := time.Parse(time.DateOnly, "2026-10-19")
 			repo := NewGrossBoardRepository(pool)
 			board, err := repo.Get(ctx, week)
@@ -200,7 +209,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 				}
 				if truckMap[e.DriverID+":"+payCommentKey(e.Date, e.Slot, e.LoadNumber)].TruckID != want {
 					tx.Rollback(ctx)
-					t.Fatal("trip ownership fell back to parent truck", truckMap)
+					t.Fatal("trip ownership ignored the Clustie assignment", truckMap)
 				}
 			}
 			pay, err := readDriverPaySourceWeek(ctx, tx, week, "")

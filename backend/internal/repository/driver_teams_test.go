@@ -56,6 +56,9 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				}
 				source = withoutBoardLiveMigration(t, withoutFleetScopeSyncMigration(t, withoutTruckRecurringMigration(t, strings.Replace(source, body, "", 1))))
 			}
+			if mode == "migration" {
+				source = withoutClustieLoadAssignments(t, source)
+			}
 			if _, err = admin.Exec(ctx, source); err != nil {
 				t.Fatal(err)
 			}
@@ -68,6 +71,7 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				applyTruckRecurringMigration(t, ctx, admin)
 				applyFleetScopeSyncMigration(t, ctx, admin)
 				applyBoardLiveMigration(t, ctx, admin)
+				applyClustieLoadAssignments(t, ctx, admin)
 			}
 			for _, table := range []string{"driver_teams", "driver_team_events"} {
 				var owner string

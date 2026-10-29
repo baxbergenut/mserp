@@ -243,9 +243,6 @@ func annotateLoad(p *BoardLoad, driver string) {
 			p.Warning = "Load details are not available yet or the number is ambiguous. Details will appear when a unique matching load is in the system."
 		}
 	}
-	if p.SourceDriver != "" && p.SourceDriver != driver {
-		p.Warning = "DataTruck assigns this load to another driver; review the plan"
-	}
 	if terminalLoad(p.SourceStatus) {
 		p.Warning = "DataTruck reports " + p.SourceStatus + "; review before replacing the current load"
 	}
@@ -361,7 +358,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		return nil, err
 	}
 	plans := map[string][]BoardLoad{}
-	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),coalesce(l.driver_id::text,''),coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb)
+	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb)
  FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''

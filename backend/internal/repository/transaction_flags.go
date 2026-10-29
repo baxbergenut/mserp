@@ -277,8 +277,7 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Team drivers use a name in DataTruck. Only unique exact canonical name
-	// matches are allowed; today's truck assignments are never used here.
+	// Team names come from Clustie's dated team membership projection.
 	nameIDs := map[string]string{}
 	if len(driverIDs) > 0 {
 		rows, err = tx.Query(ctx, `SELECT normalized_name, CASE WHEN count(*) = 1 THEN min(id::text) ELSE '' END FROM drivers GROUP BY normalized_name`)
@@ -308,13 +307,14 @@ func transactionFlagsTx(ctx context.Context, tx pgx.Tx, kind string, ids []strin
 			}
 		}
 	}
-	rows, err = tx.Query(ctx, `SELECT id, load_id, COALESCE(truck_unit,''), COALESCE(driver_id::text,''),
-		COALESCE(driver_name,''), COALESCE(team_driver_name,''), status,
-		pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time
-		FROM loads WHERE upper(regexp_replace(btrim(truck_unit),'[[:space:]]+',' ','g')) = ANY($1::text[])
-		OR driver_id = ANY($2::uuid[])
-		OR lower(regexp_replace(btrim(team_driver_name),'[[:space:]]+',' ','g')) = ANY($3::text[])
-		ORDER BY id`, units, driverIDs, driverNames)
+	rows, err = tx.Query(ctx, `SELECT l.id, l.load_id, COALESCE(a.unit_number,''), a.driver_id::text,
+		a.driver_name, COALESCE(a.team_driver_name,''), l.status,
+		l.pickup_time, l.delivery_time, l.pickup_appointment_time, l.delivery_appointment_time
+		FROM clustie_load_operators a JOIN loads l ON l.id=a.id
+		WHERE upper(regexp_replace(btrim(a.unit_number),'[[:space:]]+',' ','g')) = ANY($1::text[])
+		OR a.driver_id = ANY($2::uuid[])
+		OR lower(regexp_replace(btrim(a.team_driver_name),'[[:space:]]+',' ','g')) = ANY($3::text[])
+		ORDER BY l.id`, units, driverIDs, driverNames)
 	if err != nil {
 		return nil, err
 	}

@@ -90,12 +90,11 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
   Fuel/toll recoveries, expense recoveries, recurring/installment collections,
   escrow and carry are excluded. Owners/investors therefore cover their own
   operating costs without those recoveries inflating this remainder.
-- Counted load ownership and investor terms are checked for the service date.
-  Clicking that warning opens the exact counted loads, source truck labels,
-  dated assignments and reasons, using the same query as its count. Unlinked
-  source trucks cannot appear as Investor Pay statements. A nonblank unmatched
-  source unit never falls back to the driver's assigned truck; assignment is
-  comparison context only. Known trucks link to their profiles.
+- Counted load ownership and investor terms use Clustie's truck assignment for
+  the original service date. Clicking that warning opens the exact counted loads,
+  native truck assignments and reasons, using the same query as its count.
+  DataTruck assignment labels never determine ownership or create these warnings.
+  Missing/conflicting native assignments stay in review. Known trucks link to their profiles.
   Payroll loads must match counted load identities and original gross; missing
   fees, missing payroll coverage, duplicates, stale gross and report issues block
   the final profit. Known partial stages remain visible alongside review links.

@@ -80,9 +80,9 @@ type truckPayLoadMatch struct {
 	Candidates []string
 }
 
-// Imported source loads retain an indexed truck ID across renames. Only blank
-// source units and unmatched plans fall back to the unique dated assignment.
-// Unresolved source labels supply candidates for scoped review, never a guess.
+// Clustie's dated fleet assignment owns truck attribution. DataTruck's parent
+// and trip truck labels are source metadata, never assignment authority.
+// Explicit weekend transfers retain the truck captured from their source day.
 func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]truckPayLoadMatch, error) {
 	// Filter base tables before materialization so their statistics describe the
 	// load rows. Filtering the CTE again makes PostgreSQL 16 estimate a handful of
@@ -96,14 +96,13 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
  AND a.assigned_at < ((d.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
  AND (a.unassigned_at IS NULL OR a.unassigned_at >= ((d.service_date+1)::timestamp AT TIME ZONE 'America/New_York'))
  GROUP BY d.driver_id,d.service_date
- ), aliases AS MATERIALIZED (SELECT unit_key,array_agg(truck_id::text) trucks FROM truck_unit_aliases GROUP BY unit_key)
+ )
  SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
- CASE WHEN e.transfer_truck_id IS NOT NULL THEN e.transfer_truck_id::text WHEN trip_source.review THEN '' WHEN e.load_trip_id IS NOT NULL THEN CASE WHEN cardinality(aliases.trucks)=1 THEN aliases.trucks[1] ELSE '' END ELSE coalesce(l.truck_id::text,'') END,
- NOT trip_source.review AND (l.id IS NULL OR btrim(coalesce(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END,''))=''),
- coalesce(a.trucks,'{}'::text[]),CASE WHEN l.truck_id IS NULL OR e.load_trip_id IS NOT NULL THEN coalesce(aliases.trucks,'{}'::text[]) ELSE '{}'::text[] END
+ CASE WHEN trip_source.review THEN '' ELSE coalesce(e.transfer_truck_id::text,'') END,
+ NOT trip_source.review,
+ coalesce(a.trucks,'{}'::text[])
  FROM entries e `+payrollResolvedLoad+`
- LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.source_date
- LEFT JOIN aliases ON aliases.unit_key=upper(btrim(CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip->>'truck__unit_number' ELSE l.truck_unit END))`, week, payrollDriverIDs(ctx))
+ LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.source_date`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -111,14 +110,14 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
 	result := map[string]truckPayLoadMatch{}
 	for rows.Next() {
 		var driver, date, number string
-		var assigned, aliases []string
+		var assigned []string
 		var value truckPayLoadMatch
 		var fallback bool
 		var slot int
-		if err = rows.Scan(&driver, &date, &slot, &number, &value.TruckID, &fallback, &assigned, &aliases); err != nil {
+		if err = rows.Scan(&driver, &date, &slot, &number, &value.TruckID, &fallback, &assigned); err != nil {
 			return nil, err
 		}
-		value.Candidates = append(assigned, aliases...)
+		value.Candidates = assigned
 		if value.TruckID == "" && fallback && len(assigned) == 1 {
 			value.TruckID = assigned[0]
 		}

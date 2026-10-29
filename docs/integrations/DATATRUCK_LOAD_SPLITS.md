@@ -33,9 +33,11 @@ restore the saved board and leave without bypassing financial checks.
 
 Gross Board balances and totals, Driver Pay, Investor Pay, source acceptance and
 dashboard reconciliation use the same trip projection. Loaded/empty mileage and
-locations come from the selected trip. Investor attribution uses the selected
-trip's exact recorded truck alias, with the established dated-assignment fallback
-only when the source unit is blank. Unknown source units remain in review.
+locations come from the selected trip. Truck attribution uses Clustie's dated
+fleet assignment for the board driver and original service date, including for
+selected trips. DataTruck's driver/truck/dispatcher labels are source provenance
+only; stale or unknown source labels never override Clustie or create assignment
+warnings. Missing/conflicting Clustie assignments require review.
 
 Identity is `(load record ID, trip ID)`. A trip cannot be assigned to a second
 board driver. Repeats for the same driver count on the earliest date, including

@@ -755,6 +755,8 @@ func (handler fleetHandler) createDispatcher(w http.ResponseWriter, r *http.Requ
 	if !handler.prepareDispatcherAccount(w, r, request, &input) {
 		return
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.AssignmentActor = session.User.ID
 	value, err := handler.repo.CreateDispatcher(r.Context(), input)
 	if err != nil {
 		handler.writeError(w, err)
@@ -794,6 +796,8 @@ func (handler fleetHandler) updateDispatcher(w http.ResponseWriter, r *http.Requ
 		}
 		input.AccountActor = session.User.ID
 	}
+	session, _ := authSessionFromContext(r.Context())
+	input.AssignmentActor = session.User.ID
 	value, err := handler.repo.UpdateDispatcher(r.Context(), id, input)
 	if err != nil {
 		handler.writeError(w, err)

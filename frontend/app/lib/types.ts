@@ -1342,6 +1342,12 @@ export interface AssignmentHistoryEntry {
   unassignedAt: string | null;
   startKnown: boolean;
   source: string;
+  actorId: string;
+  actorName: string;
+  recordedAt: string | null;
+  endedById: string;
+  endedByName: string;
+  endedRecordedAt: string | null;
 }
 
 export interface Investor {

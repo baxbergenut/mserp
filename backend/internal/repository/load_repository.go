@@ -269,7 +269,7 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 		query.PickupFrom, query.PickupTo,
 	}
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM loads "+where, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM clustie_loads "+where, args...).Scan(&total); err != nil {
 		return LoadPage{}, err
 	}
 	query.Pagination = query.Pagination.Normalize(total)
@@ -313,7 +313,7 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 			COALESCE(array_agg(DISTINCT customer_name ORDER BY customer_name) FILTER (WHERE customer_name IS NOT NULL AND customer_name <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT dispatcher_name ORDER BY dispatcher_name) FILTER (WHERE dispatcher_name IS NOT NULL AND dispatcher_name <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT driver_name ORDER BY driver_name) FILTER (WHERE driver_name IS NOT NULL AND driver_name <> ''), '{}')
-		FROM loads`).Scan(&options.Statuses, &options.Customers, &options.Dispatchers, &options.Drivers)
+		FROM clustie_loads`).Scan(&options.Statuses, &options.Customers, &options.Dispatchers, &options.Drivers)
 	if err != nil {
 		return LoadPage{}, err
 	}
@@ -344,7 +344,7 @@ SELECT
 	dispatcher_name, driver_name, team_driver_name, truck_unit, customer_name,
 	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
 	created_datetime, synced_at
-FROM loads
+FROM clustie_loads
 `
 
 var ErrMissingLoadRecordID = errors.New("datatruck load is missing a positive record id")

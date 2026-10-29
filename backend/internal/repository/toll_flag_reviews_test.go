@@ -29,6 +29,9 @@ func testTollFlagReviews(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 	exec(`INSERT INTO trucks(unit_number) VALUES('REVIEW-TRUCK'),('REVIEW-NOHISTORY')`)
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit,pickup_time,delivery_time) VALUES(992001,'REVIEW-PAST','delivered',100,100,'REVIEW-TRUCK','2026-09-01','2026-09-02')`)
+	driver := scalar(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Flag Review Driver','flag review driver','cpm',0.7) RETURNING id`)
+	exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT id,$1,'2026-01-01' FROM trucks WHERE unit_number='REVIEW-TRUCK'`, driver)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-01','REVIEW-PAST',992001)`, driver)
 	repo := NewTollRepository(pool)
 	makeToll := func(n int64, unit string) prepass.Transaction {
 		return prepass.Transaction{TollID: n, AccountNumber: json.Number("1"), PostDateTime: "2026-10-05T12:00:00", ExitDateTime: "2026-10-03T12:00:00", VehicleNumber: unit, PPDeviceID: "REVIEW-TAG", DeviceNumber: "device-value", TollCharge: json.Number("2.50")}

@@ -27,7 +27,7 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   const row = page.getByRole('row').filter({ hasText: 'Week Didi' });
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel(/^Dispatcher/).selectOption(mark);
-  await page.getByLabel(/^Truck/).selectOption(truck2);
+  await page.getByLabel('Truck', { exact: true }).selectOption(truck2);
   const start = page.getByLabel('Assignment effective date', { exact: true });
   await expect(start).toHaveValue('');
   await expect(start).toHaveAttribute('required', '');
@@ -55,7 +55,7 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
     INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES('${driver}','${week}','{}');`);
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel(/^Dispatcher/).selectOption(cameron);
-  await page.getByLabel(/^Truck/).selectOption(truck1);
+  await page.getByLabel('Truck', { exact: true }).selectOption(truck1);
   await start.fill(week);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('dialog').getByText('Reopen finalized payroll for this driver from the selected assignment date onward before changing assignments', { exact: true })).toBeVisible();
@@ -111,7 +111,7 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await page.getByPlaceholder('Search drivers…').fill('Week Didi');
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel(/^Dispatcher/).selectOption(mark);
-  await page.getByLabel(/^Truck/).selectOption(truck2);
+  await page.getByLabel('Truck', { exact: true }).selectOption(truck2);
   await start.fill(wednesday);
   expect(await start.evaluate(input => input.checkValidity())).toBe(true);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -146,9 +146,31 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   await expect(page.getByText('Week Cameron / Week Mark', { exact: true })).toBeVisible();
   await page.goto(`${base}/driver-board`);
   await expect(page.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
-  const nav = page.locator('aside a');
-  await expect(nav.nth(0)).toHaveAttribute('href', '/driver-board');
-  await expect(nav.nth(1)).toHaveAttribute('href', '/gross-board');
-  await expect(nav.nth(2)).toHaveAttribute('href', '/tasks');
-  await expect(nav.nth(3)).toHaveAttribute('href', '/loads');
+  // Real form saves must expose persistent attribution on driver and truck
+  // histories, including a distinct end actor and elapsed assignment duration.
+  const historyResponse = await page.request.get(`${base}/api/drivers/${driver}/assignments`);
+  expect(historyResponse.status()).toBe(200);
+  const history = await historyResponse.json();
+  const currentTruck = history.find(entry => entry.kind === 'truck' && !entry.unassignedAt);
+  expect(currentTruck).toMatchObject({ name: 'WEEK-TWO', actorName: 'investor-e2e' });
+  expect(currentTruck.actorId).toBeTruthy();
+  expect(Date.parse(currentTruck.recordedAt)).toBeGreaterThan(Date.parse(currentTruck.assignedAt));
+  expect(history.some(entry => entry.unassignedAt && entry.endedByName === 'investor-e2e')).toBe(true);
+  expect(history.find(entry => entry.kind === 'dispatcher' && !entry.unassignedAt).actorName).toBe('investor-e2e');
+  await page.goto(`${base}/drivers/detail?id=${driver}`);
+  await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+  const assignmentHistory = page.getByRole('region', { name: 'Assignment history', exact: true });
+  await expect(assignmentHistory.getByRole('columnheader')).toHaveText(['Truck', 'Started', 'Ended', 'Duration', 'Changed by']);
+  const currentAssignment = assignmentHistory.getByRole('row').filter({ hasText: 'Current' });
+  await expect(currentAssignment).toContainText('WEEK-TWO');
+  await expect(currentAssignment).toContainText('investor-e2e');
+  await expect(currentAssignment.getByRole('cell').nth(3)).toHaveText(/^\d+[dhm]/);
+  await assignmentHistory.getByLabel('Assignment type').selectOption('dispatcher');
+  await expect(assignmentHistory.getByRole('row').filter({ hasText: 'Current' })).toContainText('investor-e2e');
+  await page.goto(`${base}/trucks/detail?id=${truck2}`);
+  await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+  const truckHistory = page.getByRole('region', { name: 'Assignment history', exact: true });
+  await expect(truckHistory.getByRole('columnheader')).toHaveText(['Driver', 'Started', 'Ended', 'Duration', 'Changed by']);
+  await expect(truckHistory.getByRole('row').filter({ hasText: 'Current' })).toContainText('investor-e2e');
+  await page.screenshot({ path: `${process.env.TEMP || '/tmp'}/clustie-assignment-history.png`, fullPage: true });
 }

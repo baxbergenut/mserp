@@ -315,6 +315,9 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 		return Driver{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, userID, "intake_setup"); err != nil {
+		return Driver{}, err
+	}
 	if input != nil && input.IsTeamDriver != nil && *input.IsTeamDriver {
 		if err = lockDriverTeamSetup(ctx, tx); err != nil {
 			return Driver{}, err

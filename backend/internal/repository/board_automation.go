@@ -155,7 +155,7 @@ func boardAutomationContext(load *BoardLoad, stop *BoardStop, truck string) stri
 
 // Resolve a unique imported load without manufacturing a Gross Board plan.
 func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoad, error) {
-	rows, err := tx.Query(ctx, `SELECT id,load_id,status,coalesce(driver_id::text,''),synced_at::text,raw_payload FROM loads WHERE lower(btrim(load_id))=lower(btrim($1)) ORDER BY id LIMIT 2`, number)
+	rows, err := tx.Query(ctx, `SELECT id,load_id,status,coalesce(driver_id::text,''),synced_at::text,raw_payload FROM clustie_loads WHERE lower(btrim(load_id))=lower(btrim($1)) ORDER BY id LIMIT 2`, number)
 	if err != nil {
 		return nil, err
 	}

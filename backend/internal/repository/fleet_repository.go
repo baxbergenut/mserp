@@ -212,6 +212,7 @@ type Dispatcher struct {
 }
 
 type DispatcherInput struct {
+	AssignmentActor     string
 	AccountPasswordHash string
 	AccountActor        string
 	PreserveFields      []string
@@ -947,6 +948,9 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 		return Dispatcher{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.AssignmentActor, "profile"); err != nil {
+		return Dispatcher{}, err
+	}
 	if err = setAssignmentWeek(ctx, tx, input.AssignmentWeek); err != nil {
 		return Dispatcher{}, err
 	}
@@ -989,6 +993,9 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 		return Dispatcher{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err = setBoardActor(ctx, tx, input.AssignmentActor, "profile"); err != nil {
+		return Dispatcher{}, err
+	}
 	if input.AccountActor != "" {
 		if err = accessLock(ctx, tx, input.AccountActor); err != nil {
 			return Dispatcher{}, err
@@ -1033,6 +1040,13 @@ func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string, actor
 		return err
 	}
 	defer tx.Rollback(ctx)
+	assignmentActor := ""
+	if len(actor) > 0 {
+		assignmentActor = actor[0]
+	}
+	if err = setBoardActor(ctx, tx, assignmentActor, "profile"); err != nil {
+		return err
+	}
 	if len(actor) > 0 {
 		if err = accessLock(ctx, tx, actor[0]); err != nil {
 			return err

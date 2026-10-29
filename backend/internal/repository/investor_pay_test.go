@@ -348,6 +348,12 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatal("payment destination changed")
 			}
 			// Owner-only work in another week uses Driver Pay once, with the 88% tariff.
+			if _, e = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-10-05 00:00-04' WHERE truck_id=$1 AND unassigned_at IS NULL`, truck); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-10-05 00:00-04')`, truck, owner); e != nil {
+				t.Fatal(e)
+			}
 			if _, e = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) SELECT $1,service_date+7,load_number,load_record_id,driver_rate FROM gross_board_entries WHERE driver_id=$2`, owner, driver); e != nil {
 				t.Fatal(e)
 			}
@@ -376,6 +382,12 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatal("duplicate investor statement for owner driving")
 			}
 			// A mixed week has one investor settlement and hired labor only.
+			if _, e = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-10-06 00:00-04' WHERE truck_id=$1 AND unassigned_at IS NULL`, truck); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = pool.Exec(ctx, `INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-10-06 00:00-04')`, truck, driver); e != nil {
+				t.Fatal(e)
+			}
 			if _, e = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,truck_unit,pickup_time,raw_payload) SELECT 992,'LOAD-2',status,1000,1000,total_miles,truck_unit,pickup_time,raw_payload FROM loads WHERE id=991`); e != nil {
 				t.Fatal(e)
 			}
@@ -456,24 +468,15 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	exec(`UPDATE loads SET truck_unit='' WHERE id=991`)
 	expectLoad()
 	exec(`UPDATE loads SET truck_unit='UNKNOWN' WHERE id=991`)
-	r := read()
-	if len(r.Issues) != 0 || len(r.Drivers) != 1 || len(r.Drivers[0].Issues) != 1 {
-		t.Fatalf("assignment issue not scoped to truck: %+v", r)
-	}
-	if _, err = pr.SettleInvestor(ctx, week, truck, r.Revision, actor, "", false, false); err == nil {
-		t.Fatal("finalized unresolved truck")
-	}
+	expectLoad()
 	exec(`UPDATE loads SET truck_unit='TRUCK-A' WHERE id=991`)
-	// Existing ID bindings survive reuse; a newly supplied ambiguous label does not resolve.
+	// Provider unit reuse/ambiguity cannot affect Clustie's assignment.
 	exec(`INSERT INTO trucks(unit_number) VALUES('TRUCK-A')`)
 	exec(`UPDATE loads SET truck_unit='TRUCK-A' WHERE id=991`)
 	expectLoad()
 	exec(`UPDATE loads SET truck_unit='UNKNOWN' WHERE id=991`)
 	exec(`UPDATE loads SET truck_unit='TRUCK-A' WHERE id=991`)
-	r = read()
-	if len(r.Drivers[0].Loads) != 0 || len(r.Drivers[0].Issues) == 0 {
-		t.Fatal("reused unit name was guessed")
-	}
+	expectLoad()
 	exec(`DELETE FROM trucks WHERE unit_number='TRUCK-A'`)
 	exec(`UPDATE loads SET truck_unit='TRUCK-A' WHERE id=991`)
 	expectLoad()
@@ -490,7 +493,7 @@ func testInvestorAttribution(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	exec(`DELETE FROM loads WHERE id=992`)
 	exec(`DELETE FROM drivers WHERE id=$1`, unrelated)
 	exec(`UPDATE trucks SET status='out_of_service',status_reason='Testing inactive historical statements' WHERE id=$1`, truck)
-	r = read()
+	r := read()
 	if len(r.Drivers) != 0 {
 		t.Fatal("inactive truck shown in default pay view")
 	}

@@ -372,7 +372,7 @@ func findRelayDriverCandidate(
 					SELECT 1 FROM truck_driver_assignments a
 					WHERE a.driver_id = d.id AND a.unassigned_at IS NULL
 				)
-				OR EXISTS (SELECT 1 FROM loads l WHERE l.driver_id = d.id)
+				OR EXISTS (SELECT 1 FROM clustie_loads l WHERE l.driver_id = d.id)
 		FROM drivers d
 		ORDER BY d.created_at, d.id`)
 	if err != nil {

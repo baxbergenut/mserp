@@ -152,7 +152,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   to parent totals; missing/invalid trips remain in review, never full-order
   fallback. Driver gross is preserved, not inferred from `total_load_pay`.
   Identity is parent record plus trip ID; repeated display numbers never merge.
-  Selected-trip truck aliases drive investor attribution. Selection/financial
+  Clustie's dated truck assignments drive investor attribution, including selected trips. Selection/financial
   edits honor finalized driver/investor statements and optimistic versions.
   See `docs/integrations/DATATRUCK_LOAD_SPLITS.md`; database checks use
   `TestLoadTripsDatabase` / `MSERP_GROSS_BOARD_TEST_DATABASE_URL` and browser checks
@@ -555,8 +555,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   their recorded ends still apply. Fuel/tolls never wait for payroll finalization.
   Unresolved fuel/tolls and load ownership/terms open a paginated review at /dashboard/cost-review
   (kind=fuel|tolls|ownership). Ownership review names the exact counted loads,
-  source units, dated assignment context and reasons; unmatched source trucks
-  cannot appear as Investor Pay statements. Counts and detail share the waterfall
+  dated Clustie truck assignments and reasons; stale DataTruck assignment labels
+  never determine ownership or create these warnings. Counts and detail share the waterfall
   attribution query and its Administrator plus five-read permission gate.
   Show missing truck links, missing/conflicting dated ownership,
   or missing amounts; never infer ownership or mutate sources on review.
@@ -1251,8 +1251,9 @@ assignment lookup lists.
   Import/refresh resolves only unique labels, preserves an existing ID when the
   source label is unchanged, and re-resolves changed labels. Truck renames do not
   alter existing load links; label reuse never transfers linked loads. Unresolved
-  labels stay NULL; blank source units may use a unique dated assignment when
-  calculating a statement. Report reads do not match every truck name per load.
+  labels stay NULL. These source links are provenance only: all assignment
+  displays and attribution use Clustie plans and dated fleet history, never
+  DataTruck driver/truck/dispatcher assignments or a source-label fallback.
   Driver and investor active flags are independent; global search labels both
   roles explicitly. Investor Pay hides inactive trucks by default and excludes
   them from whole-week actions; explicit `truckId` links and profile history
@@ -1724,8 +1725,8 @@ assignment lookup lists.
   a saved manual blank), changed identities and ambiguous matches stay protected.
 - New DataTruck imports never create managed `drivers` or `trucks`. They retain the
   upstream driver name and truck unit on the load, link only to an existing
-  unambiguous fleet record, and create a current assignment only when both
-  links resolve. Add fleet master records through the management UI first.
+  unambiguous fleet record for provenance only. Imports never create or update
+  current fleet assignments. Add fleet master records through the management UI first.
 - Person names are title-cased for display and normalized for matching. Truck
   unit numbers are trimmed/collapsed and uppercased. Use the helpers in
   `backend/internal/repository/naming.go` rather than duplicating this logic.
@@ -1771,6 +1772,12 @@ assignment lookup lists.
   are source notes, never invented effective dates. Imports may set the local
   `mserp.assignment_source` PostgreSQL setting for dispatcher provenance and the
   truck assignment's `source` column. Dispatcher names survive dispatcher deletion.
+  Migration 166 snapshots the server-owned status-history actor context on truck
+  and dispatcher period creation/end, with separate recorded timestamps. Driver,
+  truck, dispatcher and intake forms set that context before locks/writes.
+  Older attribution stays unknown; automated writes show System. Names survive
+  account renames/deletion. Assignment tables show Duration and Changed by,
+  including Ended by; dates use New York and current durations refresh each minute.
   Tests use only `MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL`, whose database name
   must contain `_test`, and verify fresh schema and migration as `mserp_app`.
   CI runs these checks against a disposable PostgreSQL service.
@@ -2899,3 +2906,21 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Compare separate release windows and retain failures/sample counts. These are
   observed API timings, not browser load p99; sparse samples cannot establish
   the one-second tail target. Payroll pages/calculations are outside this work.
+
+## Native load assignment authority (167)
+
+- DataTruck supplies load identity, dates/stops, amounts and mileage; Clustie owns
+  driver/truck/dispatcher assignment decisions everywhere. Migration 167 adds
+  security-invoker `clustie_load_operators` (per native allocation) and
+  `clustie_loads` (per imported load) read projections. They resolve exact native
+  board selections/numbers and original service-date fleet history; unplanned or
+  ambiguous loads have unknown assignments, never provider-label fallbacks.
+- Loads and filters, load search, operational board lookups, transaction coverage
+  and legacy financial reporting use these projections. Investor Pay and dashboard
+  ownership use native daily assignments directly; reviewed weekend transfers
+  retain their original source-day truck. Raw provider fields remain provenance
+  only. DataTruck driver mismatches no longer produce Status Board warnings.
+- Frozen statements retain their snapshots. This release neither updates provider
+  assignments nor adds employee mismatch warnings. New views add no financial tables.
+  Check TestClustieLoadAssignmentsDatabase, TestAssignmentAttributionDatabase,
+  existing investor/dashboard/trip/board regressions and assignment-week E2E.
