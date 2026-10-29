@@ -22,7 +22,7 @@ import { LocationCell, formatCoordinates } from "./LocationCell";
 const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog));
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
 import { StatusCell } from "./StatusCell";
-import type { DriverBoardEntry } from "@/app/lib/types";
+import type { BoardStop, DriverBoardEntry } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
 import { statuses, statusColor, previewCurrentLoad } from "./board";
 import { ETACell } from "./ETACell";
@@ -66,10 +66,11 @@ export default function DriverBoardPage() {
   const [statusChoices,setStatusChoices]=useState(statuses);
   useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
+  const [pickupEditor, setPickupEditor] = useState<{ id: string; name: string; planId: string; pickup: BoardStop; anchor: HTMLButtonElement } | null>(null);
   const [leaveEditor, setLeaveEditor] = useState<{ id: string; name: string; status: string; changingStatus: boolean } | null>(null);
  const [today, setToday] = useState(leaveToday);
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
- const state = useDriverBoard(etaEditor?.id ?? leaveEditor?.id ?? restriction?.id);
+ const state = useDriverBoard(etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -183,7 +184,8 @@ export default function DriverBoardPage() {
             const otherStop = oppositeType ? loads?.current?.stops.find(s => s.type.toLowerCase() === oppositeType && s.location.trim()) : undefined;
             const destinationBusy = dirty || saving || loading || leaving;
             const next = loads?.next[0];
-            const nextPickup = next?.stops.find(stop => stop.type.toLowerCase() === "pickup")?.schedule;
+            const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
+            const nextPickup = nextStop?.schedule;
             return <Fragment key={d.id}>
               {(i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
                 <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
@@ -243,7 +245,7 @@ export default function DriverBoardPage() {
                   }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-[9px] font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Destination", 500)}</td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}><ETACell name={d.fullName} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>
-                <td className={cellClass}><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <><span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}</span>{nextPickup?.label && <span className="ml-2">{nextPickup.label}</span>}</> : "—"}</button></td>
+                <td className={cellClass}><div className="flex h-8 w-full items-center"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full min-w-0 flex-1 truncate px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 max-w-[75%] shrink-0 truncate rounded px-1 py-1 text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>
                 <td className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>
               </tr>
             </Fragment>;
@@ -254,6 +256,11 @@ export default function DriverBoardPage() {
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
     {etaEditor && <ETAEditor key={`${etaEditor.id}:${board?.loads[etaEditor.id]?.automation?.context ?? ""}:${board?.loads[etaEditor.id]?.automation?.stopType ?? ""}`} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={dirty || saving || loading} onAction={async action => {
+      const view = board?.loads[pickupEditor.id];
+      if (!view || view.next[0]?.planId !== pickupEditor.planId) throw new Error("Next load changed. Close and reopen the pickup time.");
+      await state.changeLoads(pickupEditor.id, view, { ...action, planId: pickupEditor.planId, stopKey: pickupEditor.pickup.key });
+    }} onClose={() => setPickupEditor(null)} onApply={() => setPickupEditor(null)} />}
     {restriction&&<Modal title={`Shop · ${restriction.name}`} isSaving={false} submitLabel="Apply status" onClose={()=>setRestriction(null)} onSubmit={e=>{e.preventDefault();if(!restrictionReason.trim())return;edit(restriction.id,"status",restriction.status,{statusReason:restrictionReason.trim()});setRestriction(null);}}><Field label="Reason"><textarea aria-label="Truck status reason" required maxLength={1000} className={controlClass} value={restrictionReason} onChange={e=>setRestrictionReason(e.target.value)}/></Field><p className="mt-3 text-xs text-zinc-500">The truck will be marked Shop and cannot receive new dispatch until explicitly returned to service.</p></Modal>}
     {leaveEditor && <DriverLeaveDialog name={leaveEditor.name} initial={entries[leaveEditor.id]?.leavePlan} status={leaveEditor.status} changingStatus={leaveEditor.changingStatus} onClose={() => setLeaveEditor(null)} onApply={plan => { edit(leaveEditor.id, leaveEditor.changingStatus ? "status" : "homeTime", leaveEditor.changingStatus ? leaveEditor.status : "", { leavePlan: plan, homeTime: "" }); setLeaveEditor(null); }} />}
     {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}

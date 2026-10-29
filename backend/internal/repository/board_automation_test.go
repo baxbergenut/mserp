@@ -22,12 +22,12 @@ func TestBoardSchedules(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &stop); err != nil {
 		t.Fatal(err)
 	}
-	if got := boardSchedule(stop); got.Label != "DEL 24/7 FRI" || !strings.Contains(got.Detail, "08:00") {
+	if got := boardSchedule(stop); got.Label != "DEL TILL 23:59 FRI" || !strings.Contains(got.Detail, "08:00") {
 		t.Fatal(got)
 	}
 	encoded, _ := json.Marshal(datatruck.Load{Stops: []datatruck.LoadStop{stop}})
 	projected := boardStops(encoded)
-	if len(projected) != 1 || projected[0].Schedule.Label != "DEL 24/7 FRI" || projected[0].Latitude == nil || projected[0].ProviderID != 101555 {
+	if len(projected) != 1 || projected[0].Schedule.Label != "DEL TILL 23:59 FRI" || projected[0].Latitude == nil || projected[0].ProviderID != 101555 {
 		t.Fatal("schedule fields lost in import", string(encoded))
 	}
 	stop.ScheduleType = "appointment"
@@ -46,9 +46,10 @@ func TestBoardSchedules(t *testing.T) {
 		t.Fatal("unknown type inferred")
 	}
 	stop.ScheduleType = "window"
+	stop.ScheduledBeginTime = "23:00:00"
 	stop.ScheduledEndDate = "2026-10-17"
 	stop.ScheduledEndTime = "02:00:00"
-	if boardSchedule(stop).Label != "DEL 24/7 FRI" {
+	if boardSchedule(stop).Label != "DEL 02:00 SAT" {
 		t.Fatal("overnight window lost")
 	}
 	stop.ScheduledEndDate = "2026-10-15"
@@ -58,6 +59,117 @@ func TestBoardSchedules(t *testing.T) {
 	stop.ScheduledBeginDate = "2026-02-30"
 	if boardSchedule(stop).Label != "" {
 		t.Fatal("invalid date accepted")
+	}
+}
+
+func TestBoardWindowDeadlines(t *testing.T) {
+	for _, tc := range []struct{ name, begin, endDate, end, want string }{
+		{"Richard short pickup", "01:00:00", "2026-10-30", "02:00:00", "PU 02:00 FRI"},
+		{"six hours", "08:00:00", "2026-10-30", "14:00:00", "PU 14:00 FRI"},
+		{"late cutoff", "08:00:00", "2026-10-30", "23:00:00", "PU TILL 23:00 FRI"},
+		{"22 cutoff", "08:00:00", "2026-10-30", "22:00:00", "PU TILL 22:00 FRI"},
+		{"overnight short", "23:00:00", "2026-10-31", "02:00:00", "PU 02:00 SAT"},
+		{"all day", "00:00:00", "2026-10-30", "23:59:00", "PU 24/7 FRI"},
+		{"24 hours", "08:00:00", "2026-10-31", "08:00:00", "PU 24/7 FRI"},
+		{"multiple days", "08:00:00", "2026-11-01", "02:00:00", "PU 24/7 FRI"},
+		{"zero length", "02:00:00", "2026-10-30", "02:00:00", "PU 02:00 FRI"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stop := datatruck.LoadStop{StopType: "pickup", ScheduleType: "window", ScheduledBeginDate: "2026-10-30", ScheduledBeginTime: tc.begin, ScheduledEndDate: tc.endDate, ScheduledEndTime: tc.end}
+			if got := boardSchedule(stop); got.Label != tc.want {
+				t.Fatalf("got %+v, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func testNextPickupTimesDatabase(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {
+	t.Helper()
+	d, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Next Pickup Driver", PayType: "cpm", PayRate: 0.6, Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID) }()
+	_, err = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(99116,'NEXT-PICKUP','dispatched',0,0,'{"stops":[{"id":101556,"ordering":1,"stop_type":"pickup","schedule_type":"window","scheduled_begin_date":"2026-10-30","scheduled_begin_time":"01:00:00","scheduled_end_date":"2026-10-30","scheduled_end_time":"02:00:00","location":{"city":"Dallas","state":"TX"}}]}')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := repo.Loads(ctx, d.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Revision: view.Revision, Action: "add", Number: "NEXT-PICKUP"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	view = result.Loads
+	if len(view.Next) != 1 || view.Next[0].Stops[0].Schedule.Label != "PU 02:00 FRI" {
+		t.Fatalf("short next window: %+v", view)
+	}
+	plan, stop := view.Next[0].PlanID, view.Next[0].Stops[0].Key
+	edit := BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: view.Revision, Action: "stop_time", PlanID: plan, StopKey: stop, ManualStopTime: "03:00 FRI"}
+	bad := edit
+	bad.StopKey = "different-stop"
+	if _, err = repo.ChangeLoads(ctx, bad, ""); err != ErrBoardLoadSelection {
+		t.Fatal("wrong stop accepted", err)
+	}
+	bad = edit
+	bad.PlanID = "different-plan"
+	if _, err = repo.ChangeLoads(ctx, bad, ""); err != ErrBoardLoadSelection {
+		t.Fatal("wrong plan accepted", err)
+	}
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Loads.Current != nil || result.Entry.CurrentLoad != "" || result.Entry.ETA != "" || result.Loads.Next[0].Stops[0].Schedule.Label != "PU 03:00 FRI" {
+		t.Fatal("queue edit changed current load or lost time", result)
+	}
+	if _, err = repo.ChangeLoads(ctx, edit, ""); err != ErrDriverBoardConflict {
+		t.Fatal("stale edit accepted", err)
+	}
+	if result.Entry.UndoID == 0 {
+		t.Fatal("queued time edit missing audit receipt")
+	}
+	undone, err := repo.Undo(ctx, result.Entry.UndoID, d.ID, result.Entry.Version, "")
+	if err != nil {
+		t.Fatal("queued time undo failed", err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Next[0].Stops[0].Schedule.Label != "PU 02:00 FRI" || view.Next[0].Stops[0].ManualStopTime != "" {
+		t.Fatal("undo did not restore source schedule", err)
+	}
+	edit.Version, edit.Revision = undone.Version, view.Revision
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Source refresh and repeated reads retain the override without changing raw data.
+	_, err = pool.Exec(ctx, `UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{stops,0,scheduled_end_time}','"04:00:00"') WHERE id=99116`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit.Version, edit.Revision = result.Entry.Version, result.Loads.Revision
+	if _, err = repo.ChangeLoads(ctx, edit, ""); err != ErrBoardLoadSelection {
+		t.Fatal("source change did not fence queued time edit", err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Next[0].Stops[0].ManualStopTime != "03:00 FRI" {
+		t.Fatal("override lost on reload", err)
+	}
+	edit.Version, edit.Revision, edit.ManualStopTime = result.Entry.Version, view.Revision, ""
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil || result.Loads.Next[0].Stops[0].Schedule.Label != "PU 04:00 FRI" {
+		t.Fatal("clear did not restore updated source", err)
+	}
+	edit.Version, edit.Revision, edit.ManualStopTime = result.Entry.Version, result.Loads.Revision, "05:00 FRI"
+	result, err = repo.ChangeLoads(ctx, edit, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: result.Entry.Version, Revision: result.Loads.Revision, Action: "select", PlanID: plan}, "")
+	if err != nil || result.Loads.Automation.ManualStopTime != "05:00 FRI" || result.Loads.Automation.Appointment.Label != "PU 05:00 FRI" {
+		t.Fatal("promotion lost queued pickup override", err)
 	}
 }
 
@@ -238,7 +350,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Current == nil || view.Current.PlanID != "" || view.Automation == nil || view.Automation.Appointment == nil || view.Automation.Appointment.Label != "DEL 24/7 FRI" || view.Automation.StopType != "delivery" {
+	if view.Current == nil || view.Current.PlanID != "" || view.Automation == nil || view.Automation.Appointment == nil || view.Automation.Appointment.Label != "DEL TILL 23:59 FRI" || view.Automation.StopType != "delivery" {
 		t.Fatalf("unplanned resolution: %+v", view)
 	}
 	result, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: saved[0].Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: "14:00 SUN"}, "")
@@ -290,7 +402,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Loads.Automation.ManualStopTime != "" || result.Loads.Automation.Appointment.Label != "DEL 24/7 SAT" {
+	if result.Loads.Automation.ManualStopTime != "" || result.Loads.Automation.Appointment.Label != "DEL TILL 23:59 SAT" {
 		t.Fatal("clearing manual stop time did not restore DataTruck schedule", result.Loads.Automation)
 	}
 	var historyBefore, historyAfter int

@@ -515,7 +515,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Live travel is red; stale miles are amber. Routing assumptions remain server
   diagnostics. Load cards expose a rightmost read-only-compatible copy-number icon.
   Browser checks: `test-board-appointments.mjs`
-  and `test-status-board-layout.mjs`; database tests use the existing disposable
+  and `test-status-board-layout.mjs`; `test-board-pickup-times-e2e.mjs` uses
+  review-local with MSERP_REVIEW_ACCESS_FILE and MSERP_REVIEW_TEST_DATABASE_URL.
+  Database tests use the existing disposable
   `MSERP_DRIVER_BOARD_TEST_DATABASE_URL`.
 
 - `frontend/app/layout.tsx` and `components/AppShell.tsx`: session-aware global
@@ -661,7 +663,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Gross Board, but ordering is enabled only on Status Board.
   Status Board's Next load column shows only the first queued load, with its first
   pickup stop's source schedule label beside the number using the ETA PU format.
-  Clicking the cell still opens the full queue; missing schedules stay blank.
+  Windows under 24 hours show the facility-local closing time/day, with TILL for
+  cutoffs from 22:00 onward; full calendar days and windows of at least 24 hours
+  retain 24/7. The pickup time has a separate hover-highlighted editor using the
+  versioned stop_time action with explicit first-queued plan/stop keys. Clearing
+  restores the source schedule; overrides follow the imported load into current.
+  Clicking the number/rest of the cell opens the full queue. Known pickup stops
+  without schedules show PU — for manual entry; unresolved loads remain locked.
   Loads > Add next load saves an exact number in the audited load-state JSON,
   independently of Gross Board. Manual queue IDs persist across imports; cached
   unique number matches populate the same details and stop/progress controls.

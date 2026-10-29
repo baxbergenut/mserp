@@ -55,7 +55,17 @@ func boardSchedule(s datatruck.LoadStop) *BoardSchedule {
 			out.Reason = "Appointment window is incomplete or reversed"
 			return out
 		}
-		out.Label = fmt.Sprintf("%s 24/7 %s", prefix, strings.ToUpper(date.Format("Mon")))
+		begin, _ := time.Parse("2006-01-02 15:04:05", s.ScheduledBeginDate+" "+s.ScheduledBeginTime)
+		end, _ := time.Parse("2006-01-02 15:04:05", s.ScheduledEndDate+" "+s.ScheduledEndTime)
+		if end.Sub(begin) >= 24*time.Hour || (date.Equal(endDate) && clock.Format("15:04") == "00:00" && endClock.Format("15:04") == "23:59") {
+			out.Label = fmt.Sprintf("%s 24/7 %s", prefix, strings.ToUpper(date.Format("Mon")))
+		} else {
+			until := ""
+			if endClock.Hour() >= 22 {
+				until = "TILL "
+			}
+			out.Label = fmt.Sprintf("%s %s%s %s", prefix, until, endClock.Format("15:04"), strings.ToUpper(endDate.Format("Mon")))
+		}
 	default:
 		// Activate other provider enums only after their semantics are verified.
 		out.Reason = "Appointment type requires provider verification"
@@ -66,6 +76,25 @@ func boardSchedule(s datatruck.LoadStop) *BoardSchedule {
 		out.Detail = fmt.Sprintf("%s %s – %s %s (facility local time)", s.ScheduledBeginDate, s.ScheduledBeginTime, s.ScheduledEndDate, s.ScheduledEndTime)
 	}
 	return out
+}
+
+// Project overrides onto copies of stops so source snapshots and revision fences
+// retain the original provider schedule. The same identity follows a queued load
+// when it becomes current.
+func boardStopTimes(load BoardLoad, times map[string]string) BoardLoad {
+	load.Stops = append([]BoardStop{}, load.Stops...)
+	for i := range load.Stops {
+		stop := &load.Stops[i]
+		stop.ManualStopTime = times[boardCompletionKey(load)+"/"+stop.Key]
+		if stop.ManualStopTime != "" {
+			prefix := "PU"
+			if stop.Type == "delivery" {
+				prefix = "DEL"
+			}
+			stop.Schedule = &BoardSchedule{Kind: "manual", Label: prefix + " " + stop.ManualStopTime, Detail: "Manual stop time entered on Status Board"}
+		}
+	}
+	return load
 }
 
 func boardStopCoordinates(s datatruck.LoadStop) (*float64, *float64) {

@@ -42,7 +42,10 @@ remain refresh candidates. Source refresh never advances the current load.
 
 Read-only appointment text shares the ETA cell with editable travel information.
 The provider's explicit `appointment` type displays the local start time;
-`window` displays 24/7 under the team's shorthand convention. Full local window
+`window` displays the facility-local closing time and its weekday when shorter
+than 24 hours, including overnight windows. Closing times from 22:00 onward use
+`TILL` (for example `DEL TILL 23:00 FRI`). Full calendar days (00:00–23:59)
+and windows of at least 24 hours retain `24/7` with the start weekday. Full local window
 boundaries are preserved in Loads and the ETA editor. Live read-only sampling confirmed
 `appointment` with a start date/time and null ends, plus `window` with both ends.
 All-day ranges returned as `window` use the same formatting. Unknown provider
@@ -50,7 +53,18 @@ enums, incomplete/reversed windows and lone legacy timestamps do not produce an
 automatic label. Do not guess an all-day or exact classification from midnight.
 
 Fixture: load 4010927482, delivery stop 101555, local October 16, 2026,
-08:00–23:59, type window => `DEL 24/7 FRI`.
+08:00–23:59, type window => `DEL TILL 23:59 FRI`. A Friday pickup window of
+01:00–02:00 displays `PU 02:00 FRI`.
+
+The first queued load's pickup label is separately clickable and highlighted on
+hover/focus. Its popup saves/clears the manual pickup time through the existing
+audited `stop_time` action with explicit `planId` and `stopKey`. The server checks
+the board version, source revision, first queued load and first pickup stop;
+stale or changed targets are rejected. The load number and remaining cell open
+the queue. A known pickup without a source schedule shows `PU —`; unmatched loads
+cannot be edited. Overrides use the imported-load/stop identity, survive source
+refresh and promotion to current, and clearing restores the current source time.
+This action changes no current-load selection, ETA, progress or provider data.
 
 ## Arrival and manual input
 

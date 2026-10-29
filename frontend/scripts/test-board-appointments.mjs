@@ -21,6 +21,9 @@ const stop = { key: 'stop', type: 'delivery', location: 'Chicago, IL', latitude:
 const load = { planId: 'current', loadId: 65341, number: entry.currentLoad, stops: [stop], warning: '', date: '', slot: 0 };
 const loads = { current: load, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: true, sourceDestination: stop.location, stopKey: stop.key, revision: 'fixture', fromDate: '2026-10-17', automation: { context: 'context', appointment: schedule, manualStopTime: '', stopType: 'delivery', arrived: false, arrivalOverride: 'auto', observedAt: new Date().toISOString(), stale: false, travelMode: 'auto', travelValue: 'ETA 13:00', requiresConfirmation: false, routingEnabled: true, manualETAValid: true } };
 let readOnly = false;
+let nextSourceSchedule;
+let nextSaveError = false;
+let lastStopAction;
 loads.automation.travelArrivalAt = '2026-10-20T17:07:00Z';
 loads.automation.travelStale = false;
 loads.automation.reason = 'Last known miles remaining · GPS data stale · last observed · Assumed semi profile';
@@ -29,10 +32,19 @@ await page.route('**/api/**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname.slice(4);
   if (req.method() === 'PUT' && path === '/driver-board') { entry = { ...req.postDataJSON().entries[0], version: entry.version + 1 }; return route.fulfill({ json: [entry] }); }
   if (req.method() === 'POST' && path === '/driver-board/loads/driver') {
-    const { action, manualStopTime } = req.postDataJSON();
+    const { action, manualStopTime, planId, stopKey } = req.postDataJSON();
     if (action === 'stop_time') {
+      lastStopAction = req.postDataJSON();
+      if (planId) {
+        if (nextSaveError) return route.fulfill({ status: 409, json: { error: 'Load changed; refresh and try again' } });
+        const target = loads.next.find(load => load.planId === planId)?.stops.find(stop => stop.key === stopKey);
+        expect(target).toBeTruthy();
+        target.manualStopTime = manualStopTime;
+        target.schedule = manualStopTime ? { kind: 'manual', label: `PU ${manualStopTime}`, detail: 'Manual stop time entered on Status Board' } : nextSourceSchedule;
+      } else {
       loads.automation.manualStopTime = manualStopTime;
       loads.automation.appointment = manualStopTime ? { kind: 'manual', label: `DEL ${manualStopTime}`, detail: 'Manual stop time entered on Status Board' } : schedule;
+      }
     }
     entry.version++;
     return route.fulfill({ json: { entry, loads } });
@@ -51,14 +63,59 @@ try {
   loads.next = [nextLoad, { ...nextLoad, planId: 'next-2', number: 'NEXT-TWO' }, { ...nextLoad, planId: 'next-3', number: 'NEXT-THREE' }];
   await page.goto(base + '/driver-board');
   const nextCell = page.getByRole('button', { name: 'Appointment Driver · Next load', exact: true });
+  const pickupCell = page.getByRole('button', { name: 'Appointment Driver · Next pickup time', exact: true });
   await expect(page.getByRole('columnheader', { name: 'Next load', exact: true })).toHaveCount(1);
-  await expect(nextCell).toHaveText('NEXT-ONEPU 14:00 WED');
+  await expect(nextCell).toHaveText('NEXT-ONE');
+  await expect(pickupCell).toHaveText('PU 14:00 WED');
   await expect(nextCell).toHaveAttribute('title', `NEXT-ONE · ${pickup.detail}`);
-  const [numberBox, pickupBox] = await Promise.all([nextCell.locator('span').first().boundingBox(), nextCell.locator('span').last().boundingBox()]);
+  const [numberBox, pickupBox] = await Promise.all([nextCell.locator('span').first().boundingBox(), pickupCell.boundingBox()]);
   expect(pickupBox.x).toBeGreaterThan(numberBox.x + numberBox.width);
   nextLoad.stops[0].schedule = { kind: 'window', label: 'PU 24/7 THU', detail: '2026-10-22 00:00 – 23:59 (facility local time)' };
   await page.reload();
-  await expect(nextCell).toHaveText('NEXT-ONEPU 24/7 THU');
+  await expect(pickupCell).toHaveText('PU 24/7 THU');
+  nextSourceSchedule = { kind: 'window', label: 'PU 02:00 FRI', detail: '2026-10-30 01:00 – 02:00 (facility local time)' };
+  nextLoad.stops[0].schedule = nextSourceSchedule;
+  nextLoad.number = '4011032140';
+  await page.reload();
+  await expect(pickupCell).toHaveText('PU 02:00 FRI');
+  const beforeHover = await pickupCell.evaluate(el => getComputedStyle(el).backgroundColor);
+  await pickupCell.hover();
+  await expect.poll(() => pickupCell.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(beforeHover);
+  await pickupCell.click();
+  const pickupDialog = page.getByRole('dialog', { name: 'Appointment Driver · Next pickup time', exact: true });
+  await expect(pickupDialog).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Appointment Driver · Loads', exact: true })).toHaveCount(0);
+  await expect(pickupDialog.getByLabel('Miles left', { exact: true })).toHaveCount(0);
+  await pickupDialog.getByLabel('Manual pickup time', { exact: true }).fill('03:00 FRI');
+  await pickupDialog.getByRole('button', { name: 'Save time', exact: true }).click();
+  await expect(pickupCell).toHaveText('PU 03:00 FRI');
+  expect(lastStopAction.planId).toBe('next-1');
+  expect(lastStopAction.stopKey).toBe('next-pu');
+  expect(entry.currentLoad).toBe('4010927482');
+  expect(loads.automation.manualStopTime).toBe('');
+  await pickupDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.reload();
+  await pickupCell.click();
+  await expect(pickupDialog.getByLabel('Manual pickup time', { exact: true })).toHaveValue('03:00 FRI');
+  nextSaveError = true;
+  await pickupDialog.getByLabel('Manual pickup time', { exact: true }).fill('04:00 FRI');
+  await pickupDialog.getByRole('button', { name: 'Save time', exact: true }).click();
+  await expect(pickupDialog.getByRole('alert')).toBeVisible();
+  await expect(pickupCell).toHaveText('PU 03:00 FRI');
+  await expect(pickupDialog.getByLabel('Manual pickup time', { exact: true })).toHaveValue('04:00 FRI');
+  nextSaveError = false;
+  await pickupDialog.getByLabel('Manual pickup time', { exact: true }).fill('');
+  await pickupDialog.getByRole('button', { name: 'Save time', exact: true }).click();
+  await expect(pickupCell).toHaveText('PU 02:00 FRI');
+  await pickupDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await nextCell.click();
+  await expect(page.getByRole('dialog', { name: 'Appointment Driver · Loads', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close loads', exact: true }).click();
+  readOnly = true;
+  await page.reload();
+  await expect(pickupCell).toBeDisabled();
+  readOnly = false;
+  nextLoad.number = 'NEXT-ONE';
   nextLoad.stops = [{ ...stop, type: 'delivery' }];
   await page.reload();
   await expect(nextCell).toHaveText('NEXT-ONE');
@@ -129,5 +186,5 @@ try {
   const [copyBox, expandBox] = await Promise.all([copy.boundingBox(), expand.boundingBox()]);
   expect(copyBox.x).toBeGreaterThanOrEqual(expandBox.x + expandBox.width);
   expect(errors).toEqual([]);
-  console.log('Appointment board passed: rounded ETA, facility-local hover, live/stale colors, concise hover, manual overrides, read-only load-number copy, notes and permissions.');
+  console.log('Appointment board passed: next-pickup hover/editor, explicit plan/stop targeting, save/clear/reload/conflict recovery, queue access, permissions, rounded ETA, facility-local hover, live/stale colors, manual current-stop overrides and load-number copy.');
 } finally { await browser.close(); await new Promise(done => server.close(done)); }

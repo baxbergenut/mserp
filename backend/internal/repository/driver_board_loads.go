@@ -18,14 +18,15 @@ import (
 var ErrBoardLoadSelection = errors.New("load plans changed or the selection is unavailable; refresh Loads and review the current plans")
 
 type BoardStop struct {
-	ProviderID  int            `json:"providerId,omitempty"`
-	Latitude    *float64       `json:"latitude,omitempty"`
-	Longitude   *float64       `json:"longitude,omitempty"`
-	Schedule    *BoardSchedule `json:"schedule,omitempty"`
-	Key         string         `json:"key"`
-	Type        string         `json:"type"`
-	Location    string         `json:"location"`
-	Appointment string         `json:"appointment"`
+	ManualStopTime string         `json:"manualStopTime,omitempty"`
+	ProviderID     int            `json:"providerId,omitempty"`
+	Latitude       *float64       `json:"latitude,omitempty"`
+	Longitude      *float64       `json:"longitude,omitempty"`
+	Schedule       *BoardSchedule `json:"schedule,omitempty"`
+	Key            string         `json:"key"`
+	Type           string         `json:"type"`
+	Location       string         `json:"location"`
+	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
 	Manual       bool        `json:"manual,omitempty"`
@@ -507,6 +508,9 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		}{view, states[id], entries[id].Version})
 		hash := sha256.Sum256(raw)
 		view.Revision = hex.EncodeToString(hash[:])
+		for i := range view.Next {
+			view.Next[i] = boardStopTimes(view.Next[i], s.ManualStopTimes)
+		}
 		result[id] = view
 	}
 	if err := enrichBoardAutomation(ctx, tx, result, states); err != nil {
@@ -600,12 +604,31 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		s.Order = append(s.Order, planID)
 		s.OrderLabels = append(s.OrderLabels, number)
 	case "stop_time":
-		if view.Current == nil || view.Current.LoadID == nil || !view.DestinationSource || view.StopKey == "" || view.Automation == nil || view.Automation.Context == "" {
+		target, stopKey := view.Current, view.StopKey
+		if a.PlanID != "" {
+			// Only the visible first queued pickup is editable here. Explicit plan
+			// and stop keys prevent a reordered queue from editing another load.
+			if len(view.Next) == 0 || view.Next[0].PlanID != a.PlanID {
+				return result, ErrBoardLoadSelection
+			}
+			target, stopKey = &view.Next[0], a.StopKey
+			for _, stop := range target.Stops {
+				if stop.Type == "pickup" {
+					if stop.Key != stopKey {
+						return result, ErrBoardLoadSelection
+					}
+					break
+				}
+			}
+		} else if !view.DestinationSource || view.Automation == nil || view.Automation.Context == "" {
+			return result, ErrBoardLoadSelection
+		}
+		if target == nil || target.LoadID == nil || stopKey == "" {
 			return result, ErrBoardLoadSelection
 		}
 		found := false
-		for _, stop := range view.Current.Stops {
-			if stop.Key == view.StopKey && (stop.Type == "pickup" || stop.Type == "delivery") {
+		for _, stop := range target.Stops {
+			if stop.Key == stopKey && (stop.Type == "pickup" || (a.PlanID == "" && stop.Type == "delivery")) {
 				found = true
 				break
 			}
@@ -616,7 +639,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 		if s.ManualStopTimes == nil {
 			s.ManualStopTimes = map[string]string{}
 		}
-		key := boardCompletionKey(*view.Current) + "/" + view.StopKey
+		key := boardCompletionKey(*target) + "/" + stopKey
 		if value := strings.TrimSpace(a.ManualStopTime); value != "" {
 			s.ManualStopTimes[key] = value
 		} else {
