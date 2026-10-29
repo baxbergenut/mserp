@@ -32,19 +32,16 @@ export default function LoginPage() {
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(59,130,246,0.12),transparent_38%)]" />
     <div className="relative w-full max-w-sm animate-fade-in">
       <div className="mb-8 text-center">
-        <div className="mb-6 flex justify-center"><BrandLogo className="w-56" /></div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Sign in to Clustie</h1>
-        <p className="mt-2 text-sm text-zinc-500">Use your work email and password.</p>
+        <div className="flex justify-center"><BrandLogo className="w-56" /></div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800 bg-card p-6 shadow-2xl shadow-black/25">
         <fieldset disabled={submitting} className="space-y-5 disabled:opacity-60">
-          <label className="block space-y-2 text-sm text-zinc-300">Email or existing username<input name="email" autoComplete="username" autoFocus required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className={controlClass} /></label>
-          <label className="block space-y-2 text-sm text-zinc-300">Password<input name="password" type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={e => setPassword(e.target.value)} className={controlClass} /></label>
-          <label className="flex items-start gap-3 text-sm text-zinc-300"><input type="checkbox" checked={trust} onChange={e => setTrust(e.target.checked)} className="mt-1 accent-blue-500" /><span>Trust this device for 30 days<span className="mt-1 block text-xs text-zinc-500">Keep me signed in on this browser. Use only on a device you control.</span></span></label>
+          <input name="email" aria-label="Email" placeholder="Email" autoComplete="username" autoFocus required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className={controlClass} />
+          <input name="password" aria-label="Password" placeholder="Password" type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={e => setPassword(e.target.value)} className={controlClass} />
+          <label className="flex items-center gap-3 text-sm text-zinc-300"><input type="checkbox" checked={trust} onChange={e => setTrust(e.target.checked)} className="accent-blue-500" /><span>Trust this device for 30 days</span></label>
         </fieldset>
         {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-300" role="alert">{error}</p>}
         <button type="submit" disabled={submitting} className="flex h-11 w-full items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60">{submitting ? "Signing in…" : "Sign in"}</button>
-        <p className="text-center text-xs leading-5 text-zinc-500">Accounts are created by your administrator. Contact them for access or a password reset.</p>
       </form>
     </div>
   </main>;
