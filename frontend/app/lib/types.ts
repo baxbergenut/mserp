@@ -601,6 +601,8 @@ export interface DriverIntake {
   driver: {
     id: string;
     fullName: string;
+    firstName?: string;
+    lastName?: string;
     driverType: "company" | "owner_operator";
     hireDate: string;
     phone?: string;

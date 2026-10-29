@@ -20,6 +20,7 @@ const server=createServer(async(req,res)=>{
   const send=(data,code=200)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
   if(p.startsWith('/api/')){
    if(p.startsWith('/api/driver-intake/')&&req.method==='GET')intakeReads++;
+   if(p==='/api/auth/birthday')return send({celebrate:false,serverNow:new Date().toISOString()});
    if(p==='/api/lookups/investors')return send([{id:'00000000-0000-0000-0000-000000000001',fullName:'MS Express Inc.',isCompany:true,active:true}]);
    if(p==='/api/lookups/drivers')return send(drivers);
    if(['/api/lookups/trucks','/api/lookups/dispatchers'].includes(p))return send([]);
@@ -43,7 +44,7 @@ const server=createServer(async(req,res)=>{
    if(p==='/api/drivers'&&req.method==='GET')return send(drivers);
    if(p.startsWith('/api/drivers/')&&req.method==='GET')return send(drivers.find(d=>p.endsWith(d.id)));
    if(p==='/api/driver-intake/intake-1')return send({id:'intake-1',driver:{fullName:'Onboard Browser',hireDate:'2026-10-12',driverType:'company',phone:'5551234567',email:'onboard@example.test'},candidates:[]});
-   if(p==='/api/driver-intake/intake-2')return send({id:'intake-2',driver:{fullName:'Another Browser',hireDate:'2026-10-13',driverType:'company'},candidates:[]});
+   if(p==='/api/driver-intake/intake-2')return send({id:'intake-2',driver:{fullName:'Another Mary de la Cruz',firstName:'Another Mary',lastName:'de la Cruz',hireDate:'2026-10-13',driverType:'company'},candidates:[]});
    if(p.startsWith('/api/driver-services/')&&req.method==='GET')return send({...setups.get(p.split('/').at(-1)),checkedAt:new Date().toISOString()});
    let body='';for await(const c of req)body+=c;const input=body?JSON.parse(body):{};
    writes.push({path:p,input});
@@ -147,8 +148,9 @@ try{
  await page.goto(`${base}/drivers?setup=intake-1`);await expect(dialog).toHaveAttribute('aria-label','Set up Onboard Browser');
  await dialog.getByLabel('First name',{exact:true}).fill('Navigation draft');
  await page.evaluate(()=>window.history.pushState(null,'','/drivers?setup=intake-2'));
- await expect(dialog).toHaveAttribute('aria-label','Set up Another Browser');
- await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');
+ await expect(dialog).toHaveAttribute('aria-label','Set up Another Mary de la Cruz');
+ await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('Another Mary');
+ await expect(dialog.getByLabel('Last name',{exact:true})).toHaveValue('de la Cruz');
  await page.evaluate(()=>window.history.pushState(null,'','/drivers?setup=intake-1'));
  await expect(dialog).toHaveAttribute('aria-label','Set up Onboard Browser');
  await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');

@@ -173,8 +173,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   legacy full-name-only writers cannot overwrite confirmed parts. Existing names
   are never split automatically. Forms require both for new drivers; unrelated
   legacy profile edits can leave both unknown. Portal review saves both parts.
-  FleetScope's existing signed full-name-only hire contract remains unchanged;
-  its setup form requires a reviewed split, never guessed token positions.
+  FleetScope lifecycle/applicant webhooks accept optional paired `firstName`/
+  `lastName` alongside `fullName`. Hire intake retains the supplied parts and
+  prefills setup; legacy full-name-only events still require a reviewed split,
+  never guessed token positions. Deploy the receiver before the updated sender.
   Migration 114 adds optional truck `color` (maximum 30 characters). Truck forms
   and details expose it; omitted/null API input preserves an existing color,
   while an explicit empty string clears it. Portal batch submission saves the

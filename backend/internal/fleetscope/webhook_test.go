@@ -86,3 +86,36 @@ func TestTerminationValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitNameParts(t *testing.T) {
+	for _, kind := range []string{"driver.hired", "driver.terminated", "applicant.updated"} {
+		t.Run(kind, func(t *testing.T) {
+			for _, tc := range []struct {
+				first, last string
+				valid       bool
+			}{
+				{"", "", true}, // Legacy signed payloads remain valid.
+				{"Mary Jane", "de la Cruz", true},
+				{strings.Repeat("é", 50), "Name", true},
+				{"Mary", "", false}, {"", "Name", false},
+				{"Mary", strings.Repeat("é", 51), false},
+				{"Mary\n", "Name", false}, {"Mary", "\x00Name", false},
+			} {
+				e := Event{Version: 1, Type: kind, EventID: "00000000-0000-0000-0000-000000000001", CompanyID: "00000000-0000-0000-0000-000000000002", OccurredAt: time.Now()}
+				if kind == "applicant.updated" {
+					e.Applicant = &Applicant{ID: "00000000-0000-0000-0000-000000000003", FullName: "Mary Jane de la Cruz", FirstName: tc.first, LastName: tc.last, Status: "applied"}
+				} else {
+					e.Driver = Driver{ID: "00000000-0000-0000-0000-000000000003", FullName: "Mary Jane de la Cruz", FirstName: tc.first, LastName: tc.last}
+					if kind == "driver.hired" {
+						e.Driver.DriverType, e.Driver.HireDate = "company", "2026-09-28"
+					} else {
+						e.TerminationDate = "2026-01-01"
+					}
+				}
+				if err := e.Validate(); (err == nil) != tc.valid {
+					t.Fatalf("name parts validation: %v, want valid=%v", err, tc.valid)
+				}
+			}
+		})
+	}
+}

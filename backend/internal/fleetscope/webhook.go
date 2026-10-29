@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"mserp/internal/phone"
 )
@@ -38,6 +39,8 @@ func (o Options) Validate() error {
 type Driver struct {
 	ID             string `json:"id"`
 	FullName       string `json:"fullName"`
+	FirstName      string `json:"firstName,omitempty"`
+	LastName       string `json:"lastName,omitempty"`
 	Email          string `json:"email,omitempty"`
 	Phone          string `json:"phone,omitempty"`
 	DriverType     string `json:"driverType"`
@@ -54,6 +57,8 @@ type Driver struct {
 type Applicant struct {
 	ID            string `json:"id"`
 	FullName      string `json:"fullName"`
+	FirstName     string `json:"firstName,omitempty"`
+	LastName      string `json:"lastName,omitempty"`
 	Status        string `json:"status"`
 	HiredDriverID string `json:"hiredDriverId,omitempty"`
 }
@@ -95,6 +100,9 @@ func (e *Event) Validate() error {
 		a.ID = strings.ToLower(a.ID)
 		a.HiredDriverID = strings.ToLower(a.HiredDriverID)
 		a.FullName = strings.TrimSpace(a.FullName)
+		if err := validateNameParts(&a.FirstName, &a.LastName); err != nil {
+			return err
+		}
 		if len(a.FullName) == 0 || len(a.FullName) > 200 || strings.ContainsAny(a.FullName, "\x00\r\n") {
 			return errors.New("invalid applicant fullName")
 		}
@@ -118,6 +126,9 @@ func (e *Event) Validate() error {
 	if e.Applicant != nil || !uuidPattern.MatchString(e.Driver.ID) {
 		return errors.New("driver lifecycle requires a driver object only")
 	}
+	if err := validateNameParts(&e.Driver.FirstName, &e.Driver.LastName); err != nil {
+		return err
+	}
 	if e.Type == "driver.terminated" {
 		if e.Driver.FullName == "" {
 			return errors.New("fullName is required")
@@ -133,8 +144,8 @@ func (e *Event) Validate() error {
 			return errors.New("terminationDate cannot be in the future; send when termination takes effect")
 		}
 		// Termination is a minimal identity notification, not a profile update.
-		if e.Driver != (Driver{ID: e.Driver.ID, FullName: e.Driver.FullName}) {
-			return errors.New("terminated driver must contain only id and fullName")
+		if e.Driver != (Driver{ID: e.Driver.ID, FullName: e.Driver.FullName, FirstName: e.Driver.FirstName, LastName: e.Driver.LastName}) {
+			return errors.New("terminated driver must contain only id and name fields")
 		}
 		return nil
 	}
@@ -159,6 +170,23 @@ func (e *Event) Validate() error {
 	if e.Driver.LicenseExpires != "" {
 		if _, err := time.Parse(time.DateOnly, e.Driver.LicenseExpires); err != nil {
 			return errors.New("licenseExpires must use YYYY-MM-DD")
+		}
+	}
+	return nil
+}
+
+// Legacy immutable deliveries omit both parts; never infer a split from fullName.
+func validateNameParts(first, last *string) error {
+	if *first == "" && *last == "" {
+		return nil
+	}
+	for _, part := range []*string{first, last} {
+		if !utf8.ValidString(*part) || strings.ContainsAny(*part, "\x00\r\n") {
+			return errors.New("invalid name part")
+		}
+		*part = strings.TrimSpace(*part)
+		if *part == "" || utf8.RuneCountInString(*part) > 50 {
+			return errors.New("firstName and lastName must both contain 1–50 characters")
 		}
 	}
 	return nil
