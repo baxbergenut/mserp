@@ -24,7 +24,7 @@ export function TierMedal({ kind, row, rule }: { kind: "gross" | "rpm"; row: Dis
   }
   const basis = kind === "gross" ? `Full-week gross ${money(row.gross)}; adjusted gross ${money(row.adjustedGross)}.` : `Full-week RPM $${row.rpm.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}.`;
   const label = `${kind === "gross" ? "Gross" : "RPM"} tier ${index >= 0 ? index + 1 : "not qualified"}: ${requirement} ${basis}`;
-  const color = ["text-amber-600", "text-slate-300", "text-yellow-400"][index] ?? "text-blue-400";
+  const color = ["text-gray-400", "text-orange-500", "text-yellow-500"][index] ?? "text-blue-400";
   return <span title={label} aria-label={label} tabIndex={0} className="inline-flex items-center justify-center gap-1 rounded px-1 outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
     {index >= 0 ? <><Medal className={`h-4 w-4 ${color}`} aria-hidden="true" /><span className="font-mono tabular-nums">{index + 1}</span></> : <span className="text-zinc-500">—</span>}
   </span>;
