@@ -115,6 +115,10 @@ func applyPaySources(ctx context.Context, tx pgx.Tx, drivers, investors *DriverP
 		return err
 	}
 	week := drivers.WeekStart
+	vacation, err := readVacationWeek(ctx, tx, week)
+	if err != nil {
+		return err
+	}
 	// One explicit owner identity per driver, including owners with no current truck.
 	owners := map[string]string{}
 	activeDrivers := map[string]bool{}
@@ -199,6 +203,11 @@ func applyPaySources(ctx context.Context, tx pgx.Tx, drivers, investors *DriverP
 	sort.Strings(keys)
 	for _, key := range keys {
 		r := latest[key]
+		// Leave suspends collection as well as generation. Keep the ledger intact
+		// for return, but never resurrect a paused fee from a saved source or carry.
+		if strings.HasPrefix(r.Source, "truck_charge:") && vacation.trucks[r.Truck] {
+			continue
+		}
 		if _, ok := found[key]; ok {
 			continue
 		}

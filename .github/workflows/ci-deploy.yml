@@ -185,7 +185,9 @@ jobs:
         working-directory: frontend
         env:
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-        run: node scripts/test-investors-e2e.mjs
+        run: |
+          node scripts/test-investors-e2e.mjs
+          node scripts/test-investors-e2e.mjs --vacations-only
 
       - name: Verify driver teams in Chromium
         if: inputs.full_browser_tests == true

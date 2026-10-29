@@ -2415,6 +2415,17 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Working start dates and paginated payroll
 
+- Full Monday–Sunday vacation weeks use dated availability history in New York
+  through `payroll_vacations.go`. Gross Board and both payroll pages omit idle
+  vacation rows after routing/carry; actual loads, Shop layovers and frozen
+  statements remain accessible. Recurring truck phases and collection/carry
+  suggestions pause, then resume on actual return without vacation accrual.
+  Partial weeks retain fees. Available dated replacement/team operators keep
+  their truck eligible; idle driver-owned trucks follow the owner's leave.
+  No return-plan date changes eligibility, no schedules/ledgers are deleted,
+  and untracked legacy starts never rewrite older weeks. Verify
+  TestPayrollVacationsDatabase and `test-investors-e2e.mjs --vacations-only`.
+
 - Payroll latency diagnostics and the unresolved 300 ms p95 release gate are
   documented in `docs/PAYROLL_PERFORMANCE.md`. `TestPayrollPerformance` is opt-in
   with `MSERP_PAYROLL_PERF=1` and a disposable local `_test` database. Never use

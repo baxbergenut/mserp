@@ -103,6 +103,9 @@ func payrollSummaryOnly(ctx context.Context) bool {
 // hashing, and produce no expanded statements. Finalization always recalculates
 // full reports under the financial lock and compares this committed-input token.
 func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
+	if err := filterVacationPay(ctx, tx, kind, report); err != nil {
+		return err
+	}
 	if payrollSummaryOnly(ctx) {
 		for i, d := range report.Drivers {
 			report.Drivers[i] = summarizePayStatement(d)

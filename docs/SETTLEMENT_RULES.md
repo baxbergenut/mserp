@@ -98,6 +98,22 @@ later open weeks. Payment/category metadata cannot change a collected balance.
 
 ## Identity, activity and review
 
+Full vacation weeks do not generate or collect recurring truck fees. Determine
+Monday–Sunday eligibility from recorded availability transitions in New York
+calendar dates; partial vacation weeks keep their ordinary fee. Planned return
+dates do not end a vacation. Fees resume after an actual return, without adding
+missed vacation fees. Existing balances remain in their ledgers during leave.
+For trucks, all dated operators (including team members) must be on vacation;
+a working replacement keeps the truck eligible. An idle driver-owned truck
+without operators follows its recorded owner's vacation status.
+
+Gross Board, Driver Pay and Investor Pay omit idle full-vacation rows, including
+rows recreated by prior autosaves, installments, expenses or carried balances.
+Actual weekly loads, Shop layovers and finalized statements remain accessible;
+their presence does not restore recurring fees for a full vacation week.
+Historical vacation weeks remain exempt after return. Unknown legacy vacation
+starts apply from the current week, without inventing earlier leave dates.
+
 Driver activity and investor activity are independent. An inactive driver may
 remain an active investor; ownership alone does not create personal driving pay.
 Existing weekly work and saved personal statements remain historical records.

@@ -29,6 +29,7 @@ func payrollCostsOnly(ctx context.Context) bool {
 
 type payrollReadState struct {
 	tx          pgx.Tx
+	vacations   map[string]vacationWeek
 	charges     map[string][]byte
 	trucks      []byte
 	costs       []payCostRecord

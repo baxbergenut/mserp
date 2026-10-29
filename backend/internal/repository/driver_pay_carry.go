@@ -337,6 +337,13 @@ func currentDriverPayCosts(ctx context.Context, tx pgx.Tx, edits DriverPayEdits)
 			return d, nil
 		}
 	}
+	vacation, err := readVacationWeek(ctx, tx, edits.WeekStart)
+	if err != nil {
+		return DriverPayDriver{}, err
+	}
+	if vacation.drivers[edits.DriverID] {
+		return DriverPayDriver{}, chargeInvalid("This driver is on vacation for the full week and has no weekly work to settle")
+	}
 	// Notes can be added before a driver has loads or costs.
 	var d DriverPayDriver
 	err = tx.QueryRow(ctx, `SELECT id::text,pay_type,pay_rate::text,(driver_employment_type(id,$2::date+6)='owner_operator') FROM drivers WHERE id=$1`, edits.DriverID, edits.WeekStart).Scan(&d.ID, &d.PayType, &d.PayRate, &d.IsOwnerOperator)

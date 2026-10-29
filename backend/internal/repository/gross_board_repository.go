@@ -260,6 +260,23 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 	if err != nil {
 		return board, err
 	}
+	vacation, err := readVacationState(ctx, tx, board.WeekStart, false)
+	if err != nil {
+		return board, err
+	}
+	working := map[string]bool{}
+	for _, e := range board.Entries {
+		if !e.Deleted && (e.TransferOut || e.DayStatus == "" && strings.TrimSpace(e.LoadNumber) != "" || e.DayStatus == "SHOP") {
+			working[e.DriverID] = true
+		}
+	}
+	visible := []GrossBoardDriver{}
+	for _, d := range board.Drivers {
+		if !vacation.drivers[d.ID] || working[d.ID] {
+			visible = append(visible, d)
+		}
+	}
+	board.Drivers = visible
 	ids := make([]string, 0, len(board.Drivers))
 	for _, d := range board.Drivers {
 		ids = append(ids, d.ID)

@@ -204,6 +204,10 @@ const terminatedOwnerTruckChargesSQL = `EXISTS (
 // reports keep their existing accounting and ownership rules. Build a new slice
 // because payroll inputs may be reused for a different historical week.
 func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data TruckChargeData, week string) (TruckChargeData, error) {
+	vacation, err := readVacationWeek(ctx, q, week)
+	if err != nil {
+		return data, err
+	}
 	rows, err := q.Query(ctx, `SELECT t.id::text FROM trucks t `+truckOwnershipForWeekSQL+`
  WHERE `+terminatedOwnerTruckChargesSQL, week)
 	if err != nil {
@@ -223,7 +227,7 @@ func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data Truc
 	}
 	phases := make([]TruckChargePhase, 0, len(data.Phases))
 	for _, phase := range data.Phases {
-		if !stopped[phase.TruckID] {
+		if !stopped[phase.TruckID] && !vacation.trucks[phase.TruckID] {
 			phases = append(phases, phase)
 		}
 	}
