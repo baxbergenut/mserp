@@ -231,7 +231,7 @@ func boardStops(raw []byte) []BoardStop {
 }
 func terminalLoad(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "delivered", "completed", "cancelled", "canceled":
+	case "delivered", "completed", "invoiced", "cancelled", "canceled":
 		return true
 	}
 	return false
@@ -363,7 +363,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'
- OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','cancelled','canceled')
+ OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
  OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
 	if err != nil {

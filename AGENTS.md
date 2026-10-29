@@ -1111,6 +1111,8 @@ assignment lookup lists.
   Gross Board controls planned assignment;
   DataTruck driver mismatches warn instead of dropping or moving plans. Finished
   next loads remain inspectable; finished current loads are not auto-cleared.
+  DataTruck invoiced loads count as finished for queue eligibility and manual
+  queue refresh candidates; explicit current selections stay visible for review.
   Stops come from imported raw_payload. Only first pickup/final delivery inherit
   load-level appointments; ETA remains manually set in a compact cell-anchored
   popup with a date picker and optional time, shown on one line. New ETAs persist as YYYY-MM-DD or
@@ -2931,7 +2933,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   primary requests and weekly profit without recording raw query parameters.
 - Status Board `overview=1` omits historical/hidden load groups in GET/SSE;
   current/next loads, stops, automation and edit versions remain. Load dialogs
-  retain full details across overview updates and re-fetch before editing.
+  retain full details across overview updates and re-fetch on source revision/date
+  changes before editing. Identical snapshots do not refetch or lock controls;
+  background revalidation keeps the panel layout stable without a loading banner.
   `node scripts/test-status-board-loads.mjs` checks live refresh, history retention,
   failure/retry and close/reopen against isolated fixtures after a `/api` build.
   SSE coalesces short bursts and suppresses

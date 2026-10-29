@@ -30,7 +30,7 @@ func (r *LoadRepository) OperationalLoadIDs(ctx context.Context, from, until tim
  JOIN loads l ON lower(btrim(l.load_id))=lower(btrim(p->>'number'))
  WHERE NOT coalesce(s.payload->'hidden' ? (p->>'planId'),false)
  AND NOT coalesce(s.payload->'completed' ? ('plan:'||(p->>'planId')),false)
- AND lower(btrim(l.status)) NOT IN ('delivered','completed','cancelled','canceled')
+ AND lower(btrim(l.status)) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
  )
  SELECT l.id FROM loads l WHERE
  (l.pickup_time >= $1 AND l.pickup_time < $2) OR

@@ -98,6 +98,21 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if len(view().Next) != 1 || len(view().Week) != 1 {
 		t.Fatal("Gross Board duplicate")
 	}
+	// An old manual entry must not dispatch again after its source is invoiced.
+	exec(`UPDATE loads SET status=' Invoiced ' WHERE id=989001`)
+	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 {
+		t.Fatal("invoiced manual load remained upcoming", v)
+	}
+	ids, err = NewLoadRepository(pool).OperationalLoadIDs(ctx, now.AddDate(0, 0, -1), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		if id == 989001 {
+			t.Fatal("invoiced manual load remained an operational refresh candidate")
+		}
+	}
+	exec(`UPDATE loads SET status='Dispatched' WHERE id=989001`)
 	r = act(BoardLoadAction{Action: "hide", PlanID: planID})
 	if len(r.Loads.Next) != 0 || len(r.Loads.Hidden) != 1 {
 		t.Fatal("hide")
@@ -110,6 +125,11 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if r.Loads.SourceDestination != "Dallas, TX" || e.Status != "DISPATCHED" {
 		t.Fatal("current", r)
 	}
+	exec(`UPDATE loads SET status='invoiced' WHERE id=989001`)
+	if v = view(); v.Current == nil || v.Current.PlanID != planID || v.Current.Warning == "" || len(v.Next) != 0 {
+		t.Fatal("invoiced status must retain the explicit current selection for review", v)
+	}
+	exec(`UPDATE loads SET status='Dispatched' WHERE id=989001`)
 	act(BoardLoadAction{Action: "advance"})
 	if view().SourceDestination != "Boston, MA" {
 		t.Fatal("delivery")

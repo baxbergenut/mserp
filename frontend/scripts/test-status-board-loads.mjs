@@ -75,14 +75,29 @@ try {
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
   await expect(panel.getByText('Delivered or cancelled (1)', { exact: true })).toBeVisible();
 
-  // A same-revision overview must neither erase history nor leave editing locked.
+  // Identical live snapshots must not refetch, lock controls, or shift the panel.
   holdDetails = true;
   let before = detailReads;
   const beforeBoard = boardReads;
-  await push();
-  await expect.poll(() => detailReads).toBeGreaterThan(before);
+  const sequence = panel.getByRole('region', { name: 'Load sequence' });
+  const originalY = (await sequence.boundingBox()).y;
+  await page.evaluate(() => {
+    window.loadHistoryFlashes = 0;
+    window.loadHistoryObserver = new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.textContent?.includes('Loading load history')) window.loadHistoryFlashes++;
+      }
+    });
+    window.loadHistoryObserver.observe(document.body, { childList: true, subtree: true });
+  });
+  for (let i = 0; i < 3; i++) {
+    await push();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(destination).toBeEnabled();
+    expect((await sequence.boundingBox()).y).toBe(originalY);
+  }
+  expect(detailReads).toBe(before);
   await expect(history).toBeVisible();
-  await expect(destination).toBeDisabled();
   expect(boardReads).toBe(beforeBoard);
   release();
   await expect(destination).toBeEnabled();
@@ -97,6 +112,9 @@ try {
   await expect.poll(() => detailReads).toBeGreaterThan(before);
   await expect(history).toBeVisible();
   await expect(destination).toBeDisabled();
+  expect((await sequence.boundingBox()).y).toBe(originalY);
+  await expect(panel.getByText('Loading load history…', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => window.loadHistoryFlashes)).toBe(0);
   release();
   await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'CURRENT', exact: true })).toBeVisible();
@@ -121,6 +139,7 @@ try {
   // Closing cancels the detail consumer; a delayed response cannot replace a new panel.
   holdDetails = true;
   before = detailReads;
+  full = { ...full, revision: 'fourth' };
   await push();
   await expect.poll(() => detailReads).toBeGreaterThan(before);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();

@@ -31,10 +31,12 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   onChange: (id: string, view: Loads, action: BoardLoadAction) => Promise<Loads>;
   onClose: () => void; onHistory: () => void;
 }) {
-  const [details, setDetails] = useState({ initial, view: initial });
+  const sourceKey = `${initial.fromDate}:${initial.revision}`;
+  const overview = !!initial.detailsOmitted;
+  const [details, setDetails] = useState({ sourceKey, view: initial });
   const { view } = details;
   // Overview snapshots omit history; keep the full panel until its replacement arrives.
-  if (!initial.detailsOmitted && initial !== details.initial) setDetails({ initial, view: initial });
+  if (!overview && (view.detailsOmitted || sourceKey !== details.sourceKey)) setDetails({ sourceKey, view: initial });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [select, setSelect] = useState<BoardLoad | null>(null);
@@ -43,7 +45,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   const [expanded, setExpanded] = useState<string | null>(initial.current?.planId ?? null);
   const [expandedCurrent, setExpandedCurrent] = useState(initial.current?.planId ?? null);
   const panel = useRef<HTMLElement>(null);
-  const detailsPending = !!view.detailsOmitted || (!!initial.detailsOmitted && details.initial !== initial);
+  const detailsPending = !!view.detailsOmitted || sourceKey !== details.sourceKey;
   const locked = busy || waiting || detailsPending || !canEdit;
   const currentPlan = view.current?.planId ?? null;
   if (currentPlan !== expandedCurrent) { setExpandedCurrent(currentPlan); setExpanded(currentPlan); }
@@ -63,16 +65,16 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     document.addEventListener("keydown", keyboard); return () => document.removeEventListener("keydown", keyboard);
   }, [busy, onClose]);
   useEffect(() => {
-    if (!initial.detailsOmitted) return;
+    if (!overview) return;
     const controller = new AbortController();
     void fetchBoardLoads(driverId, undefined, controller.signal)
-      .then(value => { if (!controller.signal.aborted) { setDetails({ initial, view: value }); setError(""); } })
+      .then(value => { if (!controller.signal.aborted) { setDetails({ sourceKey, view: value }); setError(""); } })
       .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not load plans."); });
     return () => controller.abort();
-  }, [driverId, initial]);
+  }, [driverId, sourceKey, overview]);
   async function refresh() {
     setBusy(true); setError(""); setSelect(null); setClear(false);
-    try { setDetails({ initial, view: await fetchBoardLoads(driverId) }); }
+    try { setDetails({ sourceKey, view: await fetchBoardLoads(driverId) }); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not load plans."); }
     finally { setBusy(false); }
   }
@@ -81,7 +83,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     setBusy(true); setError("");
     try {
       const updated = await onChange(driverId, view, action);
-      setDetails({ initial, view: updated }); setSelect(null); setClear(false);
+      setDetails({ sourceKey, view: updated }); setSelect(null); setClear(false);
       if (action.action === "add") {
         setNumber("");
         setExpanded(updated.next.find(load => load.number.toLowerCase() === action.number?.toLowerCase())?.planId ?? null);
@@ -121,7 +123,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       <header className="flex items-center gap-2 border-b border-zinc-800 p-4"><h2 className="min-w-0 flex-1 truncate font-semibold text-zinc-100">{name} · Loads</h2><button className={buttonClass} onClick={onHistory} disabled={busy}><History className="inline h-3.5 w-3.5" /> History</button><button className={buttonClass} disabled={busy} aria-label="Close loads" onClick={onClose}><X className="h-4 w-4" /></button></header>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {waiting && <p className="text-xs text-amber-300">Wait for board edits to finish saving before changing loads.</p>}
-        {detailsPending && !error && <p role="status" className="text-xs text-zinc-400">Loading load history…</p>}
+        {view.detailsOmitted && !error && <p role="status" className="text-xs text-zinc-400">Loading load history…</p>}
         {view.resolutionWarning && <p role="status" className="text-xs text-amber-300">{view.resolutionWarning}</p>}
         {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
         {canEdit && <form className="space-y-2" onSubmit={event => {
