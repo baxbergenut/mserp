@@ -1,4 +1,4 @@
-// Package boardroutes implements opt-in, truck-only Google routing.
+// Package boardroutes implements opt-in, traffic-aware car-route ETA estimates.
 package boardroutes
 
 import (
@@ -16,29 +16,14 @@ import (
 	"time"
 )
 
-type VehicleInfo struct {
-	Height         int64         `json:"totalHeightMm,string"`
-	Length         int64         `json:"totalLengthMm,string"`
-	Width          int64         `json:"totalWidthMm,string"`
-	Weight         int64         `json:"totalWeightKg,string"`
-	TrailerInfo    []TrailerInfo `json:"trailerInfo"`
-	HazardousGoods []string      `json:"hazardousGoodsTypes"`
-}
-type TrailerInfo struct {
-	Length int64 `json:"lengthMm,string"`
-}
-type Profile struct {
-	LoadID     int         `json:"loadId"`
-	Trailer    string      `json:"trailer"`
-	ValidUntil time.Time   `json:"validUntil"`
-	Vehicle    VehicleInfo `json:"vehicleInfo"`
-}
+const TravelMode = "DRIVE"
+
+const EstimateAssumptions = "Traffic-aware car route estimate; truck restrictions, HOS and breaks are not included"
+
 type Options struct {
 	Enabled           bool
 	APIKey            string
 	SpeedUnit         string
-	Profiles          map[string]Profile
-	StandardSemi      bool
 	RequestsPerMinute int
 }
 
@@ -53,7 +38,7 @@ func LoadOptions() (Options, error) {
 	}
 	o.SpeedUnit = os.Getenv("FIVE_ELD_SPEED_UNIT")
 	if o.APIKey == "" || os.Getenv("BOARD_ROUTES_ACCESS_VERIFIED") != "true" || os.Getenv("BOARD_ROUTES_OPERATIONS_VERIFIED") != "true" || os.Getenv("FIVE_ELD_SPEED_VERIFIED") != "true" || (o.SpeedUnit != "mph" && o.SpeedUnit != "kph") {
-		return o, errors.New("board routes requires key, verified truck access/operations and verified mph/kph speed semantics")
+		return o, errors.New("board routes requires key, verified access/operations and verified mph/kph speed semantics")
 	}
 	if v := os.Getenv("BOARD_ROUTES_REQUESTS_PER_MINUTE"); v != "" {
 		n, e := strconv.Atoi(v)
@@ -62,40 +47,7 @@ func LoadOptions() (Options, error) {
 		}
 		o.RequestsPerMinute = n
 	}
-	o.StandardSemi = os.Getenv("BOARD_ROUTES_STANDARD_SEMI") == "true"
-	profileFile := strings.TrimSpace(os.Getenv("BOARD_ROUTES_PROFILES_FILE"))
-	if profileFile == "" && o.StandardSemi {
-		return o, nil
-	}
-	body, err := os.ReadFile(profileFile)
-	if err != nil {
-		return o, errors.New("board routes profiles file unavailable")
-	}
-	if err = json.Unmarshal(body, &o.Profiles); err != nil {
-		return o, errors.New("invalid board routes profiles JSON")
-	}
 	return o, nil
-}
-
-// StandardSemi is an explicitly enabled estimate profile, not measured fleet data.
-// The operator approved shared dimensions and an 80,000 lb gross-weight fallback.
-const StandardSemiAssumptions = "Assumed semi profile: 13 ft 6 in high, 102 in wide, 73 ft overall, 53 ft trailer, 80,000 lb total weight; hazmat restrictions not modeled"
-
-func (o Options) VehicleFor(truck string, load int, trailer string, now time.Time) (VehicleInfo, string, bool) {
-	if p, ok := o.Profiles[truck]; ok {
-		// An invalid explicit profile must not silently become a generic profile.
-		return p.Vehicle, "", p.Valid(load, trailer, now)
-	}
-	if !o.StandardSemi || load <= 0 {
-		return VehicleInfo{}, "", false
-	}
-	return VehicleInfo{Height: 4115, Width: 2591, Length: 22251, Weight: 36288,
-		TrailerInfo: []TrailerInfo{{Length: 16155}}, HazardousGoods: []string{}}, StandardSemiAssumptions, true
-}
-
-func (p Profile) Valid(load int, trailer string, now time.Time) bool {
-	v := p.Vehicle
-	return p.LoadID == load && p.Trailer == trailer && p.ValidUntil.After(now) && v.Height > 0 && v.Length > 0 && v.Width > 0 && v.Weight > 0 && len(v.TrailerInfo) > 0 && v.TrailerInfo[0].Length > 0 && v.HazardousGoods != nil
 }
 
 type Client struct {
@@ -116,9 +68,9 @@ type Estimate struct {
 	Meters   int
 }
 
-var ErrRouteUnavailable = errors.New("truck route unavailable or restrictions partially ignored")
+var ErrRouteUnavailable = errors.New("route unavailable")
 
-func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, vehicle VehicleInfo) (Estimate, error) {
+func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Estimate, error) {
 	c.mu.Lock()
 	now := time.Now()
 	at := c.next
@@ -140,17 +92,17 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, vehi
 	point := func(a, b float64) any {
 		return map[string]any{"location": map[string]any{"latLng": map[string]float64{"latitude": a, "longitude": b}}}
 	}
-	body, _ := json.Marshal(map[string]any{"origin": point(lat, lng), "destination": point(toLat, toLng), "travelMode": "TRUCK", "routingPreference": "TRAFFIC_AWARE_OPTIMAL", "routeModifiers": map[string]any{"vehicleInfo": vehicle}})
+	body, _ := json.Marshal(map[string]any{"origin": point(lat, lng), "destination": point(toLat, toLng), "travelMode": TravelMode, "routingPreference": "TRAFFIC_AWARE_OPTIMAL"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(body))
 	if err != nil {
 		return Estimate{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Goog-Api-Key", c.Options.APIKey)
-	req.Header.Set("X-Goog-FieldMask", "routes.duration,routes.distanceMeters,routes.travelAdvisory.routeRestrictionsPartiallyIgnored")
+	req.Header.Set("X-Goog-FieldMask", "routes.duration,routes.distanceMeters")
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return Estimate{}, errors.New("truck routing connection unavailable")
+		return Estimate{}, errors.New("routing connection unavailable")
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
@@ -164,15 +116,12 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, vehi
 		if res.StatusCode < 500 && res.StatusCode != 429 {
 			return Estimate{}, fmt.Errorf("%w: HTTP %d", ErrRouteUnavailable, res.StatusCode)
 		}
-		return Estimate{}, fmt.Errorf("truck routing returned HTTP %d", res.StatusCode)
+		return Estimate{}, fmt.Errorf("routing returned HTTP %d", res.StatusCode)
 	}
 	var response struct {
 		Routes []struct {
 			Duration string `json:"duration"`
 			Meters   *int   `json:"distanceMeters"`
-			Advisory struct {
-				Restricted bool `json:"routeRestrictionsPartiallyIgnored"`
-			} `json:"travelAdvisory"`
 		} `json:"routes"`
 	}
 	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil {
@@ -183,7 +132,7 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, vehi
 	}
 	r := response.Routes[0]
 	duration, err := time.ParseDuration(r.Duration)
-	if err != nil || duration < 0 || r.Meters == nil || *r.Meters < 0 || r.Advisory.Restricted {
+	if err != nil || duration < 0 || r.Meters == nil || *r.Meters < 0 {
 		return Estimate{}, ErrRouteUnavailable
 	}
 	return Estimate{Duration: duration, Meters: *r.Meters}, nil

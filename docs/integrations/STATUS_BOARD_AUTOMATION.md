@@ -119,12 +119,15 @@ load-state JSON and keyed by load and stop; switching stops does not copy a time
 to another stop. The input accepts up to 80 characters on one line so dispatchers
 can enter the local time and day in their own shorthand (for example, `14:00 MON`).
 
-## Opt-in Google truck routing
+## Opt-in Google car-route estimates
 
 Default off. No Google calls or speed-tracking calls are made until enabled.
-Google large-vehicle routing requires provisioned access; standard DRIVE/car
-routes are never substituted. Verify billing alerts, API key restrictions and
-actual truck-route accuracy before activation. Never put keys in browser variables.
+On October 29, 2026, the operator chose traffic-aware car routes for Status Board
+ETA estimates. Requests use DRIVE with TRAFFIC_AWARE_OPTIMAL and request only
+duration and distance. No truck dimensions, weight, restrictions, toll calculation
+or navigation directions are requested. These calls use Compute Routes Pro rather
+than the large-vehicle Enterprise SKU. Actual billing depends on the account's
+usage and pricing. Never put keys in browser variables.
 
 Server environment:
 
@@ -133,82 +136,47 @@ BOARD_ROUTES_ENABLED=false
 BOARD_ROUTES_API_KEY=...
 BOARD_ROUTES_ACCESS_VERIFIED=true
 BOARD_ROUTES_OPERATIONS_VERIFIED=true
-BOARD_ROUTES_STANDARD_SEMI=true
-# Optional measured per-truck overrides:
-# BOARD_ROUTES_PROFILES_FILE=/etc/mserp/board-route-profiles.json
 BOARD_ROUTES_REQUESTS_PER_MINUTE=30
 FIVE_ELD_SPEED_VERIFIED=true
 FIVE_ELD_SPEED_UNIT=mph
 ```
 
-`GOOGLE_ROUTING_API_TOKEN` is also accepted when `BOARD_ROUTES_API_KEY` is empty.
-Adding either key alone does not activate the worker; all verification and profile
-requirements below still apply. Keep real keys out of commits, including tracked
-development environment files.
+GOOGLE_ROUTING_API_TOKEN is also accepted when BOARD_ROUTES_API_KEY is empty.
+Adding either key alone does not activate the worker; verification flags, existing
+Five ELD configuration and verified mph/kph speed semantics remain required.
+Flags are operator attestations, not an API-access test. Legacy
+BOARD_ROUTES_STANDARD_SEMI and BOARD_ROUTES_PROFILES_FILE settings are ignored;
+car estimates do not require truck profiles. Keep real keys out of commits,
+including tracked development environment files.
 
-Enabling requires all verification flags, key, a readable profile file or explicit
-standard-semi opt-in, existing
-Five ELD configuration and an explicitly verified mph/kph speed unit. Flags are
-operator attestations, not an API-access test. No production activation is implied
-by deployment. Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached
-automatic values are disabled by the next worker pass. Manual entry remains usable.
-Matched selections with missing/invalid GPS still report routing as enabled and
-explain why an estimate is unavailable. A valid old GPS position can bootstrap
-road miles through the same paced Google worker without querying tracking data.
-Reuse an existing valid distance from that position; do not reroute an unchanged
-resting position on every poll. Fresh telemetry queues on the next minute pass
-without waiting for the old-position route's five-minute interval.
+Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached automatic values
+are disabled by the next worker pass. Manual entry remains usable. Matched
+selections with missing/invalid GPS still report routing as enabled and explain
+why an estimate is unavailable. Valid stale coordinates can bootstrap last-known
+road miles without querying tracking data or inventing movement.
 
-On October 18, 2026, the operator approved a shared estimate profile and confirmed
-Five ELD tracking speeds are mph. `BOARD_ROUTES_STANDARD_SEMI=true` uses assumed
-dimensions of 13 ft 6 in height, 102 in width, 73 ft overall length and a 53 ft
-trailer, with assumed 80,000 lb combined tractor/trailer/cargo weight. API metric
-values round up. Hazmat restrictions are not modeled. These assumptions remain
-in the server cache/diagnostics rather than the ETA/miles hover. This profile is for
-board travel estimates, not measured vehicle clearance or driver navigation.
-Live DataTruck list/detail samples (including load 8YX9221) did not expose any
-weight field; do not describe the fallback as DataTruck weight or use cargo-only
-weight as combined vehicle weight. No DataTruck refresh requests are added.
+The minute worker retains independent last-success times and route origins for
+each board truck/driver context. Routine routing requires BOTH 30 minutes since
+the last successful calculation AND at least one straight-line mile from that
+successful route origin. Skipped polls never reset either baseline. Movement is
+checked against shared cached Five ELD coordinates before any tracking request,
+then checked again against the actual tracking point before calling Google.
+Unchanged or sub-mile positions reuse the cached distance, even after a long rest.
 
-The optional profile file is keyed by local truck UUID. Each entry is reviewed for the
-specific imported numeric load record ID, current trailer number, and expiration.
-This prevents using historical dimensions/actual weight for a different load.
-An explicit entry overrides the shared profile; an invalid/expired explicit entry
-suppresses estimates rather than silently falling back. The shared profile follows
-the current context and requires no per-load file updates.
-Values below are illustrative, not fleet defaults:
+A changed load, selected stop, destination coordinates, assigned truck/crew/VIN
+or trailer bypasses the timer and movement threshold on the next minute pass.
+Changed contexts take queue priority over routine refreshes. The updated
+destination must still resolve to valid source coordinates; arbitrary text is
+not geocoded. Fresh movement of at least one mile can immediately replace a
+bootstrapped stale-position distance. Failed attempts retain a five-minute
+retry fence. Migration from old truck-route caches establishes a new DRIVE
+baseline once; no database migration is needed.
 
-```json
-{
-  "LOCAL-TRUCK-UUID": {
-    "loadId": 65341,
-    "trailer": "CURRENT-TRAILER-NUMBER",
-    "validUntil": "2026-10-20T00:00:00Z",
-    "vehicleInfo": {
-      "totalHeightMm": "4114",
-      "totalLengthMm": "21945",
-      "totalWidthMm": "2591",
-      "totalWeightKg": "32658",
-      "trailerInfo": [{ "lengthMm": "16154" }],
-      "hazardousGoodsTypes": []
-    }
-  }
-}
-```
-
-Review actual tractor/trailer dimensions, loaded weight and hazmat restrictions;
-an empty hazmat array explicitly means none. Profiles are loaded at server startup;
-restart after reviewed changes. Missing/expired/mismatched explicit attributes suppress the
-automatic estimate. No profile values are inferred from maintenance or truck color.
-
-The minute worker checks changed contexts immediately on its next pass and
-recalculates eligible estimates every five minutes. It processes least-recently
-attempted trucks first, within a forty-second run budget. Requests are serial,
-globally paced per active worker (default 30/minute, configurable 1–120), with
-fifteen-second Google timeouts and one-minute error/five-minute 429 cooldowns.
-Queue latency can exceed five minutes when fleet size/provider quotas exceed
-capacity; tune quotas only after reviewing costs. Five ELD requests reuse the
-client's roster identity cache; source mileage values are never rewritten.
+The worker has a forty-second run budget. Requests remain serial and globally
+paced per active worker (default 30/minute, configurable 1-120), with fifteen-second
+Google timeouts and one-minute error/five-minute 429 cooldowns. Queue capacity and
+provider errors can delay a refresh beyond the next minute pass. Five ELD requests
+reuse the client's roster identity cache; source mileage values are never rewritten.
 
 Distinct fresh tracking points establish moving at >=5 mph or >=100m movement.
 Stopped requires <=2 mph with movement under 100m for at least three minutes;
@@ -216,7 +184,7 @@ intermediate speeds retain the previous classification. Speed units are normaliz
 only after provider verification. Moving displays road miles remaining above 600
 miles, otherwise New York ETA from observation time plus routed duration. Exactly
 600 miles displays ETA; displayed miles round up. Stopped always displays road
-miles remaining. After ten minutes, show last-known road miles instead of ETA,
+miles remaining. GPS older than ten minutes shows last-known miles instead of ETA,
 regardless of the last movement classification. Preserve them through stale
 GPS/rest periods, with the provider observation time and stale warning on hover.
 If no route existed when the truck went offline, calculate distance from the
@@ -224,9 +192,11 @@ shared cached location. This never establishes stopped/ignition state, advances
 arrival, or produces an ETA from stale coordinates. New load/stop/truck contexts
 clear the old distance and route to the newly selected stop. A fresh stationary
 point after a long rest does not discard the last stopped state. Unknown fresh
-movement, missing/invalidated routes or partially ignored restrictions suppress
+movement or missing/invalidated routes suppress
 output. Temporary errors retain a prior valid distance with a hover warning;
-live moving ETAs expire after ten minutes. Results are fenced against the selected load/stop/source revision
+live moving ETAs remain valid between 30-minute refreshes while shared GPS is fresh,
+with a five-minute route-age grace period. Older routes show last-known miles.
+Results are fenced against the selected load/stop/source revision
 and current truck before committing.
 
 When enabled, a blank ETA displays the automatic estimate. Applying a manual
@@ -238,7 +208,10 @@ there is no explicit weather-forecast adjustment.
 ## Validation and operation
 
 Run repository Go tests, including TestBoardSchedules/TestArrivalEvidence/
-TestTrackingMotion and boardroutes tests. TestDriverBoardDatabase covers migration
+TestTrackingMotion, TestBoardTravelRefreshSchedule,
+TestBoardTravelFreshnessBetweenRefreshes and boardroutes tests.
+TestDriverBoardDatabase asserts paid/tracking request counts for stationary,
+sub-mile, timed refresh and changed-destination cases, and covers migration
 and fresh schema using MSERP_DRIVER_BOARD_TEST_DATABASE_URL, which must be a
 disposable local _test database. Browser checks after a /api frontend build:
 

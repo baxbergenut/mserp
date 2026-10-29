@@ -498,19 +498,24 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   are removed and legacy mode choices have no effect. Notes are never rewritten. Unique imported loads can
   resolve without Gross Board plans; entering a load is the operational assignment,
   even when DataTruck lists a different driver, without an extra confirmation.
-  A startup/minute cache-only GPS evaluator never advances progress. Google truck
-  routing is default off and requires explicit access/operations/speed verification
-  plus reviewed per-load/trailer truck profiles or explicit
-  `BOARD_ROUTES_STANDARD_SEMI=true` (operator-approved shared dimensions, assumed
-  80,000 lb gross; assumptions retained server-side, hazmat not modeled). Explicit
-  invalid profiles never fall back. DataTruck weight is absent in live samples.
-  Never substitute car routes.
+  A startup/minute cache-only GPS evaluator never advances progress. Google
+  routing is default off and requires explicit access/operations/speed verification.
+  The operator chose traffic-aware DRIVE/car estimates on October 29, 2026;
+  request only duration/distance, without truck restrictions or toll calculations.
+  Legacy `BOARD_ROUTES_STANDARD_SEMI`/`BOARD_ROUTES_PROFILES_FILE` are ignored.
+  Each truck context refreshes after 30 minutes AND one straight-line mile from
+  the last successful route origin. Skipped polls never reset either baseline.
+  Cached GPS gates tracking calls; the tracking origin is checked again before
+  Google. Load/stop/destination-coordinate/truck-context changes bypass both gates
+  on the next minute pass and take queue priority. Failed attempts back off five
+  minutes. Old truck-route caches establish a DRIVE baseline once.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
   Stale GPS displays amber last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
-  moving ETAs become last-known miles after ten minutes.
+  moving ETAs require GPS within ten minutes and a route within 35 minutes
+  (30-minute refresh plus five-minute queue grace), otherwise show last-known miles.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
   cell hover shows only facility-local ETA (offline coordinate timezone lookup).
