@@ -2895,7 +2895,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   primary requests and weekly profit without recording raw query parameters.
 - Status Board `overview=1` omits historical/hidden load groups in GET/SSE;
   current/next loads, stops, automation and edit versions remain. Load dialogs
-  fetch full details before editing. SSE coalesces short bursts and suppresses
+  retain full details across overview updates and re-fetch before editing.
+  `node scripts/test-status-board-loads.mjs` checks live refresh, history retention,
+  failure/retry and close/reopen against isolated fixtures after a `/api` build.
+  SSE coalesces short bursts and suppresses
   identical authorized snapshots while retaining invalidations and reconnects.
 - Inventory's optional `view=devices|supplies|locations` selects active-view
   collections; omission retains the full legacy response. Fuel and Tolls load
