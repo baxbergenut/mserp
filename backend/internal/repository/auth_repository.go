@@ -81,7 +81,7 @@ func (r *AuthRepository) CreatePasswordSession(ctx context.Context, u AuthUser, 
 	if _, err = tx.Exec(ctx, `INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) VALUES($1,$2,$3,$4)`, id, hash, csrf, expiry); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO user_login_activity(user_id,last_login_at) VALUES($1,now()) ON CONFLICT(user_id) DO UPDATE SET last_login_at=EXCLUDED.last_login_at`, id); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO user_login_activity(user_id,last_login_at,last_activity_at) VALUES($1,now(),now()) ON CONFLICT(user_id) DO UPDATE SET last_login_at=GREATEST(user_login_activity.last_login_at,EXCLUDED.last_login_at),last_activity_at=GREATEST(user_login_activity.last_activity_at,EXCLUDED.last_activity_at)`, id); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -90,7 +90,15 @@ func (r *AuthRepository) CreatePasswordSession(ctx context.Context, u AuthUser, 
 // Only the browser's session heartbeat updates presence; background SSE session
 // validation must not keep a closed or hidden browser online.
 func (r *AuthRepository) TouchSession(ctx context.Context, hash string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE auth_sessions SET last_seen_at=now() WHERE token_hash=$1 AND expires_at>now() AND (last_seen_at IS NULL OR last_seen_at<now()-interval '20 seconds')`, hash)
+	// Persist the same throttled heartbeat outside the session so logout,
+	// revocation and expired-session cleanup retain the last activity time.
+	_, err := r.pool.Exec(ctx, `WITH seen AS (
+		UPDATE auth_sessions SET last_seen_at=now()
+		WHERE token_hash=$1 AND expires_at>now() AND (last_seen_at IS NULL OR last_seen_at<now()-interval '20 seconds')
+		RETURNING user_id,last_seen_at,created_at
+	) INSERT INTO user_login_activity(user_id,last_login_at,last_activity_at)
+	SELECT user_id,created_at,last_seen_at FROM seen
+	ON CONFLICT(user_id) DO UPDATE SET last_activity_at=GREATEST(user_login_activity.last_activity_at,EXCLUDED.last_activity_at)`, hash)
 	return err
 }
 

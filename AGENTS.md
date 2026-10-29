@@ -1213,11 +1213,14 @@ assignment lookup lists.
   30-day lifetime; normal sessions use AUTH_SESSION_TTL. Password/account changes
   and explicit revocation invalidate every session, including remembered ones.
   Settings > Users shows Online for an active, unexpired session whose browser
-  session heartbeat was seen within two minutes; otherwise it shows last login in
-  New York time, or No login recorded when historical data is unavailable.
+  session heartbeat was seen within two minutes; otherwise Last activity shows
+  the latest browser heartbeat/login in New York time, or No activity recorded.
   Migration 117 stores durable successful logins in user_login_activity and adds
   auth_sessions.last_seen_at. Only GET /auth/session updates presence, using the
   shell's visible-tab 30-second checks; SSE validation never extends presence.
+  Migration 169 adds durable user_login_activity.last_activity_at, backfilled
+  from retained heartbeats or last login. Throttled heartbeat writes persist it
+  atomically with session presence; logout, expiry and revocation retain it.
   Users refreshes every 30 visible seconds and on focus. Activity does not change
   account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
@@ -2959,6 +2962,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   retain full details across overview updates and re-fetch on source revision/date
   changes before editing. Identical snapshots do not refetch or lock controls;
   background revalidation keeps the panel layout stable without a loading banner.
+  Deferred board dialogs supply local loading boundaries so cold module downloads
+  never hide the board or app shell. `node scripts/test-status-board-dialog-loading.mjs`
+  holds queue/pickup editor chunks to verify first-open and warm-reopen visibility.
   `node scripts/test-status-board-loads.mjs` checks live refresh, history retention,
   failure/retry and close/reopen against isolated fixtures after a `/api` build.
   SSE coalesces short bursts and suppresses

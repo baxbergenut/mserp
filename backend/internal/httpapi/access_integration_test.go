@@ -91,6 +91,16 @@ func TestAccessDatabase(t *testing.T) {
 				}
 				exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at,created_at) SELECT id,repeat('e',64),repeat('f',43),now()-interval '1 day',now()-interval '2 days' FROM app_users WHERE username='legacy'`)
 				exec(string(activity))
+				exec(`UPDATE auth_sessions SET last_seen_at=created_at+interval '1 hour'`)
+				lastActivity, e := os.ReadFile("../../sql/169_user_last_activity.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(lastActivity))
+				var activityBackfilled bool
+				if e = admin.QueryRow(ctx, `SELECT a.last_activity_at=s.last_seen_at FROM user_login_activity a JOIN auth_sessions s ON s.user_id=a.user_id`).Scan(&activityBackfilled); e != nil || !activityBackfilled {
+					t.Fatalf("existing heartbeat not preserved: %v", e)
+				}
 				exec(`ALTER TABLE app_roles ADD COLUMN dispatcher_role boolean NOT NULL DEFAULT false`)
 				profileMigration, e := os.ReadFile("../../sql/165_user_profiles_birthdays.sql")
 				if e != nil {
@@ -193,7 +203,7 @@ func TestAccessDatabase(t *testing.T) {
 			}
 			status(call("GET", "/loads", nil, nil, ""), 401)
 			status(call("GET", "/settings/access", nil, sessionCookie, ""), 200)
-			assertActivity := func(online bool, loginAt *time.Time) *time.Time {
+			assertActivity := func(online bool, loginAt *time.Time) repository.ManagedUser {
 				t.Helper()
 				activity := call("GET", "/settings/access", nil, sessionCookie, "")
 				status(activity, 200)
@@ -205,31 +215,49 @@ func TestAccessDatabase(t *testing.T) {
 					if user.ID != id {
 						continue
 					}
-					if user.Online != online || user.LastLoginAt == nil || (loginAt != nil && !user.LastLoginAt.Equal(*loginAt)) {
+					if user.Online != online || user.LastLoginAt == nil || user.LastActivityAt == nil || (loginAt != nil && !user.LastLoginAt.Equal(*loginAt)) {
 						t.Fatalf("unexpected login activity: %+v", user)
 					}
-					return user.LastLoginAt
+					return user
 				}
 				t.Fatal("admin missing from users")
-				return nil
+				return repository.ManagedUser{}
 			}
 			// A remembered session alone never means online. Browser checks mark
 			// activity; SSE validation and ordinary API reads do not extend it.
-			loginAt := assertActivity(false, nil)
+			createdActivity := assertActivity(false, nil)
+			if !createdActivity.LastActivityAt.Equal(*createdActivity.LastLoginAt) {
+				t.Fatal("successful login did not initialize activity")
+			}
+			// Simulate a long-lived login, then activity without signing in again.
+			exec(`UPDATE user_login_activity SET last_login_at=now()-interval '2 days',last_activity_at=now()-interval '2 days' WHERE user_id=$1`, id)
+			initial := assertActivity(false, nil)
+			loginAt := initial.LastLoginAt
 			status(call("GET", "/auth/session", nil, sessionCookie, ""), 200)
-			assertActivity(true, loginAt)
+			seen := assertActivity(true, loginAt)
+			if !seen.LastActivityAt.After(*initial.LastActivityAt) {
+				t.Fatal("heartbeat did not advance durable activity")
+			}
+			status(call("GET", "/auth/session", nil, sessionCookie, ""), 200)
+			if current := assertActivity(true, loginAt); !current.LastActivityAt.Equal(*seen.LastActivityAt) {
+				t.Fatal("heartbeat throttle did not cover durable activity")
+			}
 			exec(`UPDATE auth_sessions SET last_seen_at=now()-interval '3 minutes' WHERE user_id=$1`, id)
 			if _, e := repo.FindSessionByTokenHash(ctx, hashToken(sessionCookie.Value)); e != nil {
 				t.Fatal(e)
 			}
-			assertActivity(false, loginAt)
+			if current := assertActivity(false, loginAt); !current.LastActivityAt.Equal(*seen.LastActivityAt) {
+				t.Fatal("background session validation advanced activity")
+			}
 			status(call("GET", "/auth/session", nil, remembered.Result().Cookies()[0], ""), 200)
-			assertActivity(true, loginAt)
+			seen = assertActivity(true, loginAt)
 			status(call("POST", "/auth/logout", nil, remembered.Result().Cookies()[0], session.CSRFToken), 403)
 			var rememberedSession sessionResponse
 			_ = json.Unmarshal(remembered.Body.Bytes(), &rememberedSession)
 			status(call("POST", "/auth/logout", nil, remembered.Result().Cookies()[0], rememberedSession.CSRFToken), 204)
-			assertActivity(false, loginAt)
+			if current := assertActivity(false, loginAt); !current.LastActivityAt.Equal(*seen.LastActivityAt) {
+				t.Fatal("logout lost durable activity")
+			}
 			// Keep a second active session for the existing all-device revoke test.
 			remembered = login("admin@example.com", password, true)
 			status(remembered, 200)
@@ -321,6 +349,10 @@ func TestAccessDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			var beforeRevokeActivity time.Time
+			if e = admin.QueryRow(ctx, `SELECT last_activity_at FROM user_login_activity WHERE user_id=$1`, id).Scan(&beforeRevokeActivity); e != nil {
+				t.Fatal(e)
+			}
 			status(call("POST", "/settings/users/"+id+"/revoke", nil, sessionCookie, session.CSRFToken), 204)
 			status(call("GET", "/auth/session", nil, sessionCookie, ""), 401)
 			status(call("GET", "/auth/session", nil, remembered.Result().Cookies()[0], ""), 401)
@@ -329,16 +361,29 @@ func TestAccessDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			for _, user := range afterRevoke.Users {
-				if user.ID == id && (user.Online || user.LastLoginAt == nil) {
-					t.Fatal("revocation must clear presence and retain last login")
+				if user.ID == id && (user.Online || user.LastLoginAt == nil || user.LastActivityAt == nil || !user.LastActivityAt.Equal(beforeRevokeActivity)) {
+					t.Fatal("revocation must clear presence and retain login/activity")
 				}
 			}
 			if e = repo.CreatePasswordSession(ctx, beforeRevoke, hashToken("stale-login"), strings.Repeat("c", 43), time.Now().Add(time.Hour)); e != repository.ErrAuthRecordNotFound {
 				t.Fatalf("revocation raced stale login: %v", e)
 			}
 			// Session expiry is enforced in the database, independently of the browser.
+			var expiredActivity time.Time
+			if e = admin.QueryRow(ctx, `SELECT last_activity_at FROM user_login_activity WHERE user_id=$1`, viewerSession.User.ID).Scan(&expiredActivity); e != nil {
+				t.Fatal(e)
+			}
 			exec(`UPDATE auth_sessions SET expires_at=now()-interval '1 second'`)
 			status(call("GET", "/auth/session", nil, latestViewer.Result().Cookies()[0], ""), 401)
+			if e = repo.TouchSession(ctx, hashToken(latestViewer.Result().Cookies()[0].Value)); e != nil {
+				t.Fatal(e)
+			}
+			// A later login cleans expired sessions without erasing their activity.
+			status(login("admin@example.com", password, false), 200)
+			var retainedActivity time.Time
+			if e = admin.QueryRow(ctx, `SELECT last_activity_at FROM user_login_activity WHERE user_id=$1`, viewerSession.User.ID).Scan(&retainedActivity); e != nil || !retainedActivity.Equal(expiredActivity) {
+				t.Fatalf("expired-session cleanup lost activity: %v", e)
+			}
 			var count int
 			if e = admin.QueryRow(ctx, `SELECT count(*) FROM access_audit WHERE details::text LIKE '%'||$1||'%' OR details::text LIKE '%$2%'`, password).Scan(&count); e != nil || count != 0 {
 				t.Fatal("password material in audit")

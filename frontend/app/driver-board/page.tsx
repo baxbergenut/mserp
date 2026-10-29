@@ -20,7 +20,8 @@ import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
 import { LocationCell, formatCoordinates } from "./LocationCell";
-const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog));
+// Give each deferred dialog its own boundary so a cold download cannot hide AppShell.
+const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog), { loading: () => null });
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
 import { StatusCell } from "./StatusCell";
 import type { BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
@@ -28,12 +29,12 @@ import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/boa
 import { statuses, statusColor, previewCurrentLoad } from "./board";
 import { ETACell } from "./ETACell";
 import { useDriverBoard } from "./useDriverBoard";
-const BoardHistory = dynamic(() => import("./BoardHistory").then(m => m.BoardHistory));
+const BoardHistory = dynamic(() => import("./BoardHistory").then(m => m.BoardHistory), { loading: () => null });
 import { BoardFilter } from "@/app/components/management/BoardFilter";
 import { TrailerCell } from "./TrailerCell";
-const BoardLoads = dynamic(() => import("./BoardLoads").then(m => m.BoardLoads));
+const BoardLoads = dynamic(() => import("./BoardLoads").then(m => m.BoardLoads), { loading: () => null });
 import { CurrentLoadInput } from "./CurrentLoadInput";
-const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor));
+const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor), { loading: () => null });
 import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
 import { useDriverRowDrag } from "./useDriverRowDrag";

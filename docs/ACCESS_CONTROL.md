@@ -26,6 +26,8 @@ Viewers retain filters, sorting, date navigation, inspection, spreadsheet select
 
 The shell refreshes the session on navigation, focus, visibility changes, every 30 visible seconds and permission-denied responses. Access is versioned by user and role revisions. A changed revision cancels shared pending reads, rejects obsolete responses and remounts page state. Unwritable drafts/editors are discarded with a notice and their navigation blockers are removed. Rejected writes are not automatically replayed. Ordinary conflicts and network failures retain legitimate drafts. Backend checks remain authoritative on each request.
 
+Settings > Users shows Online when an active, unexpired session has a browser heartbeat within two minutes. Otherwise Last activity shows the latest recorded heartbeat or successful login in New York time. Migration 169 backfills retained heartbeats, falling back to the last known login when older activity is unavailable. Activity is persisted outside sessions and survives logout, expiry and revocation; background API/SSE validation does not advance it. An open visible tab sends heartbeats every 30 seconds, so Online indicates recent browser presence rather than proof of keyboard/mouse use.
+
 ## Migration and release
 
 Migration **112_permissions_v2.sql** and the matching fresh-install schema cut over together. Fleet grants map to operational directory actions; they grant no private details, documents or compensation. Financial capabilities derive from prior financial grants. Existing Accountant roles receive explicit accounting-verification access. Names and memberships remain intact. Invalid write-without-view actions are disabled instead of expanding visibility.
