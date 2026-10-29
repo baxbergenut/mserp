@@ -198,9 +198,11 @@ func (r *FleetRepository) StatusHistory(ctx context.Context, kind, id, track, st
 			return result, err
 		}
 	}
-	rows, err := r.pool.Query(ctx, `WITH periods AS (
+	rows, err := r.pool.Query(ctx, `WITH status_history AS MATERIALIZED (
+ SELECT * FROM fleet_status_history WHERE id<=$1 AND entity_kind=$2 AND entity_id=$3::uuid AND track<>'dispatch'
+ ), `+effectiveFleetStatusHistoryCTE+`, periods AS (
  SELECT h.*,lead(effective_at) OVER(PARTITION BY entity_kind,entity_id,track ORDER BY effective_at,id) AS ended_at
- FROM fleet_status_history h WHERE id<=$1
+ FROM effective_status_history h
  ) SELECT id,entity_kind,entity_id::text,entity_name,track,previous_status,status,effective_at,ended_at,recorded_at,actor_name,source,source_ref,related_truck_name,action_id,baseline,reason
  FROM periods WHERE entity_kind=$2 AND entity_id=$3::uuid AND track<>'dispatch'
  AND ($4='' OR track=$4) AND ($5='' OR status=$5)

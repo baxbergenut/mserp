@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -201,6 +202,84 @@ func TestPayrollVacationsDatabase(t *testing.T) {
 		v, err = readVacationWeek(ctx, pool, ChargeCurrentWeek())
 		if err != nil || !v.drivers[legacy] {
 			t.Fatal("legacy current vacation ignored", err)
+		}
+	})
+}
+
+func TestVacationStartCorrectionDatabase(t *testing.T) {
+	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string) {
+		exec := func(q string, args ...any) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, q, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		id := func(q string, args ...any) string {
+			t.Helper()
+			var value string
+			if err := pool.QueryRow(ctx, q, args...).Scan(&value); err != nil {
+				t.Fatal(err)
+			}
+			return value
+		}
+		driver := id(`INSERT INTO drivers(full_name,normalized_name,status,pay_type,pay_rate,hire_date) VALUES('Late vacation','late vacation','vacation','gross_percentage',88,'2026-09-01') RETURNING id::text`)
+		owner := id(`INSERT INTO investors(full_name,driver_id) VALUES('Late vacation',$1) RETURNING id::text`, driver)
+		truck := id(`INSERT INTO trucks(unit_number,owner_id) VALUES('LATE-VACATION',$1) RETURNING id::text`, owner)
+		exec(`UPDATE truck_ownership_history SET assigned_at='2026-09-01',start_known=true WHERE truck_id=$1`, truck)
+		exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-09-01')`, truck, driver)
+		typ := id(`INSERT INTO driver_charge_types(name,direction,amount,amounts) VALUES('Late vacation fee','charge',100,ARRAY[100]::numeric[]) RETURNING id::text`)
+		exec(`INSERT INTO truck_charge_phases(truck_id,type_id,week_start,amount,included) VALUES($1,$2,'2026-09-21',100,true)`, truck, typ)
+		exec(`INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,recorded_at,actor_name,source,baseline)
+ VALUES('driver',$1,'Late vacation','availability','','active','2026-10-22 12:25-04','2026-10-22 12:25-04','System','activation',true)`, driver)
+		original := id(`INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,recorded_at,actor_name,source)
+ VALUES('driver',$1,'Late vacation','availability','active','vacation','2026-10-26 13:58-04','2026-10-26 13:58-04','Test','profile') RETURNING id::text`, driver)
+		week, _ := time.Parse(time.DateOnly, "2026-10-19")
+		pay, fleet, board := NewDriverPayRepository(pool), NewFleetRepository(pool), NewGrossBoardRepository(pool)
+		before, err := pay.GetDriverWeek(ctx, week, driver)
+		if err != nil || len(before.Drivers) != 1 {
+			t.Fatalf("late entry did not reproduce prior-week fee row: %+v %v", before, err)
+		}
+		correction := id(`INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,actor_name,source,source_ref,reason)
+ VALUES('driver',$1,'Late vacation','availability','active','vacation','2026-09-26 00:00-04','User-confirmed operator','operator_correction',$2,'Actual vacation began September 26, not October 26') RETURNING id::text`, driver, original)
+		for _, date := range []string{"2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26"} {
+			w, _ := time.Parse(time.DateOnly, date)
+			r, e := pay.GetDriverWeek(ctx, w, driver)
+			if e != nil || len(r.Drivers) != 0 {
+				t.Fatalf("corrected vacation week %s retained payroll/fees: %+v %v", date, r, e)
+			}
+			b, e := board.Get(ctx, w)
+			if e != nil {
+				t.Fatal(e)
+			}
+			for _, d := range b.Drivers {
+				if d.ID == driver {
+					t.Fatal("corrected vacation retained Gross Board row", date)
+				}
+			}
+		}
+		history, err := fleet.StatusHistory(ctx, "driver", driver, "availability", "", "", "", 1, 0)
+		if err != nil || len(history.Items) != 1 || history.Items[0].Source != "operator_correction" || !history.Items[0].EffectiveAt.Equal(time.Date(2026, 9, 26, 4, 0, 0, 0, time.UTC)) {
+			t.Fatalf("corrected profile history: %+v %v", history, err)
+		}
+		snapshot, err := strconv.ParseInt(original, 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old, err := fleet.StatusHistory(ctx, "driver", driver, "availability", "", "", "", 1, snapshot)
+		if err != nil || len(old.Items) != 2 {
+			t.Fatalf("correction changed an earlier pagination snapshot: %+v %v", old, err)
+		}
+		var count int
+		if err = pool.QueryRow(ctx, `SELECT count(*) FROM fleet_status_history WHERE entity_id=$1 AND track='availability'`, driver).Scan(&count); err != nil || count != 3 {
+			t.Fatal("correction rewrote immutable originals", count, err, correction)
+		}
+		// A real subsequent return still wins; only the referenced late entry and
+		// unknown baseline are superseded by this explicit correction.
+		exec(`INSERT INTO fleet_status_history(entity_kind,entity_id,entity_name,track,previous_status,status,effective_at,actor_name,source)
+ VALUES('driver',$1,'Late vacation','availability','vacation','active','2026-10-23 00:00-04','Test','profile')`, driver)
+		v, err := readVacationWeek(ctx, pool, "2026-10-19")
+		if err != nil || v.drivers[driver] {
+			t.Fatal("correction hid a real later availability transition", err)
 		}
 	})
 }

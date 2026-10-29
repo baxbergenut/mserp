@@ -27,16 +27,18 @@ func readVacationState(ctx context.Context, q chargeQuery, week string, includeT
 		}
 	}
 	v := vacationWeek{drivers: map[string]bool{}, trucks: map[string]bool{}}
-	query := `WITH vacation_drivers AS MATERIALIZED (
+	query := `WITH status_history AS MATERIALIZED (
+ SELECT * FROM fleet_status_history WHERE entity_kind='driver' AND track='availability'
+), ` + effectiveFleetStatusHistoryCTE + `, vacation_drivers AS MATERIALIZED (
  SELECT d.id FROM drivers d
- WHERE coalesce((SELECT h.status FROM fleet_status_history h
+ WHERE coalesce((SELECT h.status FROM effective_status_history h
    WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability'
    AND h.effective_at < (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
    ORDER BY h.effective_at DESC,h.id DESC LIMIT 1),
    CASE WHEN $1::date>=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date
-   AND NOT EXISTS(SELECT 1 FROM fleet_status_history h WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability')
+   AND NOT EXISTS(SELECT 1 FROM effective_status_history h WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability')
    THEN d.availability_status ELSE 'active' END)='vacation'
- AND NOT EXISTS(SELECT 1 FROM fleet_status_history h
+ AND NOT EXISTS(SELECT 1 FROM effective_status_history h
    WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability' AND h.status<>'vacation'
    AND h.effective_at >= (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
    AND h.effective_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))

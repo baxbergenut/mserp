@@ -134,7 +134,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				// This intentionally partial migration fixture omits fleet operations;
 				// payroll now also reads availability and its dated history.
 				exec(`ALTER TABLE drivers ADD COLUMN availability_status text NOT NULL DEFAULT 'active';
- CREATE TABLE fleet_status_history(id bigint,entity_kind text,entity_id uuid,track text,status text,effective_at timestamptz);
+ CREATE TABLE fleet_status_history(id bigint,entity_kind text,entity_id uuid,track text,status text,effective_at timestamptz,recorded_at timestamptz,source text,source_ref text,baseline boolean);
  GRANT SELECT ON fleet_status_history TO mserp_app;`)
 				// Current payroll also reads durable owner-driver offboarding evidence.
 				body, readErr := os.ReadFile("../../sql/148_termination_truck_actions.sql")

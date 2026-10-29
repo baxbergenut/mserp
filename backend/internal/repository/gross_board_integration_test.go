@@ -84,7 +84,7 @@ func TestGrossBoardDatabase(t *testing.T) {
  CREATE FUNCTION `+functionSchema+`.payroll_driver_at`+teamFunction); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `CREATE TEMP TABLE fleet_status_history(id bigint,entity_kind text,entity_id uuid,track text,status text,effective_at timestamptz);
+	if _, err = pool.Exec(ctx, `CREATE TEMP TABLE fleet_status_history(id bigint,entity_kind text,entity_id uuid,track text,status text,effective_at timestamptz,recorded_at timestamptz,source text,source_ref text,baseline boolean);
  ALTER TABLE pg_temp.drivers ADD COLUMN availability_status text NOT NULL DEFAULT 'active';
  CREATE FUNCTION `+functionSchema+`.fleet_status_lock() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
  CREATE FUNCTION `+functionSchema+`.fleet_status_enabled() RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;

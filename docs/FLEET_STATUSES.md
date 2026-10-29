@@ -125,7 +125,11 @@ separately from restriction notes and the map's selected provider.
 
 History retains actor/name/source/reason snapshots, action ID, effective and
 recorded times. Migration baselines have unknown earlier starts. GETs/no-ops add
-no events. Database triggers synchronize assignments, employment, current teams,
+no events. Reviewed operator date corrections append `source=operator_correction`
+events with the original history ID in `source_ref`. Effective history and vacation
+eligibility replace that event and superseded unknown baselines, retaining the
+original immutable rows. History pagination applies corrections only within its
+recorded snapshot; genuine subsequent transitions still apply. Database triggers synchronize assignments, employment, current teams,
 profiles, board and work orders under the fleet status transaction lock. The
 cache-only minute worker catches team date changes without advancing loads.
 New writers acquire setBoardActor before row locks.

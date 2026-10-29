@@ -2442,6 +2442,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   and untracked legacy starts never rewrite older weeks. Verify
   TestPayrollVacationsDatabase and `test-investors-e2e.mjs --vacations-only`.
 
+- Reviewed historical status-date corrections append operator_correction history
+  events referencing the original event ID in source_ref. Shared effective history
+  supersedes that event and crossed unknown activation baselines without changing
+  immutable originals or genuine later transitions. Profile history snapshots and
+  weekly vacation calculations share this rule. Verify TestVacationStartCorrectionDatabase.
+
 - Payroll latency diagnostics and the unresolved 300 ms p95 release gate are
   documented in `docs/PAYROLL_PERFORMANCE.md`. `TestPayrollPerformance` is opt-in
   with `MSERP_PAYROLL_PERF=1` and a disposable local `_test` database. Never use
