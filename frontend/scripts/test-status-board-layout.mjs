@@ -136,7 +136,7 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-docked.png') });
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await setup(mobile);
-  await mobile.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await expect(mobile.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await mobile.locator('[data-scroll-key="driver-board"]').evaluate(area => {
     const point = y => new Touch({ identifier: 1, target: area, clientX: 180, clientY: y });
