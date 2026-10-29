@@ -73,6 +73,7 @@ type FiveELDBoardSummary struct {
 }
 
 type DriverBoard struct {
+	PendingDrivers          []BoardPendingDriver  `json:"pendingDrivers"`
 	StatusSyncEnabled       bool                  `json:"statusSyncEnabled"`
 	DriverOrderRevisions    map[string]string     `json:"driverOrderRevisions"`
 	DispatcherOrderRevision string                `json:"dispatcherOrderRevision"`
@@ -222,7 +223,37 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 			e.ETA = ""
 		}
 	}
+	result.PendingDrivers, err = readBoardPendingDrivers(ctx, tx)
+	if err != nil {
+		return result, err
+	}
 	return result, tx.Commit(ctx)
+}
+
+type BoardPendingDriver struct {
+	IntakeID string `json:"intakeId"`
+	FullName string `json:"fullName"`
+}
+
+func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriver, error) {
+	result := []BoardPendingDriver{}
+	visible, err := systemTaskVisible(ctx, tx, "driver_onboarding", false)
+	if err != nil || !visible {
+		return result, err
+	}
+	rows, err := tx.Query(ctx, `SELECT id,coalesce(driver_data->>'fullName','') FROM fleetscope_driver_intake WHERE completed_at IS NULL AND terminated_at IS NULL ORDER BY lower(driver_data->>'fullName'),id`)
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d BoardPendingDriver
+		if err = rows.Scan(&d.IntakeID, &d.FullName); err != nil {
+			return result, err
+		}
+		result = append(result, d)
+	}
+	return result, rows.Err()
 }
 
 func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {

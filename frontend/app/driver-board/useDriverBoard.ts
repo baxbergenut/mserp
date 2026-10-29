@@ -121,15 +121,25 @@ export function useDriverBoard(lockedDriverId?: string) {
     setChanges(result);
   }, [canEdit]);
 
-  async function reorderDrivers(driverId: string, targetDriverId: string, after: boolean, revision: string) {
-    if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) return;
+  async function reorderDrivers(driverId: string, targetDriverId: string, after: boolean, revision: string, destination?: string) {
+    if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) throw new Error("Finish the current save before moving a driver.");
     const driver = board?.drivers.find(d => d.id === driverId);
     const target = board?.drivers.find(d => d.id === targetDriverId);
-    if (!driver || !target || driverId === targetDriverId || driver.dispatcherId !== target.dispatcherId) return;
+    const targetDispatcherId = destination ?? target?.dispatcherId;
+    if (!driver || targetDispatcherId === undefined || driverId === targetDriverId) throw new Error("The driver list changed. Reload the board and try again.");
+    const transfer = driver.dispatcherId !== targetDispatcherId;
     orderSavingRef.current = true;
     setOrderSaving(true);
     try {
-      const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision });
+      const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision,
+        ...(transfer ? { targetDispatcherId, targetRevision: board?.driverOrderRevisions[targetDispatcherId] } : {}) });
+      if (transfer) {
+        // Reconcile group metadata and assignment-dependent values from the API.
+        // The write succeeded even if this follow-up read fails; SSE can recover.
+        try { setBoard(await fetchDriverBoard(currentChargeWeek())); }
+        catch { setRefreshError("Assignment saved. Refresh the board to see the latest groups."); }
+        return;
+      }
       setBoard(current => {
         if (!current || current.driverOrderRevisions?.[result.dispatcherId] !== revision) return current;
         const ranks = new Map(result.driverIds.map((id, i) => [id, i]));

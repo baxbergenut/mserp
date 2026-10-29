@@ -1,3 +1,4 @@
+import { runStatusBoardOrderE2E } from './status-board-order-e2e.mjs';
 import { runDriverSetupE2E } from "./driver-setup-e2e.mjs";
 import { runPayrollVacationsE2E } from './payroll-vacations-e2e.mjs';
 import { runPayrollOverrideE2E } from "./payroll-override-e2e.mjs";
@@ -120,6 +121,24 @@ try {
     await runDriverSetupE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--gross-live-only')) {
     await runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetworkLatency});
+  } else if (process.argv.includes('--board-order-only')) {
+    const session = await (await page.request.get(`${base}/api/auth/session`)).json();
+    const headers = { 'X-CSRF-Token': session.csrfToken };
+    sql(`SET search_path TO ${schema},public;
+      INSERT INTO app_roles(name,permissions) VALUES('Board order viewer',ARRAY['driver_board.read']);
+      INSERT INTO app_users(username,email,password_hash,role_id) SELECT 'Order Viewer','order-viewer@example.com',crypt('${password}',gen_salt('bf')),id FROM app_roles WHERE name='Board order viewer';`);
+    const context = await browser.newContext();
+    try {
+      const viewer = await context.newPage();
+      await viewer.goto(`${base}/login`);
+      await viewer.getByLabel('Email',{exact:true}).fill('order-viewer@example.com');
+      await viewer.getByLabel('Password',{exact:true}).fill(password);
+      await viewer.getByRole('button',{name:'Sign in',exact:true}).click();
+      await expect(viewer.getByRole('heading',{name:'Status Board',exact:true})).toBeVisible();
+      const today = new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
+      await runStatusBoardOrderE2E({page,viewer,base,sql,schema,headers,temp,week:date.toISOString().slice(0,10)});
+    } finally { await context.close(); }
   } else if (process.argv.includes('--board-only')) {
     await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });
   } else if (process.argv.includes('--teams-only')) {

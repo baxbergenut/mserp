@@ -107,6 +107,64 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("unassigned reorder", err)
 	}
 	defer pool.Exec(ctx, `DELETE FROM driver_board_driver_order WHERE dispatcher_key=''`)
+	// Cross-group drops preserve prior history and become effective now, with
+	// source/destination roster fences and no duplicate history on stale replay.
+	b = get()
+	destination := dispatcher
+	transfer := DriverBoardOrderAction{DispatcherID: "", DriverID: ids[0], TargetDriverID: ids[2], TargetDispatcherID: &destination, Revision: b.DriverOrderRevisions[""], TargetRevision: b.DriverOrderRevisions[dispatcher]}
+	var previousStart time.Time
+	if err = pool.QueryRow(ctx, `SELECT assigned_at FROM driver_dispatcher_assignments WHERE driver_id=$1 AND unassigned_at IS NULL`, ids[0]).Scan(&previousStart); err != nil {
+		t.Fatal(err)
+	}
+	var actor string
+	if err = pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash,role_id) SELECT 'Board mover',crypt('test-only-password',gen_salt('bf')),id FROM app_roles WHERE system_role LIMIT 1 RETURNING id`).Scan(&actor); err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Exec(ctx, `DELETE FROM app_users WHERE id=$1`, actor)
+	beforeMove := time.Now()
+	result, err = repo.ReorderDrivers(ctx, transfer, actor)
+	if err != nil {
+		t.Fatal("cross-group drop", err)
+	}
+	if !slices.Equal(result.DriverIDs, []string{ids[0], ids[2], added}) {
+		t.Fatal("destination placement", result)
+	}
+	var assignedAt, oldStart, oldEnd time.Time
+	var source, savedActor, ownerID string
+	if err = pool.QueryRow(ctx, `SELECT assigned_at,source,actor_id,dispatcher_id::text FROM driver_dispatcher_assignments WHERE driver_id=$1 AND unassigned_at IS NULL`, ids[0]).Scan(&assignedAt, &source, &savedActor, &ownerID); err != nil {
+		t.Fatal(err)
+	}
+	if assignedAt.Before(beforeMove) || assignedAt.After(time.Now()) || source != "Status Board drag" || savedActor != actor || ownerID != dispatcher {
+		t.Fatal("immediate assignment attribution", assignedAt, source, savedActor, ownerID)
+	}
+	if err = pool.QueryRow(ctx, `SELECT assigned_at,unassigned_at FROM driver_dispatcher_assignments WHERE driver_id=$1 AND unassigned_at=$2`, ids[0], assignedAt).Scan(&oldStart, &oldEnd); err != nil || !oldStart.Equal(previousStart) || !oldEnd.Equal(assignedAt) {
+		t.Fatal("historical interval changed", oldStart, oldEnd, err)
+	}
+	if _, err = repo.ReorderDrivers(ctx, transfer, actor); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("replayed transfer accepted", err)
+	}
+	b = get()
+	destination = ""
+	transfer = DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[0], TargetDispatcherID: &destination, Revision: b.DriverOrderRevisions[dispatcher], TargetRevision: "stale"}
+	if _, err = repo.ReorderDrivers(ctx, transfer, actor); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("stale destination accepted", err)
+	}
+	transfer.TargetRevision = b.DriverOrderRevisions[""]
+	if _, err = repo.ReorderDrivers(ctx, transfer, actor); err != nil {
+		t.Fatal("unassign drop", err)
+	}
+	b = get()
+	if b.Drivers[0].DispatcherID != "" {
+		t.Fatal("Unassigned is not first")
+	}
+	if _, err = pool.Exec(ctx, `UPDATE dispatchers SET active=false WHERE id=$1`, dispatcher); err != nil {
+		t.Fatal(err)
+	}
+	destination = dispatcher
+	transfer = DriverBoardOrderAction{DispatcherID: "", DriverID: ids[0], TargetDispatcherID: &destination, Revision: b.DriverOrderRevisions[""], TargetRevision: b.DriverOrderRevisions[dispatcher]}
+	if _, err = repo.ReorderDrivers(ctx, transfer, actor); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("inactive destination accepted", err)
+	}
 	// Order changes never edit dispatch fields or their versions.
 	var count int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board WHERE driver_id=ANY($1::uuid[])`, ids).Scan(&count); err != nil || count != 0 {

@@ -504,6 +504,7 @@ export interface FiveELDBoardSummary {
 }
 
 export interface DriverBoard {
+  pendingDrivers?: { intakeId: string; fullName: string }[];
 	statusSyncEnabled?: boolean;
   driverOrderRevisions: Record<string, string>;
   dispatcherOrderRevision: string;
@@ -516,6 +517,8 @@ export interface DriverBoard {
 }
 
 export interface DriverBoardOrderAction {
+  targetDispatcherId?: string;
+  targetRevision?: string;
   dispatcherId: string;
   driverId: string;
   targetDriverId: string;

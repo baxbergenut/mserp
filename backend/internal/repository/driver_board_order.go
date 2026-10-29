@@ -15,11 +15,13 @@ import (
 var ErrDriverBoardOrderConflict = errors.New("driver order or dispatcher roster changed; reload the board and try again")
 
 type DriverBoardOrderAction struct {
-	DispatcherID   string `json:"dispatcherId"`
-	DriverID       string `json:"driverId"`
-	TargetDriverID string `json:"targetDriverId"`
-	After          bool   `json:"after"`
-	Revision       string `json:"revision"`
+	TargetDispatcherID *string `json:"targetDispatcherId,omitempty"`
+	TargetRevision     string  `json:"targetRevision,omitempty"`
+	DispatcherID       string  `json:"dispatcherId"`
+	DriverID           string  `json:"driverId"`
+	TargetDriverID     string  `json:"targetDriverId"`
+	After              bool    `json:"after"`
+	Revision           string  `json:"revision"`
 }
 
 type DriverBoardOrder struct {
@@ -55,7 +57,7 @@ func boardOrderRevision(dispatcher string, version int64, ids []string) string {
 }
 
 func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) error {
-	groups := map[string][]string{}
+	groups := map[string][]string{"": {}}
 	for _, d := range board.Drivers {
 		groups[d.DispatcherID] = append(groups[d.DispatcherID], d.ID)
 	}
@@ -112,6 +114,9 @@ func (r *DriverBoardRepository) ReorderDrivers(ctx context.Context, a DriverBoar
 		return result, err
 	}
 	defer tx.Rollback(ctx)
+	if a.TargetDispatcherID != nil && *a.TargetDispatcherID != a.DispatcherID {
+		return r.transferBoardDriver(ctx, tx, a, actor)
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('status-board-order:'||$1,0))`, a.DispatcherID); err != nil {
 		return result, err
 	}

@@ -154,8 +154,8 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		// Normalize UUID spellings so advisory locks and dispatcher keys agree.
-		for _, id := range []*string{&action.DispatcherID, &action.DriverID, &action.TargetDriverID} {
-			if id == &action.DispatcherID && *id == "" {
+		for _, id := range []*string{&action.DispatcherID, &action.DriverID, &action.TargetDriverID, action.TargetDispatcherID} {
+			if id == nil || (id != &action.DriverID && *id == "") {
 				continue
 			}
 			if !isUUID(*id) {
@@ -167,6 +167,10 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		if len(action.Revision) != 64 {
 			writeAPIError(w, 400, "a current driver order revision is required")
+			return
+		}
+		if action.TargetDispatcherID != nil && *action.TargetDispatcherID != action.DispatcherID && len(action.TargetRevision) != 64 {
+			writeAPIError(w, 400, "a current destination order revision is required")
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())

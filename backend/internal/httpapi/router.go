@@ -175,7 +175,18 @@ func NewRouter(
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
 	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
 	boardEvents.snapshotEvent = "board"
+	// Pending onboarding rows follow task visibility; never share one user's
+	// authorized pending-hire snapshot with another subscriber.
+	boardEvents.snapshotKey = func(ctx context.Context) string {
+		session, _ := authSessionFromContext(ctx)
+		if session.User.Administrator {
+			return session.User.ID + ":admin"
+		}
+		return session.User.ID
+	}
 	boardEvents.snapshot = func(ctx context.Context) ([]byte, error) {
+		session, _ := authSessionFromContext(ctx)
+		ctx = repository.WithTaskViewer(ctx, session.User.ID, session.User.Administrator)
 		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
 		value, err := boardRepo.Get(ctx, week)
 		if err != nil {

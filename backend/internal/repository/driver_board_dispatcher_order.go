@@ -31,6 +31,14 @@ func boardDispatcherIDs(drivers []DriverBoardDriver) []string {
 	return ids
 }
 
+func pinUnassigned(ids []string) []string {
+	if i := slices.Index(ids, ""); i > 0 {
+		ids = slices.Delete(ids, i, i+1)
+		ids = slices.Insert(ids, 0, "")
+	}
+	return ids
+}
+
 func applyBoardDispatcherOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) error {
 	ids := boardDispatcherIDs(board.Drivers)
 	var saved []string
@@ -39,7 +47,7 @@ func applyBoardDispatcherOrder(ctx context.Context, tx pgx.Tx, board *DriverBoar
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	ids = boardOrder(ids, saved)
+	ids = pinUnassigned(boardOrder(ids, saved))
 	board.DispatcherOrderRevision = boardOrderRevision("dispatchers", version, ids)
 	ranks := map[string]int{}
 	for i, id := range ids {
@@ -90,8 +98,8 @@ func (r *DriverBoardRepository) ReorderDispatchers(ctx context.Context, a Dispat
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return result, err
 	}
-	ids = boardOrder(ids, saved)
-	if boardOrderRevision("dispatchers", version, ids) != a.Revision || a.DispatcherID == a.TargetDispatcherID || !slices.Contains(ids, a.DispatcherID) || !slices.Contains(ids, a.TargetDispatcherID) {
+	ids = pinUnassigned(boardOrder(ids, saved))
+	if a.DispatcherID == "" || a.TargetDispatcherID == "" || boardOrderRevision("dispatchers", version, ids) != a.Revision || a.DispatcherID == a.TargetDispatcherID || !slices.Contains(ids, a.DispatcherID) || !slices.Contains(ids, a.TargetDispatcherID) {
 		return result, ErrDriverBoardOrderConflict
 	}
 	before := append([]string(nil), ids...)

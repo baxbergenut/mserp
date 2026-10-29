@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEve
 type Option = [string, string];
 type Move = (id: string, target: string, after: boolean) => Promise<boolean>;
 
-export function useBoardFilterDrag(options: Option[], move?: Move) {
+export function useBoardFilterDrag(options: Option[], move?: Move, pinnedFirst?: string) {
   const [frozen, setFrozen] = useState<Option[] | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
@@ -23,7 +23,7 @@ export function useBoardFilterDrag(options: Option[], move?: Move) {
       const element = elements[index];
       const rect = element.getBoundingClientRect();
       return { id: key, element, top: rect.top - box.top, height: rect.height, style: element.getAttribute("style") };
-    });
+    }).filter(row => row.id !== pinnedFirst);
     const sourceIndex = rows.findIndex(row => row.id === id);
     const source = rows[sourceIndex];
     if (!source || rows.length < 2) return;

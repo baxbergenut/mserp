@@ -643,24 +643,22 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   choices; legacy saved statuses and undo history remain valid without inferred
   replacements, but are not offered for new selection. ACCIDENT is trimmed.
   Migration 118 stores a shared driver order per dispatcher (including Unassigned).
-  Drag the grip beside a driver to move the actual row vertically within its
-  dispatcher; neighboring rows animate into place, with reduced-motion support.
-  Pointer capture and edge scrolling support mouse/touch. The preview stays in
-  place through a save; failed saves and Escape/cancel restore the prior order.
-  Focus the grip and press
-  Up/Down for keyboard moves. `POST
-  /driver-board/order` requires driver_board.write and a current roster/order
-  revision. Moves stay within one dispatcher, retain filtered-out drivers, and
-  broadcast the saved order to other viewers through Status Board SSE. New drivers
-  append; departing drivers disappear without changing the saved order. Test with
-  TestDriverBoardDatabase and `test-investors-e2e.mjs --board-only`.
-  Migration 125 stores one shared dispatcher-group order, including Unassigned.
-  Drag the grip in the Status Board Dispatcher filter to preview animated, bounded
-  moves; the board groups update after drop and save. Up/Down moves also work from
-  the grip. `POST /driver-board/dispatcher-order` requires driver_board.write and
-  a current order/roster revision; new groups append, absent groups disappear, and
-  saved changes broadcast through Status Board SSE. The filter remains shared with
-  Gross Board, but ordering is enabled only on Status Board.
+  Unassigned is pinned first, uses the same group heading and remains a drop
+  target when empty. Dragging between dispatcher groups assigns/unassigns the
+  native driver immediately at the database clock, with actor-attributed assignment
+  history; no week backdating or provider assignment calls. POST /driver-board/order
+  retains within-group reorder and accepts explicit targetDispatcherId plus
+  targetRevision for transfers. Both complete rosters are fenced and locked; hidden
+  rows remain, inactive destinations and pending hires are rejected. Pointer/touch,
+  edge scrolling, Escape, failed-save rollback and Up/Down work; Alt+Up unassigns.
+  Migration 125 stores shared dispatcher-group order; Unassigned cannot be moved.
+  POST /driver-board/dispatcher-order retains driver_board.write and roster fences.
+  Migration 168 invalidates the live board on intake changes. Pending hires appear
+  under Unassigned as New driver / Needs setup, using existing onboarding task
+  visibility and setup permissions; they cannot be dispatched before setup.
+  Board SSE caches are per viewer because pending-hire visibility is user-specific.
+  TestDriverBoardDatabase covers fresh/migrated persistence and immediate history;
+  test-investors-e2e.mjs --board-order-only covers dragging, live views and setup notices.
   Status Board's Next load column shows only the first queued load, with its first
   pickup stop's source schedule label beside the number using the ETA PU format.
   Windows under 24 hours show the facility-local closing time/day, with TILL for

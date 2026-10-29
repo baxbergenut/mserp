@@ -22,7 +22,7 @@ import { LocationCell, formatCoordinates } from "./LocationCell";
 const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog));
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
 import { StatusCell } from "./StatusCell";
-import type { BoardStop, DriverBoardEntry } from "@/app/lib/types";
+import type { BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
 import { statuses, statusColor, previewCurrentLoad } from "./board";
 import { ETACell } from "./ETACell";
@@ -98,7 +98,8 @@ export default function DriverBoardPage() {
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
   const rowDrag = useDriverRowDrag(drivers, moveDriver);
   const renderedDrivers = rowDrag.drivers;
-  const dispatchers = Array.from(new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName])).entries());
+  const dispatchers: [string, string][] = [["", "Unassigned"], ...Array.from(new Map((board?.drivers ?? []).filter(d => d.dispatcherId).map(d => [d.dispatcherId, d.dispatcherName])).entries())];
+  const pendingDrivers = (board?.pendingDrivers ?? []).filter(d => (selectedDispatchers === null || selectedDispatchers.includes("")) && (selectedStatuses === null || selectedStatuses.includes("NEW DRIVER")) && d.fullName.toLowerCase().includes(search.trim().toLowerCase()));
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
   const ids = new Set(drivers.map(d => d.id));
   const summary = totals((board?.grossEntries ?? []).filter(e => ids.has(e.driverId)));
@@ -111,11 +112,11 @@ export default function DriverBoardPage() {
   }
   const disabled = !canEdit || loading || leaving || state.actionBusy;
   const orderDisabled = disabled || saving || dirty;
-  async function moveDriver(id: string, target: string, after: boolean, revision: string) {
+  async function moveDriver(id: string, target: string, after: boolean, revision: string, dispatcher?: string) {
     setOrderError(""); setOrderNotice("");
     try {
-      await state.reorderDrivers(id, target, after, revision);
-      setOrderNotice("Driver order saved.");
+      await state.reorderDrivers(id, target, after, revision, dispatcher);
+      setOrderNotice("Saved.");
       return true;
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Driver order could not be saved. Try again."); return false; }
   }
@@ -131,8 +132,29 @@ export default function DriverBoardPage() {
     return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled} edit={edit} />;
   }
 
+  function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
+    const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
+    return <tr data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
+                <th scope="rowgroup" colSpan={4} className="sm:sticky left-0 z-10 border-b border-r border-zinc-700 bg-zinc-900 px-3 text-left font-medium">
+                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
+                    <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
+                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater ml-auto min-w-0 truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
+                  </div>
+                </th>
+                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.original, true)}</td>
+                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.driver, true)}</td>
+                <td colSpan={2} className="border-b border-zinc-700" />
+                <td colSpan={columns.length - 8} className="border-b border-zinc-700 px-3 text-[11px]">
+                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
+                    {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="status-board-updater min-w-0 truncate">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
+                    <span className="ml-auto text-zinc-400">{decimalDisplay(group.miles)} mi</span>
+                  </div>
+                </td>
+              </tr>;
+  }
+
   return <div className="space-y-5 animate-fade-in">
-    <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Status Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length}</span></div></div></PageHeader>
+    <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Status Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length + pendingDrivers.length}</span></div></div></PageHeader>
 
     <div className="grid gap-3 sm:grid-cols-3">
       <MetricCard loading={loading} compact label="Weekly total gross" value={board ? decimalDisplay(summary.original, true) : "—"} icon={Banknote} />
@@ -144,7 +166,7 @@ export default function DriverBoardPage() {
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
-      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled} />
+      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled || rowDrag.active} pinnedFirst="" />
       <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
@@ -172,10 +194,19 @@ export default function DriverBoardPage() {
         <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
         <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" style={i < 2 ? { left: i === 0 ? 0 : driverColumnOffset } : undefined} className={`${i < 2 ? "sm:sticky sm:z-[21]" : ""} h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 text-left font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
         <tbody>
+          {!loading && groupHeader({ dispatcherId: "", dispatcherName: "Unassigned" })}
+          {!loading && pendingDrivers.map(d => <tr key={d.intakeId} data-pending-intake-id={d.intakeId} className="bg-zinc-950/20">
+            <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`} />
+            <th scope="row" style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 h-8 px-1.5 text-left font-medium text-zinc-200`} title={d.fullName}>{d.fullName}</th>
+            <td colSpan={5} className={cellClass} />
+            <td className={`${cellClass} px-1.5 ${statusColor("NEW DRIVER")}`}>New driver</td>
+            <td colSpan={columns.length - 8} className={`${cellClass} px-3 text-amber-300`}>
+              {permissions.includes("drivers.create") && permissions.includes("tasks.review") ? <Link href={`/drivers?setup=${d.intakeId}`} className="hover:underline">Needs setup</Link> : "Needs setup"}
+            </td>
+          </tr>)}
           {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.map((d, i) => {
             const entry = entries[d.id];
             const sum = totals(index.byDriver.get(d.id) ?? []);
-            const group = groups.get(d.dispatcherId)!;
             const loads = previewCurrentLoad(board?.loads[d.id], entry, board?.entries.find(e => e.driverId === d.id));
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
@@ -187,27 +218,11 @@ export default function DriverBoardPage() {
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
             const nextPickup = nextStop?.schedule;
             return <Fragment key={d.id}>
-              {(i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && <tr className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
-                <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 px-3 text-left font-medium">
-                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
-                    <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
-                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater ml-auto min-w-0 truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
-                  </div>
-                </th>
-                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.original, true)}</td>
-                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.driver, true)}</td>
-                <td colSpan={2} className="border-b border-zinc-700" />
-                <td colSpan={columns.length - 8} className="border-b border-zinc-700 px-3 text-[11px]">
-                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
-                    {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="status-board-updater min-w-0 truncate">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
-                    <span className="ml-auto text-zinc-400">{decimalDisplay(group.miles)} mi</span>
-                  </div>
-                </td>
-              </tr>}
+              {d.dispatcherId !== "" && (i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && groupHeader(d)}
               <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
-                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag to reorder within this dispatcher, or use Arrow Up / Arrow Down" disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
+                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag between dispatchers or to Unassigned. Arrow Up / Down moves rows; Alt + Arrow Up unassigns." disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
                     onPointerDown={event => {
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
@@ -216,9 +231,10 @@ export default function DriverBoardPage() {
                     onKeyDown={event => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault(); event.stopPropagation();
+                      if (event.altKey && event.key === "ArrowUp" && d.dispatcherId && !orderDisabled && !rowDrag.active) { void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], ""); return; }
                       const target = drivers[i + (event.key === "ArrowUp" ? -1 : 1)];
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (target?.dispatcherId === d.dispatcherId && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
+                      if (target && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
@@ -250,7 +266,7 @@ export default function DriverBoardPage() {
               </tr>
             </Fragment>;
           })}
-          {!loading && drivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
+          {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
     </StatusBoardScrollArea>
