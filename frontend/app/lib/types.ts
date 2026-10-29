@@ -527,6 +527,7 @@ export interface DriverBoardOrderAction {
 }
 
 export interface DriverBoardOrder {
+  sourceRevision?: string;
   dispatcherId: string;
   driverIds: string[];
   revision: string;

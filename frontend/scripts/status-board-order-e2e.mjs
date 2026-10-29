@@ -67,21 +67,47 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.getByRole('button',{name:'Select all',exact:true}).click(); await page.keyboard.press('Escape');
   // Cross-dispatcher move changes native ownership now and reaches a second viewer.
   const before = Date.now();
-  await drag(row(ids[3]));
-  await expect.poll(async()=>group(await read(),other)).toEqual([ids[2],ids[3]]);
-  await expect.poll(()=>order(viewer)).toEqual([ids[0],ids[1],ids[2],ids[3]]);
+  let releaseWrite, releaseReads;
+  const heldWrite = new Promise(resolve => { releaseWrite = resolve; });
+  const heldReads = new Promise(resolve => { releaseReads = resolve; });
+  const boardURL = url => new URL(url).pathname === '/api/driver-board';
+  await page.route(boardURL, async route => { await heldReads; await route.continue(); });
+  await page.route('**/api/driver-board/order', async route => { await heldWrite; await route.continue(); }, {times:1});
+  const normalRows = p => p.locator('tr[data-driver-id]').evaluateAll(rows => rows.every((row,i) =>
+    !row.style.transform && !row.dataset.rowDragging && (!i || row.getBoundingClientRect().top >= rows[i-1].getBoundingClientRect().bottom - 1)));
+  try {
+    await drag(row(ids[3]));
+    // The request is still blocked: the local row must already occupy a normal
+    // destination slot without covering neighbours or distorting sticky cells.
+    await expect.poll(()=>order(page)).toEqual([ids[0],ids[1],ids[2],ids[3]]);
+    await expect.poll(()=>normalRows(page)).toBe(true);
+    await expect.poll(()=>order(viewer)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
+    await expect.poll(()=>normalRows(viewer)).toBe(true);
+    expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
+    await page.screenshot({path:join(temp,'status-board-transfer-pending.png'),fullPage:true});
+    releaseWrite();
+    await expect.poll(async()=>group(await read(),other)).toEqual([ids[2],ids[3]]);
+    // A full-board GET remains blocked. Saving must finish on the POST response.
+    await expect(handle()).toBeEnabled();
+    await expect.poll(()=>normalRows(page)).toBe(true);
+    await expect.poll(()=>order(viewer)).toEqual([ids[0],ids[1],ids[2],ids[3]]);
+    await expect.poll(()=>normalRows(viewer)).toBe(true);
+  } finally { releaseWrite(); releaseReads(); await page.unrouteAll({behavior:"wait"}); }
   const history = JSON.parse(sql(`SET search_path TO ${schema},public; SELECT json_build_object('at',assigned_at,'source',source,'actor',actor_name) FROM driver_dispatcher_assignments WHERE driver_id='${ids[2]}' AND unassigned_at IS NULL;`).match(/\{[^\n]+\}/)[0]);
   expect(Date.parse(history.at)).toBeGreaterThanOrEqual(before);
   expect(history.source).toBe('Status Board drag');
   expect(history.actor).not.toBe('System');
   // Empty Unassigned header is a drop target, and assignments survive reload.
+  await page.route('**/api/driver-board/order',async route=>{const response=await route.fetch();await new Promise(resolve=>setTimeout(resolve,800));await route.fulfill({response});},{times:1});
   await drag(page.locator('tr[data-dispatcher-id=""]'),16);
   await expect.poll(async()=>group(await read(),'')).toEqual([ids[2]]);
   await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
   await expect.poll(()=>order(viewer)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
+  await expect(handle()).toBeEnabled();
   await page.reload(); await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
   await drag(row(ids[0]));
   await expect.poll(async()=>group(await read())).toEqual([ids[2],ids[0],ids[1]]);
+  await expect(handle()).toBeEnabled();
   // Cancellation and failed transfers retain the saved dispatcher and order.
   const begin = await handle().boundingBox(), destination = await row(ids[3]).boundingBox();
   await page.mouse.move(begin.x+begin.width/2,begin.y+begin.height/2);await page.mouse.down();
@@ -92,7 +118,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.route('**/api/driver-board/order',r=>r.fulfill({status:503,json:{error:'Order save unavailable'}}),{times:1});
   await drag(row(ids[3]));
   const alert=page.getByRole('alert').filter({hasText:'Order save unavailable'});
-  await expect(alert).toBeVisible();expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
+  await expect(alert).toBeVisible();await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);await expect.poll(()=>normalRows(page)).toBe(true);expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await alert.getByRole('button',{name:'Reload board',exact:true}).click();
   // Keyboard unassignment and touch reassignment use the same saved action.
   await expect(handle()).toBeEnabled();await handle().focus();await page.keyboard.press('Alt+ArrowUp');
@@ -113,6 +139,15 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect(pending.getByText('New driver',{exact:true})).toBeVisible();
   await expect(pending.getByRole('link',{name:'Needs setup',exact:true})).toHaveAttribute('href',`/drivers?setup=${intake}`);
   await expect(pending.locator('button')).toHaveCount(0);
+  await page.getByLabel('Dispatcher filter',{exact:true}).click();
+  await page.getByRole('checkbox',{name:'Unassigned',exact:true}).uncheck();await page.keyboard.press('Escape');
+  await expect(page.locator('tr[data-dispatcher-id=""]')).toHaveCount(0);
+  await expect(pending).toHaveCount(0);
+  await expect(page.locator(`tr[data-dispatcher-id="${dispatcher}"]`)).toBeVisible();
+  await page.getByLabel('Dispatcher filter',{exact:true}).click();
+  await page.getByRole('checkbox',{name:'Unassigned',exact:true}).check();await page.keyboard.press('Escape');
+  await expect(page.locator('tr[data-dispatcher-id=""]')).toBeVisible();
+  await expect(pending).toBeVisible();
   await page.screenshot({path:join(temp,'status-board-pending-hire.png'),fullPage:true});
   expect((await (await viewer.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).pendingDrivers).toEqual([]);
   await expect(viewer.locator('[data-pending-intake-id]')).toHaveCount(0);

@@ -25,9 +25,10 @@ type DriverBoardOrderAction struct {
 }
 
 type DriverBoardOrder struct {
-	DispatcherID string   `json:"dispatcherId"`
-	DriverIDs    []string `json:"driverIds"`
-	Revision     string   `json:"revision"`
+	SourceRevision string   `json:"sourceRevision,omitempty"`
+	DispatcherID   string   `json:"dispatcherId"`
+	DriverIDs      []string `json:"driverIds"`
+	Revision       string   `json:"revision"`
 }
 
 func boardOrder(ids, saved []string) []string {

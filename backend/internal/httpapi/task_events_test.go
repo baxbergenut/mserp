@@ -87,6 +87,44 @@ func TestLiveSnapshotProjectsEachSubscriber(t *testing.T) {
 	}
 }
 
+func TestLiveSnapshotSharesBoardWithPrivatePendingHires(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	defer h.shutdown()
+	h.snapshotEvent = "board"
+	calls := 0
+	h.snapshot = func(context.Context) ([]byte, error) {
+		calls++
+		return []byte(`{"drivers":[],"pendingDrivers":[{"fullName":"Private hire"}]}`), nil
+	}
+	h.projectSnapshot = func(ctx context.Context, value map[string]any) error {
+		session, _ := authSessionFromContext(ctx)
+		if session.User.ID == "error" {
+			return fmt.Errorf("visibility unavailable")
+		}
+		if !session.User.Administrator {
+			value["pendingDrivers"] = []any{}
+		}
+		return nil
+	}
+	frame := func(id string, admin bool) string {
+		return h.frame(context.WithValue(context.Background(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{ID: id, Administrator: admin}}), "changed")
+	}
+	for i := 0; i < 12; i++ {
+		if !strings.Contains(frame(fmt.Sprint(i), true), "Private hire") {
+			t.Fatal("authorized hire missing")
+		}
+		if strings.Contains(frame(fmt.Sprint(i), false), "Private hire") {
+			t.Fatal("cached onboarding names leaked after permission change")
+		}
+	}
+	if calls != 1 {
+		t.Fatal("full board recalculated per viewer", calls)
+	}
+	if got := frame("error", false); got != "event: changed\ndata: {}\n\n" {
+		t.Fatal("visibility failure exposed snapshot", got)
+	}
+}
+
 func TestBoardEventStreamPresenceAndRevocation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	board := newDatabaseEvents(nil, logger, "mserp_driver_board", "driver_board.read")

@@ -656,7 +656,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Migration 168 invalidates the live board on intake changes. Pending hires appear
   under Unassigned as New driver / Needs setup, using existing onboarding task
   visibility and setup permissions; they cannot be dispatched before setup.
-  Board SSE caches are per viewer because pending-hire visibility is user-specific.
+  Board SSE shares its expensive snapshot across viewers, then projects pending
+  hires with each subscriber's current task visibility; names never bypass access.
+  Cross-group drops clear pointer transforms immediately and preview ordinary table
+  rows while saving. The response includes sourceRevision so both orders update
+  without waiting for a full-board GET; background refresh/SSE reconcile metadata.
+  Delayed-request browser coverage checks normal rows for both sender and viewer.
   TestDriverBoardDatabase covers fresh/migrated persistence and immediate history;
   test-investors-e2e.mjs --board-order-only covers dragging, live views and setup notices.
   Status Board's Next load column shows only the first queued load, with its first

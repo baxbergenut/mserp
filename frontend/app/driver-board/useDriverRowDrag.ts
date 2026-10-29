@@ -1,8 +1,10 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import type { DriverBoardDriver } from "@/app/lib/types";
+import { transferDriverRows } from "./driverOrder";
 
-type Driver = { id: string; dispatcherId: string };
+type Driver = DriverBoardDriver;
 type Move = (id: string, target: string, after: boolean, revision: string, dispatcher?: string) => Promise<boolean>;
 
 // Keep DOM order stable during the gesture and save. Transforms move the actual
@@ -110,9 +112,18 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
       source.element.style.transition = transition;
       if (cancel) preview = rows;
       const transfer = !cancel && destinationGroup !== driver.dispatcherId;
+      if (transfer) {
+        // End the pointer styling before React lays out the pending destination.
+        // Network latency must never keep translated/sticky cells over other rows.
+        restoreStyles();
+        setFrozen(transferDriverRows(drivers, source.id, destinationGroup, targetId, targetAfter));
+        try { await move(source.id, targetId, targetAfter, revision, destinationGroup); }
+        finally { if (!disposed) setFrozen(null); }
+        return;
+      }
       if (!transfer) paint();
       const target = destination < sourceIndex ? preview[destination + 1] : preview[destination - 1];
-      const saving = transfer ? move(source.id, targetId, targetAfter, revision, destinationGroup) : !cancel && destination !== sourceIndex && target
+      const saving = !cancel && destination !== sourceIndex && target
         ? move(source.id, target.id, destination > sourceIndex, revision) : Promise.resolve(true);
       const [saved] = await Promise.all([saving, delay()]);
       if (disposed) return;
@@ -123,8 +134,7 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
     const onUp = (e: PointerEvent) => { if (e.pointerId === pointerId) { y = e.clientY; void finish(false); } };
     const onCancel = () => { void finish(true); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
-    cleanup.current = () => {
-      disposed = true; stopListening();
+    const restoreStyles = () => {
       for (const row of rows) {
         if (row.style === null) row.element.removeAttribute("style"); else row.element.setAttribute("style", row.style);
         delete row.element.dataset.rowDragging;
@@ -133,6 +143,7 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
         if (h.style === null) h.element.removeAttribute("style"); else h.element.setAttribute("style", h.style);
       }
     };
+    cleanup.current = () => { disposed = true; stopListening(); restoreStyles(); };
     for (const row of rows) row.element.style.transition = transition;
     source.element.style.transition = "none";
     source.element.style.position = "relative";

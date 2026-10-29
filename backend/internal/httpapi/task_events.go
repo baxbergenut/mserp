@@ -34,6 +34,7 @@ type taskEvents struct {
 	snapshot        func(context.Context) ([]byte, error)
 	snapshotEvent   string
 	snapshotKey     func(context.Context) string
+	projectSnapshot func(context.Context, map[string]any) error
 	snapshotMu      sync.Mutex
 	snapshots       map[string]eventSnapshot
 	shutdownContext context.Context
@@ -154,6 +155,18 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		decoder.UseNumber()
 		if decoder.Decode(&value) != nil {
 			return "event: " + fallback + "\ndata: {}\n\n"
+		}
+		if h.projectSnapshot != nil {
+			object, ok := value.(map[string]any)
+			if !ok {
+				return "event: " + fallback + "\ndata: {}\n\n"
+			}
+			projectionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := h.projectSnapshot(projectionCtx, object)
+			cancel()
+			if err != nil {
+				return "event: " + fallback + "\ndata: {}\n\n"
+			}
 		}
 		session, _ := authSessionFromContext(ctx)
 		path := "/driver-board/events"

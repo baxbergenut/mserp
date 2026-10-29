@@ -235,6 +235,10 @@ type BoardPendingDriver struct {
 	FullName string `json:"fullName"`
 }
 
+func (r *DriverBoardRepository) CanViewPendingDrivers(ctx context.Context) (bool, error) {
+	return systemTaskVisible(ctx, r.pool, "driver_onboarding", false)
+}
+
 func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriver, error) {
 	result := []BoardPendingDriver{}
 	visible, err := systemTaskVisible(ctx, tx, "driver_onboarding", false)

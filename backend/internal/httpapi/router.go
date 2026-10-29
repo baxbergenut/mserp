@@ -175,24 +175,27 @@ func NewRouter(
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
 	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
 	boardEvents.snapshotEvent = "board"
-	// Pending onboarding rows follow task visibility; never share one user's
-	// authorized pending-hire snapshot with another subscriber.
-	boardEvents.snapshotKey = func(ctx context.Context) string {
-		session, _ := authSessionFromContext(ctx)
-		if session.User.Administrator {
-			return session.User.ID + ":admin"
-		}
-		return session.User.ID
-	}
 	boardEvents.snapshot = func(ctx context.Context) ([]byte, error) {
-		session, _ := authSessionFromContext(ctx)
-		ctx = repository.WithTaskViewer(ctx, session.User.ID, session.User.Administrator)
+		// Calculate the full board once per committed revision. Its private
+		// fields and onboarding names are projected per subscriber below.
+		ctx = repository.WithTaskViewer(ctx, "", true)
 		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
 		value, err := boardRepo.Get(ctx, week)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value)
+	}
+	boardEvents.projectSnapshot = func(ctx context.Context, value map[string]any) error {
+		session, _ := authSessionFromContext(ctx)
+		visible, err := boardRepo.CanViewPendingDrivers(repository.WithTaskViewer(ctx, session.User.ID, session.User.Administrator))
+		if err != nil {
+			return err
+		}
+		if !visible {
+			value["pendingDrivers"] = []any{}
+		}
+		return nil
 	}
 	boardPresence.snapshotEvent = "peers"
 	boardPresence.snapshot = func(ctx context.Context) ([]byte, error) {

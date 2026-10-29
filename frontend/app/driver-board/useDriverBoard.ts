@@ -9,6 +9,7 @@ import { progressStatus, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
+import { transferDriverRows } from "./driverOrder";
 
 export function useDriverBoard(lockedDriverId?: string) {
   const canEdit = usePermissions().includes("driver_board.write");
@@ -134,10 +135,19 @@ export function useDriverBoard(lockedDriverId?: string) {
       const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision,
         ...(transfer ? { targetDispatcherId, targetRevision: board?.driverOrderRevisions[targetDispatcherId] } : {}) });
       if (transfer) {
-        // Reconcile group metadata and assignment-dependent values from the API.
-        // The write succeeded even if this follow-up read fails; SSE can recover.
-        try { setBoard(await fetchDriverBoard(currentChargeWeek())); }
-        catch { setRefreshError("Assignment saved. Refresh the board to see the latest groups."); }
+        setBoard(current => {
+          // A newer SSE snapshot wins over this response. Otherwise apply the
+          // committed placement immediately, without a second blocking request.
+          if (!current || current.driverOrderRevisions[driver.dispatcherId] !== revision ||
+              current.driverOrderRevisions[targetDispatcherId] !== board?.driverOrderRevisions[targetDispatcherId]) return current;
+          return { ...current,
+            drivers: transferDriverRows(current.drivers, driverId, targetDispatcherId, targetDriverId, after),
+            dispatcherOrderRevision: "",
+            driverOrderRevisions: { ...current.driverOrderRevisions,
+              [driver.dispatcherId]: result.sourceRevision ?? "", [targetDispatcherId]: result.revision },
+          };
+        });
+        refreshWanted.current();
         return;
       }
       setBoard(current => {

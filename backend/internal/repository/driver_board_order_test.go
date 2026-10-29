@@ -126,6 +126,10 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err != nil {
 		t.Fatal("cross-group drop", err)
 	}
+	b = get()
+	if result.SourceRevision != b.DriverOrderRevisions[""] || result.Revision != b.DriverOrderRevisions[dispatcher] {
+		t.Fatal("transfer response revisions", result, b.DriverOrderRevisions)
+	}
 	if !slices.Equal(result.DriverIDs, []string{ids[0], ids[2], added}) {
 		t.Fatal("destination placement", result)
 	}
