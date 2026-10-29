@@ -62,7 +62,8 @@ try {
   });
   const push = () => page.evaluate(value => window.boardStreams.at(-1).dispatchEvent(new MessageEvent('board', { data: JSON.stringify(value) })), board());
   const release = () => { holdDetails = false; pending.splice(0).forEach(resolve => resolve()); };
-  await page.goto(`http://127.0.0.1:${server.address().port}/driver-board`);
+  const base = process.env.MSERP_STATUS_BOARD_BASE_URL ?? `http://127.0.0.1:${server.address().port}`;
+  await page.goto(`${base}/driver-board`);
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(1);
   await page.getByRole('button', { name: 'Loads Driver · Next load', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Loads Driver · Loads', exact: true });
