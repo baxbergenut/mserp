@@ -98,10 +98,9 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
  GROUP BY d.driver_id,d.service_date
  )
  SELECT e.driver_id::text,e.service_date::text,e.slot,lower(btrim(e.load_number)),
- CASE WHEN trip_source.review THEN '' ELSE coalesce(e.transfer_truck_id::text,'') END,
- NOT trip_source.review,
+ coalesce(e.transfer_truck_id::text,''),
  coalesce(a.trucks,'{}'::text[])
- FROM entries e `+payrollResolvedLoad+`
+ FROM entries e
  LEFT JOIN assigned a ON a.driver_id=e.driver_id AND a.service_date=e.source_date`, week, payrollDriverIDs(ctx))
 	if err != nil {
 		return nil, err
@@ -112,13 +111,12 @@ func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]tr
 		var driver, date, number string
 		var assigned []string
 		var value truckPayLoadMatch
-		var fallback bool
 		var slot int
-		if err = rows.Scan(&driver, &date, &slot, &number, &value.TruckID, &fallback, &assigned); err != nil {
+		if err = rows.Scan(&driver, &date, &slot, &number, &value.TruckID, &assigned); err != nil {
 			return nil, err
 		}
 		value.Candidates = assigned
-		if value.TruckID == "" && fallback && len(assigned) == 1 {
+		if value.TruckID == "" && len(assigned) == 1 {
 			value.TruckID = assigned[0]
 		}
 		result[driver+":"+payCommentKey(date, slot, number)] = value
@@ -242,6 +240,9 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 				l.DriverFee = "0.00"
 			}
 			l.Fee = driverPayFee("gross_percentage", g.term.SharePercent, l.DriverGross)
+			if l.TripReview {
+				l.Fee = ""
+			}
 			l.CommentKey = l.CommentKey + ":" + d.ID
 			if l.Fee == "" {
 				l.Issues = append(l.Issues, "Investor share requires Gross Board gross")

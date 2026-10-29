@@ -115,6 +115,28 @@ func TestClustieLoadAssignmentsDatabase(t *testing.T) {
 		if err != nil || review.Total != 0 {
 			t.Fatalf("stale source truck raised dashboard warning: %+v %v", review, err)
 		}
+		// Source allocation review is separate from native assignment authority:
+		// an unresolved split stays on its real truck and keeps its financial hold.
+		exec(`UPDATE loads SET split_expected=true WHERE id=96602`)
+		held, err := pay.InvestorPay(ctx, week, oldTruck)
+		if err != nil || len(held.Drivers) != 1 || len(held.Drivers[0].Loads) != 2 {
+			t.Fatalf("split review hid a native truck load: %+v %v", held, err)
+		}
+		foundReview := false
+		for _, l := range held.Drivers[0].Loads {
+			if l.LoadNumber == "LOCAL-TUE" {
+				foundReview = l.TripReview && l.DriverFee == "" && l.Fee == ""
+			}
+		}
+		if !foundReview {
+			t.Fatal("native attribution bypassed the split financial review")
+		}
+		for _, issue := range held.Drivers[0].Issues {
+			if strings.Contains(issue, "Review truck assignment") {
+				t.Fatal("split review was mislabeled as an assignment problem")
+			}
+		}
+		exec(`UPDATE loads SET split_expected=false WHERE id=96602`)
 		// Missing native assignment cannot silently recover the provider's truck.
 		exec(`UPDATE truck_driver_assignments SET unassigned_at='2026-10-25 00:00-04' WHERE truck_id=$1`, companyTruck)
 		var linked bool
