@@ -786,6 +786,10 @@ func hasExpenseCategoryAction(access []repository.ExpenseCategoryAccess, categor
 }
 
 func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpenseFinalized) {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrExpensePayerCorrection) {
 		writeAPIError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), repository.ErrExpensePayerCorrection.Error()+": "))
 		return
@@ -810,7 +814,7 @@ func (handler expenseHandler) writeError(w http.ResponseWriter, err error) {
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
 		case "23503":
-			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses used in Driver Pay cannot be deleted")
+			writeAPIError(w, http.StatusBadRequest, "check the linked driver and truck; expenses with retained settlement or history records cannot be deleted")
 			return
 		case "23514":
 			if postgresError.ConstraintName == "expense_reimbursement" {

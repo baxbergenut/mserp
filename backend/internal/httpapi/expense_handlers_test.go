@@ -10,6 +10,14 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestExpenseDeletionFinalizedError(t *testing.T) {
+	w := httptest.NewRecorder()
+	expenseHandler{}.writeError(w, repository.ErrExpenseFinalized)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "reopen the affected Driver Pay or Investor Pay statement") {
+		t.Fatalf("finalized deletion error = %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestExpenseMaintenanceRequestValidation(t *testing.T) {
 	base := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseType: "Electrical", ExpenseDate: "2026-10-22", Amount: "100.00", Maintenance: &repository.ExpenseMaintenance{VendorName: "Test shop"}}
 	if _, err := base.validate(); err != nil {
