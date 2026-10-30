@@ -179,6 +179,11 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	sort.Slice(info.Dispatchers, func(i, j int) bool { return info.Dispatchers[i].Name < info.Dispatchers[j].Name })
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
+		aFinalized := a.driver != nil && a.driver.Settlement != nil && a.driver.Settlement.Finalized
+		bFinalized := b.driver != nil && b.driver.Settlement != nil && b.driver.Settlement.Finalized
+		if aFinalized != bFinalized {
+			return !aFinalized
+		}
 		if a.name != b.name {
 			return a.name < b.name
 		}

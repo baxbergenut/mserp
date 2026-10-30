@@ -80,7 +80,7 @@ export function WeeklyPayReport() {
     setLoading(true); setReport(null); setError(""); setNotice(""); setOpened(new Set()); setWeek(next);
   }
   const statements = report?.statements ?? [];
-  const visible = statements.filter(s => !dispatcher || s.dispatcherId === dispatcher);
+  const visible = statements.filter(s => !dispatcher || s.dispatcherId === dispatcher).sort((a, b) => Number(a.finalized) - Number(b.finalized));
   const currentWeek = report?.weekStart ?? week;
   const lockedDrivers = new Set(statements.filter(s => s.finalized).flatMap(s => s.rows.map(row => row.driverId)));
   const selectedRules = rules.filter((version, index) => rules.findIndex(v => v.effectiveWeek === version.effectiveWeek) === index);

@@ -40,6 +40,10 @@ try {
         ...Array.from({ length: total }, (_, i) => ({ dispatcherId: `dispatch-${i}`, dispatcherName: `Dispatch ${i}`, finalized: i === 0 && finalized, finalizedBy: i === 0 ? finalizer : '', rows: [], gross: 100, pay: 10, loadCount: 1, version: 1, revision: 'fixture' })),
         { dispatcherId: '', dispatcherName: 'Unassigned', finalized: false, rows: [], gross: 0, pay: 0, loadCount: 1, version: 0, revision: 'fixture' },
       ] : [] };
+      if ((path === '/driver-pay' || path === '/investor-pay') && total > 1) {
+        const template = data.drivers[0];
+        data.drivers.push(...['Zulu', 'Alpha'].map(name => ({ ...template, id: `draft-${name}`, fullName: `Draft ${name}`, settlement: null })));
+      }
       await route.fulfill({ json: data });
     });
     await page.goto(`${base}/accounting/${kind}-pay?weekStart=${week}`);
@@ -52,10 +56,15 @@ try {
     await expect(page.getByText('Payroll Reviewer', { exact: true })).toBeVisible();
     if (kind !== 'dispatcher') {
       await expect(page.getByRole('columnheader', { name: 'Finalized by', exact: true })).toBeVisible();
+      const rowNames = await page.locator('table[aria-label^="Weekly"] > tbody > tr > th').allTextContents();
+      expect(rowNames[0]).toContain('Draft Alpha');
+      expect(rowNames[1]).toContain('Draft Zulu');
+      expect(rowNames[2]).toContain('Test Recipient');
       await expect(page.getByRole('row').filter({ hasText: 'Test Recipient' }).locator('th,td')).toHaveCount(8);
       await page.getByPlaceholder(kind === 'driver' ? 'Driver, truck, or load…' : 'Investor, truck, or load…').fill('Test');
       await expect(progress).toHaveAttribute('aria-valuenow', '25');
     } else {
+      expect(await page.locator('section[aria-label^="Dispatch "]').evaluateAll(rows => rows.map(row => row.getAttribute('aria-label')))).toEqual(['Dispatch 1', 'Dispatch 2', 'Dispatch 3', 'Dispatch 0']);
       await page.getByRole('combobox', { name: 'Dispatcher', exact: true }).selectOption('dispatch-0');
       await expect(progress).toHaveAttribute('aria-valuenow', '25');
     }

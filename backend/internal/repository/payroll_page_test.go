@@ -2,6 +2,29 @@ package repository
 
 import "testing"
 
+func TestPayPageFinalizedLastBeforePagination(t *testing.T) {
+	report := DriverPayWeek{Drivers: []DriverPayDriver{
+		{ID: "closed-a", FullName: "Alpha", Settlement: &PayrollSettlement{Finalized: true}},
+		{ID: "draft-z", FullName: "Zulu"},
+		{ID: "closed-b", FullName: "Beta", Settlement: &PayrollSettlement{Finalized: true}},
+		{ID: "draft-b", FullName: "Beta", Settlement: &PayrollSettlement{Finalized: false}},
+	}, SetupRequired: []InvestorTruckSetup{{TruckID: "setup", OwnerName: "Alpha"}}}
+	assertOrder := func(want []string) {
+		t.Helper()
+		for i, id := range want {
+			page := PaginatePay(report, PayPageQuery{Pagination: Pagination{Page: i + 1, PageSize: 1}, Summary: true})
+			if len(page.Pagination.RowIDs) != 1 || page.Pagination.RowIDs[0] != id {
+				t.Fatalf("page %d: got %v, want %s", i+1, page.Pagination.RowIDs, id)
+			}
+		}
+	}
+	assertOrder([]string{"setup", "draft-b", "draft-z", "closed-a", "closed-b"})
+	report.Drivers[0].Settlement.Finalized = false
+	assertOrder([]string{"closed-a", "setup", "draft-b", "draft-z", "closed-b"})
+	report.Drivers[1].Settlement = &PayrollSettlement{Finalized: true}
+	assertOrder([]string{"closed-a", "setup", "draft-b", "closed-b", "draft-z"})
+}
+
 func TestPayPageDetailsStayOnPage(t *testing.T) {
 	r := DriverPayWeek{Revision: "same-snapshot", Drivers: []DriverPayDriver{
 		{ID: "a", FullName: "Alpha", Loads: []DriverPayLoad{{Fee: "10.00"}}},
