@@ -108,7 +108,10 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		return empty, err
 	}
 	defer conn.Release()
-	if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock(736281940)`); err != nil {
+	endLock := db.Phase(ctx, "financial_lock_wait")
+	_, err = conn.Exec(ctx, `SELECT pg_advisory_lock(736281940)`)
+	endLock()
+	if err != nil {
 		return empty, err
 	}
 	defer func() {

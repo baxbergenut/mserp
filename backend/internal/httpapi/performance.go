@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -48,6 +49,9 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 			route := chi.RouteContext(r.Context()).RoutePattern()
 			phases, _ := m.Details()
 			scenario := "default"
+			if strings.HasPrefix(route, "/driver-pay") || strings.HasPrefix(route, "/investor-pay") {
+				scenario = payrollPerformanceScenario(r)
+			}
 			if route == "/dashboard/summary" {
 				switch r.URL.Query().Get("view") {
 				case "current":
@@ -61,7 +65,33 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 					scenario += "_primary"
 				}
 			}
-			logger.Info("http performance", "scenario", scenario, "phases_ms", phases, "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
+			logger.Info("http performance", "scenario", scenario, "phases_ms", phases, "events", m.Events(), "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
 		})
 	}
+}
+
+func payrollPerformanceScenario(r *http.Request) string {
+	q := r.URL.Query()
+	if r.Method == http.MethodPost {
+		if strings.HasSuffix(r.URL.Path, "/finalize") || strings.HasSuffix(r.URL.Path, "/reopen") {
+			return "settlement"
+		}
+		return "source_action"
+	}
+	if r.Method == http.MethodPut {
+		return "save"
+	}
+	if strings.Contains(r.URL.Path, "/statements/") {
+		return "statement_detail"
+	}
+	if q.Get("summary") == "1" {
+		if q.Get("detailIds") != "" {
+			return "summary_with_details"
+		}
+		return "summary"
+	}
+	if q.Get("statementId") != "" {
+		return "statement_detail"
+	}
+	return "full_report"
 }

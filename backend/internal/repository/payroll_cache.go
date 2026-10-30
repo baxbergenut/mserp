@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
+	"mserp/internal/db"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,6 +25,7 @@ type payrollCache struct {
 // dependency, including newly tracked tables and financial audit inputs. Changes
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
+	"status_color_settings", "status_color_history",
 	"accounting_cutover_previews", "accounting_payroll_archives",
 	"driver_board_driver_order",
 	"driver_board_dispatcher_order",
@@ -47,6 +50,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 		c.mu.Lock()
 		hit, ok := c.entries[key]
 		if ok && time.Now().Before(hit.expires) {
+			db.Event(ctx, "payroll_cache_hit")
 			c.mu.Unlock()
 			var report DriverPayWeek
 			if err := json.Unmarshal(hit.body, &report); err != nil {
@@ -55,6 +59,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 			return report, nil
 		}
 		if flight := c.inFlight[key]; flight != nil {
+			db.Event(ctx, "payroll_cache_wait")
 			c.mu.Unlock()
 			select {
 			case <-flight:
@@ -67,6 +72,7 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 			c.inFlight = map[string]chan struct{}{}
 		}
 		c.inFlight[key] = make(chan struct{})
+		db.Event(ctx, "payroll_cache_miss")
 		c.mu.Unlock()
 		break
 	}
@@ -143,6 +149,11 @@ func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
 	}
 	if err := tx.QueryRow(ctx, query, args...).Scan(&snapshot); err != nil {
 		return "", err
+	}
+	if revisionTable == nil {
+		db.Event(ctx, "payroll_fallback_missing_registry")
+	} else if strings.HasPrefix(snapshot, "snapshot:") {
+		db.Event(ctx, "payroll_fallback_untracked_table")
 	}
 	return snapshot, nil
 }

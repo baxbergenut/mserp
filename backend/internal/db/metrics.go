@@ -21,7 +21,31 @@ type Metrics struct {
 	mu           sync.Mutex
 	phases       map[string]int64
 	fingerprints map[string]QueryMetric
+	events       map[string]int64
 }
+
+// Event records only fixed operational categories, never identities or inputs.
+func Event(ctx context.Context, name string) {
+	if m, ok := ctx.Value(metricsKey{}).(*Metrics); ok {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.events == nil {
+			m.events = map[string]int64{}
+		}
+		m.events[name]++
+	}
+}
+
+func (m *Metrics) Events() map[string]int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := map[string]int64{}
+	for k, v := range m.events {
+		result[k] = v
+	}
+	return result
+}
+
 type QueryMetric struct {
 	Calls int64   `json:"calls"`
 	MS    float64 `json:"ms"`
