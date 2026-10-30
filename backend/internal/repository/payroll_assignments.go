@@ -103,7 +103,7 @@ func decoratePayAssignments(ctx context.Context, tx pgx.Tx, kind string, report 
  AND (h.unassigned_at IS NULL OR h.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
  AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
  ORDER BY h.assigned_at DESC LIMIT 1
- ) h ON true LEFT JOIN dispatchers p ON p.id=h.dispatcher_id`, body)
+ ) h ON true LEFT JOIN dispatchers p ON p.id=h.dispatcher_id`, string(body))
 	if err != nil {
 		return err
 	}
