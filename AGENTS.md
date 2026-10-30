@@ -131,6 +131,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
+  Broker responsibility requires a separate load number (migration 177), preserved
+  by native/bulk expense forms and searchable in the expense directory. Driver and
+  Investor Pay show current reimbursement reminders for matching statement load
+  numbers, following the already routed/frozen loads and deduplicating split rows.
+  These collection notes never change payable totals, deductions or payout receipts;
+  the explicit Reimburse payment method retains its separate existing behavior.
+  Reminders refresh after expense edits/deletion without rewriting frozen financial
+  snapshots. Check TestBrokerExpensesDatabase with MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
+  and frontend/scripts/test-payroll-expenses.mjs after a /api build.
+  Historical imported Broker records retain unknown load numbers until reviewed;
+  unrelated bookkeeping updates remain allowed. Never infer their load numbers.
   Driver Personal charges and Expenses expose Edit balance with expenses.settle
   and category View access. Migration 176 records immutable, versioned corrections
   with reason, actor, previous and new remaining balance; original invoices and

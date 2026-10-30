@@ -74,6 +74,7 @@ type expenseRequest struct {
 	ReferenceNumber    string          `json:"referenceNumber"`
 	Description        string          `json:"description"`
 	CoveredBy          string          `json:"coveredBy"`
+	BrokerLoadNumber   string          `json:"brokerLoadNumber"`
 	PaidBy             string          `json:"paidBy"`
 	AccountingVerified bool            `json:"accountingVerified"`
 }
@@ -87,6 +88,7 @@ func (request *expenseRequest) applyDriverOnly() {
 	request.OwnerID = nil
 	request.PaymentType = ""
 	request.PaidBy = ""
+	request.BrokerLoadNumber = ""
 }
 
 // Apply category rules before fee/driver validation, including for older clients.
@@ -223,6 +225,16 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			return repository.ExpenseInput{}, errors.New("owner expenses must have a nonnegative amount")
 		}
 	}
+	request.BrokerLoadNumber = strings.TrimSpace(request.BrokerLoadNumber)
+	if strings.EqualFold(strings.TrimSpace(request.CoveredBy), "Broker") {
+		request.CoveredBy = "Broker"
+		request.OwnerID = nil
+		if request.BrokerLoadNumber == "" || utf8.RuneCountInString(request.BrokerLoadNumber) > 100 {
+			return repository.ExpenseInput{}, errors.New("broker-covered expenses require a load number of 1–100 characters")
+		}
+	} else {
+		request.BrokerLoadNumber = ""
+	}
 	breakdownTotal := request.Amount
 	if request.BaseAmount != nil {
 		breakdownTotal = *request.BaseAmount
@@ -243,6 +255,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
 		ExpenseType: optionalString(request.ExpenseType), ReferenceNumber: optionalString(request.ReferenceNumber),
 		Description: optionalString(request.Description), CoveredBy: optionalString(request.CoveredBy),
+		BrokerLoadNumber:   optionalString(request.BrokerLoadNumber),
 		PaidBy:             optionalString(request.PaidBy),
 		AccountingVerified: false,
 	}, nil

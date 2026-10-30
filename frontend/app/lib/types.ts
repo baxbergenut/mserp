@@ -970,6 +970,7 @@ export interface Expense {
   description: string | null;
   workOrderDescription?: string | null;
   coveredBy: string | null;
+  brokerLoadNumber?: string | null;
   paidBy: string | null;
   accountingVerified: boolean;
   sourceSpreadsheetId: string | null;
@@ -1016,6 +1017,7 @@ export interface ExpenseInput {
   referenceNumber: string;
   description: string;
   coveredBy: string;
+  brokerLoadNumber?: string;
   paidBy: string;
   accountingVerified: boolean;
 }
@@ -1321,6 +1323,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+  brokerReimbursements?: { expenseId: string; loadNumber: string; expenseType: string; expenseDate: string; amount: string }[];
   displayEmploymentTypes?: EmploymentType[];
   homeWeek?: boolean;
   dayStatuses?: { date: string; status: Exclude<GrossBoardDayStatus, ""> }[];

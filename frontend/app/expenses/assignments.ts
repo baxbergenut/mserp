@@ -9,6 +9,7 @@ export function expenseResponsibility(value: ExpenseInput, trucks: TruckOption[]
 }
 
 export function defaultExpenseResponsibility(value: ExpenseInput, trucks: TruckOption[], owners: InvestorOption[]): ExpenseInput {
+  if (value.coveredBy === "Broker") return { ...value, ownerId: null };
   const { truck, privatelyOwned, driverOwnsTruck } = expenseResponsibility(value, trucks, owners);
   return { ...value, coveredBy: privatelyOwned ? driverOwnsTruck ? "Driver" : "Truck Owner" : "Company", ownerId: privatelyOwned && !driverOwnsTruck ? truck!.ownerId : null };
 }

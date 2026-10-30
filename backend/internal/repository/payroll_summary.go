@@ -115,6 +115,9 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 	if err := decoratePayAssignments(ctx, tx, kind, report); err != nil {
 		return err
 	}
+	if err := decorateBrokerReimbursements(ctx, tx, report); err != nil {
+		return err
+	}
 	if payrollSummaryOnly(ctx) {
 		for i, d := range report.Drivers {
 			report.Drivers[i] = summarizePayStatement(d)

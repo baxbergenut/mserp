@@ -158,6 +158,7 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
           </button>
           <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
           {!investor && driver.teamDrivers?.map(person => <Link key={person.id} title={`Team driver: ${person.name}. This statement uses the main driver's tariff.`} href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()} className="truncate text-[10px] text-blue-400">+ {person.name}</Link>)}
+          {!!driver.brokerReimbursements?.length && <span title="Broker reimbursement expected" className="shrink-0 text-[10px] text-amber-300">Broker reimbursement · {driver.brokerReimbursements.length}</span>}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
         </div>
       </th>
@@ -173,6 +174,12 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
+        {!!driver.brokerReimbursements?.length && <div className="border-b border-zinc-800 px-3 py-2 text-xs text-amber-300" aria-label="Broker reimbursement reminders">
+          {driver.brokerReimbursements.map(item => <div key={item.expenseId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>Broker reimbursement expected · Load {item.loadNumber} · {amount(item.amount, true)}</span>
+            <ExpenseRowLabel id={item.expenseId} name={item.expenseType} date={item.expenseDate} onOpenExpense={onOpenExpense} disabled={expenseOpenDisabled} />
+          </div>)}
+        </div>}
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
         {placementError && <p role="alert" className="px-3 py-2 text-xs text-red-300">{placementError}</p>}

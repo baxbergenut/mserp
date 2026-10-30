@@ -10,6 +10,26 @@ import (
 
 const testExpenseCategoryID = "00000000-0000-4000-8000-000000000099"
 
+func TestBrokerExpenseValidation(t *testing.T) {
+	r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-30", ExpenseType: "Lumper", Amount: "125.50", CoveredBy: " broker "}
+	for _, value := range []string{"", " \t ", strings.Repeat("x", 101)} {
+		r.BrokerLoadNumber = value
+		if _, err := r.validate(); err == nil {
+			t.Fatal("invalid broker load accepted", value)
+		}
+	}
+	r.BrokerLoadNumber = " 00123-A "
+	in, err := r.validate()
+	if err != nil || *in.CoveredBy != "Broker" || *in.BrokerLoadNumber != "00123-A" || in.PaymentType != nil || in.OwnerID != nil {
+		t.Fatal("broker responsibility changed payment method or load", in, err)
+	}
+	r.CoveredBy = "Company"
+	in, err = r.validate()
+	if err != nil || in.BrokerLoadNumber != nil {
+		t.Fatal("stale broker load retained", in, err)
+	}
+}
+
 func TestExpenseDeletionFinalizedError(t *testing.T) {
 	w := httptest.NewRecorder()
 	expenseHandler{}.writeError(w, repository.ErrExpenseFinalized)

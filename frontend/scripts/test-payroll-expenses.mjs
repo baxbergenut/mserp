@@ -24,6 +24,7 @@ try {
       id: 'statement', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
       ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
+      brokerReimbursements: [{expenseId:'expense',loadNumber:'L0',expenseType:'Equipment',expenseDate:week,amount:'100.00'}],
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
@@ -71,7 +72,7 @@ try {
       }
       if (path === '/expenses/expense') {
         if (request.method() === 'PUT') {
-          const input=request.postDataJSON(); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
+          const input=request.postDataJSON(); expect(input.coveredBy).toBe('Broker'); expect(input.brokerLoadNumber).toBe('L0'); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
           expense={...expense,...input,amount:'640.00',baseAmount:'634.00',paymentFee:'6.00'}; writes++;
           driver.edits.expenseDeductions[0]={...driver.edits.expenseDeductions[0],name:input.expenseType,expenseDate:input.expenseDate,total:'640.00',available:'640.00',openingBalance:'640.00'};
         }
@@ -105,6 +106,8 @@ try {
     await page.goto(`${base}/accounting/${investor ? 'investor' : 'driver'}-pay?weekStart=${week}&${investor ? 'truckId' : 'driverId'}=statement`);
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
+    await expect(page.getByLabel('Broker reimbursement reminders')).toContainText('Broker reimbursement expected · Load L0 · $100.00');
+    await page.screenshot({path:join(tmpdir(),investor ? 'mserp-broker-investor-reminder.png':'mserp-broker-driver-reminder.png'),fullPage:true,animations:'disabled'});
     expect(costReads).toEqual([]);
     const writesBeforeDetails = payWrites;
     await region.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
@@ -154,9 +157,13 @@ try {
     }
 
     await expect(region.getByText('09/28', {exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Open expense Equipment',exact:true}).click();
+    await region.getByRole('button',{name:'Open expense Equipment',exact:true}).click();
     let modal=page.getByRole('dialog',{name:'Edit entry'});
     await expect(modal).toBeVisible();
+    await modal.getByLabel('Who will cover',{exact:true}).selectOption('Broker');
+    await expect(modal.getByLabel('Broker load number')).toBeVisible();
+    expect(await modal.getByLabel('Broker load number').evaluate(e=>e.checkValidity())).toBe(false);
+    await modal.getByLabel('Broker load number').fill('L0');
     await modal.getByLabel('Payment method',{exact:true}).selectOption('EFS');
     await modal.getByLabel('Amount',{exact:true}).fill('300');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $3.00 · Total: $303.00');
@@ -175,9 +182,11 @@ try {
     await expect(region.getByText('Left: $615.00',{exact:true})).toBeVisible();
     expect(page.url()).toContain('/accounting/');
     await page.getByRole('button',{name:'Open expense Parking',exact:true}).click();
+    await expect(modal.getByLabel('Broker load number')).toHaveValue('L0');
     await expect(modal.getByLabel('Amount',{exact:true})).toHaveValue('634.00');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $6.00 · Total: $640.00');
-    await page.screenshot({path:join(tmpdir(), investor ? 'mserp-investor-expense-edit.png':'mserp-driver-expense-edit.png'),fullPage:true,animations:"disabled"});
+    await modal.getByLabel('Broker load number').scrollIntoViewIfNeeded();
+    await page.screenshot({path:join(tmpdir(), investor ? 'mserp-broker-investor-expense.png':'mserp-broker-driver-expense.png'),fullPage:true,animations:"disabled"});
     await modal.getByRole('button',{name:'Cancel',exact:true}).click();
     writable=false; await page.reload();
     if (!investor) {

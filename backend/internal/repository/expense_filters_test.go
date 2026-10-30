@@ -151,6 +151,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 			input.PaidBy = payTestString("Other Payer")
 			input.PaymentType = payTestString("Retired card")
 			input.CoveredBy = payTestString("Broker")
+			input.BrokerLoadNumber = payTestString("FILTER-LOAD")
 			input.Amount = "40"
 			if _, err = repo.CreateExpense(ctx, input); err != nil {
 				t.Fatal(err)

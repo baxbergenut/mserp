@@ -12,7 +12,7 @@ export function isDriverOnlyExpense(settings: ExpenseSetting[], categoryId: stri
 
 export function applyExpenseCategoryRules(value: ExpenseInput, settings: ExpenseSetting[]): ExpenseInput {
   return isDriverOnlyExpense(settings, value.categoryId)
-    ? { ...value, coveredBy: "Driver", ownerId: null, paymentType: "", paidBy: "" }
+    ? { ...value, coveredBy: "Driver", brokerLoadNumber: "", ownerId: null, paymentType: "", paidBy: "" }
     : value;
 }
 

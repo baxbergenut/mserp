@@ -74,6 +74,7 @@ type Expense struct {
 	Description          *string               `json:"description"`
 	WorkOrderDescription *string               `json:"workOrderDescription"`
 	CoveredBy            *string               `json:"coveredBy"`
+	BrokerLoadNumber     *string               `json:"brokerLoadNumber"`
 	PaidBy               *string               `json:"paidBy"`
 	AccountingVerified   bool                  `json:"accountingVerified"`
 	SourceSpreadsheetID  *string               `json:"sourceSpreadsheetId"`
@@ -105,6 +106,7 @@ type ExpenseInput struct {
 	ReferenceNumber    *string
 	Description        *string
 	CoveredBy          *string
+	BrokerLoadNumber   *string
 	PaidBy             *string
 	AccountingVerified bool
 }
@@ -178,7 +180,7 @@ func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpenseP
 	where := `
 WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings WHERE id=e.category_id), COALESCE(t.unit_number, e.unit_number),
 		COALESCE(d.full_name, e.driver_name), e.payment_type, e.expense_type,
-		e.reference_number, e.description, e.covered_by, e.paid_by)
+		e.reference_number, e.description, e.covered_by, e.paid_by, e.broker_load_number)
 	ILIKE '%' || $1 || '%')
 	AND e.category_id=ANY($2::uuid[])
 	AND ($3 = '' OR e.category_id = $3::uuid)
@@ -540,18 +542,18 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 		INSERT INTO expenses (
 			category_id, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown, applicant_id
+			paid_by, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown, applicant_id, broker_load_number
 		) VALUES (
 			$1, (SELECT name FROM expense_settings WHERE id=$1 AND kind='category' AND active), $2, $3, $4,
 			CASE WHEN $3::uuid IS NULL THEN $5 ELSE (SELECT unit_number FROM trucks WHERE id = $3) END,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT full_name FROM drivers WHERE id = $4) END,
-			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, NULLIF($16,'')::uuid, NULLIF($17,''), $18::numeric, coalesce(nullif($19,''),'0')::numeric, coalesce($20::jsonb,'[]'::jsonb), $21
+			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, NULLIF($16,'')::uuid, NULLIF($17,''), $18::numeric, coalesce(nullif($19,''),'0')::numeric, coalesce($20::jsonb,'[]'::jsonb), $21, $22
 		) RETURNING id`,
 		input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.AccountingVerified, input.OwnerID, input.CreatedBy, input.CreatedByName,
-		input.BaseAmount, input.PaymentFee, breakdown, input.ApplicantID,
+		input.BaseAmount, input.PaymentFee, breakdown, input.ApplicantID, input.BrokerLoadNumber,
 	).Scan(&id)
 	return id, err
 }
@@ -600,12 +602,12 @@ func updateExpenseRow(ctx context.Context, tx pgx.Tx, id string, input ExpenseIn
 			driver_name = CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
 			amount = $8::numeric, payment_type = $9,
 			expense_type = $10, reference_number = $11, description = $12,
-			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown), applicant_id=$20
+			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown), applicant_id=$20, broker_load_number=$21
 		WHERE id = $1 AND ($18::timestamptz IS NULL OR updated_at=$18)`,
 		id, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown, input.ApplicantID,
+		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown, input.ApplicantID, input.BrokerLoadNumber,
 	)
 	if err != nil {
 		return err
@@ -707,6 +709,7 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)
 , e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),''), NOT coalesce(accounting_live_source('expense',e.id,e.expense_date),false),e.balance_version
+ , to_jsonb(e)->>'broker_load_number'
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
@@ -721,7 +724,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID, &value.ManagedInSheets, &value.BalanceVersion,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID, &value.ManagedInSheets, &value.BalanceVersion, &value.BrokerLoadNumber,
 	)
 	return value, err
 }

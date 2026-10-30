@@ -295,6 +295,19 @@ func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 // dependencies; the complete migration and its guards are tested above.
 func applyAccountingExpenseTestSchema(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
+	var brokerColumn bool
+	if err := conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='expenses'::regclass AND attname='broker_load_number' AND NOT attisdropped)`).Scan(&brokerColumn); err != nil {
+		t.Fatal(err)
+	}
+	if !brokerColumn {
+		migration, err := os.ReadFile("../../sql/177_broker_expenses.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = conn.Exec(ctx, string(migration)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	defer func() {
 		var present bool
 		if e := conn.QueryRow(ctx, "SELECT to_regprocedure('expense_collectible_total(expenses)') IS NOT NULL").Scan(&present); e != nil {

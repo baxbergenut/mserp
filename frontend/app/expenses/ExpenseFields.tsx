@@ -18,11 +18,13 @@ export function ExpenseResponsibilitySelect({ value, trucks, owners, onChange, c
 }) {
   const { truck, owner, privatelyOwned, driverOwnsTruck } = expenseResponsibility(value, trucks, owners);
   const displayedOwner = value.coveredBy === "Truck Owner" && value.ownerId ? owners.find(item => item.id === value.ownerId) : owner;
-  const choices = ["Company", ...(value.driverId ? ["Driver"] : []), ...(privatelyOwned && !driverOwnsTruck ? ["Truck Owner"] : [])];
-  return <select aria-label={label} value={value.coveredBy} onChange={event => onChange({ ...value, coveredBy: event.target.value, ownerId: event.target.value === "Truck Owner" ? truck?.ownerId ?? null : null })} className={className}>
+  const choices = ["Company", ...(value.driverId ? ["Driver"] : []), ...(privatelyOwned && !driverOwnsTruck ? ["Truck Owner"] : []), "Broker"];
+  return <><select aria-label={label} value={value.coveredBy} onChange={event => onChange({ ...value, coveredBy: event.target.value, brokerLoadNumber: event.target.value === "Broker" ? value.brokerLoadNumber ?? "" : "", ownerId: event.target.value === "Truck Owner" ? truck?.ownerId ?? null : null })} className={className}>
     {value.coveredBy && !choices.includes(value.coveredBy) && <option value={value.coveredBy}>{value.coveredBy} (saved)</option>}
     {choices.map(choice => <option key={choice} value={choice}>{choice === "Truck Owner" ? `Truck Owner${displayedOwner?.fullName ? ` · ${displayedOwner.fullName}` : ""}` : choice}</option>)}
-  </select>;
+  </select>{value.coveredBy === "Broker" && <label className="mt-2 block text-xs text-zinc-400">Load number
+    <input aria-label="Broker load number" required maxLength={100} value={value.brokerLoadNumber ?? ""} onChange={event => onChange({ ...value, brokerLoadNumber: event.target.value })} className={className} placeholder="Load number" />
+  </label>}</>;
 }
 
 export function ExpensePayerSelect({ value, users, onChange, className, label = "Paid by" }: {

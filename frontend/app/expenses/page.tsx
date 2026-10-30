@@ -451,7 +451,7 @@ export default function ExpensesPage() {
                     <div className="mt-0.5 text-[11px] text-zinc-600">{expense.managedInSheets?"Managed in Sheets":`Paid by ${expense.paidBy || "—"}`}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
+                    <div className="text-zinc-300">{expense.coveredBy || "—"}{expense.coveredBy === "Broker" && <span className="block text-xs text-zinc-500">{expense.brokerLoadNumber ? `Load ${expense.brokerLoadNumber}` : "Load number needed"}</span>}{expense.ownerName && <span className="block text-xs text-zinc-500">{expense.ownerName}</span>}</div>
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
                     <span tabIndex={0} title={(expense.paymentFee && expense.paymentFee !== "0.00" ? "Base: " + formatMoney(expense.baseAmount ?? expense.amount) + "\nEFS fee: " + formatMoney(expense.paymentFee) + "\n" : "") + "Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>

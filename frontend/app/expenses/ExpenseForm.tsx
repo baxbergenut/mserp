@@ -31,6 +31,7 @@ export const emptyExpenseInput: ExpenseInput = {
   referenceNumber: "",
   description: "",
   coveredBy: "Company",
+  brokerLoadNumber: "",
   paidBy: "",
   accountingVerified: false,
 };
@@ -56,6 +57,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     referenceNumber: expense.referenceNumber ?? "",
     description: expense.maintenance ? Array.from(new Set([expense.workOrderDescription?.trim(), expense.description?.trim()].filter(Boolean))).join("\n\n") : expense.description ?? "",
     coveredBy: expense.coveredBy ?? "",
+    brokerLoadNumber: expense.brokerLoadNumber ?? "",
     paidBy: expense.paidBy ?? "",
     accountingVerified: expense.accountingVerified,
   };
