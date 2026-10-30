@@ -28,7 +28,7 @@ let entries = drivers.map((d, i) => ({ driverId: d.id, date: week, slot: 0, dele
 
 entries = entries.map((e,i)=>({...e,loadTripId:trips[i].id,enteredOriginalRate:trips[i].originalRate,driverRate:i?'1313':'500'}));
 trips[0].originalRate='700';
-let readOnly=false,saves=0,rejectNextSave=false,reviewVersion=0;
+let readOnly=false,saves=0,rejectNextSave=false,reviewVersion=0,withExtra=false;
 const mismatchReason='Trip gross totals $2,013.00 but the load total is $1,813.00. Review the original gross split independently of DataTruck trip amounts.';
 entries=entries.map(e=>({...e,tripReviewReason:mismatchReason}));
 try {
@@ -48,7 +48,7 @@ try {
   }
   const fixtures={
    '/auth/session':{user:{id:'split-test',username:'Split Test',theme:'original',permissions:['board.read','loads.read','drivers.read','trucks.read','dispatchers.read',...(readOnly?[]:['board.write'])]},csrfToken:'fixture'},
-   '/gross-board':{weekStart:week,entries,drivers,balances:[]},'/sidebar-counts':{},'/tasks/count':{count:0},
+   '/gross-board':{weekStart:week,entries:withExtra?[...entries,{...entries[0],slot:1,loadNumber:'SECOND',loadRecordId:null,loadTripId:null,split:false,originalRate:'0',enteredOriginalRate:'0',systemOriginalRate:'0',driverRate:'0',miles:'0',enteredMiles:'0',systemMiles:'0'}]:entries,drivers,balances:[]},'/sidebar-counts':{},'/tasks/count':{count:0},
    '/loads':{items:[],total:0,page:1,pageSize:25,totalPages:1,statuses:[]}
   };return route.fulfill({json:fixtures[path]??[]});
  });
@@ -72,6 +72,16 @@ try {
  await expect(page.getByLabel('Split First, '+week+', driver rate',{exact:true})).toHaveValue('$700.00');
  await expect(page.getByLabel('Split Second, '+week+', total gross',{exact:true})).toHaveValue('$1,313.00');
  await page.reload();await expect(page.getByLabel('Split First, '+week+', driver rate',{exact:true})).toHaveValue('$700.00');
+ // Enter in a split field must not submit the surrounding Daily loads form.
+ withExtra=true;await page.reload();
+ await page.getByRole('button',{name:'Split First, '+week+', load numbers and details',exact:true}).click();
+ const daily=page.locator('form').filter({has:page.getByRole('heading',{name:'Daily loads',exact:true})});
+ await daily.getByRole('button',{name:'Split load SPLIT-1 for Split First',exact:true}).click();
+ dialog=page.getByRole('dialog',{name:'Review load SPLIT-1',exact:true});
+ await dialog.getByLabel('Split review note').fill('Nested review');await dialog.getByLabel('Split review note').press('Enter');
+ await expect(dialog).toBeVisible();await expect(daily).toBeVisible();expect(saves).toBe(1);
+ await dialog.getByRole('button',{name:'Close',exact:true}).click();await daily.getByRole('button',{name:'Cancel',exact:true}).click();
+ withExtra=false;await page.reload();
  // A source revision after opening rejects the entire save and retains its draft.
  dialog=await open();await dialog.getByLabel('Split review note').fill('Rechecked sheet');rejectNextSave=true;
  await dialog.getByRole('button',{name:'Apply split',exact:true}).click();

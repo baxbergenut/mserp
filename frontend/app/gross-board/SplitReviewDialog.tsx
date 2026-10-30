@@ -56,7 +56,7 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
   return <BoardDialog title={`Review load ${entry.loadNumber}`} onClose={onClose}>
     {error && <p role="alert" className="mb-3 text-red-300">{error}<button type="button" className="ml-3 underline" onClick={() => { setError(""); setRetry(n => n + 1); }}>Retry</button></p>}
     {!workspace && !error && <p role="status">Loading split…</p>}
-    {workspace && <>
+    {workspace && <div onKeyDown={event => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault(); }}>
       <p className="mb-4 text-zinc-400">Allocate the order&apos;s {amountDisplay(workspace.total, true)} original gross across its trips. Driver gross is entered separately. DataTruck amounts are references.</p>
       {workspace.reviewReason && <p role="status" className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">{workspace.reviewReason}</p>}
       <table className="w-full text-left text-sm"><thead className="text-zinc-400"><tr><th className="py-2">Trip</th><th className="px-2 text-right">DataTruck amount</th><th className="w-36 pl-2">Original gross</th></tr></thead>
@@ -80,6 +80,6 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
       <p className="mt-2 text-xs text-zinc-400">Driver gross does not have to equal order revenue. Existing mileage is verified against DataTruck. All linked entries save together.</p>
       <label className="mt-5 block text-zinc-400">Review note<input aria-label="Split review note" className={`${inputClass} mt-2`} maxLength={2000} disabled={disabled} value={workspace.reason} onChange={event => setWorkspace({ ...workspace, reason: event.target.value })} placeholder="For example: confirmed against the weekly sheet" /></label>
       {!disabled && <button type="button" disabled={!valid} onClick={apply} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-40">Apply split</button>}
-    </>}
+    </div>}
   </BoardDialog>;
 }
