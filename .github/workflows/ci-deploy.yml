@@ -161,6 +161,13 @@ jobs:
         working-directory: frontend
         run: node scripts/test-dashboard-views.mjs
 
+      - name: Verify payroll extra loads in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        env:
+          MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+        run: node scripts/test-investors-e2e.mjs --load-placements-only
+
       - name: Verify Gross Board daily load editing in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend

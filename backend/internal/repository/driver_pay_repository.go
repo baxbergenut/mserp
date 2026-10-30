@@ -51,36 +51,40 @@ type DriverPayEdits struct {
 	GeneratedCharges     []ChargeOccurrence    `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
-	PlacementVersion       int      `json:"placementVersion,omitempty"`
-	SourceSlot             int      `json:"sourceSlot"`
-	SourceDate             string   `json:"sourceDate,omitempty"`
-	DispatchDate           string   `json:"dispatchDate,omitempty"`
-	DispatchSlot           int      `json:"dispatchSlot,omitempty"`
-	TransferVersion        int      `json:"transferVersion,omitempty"`
-	CreditedDispatcherID   string   `json:"creditedDispatcherId,omitempty"`
-	CreditedDispatcherName string   `json:"creditedDispatcherName,omitempty"`
-	LoadTripID             *int     `json:"loadTripId,omitempty"`
-	TripReview             bool     `json:"tripReview,omitempty"`
-	BoardVersion           int      `json:"boardVersion"`
-	SystemOriginalRate     string   `json:"systemOriginalRate"`
-	SystemMiles            string   `json:"systemMiles"`
-	SourceDriverID         string   `json:"sourceDriverId,omitempty"`
-	DriverFee              string   `json:"driverFee,omitempty"`
-	Date                   string   `json:"date"`
-	Slot                   int      `json:"slot"`
-	LoadNumber             string   `json:"loadNumber"`
-	LoadRecordID           *int     `json:"loadRecordId"`
-	CommentKey             string   `json:"commentKey"`
-	PickupDate             string   `json:"pickupDate"`
-	PickupLocation         string   `json:"pickupLocation"`
-	DeliveryLocation       string   `json:"deliveryLocation"`
-	OriginalRate           string   `json:"originalRate"`
-	DriverGross            string   `json:"driverGross"`
-	TotalMiles             string   `json:"totalMiles"`
-	LoadedMiles            string   `json:"loadedMiles"`
-	DeadheadMiles          string   `json:"deadheadMiles"`
-	Fee                    string   `json:"fee"`
-	Issues                 []string `json:"issues"`
+	PayrollSupplement       bool     `json:"payrollSupplement,omitempty"`
+	PayrollPlacementVersion int      `json:"payrollPlacementVersion,omitempty"`
+	NotReady                bool     `json:"notReady,omitempty"`
+	Status                  string   `json:"status,omitempty"`
+	PlacementVersion        int      `json:"placementVersion,omitempty"`
+	SourceSlot              int      `json:"sourceSlot"`
+	SourceDate              string   `json:"sourceDate,omitempty"`
+	DispatchDate            string   `json:"dispatchDate,omitempty"`
+	DispatchSlot            int      `json:"dispatchSlot,omitempty"`
+	TransferVersion         int      `json:"transferVersion,omitempty"`
+	CreditedDispatcherID    string   `json:"creditedDispatcherId,omitempty"`
+	CreditedDispatcherName  string   `json:"creditedDispatcherName,omitempty"`
+	LoadTripID              *int     `json:"loadTripId,omitempty"`
+	TripReview              bool     `json:"tripReview,omitempty"`
+	BoardVersion            int      `json:"boardVersion"`
+	SystemOriginalRate      string   `json:"systemOriginalRate"`
+	SystemMiles             string   `json:"systemMiles"`
+	SourceDriverID          string   `json:"sourceDriverId,omitempty"`
+	DriverFee               string   `json:"driverFee,omitempty"`
+	Date                    string   `json:"date"`
+	Slot                    int      `json:"slot"`
+	LoadNumber              string   `json:"loadNumber"`
+	LoadRecordID            *int     `json:"loadRecordId"`
+	CommentKey              string   `json:"commentKey"`
+	PickupDate              string   `json:"pickupDate"`
+	PickupLocation          string   `json:"pickupLocation"`
+	DeliveryLocation        string   `json:"deliveryLocation"`
+	OriginalRate            string   `json:"originalRate"`
+	DriverGross             string   `json:"driverGross"`
+	TotalMiles              string   `json:"totalMiles"`
+	LoadedMiles             string   `json:"loadedMiles"`
+	DeadheadMiles           string   `json:"deadheadMiles"`
+	Fee                     string   `json:"fee"`
+	Issues                  []string `json:"issues"`
 }
 type PayPerson struct {
 	ID   string `json:"id"`
@@ -218,7 +222,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END)::text,''),coalesce(e.driver_rate::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles,e.miles) END)::text,''),coalesce(e.version,0),coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),
  CASE WHEN l.id IS NOT NULL THEN jsonb_build_object('stops',l.raw_payload->'stops','trip',CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip ELSE l.raw_payload->'trip' END) END,
- e.load_trip_id,coalesce(trip_source.review,false),
+ e.load_trip_id,coalesce(trip_source.review,false),coalesce(e.payroll_supplement,false),coalesce(e.payroll_placement_version,0),coalesce(l.status,''),
  e.load_trip_id IS NOT NULL AND EXISTS(SELECT 1 FROM `+grossBoardEntriesSQL+` prior WHERE NOT prior.deleted AND prior.day_status='' AND prior.driver_id=e.driver_id AND prior.load_record_id=l.id AND prior.load_trip_id=e.load_trip_id AND (prior.service_date,prior.slot)<(e.source_date,e.source_slot)),
  CASE WHEN $4::boolean THEN '' ELSE coalesce(w.notes,'') END,CASE WHEN $4::boolean THEN '{}'::jsonb ELSE coalesce(w.comments,'{}'::jsonb) END,coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
@@ -244,7 +248,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		var raw, comments, adjustments []byte
 		var repeatedTrip bool
 		if err := rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.PayType, &d.PayRate, &d.EmploymentType, &d.IsOwnerOperator,
-			&l.SourceDate, &l.SourceSlot, &l.DispatchDate, &l.DispatchSlot, &l.TransferVersion, &l.CreditedDispatcherID, &l.CreditedDispatcherName, &l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw, &l.LoadTripID, &l.TripReview, &repeatedTrip,
+			&l.SourceDate, &l.SourceSlot, &l.DispatchDate, &l.DispatchSlot, &l.TransferVersion, &l.CreditedDispatcherID, &l.CreditedDispatcherName, &l.Date, &l.Slot, &l.LoadNumber, &l.LoadRecordID, &l.PickupDate, &l.OriginalRate, &l.DriverGross, &l.TotalMiles, &l.BoardVersion, &l.SystemOriginalRate, &l.SystemMiles, &raw, &l.LoadTripID, &l.TripReview, &l.PayrollSupplement, &l.PayrollPlacementVersion, &l.Status, &repeatedTrip,
 			&d.Edits.Notes, &comments, &adjustments, &d.Edits.Version,
 			&d.Edits.FuelOverride, &d.Edits.TollOverride, &d.FuelTotal, &d.TollTotal, &d.Edits.LayoverExcludedDates); err != nil {
 			return result, err
@@ -254,6 +258,10 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		}
 		l.CommentKey = l.Date + ":" + strconv.Itoa(l.Slot) + ":" + strings.ToLower(strings.TrimSpace(l.LoadNumber))
 		l.Issues = []string{}
+		l.NotReady = l.LoadRecordID != nil && !payLoadReady(l.Status)
+		if l.NotReady {
+			l.Issues = append(l.Issues, "Load is not delivered or invoiced ("+l.Status+")")
+		}
 		if l.TripReview {
 			l.Issues = append(l.Issues, "Split load needs a valid trip selection in Gross Board")
 		}

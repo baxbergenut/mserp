@@ -568,6 +568,7 @@ export const undoPaySystemValues = (investor: boolean, id: string) => apiRequest
 export const changeDriverStatus = (id: string, input: DriverStatusChange) => apiRequest<Driver>(`/drivers/${id}/status`, { method: "PATCH", body: JSON.stringify(input) });
 export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
+export const placeStatementLoad = (investor: boolean, input: import("./types").PayLoadPlacementInput) => apiRequest<import("./types").PayLoadPlacementResult | void>(`/${investor ? "investor-pay" : "driver-pay"}/statement-load`, { method: "POST", body: JSON.stringify(input) });
 
 export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
 export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }, signal?: AbortSignal) =>

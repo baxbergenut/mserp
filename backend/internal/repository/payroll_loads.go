@@ -4,7 +4,7 @@ package repository
 // older duplicate remains ambiguous; never impose a history cutoff on identity.
 var payrollEntriesCTE = `pay_entries AS MATERIALIZED (
  SELECT * FROM ` + payrollBoardEntriesSQL + ` e WHERE NOT e.deleted
- AND e.source_date >= $1::date-7 AND e.source_date < $1::date+7
+ AND (e.payroll_supplement OR (e.source_date >= $1::date-7 AND e.source_date < $1::date+7))
  AND e.service_date >= $1::date AND e.service_date < $1::date+7
  AND ($3::uuid[] IS NULL OR e.driver_id=ANY($3::uuid[]))
 ), pay_load_numbers AS MATERIALIZED (

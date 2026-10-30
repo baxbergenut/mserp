@@ -51,6 +51,47 @@ Finalized source/target snapshots must be reopened before a transfer. A failure
 rolls back the complete operation. Payroll and invoice versions reject stale
 browser saves; normal revision triggers invalidate cached reports.
 
+## Adding and excluding statement loads
+
+Driver Pay and Investor Pay have an **Add load** row below Sunday. Enter an exact
+load ID and press Enter or **Add to statement**. Only delivered/invoiced imported
+loads qualify. A load number matching multiple records requires identity review
+in Gross Board. Existing native driver/truck attribution is enforced; split loads
+reuse their reviewed native trips, with an explicit trip choice when necessary.
+Invalid/missing allocations must be resolved in Gross Board first.
+
+The extra row uses the load's source dates, stops, gross, mileage, and reviewed
+Gross Board driver gross. For an unplanned load, the selected driver statement is
+an explicit payroll-only recognition decision. Investor Pay requires a unique
+dated truck/driver assignment. Unknown driver gross remains blank and can be
+entered in the extra row; provider revenue is never substituted for driver gross.
+Fees, investor shares and hired labor recalculate through the ordinary calculators.
+
+Loads whose status is neither delivered nor invoiced are flagged. **Remove from
+statement** excludes the load from payroll only; its Gross Board record remains
+unchanged. Extra rows can also be removed. Driver and Investor Pay use one shared
+recognition decision so investor revenue and hired labor stay together. An
+excluded load can be added in a later week after it becomes delivered/invoiced.
+Removing the final load keeps the draft statement visible.
+
+Migration 174 stores exact imported record/trip identities, original coordinates,
+dated truck, amounts, week and optimistic version in `payroll_load_placements`.
+An included allocation replaces automatic payroll occurrences, including earlier
+draft weeks. `payroll_load_placement_history` records the actor and before/after
+values atomically. Neither table changes dispatch placement or upstream data.
+All operations acquire the payroll financial lock. Global finalized JSON checks
+include legacy number-only snapshots and overlapping parent/trip identities;
+affected frozen driver/investor statements must be reopened. Database triggers
+retain the same boundary for direct writes. Unrelated finalized history stays
+frozen. Source status changes invalidate report caches; ordinary finalization
+requires resolving flags, while the existing explicit override remains available.
+
+Run `TestPayLoadPlacementsDatabase` using local disposable
+`MSERP_GROSS_BOARD_TEST_DATABASE_URL`. After a `/api` frontend build, run
+`node scripts/test-investors-e2e.mjs --load-placements-only` with
+`MSERP_INVESTOR_TEST_DATABASE_URL`. These cover fresh/upgraded schemas under the
+runtime role and real authenticated browser/API behavior on both payroll pages.
+
 ## Validation
 
 Run `TestOwnershipFeeCorrectionsDatabase` and `TestExpensePayerCorrectionsDatabase`

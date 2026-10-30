@@ -90,6 +90,7 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM investor_pay_weeks
  UNION SELECT 'driver:'||charge_driver_id,'truck:'||truck_id FROM expenses WHERE charge_driver_id IS NOT NULL AND truck_id IS NOT NULL
  UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
+ UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM payroll_load_placements WHERE truck_id IS NOT NULL
  UNION SELECT 'driver:'||f.driver_id,'truck:'||a.truck_id FROM (SELECT f.driver_id,f.reported_truck_units FROM source_weeks w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7 WHERE f.driver_id IS NOT NULL AND $1<>''
  UNION SELECT driver_id,reported_truck_units FROM fuel_transactions WHERE driver_id IS NOT NULL AND $1='') f CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key
  UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM pay_source_collections WHERE accounting_live_date(week_start)

@@ -28,7 +28,7 @@ func boardPlacementSQL(payroll bool) string {
 }
 
 var dispatchBoardEntriesSQL = boardPlacementSQL(false)
-var payrollBoardEntriesSQL = boardPlacementSQL(true)
+var payrollBoardEntriesSQL = payrollPlacementSQL()
 
 type LoadWeekTransferInput struct {
 	DriverID        string `json:"driverId"`
@@ -219,6 +219,9 @@ func decorateTransferLoads(ctx context.Context, tx pgx.Tx, report *DriverPayWeek
 		d := &report.Drivers[i]
 		for j := range d.Loads {
 			l := &d.Loads[j]
+			if l.PayrollSupplement {
+				continue
+			}
 			driver := l.SourceDriverID
 			if driver == "" {
 				driver = d.ID

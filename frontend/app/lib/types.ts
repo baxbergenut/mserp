@@ -1267,6 +1267,10 @@ export interface DriverPayEdits {
 }
 export type LoadWeekTransferMode = "everyone" | "dispatch_only" | "restore";
 export interface DriverPayLoad {
+  payrollSupplement?: boolean;
+  payrollPlacementVersion?: number;
+  notReady?: boolean;
+  status?: string;
  placementVersion?: number;
  sourceSlot?: number;
  sourceDate?: string;
@@ -1297,6 +1301,22 @@ export interface DriverPayLoad {
   deadheadMiles: string;
   fee: string;
   issues: string[];
+}
+export interface PayLoadPlacementInput {
+  driverId: string;
+  weekStart: string;
+  action: "add" | "remove" | "gross";
+  loadNumber?: string;
+  loadRecordId?: number;
+  loadTripId?: number;
+  sourceDriverId?: string;
+  commentKey?: string;
+  boardVersion?: number;
+  placementVersion?: number;
+  driverGross?: string;
+}
+export interface PayLoadPlacementResult {
+  choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
   homeWeek?: boolean;

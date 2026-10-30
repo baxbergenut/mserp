@@ -5,6 +5,7 @@ import { runPayrollOverrideE2E } from "./payroll-override-e2e.mjs";
 import { runUpdatersE2E } from "./updaters-e2e.mjs";
 import { runDriverTeamsE2E } from "./driver-teams-e2e.mjs";
 import { runProfilesE2E } from "./profiles-e2e.mjs";
+import { runPayrollLoadPlacementsE2E } from './payroll-load-placements-e2e.mjs';
 // Requires a disposable local _test database, psql, Go, and a /api frontend build.
 // Uses a temporary schema, a real API process, and real browser authentication.
 import { chromium, expect } from '@playwright/test';
@@ -109,7 +110,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--vacations-only')) {
+  if (process.argv.includes('--load-placements-only')) {
+    await runPayrollLoadPlacementsE2E({ page, base, sql, schema, temp });
+  } else if (process.argv.includes('--vacations-only')) {
     await runPayrollVacationsE2E({ page, base, sql, schema });
   } else if (process.argv.includes('--investor-pay-only')) {
     await runInvestorPayE2E({ page, base, sql, schema, temp });

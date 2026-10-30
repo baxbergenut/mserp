@@ -1612,6 +1612,21 @@ assignment lookup lists.
   queued typing after the current request finishes; week navigation flushes pending changes. Memoized day
   cells and a stable edit callback keep typing from re-rendering the whole grid.
 
+- Driver/Investor Pay's extra row below Sunday recognizes delivered/invoiced
+  imported loads in a selected week through migration 174 and repository
+  `payroll_load_placements.go`. POST /driver-pay/statement-load and its Investor
+  Pay counterpart require the respective statement Edit permission. Native
+  driver/truck/trip allocations and reviewed driver gross are reused; ambiguous
+  trips require explicit selection. Unplanned loads retain unknown driver gross
+  for review in the extra row, never inferred from provider revenue. Non-delivered/
+  non-invoiced loads are flagged and may be excluded from payroll. These audited,
+  versioned decisions never edit Gross Board or provider assignments. Driver and
+  investor revenue/labor move together; exact load/trip identities, global frozen
+  snapshot checks, database guards, and the financial lock prevent duplicate pay
+  and finalized changes. Cache revision triggers cover both new tables. Empty
+  edited drafts remain visible. See docs/PAYROLL_CORRECTIONS.md. Validate
+  TestPayLoadPlacementsDatabase with MSERP_GROSS_BOARD_TEST_DATABASE_URL and
+  `node scripts/test-investors-e2e.mjs --load-placements-only` after a /api build.
 - Weekend load transfers use migration 159, repository `load_week_transfers.go`
   and the shared Driver/Investor Pay row action. Separate dispatch/settlement
   projections retain source coordinates, trip identity, truck and original

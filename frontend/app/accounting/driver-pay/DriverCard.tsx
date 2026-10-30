@@ -4,7 +4,7 @@ import { employmentTypeLabel } from "@/app/lib/driverType";
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
-import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode } from "@/app/lib/types";
+import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode, PayLoadPlacementInput, PayLoadPlacementResult } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, dayStatuses, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { activeLayovers, carryBreakdown, centsAmount, costAmount, costRows, driverTotals, sourceAmountInput, validSourceAmount } from "./pay";
@@ -37,6 +37,8 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 export type DriverCardProps = {
+  onPlacement?: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
+  placementDisabled?: boolean;
  onTransfer?: (load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => Promise<void>;
  transferDisabled?: boolean;
   detailError?: string;
@@ -58,7 +60,23 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+  const [extraNumber, setExtraNumber] = useState("");
+  const [extraChoices, setExtraChoices] = useState<PayLoadPlacementResult["choices"]>([]);
+  const [extraChoice, setExtraChoice] = useState("");
+  const [placementError, setPlacementError] = useState("");
+  const [placing, setPlacing] = useState(false);
+  const changeLoad = async (action: PayLoadPlacementInput["action"], load?: DriverPayLoad, driverGross?: string) => {
+    if (!onPlacement || placementDisabled || placing) return;
+    setPlacing(true); setPlacementError("");
+    try {
+      const choice = action === "add" && extraChoice !== "" ? extraChoices[Number(extraChoice)] : undefined;
+      const result = await onPlacement({ driverId: driver.id, weekStart: edits.weekStart, action, loadNumber: action === "add" ? extraNumber : load?.loadNumber, loadRecordId: load?.loadRecordId ?? undefined, loadTripId: choice?.loadTripId ?? load?.loadTripId, sourceDriverId: choice?.sourceDriverId, commentKey: load?.commentKey, boardVersion: load?.boardVersion ?? 0, placementVersion: load?.payrollPlacementVersion ?? 0, driverGross });
+      if (result?.choices) { setExtraChoices(result.choices); setExtraChoice(""); return; }
+      if (action === "add") { setExtraNumber(""); setExtraChoices([]); setExtraChoice(""); }
+    } catch (error) { setPlacementError(error instanceof Error ? error.message : "Unable to change this statement load"); }
+    finally { setPlacing(false); }
+  };
   const [transfer, setTransfer] = useState<DriverPayLoad | null>(null);
   const [costDetails, setCostDetails] = useState<"fuel" | "toll" | null>(null);
   const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
@@ -84,7 +102,8 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
       return { ...current, adjustments };
     });
   };
-  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => load.date === addDays(edits.weekStart, index)).length), 0);
+  const extraLoads = driver.loads.filter(load => load.payrollSupplement);
+  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => !load.payrollSupplement && load.date === addDays(edits.weekStart, index)).length), 0) + extraLoads.length + (onPlacement ? 1 : 0);
   const visibleCostRows = costRows.filter(({ key }) => {
     const carry = hundredths(edits.costs?.[`${key}Carry`] ?? "0");
     if (driver.payType === "cpm" && carry === BigInt(0)) return false;
@@ -152,6 +171,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
       <div id={`driver-${driver.id}`}>
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
+        {placementError && <p role="alert" className="px-3 py-2 text-xs text-red-300">{placementError}</p>}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
@@ -162,23 +182,23 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
               className={`${cell} !bg-zinc-950 font-medium ${index === 0 ? "sticky left-0 z-10 bg-zinc-950" : ""} ${index >= 5 && index !== 11 ? "text-right" : ""}`}>
               {label === "Comments" ? <span className="sr-only">Comments</span> : label}
             </th>)}</tr></thead>
-            <tbody>{weekdays.map((day, dayIndex) => {
+            <tbody>{[...weekdays, ...(extraLoads.length ? ["Extra"] : [])].map((day, dayIndex) => {
               const date = addDays(edits.weekStart, dayIndex);
-              const loads = driver.loads.filter(load => load.date === date);
+              const loads = day === "Extra" ? extraLoads : driver.loads.filter(load => !load.payrollSupplement && load.date === date);
               const statuses = [...new Set((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => item.status))];
               const statusColor = statuses.length === 1 ? dayStatuses.find(item => item.value === statuses[0])?.color : undefined;
-              const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
+              const dayLabel = <>{day}{day !== "Extra" && <span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span>}</>;
               return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
  const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
- if(onTransfer && !transferDisabled && (day===0 || day===6) && load.loadRecordId!==null && !load.tripReview){event.preventDefault();setTransfer(load);}
+ if(onTransfer && !load.payrollSupplement && !transferDisabled && (day===0 || day===6) && load.loadRecordId!==null && !load.tripReview){event.preventDefault();setTransfer(load);}
  }} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
                 {index === 0 && <th rowSpan={loads.length} scope="rowgroup" className={`${cell} sticky left-0 z-10 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
-                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: load.sourceDriverId ?? driver.id, date: load.dispatchDate || load.date, slot: String(load.transferVersion ? load.dispatchSlot : load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>{onTransfer && [0,6].includes(new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay()) && load.loadRecordId!==null && !load.tripReview && <button type="button" disabled={transferDisabled} aria-label={`Move ${load.loadNumber} to next week`} title="Move or change load week" onClick={() => setTransfer(load)} className="shrink-0 rounded text-zinc-500 hover:text-blue-300 disabled:opacity-40"><MoreHorizontal className="h-3.5 w-3.5" /></button>}{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}{!!load.transferVersion && <span className="shrink-0 text-blue-300" aria-label={load.date === load.sourceDate ? "Dispatcher: next week" : "Moved from previous week"} title={`Original: ${load.sourceDate}. Dispatcher gross: ${load.dispatchDate}. Credited to ${load.creditedDispatcherName || "Unassigned"}.`}><ArrowRight className="h-3 w-3" /></span>}</div></td>
+                <td className={`${cell} text-zinc-200`}><div className="flex items-center gap-1.5"><>{load.payrollSupplement ? <span title={`Service date: ${load.sourceDate || load.date}`} className="truncate">{load.loadNumber}</span> : <Link data-payroll-load={returnToPay || undefined} href={`/gross-board?${new URLSearchParams({ driverId: load.sourceDriverId ?? driver.id, date: load.dispatchDate || load.date, slot: String(load.transferVersion ? load.dispatchSlot : load.slot), loadNumber: load.loadNumber, ...(returnToPay ? { from: "driver-pay" } : {}) })}`} prefetch={false} className="truncate text-blue-400 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500" title={`Open ${load.loadNumber} in Gross Board · ${load.date} · load ${load.slot + 1}`}>{load.loadNumber}</Link>}</>{onPlacement && load.loadRecordId !== null && (load.notReady || load.payrollSupplement) && <button type="button" disabled={placementDisabled || placing} aria-label={`Remove ${load.loadNumber} from statement`} title="Remove from payroll only; keep Gross Board unchanged" onClick={() => void changeLoad("remove", load)} className="shrink-0 rounded text-zinc-500 hover:text-red-300 disabled:opacity-40"><X className="h-3.5 w-3.5" /></button>}{onTransfer && !load.payrollSupplement && [0,6].includes(new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay()) && load.loadRecordId!==null && !load.tripReview && <button type="button" disabled={transferDisabled} aria-label={`Move ${load.loadNumber} to next week`} title="Move or change load week" onClick={() => setTransfer(load)} className="shrink-0 rounded text-zinc-500 hover:text-blue-300 disabled:opacity-40"><MoreHorizontal className="h-3.5 w-3.5" /></button>}{load.issues.length > 0 && <span title={load.issues.join("\n")} aria-label={load.issues.join(". ")} className="shrink-0 text-amber-300"><AlertTriangle className="h-3 w-3" /></span>}{!!load.transferVersion && <span className="shrink-0 text-blue-300" aria-label={load.date === load.sourceDate ? "Dispatcher: next week" : "Moved from previous week"} title={`Original: ${load.sourceDate}. Dispatcher gross: ${load.dispatchDate}. Credited to ${load.creditedDispatcherName || "Unassigned"}.`}><ArrowRight className="h-3 w-3" /></span>}</div></td>
                 <td className={`${cell} text-zinc-400`}>{load.pickupDate || "—"}</td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>
                 <PaySourceCell load={load} field="originalRate" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
-                <td className={`${numeric} text-zinc-300`}>{amount(load.driverGross, true)}</td>
+                <td className={`${numeric} text-zinc-300`}>{load.payrollSupplement && onPlacement ? <input key={`${load.commentKey}:${load.payrollPlacementVersion}`} data-grid-ignore aria-label={`${load.loadNumber}, driver gross`} defaultValue={load.driverGross} inputMode="decimal" disabled={placementDisabled || placing} className="w-full bg-transparent text-right outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60" placeholder="Enter gross" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { event.currentTarget.value = load.driverGross; event.currentTarget.blur(); } }} onBlur={event => { if (event.currentTarget.value !== load.driverGross) void changeLoad("gross", load, event.currentTarget.value); }} /> : amount(load.driverGross, true)}</td>
                 <PaySourceCell load={load} field="totalMiles" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
                 <td className={`${numeric} text-zinc-400`}>{amount(load.loadedMiles)}</td>
                 <td className={`${numeric} text-zinc-400`}>{amount(load.deadheadMiles)}</td>
@@ -189,7 +209,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
               </tr>) : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-center ${statusColor ?? "text-zinc-600"}`}>
                 {statuses.length === 1 ? statuses[0] : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${dayStatuses.find(item => item.value === status)?.color ?? ""}`}>{status}</span>)}</div> : "No load"}
               </td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
-            })}</tbody>
+            })}{onPlacement && <tr data-pay-extra-row data-grid-ignore><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>Add load</th><td className={cell}><input aria-label={`${driver.fullName}, extra load number`} value={extraNumber} onChange={event => { setExtraNumber(event.target.value); setExtraChoices([]); setExtraChoice(""); }} disabled={placementDisabled || placing} maxLength={200} placeholder="Load ID" className="w-full bg-transparent text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (extraNumber.trim()) void changeLoad("add"); } }} /></td><td colSpan={9} className={`${cell} text-zinc-500`}>{extraChoices.length > 0 && <select aria-label="Load trip allocation" value={extraChoice} disabled={placementDisabled || placing} onChange={event => setExtraChoice(event.target.value)} className="mr-3 max-w-80 bg-zinc-900 text-zinc-200"><option value="">Choose trip…</option>{extraChoices.map((choice,index) => <option key={index} value={index}>{choice.tripNumber || (choice.loadTripId ? `Trip ${choice.loadTripId}` : "Full load")} · {choice.driverName} · {choice.sourceDate}</option>)}</select>}<button type="button" disabled={placementDisabled || placing || !extraNumber.trim() || (extraChoices.length > 0 && extraChoice === "")} onClick={() => void changeLoad("add")} className="mr-3 rounded border border-zinc-700 px-2 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40">{placing ? "Saving…" : "Add to statement"}</button>Delivered or invoiced · not in a finalized statement</td><td className={cell} /></tr>}</tbody>
             <tbody>
               <tr data-pay-totals className="font-mono text-zinc-200"><th colSpan={5} className={`${cell} text-left font-sans font-medium`}>Weekly totals{incomplete ? " · provisional" : ""}</th>
                 {[totals.original, totals.gross, totals.totalMiles, totals.loadedMiles, totals.deadheadMiles, totals.fee].map((value, index) => <Fragment key={index}><td className={numeric}>{index === 5 && allFeesMissing ? "—" : decimalDisplay(value, index < 2 || index === 5)}</td></Fragment>)}<td className={`${cell} font-sans text-[10px] text-zinc-500`}>Net adjustments</td><td className={numeric}>{decimalDisplay(netAdjustments, true)}</td><td className={`${cell} !px-1 text-center`}><CommentButton label={`${driver.fullName}, weekly comment`} value={edits.notes} disabled={disabled} onClick={() => setComment({ key: null, label: "Weekly comment", value: edits.notes })} /></td>

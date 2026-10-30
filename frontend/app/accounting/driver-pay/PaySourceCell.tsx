@@ -15,7 +15,7 @@ export function PaySourceCell({ load, field, className, disabled, onAccept }: {
   const source = field === "originalRate" ? load.systemOriginalRate : load.systemMiles;
   const mismatch = load.loadRecordId !== null && !!value && source != null && (source === "" || hundredths(value) !== hundredths(source));
   const money = field === "originalRate";
-  const canAccept = !load.transferVersion && mismatch && onAccept && load.boardVersion && !disabled;
+  const canAccept = !load.payrollSupplement && !load.transferVersion && mismatch && onAccept && load.boardVersion && !disabled;
   const title = source == null ? undefined : `DataTruck: ${source ? decimalDisplay(hundredths(source), money) : "Not available"}`;
   return <td tabIndex={canAccept ? 0 : undefined} className={`${className} ${mismatch ? "text-red-400" : money ? "text-zinc-300" : "text-zinc-400"}`} title={title}
     aria-label={mismatch ? `${money ? "Total gross" : "Miles"} differs from DataTruck. ${title}` : undefined}

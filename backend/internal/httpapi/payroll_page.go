@@ -34,6 +34,28 @@ func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 }
 
 func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.DriverPayRepository, fail func(http.ResponseWriter, error)) {
+	r.Post(path+"/statement-load", func(w http.ResponseWriter, r *http.Request) {
+		var input repository.PayLoadPlacementInput
+		if err := decodeJSON(r, &input); err != nil || !isUUID(input.DriverID) || (input.SourceDriverID != "" && !isUUID(input.SourceDriverID)) {
+			writeAPIError(w, 400, "Invalid statement load")
+			return
+		}
+		kind := "driver"
+		if path == "/investor-pay" {
+			kind = "investor"
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := repo.PlacePayLoad(r.Context(), kind, input, session.User.ID); err != nil {
+			var choice *repository.PayLoadChoiceRequired
+			if errors.As(err, &choice) {
+				writeJSON(w, http.StatusOK, choice)
+				return
+			}
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	r.Post(path+"/transfer-load", func(w http.ResponseWriter, r *http.Request) {
 		var input repository.LoadWeekTransferInput
 		if err := decodeJSON(r, &input); err != nil || !isUUID(input.DriverID) {
