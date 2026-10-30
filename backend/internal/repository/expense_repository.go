@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -109,6 +110,14 @@ type ExpenseInput struct {
 }
 
 type ExpensePageQuery struct {
+	ExpenseType           string
+	Description           string
+	AmountMin             string
+	AmountMax             string
+	PaidMin               string
+	PaidMax               string
+	RemainingMin          string
+	RemainingMax          string
 	History               bool
 	PaymentType           string
 	PaidBy                string
@@ -166,7 +175,7 @@ type ExpensePage struct {
 }
 
 func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpensePageQuery) (ExpensePage, error) {
-	const where = `
+	where := `
 WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings WHERE id=e.category_id), COALESCE(t.unit_number, e.unit_number),
 		COALESCE(d.full_name, e.driver_name), e.payment_type, e.expense_type,
 		e.reference_number, e.description, e.covered_by, e.paid_by)
@@ -191,6 +200,28 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 		query.AccountantVerified, query.PaidBy, query.CoveredBy, query.UnitNumber, query.DriverName, query.History,
 	}
 
+	for _, f := range []struct{ expression, value string }{
+		{"coalesce(e.expense_type,'') ILIKE '%%' || $%d || '%%'", query.ExpenseType},
+		{"coalesce(e.description,'') ILIKE '%%' || $%d || '%%'", query.Description},
+	} {
+		if f.value != "" {
+			args = append(args, f.value)
+			where += " AND " + fmt.Sprintf(f.expression, len(args))
+		}
+	}
+	paid := "(CASE WHEN e.driver_settled THEN e.amount ELSE 0 END)+expense_external_total(e.id)+coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0)"
+	remaining := expenseSettlementTotalSQL + "-expense_external_total(e.id)-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0)"
+	for _, f := range []struct{ expression, operator, value string }{
+		{"e.amount", ">=", query.AmountMin}, {"e.amount", "<=", query.AmountMax},
+		{paid, ">=", query.PaidMin}, {paid, "<=", query.PaidMax},
+		{remaining, ">=", query.RemainingMin}, {remaining, "<=", query.RemainingMax},
+	} {
+		if f.value != "" {
+			args = append(args, f.value)
+			where += fmt.Sprintf(" AND (%s) %s $%d::numeric", f.expression, f.operator, len(args))
+		}
+	}
+
 	var total int
 	summary := ExpenseSummary{}
 	if err := r.pool.QueryRow(ctx, `
@@ -208,7 +239,7 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
 		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		LIMIT $17 OFFSET $18`, pageArgs...)
+		`+fmt.Sprintf("LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2), pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -669,9 +700,9 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
 	e.accounting_verified, e.source_spreadsheet_id,
 	e.source_sheet, e.source_row, e.created_at, e.updated_at,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
-   CASE WHEN e.driver_settled THEN e.amount ELSE expense_external_total(e.id)+coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+   ((CASE WHEN e.driver_settled THEN e.amount ELSE 0 END)+expense_external_total(e.id)+coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0))::text END,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
-   CASE WHEN e.driver_settled THEN 0 ELSE ` + expenseSettlementTotalSQL + `-expense_external_total(e.id)-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0) END::text END,
+   (` + expenseSettlementTotalSQL + `-expense_external_total(e.id)-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0))::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)

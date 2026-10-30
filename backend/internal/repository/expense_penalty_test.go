@@ -36,6 +36,10 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	balance, err := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("penalties_%d", time.Now().UnixNano())
@@ -50,11 +54,14 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if upgrade {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1)
+				// The balance functions depend on the category rule introduced by 106.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(balance), "\r\n", "\n"), "", 1)
 			}
 			exec(sql)
 			if upgrade {
 				exec(`INSERT INTO expenses(category_id,category,expense_date,amount,expense_type,covered_by,payment_type,paid_by,driver_settled) SELECT id,name,'2026-09-01',125,'Old penalty','Company','EFS','Historical payer',true FROM expense_settings WHERE kind='category' AND name='Penalties'`)
 				exec(string(migration))
+				exec(string(balance))
 				var amount, payer, covered string
 				if err := admin.QueryRow(ctx, `SELECT amount::text,paid_by,covered_by FROM expenses WHERE expense_type='Old penalty'`).Scan(&amount, &payer, &covered); err != nil || amount != "125.00" || payer != "Historical payer" || covered != "Company" {
 					t.Fatalf("legacy row changed: %s %s %s %v", amount, payer, covered, err)

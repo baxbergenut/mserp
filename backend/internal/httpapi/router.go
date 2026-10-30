@@ -220,6 +220,7 @@ func NewRouter(
 	registerCompanyDashboardRoutes(protected, logger, dashboardRepo, customTaskRepo, repository.NewMaintenanceRepository(pool), fuelRepo, wmtRepo, tollRepo)
 	registerExpenseRoutes(protected, logger, expenseRepo, expenseExtractor)
 	registerExternalExpenseRoutes(protected, expenseRepo)
+	registerExpenseBalanceRoutes(protected, expenseRepo)
 	registerMaintenanceRoutes(protected, pool, logger, expenseRepo, expenseExtractor, fiveELDJob)
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)

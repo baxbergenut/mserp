@@ -131,6 +131,20 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
+  Driver Personal charges and Expenses expose Edit balance with expenses.settle
+  and category View access. Migration 176 records immutable, versioned corrections
+  with reason, actor, previous and new remaining balance; original invoices and
+  payment allocations stay intact. Corrected debt feeds Driver/Investor Pay and
+  database collection limits under the payroll financial lock. Finalized statements
+  must be reopened. Historical assumed-paid entries retain their paid baseline;
+  reimbursements use their existing payout workflow. GET/POST
+  /expenses/{id}/balance-corrections supplies history and idempotent corrections.
+  Install the updated deploy helper before release; once correction history exists,
+  rollback requires a release containing migration 176. Deployment alone edits no balances.
+  Personal expense search and header date/category/type/description/responsibility/
+  amount ranges run before counts and pagination; headers remain on empty results.
+  Check TestExpenseBalanceCorrectionsDatabase with MSERP_DRIVER_CHARGES_TEST_DATABASE_URL
+  and frontend/scripts/test-expense-balances.mjs after a /api build.
   Ordinary expense deletion removes saved draft deductions/reimbursement payouts
   atomically under the payroll financial lock. Finalized Driver/Investor Pay
   snapshots (including dated teams and legacy credits) still require reopening;

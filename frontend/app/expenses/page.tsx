@@ -44,6 +44,7 @@ import {
 } from "./ExpenseForm";
 import { ExpenseAIImport } from "./ExpenseAIImport";
 import { ReceiptUpload } from "../components/ReceiptUpload";
+import { ExpenseBalanceAction } from "@/app/components/expenses/ExpenseBalanceEditor";
 import { ExternalSettlements } from "./ExternalSettlements";
 import { ExpenseDocuments } from "./ExpenseDocuments";
 import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
@@ -454,6 +455,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
                     <span tabIndex={0} title={(expense.paymentFee && expense.paymentFee !== "0.00" ? "Base: " + formatMoney(expense.baseAmount ?? expense.amount) + "\nEFS fee: " + formatMoney(expense.paymentFee) + "\n" : "") + "Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>
+                    {expense.remainingAmount != null && <div className="mt-1 text-xs text-zinc-400">Remaining: {formatMoney(expense.remainingAmount)}<ExpenseBalanceAction expense={expense} onSaved={() => loadData(false)} /></div>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

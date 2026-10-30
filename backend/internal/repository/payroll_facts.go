@@ -46,7 +46,7 @@ var payDriverEligibilitySQL = `, eligible_pay_drivers AS MATERIALIZED (
  EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.driver_id=d.id AND lower(btrim(x.payment_type))='reimburse' AND x.expense_date < $1::date+10 AND x.amount>0) pay_reimburse,
  EXISTS(SELECT 1 FROM weighmytruck_transactions wt WHERE payroll_driver_at(wt.driver_id,wt.transaction_date)=d.id AND wt.transaction_date >= $1::date AND wt.transaction_date < $1::date+7) pay_scale,
  EXISTS(SELECT 1 FROM driver_charge_schedules cs WHERE (cs.kind<>'installment' OR accounting_live_source('installment',cs.id,cs.start_week)) AND cs.driver_id=d.id AND cs.start_week<=$1::date) pay_charge,
- EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.charge_driver_id=d.id AND NOT x.driver_settled AND x.expense_date<$1::date+10) pay_expense,
+ EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.charge_driver_id=d.id AND (NOT x.driver_settled OR expense_balance_adjustment(x.id)<>0) AND x.expense_date<$1::date+10) pay_expense,
  EXISTS(SELECT 1 FROM pay_escrow_capacity x WHERE x.driver_id=d.id AND (x.available>0 OR EXISTS(SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date))) pay_escrow
  FROM pay_drivers d
 )`
