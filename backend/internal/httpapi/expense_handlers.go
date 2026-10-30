@@ -333,7 +333,17 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to view that category")
 		return
 	}
+	for _, key := range []string{"amountMin", "amountMax", "paidMin", "paidMax", "remainingMin", "remainingMax"} {
+		v := r.URL.Query().Get(key)
+		if v != "" && !expenseAmountPattern.MatchString(v) {
+			writeAPIError(w, 400, "Invalid amount filter: "+key)
+			return
+		}
+	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
+		ExpenseType: strings.TrimSpace(r.URL.Query().Get("expenseType")),
+		Description: strings.TrimSpace(r.URL.Query().Get("description")),
+		AmountMin:   r.URL.Query().Get("amountMin"), AmountMax: r.URL.Query().Get("amountMax"), PaidMin: r.URL.Query().Get("paidMin"), PaidMax: r.URL.Query().Get("paidMax"), RemainingMin: r.URL.Query().Get("remainingMin"), RemainingMax: r.URL.Query().Get("remainingMax"),
 		AccountantVerified: accountantVerified,
 		Pagination:         pagination,
 		ChargeDriverID:     chargeDriverID, Responsibility: responsibility,

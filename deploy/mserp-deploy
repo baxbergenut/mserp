@@ -38,10 +38,11 @@ accounting_retirement_migration=161_retire_accounting_cutover.sql
 status_colors_migration=171_status_colors.sql
 status_palette_rollback_migration=172_restore_status_board_palette.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
+expense_balance_migration=176_expense_balance_corrections.sql
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
-    local applied manager_removed accounting_installed cost_start_installed cost_start_active
+    local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active
     # Detect the committed schema even if recording the migration ledger failed.
     applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
@@ -49,6 +50,13 @@ compatible_release() {
     [[ $manager_removed == f ]] || { [[ $manager_removed == t ]] && [[ -f $1/migrations/$manager_verification_migration ]]; } || return 1
     accounting_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.accounting_cutover') IS NOT NULL") || return 1
     [[ $accounting_installed == f ]] || { [[ $accounting_installed == t ]] && [[ -f $1/migrations/$accounting_cutover_migration ]]; } || return 1
+    balance_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_balance_corrections') IS NOT NULL") || return 1
+    if [[ $balance_installed == t ]]; then
+        balance_active=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.expense_balance_corrections)") || return 1
+        [[ $balance_active == f ]] || { [[ $balance_active == t ]] && [[ -f $1/migrations/$expense_balance_migration ]]; } || return 1
+    elif [[ $balance_installed != f ]]; then
+        return 1
+    fi
     cost_start_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
     [[ $cost_start_installed == f ]] && return 0
     [[ $cost_start_installed == t ]] || return 1

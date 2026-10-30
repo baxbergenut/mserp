@@ -50,6 +50,11 @@ application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
+Migration 176 adds immutable expense balance corrections without changing existing
+balances on deployment. Install the updated helper first: after the first correction
+is saved, it refuses rollback to releases that ignore corrected debt. Empty correction
+history remains compatible with the previous release; database read failures deny rollback.
+
 Migration 160 installs Accounting cutover **inactive**. Install the updated
 deployment helper first. It briefly stops the API and expense-sheet writer while
 registering revision triggers, preventing DDL/write deadlocks. Releases without

@@ -18,7 +18,7 @@ func routeCorrectedInvestorExpenses(ctx context.Context, tx pgx.Tx, investors *D
  FROM expense_payments p JOIN expenses e ON e.id=p.expense_id JOIN trucks t ON t.id=p.investor_truck_id
  JOIN investors i ON i.id=e.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
  WHERE p.week_start=$1::date AND e.truck_id=p.investor_truck_id AND lower(btrim(e.covered_by))='truck owner'
- AND NOT e.driver_settled AND ($2::uuid[] IS NULL OR t.id=ANY($2::uuid[])) ORDER BY t.id::text`, investors.WeekStart, payrollTruckIDs(ctx))
+ AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND ($2::uuid[] IS NULL OR t.id=ANY($2::uuid[])) ORDER BY t.id::text`, investors.WeekStart, payrollTruckIDs(ctx))
 	if err != nil {
 		return err
 	}

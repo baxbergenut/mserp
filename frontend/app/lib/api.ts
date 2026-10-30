@@ -499,6 +499,7 @@ export const syncTolls = () =>
   apiRequest<SyncTollsResult>("/jobs/sync-tolls", { method: "POST" });
 
 export const fetchExpensesPage = (query: PageQuery & {
+  expenseType?: string; description?: string; amountMin?: string; amountMax?: string; paidMin?: string; paidMax?: string; remainingMin?: string; remainingMax?: string;
  history?:string;
   scope?: "general";
   accountantVerified?: string;
@@ -749,3 +750,6 @@ export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePass
 export const fetchServiceProgramWorkspace = (query: {program: string; truckId?: string; search: string; status: string; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").ServiceProgramWorkspace>(withQuery("/maintenance/program-workspace",query),{signal});
 
 export const fetchLoadSplit = (id: number, signal?: AbortSignal) => apiRequest<import("./types").LoadSplitWorkspace>(`/gross-board/loads/${id}/split`, { signal });
+
+export const fetchExpenseBalanceHistory = (id: string, signal?: AbortSignal) => apiRequest<import("./types").ExpenseBalanceCorrection[]>(`/expenses/${id}/balance-corrections`, {signal});
+export const correctExpenseBalance = (id: string, data: import("./types").ExpenseBalanceCorrection) => apiRequest<import("./types").ExpenseBalanceCorrection[]>(`/expenses/${id}/balance-corrections`, {method:"POST",body:JSON.stringify(data)});

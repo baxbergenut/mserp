@@ -10,7 +10,7 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	// Expenses are eligible through the following Wednesday (Thursday is
 	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
 	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
- SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND NOT driver_settled AND expense_date<$2::date+10 AND amount>=0
+ SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT driver_settled OR expense_balance_adjustment(id)<>0) AND expense_date<$2::date+10 AND amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id

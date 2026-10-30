@@ -14,6 +14,11 @@ import (
 
 func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 	t.Helper()
+	balance, err := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = strings.Replace(source, strings.ReplaceAll(string(balance), "\r\n", "\n"), "", 1)
 	costStart, e := os.ReadFile("../../sql/173_payroll_cost_start.sql")
 	if e != nil {
 		t.Fatal(e)
@@ -70,6 +75,13 @@ func applyAccountingCutoverMigration(t *testing.T, ctx context.Context, conn *pg
 		t.Fatal(e)
 	}
 	if _, e = conn.Exec(ctx, string(costStart)); e != nil {
+		t.Fatal(e)
+	}
+	balance, e := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = conn.Exec(ctx, string(balance)); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -283,6 +295,23 @@ func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 // dependencies; the complete migration and its guards are tested above.
 func applyAccountingExpenseTestSchema(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
+	defer func() {
+		var present bool
+		if e := conn.QueryRow(ctx, "SELECT to_regprocedure('expense_collectible_total(expenses)') IS NOT NULL").Scan(&present); e != nil {
+			t.Fatal(e)
+		}
+		if !present {
+			body, e := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
+			funcs := strings.Split(strings.Split(string(body), "CREATE FUNCTION expense_collectible_total")[1], "CREATE TRIGGER expense_balance_immutable")[0]
+			if _, e = conn.Exec(ctx, "CREATE FUNCTION expense_balance_adjustment(uuid) RETURNS numeric LANGUAGE sql STABLE AS 'SELECT 0::numeric'; CREATE FUNCTION expense_collectible_total"+funcs); e != nil {
+				t.Fatal(e)
+			}
+		}
+	}()
+
 	var exists bool
 	if e := conn.QueryRow(ctx, "SELECT to_regclass('accounting_cutover') IS NOT NULL").Scan(&exists); e != nil {
 		t.Fatal(e)
