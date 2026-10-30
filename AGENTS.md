@@ -429,6 +429,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Check `node scripts/test-pinnable-headers.mjs` after a `/api` build.
 
 - Driver/Investor/Dispatcher Pay show Finalized by from recorded settlement actors.
+  Unfinalized Driver/Investor rows offer Finalize in that cell to authorized users,
+  using the existing confirmation and busy/save guards without expanding the row.
   Unfinalized statements sort before finalized statements, before Driver/Investor
   pagination; each group retains its existing order. Reopening restores draft placement.
   Their third summary card shows week-wide finalization percentage and green progress;

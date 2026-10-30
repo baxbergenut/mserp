@@ -25,11 +25,22 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     let finalized = true, total = 4, finalizer = 'Payroll Reviewer';
+    let canFinalize = false, holdPreview = false, releasePreview;
+    const writes = [];
     const week = '2026-10-26';
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname.slice(4);
+      if (path === `/${kind}-pay/finalize`) {
+        writes.push(route.request().postDataJSON());
+        finalized = true;
+        await route.fulfill({ json: {} });
+        return;
+      }
+      if (holdPreview && path === `/${kind}-pay` && !new URL(route.request().url()).searchParams.has('summary')) {
+        await new Promise(resolve => { releasePreview = resolve; });
+      }
       let data = [];
-      if (path === '/auth/session') data = { user: { id: 'test', username: 'Test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read', 'drivers.read', 'investors.read'], expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
+      if (path === '/auth/session') data = { user: { id: 'test', username: 'Test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read', 'drivers.read', 'investors.read', ...(canFinalize ? [`${kind}_pay.finalize`] : [])], expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
       else if (path === '/auth/birthday') data = { eligible: false, serverTime: new Date().toISOString() };
       else if (path === '/driver-pay' || path === '/investor-pay') data = {
         weekStart: week, revision: 'fixture',
@@ -78,6 +89,30 @@ try {
     await page.reload();
     await expect(progress).toHaveAttribute('aria-valuenow', '0');
     await expect(page.getByText('Payroll Reviewer', { exact: true })).toHaveCount(0);
+    if (kind !== 'dispatcher') {
+      const row = page.getByRole('row').filter({ hasText: 'Test Recipient' });
+      await expect(row.getByRole('button', { name: /^Finalize / })).toHaveCount(0);
+      canFinalize = true;
+      await page.reload();
+      const finalize = row.getByRole('button', { name: /^Finalize / });
+      await expect(finalize).toBeEnabled();
+      await expect(row.locator('td').last().getByRole('button', { name: /^Finalize / })).toBeVisible();
+      holdPreview = true;
+      await finalize.click();
+      await expect(finalize).toBeDisabled();
+      await expect(row.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'false');
+      await expect.poll(() => typeof releasePreview).toBe('function');
+      holdPreview = false;
+      releasePreview();
+      const dialog = page.getByRole('dialog', { name: kind === 'investor' ? 'Finalize truck' : 'Finalize driver', exact: true });
+      await expect(dialog).toBeVisible();
+      expect(writes).toHaveLength(0);
+      await dialog.getByRole('button', { name: 'Finalize settlement', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
+      await expect(finalize).toHaveCount(0);
+      expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: false }]);
+    }
     finalized = true; total = 1; finalizer = '';
     await page.reload();
     await expect(progress).toHaveAttribute('aria-valuenow', '100');
