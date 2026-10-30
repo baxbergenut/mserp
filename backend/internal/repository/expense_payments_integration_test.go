@@ -159,11 +159,13 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
-				body, readErr := os.ReadFile("../../sql/174_payroll_load_placements.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
+				for _, name := range []string{"174_payroll_load_placements.sql", "177_broker_expenses.sql"} {
+					body, readErr := os.ReadFile("../../sql/" + name)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					exec(string(body))
 				}
-				exec(string(body))
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
