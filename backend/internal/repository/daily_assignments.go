@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -57,33 +56,4 @@ func readDailyAssignments(ctx context.Context, tx pgx.Tx, week string, ids []str
 		out[id] = append(out[id], a)
 	}
 	return out, rows.Err()
-}
-
-func setPayDispatchers(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
-	ids := make([]string, 0, len(report.Drivers))
-	for _, d := range report.Drivers {
-		ids = append(ids, d.ID)
-	}
-	assignments, err := readDailyAssignments(ctx, tx, report.WeekStart, ids)
-	if err != nil {
-		return err
-	}
-	for i := range report.Drivers {
-		d := &report.Drivers[i]
-		d.Dispatchers = nil
-		seen := map[string]bool{}
-		names := []string{}
-		for _, a := range assignments[d.ID] {
-			if seen[a.DispatcherID] {
-				continue
-			}
-			seen[a.DispatcherID] = true
-			d.Dispatchers = append(d.Dispatchers, PayPerson{ID: a.DispatcherID, Name: a.DispatcherName})
-			names = append(names, a.DispatcherName)
-		}
-		if len(names) > 0 {
-			d.DispatcherName = strings.Join(names, " / ")
-		}
-	}
-	return nil
 }

@@ -92,35 +92,36 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
-	costTransactions []PayCostTransaction
-	HomeWeek         bool                 `json:"homeWeek,omitempty"`
-	DayStatuses      []PayDayStatus       `json:"dayStatuses"`
-	Summary          *PayStatementSummary `json:"summary,omitempty"`
-	Layovers         []DriverPayLayover   `json:"layovers,omitempty"`
-	TeamNotice       string               `json:"teamNotice,omitempty"`
-	TeamDrivers      []PayPerson          `json:"teamDrivers,omitempty"`
-	TruckInactive    bool                 `json:"truckInactive,omitempty"`
-	OperatingDrivers []PayPerson          `json:"operatingDrivers,omitempty"`
-	InvestorID       string               `json:"investorId,omitempty"`
-	ProfileDriverID  string               `json:"profileDriverId,omitempty"`
-	TruckID          string               `json:"truckId,omitempty"`
-	AutoCharges      []PayAutoCharge      `json:"autoCharges,omitempty"`
-	Issues           []string             `json:"issues,omitempty"`
-	Settlement       *PayrollSettlement   `json:"settlement,omitempty"`
-	ID               string               `json:"id"`
-	FullName         string               `json:"fullName"`
-	TruckUnit        string               `json:"truckUnit"`
-	DispatcherID     string               `json:"dispatcherId"`
-	DispatcherName   string               `json:"dispatcherName"`
-	Dispatchers      []PayPerson          `json:"dispatchers,omitempty"`
-	EmploymentType   string               `json:"employmentType,omitempty"`
-	IsOwnerOperator  bool                 `json:"isOwnerOperator"`
-	PayType          string               `json:"payType"`
-	PayRate          string               `json:"payRate"`
-	FuelTotal        string               `json:"fuelTotal"`
-	TollTotal        string               `json:"tollTotal"`
-	Loads            []DriverPayLoad      `json:"loads"`
-	Edits            DriverPayEdits       `json:"edits"`
+	costTransactions       []PayCostTransaction
+	HomeWeek               bool                 `json:"homeWeek,omitempty"`
+	DayStatuses            []PayDayStatus       `json:"dayStatuses"`
+	Summary                *PayStatementSummary `json:"summary,omitempty"`
+	Layovers               []DriverPayLayover   `json:"layovers,omitempty"`
+	TeamNotice             string               `json:"teamNotice,omitempty"`
+	TeamDrivers            []PayPerson          `json:"teamDrivers,omitempty"`
+	TruckInactive          bool                 `json:"truckInactive,omitempty"`
+	OperatingDrivers       []PayPerson          `json:"operatingDrivers,omitempty"`
+	InvestorID             string               `json:"investorId,omitempty"`
+	ProfileDriverID        string               `json:"profileDriverId,omitempty"`
+	TruckID                string               `json:"truckId,omitempty"`
+	AutoCharges            []PayAutoCharge      `json:"autoCharges,omitempty"`
+	Issues                 []string             `json:"issues,omitempty"`
+	Settlement             *PayrollSettlement   `json:"settlement,omitempty"`
+	ID                     string               `json:"id"`
+	FullName               string               `json:"fullName"`
+	TruckUnit              string               `json:"truckUnit"`
+	DispatcherID           string               `json:"dispatcherId"`
+	DispatcherName         string               `json:"dispatcherName"`
+	Dispatchers            []PayPerson          `json:"dispatchers,omitempty"`
+	EmploymentType         string               `json:"employmentType,omitempty"`
+	DisplayEmploymentTypes []string             `json:"displayEmploymentTypes,omitempty"`
+	IsOwnerOperator        bool                 `json:"isOwnerOperator"`
+	PayType                string               `json:"payType"`
+	PayRate                string               `json:"payRate"`
+	FuelTotal              string               `json:"fuelTotal"`
+	TollTotal              string               `json:"tollTotal"`
+	Loads                  []DriverPayLoad      `json:"loads"`
+	Edits                  DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
 	ManagedInSheets bool                 `json:"managedInSheets,omitempty"`
@@ -198,10 +199,6 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 			}
 		}
 		result.Drivers = selected
-	}
-	// Carry and team routing can add rows after the source read.
-	if err = setPayDispatchers(ctx, tx, &result); err != nil {
-		return result, err
 	}
 	result, err = overlayPayrollSettlements(ctx, tx, result, driverID)
 	if err != nil {

@@ -96,6 +96,7 @@ func TestDriverPayLayoverDatabase(t *testing.T) {
 			defer pool.Close()
 			verifyDriverPayLayovers(t, ctx, pool)
 			testPayrollDayStatusRouting(t, ctx, pool)
+			testPayrollAssignmentLabels(t, ctx, pool)
 		})
 	}
 }

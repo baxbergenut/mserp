@@ -610,6 +610,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   adjustments block autosave/navigation until completed or cleared.
   `backend/internal/repository/driver_pay_repository.go` and
   `backend/internal/httpapi/driver_pay_handlers.go` own its API and persistence.
+  Driver/Investor Pay header assignments use each load's original service date,
+  with reviewed transfer dispatcher credits. Empty statements use assignments
+  from the selected week. This display projection runs after financial routing;
+  current profiles/Sunday roster do not replace worked dates, and finalized
+  headers remain frozen. Check TestDriverPayLayoverDatabase for label coverage.
+  Optional displayEmploymentTypes supplies dated header labels separately from
+  the employmentType used by financial calculations and cost controls.
 - `frontend/app/accounting/driver-charges/`: truck-based recurring fees for every
   non-company truck, driver installment plans, and shared charge types. The Truck
   charges tab defaults open; per-charge counts and Included/Excluded truck filters
@@ -1526,8 +1533,8 @@ assignment lookup lists.
   intakes. Only explicit completed-intake links authorize automatic deactivation;
   unlinked/deleted identities create review tasks without name matching. Receipt,
   deactivation, current truck/dispatcher release, and an Offboard task in custom_tasks
-  commit atomically. Effective assignments/charge pauses use the current New York
-  week; source termination dates remain for accounting review. Charge validation
+  commit atomically. Assignment releases use the observed New York calendar day;
+  charge pauses use the current week. Source termination dates remain for accounting review. Charge validation
   conflicts roll back the pause only and flag the task; database errors roll back
   the whole event. History, ownership, financial records and external identity links
   remain. First termination wins; retries never repeat work or recreate deleted
