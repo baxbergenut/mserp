@@ -50,9 +50,10 @@ type authHandler struct {
 type authContextKey struct{}
 
 type loginRequest struct {
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	TrustDevice bool   `json:"trustDevice"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	// Accepted only for older clients; it never extends the session lifetime.
+	TrustDevice bool `json:"trustDevice"`
 }
 
 type authUserResponse struct {
@@ -76,6 +77,9 @@ type sessionResponse struct {
 }
 
 func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *authHandler {
+	if options.SessionTTL <= 0 || options.SessionTTL > 8*time.Hour {
+		options.SessionTTL = 8 * time.Hour
+	}
 	dummyPasswordHash, err := bcrypt.GenerateFromPassword([]byte("dummy-password"), 12)
 	if err != nil {
 		panic("generate dummy bcrypt hash: " + err.Error())
@@ -140,11 +144,7 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 		h.authFailure(w)
 		return
 	}
-	ttl := h.options.SessionTTL
-	if request.TrustDevice {
-		ttl = 30 * 24 * time.Hour
-	}
-	expiry := h.now().Add(ttl)
+	expiry := h.now().Add(h.options.SessionTTL)
 	if err = h.store.CreatePasswordSession(r.Context(), user, hashToken(token), csrf, expiry); err != nil {
 		h.authFailure(w)
 		return

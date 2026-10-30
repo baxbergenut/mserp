@@ -371,10 +371,10 @@ export async function fetchAuthSession(): Promise<AuthSession> {
 	return session;
 }
 
-export async function login(email: string, password: string, trustDevice = false): Promise<AuthSession> {
+export async function login(email: string, password: string): Promise<AuthSession> {
 	const session = await apiRequest<AuthSession>("/auth/login", {
 		method: "POST",
-		body: JSON.stringify({ email, password, trustDevice }),
+		body: JSON.stringify({ email, password }),
 	});
 	csrfToken = session.csrfToken;
 	acceptSession(session);

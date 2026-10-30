@@ -885,7 +885,7 @@ PREPASS_NONPRODUCTION_CLIENT_SECRET=...
 PREPASS_TOLL_SYNC_START_DATE=2026-01-01
 FRONTEND_ORIGIN=http://localhost:3000
 AUTH_COOKIE_SECURE=false
-AUTH_SESSION_TTL=12h
+AUTH_SESSION_TTL=8h
 FLEETSCOPE_COMPANY_ID=...
 FLEETSCOPE_WEBHOOK_SECRET=...
 SCHEDULED_SYNCS_ENABLED=true
@@ -952,7 +952,7 @@ browser bundle.
 ## Current API surface
 
 - Health: `GET /healthz`, `GET /readyz`
-- Auth: `POST /auth/login` (email/password, optional trustDevice),
+- Auth: `POST /auth/login` (email/password),
   `GET /auth/session`, `POST /auth/logout`, `POST /auth/password`, `PUT /auth/theme`.
 - Access administration: `GET /settings/access`, `POST /settings/users`,
   `PUT /settings/users/{id}`, `POST /settings/users/{id}/revoke`,
@@ -1225,8 +1225,12 @@ assignment lookup lists.
   New/edited accounts require a valid unique email. Existing accounts retain
   their full access as Administrators and may use their old username until an
   email is attached; subsequently login requires that email. Passwords are bcrypt
-  hashes. Trust this device for 30 days extends only that session to a fixed
-  30-day lifetime; normal sessions use AUTH_SESSION_TTL. Password/account changes
+  hashes. All sessions expire eight hours after sign-in, without activity-based
+  renewal or trusted-device extensions. AUTH_SESSION_TTL can shorten the lifetime;
+  larger legacy overrides are capped at eight hours. Legacy trustDevice input is
+  accepted but ignored. Migration 170 caps existing sessions at eight hours from
+  their original creation, preserving shorter expirations and activity history.
+  Password/account changes
   and explicit revocation invalidate every session, including remembered ones.
   Settings > Users shows Online for an active, unexpired session whose browser
   session heartbeat was seen within two minutes; otherwise Last activity shows

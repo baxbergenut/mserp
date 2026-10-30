@@ -5,6 +5,39 @@ import (
 	"time"
 )
 
+func TestAuthSessionTTL(t *testing.T) {
+	for key, value := range map[string]string{
+		"DATABASE_URL":           "postgres://localhost/mserp_test",
+		"DATATRUCK_API_KEY":      "test-key",
+		"DATATRUCK_COMPANY_NAME": "Test company",
+		"RELAY_API_KEY":          "test-key",
+		"PREPASS_CLIENT_ID":      "test-client",
+		"PREPASS_CLIENT_SECRET":  "test-secret",
+	} {
+		t.Setenv(key, value)
+	}
+	for _, tc := range []struct {
+		name, value string
+		want        time.Duration
+	}{
+		{name: "default", want: 8 * time.Hour},
+		{name: "explicit eight hours", value: "8h", want: 8 * time.Hour},
+		{name: "configured override", value: "2h", want: 2 * time.Hour},
+		{name: "legacy override capped", value: "12h", want: 8 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AUTH_SESSION_TTL", tc.value)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.AuthSessionTTL != tc.want {
+				t.Fatalf("AuthSessionTTL = %v, want %v", cfg.AuthSessionTTL, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseDailySyncTime(t *testing.T) {
 	t.Setenv("TEST_DAILY_SYNC_TIME", "23:45")
 

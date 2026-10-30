@@ -22,6 +22,12 @@ Profile writes distinguish absence from explicit null/zero. Protected fields omi
 
 ## Browser behaviour
 
+Sessions expire eight hours after sign-in. There is no trusted-device extension;
+legacy `trustDevice` login input is ignored. `AUTH_SESSION_TTL` may select a shorter
+lifetime; values above eight hours are capped. Migration 170 caps existing sessions
+from their original creation time and preserves shorter expirations. Activity never
+renews a session.
+
 Viewers retain filters, sorting, date navigation, inspection, spreadsheet selection and copying. Mutation controls are unavailable; event handlers and save functions also guard permissions. Read-only boards and payroll do not acquire dirty state, autosave work, undo actions or navigation blockers.
 
 The shell refreshes the session on navigation, focus, visibility changes, every 30 visible seconds and permission-denied responses. Access is versioned by user and role revisions. A changed revision cancels shared pending reads, rejects obsolete responses and remounts page state. Unwritable drafts/editors are discarded with a notice and their navigation blockers are removed. Rejected writes are not automatically replayed. Ordinary conflicts and network failures retain legitimate drafts. Backend checks remain authoritative on each request.

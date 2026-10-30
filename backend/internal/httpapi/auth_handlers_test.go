@@ -115,8 +115,10 @@ func TestAuthLoginSessionAndCSRF(t *testing.T) {
 	handler := newAuthHandler(
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		store,
-		AuthOptions{SessionTTL: 12 * time.Hour},
+		AuthOptions{SessionTTL: 8 * time.Hour},
 	)
+	now := time.Date(2026, time.October, 29, 12, 0, 0, 0, time.UTC)
+	handler.now = func() time.Time { return now }
 
 	router := chi.NewRouter()
 	router.Post("/auth/login", handler.login)
@@ -152,13 +154,28 @@ func TestAuthLoginSessionAndCSRF(t *testing.T) {
 	if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
 		t.Fatalf("unexpected session cookie: %+v", cookies)
 	}
+	wantExpiry := now.Add(8 * time.Hour)
+	if !response.ExpiresAt.Equal(wantExpiry) || !cookies[0].Expires.Equal(wantExpiry) || cookies[0].MaxAge != 8*60*60 {
+		t.Fatalf("session must expire eight hours after login: response=%v cookie=%+v", response.ExpiresAt, cookies[0])
+	}
+	if stored := store.sessions[hashToken(cookies[0].Value)]; !stored.ExpiresAt.Equal(wantExpiry) {
+		t.Fatalf("stored expiry = %v, want %v", stored.ExpiresAt, wantExpiry)
+	}
 
+	now = now.Add(time.Hour)
 	sessionRequest := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
 	sessionRequest.AddCookie(cookies[0])
 	sessionResponseRecorder := httptest.NewRecorder()
 	router.ServeHTTP(sessionResponseRecorder, sessionRequest)
 	if sessionResponseRecorder.Code != http.StatusOK {
 		t.Fatalf("session status = %d", sessionResponseRecorder.Code)
+	}
+	var refreshed sessionResponse
+	if err := json.NewDecoder(sessionResponseRecorder.Body).Decode(&refreshed); err != nil {
+		t.Fatal(err)
+	}
+	if !refreshed.ExpiresAt.Equal(wantExpiry) {
+		t.Fatalf("session heartbeat changed expiry to %v, want %v", refreshed.ExpiresAt, wantExpiry)
 	}
 
 	missingCSRFRequest := httptest.NewRequest(http.MethodPost, "/protected", nil)
@@ -198,6 +215,50 @@ func TestAuthLoginRejectsInvalidCredentials(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "invalid email or password") {
 		t.Fatalf("unexpected body: %s", response.Body.String())
+	}
+}
+
+func TestAuthLoginLegacyTrustDoesNotExtendSession(t *testing.T) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("correct horse battery staple"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		ttl, want time.Duration
+	}{
+		{name: "eight hours", ttl: 8 * time.Hour, want: 8 * time.Hour},
+		{name: "legacy long configuration", ttl: 30 * 24 * time.Hour, want: 8 * time.Hour},
+		{name: "shorter configuration", ttl: 2 * time.Hour, want: 2 * time.Hour},
+		{name: "unset configuration", want: 8 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeAuthStore{
+				user:     repository.AuthUser{ID: "admin", Username: "admin", PasswordHash: string(passwordHash)},
+				sessions: make(map[string]repository.AuthSession),
+			}
+			h := newAuthHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), store, AuthOptions{SessionTTL: tc.ttl})
+			now := time.Date(2026, time.October, 29, 12, 0, 0, 0, time.UTC)
+			h.now = func() time.Time { return now }
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(`{"email":"admin","password":"correct horse battery staple","trustDevice":true}`))
+			res := httptest.NewRecorder()
+			h.login(res, req)
+			if res.Code != http.StatusOK {
+				t.Fatalf("login status = %d: %s", res.Code, res.Body.String())
+			}
+			var response sessionResponse
+			if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			cookie := res.Result().Cookies()[0]
+			wantExpiry := now.Add(tc.want)
+			if !response.ExpiresAt.Equal(wantExpiry) || !cookie.Expires.Equal(wantExpiry) || cookie.MaxAge != int(tc.want.Seconds()) {
+				t.Fatalf("legacy trustDevice changed expiry: response=%v cookie=%+v", response.ExpiresAt, cookie)
+			}
+			if !store.sessions[hashToken(cookie.Value)].ExpiresAt.Equal(wantExpiry) {
+				t.Fatal("stored session has an incorrect expiration")
+			}
+		})
 	}
 }
 

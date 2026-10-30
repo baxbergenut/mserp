@@ -160,9 +160,13 @@ func Load() (Config, error) {
 		parsedOrigin.Hostname() != "127.0.0.1" && parsedOrigin.Hostname() != "::1" {
 		return Config{}, errors.New("AUTH_COOKIE_SECURE may only be false for local development")
 	}
-	authSessionTTL, err := time.ParseDuration(envOrDefault("AUTH_SESSION_TTL", "12h"))
+	authSessionTTL, err := time.ParseDuration(envOrDefault("AUTH_SESSION_TTL", "8h"))
 	if err != nil || authSessionTTL < 15*time.Minute || authSessionTTL > 7*24*time.Hour {
 		return Config{}, errors.New("AUTH_SESSION_TTL must be a duration between 15m and 168h")
+	}
+	// Existing runtime overrides remain valid, but cannot exceed the session limit.
+	if authSessionTTL > 8*time.Hour {
+		authSessionTTL = 8 * time.Hour
 	}
 	scheduledSyncsEnabled, err := strconv.ParseBool(envOrDefault("SCHEDULED_SYNCS_ENABLED", "true"))
 	if err != nil {

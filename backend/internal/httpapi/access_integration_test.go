@@ -147,6 +147,27 @@ func TestAccessDatabase(t *testing.T) {
 			if e = admin.QueryRow(ctx, `INSERT INTO app_users(username,email,role_id,password_hash) VALUES('Admin','admin@example.com',$1,$2) RETURNING id::text`, roleID, string(hash)).Scan(&id); e != nil {
 				t.Fatal(e)
 			}
+			// Existing remembered sessions retain their original sign-in window.
+			exec(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,created_at,expires_at) VALUES
+				($1,repeat('a',64),repeat('a',43),now()-interval '9 hours',now()+interval '30 days'),
+				($1,repeat('b',64),repeat('b',43),now()-interval '1 hour',now()+interval '30 days'),
+				($1,repeat('c',64),repeat('c',43),now(),now()+interval '1 hour')`, id)
+			sessionMigration, e := os.ReadFile("../../sql/170_eight_hour_sessions.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
+			exec(string(sessionMigration))
+			var capped, shortened bool
+			if e = admin.QueryRow(ctx, `SELECT bool_and(expires_at=created_at+interval '8 hours') FROM auth_sessions WHERE token_hash IN (repeat('a',64),repeat('b',64))`).Scan(&capped); e != nil || !capped {
+				t.Fatalf("long sessions were not capped: %v", e)
+			}
+			if e = admin.QueryRow(ctx, `SELECT expires_at=created_at+interval '1 hour' FROM auth_sessions WHERE token_hash=repeat('c',64)`).Scan(&shortened); e != nil || !shortened {
+				t.Fatalf("shorter session expiry changed: %v", e)
+			}
+			if _, e = repo.FindSessionByTokenHash(ctx, strings.Repeat("a", 64)); e != repository.ErrAuthRecordNotFound {
+				t.Fatalf("session older than eight hours is still valid: %v", e)
+			}
+			exec(`DELETE FROM auth_sessions`)
 			h := newAuthHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), repo, AuthOptions{SessionTTL: time.Hour, CookieSecure: true})
 			router := chi.NewRouter()
 			router.Post("/auth/login", h.login)
@@ -198,8 +219,8 @@ func TestAccessDatabase(t *testing.T) {
 			status(login("Admin", password, false), 401) // No username fallback once email is set.
 			remembered := login("admin@example.com", password, true)
 			status(remembered, 200)
-			if age := remembered.Result().Cookies()[0].MaxAge; age < 2591998 || age > 2592000 {
-				t.Fatal("remembered session is not 30 days")
+			if age := remembered.Result().Cookies()[0].MaxAge; age < 3598 || age > 3600 {
+				t.Fatal("legacy trustDevice input extended the configured session lifetime")
 			}
 			status(call("GET", "/loads", nil, nil, ""), 401)
 			status(call("GET", "/settings/access", nil, sessionCookie, ""), 200)
