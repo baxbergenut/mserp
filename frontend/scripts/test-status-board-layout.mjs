@@ -50,6 +50,14 @@ try {
   const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'Health issue', 'NEW DRIVER', 'ACCIDENT'];
   const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
   expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
+  await status.selectOption('');
+  await expect.poll(() => entries[0].status).toBe('');
+  const blankCell = status.locator('xpath=ancestor::td');
+  await expect(blankCell).not.toHaveClass(/status-(tone|discarded)/);
+  await expect(blankCell).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await page.reload();
+  await expect(status).toHaveValue('');
+  await expect(blankCell).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const colors = { READY: "driver_ready", REST: "rest", COVERED: "covered", DISPATCHED: "dispatched", ENROUTE: "enroute", RESERVED: "reserved", VACATION: "vacation", HOME: "home", SHOP: "shop", STOP: "stop", DEADHEAD: "deadhead", "In the YARD": "yard", "Hold for Load": "hold_for_load", "Family issue": "family_issue", "Issue with PU/Del": "pickup_delivery_issue", "Health issue": "health_issue", "NEW DRIVER": "new_driver", ACCIDENT: "accident" };
   for (const value of sheetStatuses) {
     if(value === "Left") continue; // Termination has its own permission-gated workflow.

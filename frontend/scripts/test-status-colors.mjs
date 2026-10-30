@@ -3,7 +3,12 @@ import fs from 'node:fs';
 import ts from 'typescript';
 const source=fs.readFileSync(new URL('../app/lib/statusColors.ts',import.meta.url),'utf8');
 const url='data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64');
-const {statusColorKey,statusPair,contrast,displayStatus,statusDefinitions,legacyStatusColorKeys}=await import(url);
+const {statusClass,statusColorKey,statusPair,contrast,displayStatus,statusDefinitions,legacyStatusColorKeys}=await import(url);
+for(const scope of ['general','driver','truck']) for(const mode of ['tone','text','dot']) {
+ assert.equal(statusClass('',scope,mode),'');
+ assert.equal(statusClass(' \t\n ',scope,mode),'');
+}
+assert.equal(statusClass('NO LOAD','driver'),'status-tone status-no_load');
 const originalBoard={
  READY:['#ffffff','#000000'], REST:['#000000','#d9d9d9'], COVERED:['#000000','#ffff00'],
  ENROUTE:['#000000','#3d85c6'], DISPATCHED:['#ffffff','#fbbc04'], RESERVED:['#000000','#b7e1cd'],

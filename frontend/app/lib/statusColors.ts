@@ -65,6 +65,7 @@ export function statusColorKey(value: string, scope: StatusScope = "general"): S
   return Object.hasOwn(aliases, key) ? aliases[key] : Object.hasOwn(defaultStatusColors, key) ? key as StatusColorKey : "discarded";
 }
 export function statusClass(value: string, scope: StatusScope = "general", mode: "tone" | "text" | "dot" = "tone") {
+  if (!value.trim()) return "";
   return `status-${mode} status-${statusColorKey(value, scope)}`;
 }
 export function displayStatus(value: string): string {

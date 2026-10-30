@@ -50,6 +50,10 @@ than hardcoded colors. Markers and charts use the same resolved background and
 foreground. Text status labels retain the paired background so dark foregrounds
 stay visible on dark personal themes.
 
+Blank/whitespace-only statuses have no status color classes or fill. They must
+not inherit the fallback palette for named statuses; an explicit No load remains
+a separate, colored status.
+
 
 Migration 171 retires At PU, At DEL, HOME (YARD), and 34 RESET from the board
 catalog. Current records consolidate to DISPATCHED, ENROUTE, HOME, and REST;
