@@ -61,7 +61,7 @@ func TestGrossBoardDatabase(t *testing.T) {
  INSERT INTO dispatchers VALUES('00000000-0000-0000-0000-000000000010','Dispatch A');
  INSERT INTO drivers VALUES('00000000-0000-0000-0000-000000000001','Test Driver','00000000-0000-0000-0000-000000000010',true),('00000000-0000-0000-0000-000000000002','Inactive',null,false);
  INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);
- ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date;`)
+ ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date, ADD COLUMN termination_date date;`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,14 +155,23 @@ func TestGrossBoardDatabase(t *testing.T) {
 	t.Run("inactive roster uses selected week", func(t *testing.T) {
 		const inactiveDriver = "00000000-0000-0000-0000-000000000002"
 		for _, tc := range []struct {
-			name    string
-			date    string
-			extra   bool
-			deleted bool
-			status  string
-			visible bool
+			name        string
+			date        string
+			termination string
+			start       string
+			extra       bool
+			deleted     bool
+			status      string
+			visible     bool
 		}{
 			{name: "no entries"},
+			{name: "terminated before selected week", termination: "2026-09-27"},
+			{name: "terminated selected Monday", termination: "2026-09-28", visible: true},
+			{name: "terminated midweek without saved loads", termination: "2026-09-30", start: "2026-09-21", visible: true},
+			{name: "terminated selected Sunday", termination: "2026-10-04", visible: true},
+			{name: "other unsaved historical week", termination: "2026-10-05"},
+			{name: "before working start", termination: "2026-10-12", start: "2026-10-05"},
+			{name: "saved work after termination", termination: "2026-09-27", date: "2026-09-30", visible: true},
 			{name: "previous Sunday", date: "2026-09-27", status: "LEFT"},
 			{name: "selected Monday", date: "2026-09-28", visible: true},
 			{name: "selected Sunday status", date: "2026-10-04", status: "LEFT", visible: true},
@@ -172,7 +181,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 			{name: "previous extra slot", date: "2026-09-27", extra: true},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
+				if _, err := pool.Exec(ctx, `UPDATE pg_temp.drivers SET termination_date=NULLIF($2,'')::date,roster_start_week=NULLIF($3,'')::date WHERE id=$1`, inactiveDriver, tc.termination, tc.start); err != nil {
+					t.Fatal(err)
+				}
 				defer func() {
+					if _, err := pool.Exec(ctx, `UPDATE pg_temp.drivers SET termination_date=NULL,roster_start_week=NULL WHERE id=$1`, inactiveDriver); err != nil {
+						t.Fatal(err)
+					}
 					for _, table := range []string{"gross_board_entries", "gross_board_extra_entries"} {
 						if _, err := pool.Exec(ctx, "DELETE FROM pg_temp."+table+" WHERE driver_id=$1", inactiveDriver); err != nil {
 							t.Fatal(err)
@@ -204,6 +219,69 @@ func TestGrossBoardDatabase(t *testing.T) {
 					t.Fatalf("inactive visible=%t, want %t; active visible=%t", visible, tc.visible, activeVisible)
 				}
 			})
+		}
+	})
+	t.Run("termination defaults preserve work and payroll labels", func(t *testing.T) {
+		const id = "00000000-0000-0000-0000-000000000002"
+		exec := func(sql string, args ...any) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, sql, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec(`UPDATE pg_temp.drivers SET termination_date='2026-09-28' WHERE id=$1`, id)
+		defer exec(`UPDATE pg_temp.drivers SET termination_date=NULL WHERE id=$1`, id)
+		defer exec(`DELETE FROM pg_temp.gross_board_entries WHERE driver_id=$1`, id)
+		defer exec(`DELETE FROM pg_temp.gross_board_extra_entries WHERE driver_id=$1`, id)
+		exec(`INSERT INTO pg_temp.gross_board_entries(driver_id,service_date,load_number,day_status,version,note) VALUES
+ ($1,'2026-09-30','','',4,''),($1,'2026-10-01','L100','',1,''),
+ ($1,'2026-10-02','','SHOP',1,''),($1,'2026-10-04','','',1,'Keep this note')`, id)
+		exec(`INSERT INTO pg_temp.gross_board_extra_entries(driver_id,service_date,slot,load_number,day_status) VALUES ($1,'2026-10-03',1,'Extra load','')`, id)
+		board, err := repo.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		left := map[string]int{}
+		for _, e := range board.Entries {
+			if e.DriverID == id && e.DayStatus == "LEFT" {
+				left[e.Date] = e.Version
+			}
+		}
+		if len(left) != 2 || left["2026-09-30"] != 4 {
+			t.Fatalf("unexpected LEFT defaults/versions: %v", left)
+		}
+		if version, ok := left["2026-09-29"]; !ok || version != 0 {
+			t.Fatalf("missing unsaved default: %v", left)
+		}
+		var savedLeft int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_temp.gross_board_entries WHERE driver_id=$1 AND day_status='LEFT'`, id).Scan(&savedLeft); err != nil || savedLeft != 0 {
+			t.Fatalf("read persisted defaults: %d %v", savedLeft, err)
+		}
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		report := DriverPayWeek{WeekStart: "2026-09-28", Drivers: []DriverPayDriver{{ID: id}}}
+		err = decoratePayDayStatuses(ctx, tx, "driver", &report)
+		tx.Rollback(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(report.Drivers[0].DayStatuses) != 3 {
+			t.Fatalf("payroll should share two LEFT defaults and saved SHOP: %+v", report.Drivers[0].DayStatuses)
+		}
+		// A dispatcher can replace an unsaved LEFT default with a real load.
+		if err := repo.Save(ctx, []GrossBoardEntry{{DriverID: id, Date: "2026-09-29", LoadNumber: "Final load", OriginalRate: "100", DriverRate: "90", Miles: "10"}}); err != nil {
+			t.Fatal(err)
+		}
+		board, err = repo.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range board.Entries {
+			if e.DriverID == id && e.Date == "2026-09-29" && (e.DayStatus != "" || e.LoadNumber != "Final load") {
+				t.Fatalf("default hid saved work: %+v", e)
+			}
 		}
 	})
 	base := GrossBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", LoadNumber: "l100", OriginalRate: "999", Miles: "999", DriverRate: "1000.10"}

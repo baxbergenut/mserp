@@ -181,7 +181,7 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
- WHERE payroll_driver_at(d.id,$1::date)=d.id AND ((d.active AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
+ WHERE payroll_driver_at(d.id,$1::date)=d.id AND (((d.active OR (d.termination_date >= $1::date AND d.termination_date < $1::date+7)) AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
  AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7))
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
@@ -289,6 +289,9 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 	}
 	for i := range board.Drivers {
 		board.Drivers[i].Assignments = assignments[board.Drivers[i].ID]
+	}
+	if err := decorateGrossBoardTerminations(ctx, tx, &board); err != nil {
+		return board, err
 	}
 	return board, nil
 }

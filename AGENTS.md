@@ -631,6 +631,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `frontend/app/loads/`: load table, filters, sorting, and manual sync.
 - `frontend/app/gross-board/`: Monday–Sunday dispatch planning grid, dispatcher
   grouping/filtering, load suggestions, autosave, and exact-decimal totals.
+  The unsaved roster includes terminated drivers in their termination week, respecting
+  working start dates. Saved entries/transfers retain visibility afterward;
+  imported provider loads still require explicit native board assignment.
+  Empty days after termination through Sunday default to LEFT in Gross Board
+  and payroll day labels. This read projection preserves saved work, statuses,
+  versions and frozen payroll labels; it never creates future-week roster rows.
   Migration 115 adds commit-only notifications and week-scoped, session-owned
   presence. `/gross-board/events?weekStart=...` pushes grossBoard/peers data
   directly; normal updates perform no follow-up browser board GET. Snapshot
