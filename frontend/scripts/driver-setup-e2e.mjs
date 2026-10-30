@@ -14,13 +14,14 @@ export async function runDriverSetupE2E({ page, base, sql, schema, temp }) {
   else await page.goto(`${base}/drivers?setup=${intake}`);
   const dialog=page.getByRole('dialog'),next=()=>dialog.getByRole('button',{name:'Continue',exact:true}).click();
   await expect(dialog.getByRole('progressbar')).toHaveAttribute('aria-valuemax','5');
-  await dialog.getByLabel('Full name',{exact:true}).fill(name);
+  await dialog.getByLabel('First name',{exact:true}).fill(mode==='manual'?'Wizard Manual':'Wizard Intake');
+  await dialog.getByLabel('Last name',{exact:true}).fill('Driver');
   await dialog.getByLabel('City',{exact:true}).fill('Louisville');await dialog.getByLabel('State / province',{exact:true}).fill('KY');
   await expect(dialog.locator('input[type=file]')).toHaveCount(0);
   await next();await expect(dialog.getByLabel('Truck',{exact:true})).toHaveValue('__new__');
   await dialog.getByLabel('Rate per mile ($)',{exact:true}).fill('0.65');
   await next();await dialog.getByLabel('Unit number',{exact:true}).fill(unit);
-  if(mode==='manual')await dialog.getByRole('combobox',{name:/^Owner/}).selectOption('__driver__');
+  if(mode==='manual')await dialog.getByRole('checkbox',{name:/^Driver owns this truck/}).check();
   await next();await dialog.getByRole('button',{name:'Remind me later',exact:true}).first().click();
   await next();await dialog.getByLabel('Driver started working',{exact:true}).fill('2026-10-07');
   await page.screenshot({path:join(temp,`driver-setup-${mode}-finalize.png`)});

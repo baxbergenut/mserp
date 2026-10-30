@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"mserp/internal/groq"
+	"mserp/internal/openai"
 	"mserp/internal/repository"
 )
 
@@ -28,26 +28,26 @@ const (
 type fileHandler struct {
 	logger    *slog.Logger
 	repo      *repository.FileRepository
-	extractor groq.DocumentExtractor
+	extractor openai.CabCardExtractor
 }
 
 type irpUploadResponse struct {
 	File   repository.StoredFileMetadata `json:"file"`
-	Fields groq.CabCardFields            `json:"fields"`
+	Fields openai.CabCardFields          `json:"fields"`
 }
 
 type uploadedDocument struct {
 	fileName    string
 	contentType string
 	data        []byte
-	images      []groq.Image
+	images      []openai.Image
 }
 
 func registerFileRoutes(
 	r chi.Router,
 	logger *slog.Logger,
 	repo *repository.FileRepository,
-	extractor groq.DocumentExtractor,
+	extractor openai.CabCardExtractor,
 ) {
 	handler := fileHandler{logger: logger, repo: repo, extractor: extractor}
 	r.Post("/irp-files", handler.uploadIRPFile)
@@ -106,9 +106,9 @@ func (handler fileHandler) readDocumentUpload(
 		return uploadedDocument{}, false
 	}
 
-	images := make([]groq.Image, 0, 3)
+	images := make([]openai.Image, 0, 3)
 	if strings.HasPrefix(originalType, "image/") {
-		images = append(images, groq.Image{ContentType: originalType, Data: originalData})
+		images = append(images, openai.Image{ContentType: originalType, Data: originalData})
 	} else {
 		pageHeaders := r.MultipartForm.File["page"]
 		if len(pageHeaders) == 0 {
@@ -136,7 +136,7 @@ func (handler fileHandler) readDocumentUpload(
 				writeAPIError(w, http.StatusRequestEntityTooLarge, "rendered PDF pages are too large")
 				return uploadedDocument{}, false
 			}
-			images = append(images, groq.Image{ContentType: pageType, Data: pageData})
+			images = append(images, openai.Image{ContentType: pageType, Data: pageData})
 		}
 	}
 	return uploadedDocument{
@@ -149,8 +149,8 @@ func (handler fileHandler) readDocumentUpload(
 
 func (handler fileHandler) writeExtractionError(w http.ResponseWriter, label string, err error) {
 	if err != nil {
-		if errors.Is(err, groq.ErrNotConfigured) {
-			writeAPIError(w, http.StatusServiceUnavailable, "GROQ_API_KEY is not configured on the server")
+		if errors.Is(err, openai.ErrNotConfigured) {
+			writeAPIError(w, http.StatusServiceUnavailable, "OpenAI document extraction is not configured on the server")
 			return
 		}
 		handler.logger.Error("extract document", "document", label, "error", err)

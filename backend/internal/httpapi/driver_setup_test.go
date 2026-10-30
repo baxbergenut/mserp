@@ -1,6 +1,32 @@
 package httpapi
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestDriverSetupSelfOwnershipPermissions(t *testing.T) {
+	request := driverRequest{NewTruck: &truckRequest{}, NewTruckOwnedByDriver: true}
+	grants := []string{"drivers.create", "drivers.private.edit", "driver_compensation.edit", "escrow.create", "trucks.create"}
+	for _, path := range []string{"/drivers", "/driver-intake/id/complete"} {
+		t.Run(path, func(t *testing.T) {
+			if !authorizeDriverSetup(httptest.NewRecorder(), capabilityRequest("POST", path, "", grants...), request) {
+				t.Fatal("combined setup must allow the new driver to own the new truck without investors.create")
+			}
+			for index, missing := range grants {
+				t.Run("missing "+missing, func(t *testing.T) {
+					remaining := append([]string{}, grants[:index]...)
+					remaining = append(remaining, grants[index+1:]...)
+					w := httptest.NewRecorder()
+					if authorizeDriverSetup(w, capabilityRequest("POST", path, "", remaining...), request) || w.Code != http.StatusForbidden {
+						t.Fatal("self ownership must retain the setup permission: " + missing)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestDriverSetupTruckValidation(t *testing.T) {
 	good := func() driverRequest {
@@ -9,6 +35,14 @@ func TestDriverSetupTruckValidation(t *testing.T) {
 	input, err := good().validate()
 	if err != nil || input.NewTruck == nil || input.NewTruck.UnitNumber != "001" {
 		t.Fatal("nested truck rejected", err)
+	}
+	selfOwned := good()
+	selfOwned.NewTruckOwnedByDriver = true
+	selfOwned.NewTruck.OwnerID = stringPtr("00000000-0000-0000-0000-000000000001")
+	selfOwned.NewTruck.IsCompanyOwned = true
+	input, err = selfOwned.validate()
+	if err != nil || !input.NewTruckOwnedByDriver || input.NewTruck == nil || input.NewTruck.OwnerID != nil {
+		t.Fatal("driver ownership must override the retained owner dropdown choice", err)
 	}
 	for _, mutate := range []func(*driverRequest){
 		func(r *driverRequest) { r.NewTruck.UnitNumber = "" },

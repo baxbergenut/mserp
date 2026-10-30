@@ -77,6 +77,7 @@ export function TruckForm({
   onUploadIRP,
   onRemoveIRP,
   setup = false,
+  setupDriverOwner,
   creating = false,
 }: {
   value: TruckInput;
@@ -88,6 +89,7 @@ export function TruckForm({
   onUploadIRP?: (file: File) => Promise<void>;
   onRemoveIRP?: () => void;
   setup?: boolean;
+  setupDriverOwner?: { name: string; checked: boolean; onChange: (checked: boolean) => void };
   creating?: boolean;
 }) {
   const set = <K extends keyof TruckInput>(key: K, next: TruckInput[K]) =>
@@ -99,7 +101,7 @@ export function TruckForm({
   return (
     <div className="space-y-6">
       {(setup || creating) && <section aria-label="Truck services"><Toggle checked={value.addToDataTruck ?? true} onChange={checked => set("addToDataTruck", checked)} label="Add to DataTruck after saving" description="Create this truck in DataTruck using the saved truck details." /></section>}
-      {!setup && permissions.includes("trucks.documents.read") && <fieldset disabled={!permissions.includes("trucks.documents.edit")}><FormSection title="IRP cab card">
+      {(!setup || onUploadIRP) && permissions.includes("trucks.documents.read") && <fieldset disabled={!permissions.includes("trucks.documents.edit")}><FormSection title={setup ? "AI cab-card extraction" : "IRP cab card"}>
         <div className="sm:col-span-2">
           <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/[0.04] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -114,7 +116,7 @@ export function TruckForm({
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-medium text-zinc-200">
                     {isUploadingIRP
-                      ? "Reading cab card with GROQ…"
+                      ? "Reading cab card…"
                       : irpFileName ?? "Upload an IRP cab card"}
                   </p>
                   <p className="mt-1 text-[11px] leading-5 text-zinc-500">
@@ -226,15 +228,16 @@ export function TruckForm({
             placeholder="e.g. White"
           />
         </Field>
+        {setupDriverOwner && <Toggle checked={setupDriverOwner.checked} onChange={setupDriverOwner.onChange} label="Driver owns this truck" description={`${setupDriverOwner.name} will be the truck owner.`} />}
         <Field label="Owner">
-          <select required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
+          {setupDriverOwner?.checked ? <input aria-label="Truck owner" readOnly value={setupDriverOwner.name} className={controlClass} /> : <select required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
             onChange={(event) => { const owner = event.target.value; onChange({ ...value, ownershipEffectiveDate: today, ownerDriverId: owner.startsWith("driver:") ? owner.slice(7) : null, ownerId: owner.startsWith("driver:") ? null : owner, isCompanyOwned: investors.find(i => i.id === owner)?.isCompany ?? false }); }}
             className={controlClass}>
             {investors.filter((i) => (i.active || i.id === value.ownerId) && (!i.driverId || !drivers.some(d => d.id === i.driverId) || i.id === value.ownerId)).map((i) => (
               <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
             ))}
             <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`} disabled={!investors.some(i=>i.driverId===d.id) && !permissions.includes("investors.create")}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
-          </select>
+          </select>}
         </Field>
         <Field label="Ownership effective date">
           <input aria-label="Ownership effective date" type="date" min="1900-01-01" max={today} value={value.ownershipEffectiveDate ?? ""} onChange={event => set("ownershipEffectiveDate", event.target.value)} className={controlClass} />

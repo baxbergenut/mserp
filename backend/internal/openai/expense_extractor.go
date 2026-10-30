@@ -1,13 +1,11 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -15,7 +13,7 @@ import (
 
 const maxInlineBytes = 20 << 20
 
-var ErrNotConfigured = errors.New("OpenAI expense extraction is not configured")
+var ErrNotConfigured = errors.New("OpenAI extraction is not configured")
 
 type ExpenseExtraction struct {
 	IsExpense bool          `json:"isExpense"`
@@ -168,65 +166,12 @@ func (c *Client) ExtractExpense(ctx context.Context, input ExpenseInput) (Expens
 			schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["maintenance"].(map[string]any)["type"] = []string{"object", "null"}
 		}
 	}
-	payload := map[string]any{
-		"model": c.model, "store": false, "reasoning": map[string]any{"effort": "low"}, "max_output_tokens": 16000,
-		"input": []map[string]any{{"role": "user", "content": parts}},
-		"text":  map[string]any{"format": map[string]any{"type": "json_schema", "name": "expense_extraction", "strict": true, "schema": schema}},
-	}
-	encoded, err := json.Marshal(payload)
+	raw, err := c.extractStructured(ctx, parts, "expense_extraction", schema, 16000)
 	if err != nil {
 		return ExpenseExtraction{}, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.baseURL, "/")+"/responses", bytes.NewReader(encoded))
-	if err != nil {
-		return ExpenseExtraction{}, errors.New("create OpenAI request failed")
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+c.apiKey)
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return ExpenseExtraction{}, errors.New("OpenAI expense extraction request failed")
-	}
-	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
-	if err != nil {
-		return ExpenseExtraction{}, errors.New("read OpenAI response failed")
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		// Do not expose provider bodies, which may include submitted data or credentials.
-		return ExpenseExtraction{}, fmt.Errorf("OpenAI expense extraction failed (HTTP %d); check model access, API key and quota", response.StatusCode)
-	}
-	var result struct {
-		Status string `json:"status"`
-		Output []struct {
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"output"`
-	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return ExpenseExtraction{}, errors.New("decode OpenAI response failed")
-	}
-	if result.Status != "completed" {
-		return ExpenseExtraction{}, errors.New("OpenAI extraction was incomplete; try a smaller document")
-	}
-	var raw strings.Builder
-	for _, output := range result.Output {
-		for _, content := range output.Content {
-			if content.Type == "refusal" {
-				return ExpenseExtraction{}, errors.New("OpenAI could not extract this document")
-			}
-			if content.Type == "output_text" {
-				raw.WriteString(content.Text)
-			}
-		}
-	}
-	if raw.Len() == 0 {
-		return ExpenseExtraction{}, errors.New("OpenAI returned no expense extraction")
-	}
 	var extracted expenseExtractionResponse
-	if err := json.Unmarshal([]byte(raw.String()), &extracted); err != nil {
+	if err := json.Unmarshal(raw, &extracted); err != nil {
 		return ExpenseExtraction{}, errors.New("decode OpenAI expense JSON failed")
 	}
 	return extracted.extraction(), nil

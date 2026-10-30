@@ -341,10 +341,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - `backend/internal/jobs/sync_fuel.go`: synchronous missing-day Relay fuel sync.
 - `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
   sync in API-compatible date windows.
-- `backend/internal/groq/`: vision extraction client and normalization for truck
-  cab cards. CDL upload/extraction is no longer exposed by the API.
-- `backend/internal/openai/`: structured expense extraction from user-provided
-  text, PDFs, text files, and receipt images.
+- `backend/internal/groq/`: legacy extraction client, no longer wired to the API.
+  CDL upload/extraction is no longer exposed by the API.
+- `backend/internal/openai/`: structured expense and truck cab-card extraction.
+  Both use one client with server-only OPENAI_API_KEY and OPENAI_EXPENSE_MODEL
+  (gpt-6-luna), the Responses API, strict schemas and store=false. Cab cards keep
+  the existing upload/attachment permissions, normalization and PDF page rendering.
+  TestCabCardLunaLive is opt-in with MSERP_OPENAI_CAB_CARD_LIVE_TEST=1 and
+  MSERP_OPENAI_CAB_CARD_LIVE_IMAGE pointing to the synthetic test cab-card PNG.
 - `backend/internal/db/pool.go`: pgx pool configuration.
 - `backend/sql/init.sql`: complete schema for a new database.
 - `backend/scripts/prepare-expense-import.ps1`: validates Google Sheets expense
@@ -836,7 +840,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   list search/page values; new query tokens open existing forms once.
 - `frontend/app/lib/api.ts`: API base selection and every frontend request.
 - `frontend/app/lib/types.ts`: frontend view/input contracts.
-- `frontend/app/lib/pdf.ts`: browser-side PDF-to-JPEG rendering used before GROQ
+- `frontend/app/lib/pdf.ts`: browser-side PDF-to-JPEG rendering used before OpenAI
   extraction; the original PDF is still uploaded and stored.
 - `frontend/app/globals.css`: Tailwind import, theme tokens, and global animation/
   scrollbar styles.
@@ -906,7 +910,9 @@ SCHEDULED_FUEL_SYNC_TIME=06:30
 SCHEDULED_TOLLS_SYNC_TIME=07:00
 ```
 
-`GROQ_API_KEY` is required for document extraction. CORS allows only
+`OPENAI_API_KEY` is required for expense and cab-card extraction; both use
+`OPENAI_EXPENSE_MODEL` (default gpt-6-luna). GROQ settings are legacy and unused
+by the API. CORS allows only
 `FRONTEND_ORIGIN`. `AUTH_COOKIE_SECURE` defaults to true for an HTTPS
 frontend origin and false for HTTP; production must use HTTPS and secure cookies.
 
@@ -2060,8 +2066,8 @@ assignment lookup lists.
   uploads accept PDF, PNG, JPEG, or WEBP originals up to 10 MB. PDFs require up
   to three browser-rendered page images for extraction. Never replace the stored
   original with rendered pages.
-- GROQ-extracted fields are suggestions: the frontend fills the form and the user
-  reviews before saving the truck or driver.
+- OpenAI-extracted cab-card fields are suggestions: the frontend fills the form
+  and the user reviews before saving the truck. Ownership is never inferred.
 - PrePass toll sync discovers active accounts from the authenticated Account
   API, fetches posting-date ranges of at most 31 days with pagination, and
   never fetches earlier than January 1 of the current UTC year. It upserts by
@@ -2611,6 +2617,16 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   requests in one transaction. Explicit driver ownership creates a linked investor;
   otherwise the selected existing owner applies. Truck assignments use the hire
   date's Monday. Existing driver intake links do not change profiles/assignments.
+- The new truck's Driver owns this truck toggle is always offered during combined
+  setup and shows the driver's name as owner; switching it off restores the
+  previous company/investor selection. Finalize also shows the chosen owner.
+  Creating that linked owner identity uses the driver/truck setup permissions;
+  it does not require investors.create. Standalone investor creation and assigning
+  an existing driver as a new owner retain their existing investor permissions.
+- Truck details also offers the existing IRP cab-card AI upload with truck document
+  read/edit permissions. Extracted fields remain editable; ownership is never
+  extracted. Uploads hold wizard navigation/saving, retain the attachment in the
+  draft, and ignore results after the draft changes or the wizard closes.
 - Service card titles link to their management pages. Reminders are offered only
   during setup and its saved-results modal, not on Driver Overview.
 - CDL upload UI, browser request and POST route are removed. Manual CDL fields and

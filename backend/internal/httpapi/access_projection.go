@@ -232,9 +232,8 @@ func authorizeDriverSetup(w http.ResponseWriter, r *http.Request, request driver
 			keys = append(keys, "trucks.documents.edit")
 		}
 	}
-	if request.NewTruckOwnedByDriver {
-		keys = append(keys, "investors.create")
-	}
+	// The linked owner identity for this new driver is part of combined setup.
+	// Standalone investor creation and existing-driver ownership keep their grants.
 	if request.CDLFileID != nil {
 		keys = append(keys, "drivers.documents.edit")
 	}

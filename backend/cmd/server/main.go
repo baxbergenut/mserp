@@ -22,7 +22,6 @@ import (
 	"mserp/internal/datatruck"
 	"mserp/internal/db"
 	"mserp/internal/fiveeld"
-	"mserp/internal/groq"
 	"mserp/internal/httpapi"
 	"mserp/internal/jobs"
 	"mserp/internal/openai"
@@ -164,7 +163,7 @@ func main() {
 	grossBoardRepo := repository.NewGrossBoardRepository(pool)
 	authRepo := repository.NewAuthRepository(pool)
 	customTaskRepo := repository.NewCustomTaskRepository(pool)
-	cabCardExtractor := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
+	aiExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
 	fuelRepo.ConfigureRelayDrivers(relayClient, cfg.RelayEnvironment)
 	fuelJob := jobs.NewSyncFuelJob(
@@ -231,7 +230,6 @@ func main() {
 			return err
 		}})
 	}()
-	expenseExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,
@@ -248,8 +246,8 @@ func main() {
 		grossBoardRepo,
 		authRepo,
 		customTaskRepo,
-		cabCardExtractor,
-		expenseExtractor,
+		aiExtractor,
+		aiExtractor,
 		locationRefresher,
 		wmtClient,
 		httpapi.AuthOptions{

@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mserp/internal/fleetscope"
-	"mserp/internal/groq"
 	"mserp/internal/jobs"
 	"mserp/internal/openai"
 	"mserp/internal/repository"
@@ -42,7 +41,7 @@ func NewRouter(
 	grossBoardRepo *repository.GrossBoardRepository,
 	authRepo *repository.AuthRepository,
 	customTaskRepo *repository.CustomTaskRepository,
-	documentExtractor groq.DocumentExtractor,
+	documentExtractor openai.CabCardExtractor,
 	expenseExtractor openai.ExpenseExtractor,
 	fiveELDJob jobs.LocationRefresher,
 	wmtClient repository.WMTProvider,
