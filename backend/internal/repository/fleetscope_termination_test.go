@@ -134,6 +134,17 @@ func testFleetScopeOffboarding(t *testing.T, pool, admin *pgxpool.Pool) {
 	if n != 0 {
 		t.Fatal("dispatcher history not closed")
 	}
+	loc, _ := time.LoadLocation("America/New_York")
+	var releaseDate string
+	must(pool.QueryRow(ctx, `SELECT (assigned_at AT TIME ZONE 'America/New_York')::date::text FROM driver_dispatcher_assignments WHERE driver_id=$1 AND dispatcher_id IS NULL AND unassigned_at IS NULL`, driver.ID).Scan(&releaseDate))
+	if releaseDate != time.Now().In(loc).Format(time.DateOnly) {
+		t.Fatalf("offboarding rewound assignments to the start of the week: %s", releaseDate)
+	}
+	var truckReleaseDate string
+	must(pool.QueryRow(ctx, `SELECT (max(unassigned_at) AT TIME ZONE 'America/New_York')::date::text FROM truck_driver_assignments WHERE driver_id=$1`, driver.ID).Scan(&truckReleaseDate))
+	if truckReleaseDate != releaseDate {
+		t.Fatalf("truck and dispatcher release dates differ: %s / %s", truckReleaseDate, releaseDate)
+	}
 	var notes string
 	must(pool.QueryRow(ctx, `SELECT notes FROM custom_tasks WHERE id=(SELECT task_id FROM fleetscope_driver_terminations WHERE id=$1)`, terminationID).Scan(&notes))
 	if !strings.Contains(notes, "dispatcher assignment disconnected") || !strings.Contains(notes, "Non-owned truck assignments disconnected") {

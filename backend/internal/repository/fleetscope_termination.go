@@ -42,7 +42,10 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Never infer destructive identity changes from names or contact information.
 		// The explicit intake completion is the authoritative external identity link.
-		if err = setAssignmentWeek(ctx, tx, ""); err != nil {
+		// Offboarding is observed today. Rounding back to Monday erases work
+		// already performed this week; late source dates still require review.
+		loc, _ := time.LoadLocation("America/New_York")
+		if err = setAssignmentWeek(ctx, tx, time.Now().In(loc).Format(time.DateOnly)); err != nil {
 			return IntakeResult{}, err
 		}
 		var driverID *string

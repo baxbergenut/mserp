@@ -85,6 +85,9 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
   const totals = driverTotals(driver, edits);
   const investor = !!driver.investorId;
   const statementName = driver.fullName;
+  const employmentLabel = driver.displayEmploymentTypes?.length
+    ? driver.displayEmploymentTypes.map(employmentTypeLabel).join(" / ")
+    : employmentTypeLabel(driver.employmentType ?? (driver.isOwnerOperator ? "owner_operator" : "company"));
   const operatingDrivers = (driver.operatingDrivers ?? (driver.autoCharges ?? []).filter(c => c.source.startsWith("driver:")).map(c => ({ id: c.source.slice(7), name: c.name.replace(/^Driver earnings · /, "") }))).filter(person => person.id !== driver.profileDriverId);
   const profileHref = investor ? `/investors/detail?id=${driver.investorId}` : `/drivers/detail?id=${driver.id}`;
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
@@ -159,7 +162,7 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
         </div>
       </th>
       <td className="border-b border-zinc-800 px-3">{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} onClick={event => event.stopPropagation()} className="font-mono underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
-      <td className="border-b border-zinc-800 px-3">{investor ? <div className="flex items-center gap-2">{operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—"}{operatingDrivers.length > 0 && homeBadge}</div> : employmentTypeLabel(driver.employmentType ?? (driver.isOwnerOperator ? "owner_operator" : "company"))}</td>
+      <td className="border-b border-zinc-800 px-3">{investor ? <div className="flex items-center gap-2">{operatingDrivers.length ? operatingDrivers.map((person, index) => <Fragment key={person.id}>{index > 0 && ", "}<Link href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()}>{person.name}</Link></Fragment>) : "—"}{operatingDrivers.length > 0 && homeBadge}</div> : employmentLabel}</td>
       {!investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-zinc-500">{driver.dispatcherName || "—"}</td>
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}

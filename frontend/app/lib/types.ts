@@ -1320,6 +1320,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+  displayEmploymentTypes?: EmploymentType[];
   homeWeek?: boolean;
   dayStatuses?: { date: string; status: Exclude<GrossBoardDayStatus, ""> }[];
   dispatchers?: { id: string; name: string }[];
