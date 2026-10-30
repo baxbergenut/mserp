@@ -97,6 +97,7 @@ func decoratePayDayStatuses(ctx context.Context, tx pgx.Tx, kind string, report 
 	rows, err := tx.Query(ctx, `WITH statuses AS (
  SELECT driver_id,service_date,day_status FROM `+grossBoardEntriesSQL+` e
  WHERE NOT deleted AND day_status<>'' AND service_date >= $1::date AND service_date < $1::date+7
+ UNION ALL SELECT driver_id,service_date,'LEFT' FROM (`+terminationDaysSQL+`) termination_days
  ), routed AS (
  SELECT coalesce(team.main_driver_id,e.driver_id) driver_id,e.service_date,e.day_status
  FROM statuses e LEFT JOIN driver_teams team ON team.team_driver_id=e.driver_id
