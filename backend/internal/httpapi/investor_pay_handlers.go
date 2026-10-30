@@ -18,7 +18,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		var pg *pgconn.PgError
 		switch {
 		case errors.As(err, &blocked):
-			writeJSON(w, 400, map[string]string{"error": err.Error(), "code": "finalization_blocked"})
+			writeJSON(w, 400, map[string]any{"error": err.Error(), "code": "finalization_blocked", "review": blocked.Review})
 		case errors.As(err, &invalid):
 			writeAPIError(w, 400, err.Error())
 		case errors.Is(err, repository.ErrDriverPayConflict) || errors.Is(err, repository.ErrChargeConflict):
@@ -174,7 +174,11 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			return
 		}
 		v.Comments = original
-		saved, err := pay.SaveInvestorPay(r.Context(), v, actor(r))
+		ctx := r.Context()
+		if r.URL.Query().Get("receipt") == "1" {
+			ctx = repository.WithPayrollReceipt(ctx)
+		}
+		saved, err := pay.SaveInvestorPay(ctx, v, actor(r))
 		if err != nil {
 			fail(w, err)
 			return
@@ -192,7 +196,11 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 				writeAPIError(w, 400, "Invalid week or truck")
 				return
 			}
-			result, err := pay.SettleInvestor(r.Context(), week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override)
+			ctx := r.Context()
+			if r.URL.Query().Get("receipt") == "1" {
+				ctx = repository.WithPayrollReceipt(ctx)
+			}
+			result, err := pay.SettleInvestor(ctx, week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override)
 			if err != nil {
 				fail(w, err)
 				return

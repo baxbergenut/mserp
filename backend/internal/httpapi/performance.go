@@ -22,7 +22,8 @@ type timedWriter struct {
 func (w *timedWriter) WriteHeader(code int) {
 	if !w.wrote {
 		w.wrote = true
-		w.Header().Set("Server-Timing", fmt.Sprintf("app;dur=%.2f, db;dur=%.2f, pool;dur=%.2f, queries;desc=\"%d\"", float64(time.Since(w.start).Microseconds())/1000, float64(w.metrics.QueryNanos.Load())/1e6, float64(w.metrics.AcquireNanos.Load())/1e6, w.metrics.Queries.Load()))
+		phases, _ := w.metrics.Details()
+		w.Header().Set("Server-Timing", fmt.Sprintf("app;dur=%.2f, db;dur=%.2f, pool;dur=%.2f, lock;dur=%.2f, queries;desc=\"%d\"", float64(time.Since(w.start).Microseconds())/1000, float64(w.metrics.QueryNanos.Load())/1e6, float64(w.metrics.AcquireNanos.Load())/1e6, phases["financial_lock_wait"], w.metrics.Queries.Load()))
 	}
 	w.ResponseWriter.WriteHeader(code)
 }

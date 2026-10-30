@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"mserp/internal/db"
 	"strings"
@@ -13,12 +15,18 @@ import (
 type payrollCacheEntry struct {
 	body    []byte
 	expires time.Time
+	used    uint64
 }
 type payrollCache struct {
 	mu       sync.Mutex
 	entries  map[string]payrollCacheEntry
 	inFlight map[string]chan struct{}
 	bytes    int
+	clock    uint64
+}
+
+func payrollCacheKey(kind string, week time.Time, snapshot string) string {
+	return fmt.Sprintf("%s:%s:%s:%x", kind, week.Format(time.DateOnly), ChargeCurrentWeek(), sha256.Sum256([]byte(snapshot)))
 }
 
 // This is deliberately an exclusion list: every other tracked table remains a
@@ -43,13 +51,16 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
-	key := kind + ":" + week.Format(time.DateOnly) + ":" + ChargeCurrentWeek() + ":" + snapshot
+	key := payrollCacheKey(kind, week, snapshot)
 	now := time.Now()
 	c := &r.cache
 	for {
 		c.mu.Lock()
 		hit, ok := c.entries[key]
 		if ok && time.Now().Before(hit.expires) {
+			c.clock++
+			hit.used = c.clock
+			c.entries[key] = hit
 			db.Event(ctx, "payroll_cache_hit")
 			c.mu.Unlock()
 			var report DriverPayWeek
@@ -99,14 +110,23 @@ func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind st
 			c.bytes -= len(v.body)
 		}
 	}
-	if len(c.entries) >= 32 || c.bytes+len(body) > 8*1024*1024 {
-		clear(c.entries)
-		c.bytes = 0
-	}
 	if old, exists := c.entries[key]; exists {
 		c.bytes -= len(old.body)
+		delete(c.entries, key)
 	}
-	c.entries[key] = payrollCacheEntry{body: body, expires: time.Now().Add(5 * time.Minute)}
+	for len(c.entries) >= 256 || c.bytes+len(body) > 8*1024*1024 {
+		var oldest string
+		var used uint64 = ^uint64(0)
+		for k, entry := range c.entries {
+			if entry.used < used {
+				oldest, used = k, entry.used
+			}
+		}
+		c.bytes -= len(c.entries[oldest].body)
+		delete(c.entries, oldest)
+	}
+	c.clock++
+	c.entries[key] = payrollCacheEntry{body: body, expires: time.Now().Add(5 * time.Minute), used: c.clock}
 	c.bytes += len(body)
 	return report, nil
 }
@@ -132,6 +152,9 @@ func selectPayDriver(report DriverPayWeek, id string) DriverPayWeek {
 
 // Shared by cache keys and summary finalization tokens; untracked inputs fall back to MVCC.
 func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
+	if memo, ok := ctx.Value(payrollSnapshotKey{}).(payrollSnapshot); ok && memo.tx == tx {
+		return memo.value, nil
+	}
 	var snapshot string
 	var revisionTable *string
 	if err := tx.QueryRow(ctx, `SELECT to_regclass('payroll_cache_revisions')::text`).Scan(&revisionTable); err != nil {
@@ -160,4 +183,12 @@ func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
 		db.Event(ctx, "payroll_fallback_untracked_table")
 	}
 	return snapshot, nil
+}
+
+// Only read-only entrypoints pin this memo. Write transactions must observe their
+// own revision changes after every financial mutation.
+type payrollSnapshotKey struct{}
+type payrollSnapshot struct {
+	tx    pgx.Tx
+	value string
 }

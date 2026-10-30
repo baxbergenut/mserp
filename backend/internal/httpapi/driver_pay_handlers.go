@@ -112,7 +112,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	fail := func(w http.ResponseWriter, err error) {
 		var blocked *repository.PayrollFinalizationBlockedError
 		if errors.As(err, &blocked) {
-			writeJSON(w, 400, map[string]string{"error": err.Error(), "code": "finalization_blocked"})
+			writeJSON(w, 400, map[string]any{"error": err.Error(), "code": "finalization_blocked", "review": blocked.Review})
 			return
 		}
 		var invalid *repository.ChargeValidationError
@@ -190,7 +190,11 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 				return
 			}
 			session, _ := authSessionFromContext(r.Context())
-			result, err := repo.Settle(r.Context(), week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override)
+			ctx := r.Context()
+			if r.URL.Query().Get("receipt") == "1" {
+				ctx = repository.WithPayrollReceipt(ctx)
+			}
+			result, err := repo.Settle(ctx, week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override)
 			if err != nil {
 				fail(w, err)
 				return
@@ -233,7 +237,11 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		saved, err := repo.Save(r.Context(), e, session.User.ID)
+		ctx := r.Context()
+		if r.URL.Query().Get("receipt") == "1" {
+			ctx = repository.WithPayrollReceipt(ctx)
+		}
+		saved, err := repo.Save(ctx, e, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

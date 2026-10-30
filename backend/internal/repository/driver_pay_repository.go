@@ -36,6 +36,7 @@ type DriverPayAdjustment struct {
 	Amount       string `json:"amount"`
 }
 type DriverPayEdits struct {
+	InputRevision        string                `json:"inputRevision,omitempty"`
 	SourceCharges        []PaySourceCharge     `json:"sourceCharges,omitempty"`
 	LayoverExcludedDates []string              `json:"layoverExcludedDates,omitempty"`
 	Costs                *DriverPayCosts       `json:"costs,omitempty"`
@@ -125,14 +126,16 @@ type DriverPayDriver struct {
 	Edits                  DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
-	ManagedInSheets bool                 `json:"managedInSheets,omitempty"`
-	Pagination      *PayPageInfo         `json:"pagination,omitempty"`
-	SetupRequired   []InvestorTruckSetup `json:"setupRequired,omitempty"`
-	Issues          []string             `json:"issues,omitempty"`
-	Notices         []string             `json:"notices,omitempty"`
-	Revision        string               `json:"revision"`
-	WeekStart       string               `json:"weekStart"`
-	Drivers         []DriverPayDriver    `json:"drivers"`
+	Receipt              bool                 `json:"receipt,omitempty"`
+	AffectedStatementIDs []string             `json:"affectedStatementIds,omitempty"`
+	ManagedInSheets      bool                 `json:"managedInSheets,omitempty"`
+	Pagination           *PayPageInfo         `json:"pagination,omitempty"`
+	SetupRequired        []InvestorTruckSetup `json:"setupRequired,omitempty"`
+	Issues               []string             `json:"issues,omitempty"`
+	Notices              []string             `json:"notices,omitempty"`
+	Revision             string               `json:"revision"`
+	WeekStart            string               `json:"weekStart"`
+	Drivers              []DriverPayDriver    `json:"drivers"`
 }
 
 type InvestorTruckSetup struct {
@@ -442,11 +445,12 @@ func driverPayFee(kind, rate, basis string) string {
 }
 
 func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, actors ...string) (DriverPayEdits, error) {
-	tx, err := r.pool.Begin(ctx)
+	edits.InputRevision = ""
+	tx, closeWrite, err := r.beginPayrollWrite(ctx)
 	if err != nil {
 		return edits, err
 	}
-	defer tx.Rollback(ctx)
+	defer closeWrite()
 	endLock := db.Phase(ctx, "financial_lock_wait")
 	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
 	endLock()
@@ -544,5 +548,8 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	edits.Costs = refreshed.Drivers[0].Edits.Costs
+	if err = setPaySaveRevision(ctx, tx, "driver", &edits); err != nil {
+		return edits, err
+	}
 	return edits, tx.Commit(ctx)
 }

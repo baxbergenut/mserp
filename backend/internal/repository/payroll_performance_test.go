@@ -85,12 +85,19 @@ func TestPayrollPerformance(t *testing.T) {
  INSERT INTO investors(id,full_name,driver_id) SELECT md5('owner'||n)::uuid,'Perf Owner '||n,CASE WHEN n%4=0 THEN md5('driver'||n)::uuid END FROM generate_series(1,176)n;
  INSERT INTO trucks(id,unit_number,owner_id) SELECT md5('truck'||n)::uuid,'PERF-'||n,md5('owner'||n)::uuid FROM generate_series(1,176)n;
  UPDATE truck_ownership_history SET start_known=false;
- INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT md5('truck'||n)::uuid,md5('driver'||n)::uuid,'2026-01-01' FROM generate_series(1,176)n;
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT md5('truck'||n)::uuid,md5('driver'||n)::uuid,'2026-09-01' FROM generate_series(1,176)n;
+ -- Old assignments connect 101 drivers through 88 trucks, reproducing the large
+ -- production history component without inventing current shared obligations.
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at,unassigned_at)
+ SELECT md5('truck'||(1+(n-1)%88))::uuid,md5('driver'||(n+side))::uuid,
+ '2026-01-01'::timestamptz+(2*n+side)*interval '1 day',
+ '2026-01-01'::timestamptz+(2*n+side+1)*interval '1 day'
+ FROM generate_series(1,100)n CROSS JOIN generate_series(0,1)side;
  INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) SELECT md5('truck'||n)::uuid,md5('owner'||n)::uuid,'2026-01-05',88 FROM generate_series(1,176)n;
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles)
- SELECT md5('driver'||n)::uuid,'2026-09-21'::date+d,'PERF-'||n||'-'||d,1000,1200,400 FROM generate_series(1,176)n CROSS JOIN generate_series(0,27)d;
+ SELECT md5('driver'||n)::uuid,'2026-09-21'::date+d,'PERF-'||n||'-'||d,1000,1200,400 FROM generate_series(1,176)n CROSS JOIN generate_series(0,41)d;
  INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,truck_id,truck_unit,raw_payload)
- SELECT n*100+d,'PERF-'||n||'-'||d,'delivered',1000,1200,400,'2026-09-21 12:00Z'::timestamptz+d*interval '1 day',md5('truck'||n)::uuid,'PERF-'||n,'{}'::jsonb FROM generate_series(1,176)n CROSS JOIN generate_series(0,27)d;
+ SELECT n*100+d,'PERF-'||n||'-'||d,'delivered',1000,1200,400,'2026-09-21 12:00Z'::timestamptz+d*interval '1 day',md5('truck'||n)::uuid,'PERF-'||n,'{}'::jsonb FROM generate_series(1,176)n CROSS JOIN generate_series(0,41)d;
  INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint)
  SELECT md5('truck'||(1+n%176))::uuid,'2026-09-21'::date+n%28,'2026-10-01','test','test','test','test','PERF-'||(1+n%176),'test','test','2026-09-21'::date+n%28,'12:00','test',10,md5('toll'||n)||md5('toll'||n) FROM generate_series(1,6000)n;
  INSERT INTO expenses(category_id,category,expense_date,amount,charge_driver_id,driver_settled,expense_type)

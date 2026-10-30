@@ -1254,6 +1254,7 @@ export interface PayCostTransactions {
   notice?: string;
 }
 export interface DriverPayEdits {
+  inputRevision?: string;
   sourceCharges?: PaySourceCharge[];
   /** Read-only exclusions retained for legacy finalized statements. */
   layoverExcludedDates?: string[];
@@ -1390,6 +1391,8 @@ export interface PayPageInfo {
   payable: string;
 }
 export interface DriverPayWeek {
+  receipt?: boolean;
+  affectedStatementIds?: string[];
  notices?: string[];
  managedInSheets?:boolean;
   pagination?: PayPageInfo;

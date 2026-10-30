@@ -11,11 +11,12 @@ import (
 )
 
 func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverPayEdits, actor string) (DriverPayEdits, error) {
-	tx, err := r.pool.Begin(ctx)
+	edits.InputRevision = ""
+	tx, closeWrite, err := r.beginPayrollWrite(ctx)
 	if err != nil {
 		return edits, err
 	}
-	defer tx.Rollback(ctx)
+	defer closeWrite()
 	endLock := db.Phase(ctx, "financial_lock_wait")
 	err = lockTruckAccounting(ctx, tx)
 	endLock()
@@ -89,6 +90,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if err = truckAudit(ctx, tx, card.ID, edits.WeekStart, "pay_edits", actor, edits); err != nil {
 		return edits, err
 	}
+	if err = setPaySaveRevision(ctx, tx, "investor", &edits); err != nil {
+		return edits, err
+	}
 	return edits, tx.Commit(ctx)
 }
 func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen, override bool) (DriverPayWeek, error) {
@@ -137,9 +141,18 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		return empty, ErrDriverPayConflict
 	}
 	if !reopen && !override && len(report.Issues) > 0 {
-		return empty, finalizationBlocked("Resolve unattributed loads before finalizing Investor Pay")
+		return empty, finalizationReview(report, truck, "Resolve unattributed loads before finalizing Investor Pay")
 	}
 	count := 0
+	selectedIDs := map[string]bool{}
+	committed := DriverPayWeek{WeekStart: report.WeekStart, Issues: report.Issues, Notices: report.Notices, Drivers: []DriverPayDriver{}}
+	var username string
+	var finalizedAt time.Time
+	if !reopen {
+		if err = tx.QueryRow(ctx, `SELECT username,now() FROM app_users WHERE id=$1`, actor).Scan(&username, &finalizedAt); err != nil {
+			return empty, err
+		}
+	}
 	for _, d := range report.Drivers {
 		if (truck != "" && d.ID != truck) || (truck == "" && d.TruckInactive) {
 			continue
@@ -149,6 +162,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			continue
 		}
 		count++
+		selectedIDs[d.ID] = true
 		if reopen {
 			if _, err = tx.Exec(ctx, `UPDATE investor_pay_weeks SET finalized=false,version=version+1 WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart); err != nil {
 				return empty, err
@@ -161,11 +175,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 				return empty, err
 			}
 			if !override && len(d.Issues) > 0 {
-				return empty, finalizationBlocked("Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
+				return empty, finalizationReview(report, truck, "Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
 			}
 			for _, l := range d.Loads {
 				if !override && (l.Fee == "" || len(l.Issues) > 0) {
-					return empty, finalizationBlocked("Resolve loads needing review for truck %s", d.TruckUnit)
+					return empty, finalizationReview(report, truck, "Resolve loads needing review for truck %s", d.TruckUnit)
 				}
 			}
 			expenses := append([]ExpenseDeduction(nil), d.Edits.ExpenseDeductions...)
@@ -179,11 +193,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			if err != nil {
 				return empty, err
 			}
-			var username string
-			if err = tx.QueryRow(ctx, `SELECT username FROM app_users WHERE id=$1`, actor).Scan(&username); err != nil {
-				return empty, err
-			}
-			d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: time.Now(), FinalizedBy: username}
+			d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: finalizedAt, FinalizedBy: username}
 			d.Edits.Version++
 			body, e := json.Marshal(d)
 			if e != nil {
@@ -204,13 +214,29 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		if err = truckAudit(ctx, tx, d.ID, report.WeekStart, action, actor, map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d}); err != nil {
 			return empty, err
 		}
+		committed.Drivers = append(committed.Drivers, d)
 	}
 	if count == 0 {
 		return empty, chargeInvalid("No eligible investor settlements selected")
 	}
+	if payrollReceiptRequested(ctx) && !reopen && strings.HasPrefix(report.Revision, "inputs:") {
+		if err = setPayrollRevision(ctx, tx, "investor", &committed); err != nil {
+			return empty, err
+		}
+		return payrollReceipt(committed, selectedIDs), tx.Commit(ctx)
+	}
+	if payrollReceiptRequested(ctx) && truck != "" && strings.HasPrefix(report.Revision, "inputs:") {
+		ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "truck", truck)
+		if err != nil {
+			return empty, err
+		}
+	}
 	result, err := readInvestorPay(ctx, tx, week)
 	if err != nil {
 		return empty, err
+	}
+	if payrollReceiptRequested(ctx) {
+		return payrollReceipt(result, selectedIDs), tx.Commit(ctx)
 	}
 	return investorPayView(result, truck), tx.Commit(ctx)
 }

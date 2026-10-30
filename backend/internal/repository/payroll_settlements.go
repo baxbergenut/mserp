@@ -33,12 +33,30 @@ type PayrollSettlementInput struct {
 
 // Only these review checks can be bypassed by an explicit finalization override.
 // Conflicts, permissions, collection limits and other errors remain ordinary errors.
-type PayrollFinalizationBlockedError struct{ error }
+type PayrollFinalizationBlockedError struct {
+	error
+	Review *DriverPayWeek
+}
 
 func (e *PayrollFinalizationBlockedError) Unwrap() error { return e.error }
 
 func finalizationBlocked(format string, args ...any) error {
-	return &PayrollFinalizationBlockedError{chargeInvalid(format, args...)}
+	return &PayrollFinalizationBlockedError{error: chargeInvalid(format, args...)}
+}
+
+func finalizationReview(report DriverPayWeek, id, format string, args ...any) error {
+	if id != "" {
+		rows := []DriverPayDriver{}
+		for _, d := range report.Drivers {
+			if d.ID == id {
+				rows = append(rows, d)
+			}
+		}
+		report.Drivers = rows
+	}
+	report.Pagination = nil
+	report.SetupRequired = nil
+	return &PayrollFinalizationBlockedError{error: chargeInvalid(format, args...), Review: &report}
 }
 
 type SettlementEvent struct {
@@ -166,6 +184,8 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		return empty, ErrDriverPayConflict
 	}
 	selected := 0
+	selectedIDs := map[string]bool{}
+	var frozenResult *DriverPayWeek
 	pending := map[string][]string{}
 	for _, d := range report.Drivers {
 		if driver != "" && d.ID != driver {
@@ -176,6 +196,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			continue
 		}
 		selected++
+		selectedIDs[d.ID] = true
 		if reopen {
 			var ids []string
 			if err = tx.QueryRow(ctx, `UPDATE payroll_settlements SET finalized=false,version=version+1,reopened_at=now(),reopened_by=nullif($3,'')::uuid,reason=$4 WHERE driver_id=$1 AND week_start=$2::date RETURNING confirmed_schedules`, d.ID, report.WeekStart, actor, strings.TrimSpace(reason)).Scan(&ids); err != nil {
@@ -200,11 +221,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				return empty, err
 			}
 			if !override && len(d.Issues) > 0 {
-				return empty, finalizationBlocked("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
+				return empty, finalizationReview(report, driver, "Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
 			}
 			for _, load := range d.Loads {
 				if !override && (load.Fee == "" || len(load.Issues) > 0) {
-					return empty, finalizationBlocked("Resolve the loads needing review for %s before finalizing", d.FullName)
+					return empty, finalizationReview(report, driver, "Resolve the loads needing review for %s before finalizing", d.FullName)
 				}
 			}
 			deductions := append([]ExpenseDeduction(nil), d.Edits.ExpenseDeductions...)
@@ -302,10 +323,33 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		if len(pending) != 0 {
 			return empty, ErrDriverPayConflict
 		}
+		frozenResult = &updated
+	}
+	if payrollReceiptRequested(ctx) && frozenResult != nil && strings.HasPrefix(report.Revision, "inputs:") {
+		result := payrollReceipt(*frozenResult, selectedIDs)
+		result, err = overlayPayrollSettlements(ctx, tx, result, driver)
+		if err != nil {
+			return empty, err
+		}
+		result = payrollReceipt(result, selectedIDs)
+		// Freezing only adds settlement metadata to these already recalculated rows.
+		if err = setPayrollRevision(ctx, tx, "driver", &result); err != nil {
+			return empty, err
+		}
+		return result, tx.Commit(ctx)
+	}
+	if payrollReceiptRequested(ctx) && driver != "" && strings.HasPrefix(report.Revision, "inputs:") {
+		ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "driver", driver)
+		if err != nil {
+			return empty, err
+		}
 	}
 	result, err := readDriverPayWeek(ctx, tx, week, "")
 	if err != nil {
 		return empty, err
+	}
+	if payrollReceiptRequested(ctx) {
+		result = payrollReceipt(result, selectedIDs)
 	}
 	return result, tx.Commit(ctx)
 }

@@ -13,7 +13,7 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound } from "lucide-react";
-import { APIError, fetchDriverPay, fetchInvestorPay, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad } from "@/app/lib/api";
+import { APIError, fetchDriverPay, fetchInvestorPay, fetchPaySettlementPreview, fetchPayStatement, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek } from "@/app/lib/types";
 import { currentChargeWeek } from "../driver-charges/charges";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -21,15 +21,15 @@ import { FinalizationCard } from "../components/FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch, TablePagination, controlClass } from "@/app/components/management/ManagementUI";
 import { addDays, decimalDisplay, hundredths, shortDate } from "@/app/gross-board/board";
-import { LazyDriverCard } from "./LazyDriverCard";
+import { StatementRow, type PayRowActions } from "./StatementRow";
 import { payButtonClass } from "./DriverCard";
 import { SettlementDialog } from "./SettlementDialog";
 import { useDebouncedValue } from "@/app/lib/useDebouncedValue";
-import { applyPayDetails, applyPaySave, driverTotals, normalizedPayEdits, paySourceError, reconcilePaySave, validAdjustments } from "./pay";
+import { applyPayDetails, applyPayReceipt, applyPaySave, driverTotals, normalizedPayEdits, paySourceError, reconcilePaySave, validAdjustments } from "./pay";
 import { restorePayEdit } from "./payUndo";
 import { isPayReplacementInput } from "./payGrid";
 
-type PayUndoAction = { kind: "edit"; id: string; before: DriverPayEdits; after: DriverPayEdits; group: number } | { kind: "source"; id: string };
+type PayUndoAction = { kind: "edit"; id: string; before: DriverPayEdits; after: DriverPayEdits; group: number } | { kind: "source"; id: string; statementId: string };
 
 export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const permissions = usePermissions();
@@ -46,6 +46,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
   const [expenseId, setExpenseId] = useState<string | null>(null);
+  const [expenseStatement, setExpenseStatement] = useState("");
   const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean; blockedIssue?: string} | null>(null);
   const settlementPending = useRef(false);
   useEffect(() => {
@@ -60,7 +61,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [report, setReport] = useState<DriverPayWeek | null>(null);
  const canEdit=hasEditPermission&&!report?.managedInSheets,canFinalize=permissions.includes(payArea+".finalize")&&!report?.managedInSheets,canReopen=permissions.includes(payArea+".reopen")&&!report?.managedInSheets;
   const [changes, setChanges] = useState<Record<string, DriverPayEdits>>({});
-  const onDetails = useCallback((expected: DriverPayDriver, detail: DriverPayDriver) => { setReport(current => current && applyPayDetails(current, expected, detail)); }, []);
+  const onDetails = useCallback((expected: DriverPayDriver, detail: DriverPayDriver, revision: string) => { setReport(current => current && applyPayDetails(current, expected, { ...detail, edits: { ...detail.edits, inputRevision: revision } })); }, []);
   const [search, setSearch] = useViewState("page:search", "", targetId && !restoringView ? "" : undefined);
   const [headerPinned, setHeaderPinned] = useViewState("page:headerPinned", false);
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId && !restoringView ? "all" : undefined);
@@ -72,6 +73,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter };
     return investor ? fetchInvestorPay(selectedWeek, driverFilter || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
   }, [investor, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
+  const [refreshRequest, setRefreshRequest] = useState(0);
+  const refreshedRequest = useRef(0);
   const loadedQuery = useRef("");
   const queryKey = JSON.stringify([week, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +116,56 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     }, 0);
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [week, fetchPay, queryKey, dirty, saving, refreshing]);
+  // Revalidate aggregates without replacing drafts or blanking the table.
+  useEffect(() => {
+    if (refreshRequest === refreshedRequest.current || dirty || saving || refreshing || loading) return;
+    const controller = new AbortController();
+    const request = refreshRequest;
+    fetchPay(week, controller.signal).then(value => {
+      if (controller.signal.aborted || savingRef.current || Object.keys(changesRef.current).length) return;
+      refreshedRequest.current = request; setReport(value);
+    }).catch(reason => {
+      if (!controller.signal.aborted) { refreshedRequest.current = request; setError(reason instanceof Error ? "Saved, but the updated totals could not be loaded: " + reason.message : "Saved, but totals could not be refreshed. Reload this week."); }
+    });
+    return () => controller.abort();
+  }, [refreshRequest, dirty, saving, refreshing, loading, fetchPay, week]);
+  const receiveSettlement = (receipt: DriverPayWeek) => {
+    undoStack.current = []; pendingUndo.current = false;
+    setReport(current => current && applyPayReceipt(current, receipt));
+    setRefreshRequest(value => value + 1);
+  };
+  const rowHandlers = useRef<PayRowActions | null>(null);
+  const rowActions = useMemo<PayRowActions>(() => ({
+    place: input => rowHandlers.current!.place(input),
+    transfer: (id, load, mode, reason) => rowHandlers.current!.transfer(id, load, mode, reason),
+    settle: (id, reopen) => rowHandlers.current!.settle(id, reopen),
+    accept: (id, load, field) => rowHandlers.current!.accept(id, load, field),
+    reload: id => rowHandlers.current!.reload(id),
+    openExpense: (id, expense) => rowHandlers.current!.openExpense(id, expense),
+  }), []);
+  useLayoutEffect(() => {
+    rowHandlers.current = {
+      place: async input => {
+        setRefreshing(true); setError("");
+        try {
+          const result = await placeStatementLoad(investor, input);
+          if (result?.choices) return result;
+          undoStack.current = []; await refreshStatement(input.driverId); setMessage("Saved");
+        } finally { setRefreshing(false); }
+      },
+      transfer: async (id, load, mode, reason) => {
+        setRefreshing(true); setError("");
+        try {
+          await transferPayLoadWeek(investor, { driverId: load.sourceDriverId || id, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, boardVersion: load.boardVersion || 0, transferVersion: load.placementVersion ?? load.transferVersion ?? 0, mode, reason });
+          undoStack.current = []; await refreshStatement(id); setMessage("Saved");
+        } finally { setRefreshing(false); }
+      },
+      settle: (id, reopen) => void prepareSettlement(reopen, id),
+      accept: (id, load, field) => acceptSource(load, id, field),
+      reload: refreshStatement,
+      openExpense: (id, expense) => { setExpenseStatement(id); setExpenseId(expense); },
+    };
+  });
   const edit = useCallback((id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => {
     if(!canEdit)return;
     const before = changesRef.current[id] ?? savedRef.current[id];
@@ -142,6 +195,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         changesRef.current = reconcilePaySave(changesRef.current, submitted, saved);
         setReport(current => current && applyPaySave(current, saved));
         setChanges(changesRef.current);
+        setRefreshRequest(value => value + 1);
       }
       if (Object.keys(changesRef.current).length === 0) setMessage("Saved");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save; your edits are still here."); }
@@ -164,10 +218,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         try {
           await undoPaySystemValues(investor, action.id);
           undoStack.current.pop();
-          const updated = await fetchPay(week);
-          // A source refresh may also reveal another accountant's payroll save.
-          undoStack.current = undoStack.current.filter(item => item.kind !== "edit" || updated.drivers.find(row => row.id === item.id)?.edits.version === savedRef.current[item.id]?.version);
-          setReport(updated); setMessage("Change undone");
+          await refreshStatement(action.statementId); setMessage("Change undone");
         }
         catch (err) { setError(err instanceof Error ? err.message : "Unable to undo this change"); }
         finally { setRefreshing(false); }
@@ -233,29 +284,39 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     catch (err) { setError(err instanceof Error ? err.message : "Unable to reload this week"); }
     finally { setLoading(false); setRefreshing(false); }
   }
-  async function prepareSettlement(reopen: boolean, driverId?: string) {
- if(reopen ? !canReopen : !canFinalize)return;
-    if (dirty || saving || loading || refreshing || settlementPending.current) return;
-    settlementPending.current = true;
-    setRefreshing(true); setError(""); setMessage("");
+  async function refreshStatement(id: string) {
+    if (dirty || savingRef.current) return;
+    // The mutation has committed. Only its visible statement blocks the local
+    // action; totals, related rows and ordering revalidate once in the background.
     try {
-      // Get the current revision; finalization still validates under the financial lock.
-      const current = await (investor ? fetchInvestorPay(week, driverFilter || undefined) : fetchDriverPay(week));
+      const value = await fetchPayStatement(investor, week, id);
+      undoStack.current = undoStack.current.filter(item => item.kind !== "edit" || item.id !== id || value.drivers[0]?.edits.version === savedRef.current[id]?.version);
+      setReport(current => current && applyPayReceipt(current, value));
+    } catch (err) {
+      setError(err instanceof Error ? "Saved, but this statement could not be refreshed: " + err.message : "Saved, but this statement could not be refreshed.");
+    } finally { setRefreshRequest(value => value + 1); }
+  }
+  async function prepareSettlement(reopen: boolean, driverId?: string) {
+    if (reopen ? !canReopen : !canFinalize) return;
+    if (!report || dirty || saving || loading || refreshing || settlementPending.current) return;
+    const row = report.drivers.find(value => value.id === driverId);
+    const current = driverId && row ? { ...report, revision: row.edits.inputRevision || report.revision, drivers: [row], pagination: undefined } : report;
+    if (reopen && driverId) { setSettlementReport(current); setSettlement({ driverId, reopen }); return; }
+    settlementPending.current = true; setRefreshing(true); setError(""); setMessage("");
+    try {
       if (reopen) {
-        setSettlementReport(current); setSettlement({ driverId, reopen });
-        return;
+        setSettlementReport(await fetchPaySettlementPreview(investor, week)); setSettlement({ reopen }); return;
       }
       try {
-        await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, "", false);
+        const receipt = await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, "", false, true);
+        receiveSettlement(receipt); setMessage("Finalized");
       } catch (err) {
         if (err instanceof APIError && err.code === "finalization_blocked") {
-          setSettlementReport(current); setSettlement({ driverId, reopen: false, blockedIssue: err.message });
-          return;
+          const reviewed = err.review ?? (driverId ? current : await fetchPaySettlementPreview(investor, week));
+          setSettlementReport(reviewed); setSettlement({ driverId, reopen: false, blockedIssue: err.message }); return;
         }
         throw err;
       }
-      undoStack.current = []; pendingUndo.current = false;
-      setReport(await fetchPay(week)); setMessage("Finalized");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to finalize settlement"); }
     finally { settlementPending.current = false; setRefreshing(false); }
   }
@@ -265,10 +326,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     setRefreshing(true); setError("");
     try {
       const receipt = await acceptPaySystemValues(investor, { field, driverId: load.sourceDriverId ?? sourceDriverId, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, version: load.boardVersion, loadRecordId: load.loadRecordId, originalRate: field === "originalRate" ? load.systemOriginalRate ?? "" : "", miles: field === "totalMiles" ? load.systemMiles ?? "" : "" });
-      undoStack.current.push({ kind: "source", id: receipt.undoId });
-      const updated = await fetchPay(week);
-      undoStack.current = undoStack.current.filter(item => item.kind !== "edit" || updated.drivers.find(row => row.id === item.id)?.edits.version === savedRef.current[item.id]?.version);
-      setReport(updated); setMessage("System values accepted");
+      undoStack.current.push({ kind: "source", id: receipt.undoId, statementId: sourceDriverId });
+      await refreshStatement(sourceDriverId); setMessage("System values accepted");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to accept system values"); }
     finally { setRefreshing(false); }
   }
@@ -311,19 +370,10 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {sourceError && <p role="alert" className="text-sm text-red-300">{sourceError} This edit has not been saved.</p>}
     {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid ? "Correct invalid amounts or remove unfinished adjustments; enter zero or reset Fuel/Toll before leaving this week." : "Saving edits before leaving this week…"}{error && " Resolve the save error to continue."}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
 
-    {!report ? <WeeklyTableSkeleton /> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[1120px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "21%" }} /><col style={{ width: "8%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "14%" }} /><col style={{ width: "5%" }} /><col style={{ width: "12%" }} /><col style={{ width: "14%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable", "Finalized by"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${(i === 5 || i === 6) ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500">No statements match this view.</td></tr> : rows.map(row => row.kind === "statement" ? <LazyDriverCard onPlacement={canEdit ? async input => {
- setRefreshing(true); setError("");
- try { const result = await placeStatementLoad(investor, input); if (result?.choices) return result; undoStack.current=[]; setReport(await fetchPay(week)); setMessage("Saved"); }
- finally { setRefreshing(false); }
- } : undefined} placementDisabled={!canEdit || busy || dirty || saving || !!row.driver.settlement?.finalized} onDetails={onDetails} transferDisabled={!canEdit || busy || dirty || saving} onTransfer={canEdit ? async (load, mode, reason) => {
- setRefreshing(true);setError("");
- try { await transferPayLoadWeek(investor,{driverId:load.sourceDriverId || row.driver.id,date:load.sourceDate || load.date,slot:load.sourceSlot ?? load.slot,boardVersion:load.boardVersion || 0,transferVersion:load.placementVersion ?? load.transferVersion ?? 0,mode,reason});
- undoStack.current=[];setReport(await fetchPay(week));setMessage("Saved");
- } finally {setRefreshing(false);}
- } : undefined} onOpenExpense={setExpenseId} expenseOpenDisabled={busy || dirty || saving} key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={!canEdit || busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={!canEdit || !permissions.includes("charges.edit") || busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} onSettlement={(row.driver.settlement?.finalized ? canReopen : canFinalize) ? reopen => void prepareSettlement(reopen, row.driver.id) : undefined} onReload={() => reload()} sourceActionDisabled={!canEdit || busy || dirty || saving || !!row.driver.settlement?.finalized} onAcceptSource={canEdit ? (load, field) => acceptSource(load, row.driver.id, field) : undefined} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
+    {!report ? <WeeklyTableSkeleton /> : <div data-payroll-scroll="drivers" className="weekly-content-enter overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[1120px] table-fixed border-separate border-spacing-0" aria-label={investor ? "Weekly investor pay" : "Weekly driver pay"}><colgroup><col style={{ width: "21%" }} /><col style={{ width: "8%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "14%" }} /><col style={{ width: "5%" }} /><col style={{ width: "12%" }} /><col style={{ width: "14%" }} /></colgroup><thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{[investor ? "Investor" : "Driver", "Truck", investor ? "Driver" : "Driver type", investor ? "Dispatcher" : "Tariff", investor ? "Tariff" : "Dispatcher", "Loads", "Total payable", "Finalized by"].map((label, i) => <th key={label} className={`border-b border-zinc-800 px-3 font-medium ${(i === 5 || i === 6) ? "text-right" : ""}`}>{label}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : rows.length === 0 ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500">No statements match this view.</td></tr> : rows.map(row => row.kind === "statement" ? <StatementRow actions={rowActions} canEdit={canEdit} canSettle={row.driver.settlement?.finalized ? canReopen : canFinalize} detailRevision={report.revision} placementDisabled={!canEdit || busy || dirty || saving || !!row.driver.settlement?.finalized} onDetails={onDetails} transferDisabled={!canEdit || busy || dirty || saving} expenseOpenDisabled={busy || dirty || saving} key={`${week}:${row.driver.id}`} returnToPay driver={row.driver} edits={changes[row.driver.id] ?? row.driver.edits} open={opened.has(row.driver.id)} onToggle={toggle} onEdit={edit} disabled={!canEdit || busy || !!row.driver.settlement?.finalized} chargeActionsDisabled={!canEdit || !permissions.includes("charges.edit") || busy || dirty || saving || !!row.driver.settlement?.finalized} settlementDisabled={busy || dirty || saving} sourceActionDisabled={!canEdit || busy || dirty || saving || !!row.driver.settlement?.finalized} /> : <InvestorSetupRow key={`${week}:${row.id}`} truck={row.truck} canConfigure={permissions.includes("charges.read")} />)}</tbody></table></div>}
     {report?.pagination && !loading && <fieldset disabled={busy || dirty || saving} className="min-w-0"><TablePagination page={report.pagination.page} pageSize={pageSize} totalItems={report.pagination.total} totalPages={report.pagination.totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} /></fieldset>}
-    {expenseId && <ExpenseEditModal key={expenseId} id={expenseId} onClose={() => setExpenseId(null)} onSaved={() => reload()} />}
-    {settlement && settlementReport && <SettlementDialog investor={investor} report={settlementReport} {...settlement} onClose={() => setSettlement(null)} onSaved={() => { setSettlement(null); setSettlementReport(null); loadedQuery.current = ""; void reload(); }} />}
+    {expenseId && <ExpenseEditModal key={expenseId} id={expenseId} onClose={() => setExpenseId(null)} onSaved={() => refreshStatement(expenseStatement)} />}
+    {settlement && settlementReport && <SettlementDialog investor={investor} report={settlementReport} {...settlement} onClose={() => setSettlement(null)} onSaved={receipt => { receiveSettlement(receipt); setMessage(settlement.reopen ? "Reopened" : "Finalized"); setSettlement(null); setSettlementReport(null); }} />}
   </div>;
 }
 

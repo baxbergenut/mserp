@@ -47,7 +47,9 @@ func TestPayrollCacheSchemaCoverageDatabase(t *testing.T) {
 		err := conn.QueryRow(ctx, `SELECT coalesce(array_agg(t.tablename ORDER BY t.tablename),'{}') FROM pg_tables t
  WHERE t.schemaname=current_schema() AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
  AND (NOT EXISTS(SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
- OR (NOT t.tablename=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid WHERE g.tgrelid=(quote_ident(t.schemaname)||'.'||quote_ident(t.tablename))::regclass AND p.proname='invalidate_payroll_cache' AND g.tgenabled='O' AND (g.tgtype & 4)=4)))`, payrollUnrelatedTables).Scan(&missing)
+ OR (NOT t.tablename=ANY($1::text[]) AND EXISTS(
+ SELECT 1 FROM (VALUES(4),(8),(16),(32)) required(op)
+ WHERE NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid WHERE g.tgrelid=(quote_ident(t.schemaname)||'.'||quote_ident(t.tablename))::regclass AND p.proname LIKE 'invalidate_payroll%' AND g.tgenabled='O' AND (g.tgtype & required.op)=required.op))))`, payrollUnrelatedTables).Scan(&missing)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,6 +93,15 @@ func TestPayrollCacheSchemaCoverageDatabase(t *testing.T) {
 			t.Fatalf("missing input must fall back: %q %v", snapshot, err)
 		}
 		migration, err := os.ReadFile("../../sql/179_payroll_cache_coverage.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec(string(migration))
+		check(t)
+	})
+	t.Run("missing_event", func(t *testing.T) {
+		exec(`DROP TRIGGER payroll_cache_delete ON gross_board_transfers; DROP TRIGGER payroll_cache_truncate ON payroll_load_placements`)
+		migration, err := os.ReadFile("../../sql/180_payroll_revision_triggers.sql")
 		if err != nil {
 			t.Fatal(err)
 		}

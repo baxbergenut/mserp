@@ -76,6 +76,21 @@ export function applyPayDetails(report: DriverPayWeek, expected: DriverPayDriver
   } };
 }
 
+// Receipts acknowledge committed rows. The separate summary refresh replaces
+// aggregate/order metadata; a receipt never gives old rows a newer input token.
+export function applyPayReceipt(report: DriverPayWeek, receipt: DriverPayWeek): DriverPayWeek {
+  if (report.weekStart !== receipt.weekStart) return report;
+  let next = report;
+  let finalizedDelta = 0;
+  for (const row of receipt.drivers) {
+    const previous = next.drivers.find(d => d.id === row.id);
+    if (!previous) continue;
+    if (!previous.truckInactive) finalizedDelta += Number(!!row.settlement?.finalized) - Number(!!previous.settlement?.finalized);
+    next = applyPayDetails(next, previous, { ...row, edits: { ...row.edits, inputRevision: receipt.revision } });
+  }
+  return next.pagination ? { ...next, pagination: { ...next.pagination, finalized: next.pagination.finalized + finalizedDelta } } : next;
+}
+
 export function activeLayovers(driver: DriverPayDriver, edits: DriverPayEdits) {
   return (driver.layovers ?? []).filter(row => !edits.layoverExcludedDates?.includes(row.date));
 }
@@ -113,7 +128,7 @@ export function costAmount(driver: DriverPayDriver, edits: DriverPayEdits, key: 
 export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapshot: DriverPayEdits, saved: DriverPayEdits) {
   const result = { ...current };
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
-  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version,
+  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version, ...(saved.inputRevision && { inputRevision: saved.inputRevision }),
     ...(saved.costs && { costs: saved.costs }),
     sourceCharges: result[saved.driverId].sourceCharges?.map(row => {
       const committed = saved.sourceCharges?.find(r => r.source === row.source && r.ownerId === row.ownerId);
@@ -148,7 +163,9 @@ export function validAdjustments(edits: DriverPayEdits, driver?: DriverPayDriver
 }
 
 export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
-  return { ...edits,
+  const payload = { ...edits };
+  delete payload.inputRevision;
+  return { ...payload,
     // Include displayed expense deductions in a normal payroll save. Reading a
     // week remains read-only; saved rows only change when their amount is edited.
     ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => row.saved ? row : { ...row, apply: true }) }),

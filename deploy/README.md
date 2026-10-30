@@ -50,6 +50,11 @@ application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
+Migration 180 fills missing cache-revision trigger events on enrolled tables.
+Install the updated deployment helper first: it pauses API and expense-sheet
+writers during the DDL to avoid lock inversion. It changes no payroll values,
+and the preceding release remains compatible for rollback.
+
 Migration 176 adds immutable expense balance corrections without changing existing
 balances on deployment. Install the updated helper first: after the first correction
 is saved, it refuses rollback to releases that ignore corrected debt. Empty correction

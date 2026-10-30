@@ -38,9 +38,8 @@ try {
           await route.fulfill({ status: failure.status, json: { error: failure.error, code: failure.code } });
           return;
         }
+        if (holdPreview) await new Promise(resolve => { releasePreview = resolve; });
         finalized = true;
-        await route.fulfill({ json: {} });
-        return;
       }
       if (holdPreview && path === `/${kind}-pay` && !new URL(route.request().url()).searchParams.has('summary')) {
         await new Promise(resolve => { releasePreview = resolve; });
@@ -48,7 +47,7 @@ try {
       let data = [];
       if (path === '/auth/session') data = { user: { id: 'test', username: 'Test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read', 'drivers.read', 'investors.read', ...(canFinalize ? [`${kind}_pay.finalize`] : [])], expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
       else if (path === '/auth/birthday') data = { eligible: false, serverTime: new Date().toISOString() };
-      else if (path === '/driver-pay' || path === '/investor-pay') data = {
+      else if (/^\/(driver|investor)-pay(\/finalize|\/settlement-preview)?$/.test(path)) data = {
         weekStart: week, revision: 'fixture',
         pagination: { page: 1, pageSize: 25, total, totalPages: 1, dispatchers: [], finalized: finalized && total ? 1 : 0, statements: total, loads: 0, review: 0, fee: '0', payable: '0' },
         drivers: total ? [{ id: 'statement', fullName: 'Test Recipient', ...(kind === 'investor' ? { investorId: 'owner' } : {}), payType: 'cpm', payRate: '0.75', employmentType: 'unassigned', dispatcherName: 'Dispatch', truckUnit: '101', loads: [], fuelTotal: '0', tollTotal: '0', summary: { loads: 0, missingFees: 0, review: 0, fee: '0', payable: '0' }, settlement: { finalized, finalizedBy: finalizer, finalizedAt: '2026-10-30T12:00:00Z', version: 1 }, edits: { driverId: 'statement', weekStart: week, version: 1, comments: {}, adjustments: [], fuelOverride: null, tollOverride: null } }] : [],
@@ -60,6 +59,12 @@ try {
       if ((path === '/driver-pay' || path === '/investor-pay') && total > 1) {
         const template = data.drivers[0];
         data.drivers.push(...['Zulu', 'Alpha'].map(name => ({ ...template, id: `draft-${name}`, fullName: `Draft ${name}`, settlement: null })));
+      }
+      if (path.endsWith('/finalize') && kind !== 'dispatcher') {
+        const input = route.request().postDataJSON();
+        data.receipt = true;
+        data.pagination = undefined;
+        data.drivers = data.drivers.filter(d => !input.driverId || d.id === input.driverId).map(d => { const row = { ...d }; delete row.summary; return row; });
       }
       await route.fulfill({ json: data });
     });

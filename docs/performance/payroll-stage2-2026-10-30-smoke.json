@@ -1,0 +1,1252 @@
+{
+  "synthetic": true,
+  "addedRoundTripMS": 175,
+  "runs": 1,
+  "weeks": [
+    "2026-10-05"
+  ],
+  "results": {
+    "driver/2026-10-05/coldPage": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1983.9713000000002,
+      "p95": 1983.9713000000002,
+      "p99": 1983.9713000000002,
+      "targetMS": 1000,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 86,
+      "payloadBytes": 22206,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1608.5946999999996
+    },
+    "driver/2026-10-05/firstExpansion": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 499.8116,
+      "p95": 499.8116,
+      "p99": 499.8116,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 46,
+      "payloadBytes": 4775,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "driver/2026-10-05/cachedExpansion": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 90.76499999999942,
+      "p95": 90.76499999999942,
+      "p99": 90.76499999999942,
+      "targetMS": 300,
+      "targetMet": true,
+      "requestCount": 0,
+      "queryCount": 0,
+      "payloadBytes": 0,
+      "lockWaitP95": null,
+      "aggregateRefreshP95": null
+    },
+    "driver/2026-10-05/multipleOpen": {
+      "samples": 2,
+      "failures": 0,
+      "p50": 417.2671,
+      "p95": 584.7601999999997,
+      "p99": 584.7601999999997,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 92,
+      "payloadBytes": 9058,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "driver/2026-10-05/save": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 922.7053999999989,
+      "p95": 922.7053999999989,
+      "p99": 922.7053999999989,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 194,
+      "payloadBytes": 5756,
+      "lockWaitP95": 0.59,
+      "aggregateRefreshP95": 1876.1324999999997
+    },
+    "driver/2026-10-05/finalize": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1536.0535,
+      "p95": 1536.0535,
+      "p99": 1536.0535,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 364,
+      "payloadBytes": 9757,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 2373.913699999999
+    },
+    "driver/2026-10-05/reopenDialog": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 141.87660000000142,
+      "p95": 141.87660000000142,
+      "p99": 141.87660000000142,
+      "targetMS": 300,
+      "targetMet": true,
+      "requestCount": 0,
+      "queryCount": 0,
+      "payloadBytes": 0,
+      "lockWaitP95": null,
+      "aggregateRefreshP95": null
+    },
+    "driver/2026-10-05/reopen": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1439.0828000000001,
+      "p95": 1439.0828000000001,
+      "p99": 1439.0828000000001,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 260,
+      "payloadBytes": 9885,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 2196.0293
+    },
+    "driver/2026-10-05/warmPage": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1436.1099999999988,
+      "p95": 1436.1099999999988,
+      "p99": 1436.1099999999988,
+      "targetMS": 1000,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 46,
+      "payloadBytes": 33001,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1179.0909999999985
+    },
+    "driver/2026-10-05/finalizeWeek": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 4017.943800000001,
+      "p95": 4017.943800000001,
+      "p99": 4017.943800000001,
+      "targetMS": 2000,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 4044,
+      "payloadBytes": 839543,
+      "lockWaitP95": 8.77,
+      "aggregateRefreshP95": 4466.951800000003
+    },
+    "driver/2026-10-05/reopenWeekPreview": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 334.35180000000037,
+      "p95": 334.35180000000037,
+      "p99": 334.35180000000037,
+      "targetMS": 1000,
+      "targetMet": true,
+      "requestCount": 1,
+      "queryCount": 6,
+      "payloadBytes": 173600,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "driver/2026-10-05/reopenWeek": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1581.0836000000018,
+      "p95": 1581.0836000000018,
+      "p99": 1581.0836000000018,
+      "targetMS": 2000,
+      "targetMet": true,
+      "requestCount": 2,
+      "queryCount": 518,
+      "payloadBytes": 852606,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 2204.4328000000023
+    },
+    "driver/2026-10-05/fiveUsersWithSync": {
+      "samples": 5,
+      "failures": 0,
+      "p50": 1482.0960999999988,
+      "p95": 1690.9478999999992,
+      "p99": 1690.9478999999992,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 10,
+      "queryCount": 669,
+      "payloadBytes": 28394,
+      "lockWaitP95": 166.04,
+      "aggregateRefreshP95": 2364.2816999999995
+    },
+    "investor/2026-10-05/coldPage": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1463.2931000000026,
+      "p95": 1463.2931000000026,
+      "p99": 1463.2931000000026,
+      "targetMS": 1000,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 41,
+      "payloadBytes": 24554,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1291.1811000000016
+    },
+    "investor/2026-10-05/firstExpansion": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 366.21740000000136,
+      "p95": 366.21740000000136,
+      "p99": 366.21740000000136,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 45,
+      "payloadBytes": 5945,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "investor/2026-10-05/cachedExpansion": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 91.14549999999872,
+      "p95": 91.14549999999872,
+      "p99": 91.14549999999872,
+      "targetMS": 300,
+      "targetMet": true,
+      "requestCount": 0,
+      "queryCount": 0,
+      "payloadBytes": 0,
+      "lockWaitP95": null,
+      "aggregateRefreshP95": null
+    },
+    "investor/2026-10-05/multipleOpen": {
+      "samples": 2,
+      "failures": 0,
+      "p50": 400.1764999999941,
+      "p95": 419.0771999999997,
+      "p99": 419.0771999999997,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 90,
+      "payloadBytes": 11954,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "investor/2026-10-05/save": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 815.2733999999982,
+      "p95": 815.2733999999982,
+      "p99": 815.2733999999982,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 141,
+      "payloadBytes": 7374,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1409.7494000000006
+    },
+    "investor/2026-10-05/finalize": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 664.1195999999982,
+      "p95": 664.1195999999982,
+      "p99": 664.1195999999982,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 135,
+      "payloadBytes": 12620,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1353.7626000000018
+    },
+    "investor/2026-10-05/reopenDialog": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 159.55849999999919,
+      "p95": 159.55849999999919,
+      "p99": 159.55849999999919,
+      "targetMS": 300,
+      "targetMet": true,
+      "requestCount": 0,
+      "queryCount": 0,
+      "payloadBytes": 0,
+      "lockWaitP95": null,
+      "aggregateRefreshP95": null
+    },
+    "investor/2026-10-05/reopen": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1138.8997000000018,
+      "p95": 1138.8997000000018,
+      "p99": 1138.8997000000018,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 169,
+      "payloadBytes": 12316,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1783.2448000000004
+    },
+    "investor/2026-10-05/warmPage": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1536.739999999998,
+      "p95": 1536.739999999998,
+      "p99": 1536.739999999998,
+      "targetMS": 1000,
+      "targetMet": false,
+      "requestCount": 1,
+      "queryCount": 45,
+      "payloadBytes": 39369,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 1186.181199999999
+    },
+    "investor/2026-10-05/finalizeWeek": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 2806.841099999998,
+      "p95": 2806.841099999998,
+      "p99": 2806.841099999998,
+      "targetMS": 2000,
+      "targetMet": false,
+      "requestCount": 2,
+      "queryCount": 1837,
+      "payloadBytes": 840394,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 3327.8292999999976
+    },
+    "investor/2026-10-05/reopenWeekPreview": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 390.1143000000011,
+      "p95": 390.1143000000011,
+      "p99": 390.1143000000011,
+      "targetMS": 1000,
+      "targetMet": true,
+      "requestCount": 1,
+      "queryCount": 6,
+      "payloadBytes": 142211,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": null
+    },
+    "investor/2026-10-05/reopenWeek": {
+      "samples": 1,
+      "failures": 0,
+      "p50": 1777.3427999999985,
+      "p95": 1777.3427999999985,
+      "p99": 1777.3427999999985,
+      "targetMS": 2000,
+      "targetMet": true,
+      "requestCount": 2,
+      "queryCount": 427,
+      "payloadBytes": 817891,
+      "lockWaitP95": 0,
+      "aggregateRefreshP95": 2371.1106
+    },
+    "investor/2026-10-05/fiveUsersWithSync": {
+      "samples": 5,
+      "failures": 0,
+      "p50": 1711.8955999999962,
+      "p95": 2129.6317000000054,
+      "p99": 2129.6317000000054,
+      "targetMS": 300,
+      "targetMet": false,
+      "requestCount": 10,
+      "queryCount": 640,
+      "payloadBytes": 37194,
+      "lockWaitP95": 342.91,
+      "aggregateRefreshP95": 2800.8170000000027
+    }
+  },
+  "samples": [
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "coldPage",
+      "target": 1000,
+      "visibleMS": 1983.9713000000002,
+      "aggregateRefreshMS": 1608.5946999999996,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 22206,
+          "queries": 86,
+          "appMS": 753.83,
+          "lockMS": 0,
+          "completedMS": 1608.5946999999996
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "firstExpansion",
+      "target": 300,
+      "visibleMS": 499.8116,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay/statements/:id",
+          "bytes": 4775,
+          "queries": 46,
+          "appMS": 141.56,
+          "lockMS": 0,
+          "completedMS": 386.7699999999995
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "cachedExpansion",
+      "target": 300,
+      "visibleMS": 90.76499999999942,
+      "aggregateRefreshMS": null,
+      "requests": []
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "multipleOpen",
+      "target": 300,
+      "visibleMS": 417.2671,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay/statements/:id",
+          "bytes": 4529,
+          "queries": 46,
+          "appMS": 100.32,
+          "lockMS": 0,
+          "completedMS": 354.20720000000074
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "multipleOpen",
+      "target": 300,
+      "visibleMS": 584.7601999999997,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay/statements/:id",
+          "bytes": 4529,
+          "queries": 46,
+          "appMS": 192.95,
+          "lockMS": 0,
+          "completedMS": 467.2357000000002
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "save",
+      "target": 300,
+      "visibleMS": 922.7053999999989,
+      "aggregateRefreshMS": 1876.1324999999997,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 726,
+          "queries": 68,
+          "appMS": 195.84,
+          "lockMS": 0.59,
+          "completedMS": 897.9303999999993
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5030,
+          "queries": 126,
+          "appMS": 790.76,
+          "lockMS": 0,
+          "completedMS": 1876.1324999999997
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "finalize",
+      "target": 300,
+      "visibleMS": 1536.0535,
+      "aggregateRefreshMS": 2373.913699999999,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/driver-pay/finalize",
+          "bytes": 4795,
+          "queries": 238,
+          "appMS": 1275.94,
+          "lockMS": 0,
+          "completedMS": 1510.8199999999997
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 4962,
+          "queries": 126,
+          "appMS": 668.73,
+          "lockMS": 0,
+          "completedMS": 2373.913699999999
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "reopenDialog",
+      "target": 300,
+      "visibleMS": 141.87660000000142,
+      "aggregateRefreshMS": null,
+      "requests": []
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "reopen",
+      "target": 300,
+      "visibleMS": 1439.0828000000001,
+      "aggregateRefreshMS": 2196.0293,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/driver-pay/reopen",
+          "bytes": 4859,
+          "queries": 134,
+          "appMS": 823.6,
+          "lockMS": 0,
+          "completedMS": 1372.6347000000005
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5026,
+          "queries": 126,
+          "appMS": 620.66,
+          "lockMS": 0,
+          "completedMS": 2196.0293
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "warmPage",
+      "target": 1000,
+      "visibleMS": 1436.1099999999988,
+      "aggregateRefreshMS": 1179.0909999999985,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 33001,
+          "queries": 46,
+          "appMS": 298.39,
+          "lockMS": 0,
+          "completedMS": 1179.0909999999985
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "finalizeWeek",
+      "target": 2000,
+      "visibleMS": 4017.943800000001,
+      "aggregateRefreshMS": 4466.951800000003,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/driver-pay/finalize",
+          "bytes": 802964,
+          "queries": 3963,
+          "appMS": 3651.45,
+          "lockMS": 8.77,
+          "completedMS": 3974.0850000000028
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 36579,
+          "queries": 81,
+          "appMS": 290.36,
+          "lockMS": 0,
+          "completedMS": 4466.951800000003
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "reopenWeekPreview",
+      "target": 1000,
+      "visibleMS": 334.35180000000037,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay/settlement-preview",
+          "bytes": 173600,
+          "queries": 6,
+          "appMS": 29.14,
+          "lockMS": 0,
+          "completedMS": 279.2576000000008
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "reopenWeek",
+      "target": 2000,
+      "visibleMS": 1581.0836000000018,
+      "aggregateRefreshMS": 2204.4328000000023,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/driver-pay/reopen",
+          "bytes": 814404,
+          "queries": 436,
+          "appMS": 890.23,
+          "lockMS": 0,
+          "completedMS": 1456.2760000000017
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 38202,
+          "queries": 82,
+          "appMS": 506.85,
+          "lockMS": 0,
+          "completedMS": 2204.4328000000023
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1455.2784000000029,
+      "aggregateRefreshMS": 2062.7008000000023,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 739,
+          "queries": 68,
+          "appMS": 179.25,
+          "lockMS": 0,
+          "completedMS": 1278.6967000000004
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5040,
+          "queries": 82,
+          "appMS": 584.5,
+          "lockMS": 0,
+          "completedMS": 2062.7008000000023
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1482.0960999999988,
+      "aggregateRefreshMS": 2163.359400000001,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 739,
+          "queries": 68,
+          "appMS": 222.36,
+          "lockMS": 147.84,
+          "completedMS": 1432.8659000000007
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5040,
+          "queries": 46,
+          "appMS": 521.12,
+          "lockMS": 0,
+          "completedMS": 2163.359400000001
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1457.2248999999974,
+      "aggregateRefreshMS": 2161.1623,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 480,
+          "queries": 59,
+          "appMS": 200.94,
+          "lockMS": 127.92,
+          "completedMS": 1346.7585999999974
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 4798,
+          "queries": 82,
+          "appMS": 614.22,
+          "lockMS": 0,
+          "completedMS": 2161.1623
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1521.5295000000006,
+      "aggregateRefreshMS": 2280.0442999999977,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 739,
+          "queries": 68,
+          "appMS": 245.48,
+          "lockMS": 166.04,
+          "completedMS": 1492.8538000000008
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5040,
+          "queries": 82,
+          "appMS": 568.23,
+          "lockMS": 0,
+          "completedMS": 2280.0442999999977
+        }
+      ]
+    },
+    {
+      "kind": "driver",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1690.9478999999992,
+      "aggregateRefreshMS": 2364.2816999999995,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/driver-pay",
+          "bytes": 739,
+          "queries": 68,
+          "appMS": 88.62,
+          "lockMS": 0,
+          "completedMS": 1652.9773000000023
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/driver-pay",
+          "bytes": 5040,
+          "queries": 46,
+          "appMS": 503.62,
+          "lockMS": 0,
+          "completedMS": 2364.2816999999995
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "coldPage",
+      "target": 1000,
+      "visibleMS": 1463.2931000000026,
+      "aggregateRefreshMS": 1291.1811000000016,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 24554,
+          "queries": 41,
+          "appMS": 407.85,
+          "lockMS": 0,
+          "completedMS": 1291.1811000000016
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "firstExpansion",
+      "target": 300,
+      "visibleMS": 366.21740000000136,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay/statements/:id",
+          "bytes": 5945,
+          "queries": 45,
+          "appMS": 62.89,
+          "lockMS": 0,
+          "completedMS": 333.5818999999974
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "cachedExpansion",
+      "target": 300,
+      "visibleMS": 91.14549999999872,
+      "aggregateRefreshMS": null,
+      "requests": []
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "multipleOpen",
+      "target": 300,
+      "visibleMS": 400.1764999999941,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay/statements/:id",
+          "bytes": 5963,
+          "queries": 45,
+          "appMS": 67.06,
+          "lockMS": 0,
+          "completedMS": 332.80489999999554
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "multipleOpen",
+      "target": 300,
+      "visibleMS": 419.0771999999997,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay/statements/:id",
+          "bytes": 5991,
+          "queries": 45,
+          "appMS": 74.05,
+          "lockMS": 0,
+          "completedMS": 301.2013999999981
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "save",
+      "target": 300,
+      "visibleMS": 815.2733999999982,
+      "aggregateRefreshMS": 1409.7494000000006,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1132,
+          "queries": 61,
+          "appMS": 72.65,
+          "lockMS": 0,
+          "completedMS": 775.5270000000019
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6242,
+          "queries": 80,
+          "appMS": 429.43,
+          "lockMS": 0,
+          "completedMS": 1409.7494000000006
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "finalize",
+      "target": 300,
+      "visibleMS": 664.1195999999982,
+      "aggregateRefreshMS": 1353.7626000000018,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/investor-pay/finalize",
+          "bytes": 6226,
+          "queries": 55,
+          "appMS": 366.06,
+          "lockMS": 0,
+          "completedMS": 608.9314000000013
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6394,
+          "queries": 80,
+          "appMS": 544.84,
+          "lockMS": 0,
+          "completedMS": 1353.7626000000018
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "reopenDialog",
+      "target": 300,
+      "visibleMS": 159.55849999999919,
+      "aggregateRefreshMS": null,
+      "requests": []
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "reopen",
+      "target": 300,
+      "visibleMS": 1138.8997000000018,
+      "aggregateRefreshMS": 1783.2448000000004,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/investor-pay/reopen",
+          "bytes": 6074,
+          "queries": 89,
+          "appMS": 522.04,
+          "lockMS": 0,
+          "completedMS": 1097.3006000000023
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6242,
+          "queries": 80,
+          "appMS": 484.81,
+          "lockMS": 0,
+          "completedMS": 1783.2448000000004
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "warmPage",
+      "target": 1000,
+      "visibleMS": 1536.739999999998,
+      "aggregateRefreshMS": 1186.181199999999,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 39369,
+          "queries": 45,
+          "appMS": 241.12,
+          "lockMS": 0,
+          "completedMS": 1186.181199999999
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "finalizeWeek",
+      "target": 2000,
+      "visibleMS": 2806.841099999998,
+      "aggregateRefreshMS": 3327.8292999999976,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/investor-pay/finalize",
+          "bytes": 797227,
+          "queries": 1758,
+          "appMS": 2421.98,
+          "lockMS": 0,
+          "completedMS": 2767.7665999999954
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 43167,
+          "queries": 79,
+          "appMS": 347.98,
+          "lockMS": 0,
+          "completedMS": 3327.8292999999976
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "reopenWeekPreview",
+      "target": 1000,
+      "visibleMS": 390.1143000000011,
+      "aggregateRefreshMS": null,
+      "requests": [
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay/settlement-preview",
+          "bytes": 142211,
+          "queries": 6,
+          "appMS": 9.09,
+          "lockMS": 0,
+          "completedMS": 284.67609999999695
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "reopenWeek",
+      "target": 2000,
+      "visibleMS": 1777.3427999999985,
+      "aggregateRefreshMS": 2371.1106,
+      "requests": [
+        {
+          "status": 200,
+          "method": "POST",
+          "path": "/api/investor-pay/reopen",
+          "bytes": 778505,
+          "queries": 347,
+          "appMS": 1054.05,
+          "lockMS": 0,
+          "completedMS": 1663.4658999999956
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 39386,
+          "queries": 80,
+          "appMS": 476.97,
+          "lockMS": 0,
+          "completedMS": 2371.1106
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1429.3453000000009,
+      "aggregateRefreshMS": 2248.608,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1151,
+          "queries": 55,
+          "appMS": 331.76,
+          "lockMS": 0,
+          "completedMS": 1348.056199999999
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6295,
+          "queries": 80,
+          "appMS": 706.01,
+          "lockMS": 0,
+          "completedMS": 2248.608
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1624.5779000000039,
+      "aggregateRefreshMS": 2408.1350999999995,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1156,
+          "queries": 55,
+          "appMS": 258.43,
+          "lockMS": 22.85,
+          "completedMS": 1591.762999999999
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6301,
+          "queries": 80,
+          "appMS": 622.73,
+          "lockMS": 0,
+          "completedMS": 2408.1350999999995
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1711.8955999999962,
+      "aggregateRefreshMS": 2500.7358999999997,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1156,
+          "queries": 55,
+          "appMS": 287.62,
+          "lockMS": 200.41,
+          "completedMS": 1680.6932000000015
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6301,
+          "queries": 80,
+          "appMS": 610.28,
+          "lockMS": 0,
+          "completedMS": 2500.7358999999997
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 1894.845699999998,
+      "aggregateRefreshMS": 2497.584799999997,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1151,
+          "queries": 55,
+          "appMS": 419.73,
+          "lockMS": 233.39,
+          "completedMS": 1866.0257999999958
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6272,
+          "queries": 45,
+          "appMS": 424.9,
+          "lockMS": 0,
+          "completedMS": 2497.584799999997
+        }
+      ]
+    },
+    {
+      "kind": "investor",
+      "week": "2026-10-05",
+      "action": "fiveUsersWithSync",
+      "target": 300,
+      "visibleMS": 2129.6317000000054,
+      "aggregateRefreshMS": 2800.8170000000027,
+      "requests": [
+        {
+          "status": 200,
+          "method": "PUT",
+          "path": "/api/investor-pay",
+          "bytes": 1156,
+          "queries": 55,
+          "appMS": 568.58,
+          "lockMS": 342.91,
+          "completedMS": 2088.8106000000043
+        },
+        {
+          "status": 200,
+          "method": "GET",
+          "path": "/api/investor-pay",
+          "bytes": 6255,
+          "queries": 80,
+          "appMS": 512.5,
+          "lockMS": 0,
+          "completedMS": 2800.8170000000027
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/jackc/pgx/v5"
-	"sort"
 	"strings"
 	"time"
 )
@@ -23,25 +22,11 @@ func (r *DriverPayRepository) PayrollPage(ctx context.Context, kind string, week
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
+	ctx = context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	// Old/test schemas and future untracked dependencies retain the original
 	// rendered-report revision contract until all inputs have durable revisions.
 	compact := !strings.HasPrefix(snapshot, "snapshot:")
-	summary, err := r.cachedWeek(ctx, tx, "summary:"+kind, week, func() (DriverPayWeek, error) {
-		var full DriverPayWeek
-		var e error
-		if kind == "investor" {
-			full, e = readInvestorPay(context.WithValue(ctx, payrollSummaryKey{}, compact), tx, week)
-		} else {
-			full, e = readDriverPayWeek(context.WithValue(ctx, payrollSummaryKey{}, compact), tx, week, "")
-		}
-		if e != nil {
-			return full, e
-		}
-		for i, d := range full.Drivers {
-			full.Drivers[i] = summarizePayStatement(d)
-		}
-		return full, nil
-	})
+	summary, err := r.payrollSummary(ctx, tx, kind, week, compact)
 	if err != nil {
 		return summary, err
 	}
@@ -56,21 +41,7 @@ func (r *DriverPayRepository) PayrollPage(ctx context.Context, kind string, week
 		}
 	}
 	if len(ids) > 0 {
-		sort.Strings(ids)
-		details, e := r.cachedWeek(ctx, tx, "detail:"+kind+":"+strings.Join(ids, ","), week, func() (DriverPayWeek, error) {
-			nodeKind := "driver"
-			if kind == "investor" {
-				nodeKind = "truck"
-			}
-			selected, e := selectPayrollContexts(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, nodeKind, ids)
-			if e != nil {
-				return DriverPayWeek{}, e
-			}
-			if kind == "investor" {
-				return readInvestorPay(selected, tx, week)
-			}
-			return readDriverPayWeek(selected, tx, week, "")
-		})
+		details, e := r.payrollDetails(ctx, tx, kind, week, ids)
 		if e != nil {
 			return page, e
 		}
@@ -130,6 +101,10 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 			return err
 		}
 	}
+	return setPayrollRevision(ctx, tx, kind, report)
+}
+
+func setPayrollRevision(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
 	snapshot, err := payrollCacheSnapshot(ctx, tx)
 	if err != nil {
 		return err
