@@ -24,6 +24,7 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
+	SplitReview            *LoadSplitReview `json:"splitReview,omitempty"`
 	SourceDate             string           `json:"sourceDate,omitempty"`
 	SourceSlot             int              `json:"sourceSlot,omitempty"`
 	TransferVersion        int              `json:"transferVersion,omitempty"`
@@ -127,7 +128,7 @@ const grossBoardResolvedLoad = `
 var grossBoardEffective = `WITH resolved AS (
  SELECT e.*, l.id AS matched_id,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
- CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS effective_original,
+ CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END AS effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
  trip_source.original AS system_original, trip_source.miles AS system_miles,
  trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips,
@@ -318,7 +319,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
  coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason
- FROM clustie_loads l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
+ FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err
@@ -361,6 +362,10 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 	}
 	// Preserve the existing fleet-status then financial lock order.
 	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return nil, err
+	}
+	entries, err = prepareSplitReviews(ctx, tx, entries)
+	if err != nil {
 		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -438,14 +443,14 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			e.LoadTripID = previousTrip
 		}
 		original, miles := e.OriginalRate, e.Miles
-		split, review := false, false
+		split, review, reviewed := false, false, false
 		reviewReason := ""
 		if loadID != nil {
 			// Lock the source before comparing the displayed allocation.
 			if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, *loadID); err != nil {
 				return nil, err
 			}
-			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review,trip_source.review_reason FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review, &reviewReason)
+			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review,trip_source.review_reason,trip_source.reviewed FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review, &reviewReason, &reviewed)
 			if err != nil {
 				return nil, err
 			}
@@ -488,6 +493,16 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 				return nil, ErrGrossBoardConflict
 			}
 			enteredOriginal, enteredMiles = original, miles
+		}
+		if reviewed && e.LoadTripID != nil {
+			if enteredOriginal != "" {
+				a, err := chargeCents(enteredOriginal)
+				b, _ := chargeCents(original)
+				if err != nil || a != b {
+					return nil, chargeInvalid("Edit original gross in the split editor so the whole load stays balanced")
+				}
+			}
+			enteredOriginal = original
 		}
 		// Exact-number resolution can beat the browser's load lookup. Apply the
 		// same initial driver-gross default here, preserving explicit amounts

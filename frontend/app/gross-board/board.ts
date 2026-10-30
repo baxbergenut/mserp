@@ -199,9 +199,11 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
     const key = entryKey(entry.driverId, entry.date, entry.slot);
     const draft = current[key];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[key])) { delete remaining[key]; continue; }
+    if (!snapshot[key]) { remaining[key] = { ...draft, version: entry.version }; continue; }
     const sameLoad = !draft.dayStatus && draft.loadNumber === snapshot[key].loadNumber && draft.loadRecordId === snapshot[key].loadRecordId && draft.loadTripId === snapshot[key].loadTripId;
     remaining[key] = { ...draft, version: entry.version,
       ...(sameLoad && entry.loadRecordId !== null ? {
+        ...("splitReview" in draft ? { splitReview: JSON.stringify(draft.splitReview) === JSON.stringify(snapshot[key].splitReview) ? undefined : draft.splitReview } : {}),
         loadRecordId: entry.loadRecordId, loadTripId: entry.loadTripId, split: entry.split, tripReview: entry.tripReview, tripReviewReason: entry.tripReviewReason, trips: entry.trips,
         originalRate: draft.originalRate === snapshot[key].originalRate ? entry.originalRate : draft.originalRate,
         driverRate: draft.driverRate === snapshot[key].driverRate ? entry.driverRate : draft.driverRate,

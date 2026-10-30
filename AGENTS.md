@@ -3073,3 +3073,18 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - The deploy helper pauses API/export writers for 171/172. Newer ENROUTE/REST day
   aliases project to the original IN TRANSIT/RESET labels on read and old-client
   saves without rewriting historical or finalized database records.
+
+## Reviewed load revenue splits (175)
+
+- DataTruck trip total_load_pay is source evidence, not an assured original-gross
+  allocation or driver gross. The Gross Board Split editor independently reviews
+  all trip original allocations against the order total and edits driver gross.
+- loads.split_allocation retains reviewed revenue through sync; load_split_history
+  records immutable actor/reason decisions. One autosave updates every linked
+  board slot atomically with source/revision/companion-version and all affected
+  driver/investor finalization guards. Changed source evidence preserves the saved
+  decision but holds effective amounts for re-review. Ordinary individual original
+  edits cannot bypass whole-load balance. Dated Clustie attribution stays authoritative.
+- GET /gross-board/loads/{id}/split uses board.read; saves use existing board.write.
+  See docs/integrations/DATATRUCK_LOAD_SPLITS.md and TestLoadTripsDatabase plus
+  frontend/scripts/test-gross-board-splits.mjs. Deployment alone changes no amounts.

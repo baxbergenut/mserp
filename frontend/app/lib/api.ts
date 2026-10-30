@@ -747,3 +747,5 @@ export const fetchTollAttention = (from: string, includeReviewed: boolean, page:
 export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePassTruckLinks>("/tolls/truck-link-options",{signal});
 
 export const fetchServiceProgramWorkspace = (query: {program: string; truckId?: string; search: string; status: string; page: number; pageSize: number}, signal?: AbortSignal) => apiRequest<import("./types").ServiceProgramWorkspace>(withQuery("/maintenance/program-workspace",query),{signal});
+
+export const fetchLoadSplit = (id: number, signal?: AbortSignal) => apiRequest<import("./types").LoadSplitWorkspace>(`/gross-board/loads/${id}/split`, { signal });

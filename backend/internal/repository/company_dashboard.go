@@ -147,7 +147,7 @@ type CompanyDashboard struct {
 // Conflicts are evaluated through the requested end date (not future plans).
 const companyDashboardCTE = `WITH resolved AS MATERIALIZED (
  SELECT e.driver_id,e.service_date,e.slot,e.load_number,l.id AS matched_id,e.load_trip_id,trip_source.review AS trip_review,
- CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END AS gross,
+ CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate,CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END AS gross,
  e.driver_rate,CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS miles
  FROM ` + grossBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
  WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'' AND e.service_date<=$2::date

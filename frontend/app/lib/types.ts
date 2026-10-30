@@ -1100,6 +1100,7 @@ export interface GrossBoardTrip {
 }
 
 export interface GrossBoardEntry {
+  splitReview?: LoadSplitReview;
  sourceDate?: string;
  sourceSlot?: number;
  transferVersion?: number;
@@ -1677,3 +1678,7 @@ export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: 
 export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:string;reference:string;reversesId?:string;version:number;actor?:string;createdAt?:string}
 
 export interface ServiceProgramWorkspace { programs: ServiceProgram[]; trucks: PaginatedResponse<ProgramTruck> }
+
+export type SplitAllocation = { tripId: number; originalRate: string };
+export type LoadSplitReview = { loadId: number; version: number; sourceHash: string; reason: string; allocations: SplitAllocation[]; entries: {driverName: string; entry: GrossBoardEntry}[] };
+export type LoadSplitWorkspace = LoadSplitReview & { loadNumber: string; total: string; miles: string; trips: (GrossBoardTrip & {reviewedRate?: string})[]; reviewReason: string };

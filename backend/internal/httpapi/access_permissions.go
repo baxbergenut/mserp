@@ -166,6 +166,7 @@ var routeAccessPolicies = []routeAccess{
 	{"PUT", "/gross-board", "board.write"},
 	{"GET", "/gross-board/balance", "board.read"},
 	{"GET", "/gross-board/loads", "board.read"},
+	{"GET", "/gross-board/loads/{id}/split", "board.read"},
 	{"GET", "/investor-pay", "investor_pay.read"},
 	{"GET", "/investor-pay/{id}/cost-transactions", "investor_pay.read"},
 	{"PUT", "/investor-pay", "investor_pay.edit"},

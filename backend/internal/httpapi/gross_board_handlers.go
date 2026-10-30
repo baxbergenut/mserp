@@ -153,6 +153,19 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 		}
 		writeJSON(w, http.StatusOK, board)
 	})
+	r.Get("/gross-board/loads/{id}/split", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(chi.URLParam(r, "id"))
+		if err != nil || id <= 0 {
+			writeAPIError(w, 400, "invalid load id")
+			return
+		}
+		result, err := repo.SplitWorkspace(r.Context(), id)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
 	r.Get("/gross-board/loads", func(w http.ResponseWriter, r *http.Request) {
 		search := strings.TrimSpace(r.URL.Query().Get("search"))
 		if len([]rune(search)) > 200 {

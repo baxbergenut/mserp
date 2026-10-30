@@ -83,12 +83,17 @@ func TestLoadTripsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			reviewMigration, err := os.ReadFile("../../sql/175_reviewed_load_splits.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if migrated {
 				initial := strings.ReplaceAll(string(init), "\r\n", "\n")
 				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 				if strings.Count(initial, body) != 1 {
 					t.Fatal("expected exactly one trip migration in init.sql")
 				}
+				initial = strings.Replace(initial, strings.ReplaceAll(string(reviewMigration), "\r\n", "\n"), "", 1)
 				initial = strings.Replace(initial, strings.ReplaceAll(string(assignmentView), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(initial, body, "", 1))
 			} else {
@@ -102,6 +107,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 			if migrated {
 				exec(string(migration))
 				exec(string(assignmentView))
+				exec(string(reviewMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; SET ROLE mserp_app`)
 			exec(`INSERT INTO trucks(id,unit_number) VALUES('82000000-0000-0000-0000-000000000001','S-A'),('82000000-0000-0000-0000-000000000002','S-B');UPDATE loads SET truck_id='82000000-0000-0000-0000-000000000002',truck_unit='S-B' WHERE id=8101`)
@@ -283,6 +289,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 			if _, err = repo.SaveEntries(ctx, []GrossBoardEntry{board.Entries[0]}); err == nil || !strings.Contains(err.Error(), "$2,013.00") {
 				t.Fatal("stale selection must explain the source mismatch", err)
 			}
+			checkReviewedLoadSplit(t, ctx, pool, repo)
 			exec(`UPDATE loads SET raw_payload=$1::jsonb WHERE id=8101`, splitFixture)
 			// Financial history stays frozen; deletion cannot bypass the guard.
 			exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,'2026-10-19','{}')`, a)

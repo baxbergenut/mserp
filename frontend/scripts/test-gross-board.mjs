@@ -235,3 +235,16 @@ assert.deepEqual(mergeGrossLive(liveBoard([liveMoved]),liveBoard([{...liveMoved,
 assert.deepEqual(mergeGrossLive(liveBoard([liveEmpty]),liveBoard([liveMoved]),new Set([entryKey(liveEmpty.driverId,liveEmpty.date,liveEmpty.slot)]),new Set()).entries,[liveEmpty],"typing remains protected even while placement changes");
 assert.deepEqual(mergeGrossLive(liveBoard([liveMoved]),liveBoard([]),new Set(),new Set([`${liveMoved.driverId}:${liveMoved.date}`])).entries,[liveMoved],"open day editors retain their source snapshot");
 console.log("Transfer live reconciliation passed: independent source versions, restore, removals and editor protection.");
+
+// Whole-load split saves also return companion rows. Preserve newer local
+// typing on a companion absent from the original autosave snapshot.
+const companionPending = {...extra, driverRate:'700'};
+const companionResult = reconcileAutosave({[extraKey]:companionPending}, {[key]:draft}, [{...extra,version:8}]);
+assert.equal(companionResult[extraKey].driverRate,'700');
+assert.equal(companionResult[extraKey].version,8);
+const splitPending = {...match, splitReview:{version:1}, driverRate:'700'};
+const splitLater = {...splitPending, driverRate:'750'};
+const splitResult = reconcileAutosave({[key]:splitLater}, {[key]:splitPending}, [{...match,version:9}]);
+assert.equal(splitResult[key].driverRate,'750');
+assert.equal(splitResult[key].splitReview,undefined);
+console.log('Split autosave preserves companion typing and consumes accepted review decisions.');

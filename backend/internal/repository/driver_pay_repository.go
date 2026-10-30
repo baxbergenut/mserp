@@ -219,7 +219,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
  coalesce(e.source_date::text,''),coalesce(e.source_slot,0),coalesce(e.dispatch_date,''),coalesce(e.dispatch_slot,0),coalesce(e.transfer_version,0),coalesce(e.credited_dispatcher_id,''),coalesce(e.credited_dispatcher_name,''),coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
- coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END)::text,''),coalesce(e.driver_rate::text,''),
+ coalesce((CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate,trip_source.original,e.original_rate) END END)::text,''),coalesce(e.driver_rate::text,''),
  coalesce((CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles,e.miles) END)::text,''),coalesce(e.version,0),coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),
  CASE WHEN l.id IS NOT NULL THEN jsonb_build_object('stops',l.raw_payload->'stops','trip',CASE WHEN e.load_trip_id IS NOT NULL THEN trip_source.selected_trip ELSE l.raw_payload->'trip' END) END,
  e.load_trip_id,coalesce(trip_source.review,false),coalesce(e.payroll_supplement,false),coalesce(e.payroll_placement_version,0),coalesce(l.status,''),
