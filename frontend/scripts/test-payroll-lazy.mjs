@@ -37,7 +37,7 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
-      if (path === '/driver-pay' || path === '/investor-pay') {
+      if (path === '/driver-pay' || path === '/investor-pay' || /^\/(driver|investor)-pay\/statements\//.test(path)) {
         const summary=new URL(request.url()).searchParams.get('summary')==='1';
         let row=structuredClone(driver);
         if(summary) summaryReads++;

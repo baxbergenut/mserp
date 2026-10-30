@@ -286,7 +286,7 @@ let accessGeneration = 0;
 let accessFingerprint = "";
 let currentPermissions: string[] = [];
 export class APIError extends Error {
-  constructor(message: string, public status: number, public code: string) { super(message); this.name = "APIError"; }
+  constructor(message: string, public status: number, public code: string, public review?: DriverPayWeek) { super(message); this.name = "APIError"; }
 }
 export function resetAccessRequests() { accessGeneration++; reads.clear(true); }
 function acceptSession(session: AuthSession) {
@@ -354,7 +354,7 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new APIError(
       body?.error ??
         `Request failed (${response.status} ${response.statusText})`,
-      response.status, body?.code ?? "request_failed",
+      response.status, body?.code ?? "request_failed", body?.code === "finalization_blocked" ? body?.review : undefined,
     );
   }
 
@@ -559,13 +559,15 @@ export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
 
 // detailIds hydrates remembered expanded rows in the same paginated snapshot.
+export const fetchPayStatement = (investor: boolean, weekStart: string, id: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/statements/${encodeURIComponent(id)}`, { weekStart }), { signal });
+export const fetchPaySettlementPreview = (investor: boolean, weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/settlement-preview`, { weekStart }), { signal });
 export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, ...query }), { signal });
 export const fetchPayCostTransactions = (kind: "driver" | "investor", id: string, weekStart: string, cost: "fuel" | "toll", signal?: AbortSignal) => apiRequest<import("./types").PayCostTransactions>(withQuery(`/${kind}-pay/${id}/cost-transactions`, { weekStart, cost }), { signal });
 export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => apiRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, { method: "POST", body: JSON.stringify(input) });
 export const transferPayLoadWeek = (investor: boolean, input: { driverId: string; date: string; slot: number; boardVersion: number; transferVersion: number; mode: import("./types").LoadWeekTransferMode; reason: string }) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/transfer-load`, { method: "POST", body: JSON.stringify(input) });
 export const undoPaySystemValues = (investor: boolean, id: string) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/undo-system`, { method: "POST", body: JSON.stringify({ id }) });
 export const changeDriverStatus = (id: string, input: DriverStatusChange) => apiRequest<Driver>(`/drivers/${id}/status`, { method: "PATCH", body: JSON.stringify(input) });
-export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay", { method: "PUT", body: JSON.stringify(edits) });
+export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay?receipt=1", { method: "PUT", body: JSON.stringify(edits) });
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
 export const placeStatementLoad = (investor: boolean, input: import("./types").PayLoadPlacementInput) => apiRequest<import("./types").PayLoadPlacementResult | void>(`/${investor ? "investor-pay" : "driver-pay"}/statement-load`, { method: "POST", body: JSON.stringify(input) });
 
@@ -592,7 +594,7 @@ export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/dri
 
 export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25, signal?: AbortSignal) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }), { signal });
 export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequest<SettlementEvent[]>(withQuery(`/drivers/${id}/settlement-history`, { weekStart }));
-export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason, override} satisfies PayrollSettlementInput) });
+export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}${receipt ? "?receipt=1" : ""}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason, override} satisfies PayrollSettlementInput) });
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
 export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id" | "driverOnly"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
@@ -600,8 +602,8 @@ export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/
 export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 
 export const fetchInvestorPay = (weekStart: string, truckId?: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId, ...query }), { signal });
-export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay", { method: "PUT", body: JSON.stringify(input) });
-export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason, override } satisfies PayrollSettlementInput) });
+export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay?receipt=1", { method: "PUT", body: JSON.stringify(input) });
+export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}${receipt ? "?receipt=1" : ""}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason, override } satisfies PayrollSettlementInput) });
 export const fetchTruckCharges = (weekStart?: string) => apiRequest<import("./types").TruckChargeData>(`/truck-charges${weekStart ? `?weekStart=${encodeURIComponent(weekStart)}` : ""}`);
 export const saveTruckTerm = (input: import("./types").TruckTerm) => apiRequest<void>("/truck-charges/terms", { method: "PUT", body: JSON.stringify(input) });
 export const saveTruckCharge = (input: import("./types").TruckChargePhase) => apiRequest<void>("/truck-charges/recurring", { method: "PUT", body: JSON.stringify(input) });

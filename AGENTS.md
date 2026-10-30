@@ -2569,6 +2569,25 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   and incremental coverage as mserp_app. Payroll performance logs distinguish
   summary/details, cache hits/misses/fallback and financial-lock wait.
 
+- GET /driver-pay/statements/{id} and /investor-pay/statements/{id} return only
+  the selected statement and its committed input revision. Weekly responses with
+  remembered detailIds remain one repeatable-read snapshot. Per-statement caches
+  use bounded LRU eviction and duplicate-request coordination.
+- Payroll finalize/reopen and PUT saves accept receipt=1. Finalization receipts
+  acknowledge completed writes; the UI applies them before one background summary
+  refresh. Blocking review errors include the reviewed report/revision; stale
+  conflicts never retry automatically. Saves acquire the existing financial lock
+  before their repeatable-read snapshot, so receipt revisions cannot adopt unseen
+  source commits. Reopening reasons, immutable snapshots and audit remain required.
+  TestPayrollStatementReceiptsDatabase covers both pages and fresh/migrated schemas.
+- Migration 180 completes missing trigger events on already registered inputs.
+  Install the updated deployment helper first; it pauses writers for that DDL.
+  The prior release remains schema-compatible. Unknown tables still fail closed.
+  The browser benchmark is scripts/measure-payroll.mjs; the former cutover-named
+  entrypoint delegates to it. It permits only local synthetic payroll_perf schemas,
+  records browser latency separately from aggregate refresh, and never benchmarks
+  financial writes against production.
+
 - Full Monday–Sunday vacation weeks use dated availability history in New York
   through `payroll_vacations.go`. Gross Board and both payroll pages omit idle
   vacation rows after routing/carry; actual loads and frozen
@@ -2624,15 +2643,16 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   collapsed-row totals from the same authoritative report. Shared LazyDriverCard
   fetches a single statement when expanded and reuses it until report reload.
   Aborted/obsolete responses cannot overwrite a refreshed report or pending edits.
-  Full legacy reads, exports, settlement review and save validation retain details.
+  Full legacy reads and save validation retain details; whole-week reopen uses a
+  compact settlement-preview response.
   Run test-payroll-lazy.mjs and test-payroll-expenses.mjs for both pages.
 - GET /driver-pay and /investor-pay accept page/pageSize, search, dispatcherId
   (including __unassigned), and statementId. Paging runs after complete financial
   routing/carry/frozen overlays and uses the snapshot cache; only the selected
   rows are transferred/rendered. pagination includes totals across all matching
   rows, complete dispatcher choices and week-wide finalized counts. Legacy reads
-  remain complete reports. Whole-week actions fetch/review the full report and
-  ignore filters/pages. Unsaved edits retain navigation protections.
+  remain complete reports. Whole-week actions ignore filters/pages and validate
+  authoritative inputs under lock. Unsaved edits retain navigation protections.
 - Both payroll statements show entered/fallback total gross and miles, with
   DataTruck comparison values and red mismatches. POST /driver-pay/accept-system
   and /investor-pay/accept-system require payroll.write and a driver/date/slot,

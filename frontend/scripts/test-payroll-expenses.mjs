@@ -101,7 +101,7 @@ try {
         '/tasks/count': { count: 0 },
         '/maintenance/options': { vendors: [], types: [] },
       };
-      return route.fulfill({ json: fixtures[path] ?? [] });
+      return route.fulfill({ json: fixtures[path.replace(/\/statements\/[^/]+$/, '')] ?? [] });
     });
     await page.goto(`${base}/accounting/${investor ? 'investor' : 'driver'}-pay?weekStart=${week}&${investor ? 'truckId' : 'driverId'}=statement`);
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });

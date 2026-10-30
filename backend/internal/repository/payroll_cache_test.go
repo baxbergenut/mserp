@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+func TestSelectPayDriverPreservesInputRevision(t *testing.T) {
+	report := DriverPayWeek{Revision: "inputs:committed", Drivers: []DriverPayDriver{{ID: "a"}, {ID: "b"}}}
+	selected := selectPayDriver(report, "a")
+	if selected.Revision != report.Revision || len(selected.Drivers) != 1 || selected.Drivers[0].ID != "a" {
+		t.Fatalf("selected statement lost its committed input revision: %+v", selected)
+	}
+	report.Revision = "legacy"
+	if selectPayDriver(report, "a").Revision == "legacy" {
+		t.Fatal("legacy report still needs a content revision")
+	}
+}
+
 func TestPayrollSnapshotCacheDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_DRIVER_PAY_TEST_DATABASE_URL")
 	if dsn == "" {

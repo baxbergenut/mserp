@@ -238,3 +238,37 @@ are not forcibly evicted. Network and browser time are excluded.
 Selected `expand` measurements call the repository calculator directly; they
 are not measurements of the existing HTTP expansion endpoint. The preserved
 phase/query breakdown is in [the benchmark artifact](performance/payroll-2026-10-13.json).
+
+## October 30 staged optimization
+
+Stage 1 is production release 04a6098 (PR 68). Migration 179 registers the
+retired palette tables, restoring committed-input caching and compact reads.
+Unknown tables still select conservative fallback. Selected statement responses
+preserve the committed revision instead of hashing their smaller response.
+Production read-only diagnostic samples after deployment: Driver Pay cold
+501 ms, warm 15/13 ms; Investor Pay 935/1094 ms with an intervening source
+revision, then 24 ms warm. These are three samples per page, not percentiles or
+browser measurements, and confirm why sync invalidation still needs work.
+
+Stage 2 introduces dedicated detail endpoints, per-statement LRU entries,
+compact committed mutation receipts, immediate single-statement reopen dialogs
+and one background aggregate refresh. Legacy weekly endpoints remain compatible.
+No financial rules or provider polling frequencies change.
+
+The repaired browser harness is `frontend/scripts/measure-payroll.mjs`.
+It measures cold first expansion (without prefetching its detail), cached and
+multiple expansions, saves, single/bulk finalize and reopen, plus five distinct
+users saving during source updates. Server-Timing provides query counts and
+financial-lock wait; response bodies provide payload sizes. Visible commitment
+and background aggregate completion are separate. Only local synthetic fixtures
+are accepted. Default weeks are October 26, October 19 and September 28; use
+`MSERP_PERF_WEEKS` to move the matrix forward with the fixture.
+
+An initial one-sample-per-action smoke run on the 176-driver local fixture with
+175 ms added API delay passed all financial actions. Driver/Investor first
+expansion was 500/366 ms, save 923/815 ms, finalize 1536/664 ms and reopen
+1439/1139 ms. Whole-week finalization was 4018/2807 ms and used 4044/1837
+queries including background refresh. These are diagnostic samples, not p95
+claims; the 300 ms target is **not met**. The complete dependency and bulk-action
+optimization remains required. See the preserved
+[smoke run](performance/payroll-stage2-2026-10-30-smoke.json).

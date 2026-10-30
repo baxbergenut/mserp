@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"mserp/internal/repository"
 )
 
@@ -34,6 +35,48 @@ func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 }
 
 func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.DriverPayRepository, fail func(http.ResponseWriter, error)) {
+	r.Get(path+"/settlement-preview", func(w http.ResponseWriter, r *http.Request) {
+		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		kind := "driver"
+		if path == "/investor-pay" {
+			kind = "investor"
+		}
+		result, err := repo.PayrollPreview(r.Context(), kind, week)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
+	r.Get(path+"/statements/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(w, r)
+		if !ok {
+			return
+		}
+		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		kind := "driver"
+		if path == "/investor-pay" {
+			kind = "investor"
+		}
+		result, err := repo.PayrollStatement(r.Context(), kind, week, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeAPIError(w, 404, "Statement no longer exists for this week")
+			return
+		}
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+	})
 	r.Post(path+"/statement-load", func(w http.ResponseWriter, r *http.Request) {
 		var input repository.PayLoadPlacementInput
 		if err := decodeJSON(r, &input); err != nil || !isUUID(input.DriverID) || (input.SourceDriverID != "" && !isUUID(input.SourceDriverID)) {
