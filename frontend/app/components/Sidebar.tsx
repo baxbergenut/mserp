@@ -96,7 +96,7 @@ export function Sidebar() {
   return (
     <aside
       className={`
-        flex shrink-0 flex-col border-r border-zinc-800/60 bg-sidebar-bg
+        flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-zinc-800/60 bg-sidebar-bg
         transition-[width] duration-200 ease-in-out
         ${collapsed ? "w-16" : "w-60"}
       `}
@@ -107,7 +107,7 @@ export function Sidebar() {
       </div>
 
       {/* ── Navigation ── */}
-      <nav className="mt-4 flex flex-1 flex-col gap-1 px-2">
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2 *:shrink-0">
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
@@ -222,7 +222,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-zinc-800/40 p-2">
+      <div className="shrink-0 border-t border-zinc-800/40 p-2">
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={`
