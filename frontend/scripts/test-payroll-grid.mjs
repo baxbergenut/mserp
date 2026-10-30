@@ -66,7 +66,7 @@ try {
     const geometry = await region.evaluate(el => ({ height: el.clientHeight, scroll: el.scrollHeight, rows: [...el.querySelectorAll('tr')].map(row => row.getBoundingClientRect().height) }));
     // Chromium can report subpixel float noise (32.00003px) at scaled displays.
     expect(geometry.rows.every(height => Math.abs(height - 32) < 0.01), JSON.stringify(geometry)).toBe(true);
-    expect(geometry.height).toBe(320);
+    expect(geometry.height).toBe(352); // Ten day/load rows plus the extra-load editor.
     expect(geometry.scroll).toBe(geometry.height);
     const loads = page.getByRole('region', { name: 'Grid Test weekly loads' });
     for (const [status, color] of [['HOME', 'violet'], ['IN TRANSIT', 'blue']]) {
@@ -80,7 +80,8 @@ try {
     await expect(loads.getByText('STUCK', { exact: true })).toBeVisible();
     await expect(loads.getByText('SHOP', { exact: true })).toHaveCount(0); // Real loads take precedence.
     await expect(loads.getByRole('cell', { name: 'No load', exact: true })).toHaveCount(3);
-    await expect.poll(() => loads.locator('table').first().evaluate(table => [...table.tBodies[0].rows].map(row => Math.round(row.getBoundingClientRect().height * 100) / 100))).toEqual(Array(10).fill(32));
+    await expect(loads.locator('[data-pay-extra-row]')).toBeVisible();
+    await expect.poll(() => loads.locator('table').first().evaluate(table => [...table.tBodies[0].rows].map(row => Math.round(row.getBoundingClientRect().height * 100) / 100))).toEqual(Array(11).fill(32));
     expect(await loads.locator('[data-pay-totals] > th').evaluate(cell => getComputedStyle(cell).borderTopWidth)).toBe('1px');
     expect(await region.locator('tr:last-child > td').first().evaluate(cell => getComputedStyle(cell).borderBottomWidth)).toBe('1px');
     const fuel = page.getByLabel('Grid Test, Fuel, amount', { exact: true });
