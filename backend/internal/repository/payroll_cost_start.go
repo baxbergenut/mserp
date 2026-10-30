@@ -33,10 +33,14 @@ func applyCostStartDisplay(ctx context.Context, tx pgx.Tx, report *DriverPayWeek
 		}
 		if c := d.Edits.Costs; c != nil {
 			v := *c
+			fuel, _ := chargeCents(v.FuelDue)
+			fuelCarry, _ := chargeCents(v.FuelCarry)
+			toll, _ := chargeCents(v.TollDue)
+			tollCarry, _ := chargeCents(v.TollCarry)
 			v.FuelCarry = "0.00"
 			v.TollCarry = "0.00"
-			v.FuelDue = d.FuelTotal
-			v.TollDue = d.TollTotal
+			v.FuelDue = chargeMoney(fuel - fuelCarry)
+			v.TollDue = chargeMoney(toll - tollCarry)
 			d.Edits.Costs = &v
 		}
 		for j := range d.Edits.SourceCharges {

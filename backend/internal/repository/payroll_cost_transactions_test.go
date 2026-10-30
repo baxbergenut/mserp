@@ -180,6 +180,23 @@ func TestPayrollCostStartDatabase(t *testing.T) {
 			if after.Edits.Costs.FuelCarry != "0.00" || *after.Edits.FuelOverride != "-102.00" {
 				t.Fatalf("frozen amount changed %+v", after.Edits)
 			}
+			// Raw company-driver fuel is evidence, not a personal obligation.
+			company := frozen
+			company.IsOwnerOperator = false
+			company.Settlement = &PayrollSettlement{Finalized: true}
+			company.Edits.Costs = &DriverPayCosts{FuelDue: "90.21", FuelCarry: "90.21", TollDue: "0.00", TollCarry: "0.00"}
+			companyReport := DriverPayWeek{WeekStart: "2026-10-19", Drivers: []DriverPayDriver{company}}
+			tx, e := pool.Begin(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = applyCostStartDisplay(ctx, tx, &companyReport); e != nil {
+				t.Fatal(e)
+			}
+			tx.Rollback(ctx)
+			if companyReport.Drivers[0].Edits.Costs.FuelDue != "0.00" {
+				t.Fatal("company fuel became a personal deduction")
+			}
 			var stored string
 			if e = admin.QueryRow(ctx, `SELECT report->'edits'->'costs'->>'fuelCarry' FROM payroll_settlements WHERE driver_id=$1`, driver).Scan(&stored); e != nil || stored != "90.21" {
 				t.Fatalf("frozen JSON changed %s %v", stored, e)
