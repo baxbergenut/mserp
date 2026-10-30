@@ -122,7 +122,11 @@ func selectPayDriver(report DriverPayWeek, id string) DriverPayWeek {
 		}
 	}
 	report.Drivers = selected
-	report.Revision = payrollRevision(report)
+	// Committed input revisions describe the transaction, not the response shape.
+	// Keep them usable when a selected statement is finalized against the week.
+	if !strings.HasPrefix(report.Revision, "inputs:") {
+		report.Revision = payrollRevision(report)
+	}
 	return report
 }
 
