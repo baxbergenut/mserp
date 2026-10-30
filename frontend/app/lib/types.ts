@@ -44,6 +44,7 @@ export interface DispatcherCommissionStatement {
   sourceChanged: boolean;
   version: number;
   finalizedAt?: string;
+  finalizedBy?: string;
 }
 export interface DispatcherCommissionReport {
   weekStart: string;

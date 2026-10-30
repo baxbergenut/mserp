@@ -84,6 +84,11 @@ try {
  await section.getByRole('button',{name:'Finalize',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Finalize',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('Finalized');
+ report=await get('/dispatcher-pay?weekStart='+week);
+ const finalizedStatement=report.statements.find(s=>s.dispatcherId===dispatcher);
+ assert.ok(finalizedStatement.finalizedBy);
+ await expect(section.getByText(finalizedStatement.finalizedBy,{exact:true})).toBeVisible();
+ await expect(page.getByRole('progressbar',{name:'Finalization'})).toHaveAttribute('aria-valuenow',String(report.statements.filter(s=>s.dispatcherId&&s.finalized).length/report.statements.filter(s=>s.dispatcherId).length*100));
  sql(`UPDATE gross_board_entries SET entered_original_rate=10000,entered_miles=4000 WHERE driver_id='${driver}';`);
  await page.reload();await expect(section).toContainText('Source values changed');await expect(section).toContainText('$85.00');
  await expect(section.getByRole('button',{name:`Edit home days for ${driverName}`})).toBeDisabled();
@@ -91,6 +96,7 @@ try {
  await page.getByRole('dialog').getByLabel('Reason',{exact:true}).fill('Review corrected Gross Board values');
  await page.getByRole('dialog').getByRole('button',{name:'Reopen',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('$100.00');await expect(section.getByText('Draft',{exact:true})).toHaveCount(0);
+ await expect(section.getByText(finalizedStatement.finalizedBy,{exact:true})).toHaveCount(0);
  await section.getByRole('button',{name:'Collapse '+dispatcherName,exact:true}).click();await expect(section.getByRole('table')).toHaveCount(0);
  await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
  await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(section).toHaveCount(0);

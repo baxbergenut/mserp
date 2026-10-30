@@ -416,6 +416,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   respecting dated/transfer dispatcher attribution and excluding deleted/status rows.
   Check `node scripts/test-pinnable-headers.mjs` after a `/api` build.
 
+- Driver/Investor/Dispatcher Pay show Finalized by from recorded settlement actors.
+  Their third summary card shows week-wide finalization percentage and green progress;
+  paging/search do not change that progress. Inactive/setup-only investor rows and
+  unassigned dispatcher groups are excluded. Dispatcher reads resolve the saved actor
+  without rewriting frozen reports; reopened rows have no finalizer. Check
+  TestDispatcherPayDatabase and frontend/scripts/test-pay-finalization.mjs after a /api build.
+
 - Loads keeps compact summary rows with Driver Pay-style expansion. Expanded rows
   show every imported pickup/delivery stop in source order with full address and
   explicit missing-address states. The Loads API projects an allowlisted `Stops`

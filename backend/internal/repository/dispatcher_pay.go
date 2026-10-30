@@ -85,6 +85,7 @@ type DispatcherCommissionStatement struct {
 	SourceChanged  bool                      `json:"sourceChanged"`
 	Version        int                       `json:"version"`
 	FinalizedAt    *time.Time                `json:"finalizedAt,omitempty"`
+	FinalizedBy    string                    `json:"finalizedBy,omitempty"`
 }
 type DispatcherCommissionReport struct {
 	WeekStart      string                          `json:"weekStart"`
@@ -444,7 +445,7 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 		return out, err
 	}
 	out.Statements = buildDispatcherCommissions(board, inputs, out.Rule)
-	rows, err = tx.Query(ctx, `SELECT dispatcher_id,finalized,report,version,updated_at FROM dispatcher_pay_statements WHERE week_start=$1 ORDER BY dispatcher_id`, week)
+	rows, err = tx.Query(ctx, `SELECT s.dispatcher_id,s.finalized,s.report,s.version,s.updated_at,coalesce(u.username,'') FROM dispatcher_pay_statements s LEFT JOIN app_users u ON u.id::text=s.actor_id WHERE s.week_start=$1 ORDER BY s.dispatcher_id`, week)
 	if err != nil {
 		return out, err
 	}
@@ -454,7 +455,8 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 		var raw []byte
 		var version int
 		var at time.Time
-		if err = rows.Scan(&id, &closed, &raw, &version, &at); err != nil {
+		var finalizedBy string
+		if err = rows.Scan(&id, &closed, &raw, &version, &at, &finalizedBy); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -475,6 +477,7 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 			saved.Finalized = true
 			saved.Version = version
 			saved.FinalizedAt = &at
+			saved.FinalizedBy = finalizedBy
 			saved.SourceChanged = index < 0 || saved.Revision != out.Statements[index].Revision
 			if index < 0 {
 				out.Statements = append(out.Statements, saved)

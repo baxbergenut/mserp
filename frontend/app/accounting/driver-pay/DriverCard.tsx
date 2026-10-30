@@ -168,9 +168,10 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-right font-mono">{loadCount}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
+      <td className="border-b border-zinc-800 px-3 text-zinc-400 break-words">{driver.settlement?.finalized ? driver.settlement.finalizedBy || "Unknown" : "—"}</td>
     </tr>
-    {open && driver.summary && <tr><td colSpan={7} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
-    {open && !driver.summary && <tr><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
+    {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
+    {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
         {driver.issues?.map((issue, index) => <p key={index} role="alert" className="px-3 py-2 text-xs text-amber-300">{issue}</p>)}
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}

@@ -236,6 +236,8 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			exec("GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + quoted + " TO mserp_app; SET ROLE mserp_app")
 			const driver = "93000000-0000-0000-0000-000000000001"
 			const dispatcher = "93000000-0000-0000-0000-000000000002"
+			const finalizer = "93000000-0000-0000-0000-000000000004"
+			exec(`INSERT INTO app_users(id,username,password_hash) VALUES($1,'Payroll Reviewer','$2test')`, finalizer)
 			exec(`INSERT INTO dispatchers(id,full_name,normalized_name) VALUES($1,'Commission Dispatcher','commission dispatcher')`, dispatcher)
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES($1,'Commission Driver','commission driver','cpm',1,$2)`, driver, dispatcher)
 			exec(`UPDATE driver_dispatcher_assignments SET assigned_at='2099-01-05'::date::timestamp AT TIME ZONE 'America/New_York',start_known=true WHERE driver_id=$1`, driver)
@@ -307,12 +309,15 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			report = get()
 			s = report.Statements[0]
 			change.Revision = s.Revision
-			if err = repo.ChangeStatement(ctx, "2099-01-05", change, "test", false); err != nil {
+			if err = repo.ChangeStatement(ctx, "2099-01-05", change, finalizer, false); err != nil {
 				t.Fatal(err)
 			}
 			frozen := get()
 			if !frozen.Statements[0].Finalized || frozen.Statements[0].SourceChanged {
 				t.Fatal("invalid snapshot", frozen)
+			}
+			if frozen.Statements[0].FinalizedBy != "Payroll Reviewer" {
+				t.Fatal("missing finalizer attribution", frozen.Statements[0].FinalizedBy)
 			}
 			// Simulate a snapshot saved before credited mileage was introduced.
 			exec(`UPDATE dispatcher_pay_statements SET report=jsonb_set(report,'{rows,0}',(report->'rows'->0)-'creditedMiles')`)
@@ -356,6 +361,9 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			reopened := get()
 			if reopened.Statements[0].Finalized || reopened.Statements[0].Pay != 137.5 {
 				t.Fatal("reopen did not calculate", reopened)
+			}
+			if reopened.Statements[0].FinalizedBy != "" || reopened.Statements[0].FinalizedAt != nil {
+				t.Fatal("reopened statement retained finalization metadata")
 			}
 			exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2099-01-06','HOME')`, driver)
 			exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status) VALUES($1,'2099-01-06',1,'HOME')`, driver)

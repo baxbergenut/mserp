@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Banknote, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Headset, Pencil, Plus, Route, UsersRound } from "lucide-react";
+import { Banknote, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Headset, Pencil, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -9,6 +9,7 @@ import { addDays, shortDate } from "@/app/gross-board/board";
 import { currentChargeWeek } from "../driver-charges/charges";
 import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
+import { FinalizationCard } from "./FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
@@ -88,11 +89,10 @@ export function WeeklyPayReport() {
 
   return <div className="space-y-4">
     <PageHeader><div className="flex items-center gap-2"><Headset className="h-5 w-5 text-violet-400" /><h1 className="font-semibold">Dispatcher pay</h1></div></PageHeader>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-3">
       <MetricCard label="Dispatcher commission" value={money.format(total("pay"))} icon={Banknote} loading={loading} />
       <MetricCard label="Gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
-      <MetricCard label="Dispatchers" value={String(statements.filter(s => s.dispatcherId).length)} icon={UsersRound} loading={loading} />
-      <MetricCard label="Loads" value={number.format(total("loadCount"))} icon={Route} loading={loading} />
+      <FinalizationCard loading={loading} finalized={statements.filter(s => s.dispatcherId && s.finalized).length} total={statements.filter(s => s.dispatcherId).length} />
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <div role="tablist" aria-label="Dispatcher pay views" className="flex gap-4">
@@ -110,13 +110,16 @@ export function WeeklyPayReport() {
       {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Review flagged rows before finalizing.</p>}
       {visible.length === 0 && <div className="ui-card py-10 text-center text-zinc-400">No Gross Board loads in this week.</div>}
       {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <section key={key} aria-label={s.dispatcherName} className="overflow-hidden rounded-lg border border-zinc-800">
-        <div className="flex items-center gap-3 bg-card px-3 py-2">
-          <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 min-w-0 flex-1 items-center gap-3 text-left hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}>
+        <div className="flex flex-wrap items-center gap-3 bg-card px-3 py-2">
+          <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 min-w-0 flex-1 basis-full items-center gap-3 text-left sm:basis-0 hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}>
             <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="min-w-0 flex-1 truncate font-semibold">{s.dispatcherName}</span>
             <span className="hidden text-xs text-zinc-400 sm:inline">{s.rows.length} {s.rows.length === 1 ? "driver" : "drivers"}</span><span className="hidden text-xs text-zinc-400 sm:inline">{s.loadCount} {s.loadCount === 1 ? "load" : "loads"}</span><span className="hidden w-28 text-right font-mono tabular-nums text-zinc-400 md:inline">{money.format(s.gross)}</span><strong className="w-24 text-right font-mono tabular-nums">{money.format(s.pay)}</strong>
           </button>
+          <div className="w-32 shrink-0 text-xs text-zinc-400"><div>Finalized by</div><div className="break-words text-zinc-200">{s.finalized ? s.finalizedBy || "Unknown" : "—"}</div></div>
+          <div className="flex w-44 shrink-0 items-center justify-end gap-2">
           {s.finalized && <span className="text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}
           {s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setReason(""); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}
+          </div>
         </div>
         {s.sourceChanged && <p className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</p>}
         {open && <div id={`dispatcher-${key}`}>
