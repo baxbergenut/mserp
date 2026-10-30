@@ -3033,8 +3033,11 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Frontend statusColors.ts and StatusColorsProvider drive boards, directories,
   profiles/history, payroll, Loads, dashboard charts, tasks, feedback and inventory.
   The deploy helper pauses API/export writers for migration 171.
-  Personal themes adapt badge contrast without changing the saved hues. Driver
-  Ready is amber, truck Ready green, Deadhead red.
+  The original Status Board foreground/background pairs are the shared defaults
+  everywhere, including Gross Board. Settings edits one global FG/BG pair per
+  status; there are no page palettes. Driver/truck Ready share driver_ready (white
+  on black); truck_ready remains a compatibility key. Explicit pairs remain exact
+  across themes. Existing JSON stores .fg/.bg suffixes without a schema migration.
 - Current retired board labels consolidate with audits and preserve ETA/notes/load
   state. Direct/legacy writes and undo normalize aliases. Gross Board offers
   ENROUTE/REST; historical IN TRANSIT/RESET rows and finalized snapshots remain

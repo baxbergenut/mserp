@@ -36,6 +36,7 @@ async function setup(page) {
     const fixtures = {
       '/auth/session': { user: { id: 'scroll', username: 'Scroll Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
       '/driver-board': { weekStart: '2026-10-12', drivers, entries, grossEntries: [], loads: Object.fromEntries(drivers.map(d => [d.id, loads])), eld: { configured: false } },
+      '/settings/status-colors': {colors:{'home.fg':'#112233','home.bg':'#ddeeff'},version:1},
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };
     await route.fulfill({ json: path.startsWith('/driver-board/loads/') ? loads : fixtures[path] ?? [] });
@@ -62,6 +63,7 @@ try {
     if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
     const cell = status.locator('xpath=ancestor::td');
+    if(value==='HOME'){ await expect(cell).toHaveCSS('color','rgb(17, 34, 51)'); await expect(cell).toHaveCSS('background-color','rgb(221, 238, 255)'); }
     await expect(cell).toHaveClass(new RegExp(`status-${colors[value]}(?:\\s|$)`));
   }
   await page.reload();

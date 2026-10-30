@@ -10,6 +10,8 @@ import (
 )
 
 type StatusColors struct {
+	// Legacy keys are background hues. Shared .fg/.bg keys preserve explicit
+	// foreground/background pairs in the existing versioned JSON and audit.
 	Colors  map[string]string `json:"colors"`
 	Version int               `json:"version"`
 }
@@ -19,7 +21,7 @@ var ErrStatusColorsConflict = errors.New("status colors changed; reload saved co
 var statusColorKeys = strings.Fields(`truck_ready driver_ready active in_use shop out_of_service terminated home vacation rest family_issue health_issue new_driver covered dispatched enroute reserved deadhead stop yard hold_for_load pickup_delivery_issue accident rejected canceled no_load stuck late_delivery truck_issue open in_progress completed paid pending needs_review discarded disabled partial scheduled unpaid failed`)
 
 func validStatusColors(s StatusColors) bool {
-	if s.Version < 1 || s.Version > 2147483646 || s.Colors == nil || len(s.Colors) > len(statusColorKeys) {
+	if s.Version < 1 || s.Version > 2147483646 || s.Colors == nil || len(s.Colors) > 3*len(statusColorKeys) {
 		return false
 	}
 	allowed := map[string]bool{}
@@ -27,7 +29,8 @@ func validStatusColors(s StatusColors) bool {
 		allowed[key] = true
 	}
 	for key, value := range s.Colors {
-		if !allowed[key] || !statusColorHex.MatchString(value) {
+		base, part, hasPart := strings.Cut(key, ".")
+		if !allowed[base] || (hasPart && part != "fg" && part != "bg") || !statusColorHex.MatchString(value) {
 			return false
 		}
 	}

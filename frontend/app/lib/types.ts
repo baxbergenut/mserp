@@ -1636,4 +1636,6 @@ export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:st
 
 export interface ServiceProgramWorkspace { programs: ServiceProgram[]; trucks: PaginatedResponse<ProgramTruck> }
 
+// Shared status keys store legacy background hues; .fg/.bg suffixes store exact
+// text/fill overrides. There are no page-specific status color settings.
 export interface StatusColorSettings { colors: Record<string, string>; version: number; }

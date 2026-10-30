@@ -3,8 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { fetchStatusColors, saveStatusColors } from "@/app/lib/api";
 import type { StatusColorSettings } from "@/app/lib/types";
-import { defaultStatusColors, statusSwatch } from "@/app/lib/statusColors";
-import { useTheme } from "./ThemeProvider";
+import { statusDefinitions, statusPair } from "@/app/lib/statusColors";
 
 const Context = createContext<{
   settings: StatusColorSettings | null; error: string; loading: boolean;
@@ -12,7 +11,6 @@ const Context = createContext<{
 } | null>(null);
 
 export function StatusColorsProvider({ children }: { children: React.ReactNode }) {
-  const { theme } = useTheme();
   const [settings, setSettings] = useState<StatusColorSettings | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -31,16 +29,14 @@ export function StatusColorsProvider({ children }: { children: React.ReactNode }
   }, [reload]);
   useEffect(() => {
     const root = document.documentElement;
-    const surface = getComputedStyle(root).getPropertyValue("--card").trim() || "#111113";
-    const colors = { ...defaultStatusColors, ...settings?.colors };
-    for (const [key, base] of Object.entries(colors)) {
-      const swatch = statusSwatch(base, surface);
-      root.style.setProperty(`--status-${key}`, base);
-      root.style.setProperty(`--status-${key}-bg`, swatch.background);
-      root.style.setProperty(`--status-${key}-fg`, swatch.color);
+    for (const [key] of statusDefinitions) {
+      const colors = statusPair(key, settings?.colors);
+      root.style.setProperty(`--status-${key}`, colors.background);
+      root.style.setProperty(`--status-${key}-bg`, colors.background);
+      root.style.setProperty(`--status-${key}-fg`, colors.foreground);
     }
-    return () => { for (const key of Object.keys(colors)) for (const suffix of ["", "-bg", "-fg"]) root.style.removeProperty(`--status-${key}${suffix}`); };
-  }, [settings, theme]);
+    return () => { for (const [key] of statusDefinitions) for (const suffix of ["", "-bg", "-fg"]) root.style.removeProperty(`--status-${key}${suffix}`); };
+  }, [settings]);
   async function save(input: StatusColorSettings) {
     const next = await saveStatusColors(input);
     setSettings(previous => !previous || next.version >= previous.version ? next : previous);

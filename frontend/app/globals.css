@@ -224,49 +224,47 @@ body {
 .mserp-ui [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
 .mserp-ui .global-search-input:focus-visible { outline: none; }
 
-/* Shared company-wide status hues; independent of personal appearance. */
-.status-tone { background-color:var(--status-bg) !important; color:var(--status-fg) !important; }
-.status-text { color:var(--status-fg) !important; }
-.status-dot { background-color:var(--status-base) !important; }
+/* Shared company-wide Status Board foreground/background pairs. */
+.status-tone, .status-text { background-color:var(--status-bg) !important; color:var(--status-fg) !important; }
+.status-dot { background-color:var(--status-base) !important; border:1px solid var(--status-fg); }
 .status-selected { border-color:var(--status-base) !important; box-shadow:0 0 0 1px var(--status-base); }
-.status-truck_ready { --status-base:var(--status-truck_ready,#10b981); --status-bg:var(--status-truck_ready-bg,color-mix(in srgb,#10b981 14%,var(--card))); --status-fg:var(--status-truck_ready-fg,var(--ui-text)); }
-.status-driver_ready { --status-base:var(--status-driver_ready,#f59e0b); --status-bg:var(--status-driver_ready-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-driver_ready-fg,var(--ui-text)); }
-.status-active { --status-base:var(--status-active,#10b981); --status-bg:var(--status-active-bg,color-mix(in srgb,#10b981 14%,var(--card))); --status-fg:var(--status-active-fg,var(--ui-text)); }
-.status-in_use { --status-base:var(--status-in_use,#3b82f6); --status-bg:var(--status-in_use-bg,color-mix(in srgb,#3b82f6 14%,var(--card))); --status-fg:var(--status-in_use-fg,var(--ui-text)); }
-.status-shop { --status-base:var(--status-shop,#f97316); --status-bg:var(--status-shop-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-shop-fg,var(--ui-text)); }
-.status-out_of_service { --status-base:var(--status-out_of_service,#ef4444); --status-bg:var(--status-out_of_service-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-out_of_service-fg,var(--ui-text)); }
-.status-terminated { --status-base:var(--status-terminated,#71717a); --status-bg:var(--status-terminated-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-terminated-fg,var(--ui-text)); }
-.status-home { --status-base:var(--status-home,#8b5cf6); --status-bg:var(--status-home-bg,color-mix(in srgb,#8b5cf6 14%,var(--card))); --status-fg:var(--status-home-fg,var(--ui-text)); }
-.status-vacation { --status-base:var(--status-vacation,#8b5cf6); --status-bg:var(--status-vacation-bg,color-mix(in srgb,#8b5cf6 14%,var(--card))); --status-fg:var(--status-vacation-fg,var(--ui-text)); }
-.status-rest { --status-base:var(--status-rest,#8b5cf6); --status-bg:var(--status-rest-bg,color-mix(in srgb,#8b5cf6 14%,var(--card))); --status-fg:var(--status-rest-fg,var(--ui-text)); }
-.status-family_issue { --status-base:var(--status-family_issue,#f97316); --status-bg:var(--status-family_issue-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-family_issue-fg,var(--ui-text)); }
-.status-health_issue { --status-base:var(--status-health_issue,#f97316); --status-bg:var(--status-health_issue-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-health_issue-fg,var(--ui-text)); }
-.status-new_driver { --status-base:var(--status-new_driver,#14b8a6); --status-bg:var(--status-new_driver-bg,color-mix(in srgb,#14b8a6 14%,var(--card))); --status-fg:var(--status-new_driver-fg,var(--ui-text)); }
-.status-covered { --status-base:var(--status-covered,#f59e0b); --status-bg:var(--status-covered-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-covered-fg,var(--ui-text)); }
-.status-dispatched { --status-base:var(--status-dispatched,#3b82f6); --status-bg:var(--status-dispatched-bg,color-mix(in srgb,#3b82f6 14%,var(--card))); --status-fg:var(--status-dispatched-fg,var(--ui-text)); }
-.status-enroute { --status-base:var(--status-enroute,#3b82f6); --status-bg:var(--status-enroute-bg,color-mix(in srgb,#3b82f6 14%,var(--card))); --status-fg:var(--status-enroute-fg,var(--ui-text)); }
-.status-reserved { --status-base:var(--status-reserved,#f59e0b); --status-bg:var(--status-reserved-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-reserved-fg,var(--ui-text)); }
-.status-deadhead { --status-base:var(--status-deadhead,#ef4444); --status-bg:var(--status-deadhead-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-deadhead-fg,var(--ui-text)); }
-.status-stop { --status-base:var(--status-stop,#ef4444); --status-bg:var(--status-stop-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-stop-fg,var(--ui-text)); }
-.status-yard { --status-base:var(--status-yard,#71717a); --status-bg:var(--status-yard-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-yard-fg,var(--ui-text)); }
-.status-hold_for_load { --status-base:var(--status-hold_for_load,#f59e0b); --status-bg:var(--status-hold_for_load-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-hold_for_load-fg,var(--ui-text)); }
-.status-pickup_delivery_issue { --status-base:var(--status-pickup_delivery_issue,#f97316); --status-bg:var(--status-pickup_delivery_issue-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-pickup_delivery_issue-fg,var(--ui-text)); }
-.status-accident { --status-base:var(--status-accident,#ef4444); --status-bg:var(--status-accident-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-accident-fg,var(--ui-text)); }
-.status-rejected { --status-base:var(--status-rejected,#71717a); --status-bg:var(--status-rejected-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-rejected-fg,var(--ui-text)); }
-.status-canceled { --status-base:var(--status-canceled,#71717a); --status-bg:var(--status-canceled-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-canceled-fg,var(--ui-text)); }
-.status-no_load { --status-base:var(--status-no_load,#71717a); --status-bg:var(--status-no_load-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-no_load-fg,var(--ui-text)); }
-.status-stuck { --status-base:var(--status-stuck,#f97316); --status-bg:var(--status-stuck-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-stuck-fg,var(--ui-text)); }
-.status-late_delivery { --status-base:var(--status-late_delivery,#f97316); --status-bg:var(--status-late_delivery-bg,color-mix(in srgb,#f97316 14%,var(--card))); --status-fg:var(--status-late_delivery-fg,var(--ui-text)); }
-.status-truck_issue { --status-base:var(--status-truck_issue,#ef4444); --status-bg:var(--status-truck_issue-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-truck_issue-fg,var(--ui-text)); }
-.status-open { --status-base:var(--status-open,#f59e0b); --status-bg:var(--status-open-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-open-fg,var(--ui-text)); }
-.status-in_progress { --status-base:var(--status-in_progress,#3b82f6); --status-bg:var(--status-in_progress-bg,color-mix(in srgb,#3b82f6 14%,var(--card))); --status-fg:var(--status-in_progress-fg,var(--ui-text)); }
-.status-completed { --status-base:var(--status-completed,#10b981); --status-bg:var(--status-completed-bg,color-mix(in srgb,#10b981 14%,var(--card))); --status-fg:var(--status-completed-fg,var(--ui-text)); }
-.status-paid { --status-base:var(--status-paid,#10b981); --status-bg:var(--status-paid-bg,color-mix(in srgb,#10b981 14%,var(--card))); --status-fg:var(--status-paid-fg,var(--ui-text)); }
-.status-pending { --status-base:var(--status-pending,#f59e0b); --status-bg:var(--status-pending-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-pending-fg,var(--ui-text)); }
-.status-needs_review { --status-base:var(--status-needs_review,#f59e0b); --status-bg:var(--status-needs_review-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-needs_review-fg,var(--ui-text)); }
-.status-discarded { --status-base:var(--status-discarded,#71717a); --status-bg:var(--status-discarded-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-discarded-fg,var(--ui-text)); }
-.status-disabled { --status-base:var(--status-disabled,#71717a); --status-bg:var(--status-disabled-bg,color-mix(in srgb,#71717a 14%,var(--card))); --status-fg:var(--status-disabled-fg,var(--ui-text)); }
-.status-partial { --status-base:var(--status-partial,#f59e0b); --status-bg:var(--status-partial-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-partial-fg,var(--ui-text)); }
-.status-scheduled { --status-base:var(--status-scheduled,#f59e0b); --status-bg:var(--status-scheduled-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-scheduled-fg,var(--ui-text)); }
-.status-unpaid { --status-base:var(--status-unpaid,#f59e0b); --status-bg:var(--status-unpaid-bg,color-mix(in srgb,#f59e0b 14%,var(--card))); --status-fg:var(--status-unpaid-fg,var(--ui-text)); }
-.status-failed { --status-base:var(--status-failed,#ef4444); --status-bg:var(--status-failed-bg,color-mix(in srgb,#ef4444 14%,var(--card))); --status-fg:var(--status-failed-fg,var(--ui-text)); }
+.status-driver_ready { --status-base:var(--status-driver_ready,#000000); --status-bg:var(--status-driver_ready-bg,#000000); --status-fg:var(--status-driver_ready-fg,#ffffff); }
+.status-active { --status-base:var(--status-active,#000000); --status-bg:var(--status-active-bg,#000000); --status-fg:var(--status-active-fg,#ffffff); }
+.status-in_use { --status-base:var(--status-in_use,#3d85c6); --status-bg:var(--status-in_use-bg,#3d85c6); --status-fg:var(--status-in_use-fg,#000000); }
+.status-shop { --status-base:var(--status-shop,#ff9900); --status-bg:var(--status-shop-bg,#ff9900); --status-fg:var(--status-shop-fg,#ffffff); }
+.status-out_of_service { --status-base:var(--status-out_of_service,#990000); --status-bg:var(--status-out_of_service-bg,#990000); --status-fg:var(--status-out_of_service-fg,#000000); }
+.status-terminated { --status-base:var(--status-terminated,#ffffff); --status-bg:var(--status-terminated-bg,#ffffff); --status-fg:var(--status-terminated-fg,#000000); }
+.status-home { --status-base:var(--status-home,#ff0000); --status-bg:var(--status-home-bg,#ff0000); --status-fg:var(--status-home-fg,#000000); }
+.status-vacation { --status-base:var(--status-vacation,#e06666); --status-bg:var(--status-vacation-bg,#e06666); --status-fg:var(--status-vacation-fg,#000000); }
+.status-rest { --status-base:var(--status-rest,#d9d9d9); --status-bg:var(--status-rest-bg,#d9d9d9); --status-fg:var(--status-rest-fg,#000000); }
+.status-family_issue { --status-base:var(--status-family_issue,#ffffff); --status-bg:var(--status-family_issue-bg,#ffffff); --status-fg:var(--status-family_issue-fg,#000000); }
+.status-health_issue { --status-base:var(--status-health_issue,#ffffff); --status-bg:var(--status-health_issue-bg,#ffffff); --status-fg:var(--status-health_issue-fg,#000000); }
+.status-new_driver { --status-base:var(--status-new_driver,#ffffff); --status-bg:var(--status-new_driver-bg,#ffffff); --status-fg:var(--status-new_driver-fg,#000000); }
+.status-covered { --status-base:var(--status-covered,#ffff00); --status-bg:var(--status-covered-bg,#ffff00); --status-fg:var(--status-covered-fg,#000000); }
+.status-dispatched { --status-base:var(--status-dispatched,#fbbc04); --status-bg:var(--status-dispatched-bg,#fbbc04); --status-fg:var(--status-dispatched-fg,#ffffff); }
+.status-enroute { --status-base:var(--status-enroute,#3d85c6); --status-bg:var(--status-enroute-bg,#3d85c6); --status-fg:var(--status-enroute-fg,#000000); }
+.status-reserved { --status-base:var(--status-reserved,#b7e1cd); --status-bg:var(--status-reserved-bg,#b7e1cd); --status-fg:var(--status-reserved-fg,#000000); }
+.status-deadhead { --status-base:var(--status-deadhead,#ffffff); --status-bg:var(--status-deadhead-bg,#ffffff); --status-fg:var(--status-deadhead-fg,#000000); }
+.status-stop { --status-base:var(--status-stop,#990000); --status-bg:var(--status-stop-bg,#990000); --status-fg:var(--status-stop-fg,#000000); }
+.status-yard { --status-base:var(--status-yard,#ffffff); --status-bg:var(--status-yard-bg,#ffffff); --status-fg:var(--status-yard-fg,#000000); }
+.status-hold_for_load { --status-base:var(--status-hold_for_load,#ffffff); --status-bg:var(--status-hold_for_load-bg,#ffffff); --status-fg:var(--status-hold_for_load-fg,#000000); }
+.status-pickup_delivery_issue { --status-base:var(--status-pickup_delivery_issue,#ffffff); --status-bg:var(--status-pickup_delivery_issue-bg,#ffffff); --status-fg:var(--status-pickup_delivery_issue-fg,#000000); }
+.status-accident { --status-base:var(--status-accident,#ffffff); --status-bg:var(--status-accident-bg,#ffffff); --status-fg:var(--status-accident-fg,#000000); }
+.status-rejected { --status-base:var(--status-rejected,#ffffff); --status-bg:var(--status-rejected-bg,#ffffff); --status-fg:var(--status-rejected-fg,#000000); }
+.status-canceled { --status-base:var(--status-canceled,#ffffff); --status-bg:var(--status-canceled-bg,#ffffff); --status-fg:var(--status-canceled-fg,#000000); }
+.status-no_load { --status-base:var(--status-no_load,#ffffff); --status-bg:var(--status-no_load-bg,#ffffff); --status-fg:var(--status-no_load-fg,#000000); }
+.status-stuck { --status-base:var(--status-stuck,#ffffff); --status-bg:var(--status-stuck-bg,#ffffff); --status-fg:var(--status-stuck-fg,#000000); }
+.status-late_delivery { --status-base:var(--status-late_delivery,#ffff00); --status-bg:var(--status-late_delivery-bg,#ffff00); --status-fg:var(--status-late_delivery-fg,#000000); }
+.status-truck_issue { --status-base:var(--status-truck_issue,#990000); --status-bg:var(--status-truck_issue-bg,#990000); --status-fg:var(--status-truck_issue-fg,#000000); }
+.status-open { --status-base:var(--status-open,#ffff00); --status-bg:var(--status-open-bg,#ffff00); --status-fg:var(--status-open-fg,#000000); }
+.status-in_progress { --status-base:var(--status-in_progress,#3d85c6); --status-bg:var(--status-in_progress-bg,#3d85c6); --status-fg:var(--status-in_progress-fg,#000000); }
+.status-completed { --status-base:var(--status-completed,#b7e1cd); --status-bg:var(--status-completed-bg,#b7e1cd); --status-fg:var(--status-completed-fg,#000000); }
+.status-paid { --status-base:var(--status-paid,#b7e1cd); --status-bg:var(--status-paid-bg,#b7e1cd); --status-fg:var(--status-paid-fg,#000000); }
+.status-pending { --status-base:var(--status-pending,#ffff00); --status-bg:var(--status-pending-bg,#ffff00); --status-fg:var(--status-pending-fg,#000000); }
+.status-needs_review { --status-base:var(--status-needs_review,#ffff00); --status-bg:var(--status-needs_review-bg,#ffff00); --status-fg:var(--status-needs_review-fg,#000000); }
+.status-discarded { --status-base:var(--status-discarded,#ffffff); --status-bg:var(--status-discarded-bg,#ffffff); --status-fg:var(--status-discarded-fg,#000000); }
+.status-disabled { --status-base:var(--status-disabled,#ffffff); --status-bg:var(--status-disabled-bg,#ffffff); --status-fg:var(--status-disabled-fg,#000000); }
+.status-partial { --status-base:var(--status-partial,#ffff00); --status-bg:var(--status-partial-bg,#ffff00); --status-fg:var(--status-partial-fg,#000000); }
+.status-scheduled { --status-base:var(--status-scheduled,#ffff00); --status-bg:var(--status-scheduled-bg,#ffff00); --status-fg:var(--status-scheduled-fg,#000000); }
+.status-unpaid { --status-base:var(--status-unpaid,#ffff00); --status-bg:var(--status-unpaid-bg,#ffff00); --status-fg:var(--status-unpaid-fg,#000000); }
+.status-failed { --status-base:var(--status-failed,#990000); --status-bg:var(--status-failed-bg,#990000); --status-fg:var(--status-failed-fg,#000000); }

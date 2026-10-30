@@ -14,7 +14,7 @@ import (
 )
 
 func TestStatusColorValidation(t *testing.T) {
-	for _, s := range []StatusColors{{nil, 1}, {map[string]string{"unknown": "#123456"}, 1}, {map[string]string{"home": "red"}, 1}, {map[string]string{"home": "#123456"}, 0}} {
+	for _, s := range []StatusColors{{nil, 1}, {map[string]string{"unknown": "#123456"}, 1}, {map[string]string{"home": "red"}, 1}, {map[string]string{"home": "#123456"}, 0}, {map[string]string{"home.bg.fg": "#123456"}, 1}, {map[string]string{"unknown.fg": "#123456"}, 1}, {map[string]string{"home.bg": "url(evil)"}, 1}} {
 		if validStatusColors(s) {
 			t.Fatalf("invalid settings accepted: %+v", s)
 		}
@@ -22,7 +22,7 @@ func TestStatusColorValidation(t *testing.T) {
 	if !validStatusColors(StatusColors{map[string]string{}, 1}) {
 		t.Fatal("reset to defaults rejected")
 	}
-	if !validStatusColors(StatusColors{map[string]string{"driver_ready": "#ABCDEF", "truck_ready": "#000000"}, 1}) {
+	if !validStatusColors(StatusColors{map[string]string{"driver_ready": "#ABCDEF", "truck_ready": "#000000", "home.fg": "#FFFFFF", "home.bg": "#ff0000"}, 1}) {
 		t.Fatal("valid settings rejected")
 	}
 }
@@ -99,8 +99,8 @@ func TestStatusColorsDatabase(t *testing.T) {
 			if e != nil || original.Version != 1 || len(original.Colors) != 0 {
 				t.Fatal(original, e)
 			}
-			saved, e := repo.SaveStatusColors(ctx, StatusColors{map[string]string{"home": "#ABCDEF", "driver_ready": "#ff0000"}, original.Version}, "")
-			if e != nil || saved.Version != 2 || saved.Colors["home"] != "#abcdef" {
+			saved, e := repo.SaveStatusColors(ctx, StatusColors{map[string]string{"home": "#ABCDEF", "driver_ready": "#ff0000", "home.fg": "#FEDCBA", "home.bg": "#123456"}, original.Version}, "")
+			if e != nil || saved.Version != 2 || saved.Colors["home"] != "#abcdef" || saved.Colors["home.fg"] != "#fedcba" || saved.Colors["home.bg"] != "#123456" {
 				t.Fatal(saved, e)
 			}
 			if _, e = repo.SaveStatusColors(ctx, original, ""); !errors.Is(e, ErrStatusColorsConflict) {

@@ -22,7 +22,7 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const path=new URL(route.request().url()).pathname.slice(4),method=route.request().method();
-   if(path==='/auth/session')return route.fulfill({json:{user:{id:manager?'admin':'viewer',username:manager?'Administrator':'Viewer',theme,permissions:['trucks.read','drivers.read',...(manager?['access.manage']:[])]},csrfToken:'test'}});
+   if(path==='/auth/session')return route.fulfill({json:{user:{id:manager?'admin':'viewer',username:manager?'Administrator':'Viewer',theme,permissions:['trucks.read','drivers.read','board.read','driver_board.read',...(manager?['access.manage']:[])]},csrfToken:'test'}});
    if(path==='/settings/status-colors'){
     if(method==='PUT'){
      if(!manager)return route.fulfill({status:403,json:{error:'Forbidden'}});
@@ -35,34 +35,47 @@ try {
    }
    if(path==='/auth/theme'){theme=route.request().postDataJSON().theme;return route.fulfill({status:204});}
    if(path==='/auth/birthday')return route.fulfill({json:{celebrate:false,serverNow:new Date().toISOString()}});
+   if(path==='/driver-board') { const driver={id:'home-driver',fullName:'Home Driver',active:true,driverType:'M',truckId:'',truckUnit:'',dispatcherId:'',dispatcherName:'Unassigned',phone:'',location:null}; return route.fulfill({json:{weekStart:'2026-10-19',drivers:[driver],entries:[{driverId:driver.id,currentLoad:'',trailerNumber:'',trailerNote:'',status:'HOME',destination:'',eta:'',notes:'',homeTime:'',version:1}],grossEntries:[],loads:{},eld:{configured:false}}}); }
+   if(path==='/gross-board') return route.fulfill({json:{weekStart:'2026-10-19',drivers:[{id:'home-driver',fullName:'Home Driver',active:true,dispatcherId:'',dispatcherName:'Unassigned'}],balances:[],entries:[{driverId:'home-driver',date:'2026-10-19',slot:0,deleted:false,loadNumber:'',note:'',loadRecordId:null,loadTripId:null,split:false,tripReview:false,trips:[],originalRate:'',driverRate:'',miles:'',enteredOriginalRate:'',enteredMiles:'',duplicate:false,dayStatus:'HOME',version:1}]}});
    if(path.startsWith('/trucks'))return route.fulfill({json:{items:[{id:'00000000-0000-0000-0000-000000000001',unitNumber:'TEST-100',status:'available',operatingStatus:'ready',ownerName:'Company',active:true}],total:1,page:1,pageSize:25,totalPages:1,statusCounts:{ready:1,in_use:0,shop:0,out_of_service:0,terminated:0},gpsAlertCounts:{overdue:0,missing:0}}});
    if(path.includes('count'))return route.fulfill({json:{count:0}});
    return route.fulfill({json:[]});
   });
  }
- const page=await browser.newPage({viewport:{width:1440,height:1000}});await setup(page);
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.clock.setFixedTime(new Date('2026-10-20T12:00:00Z'));await setup(page);
  await page.goto(`${base}/settings`);await page.getByRole('tab',{name:'Status colors',exact:true}).click();
- const input=page.getByLabel('Truck ready color',{exact:true});
- await expect(input).toHaveValue('#10b981');
+ const input=page.getByLabel('Ready background color',{exact:true});
+ const foreground=page.getByLabel('Ready foreground color',{exact:true});
+ await expect(input).toHaveValue('#000000');await expect(foreground).toHaveValue('#ffffff');
  if(process.env.MSERP_STATUS_SCREENSHOT_DIR) await page.screenshot({path:process.env.MSERP_STATUS_SCREENSHOT_DIR+'/status-colors-settings.png'});
- await pickColor(input,'#8844cc');await page.getByRole('button',{name:'Save colors',exact:true}).click();
+ await pickColor(input,'#8844cc');await pickColor(foreground,'#ffee00');await page.getByRole('button',{name:'Save colors',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:/^Saved$/})).toBeVisible();
+ await pickColor(page.getByLabel('Home foreground color',{exact:true}),'#112233');
+ await pickColor(page.getByLabel('Home background color',{exact:true}),'#ddeeff');
+ await page.getByRole('button',{name:'Save colors',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:/^Saved$/})).toBeVisible();
+ for(const path of ['/driver-board','/gross-board?weekStart=2026-10-19']) {
+  await page.goto(base+path);
+  await expect(page.locator('.status-home').first()).toHaveCSS('color','rgb(17, 34, 51)');
+  await expect(page.locator('.status-home').first()).toHaveCSS('background-color','rgb(221, 238, 255)');
+ }
  await page.goto(`${base}/trucks`);
- const badge=page.getByRole('row',{name:'Open truck TEST-100 details'}).locator('.status-truck_ready');
+ const badge=page.getByRole('row',{name:'Open truck TEST-100 details'}).locator('.status-driver_ready');
  await expect(badge).toHaveText('Ready');
  await expect.poll(()=>badge.evaluate(el=>getComputedStyle(el).getPropertyValue('--status-base').trim())).toBe('#8844cc');
+ await expect(badge).toHaveCSS('color','rgb(255, 238, 0)');
  const darkFill=await badge.evaluate(el=>getComputedStyle(el).backgroundColor);
  // A second user gets the company-wide saved hue without editing permissions.
  manager=false;
  const viewer=await browser.newPage();await setup(viewer);await viewer.goto(`${base}/trucks`);
- await expect.poll(()=>viewer.locator('tbody .status-truck_ready').evaluate(el=>getComputedStyle(el).getPropertyValue('--status-base').trim())).toBe('#8844cc');
+ await expect.poll(()=>viewer.locator('tbody .status-driver_ready').evaluate(el=>getComputedStyle(el).getPropertyValue('--status-base').trim())).toBe('#8844cc');
  await viewer.goto(`${base}/settings`);await expect(viewer.getByRole('tab',{name:'Status colors',exact:true})).toHaveCount(0);
  manager=true;await page.goto(`${base}/settings`);
  await page.getByRole('tab',{name:'Appearance',exact:true}).click();
  await page.getByRole('button',{name:/Default Light/}).click();
  await expect(page.locator('html')).toHaveAttribute('data-theme','default-light');
  await page.goto(`${base}/trucks`);
- await expect.poll(()=>badge.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(darkFill);
+ await expect.poll(()=>badge.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(darkFill);
  await expect.poll(()=>badge.evaluate(el=>getComputedStyle(el).getPropertyValue('--status-base').trim())).toBe('#8844cc');
  await page.goto(`${base}/settings`);await page.getByRole('tab',{name:'Status colors',exact:true}).click();
  await pickColor(input,'#ff0000');fail=true;await page.getByRole('button',{name:'Save colors',exact:true}).click();
@@ -73,8 +86,8 @@ try {
  await expect(page.locator('section[aria-label="Status colors"] [role="alert"]')).toContainText('Colors changed in another window');
  await expect(page.getByRole('button',{name:'Save colors',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'Discard changes',exact:true}).click();await expect(input).toHaveValue('#112233');
- await page.getByRole('button',{name:'Restore defaults',exact:true}).click();await page.getByRole('button',{name:'Save colors',exact:true}).click();await expect(input).toHaveValue('#10b981');
+ await page.getByRole('button',{name:'Restore defaults',exact:true}).click();await page.getByRole('button',{name:'Save colors',exact:true}).click();await expect(input).toHaveValue('#000000');await expect(foreground).toHaveValue('#ffffff');
  await page.setViewportSize({width:390,height:844});await expect(page.getByRole('button',{name:'Save colors',exact:true})).toBeVisible();
  if(errors.length)throw Error(errors.join('\n'));
- console.log('Status color browser checks passed: persistence, cross-user sharing, truck badges, theme changes, failed saves, stale drafts, restore and mobile controls.');
+ console.log('Status color browser checks passed: persistence, cross-user sharing, Status Board/Gross Board/truck pairs, exact colors across themes, failed saves, stale drafts, restore and mobile controls.');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
