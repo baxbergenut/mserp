@@ -98,6 +98,16 @@ func TestClustieLoadAssignmentsDatabase(t *testing.T) {
 		if err != nil || loads.Total != 3 {
 			t.Fatalf("load filters used source assignments: %+v %v", loads, err)
 		}
+		exec(`UPDATE loads SET raw_payload='{"stops":[{"stop_type":"delivery","ordering":2,"location":{"address1":"200 Delivery Rd"}},{"stop_type":"pickup","ordering":1,"location":{"address1":"100 Pickup Rd","zip_code":"00123"}}]}' WHERE id=96601`)
+		stopPage, err := NewLoadRepository(pool).GetLoadsPage(ctx, LoadPageQuery{Pagination: Pagination{Page: 1, PageSize: 100}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range stopPage.Items {
+			if l.ID == 96601 && (len(l.Stops) != 2 || l.Stops[0].Address != "100 Pickup Rd" || l.Stops[0].ZipCode != "00123" || l.Stops[1].Address != "200 Delivery Rd" || l.RawPayload != nil) {
+				t.Fatalf("load stop projection = %+v", l)
+			}
+		}
 		for _, l := range loads.Items {
 			if l.DriverID == nil || *l.DriverID != driver || l.TruckUnit == nil || l.DispatcherName == nil || *l.DispatcherName != "Local Dispatcher" {
 				t.Fatalf("load surface leaked provider assignment: %+v", l)

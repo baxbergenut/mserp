@@ -52,6 +52,14 @@ export interface DispatcherCommissionReport {
   statements: DispatcherCommissionStatement[];
 }
 
+export interface LoadStop {
+  type: "pickup" | "delivery";
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
 export interface Load {
   ID: number;
   LoadID: string;
@@ -76,6 +84,7 @@ export interface Load {
   CreatedDatetime: string;
   SyncedAt: string;
   RawPayload: unknown | null;
+  Stops: LoadStop[];
 }
 
 export interface PaginatedResponse<T> {

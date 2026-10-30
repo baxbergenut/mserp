@@ -380,6 +380,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Loads keeps compact summary rows with Driver Pay-style expansion. Expanded rows
+  show every imported pickup/delivery stop in source order with full address and
+  explicit missing-address states. The Loads API projects an allowlisted `Stops`
+  array from stored source stops; raw provider payloads remain omitted. Check
+  TestLoadStops, TestClustieLoadAssignmentsDatabase and
+  `node scripts/test-loads-views.mjs` after a `/api` build.
+
 - Settings > Users stores optional reviewed first/last names for legacy accounts
   (both required for new accounts), with private DOB and phone visible/editable
   only to the built-in Administrator. Migration 165 preserves old display names.

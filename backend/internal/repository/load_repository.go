@@ -45,6 +45,7 @@ type LoadRecord struct {
 	CreatedDatetime         *time.Time
 	SyncedAt                time.Time
 	RawPayload              []byte
+	Stops                   []LoadStop
 }
 
 // Discovery, reconciliation and refresh only maintain imported load records.
@@ -322,14 +323,16 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 
 func scanLoad(row rowScanner) (LoadRecord, error) {
 	var rec LoadRecord
+	var stops []byte
 	err := row.Scan(
 		&rec.ID, &rec.LoadID, &rec.DriverID, &rec.DispatcherID, &rec.ShipmentID,
 		&rec.Status, &rec.LoadPay, &rec.TotalOtherPay, &rec.TotalPay,
 		&rec.TotalMiles, &rec.PerMileRevenue, &rec.DispatcherName, &rec.DriverName,
 		&rec.TeamDriverName, &rec.TruckUnit, &rec.CustomerName, &rec.PickupTime,
 		&rec.DeliveryTime, &rec.PickupAppointmentTime, &rec.DeliveryAppointmentTime,
-		&rec.CreatedDatetime, &rec.SyncedAt,
+		&rec.CreatedDatetime, &rec.SyncedAt, &stops,
 	)
+	rec.Stops = loadStops(stops)
 	rec.DispatcherName = formatPersonNamePtr(rec.DispatcherName)
 	rec.DriverName = formatPersonNamePtr(rec.DriverName)
 	rec.TeamDriverName = formatPersonNamePtr(rec.TeamDriverName)
@@ -343,7 +346,7 @@ SELECT
 	load_pay, total_other_pay, total_pay, total_miles, per_mile_revenue,
 	dispatcher_name, driver_name, team_driver_name, truck_unit, customer_name,
 	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
-	created_datetime, synced_at
+	created_datetime, synced_at, raw_payload->'stops'
 FROM clustie_loads
 `
 

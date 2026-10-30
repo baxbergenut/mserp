@@ -243,6 +243,7 @@ export async function fetchLoads(): Promise<Load[]> {
   return [];
 }
 
+// Includes ordered pickup/delivery stop addresses without exposing source payloads.
 export const fetchLoadsPage = (query: PageQuery & {
   status?: string;
   customer?: string;
