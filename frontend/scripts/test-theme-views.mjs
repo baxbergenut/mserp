@@ -76,6 +76,14 @@ try {
   user = 'admin'; preferences.admin = 'default-light';
   await page.goto(`${base}/settings`);
   await page.getByRole('tab', { name: 'Users', exact: true }).click();
+  // A browser that last visited the removed Status colors tab must recover.
+  await page.evaluate(() => {
+    for (const key of Object.keys(sessionStorage)) if (key.endsWith(':view:access:tab')) sessionStorage.setItem(key, JSON.stringify('status-colors'));
+  });
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'Appearance', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Color theme', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Users', exact: true }).click();
   await page.getByRole('button', { name: 'Add user', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.getByRole('dialog').locator('form').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)');

@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const canFleetScope = permissions.includes("fleetscope.read") && permissions.includes("trucks.read") && permissions.includes("drivers.read");
   const [data, setData] = useState<AccessData | null>(null);
   const [savedTab, setTab] = useViewState<"appearance" | "users" | "roles" | "tasks" | "payroll" | "fleetscope">("access:tab", "appearance");
-  const tab = (savedTab === "fleetscope" ? canFleetScope : canManage) ? savedTab : "appearance";
+  const tab = ["appearance", "users", "roles", "tasks", "payroll", "fleetscope"].includes(savedTab) && (savedTab === "fleetscope" ? canFleetScope : canManage) ? savedTab : "appearance";
   const [search, setSearch] = useViewState("access:search", "");
   const [user, setUser] = useState<ManagedUser | null>(null);
   const [role, setRole] = useState<AccessRole | null>(null);
