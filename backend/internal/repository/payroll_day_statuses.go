@@ -67,6 +67,13 @@ func decoratePayHomeWeeks(ctx context.Context, tx pgx.Tx, kind string, report *D
 // Day labels are display metadata, never loads or payable amounts. Resolve the
 // truck at the recorded day, rather than using today's operator or assignment.
 func decoratePayDayStatuses(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
+	defer func() {
+		for i := range report.Drivers {
+			for j := range report.Drivers[i].DayStatuses {
+				report.Drivers[i].DayStatuses[j].Status = LegacyGrossBoardDayStatus(report.Drivers[i].DayStatuses[j].Status)
+			}
+		}
+	}()
 	ids := []string{}
 	for _, d := range report.Drivers {
 		if d.Settlement == nil || !d.Settlement.Finalized || d.DayStatuses == nil {

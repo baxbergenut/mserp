@@ -1,7 +1,4 @@
 "use client";
-
-import { statusClass } from "@/app/lib/statusColors";
-
 import { useCallback, useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import { fetchTruckDataTruck, retryTruckDataTruck } from "../lib/api";
@@ -18,7 +15,7 @@ export function DataTruckSetup({truckId}:{truckId:string}) {
  if(!error&&(!data||data.state==="not_requested"))return null;
  const labels:Record<string,string>={queued:"Waiting to add",running:"Adding…",done:"Added",review:"Needs attention",unconfirmed:"Check result",canceled:"Setup canceled"};
  return <section aria-label="DataTruck setup" className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
-  <div className="flex items-center justify-between gap-3"><a href="https://app.datatruck.io/fleet-management/main/trucks" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Truck className="h-4 w-4"/>DataTruck</a><span role="status" className={`text-xs ${statusClass(data?.state ?? "unknown","general","text")}`}>{data?labels[data.state]:""}</span></div>
+  <div className="flex items-center justify-between gap-3"><a href="https://app.datatruck.io/fleet-management/main/trucks" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Truck className="h-4 w-4"/>DataTruck</a><span role="status" className={`text-xs ${data?.state==="done"?"text-emerald-400":"text-zinc-400"}`}>{data?labels[data.state]:""}</span></div>
   {error&&<ErrorBanner message={error}/>}
   {data?.message&&<p className="text-xs leading-5 text-zinc-400">{data.message}</p>}
   {data?.providerId&&<p className="text-xs text-zinc-500">DataTruck ID: {data.providerId}</p>}

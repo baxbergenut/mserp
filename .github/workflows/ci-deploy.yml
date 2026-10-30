@@ -121,9 +121,7 @@ jobs:
 
       - name: Check gross board calculations and autosave
         working-directory: frontend
-        run: |
-          node scripts/test-status-colors.mjs
-          node scripts/test-gross-board.mjs
+        run: node scripts/test-gross-board.mjs
 
       - name: Check driver board autosave
         working-directory: frontend

@@ -665,10 +665,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
-  Driver status choices originated in Driver Board > TODAY!J4 (gid 1851742271).
-  Migration 171 retires At PU/At DEL, HOME (YARD), and 34 RESET in favor of
-  Dispatched/Enroute, Home, and Rest. Shared company-wide status colors now
-  replace the sheet fills. See docs/STATUS_COLORS.md. Migration 122 adds the sheet
+  Driver status choices/order/colors follow Driver Board > TODAY!J4 (gid 1851742271),
+  separately from load/Gross Board day statuses. Migration 122 adds the sheet
   choices; legacy saved statuses and undo history remain valid without inferred
   replacements, but are not offered for new selection. ACCIDENT is trimmed.
   Migration 118 stores a shared driver order per dispatcher (including Unassigned).
@@ -3042,19 +3040,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Check TestClustieLoadAssignmentsDatabase, TestAssignmentAttributionDatabase,
   existing investor/dashboard/trip/board regressions and assignment-week E2E.
 
-## Shared status colors (171)
+## Status palette rollback (172)
 
-- Settings > Status colors stores company-wide, versioned per-meaning hex overrides
-  with append-only actor receipts. Authenticated users read; access.manage edits.
-  Frontend statusColors.ts and StatusColorsProvider drive boards, directories,
-  profiles/history, payroll, Loads, dashboard charts, tasks, feedback and inventory.
-  The deploy helper pauses API/export writers for migration 171.
-  The original Status Board foreground/background pairs are the shared defaults
-  everywhere, including Gross Board. Settings edits one global FG/BG pair per
-  status; there are no page palettes. Driver/truck Ready share driver_ready (white
-  on black); truck_ready remains a compatibility key. Explicit pairs remain exact
-  across themes. Existing JSON stores .fg/.bg suffixes without a schema migration.
-- Current retired board labels consolidate with audits and preserve ETA/notes/load
-  state. Direct/legacy writes and undo normalize aliases. Gross Board offers
-  ENROUTE/REST; historical IN TRANSIT/RESET rows and finalized snapshots remain
-  intact and display current labels. See docs/STATUS_COLORS.md for validation.
+- Migration 172 restores the pre-palette Status Board choices and personal reset
+  label. The shared color settings/UI are removed, and original per-page styling
+  is restored. Migration 171 stays recorded with unused settings/audit tables; no
+  financial data, profile status history or configuration receipts are deleted.
+- The deploy helper pauses API/export writers for 171/172. Newer ENROUTE/REST day
+  aliases project to the original IN TRANSIT/RESET labels on read and old-client
+  saves without rewriting historical or finalized database records.

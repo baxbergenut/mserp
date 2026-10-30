@@ -1,7 +1,4 @@
 "use client";
-
-import { statusClass, displayStatus } from "@/app/lib/statusColors";
-
 import type { DriverOption, TruckOption, DispatcherOption, InvestorOption } from "@/app/lib/types";
 
 import { TableFilters } from "@/app/components/management/TableFilters";
@@ -52,6 +49,7 @@ import { DriverStatusDialog } from "./DriverStatusDialog";
 import { DriverSetup } from "./DriverSetup";
 import { emptyTruckInput } from "../trucks/TruckForm";
 import { DriverForm, driverToInput, emptyDriverInput } from "./DriverForm";
+
 
 export default function DriversPage() {
   return <Suspense><DriversContent /></Suspense>;
@@ -251,13 +249,14 @@ function DriversContent() {
   return (
     <div className="space-y-5 animate-fade-in">
 
+
       {error && <ErrorBanner message={error} />}
       {permissions.includes("drivers.create") && !canCreateDriver(permissions) && <p role="status" className="text-sm text-amber-300">Driver setup also requires: {[["drivers.private.edit", "private details editing"], ["driver_compensation.edit", "compensation editing"], ["escrow.create", "escrow creation"]].filter(([key]) => !permissions.includes(key)).map(([, label]) => label).join(", ")}.</p>}
       <div className="flex flex-wrap items-center gap-3">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search drivers…" />
         <TableFilters>
           <select aria-label="Employment" className={controlClass} value={filters.employment ?? "active"} onChange={e => changeFilter("employment", e.target.value)}><option value="active">Active drivers</option><option value="all">All drivers</option><option value="terminated">Terminated</option><option value="pending">Needs setup</option></select>
-          <select aria-label="Availability" className={controlClass} value={filters.availability ?? ""} onChange={e => changeFilter("availability", e.target.value)}><option value="">All availability</option>{[["active","Available"],["active_or_new","Active (incl. new)"],["home","Home"],["vacation","Vacation"],["rest","Rest"],["family_issue","Family issue"],["health_issue","Health issue"],["new_driver","New driver"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select aria-label="Availability" className={controlClass} value={filters.availability ?? ""} onChange={e => changeFilter("availability", e.target.value)}><option value="">All availability</option>{[["active","Available"],["active_or_new","Active (incl. new)"],["home","Home"],["vacation","Vacation"],["rest","Rest"],["reset","Reset"],["family_issue","Family issue"],["health_issue","Health issue"],["new_driver","New driver"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select aria-label="Driver type" className={controlClass} value={filters.driverType ?? ""} onChange={e => changeFilter("driverType", e.target.value)}><option value="">All driver types</option><option value="company">Company driver</option><option value="owner_operator">Owner operator</option><option value="investor_driver">Investor truck driver</option><option value="unassigned">Unassigned</option></select>
           <select aria-label="Truck assignment" className={controlClass} value={filters.assignment ?? ""} onChange={e => changeFilter("assignment", e.target.value)}><option value="">All assignments</option><option value="assigned">With truck</option><option value="unassigned">Without truck</option></select>
           {(search || filters.employment !== "active" || filters.availability || filters.driverType || filters.assignment) && <button className="ui-button" onClick={() => { setSearch(""); setFilters({ employment: "active" }); setPage(1); }}>Clear filters</button>}
@@ -321,7 +320,7 @@ function DriversContent() {
                       <span className="text-zinc-600">—</span>
                     )}
                   </td>}
-                  <td className="px-4 py-3">{driver.intakeId ? <span className={`rounded px-2 py-0.5 text-xs ${statusClass("new_driver")}`}>Needs setup</span> : <span className={`rounded px-2 py-0.5 capitalize ${statusClass(driver.status ?? (driver.active ? "active" : "terminated"))}`}>{displayStatus(driver.status ?? (driver.active ? "active" : "terminated"))}</span>}</td>
+                  <td className="px-4 py-3">{driver.intakeId ? <span className="text-xs text-zinc-500">Needs setup</span> : <span className="capitalize text-zinc-400">{driver.status ?? (driver.active ? "active" : "terminated")}</span>}</td>
                   <td className="px-4 py-3">{driver.intakeId ? <button type="button" onClick={() => void startSetup(driver.intakeId!)} className="float-right text-xs text-blue-400 hover:text-blue-300">Set up</button> : <RowActions onEdit={() => openEdit(driver)} onDelete={() => setPendingDelete(driver)} />}</td>
                 </tr>
               ))}

@@ -1,5 +1,3 @@
-export const fetchStatusColors = () => apiRequest<import("./types").StatusColorSettings>("/settings/status-colors");
-export const saveStatusColors = (input: import("./types").StatusColorSettings) => apiRequest<import("./types").StatusColorSettings>("/settings/status-colors", { method: "PUT", body: JSON.stringify(input) });
 import { expensePayload } from "./expenseCosts";
 export const fetchFleetStatusCatalog = (signal?:AbortSignal) => apiRequest<{enabled:boolean;rules:import("./types").FleetStatusRule[]}>("/fleet-status/catalog",{signal});
 export const fetchFleetStatusHistory = (kind:"drivers"|"trucks",id:string,query:Record<string,string>,signal?:AbortSignal) => apiRequest<import("./types").FleetStatusHistory>(`/${kind}/${id}/status-history?${new URLSearchParams(query)}`,{signal});
@@ -433,6 +431,8 @@ export const updateDriver = (id: string, input: DriverInput) =>
 export const deleteDriver = (id: string) =>
   apiRequest<void>(`/drivers/${id}`, { method: "DELETE" });
 
+
+
 export const fetchTrucks = () => apiRequest<Truck[]>("/trucks");
 export const fetchTruck = (id: string) => apiRequest<Truck>(`/trucks/${id}`);
 export const fetchTruckLocation = (id: string) => apiRequest<FleetLocation>(`/trucks/${id}/location`);
@@ -739,6 +739,7 @@ export const readFeedbackMessage = (id: string) => apiRequest<void>(`/feedback/m
 
 export const fetchExternalSettlements=(id:string,signal?:AbortSignal)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{signal});
 export const recordExternalSettlement=(id:string,data:import('./types').ExternalExpenseSettlement)=>apiRequest<import('./types').ExternalExpenseSettlement[]>(`/expenses/${id}/external-settlements`,{method:'POST',body:JSON.stringify(data)});
+
 
 export const fetchTollAttention = (from: string, includeReviewed: boolean, page: number, pageSize: number, signal?: AbortSignal) => apiRequest<import("./types").PaginatedResponse<import("./types").Toll> & {dateFrom: string}>(withQuery("/tolls/attention",{from,includeReviewed:includeReviewed ? "true" : undefined,page,pageSize}),{signal});
 export const fetchTollLinkOptions = (signal?: AbortSignal) => apiRequest<PrePassTruckLinks>("/tolls/truck-link-options",{signal});

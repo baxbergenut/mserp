@@ -1,7 +1,5 @@
 "use client";
 
-import { statusClass, displayStatus } from "@/app/lib/statusColors";
-
 import { useLoadNotes } from "./useLoadNotes";
 
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
@@ -11,7 +9,7 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
-import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, totals, validDecimal } from "./board";
+import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
   readOnly?: boolean;
@@ -101,14 +99,14 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
         onMouseEnter={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onMouseLeave={() => setHover(null)} onFocus={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onBlur={() => setHover(null)}
         title={unmatched ? "Contains unmatched manual loads. Open to review each load." : undefined}
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
-        <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? entry.loadRecordId === null ? "font-semibold text-red-300" : "text-emerald-300" : entry.dayStatus ? statusClass(entry.dayStatus,"driver") : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${entry.loadRecordId === null ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : displayStatus(entry.dayStatus) || entry.loadNumber || "Empty"}</span>)}</span>
+        <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? entry.loadRecordId === null ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${entry.loadRecordId === null ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
       </button></div>
       {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${needsReview && name !== "driver rate" ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
     </td>}
     {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 shadow-xl">
       <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">{readOnly ? "Click to inspect" : "Click to edit"}</span></div>
-      <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Total gross</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? statusClass(entry.dayStatus,"driver") : entry.loadRecordId !== null ? "text-emerald-300" : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.transferOut ? `${entry.loadNumber} · moved to next week` : displayStatus(entry.dayStatus) || entry.loadNumber || "Empty"}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{amountDisplay(value, index < 2) || "—"}</td>)}</tr>)}</tbody></table></div>
+      <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Total gross</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? dayStatuses.find(status => status.value === entry.dayStatus)?.color : entry.loadRecordId !== null ? "text-emerald-300" : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{amountDisplay(value, index < 2) || "—"}</td>)}</tr>)}</tbody></table></div>
       {displayed.length > 4 && <p className="mt-2 text-[10px] text-zinc-500">Open to view all {displayed.length} loads.</p>}
     </div>, document.body)}
     {draft && <Modal title="Daily loads" description={`${driverName} · ${date}. Total gross and miles stay linked to system loads.`} isSaving={false} submitLabel={readOnly ? "Close" : "Apply changes"} onClose={() => setDraft(null)} onSubmit={event => {

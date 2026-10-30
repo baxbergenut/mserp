@@ -17,7 +17,7 @@ func testDriverBoardSheetStatuses(t *testing.T, ctx context.Context, repo *Drive
 		}
 	}()
 	entry := DriverBoardEntry{DriverID: driver.ID, Notes: "Preserve notes"}
-	for _, status := range []string{"READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "Health issue", "NEW DRIVER", "ACCIDENT"} {
+	for _, status := range []string{"READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT"} {
 		entry.Status, entry.StatusEdited = status, true
 		saved, err := repo.Save(ctx, []DriverBoardEntry{entry})
 		if err != nil {

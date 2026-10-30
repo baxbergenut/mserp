@@ -183,10 +183,10 @@ checks restricted runtime permissions, snapshot conflicts, missing-record
 creation, ownership, lifecycle/trailer preservation, partial commits, replay,
 immutable receipts and enrollment fencing. Never point these tests at production.
 
-## Shared status palette (171)
+## Status palette rollback (172)
 
-Install the updated deployment helper before releasing migration 171. It briefly
-pauses API and expense-sheet writers while status rules, normalization triggers
-and Gross Board checks change. Normal activation/recovery restarts both writers.
-The schema remains compatible with the previous release; historical/finalized
-financial data is never rewritten. See docs/STATUS_COLORS.md.
+Install the updated deployment helper before migration 172. It pauses API and
+expense-sheet writers while restoring Status Board rules and removing the 171
+normalization triggers. Original page colors and choices are restored. Retain
+migration 171, its unused settings/audit tables and extended day-status checks;
+no financial or historical records are rewritten or removed.

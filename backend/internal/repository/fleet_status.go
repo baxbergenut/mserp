@@ -205,7 +205,7 @@ func (r *FleetRepository) StatusHistory(ctx context.Context, kind, id, track, st
  FROM effective_status_history h
  ) SELECT id,entity_kind,entity_id::text,entity_name,track,previous_status,status,effective_at,ended_at,recorded_at,actor_name,source,source_ref,related_truck_name,action_id,baseline,reason
  FROM periods WHERE entity_kind=$2 AND entity_id=$3::uuid AND track<>'dispatch'
- AND ($4='' OR track=$4) AND ($5='' OR status=$5 OR ($5='rest' AND status='reset'))
+ AND ($4='' OR track=$4) AND ($5='' OR status=$5)
  AND ($6='' OR coalesce(ended_at,'infinity'::timestamptz)>=($6::date::timestamp AT TIME ZONE 'America/New_York'))
  AND ($7='' OR effective_at<(($7::date+1)::timestamp AT TIME ZONE 'America/New_York'))
  ORDER BY effective_at DESC,id DESC LIMIT 51 OFFSET $8`, result.Snapshot, kind, id, track, status, from, to, (page-1)*50)

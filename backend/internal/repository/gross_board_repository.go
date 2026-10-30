@@ -157,6 +157,7 @@ func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	if err != nil {
 		return err
 	}
+	e.DayStatus = LegacyGrossBoardDayStatus(e.DayStatus)
 	return json.Unmarshal(trips, &e.Trips)
 }
 

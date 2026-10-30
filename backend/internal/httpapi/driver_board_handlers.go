@@ -50,10 +50,10 @@ func (request *driverBoardRequest) validate() error {
 			return err
 		}
 		switch e.Status {
-		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "Health issue", "NEW DRIVER", "ACCIDENT":
+		case "", "READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT":
 		// Retain existing values during unrelated autosaves and history recovery.
 		// These are no longer offered as driver status choices.
-		case "At PU", "At DEL", "HOME (YARD)", "34 RESET", "HOLD", "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "LOAD CANCELLED", "REJECTED":
+		case "HOLD", "RESET", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "LOAD CANCELLED", "REJECTED":
 			if e.StatusEdited {
 				return errors.New("select a current driver status")
 			}

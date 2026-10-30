@@ -1,4 +1,3 @@
-import { displayStatus } from "./statusColors";
 import type { Load, SortKey, SortDir, PeriodKey, ChartDataPoint } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -50,9 +49,9 @@ export function statusKey(status: string): string {
   return status.trim().toLowerCase();
 }
 
-/** Human-readable label from a raw status key, e.g. "in_transit" -> "Enroute". */
+/** Human-readable label from a raw status key, e.g. "in_transit" -> "In transit". */
 export function statusLabel(status: string): string {
-  const s = displayStatus(status).replace(/[_-]+/g, " ").trim();
+  const s = status.replace(/[_-]+/g, " ").trim();
   if (!s) return "Unknown";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

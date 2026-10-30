@@ -3,10 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 
-const statusColorsSource = readFileSync(new URL('../app/lib/statusColors.ts', import.meta.url), 'utf8');
-const statusColorsURL = 'data:text/javascript;base64,' + Buffer.from(ts.transpileModule(statusColorsSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString('base64');
 const source = readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8");
-const { outputText } = ts.transpileModule(source.replaceAll('"@/app/lib/statusColors"', JSON.stringify(statusColorsURL)), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
+const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
 const { dispatcherRows, compactDecimal, indexBoardEntries, addDays, additionalLoadEntries, monday, emptyEntry, entryKey, hundredths, totals, decimalDisplay, rpmDisplay, reconcileAutosave, rateBalance, rateChange, incompleteRates, matchLoad, mismatch, dayStatuses, exactDayStatus, suggestedDayStatuses, setDayStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 const { amountDisplay, signedMoney } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
@@ -89,7 +87,7 @@ assert.equal(cancelled.loadRecordId, null);
 assert.equal(rateBalance("200", [cancelled]), 20000n);
 assert.equal(incompleteRates([cancelled]), 0);
 assert.equal(totals([cancelled]).original, 0n);
-assert.equal(exactDayStatus("  in-transit ").value, "ENROUTE");
+assert.equal(exactDayStatus("  in-transit ").value, "IN TRANSIT");
 assert.equal(exactDayStatus("late delivery").value, "LATE DEL");
 assert.equal(exactDayStatus("sh"), undefined);
 assert.equal(exactDayStatus("SHOP123"), undefined);

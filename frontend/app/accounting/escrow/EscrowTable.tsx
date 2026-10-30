@@ -1,7 +1,5 @@
 "use client";
 
-import { statusClass } from "@/app/lib/statusColors";
-
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { useEffect, useState, type ReactNode } from "react";
 import { IntentLink } from "@/app/components/IntentLink";
@@ -74,7 +72,7 @@ export function EscrowTable({ driverId = "", toolbarEnd }: { driverId?: string; 
       <tbody>{loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-500" role="status">Loading escrow…</td></tr> : error ? null : !data?.items.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-500">No escrow records match these filters.</td></tr> : data.items.map(item => <tr key={item.id} className="border-b border-zinc-800/60 align-top text-zinc-300">
         <td className="px-4 py-3">{item.driverId && permissions.includes("drivers.read") ? <IntentLink className="text-blue-400 hover:text-blue-300" href={`/drivers/detail?id=${item.driverId}`}>{item.driverName}</IntentLink> : item.driverName}{!item.active && <span className="ml-2 text-[10px] text-zinc-500">Terminated</span>}</td>
         <td className="px-4 py-3 font-mono">{money(item.amount)}</td><td className="px-4 py-3 font-mono text-emerald-400">{money(item.heldAmount)}</td><td className="px-4 py-3 font-mono">{money(group === "terminated" && !driverId ? item.releasedAmount : item.remainingAmount)}</td>
-        <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2 py-1 text-[11px] ${statusClass(item.status)}`}>{item.managedInSheets ? "Managed in Sheets" : statusLabels[item.status]}</span></td>
+        <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2 py-1 text-[11px] ${["paid", "released"].includes(item.status) ? "bg-emerald-500/10 text-emerald-400" : ["partial", "partially_released"].includes(item.status) ? "bg-amber-500/10 text-amber-400" : "bg-zinc-800 text-zinc-400"}`}>{item.managedInSheets ? "Managed in Sheets" : statusLabels[item.status]}</span></td>
         <td className="px-4 py-3"><div className="flex items-center gap-3">{!item.managedInSheets && permissions.includes("escrow.create") && item.driverId && <button className="text-blue-400 hover:text-blue-300 disabled:text-zinc-600" disabled={hundredths(item.heldAmount) <= BigInt(0)} onClick={event => setEditor({ escrow: item, anchor: event.currentTarget.getBoundingClientRect() })}>Release</button>}<button aria-label="Payment history" className="whitespace-nowrap text-blue-400 hover:text-blue-300" onClick={() => setSelectedId(item.id)}>History</button></div></td>
       </tr>)}</tbody>
     </table></TableShell>

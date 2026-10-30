@@ -69,7 +69,7 @@ func (h fleetHandler) changeAvailability(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	switch in.Status {
-	case "active", "home", "vacation", "rest", "family_issue", "health_issue", "new_driver":
+	case "active", "home", "vacation", "rest", "reset", "family_issue", "health_issue", "new_driver":
 	default:
 		writeAPIError(w, 400, "Invalid driver availability")
 		return

@@ -167,6 +167,10 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	statusPaletteRollback, err := os.ReadFile("../../sql/172_restore_status_board_palette.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	statusColorsMigration, err := os.ReadFile("../../sql/171_status_colors.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -199,6 +203,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 			if mode == "migration" {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(retirement), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(readMigration), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(statusPaletteRollback), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(statusColorsMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(truckStatusMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(expenseMigration), "\r\n", "\n"), "", 1)
@@ -279,6 +284,7 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(readMigration))
 				exec(string(retirement))
 				exec(string(statusColorsMigration))
+				exec(string(statusPaletteRollback))
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))

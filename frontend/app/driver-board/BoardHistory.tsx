@@ -1,7 +1,5 @@
 "use client";
 
-import { displayStatus } from "@/app/lib/statusColors";
-
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { History, RefreshCw, Undo2, X } from "lucide-react";
@@ -14,7 +12,6 @@ import { CurrentUserIDContext } from "@/app/lib/access";
 const labels: Record<string, string> = { currentLoad: "Current load", trailerNumber: "Trailer", trailerNote: "Trailer note", status: "Status", destination: "Destination", eta: "ETA", notes: "Notes", homeTime: "Former home-time text", leavePlan: "Home time / return", driverHome: "Former home entry", loadPlan: "Load selection and queue" };
 function historyValue(field: string, value: string) {
   if (field === "leavePlan") { try { return leavePlanDetails(JSON.parse(value || "{}")) || "No dates"; } catch { return "No dates"; } }
-  if (field === "status") return displayStatus(value) || "Empty";
   if (field === "eta") return formatETA(value, true);
   if (field !== "loadPlan") return value || "Empty";
   try {

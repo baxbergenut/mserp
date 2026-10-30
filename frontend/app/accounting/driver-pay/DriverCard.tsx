@@ -1,14 +1,12 @@
 "use client";
 
-import { statusClass, displayStatus } from "@/app/lib/statusColors";
-
 import { employmentTypeLabel } from "@/app/lib/driverType";
 import { Fragment, memo, useCallback, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode } from "@/app/lib/types";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
-import { addDays, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
+import { addDays, dayStatuses, decimalDisplay, hundredths, shortDate, validDecimal } from "@/app/gross-board/board";
 import { activeLayovers, carryBreakdown, centsAmount, costAmount, costRows, driverTotals, sourceAmountInput, validSourceAmount } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
 import { SourceChargeRows } from "./SourceChargeRows";
@@ -72,7 +70,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
   const displayColumns = columns.map(([label, width]) => [investor && label === "Driver fee" ? "Investor share" : label, width] as const);
   const edit = (update: (value: DriverPayEdits) => DriverPayEdits) => onEdit(driver.id, update);
   const loadCount = driver.summary?.loads ?? driver.loads.length;
-  const homeBadge = driver.homeWeek && loadCount === 0 ? <span title="Home every day of this week, with no loads" className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${statusClass("home")}`}>Home</span> : null;
+  const homeBadge = driver.homeWeek && loadCount === 0 ? <span title="Home every day of this week, with no loads" className="shrink-0 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-300">Home</span> : null;
   const allFeesMissing = loadCount > 0 && totals.missingFees === loadCount;
   const incomplete = totals.review > 0;
   const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses;
@@ -134,7 +132,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
           <button type="button" aria-label={investor ? `${statementName} ${driver.truckUnit}` : statementName} aria-expanded={open} aria-controls={`driver-${driver.id}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500">
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
           </button>
-          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className={`shrink-0 whitespace-nowrap text-[10px] ${statusClass("completed","general","text")}`}>{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
+          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
           {!investor && driver.teamDrivers?.map(person => <Link key={person.id} title={`Team driver: ${person.name}. This statement uses the main driver's tariff.`} href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()} className="truncate text-[10px] text-blue-400">+ {person.name}</Link>)}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
         </div>
@@ -165,8 +163,8 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
             <tbody>{weekdays.map((day, dayIndex) => {
               const date = addDays(edits.weekStart, dayIndex);
               const loads = driver.loads.filter(load => load.date === date);
-              const statuses = [...new Set((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => displayStatus(item.status)))];
-              const statusColor = statuses.length === 1 ? statusClass(statuses[0], "driver") : undefined;
+              const statuses = [...new Set((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => item.status))];
+              const statusColor = statuses.length === 1 ? dayStatuses.find(item => item.value === statuses[0])?.color : undefined;
               const dayLabel = <>{day}<span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span></>;
               return <Fragment key={date}>{loads.length ? loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
  const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
@@ -187,7 +185,7 @@ export const DriverCard = memo(function DriverCard({ onTransfer, transferDisable
                 <td className={`${cell} !px-1 text-center`}><CommentButton label={`${driver.fullName}, ${load.loadNumber}, ${load.date}, comment`} value={edits.comments[load.commentKey] ?? ""} disabled={disabled}
                   onClick={() => setComment({ key: load.commentKey, label: `${load.loadNumber} · ${load.date}`, value: edits.comments[load.commentKey] ?? "" })} /></td>
               </tr>) : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-center ${statusColor ?? "text-zinc-600"}`}>
-                {statuses.length === 1 ? displayStatus(statuses[0]) : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${statusClass(status, "driver")}`}>{displayStatus(status)}</span>)}</div> : "No load"}
+                {statuses.length === 1 ? statuses[0] : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${dayStatuses.find(item => item.value === status)?.color ?? ""}`}>{status}</span>)}</div> : "No load"}
               </td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
             })}</tbody>
             <tbody>

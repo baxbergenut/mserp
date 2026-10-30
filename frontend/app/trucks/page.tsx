@@ -1,7 +1,4 @@
 "use client";
-
-import { statusClass } from "../lib/statusColors";
-
 import type { DriverOption, InvestorOption } from "@/app/lib/types";
 import { usePermissions } from "../lib/access";
 import { useQuickCreate } from "@/app/lib/topNavigation";
@@ -39,11 +36,11 @@ import { TruckGPSHealth, gpsAlertLabels } from "../components/fleet/TruckGPSHeal
 
 const statusCards = [
   { code: "", label: "All", color: "text-zinc-200 bg-zinc-500/5", selected: "border-zinc-400 ring-zinc-400/30" },
-  { code: "ready", label: conditionLabels.ready, color: statusClass("ready", "truck"), selected: "status-selected" },
-  { code: "shop", label: conditionLabels.shop, color: statusClass("shop", "truck"), selected: "status-selected" },
-  { code: "in_use", label: conditionLabels.in_use, color: statusClass("in_use", "truck"), selected: "status-selected" },
-  { code: "out_of_service", label: conditionLabels.out_of_service, color: statusClass("out_of_service", "truck"), selected: "status-selected" },
-  { code: "terminated", label: conditionLabels.terminated, color: statusClass("terminated", "truck"), selected: "status-selected" },
+  { code: "ready", label: conditionLabels.ready, color: "text-emerald-400 bg-emerald-500/5", selected: "border-emerald-400 ring-emerald-400/30" },
+  { code: "shop", label: conditionLabels.shop, color: "text-amber-400 bg-amber-500/5", selected: "border-amber-400 ring-amber-400/30" },
+  { code: "in_use", label: conditionLabels.in_use, color: "text-blue-400 bg-blue-500/5", selected: "border-blue-400 ring-blue-400/30" },
+  { code: "out_of_service", label: conditionLabels.out_of_service, color: "text-red-400 bg-red-500/5", selected: "border-red-400 ring-red-400/30" },
+  { code: "terminated", label: conditionLabels.terminated, color: "text-zinc-400 bg-zinc-500/5", selected: "border-zinc-400 ring-zinc-400/30" },
 ] as const;
 
 export default function TrucksPage() {

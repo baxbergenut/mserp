@@ -30,8 +30,6 @@ var routeAccessPolicies = []routeAccess{
 	{"PATCH", "/weekly-pti/{week}/{truck}", "pti.edit"},
 	{"GET", "/weekly-pti/{week}/{truck}/history", "pti.read"},
 	{"GET", "/fleet-status/catalog", "authenticated"},
-	{"GET", "/settings/status-colors", "authenticated"},
-	{"PUT", "/settings/status-colors", "access.manage"},
 	{"GET", "/drivers/{id}/status-history", "drivers.read"},
 	{"PATCH", "/drivers/{id}/availability", "drivers.edit"},
 	{"GET", "/trucks/{id}/status-history", "trucks.read"},
