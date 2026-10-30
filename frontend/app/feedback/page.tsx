@@ -1,5 +1,7 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
+
 import { useCallback, useContext, useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
 import { ArrowUp, Columns3, List, MessageSquare, Paperclip, Pencil, Plus, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -11,7 +13,6 @@ import { useDebouncedValue } from "../lib/useDebouncedValue";
 
 const statuses: FeedbackStatus[] = ["open", "in_progress", "completed", "discarded"];
 const labels: Record<FeedbackStatus, string> = { open: "Open", in_progress: "In progress", completed: "Completed", discarded: "Discarded" };
-const colors: Record<FeedbackStatus, string> = { open: "bg-blue-500/10 text-blue-400", in_progress: "bg-amber-500/10 text-amber-400", completed: "bg-emerald-500/10 text-emerald-400", discarded: "bg-zinc-500/10 text-zinc-400" };
 const defaultTags = ["bug", "feature", "ui", "ux", "improvement", "question"];
 const tagLabel = (tag: string) => tag === "ui" || tag === "ux" ? tag.toUpperCase() : tag.charAt(0).toUpperCase() + tag.slice(1);
 const when = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -164,7 +165,7 @@ export default function Feedback() {
       <div className="flex gap-3">
         <button type="button" aria-label={`${post.voted ? "Remove upvote from" : "Upvote"} ${post.title}`} aria-pressed={post.voted} disabled={!!busy} onClick={() => void vote(post)} className={`flex h-fit min-w-10 shrink-0 flex-col items-center rounded-lg border p-2 text-xs ${post.voted ? "border-blue-500/50 bg-blue-500/10 text-blue-400" : "border-zinc-800 text-zinc-400 hover:border-blue-500/50"}`}><ArrowUp className="h-4 w-4" /><span>{post.votes}</span></button>
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs ${colors[post.status]}`}>{labels[post.status]}</span>{post.tags.map(t => <button key={t} type="button" onClick={() => { setTag(t); resetPages(); }} className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">{tagLabel(t)}</button>)}</div>
+          <div className="mb-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(post.status)}`}>{labels[post.status]}</span>{post.tags.map(t => <button key={t} type="button" onClick={() => { setTag(t); resetPages(); }} className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">{tagLabel(t)}</button>)}</div>
           <button type="button" className="text-left font-semibold text-zinc-100 hover:text-blue-400 [overflow-wrap:anywhere]" onClick={() => void open(post.id)}>{post.title}</button>
           {!compact && <PostMedia files={post.attachments} />}
           <p className={`mt-3 whitespace-pre-wrap text-zinc-400 [overflow-wrap:anywhere] ${compact ? "line-clamp-3" : "line-clamp-6"}`}>{post.body}</p>
@@ -187,14 +188,14 @@ export default function Feedback() {
     {loading && !data && !Object.keys(columns).length && <p role="status" className="text-zinc-500">Loading feedback…</p>}
     {view === "feed" && data && <div aria-busy={loading} className="space-y-3">{data.items.map(post => card(post))}{data.items.length === 0 && <div className="ui-card p-8 text-center text-zinc-500">{query || tag || status ? "No feedback matches these filters." : "Have an idea or found a bug? Share the details and help shape Clustie."}</div>}<TablePagination page={data.page} pageSize={data.pageSize} totalItems={data.total} totalPages={data.totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); resetPages(); }} /></div>}
     {view === "kanban" && <div className="overflow-x-auto pb-2" aria-busy={loading}><div className="grid min-w-[1000px] grid-cols-4 gap-3">{statuses.map(s => <section key={s} aria-label={labels[s]} className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-950/30 p-3" onDragOver={e => { if (administrator && e.dataTransfer.types.includes("application/x-clustie-feedback")) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (!administrator) return; const id = e.dataTransfer.getData("application/x-clustie-feedback"); const post = Object.values(columns).flatMap(p => p?.items ?? []).find(p => p.id === id); if (post && post.status !== s) void changeStatus(post, s); }}>
-      <h2 className="mb-3 flex items-center justify-between font-semibold"><span className={`rounded-full px-2 py-0.5 text-xs ${colors[s]}`}>{labels[s]}</span><span className="text-xs text-zinc-500">{columns[s]?.total ?? 0}</span></h2>
+      <h2 className="mb-3 flex items-center justify-between font-semibold"><span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(s)}`}>{labels[s]}</span><span className="text-xs text-zinc-500">{columns[s]?.total ?? 0}</span></h2>
       <div className="space-y-3">{columns[s]?.items.map(post => card(post, true))}{columns[s]?.total === 0 && <p className="py-6 text-center text-xs text-zinc-500">No requests</p>}</div>
       {columns[s] && columns[s]!.totalPages > 1 && <div className="mt-3 flex items-center justify-between text-xs"><button type="button" className="ui-button" aria-label={`Previous ${labels[s]} page`} disabled={columns[s]!.page <= 1 || loading} onClick={() => setColumnPages(p => ({ ...p, [s]: columns[s]!.page - 1 }))}>Previous</button><span>{columns[s]!.page} / {columns[s]!.totalPages}</span><button type="button" className="ui-button" aria-label={`Next ${labels[s]} page`} disabled={columns[s]!.page >= columns[s]!.totalPages || loading} onClick={() => setColumnPages(p => ({ ...p, [s]: columns[s]!.page + 1 }))}>Next</button></div>}
     </section>)}</div></div>}
     {detail && !composer && <Modal title={detail.title} isSaving={!!busy} submitLabel="Add comment" submitDisabled={!comment.trim()} onClose={closeDetail} onSubmit={addComment} cancelLabel="Close">
       <div className="space-y-4">
         {detailError && <ErrorBanner message={detailError} />}
-        <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs ${colors[detail.status]}`}>{labels[detail.status]}</span>{detail.tags.map(t => <span key={t} className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">{tagLabel(t)}</span>)}
+        <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(detail.status)}`}>{labels[detail.status]}</span>{detail.tags.map(t => <span key={t} className="rounded-full bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">{tagLabel(t)}</span>)}
           {(administrator || detail.authorId === userID) && <button type="button" disabled={!!busy} className="ui-button ml-auto" onClick={() => setComposer(detail)}><Pencil className="h-4 w-4" />Edit</button>}
         </div>
         <p className="text-xs text-zinc-500">{detail.authorName} · {when(detail.createdAt)} NY</p>

@@ -1,3 +1,4 @@
+import { statusClass } from "@/app/lib/statusColors";
 import type { BoardLoads, DriverBoardEntry } from "@/app/lib/types";
 
 export function progressStatus(status: string, loads?: BoardLoads) {
@@ -50,26 +51,8 @@ export function formatETA(value: string, full = false) {
 
 // Driver Board > TODAY!J4 validation order; distinct from load/day statuses.
 // Trim the source's accidental trailing space on ACCIDENT.
-export const statuses = ["READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "At PU", "Health issue", "At DEL", "HOME (YARD)", "NEW DRIVER", "34 RESET", "ACCIDENT"];
-export function statusColor(status: string) {
-  // Exact TODAY sheet fills (Driver Board, gid 1851742271, column J).
-  switch (status) {
-    case "READY": return "bg-black text-white";
-    case "REST": return "bg-[#d9d9d9] text-black";
-    case "COVERED": return "bg-[#ffff00] text-black";
-    case "ENROUTE": return "bg-[#3d85c6] text-black";
-    case "DISPATCHED": return "bg-[#fbbc04] text-white";
-    case "RESERVED": return "bg-[#b7e1cd] text-black";
-    case "HOME": case "HOME (YARD)": return "bg-[#ff0000] text-black";
-    case "VACATION": return "bg-[#e06666] text-black";
-    case "SHOP": return "bg-[#ff9900] text-white";
-    case "HOLD": return "bg-orange-500/20 text-orange-300";
-    case "STOP": return "bg-[#990000] text-black";
-  }
-  // The remaining sheet choices have white cells with black text.
-  if (statuses.includes(status)) return "bg-white text-black";
-  return "text-zinc-400";
-}
+export const statuses = ["READY", "REST", "COVERED", "DISPATCHED", "ENROUTE", "RESERVED", "VACATION", "DEADHEAD", "HOME", "SHOP", "STOP", "In the YARD", "Hold for Load", "Left", "Family issue", "Issue with PU/Del", "Health issue", "NEW DRIVER", "ACCIDENT"];
+export function statusColor(status: string) { return statusClass(status, "driver"); }
 
 // An in-flight save may finish after more typing. Keep the new text, while
 // advancing both concurrency tokens to the committed response.

@@ -1,5 +1,7 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
+
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, FileText, History, LoaderCircle, Wrench } from "lucide-react";
@@ -52,7 +54,7 @@ export function WorkOrderDetail() {
       {record.truckId?<Link href={`/trucks/detail?id=${record.truckId}`} className="text-blue-400">Truck {record.unitNumber}</Link>:<span>Truck not linked</span>}
       <span>Added by <span className="text-zinc-300">{record.createdByName || "Unknown"}</span> · {dateTime(record.createdAt)}</span>
       <FleetStatusBadge status={record.dispatchStatus} />
-      <span className="ml-auto rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-400">{workStatusLabels[status] ?? status}</span>
+      <span className={`ml-auto rounded-full px-2.5 py-1 ${statusClass(status)}`}>{workStatusLabels[status] ?? status}</span>
     </div>
     {!terminal && <WorkOrderProgress record={record} step={step} onStep={setStep} />}
     {error && <ErrorBanner message={error} />}

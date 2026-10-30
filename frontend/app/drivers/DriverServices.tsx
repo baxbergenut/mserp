@@ -1,5 +1,7 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/app/components/AccessLink";
 import { CheckCircle2, Clock3, Fuel, Scale, Truck, Loader2, AlertCircle } from "lucide-react";
@@ -22,7 +24,7 @@ function tomorrowNY() {
 function ServiceTitle({ service, state }: { service: DriverService; state: string }) {
   const Icon = service === "relay" ? Fuel : service === "datatruck" ? Truck : Scale;
   const StatusIcon = state === "added" ? CheckCircle2 : ["queued", "running"].includes(state) ? Loader2 : ["review", "unconfirmed", "needs_setup"].includes(state) ? AlertCircle : Clock3;
-  return <div className="flex flex-wrap items-center justify-between gap-2"><h3><Link href={service === "relay" ? "/fuel?tab=drivers" : service === "datatruck" ? "https://app.datatruck.io/hr-management/driver/drivers" : "/weighmytruck"} target="_blank" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</Link></h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${state === "added" ? "text-emerald-400" : ["review", "unconfirmed", "needs_setup"].includes(state) ? "text-amber-300" : "text-zinc-400"}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
+  return <div className="flex flex-wrap items-center justify-between gap-2"><h3><Link href={service === "relay" ? "/fuel?tab=drivers" : service === "datatruck" ? "https://app.datatruck.io/hr-management/driver/drivers" : "/weighmytruck"} target="_blank" className="flex items-center gap-2 text-sm font-semibold text-zinc-200 hover:text-blue-400"><Icon className="h-4 w-4 text-zinc-400" />{names[service]}</Link></h3><span role="status" className={`inline-flex items-center gap-1.5 text-xs ${statusClass(state,"general","text")}`}><StatusIcon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin" : ""}`} />{labels[state] || state}</span></div>;
 }
 
 // Draft selections never call a mutation endpoint. Membership checks are read-only.

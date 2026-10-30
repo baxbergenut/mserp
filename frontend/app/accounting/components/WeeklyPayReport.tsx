@@ -1,5 +1,7 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
+
 import { useEffect, useState } from "react";
 import { Banknote, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Headset, Pencil, Plus, Route, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -115,7 +117,7 @@ export function WeeklyPayReport() {
             <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="min-w-0 flex-1 truncate font-semibold">{s.dispatcherName}</span>
             <span className="hidden text-xs text-zinc-400 sm:inline">{s.rows.length} {s.rows.length === 1 ? "driver" : "drivers"}</span><span className="hidden text-xs text-zinc-400 sm:inline">{s.loadCount} {s.loadCount === 1 ? "load" : "loads"}</span><span className="hidden w-28 text-right font-mono tabular-nums text-zinc-400 md:inline">{money.format(s.gross)}</span><strong className="w-24 text-right font-mono tabular-nums">{money.format(s.pay)}</strong>
           </button>
-          {s.finalized && <span className="text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}
+          {s.finalized && <span className={`text-xs ${statusClass("completed","general","text")}`} title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}
           {s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setReason(""); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}
         </div>
         {s.sourceChanged && <p className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</p>}

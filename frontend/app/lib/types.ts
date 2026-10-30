@@ -1093,7 +1093,7 @@ export interface AuthSession {
   expiresAt: string;
 }
 
-export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "RESET" | "IN TRANSIT" | "REJECTED" | "LOAD CANCELLED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
+export type GrossBoardDayStatus = "" | "SHOP" | "HOME" | "REST" | "ENROUTE" | "RESET" | "IN TRANSIT" | "REJECTED" | "LOAD CANCELLED" | "NO LOAD" | "STUCK" | "LATE DEL" | "TRUCK ISSUE" | "LEFT" | "NEW DRIVER" | "DEADHEAD";
 
 export interface GrossBoardTrip {
   id: number; number: string; driverName: string; truckUnit: string; originalRate: string; miles: string; loadedMiles: string; emptyMiles: string; startDate: string; endDate: string;
@@ -1635,3 +1635,5 @@ export interface ExpenseFormChoices { options: ExpensePage["options"]; drivers: 
 export interface ExternalExpenseSettlement {id:string;amount:string;settledOn:string;reference:string;reversesId?:string;version:number;actor?:string;createdAt?:string}
 
 export interface ServiceProgramWorkspace { programs: ServiceProgram[]; trucks: PaginatedResponse<ProgramTruck> }
+
+export interface StatusColorSettings { colors: Record<string, string>; version: number; }

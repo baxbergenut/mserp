@@ -1,4 +1,7 @@
 "use client";
+
+import { statusClass } from "@/app/lib/statusColors";
+
 import { formatDriverLeave } from "@/app/lib/driverLeave";
 import { employmentTypeLabel } from "../../lib/driverType";
 
@@ -76,7 +79,7 @@ export default function DriverDetailPage() {
   const displayedDriver = driver ? { ...driver, truckId: driver.truckId ?? driver.teamTruckId ?? null, truckUnit: driver.truckUnit ?? driver.teamTruckUnit ?? null } : null;
   const currentTruck = truck?.id === displayedDriver?.truckId ? truck : null;
   const availabilityStatus = driver?.active ? driver.availabilityStatus ?? "active" : "terminated";
-  const availabilityColor = availabilityStatus === "active" ? "bg-emerald-500/10 text-emerald-400" : availabilityStatus === "terminated" ? "bg-zinc-800 text-zinc-400" : "bg-blue-500/10 text-blue-400";
+  const availabilityColor = statusClass(availabilityStatus, "driver");
   const rate = driver && canCompensation && driver.payRate !== undefined ? driver.teamRole === "team" ? "Main driver’s statement" : driver.payType === "cpm" ? `$${driver.payRate.toFixed(2)} / mile` : `${driver.payRate}% of driver gross` : "";
   return <div className="space-y-5 animate-fade-in">
     {error && <><ErrorBanner message={error} /><button className="text-sm text-blue-400" onClick={() => setAttempt(v => v + 1)}>Retry driver</button></>}

@@ -1,3 +1,4 @@
+import { statusClass } from "@/app/lib/statusColors";
 import type { InventoryData, InventoryFields, InventoryRecord } from "@/app/lib/types";
 
 export const presenceStates = ["unknown", "reported_present", "verified_installed", "missing"];
@@ -23,13 +24,7 @@ export function installationState(record: InventoryRecord, data: InventoryData):
 }
 export function StatusBadge({ value = "unknown", label }: { value?: string; label?: string }) {
   value = value || "unknown";
-  const color = ["verified_installed", "good", "ready", "active"].includes(value)
-    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-    : ["reported_present", "repair", "pending", "suspended", "needs_review"].includes(value)
-      ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
-      : ["unknown", "missing", "lost", "damaged", "total_loss", "cancelled"].includes(value)
-        ? "border-red-500/25 bg-red-500/10 text-red-400"
-        : "border-zinc-700 bg-zinc-800/40 text-zinc-400";
+  const color = statusClass(value, "truck");
   return <span className={"inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-medium " + color}>{label || readable(value)}</span>;
 }
 

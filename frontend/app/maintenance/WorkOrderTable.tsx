@@ -1,5 +1,7 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
+
 import Link from "../components/AccessLink";
 import { FleetStatusBadge } from "../components/FleetStatusBadge";
 import { TableShell } from "../components/management/ManagementUI";
@@ -49,7 +51,7 @@ export function WorkOrderTable({records,options,stage,loading,embeddedTruck,onOp
         <td className="max-w-[180px] p-3 text-zinc-400">{record.vendorName || "—"}</td>
         {work ? <>
           <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{date(record.scheduledFor)}</td><td className="whitespace-nowrap p-3 text-xs text-zinc-400">{date(record.expectedReady)}</td>
-          <td className="whitespace-nowrap p-3 text-xs"><span className={`rounded-full px-2 py-1 ${state==="in_progress"?"bg-blue-500/10 text-blue-400":"bg-zinc-800 text-zinc-400"}`}>{workStatusLabels[state]}</span></td>
+          <td className="whitespace-nowrap p-3 text-xs"><span className={`rounded-full px-2 py-1 ${statusClass(state)}`}>{workStatusLabels[state]}</span></td>
           <td className="whitespace-nowrap p-3 text-xs text-zinc-500">{record.createdByName || "Unknown"}</td>
         </> : <>
           <td className="whitespace-nowrap p-3 text-xs text-zinc-400">{date(archived?record.updatedAt:record.serviceDate)}</td>

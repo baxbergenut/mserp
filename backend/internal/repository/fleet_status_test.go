@@ -141,12 +141,12 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e = save("DISPATCHED"); e != nil {
 				t.Fatal(e)
 			}
-			for _, status := range []string{"COVERED", "ENROUTE", "RESERVED", "DEADHEAD", "At PU", "At DEL", "Issue with PU/Del", "In the YARD", "Hold for Load"} {
+			for _, status := range []string{"COVERED", "ENROUTE", "RESERVED", "DEADHEAD", "Issue with PU/Del", "In the YARD", "Hold for Load"} {
 				if e = save(status); e != nil {
 					t.Fatalf("%s: %v", status, e)
 				}
 			}
-			for label, availability := range map[string]string{"HOME": "home", "HOME (YARD)": "home", "VACATION": "vacation", "REST": "rest", "34 RESET": "reset", "Family issue": "family_issue", "Health issue": "health_issue", "NEW DRIVER": "new_driver"} {
+			for label, availability := range map[string]string{"HOME": "home", "VACATION": "vacation", "REST": "rest", "Family issue": "family_issue", "Health issue": "health_issue", "NEW DRIVER": "new_driver"} {
 				if e = save(label); e != nil {
 					t.Fatalf("%s: %v", label, e)
 				}

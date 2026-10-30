@@ -182,3 +182,11 @@ on localhost, with URLs in `MSERP_PORTAL_TEST_DATABASE_URL` and
 checks restricted runtime permissions, snapshot conflicts, missing-record
 creation, ownership, lifecycle/trailer preservation, partial commits, replay,
 immutable receipts and enrollment fencing. Never point these tests at production.
+
+## Shared status palette (171)
+
+Install the updated deployment helper before releasing migration 171. It briefly
+pauses API and expense-sheet writers while status rules, normalization triggers
+and Gross Board checks change. Normal activation/recovery restarts both writers.
+The schema remains compatible with the previous release; historical/finalized
+financial data is never rewritten. See docs/STATUS_COLORS.md.

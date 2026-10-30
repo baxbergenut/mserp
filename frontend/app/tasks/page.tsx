@@ -1,5 +1,6 @@
 "use client";
 
+import { statusClass } from "@/app/lib/statusColors";
 
 import { TableFilters } from "@/app/components/management/TableFilters";
 import { useEffect, useRef, useState } from "react";
@@ -158,7 +159,7 @@ function TaskBoard() {
       <TableShell><table className="w-full min-w-[560px] text-left text-[13px]">
         <thead className="bg-zinc-900 text-xs text-zinc-500"><tr>{["Task", "Status", "Assignee", "Age", ""].map((label, i) => <th key={i} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
         <tbody className="divide-y divide-zinc-800">{data.items.map(task => <tr key={task.id} className="bg-card hover:bg-zinc-800/20">
-          <td className="max-w-sm px-3 py-2">{title(task)}</td><td className="whitespace-nowrap px-3 py-2 text-zinc-400">{statusLabels[taskStatus(task)]}</td>
+          <td className="max-w-sm px-3 py-2">{title(task)}</td><td className="whitespace-nowrap px-3 py-2"><span className={`rounded px-2 py-0.5 ${statusClass(taskStatus(task))}`}>{statusLabels[taskStatus(task)]}</span></td>
           <td className="px-3 py-2 text-zinc-400">{task.assigneeName || "Unassigned"}</td>
           <td className="whitespace-nowrap px-3 py-2 tabular-nums text-zinc-400" title={`${task.completedAt ? "Time from creation to completion" : "Time since creation"} · Created ${dateTime(task.createdAt)} NY`}>{taskAge(task, now)}</td>
           <td className="px-3 py-1">{actions(task)}</td>
@@ -170,7 +171,7 @@ function TaskBoard() {
         onDragOver={event => { if (dragId.current && canWrite && !saving) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(column); } }}
         onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null); }}
         onDrop={event => { event.preventDefault(); const task = [...columns.open.items, ...columns.in_process.items, ...columns.completed.items].find(task => task.id === dragId.current); dragId.current = null; setDropTarget(null); if (task) move(task, column); }}>
-        <h2 className="mb-3 flex items-center justify-between text-sm font-semibold text-zinc-200">{statusLabels[column]}<span className="text-xs tabular-nums text-zinc-500">{columns[column].total}</span></h2>
+        <h2 className={`mb-3 flex items-center justify-between text-sm font-semibold ${statusClass(column,"general","text")}`}>{statusLabels[column]}<span className="text-xs tabular-nums text-zinc-500">{columns[column].total}</span></h2>
         <div className="min-h-24 space-y-3">{columns[column].items.map(task => <article key={task.id} aria-label={task.title} draggable={canWrite && !task.systemTaskKind && !saving}
           onDragStart={event => { if (!canWrite || task.systemTaskKind || saving) { event.preventDefault(); return; } dragId.current = task.id; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); }} onDragEnd={() => { dragId.current = null; setDropTarget(null); }}
           className={`rounded-lg border border-zinc-800 bg-card p-4 ${canWrite && !task.systemTaskKind ? "cursor-grab active:cursor-grabbing" : ""}`}>

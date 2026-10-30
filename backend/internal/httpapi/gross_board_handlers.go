@@ -99,9 +99,15 @@ func (request *grossBoardRequest) validate() error {
 		if strings.HasPrefix(e.Miles, "-") || strings.HasPrefix(e.EnteredMiles, "-") {
 			return errors.New("miles cannot be negative")
 		}
+		if e.DayStatus == "IN TRANSIT" {
+			e.DayStatus = "ENROUTE"
+		}
+		if e.DayStatus == "RESET" {
+			e.DayStatus = "REST"
+		}
 		switch e.DayStatus {
 		case "":
-		case "SHOP", "HOME", "RESET", "IN TRANSIT", "REJECTED", "LOAD CANCELLED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD":
+		case "SHOP", "HOME", "REST", "ENROUTE", "RESET", "IN TRANSIT", "REJECTED", "LOAD CANCELLED", "NO LOAD", "STUCK", "LATE DEL", "TRUCK ISSUE", "LEFT", "NEW DRIVER", "DEADHEAD":
 			if e.LoadNumber != "" || e.LoadRecordID != nil || e.OriginalRate != "" || e.DriverRate != "" || e.Miles != "" || e.EnteredOriginalRate != "" || e.EnteredMiles != "" || e.AcceptSystemValues {
 				return errors.New("a day status cannot contain a load, rates, or miles")
 			}

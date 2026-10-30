@@ -33,6 +33,8 @@ func registerFleetRoutes(r chi.Router, logger *slog.Logger, repo *repository.Fle
 	r.Patch("/weekly-pti/{week}/{truck}", handler.changePTI)
 	r.Get("/weekly-pti/{week}/{truck}/history", handler.ptiHistory)
 	r.Get("/fleet-status/catalog", handler.fleetStatusCatalog)
+	r.Get("/settings/status-colors", handler.statusColors)
+	r.Put("/settings/status-colors", handler.statusColors)
 	r.Get("/drivers/{id}/status-history", handler.fleetStatusHistory)
 	r.Patch("/drivers/{id}/availability", handler.changeAvailability)
 	r.Get("/trucks/{id}/status-history", handler.fleetStatusHistory)

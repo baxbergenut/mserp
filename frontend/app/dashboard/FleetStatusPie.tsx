@@ -1,18 +1,18 @@
 "use client";
 
+import { defaultStatusColors, statusColorKey } from "@/app/lib/statusColors";
+import { useStatusColors } from "@/app/components/StatusColorsProvider";
+
 import { useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import Link from "@/app/components/AccessLink";
 import type { DashboardSection } from "@/app/lib/dashboardTypes";
 import { number, SectionError } from "./display";
 
-const colors: Record<string, string> = {
-  ready: "#000000", in_use: "#3b82f6", shop: "#f59e0b", out_of_service: "#ef4444",
-  active: "#3b82f6", home: "#ef4444", vacation: "#f59e0b",
-};
-
 export function FleetStatusPie({ section, kind }: { section: DashboardSection; kind: "trucks" | "drivers" | "trailers" }) {
   const [width, setWidth] = useState(320);
+ const {settings} = useStatusColors();
+ const color = (status:string) => {const key=statusColorKey(status,kind==="drivers"?"driver":"truck");return settings?.colors[key] ?? defaultStatusColors[key];};
   const visibleStatuses = kind === "drivers" ? ["active", "home", "vacation"] : ["ready", "in_use", "shop", "out_of_service"];
   const statuses = section.items.filter(item => visibleStatuses.includes(item.id)).map(item => {
     // Accept the previous API shape during deployment without dropping new drivers.
@@ -54,14 +54,14 @@ export function FleetStatusPie({ section, kind }: { section: DashboardSection; k
           <ResponsiveContainer width="100%" height="100%" onResize={nextWidth => { if (nextWidth > 0) setWidth(nextWidth); }}>
             <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
               <Pie data={slices} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={radius} startAngle={90} endAngle={-270} stroke="var(--background)" strokeWidth={2} isAnimationActive={false}>
-                {slices.map(item => <Cell key={item.id} fill={colors[item.id] ?? "#71717a"} />)}
+                {slices.map(item => <Cell key={item.id} fill={color(item.id)} />)}
               </Pie>
               <Tooltip formatter={value => `${number(Number(value))} · ${share(Number(value))}`} contentStyle={{ background: "var(--background)", border: "1px solid #71717a", borderRadius: 8, fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
         <svg aria-hidden="true" viewBox={`0 0 ${width} ${height}`} className="pointer-events-none absolute inset-0 h-full w-full">
-          {labels.map(label => <polyline key={label.item.id} points={`${label.x},${label.y} ${label.elbowX},${label.elbowY} ${label.right ? width - 86 : 86},${label.labelY} ${label.right ? width - 80 : 80},${label.labelY}`} fill="none" stroke={colors[label.item.id] ?? "#71717a"} strokeWidth={1.25} />)}
+          {labels.map(label => <polyline key={label.item.id} points={`${label.x},${label.y} ${label.elbowX},${label.elbowY} ${label.right ? width - 86 : 86},${label.labelY} ${label.right ? width - 80 : 80},${label.labelY}`} fill="none" stroke={color(label.item.id)} strokeWidth={1.25} />)}
         </svg>
         <div aria-label={`${section.title} status labels`} className="pointer-events-none absolute inset-0">
           {labels.map(({ item, right, labelY }) => <div key={item.id} className={`pointer-events-auto absolute w-[78px] ${right ? "right-0 text-left" : "left-0 text-right"}`} style={{ top: labelY - 20 }}>

@@ -1,5 +1,7 @@
 "use client";
 
+import { StatusColorsProvider } from "./StatusColorsProvider";
+
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AuthSession } from "@/app/lib/types";
@@ -63,6 +65,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider key={session.user.id} initialTheme={session.user.theme}>
+    <StatusColorsProvider>
     <AdministratorContext.Provider value={session.user.administrator === true}>
     <CurrentUserIDContext.Provider value={session.user.id}>
     <PermissionCatalogContext.Provider value={session.permissionCatalog ?? []}>
@@ -86,6 +89,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     </PermissionCatalogContext.Provider>
     </CurrentUserIDContext.Provider>
     </AdministratorContext.Provider>
+    </StatusColorsProvider>
     </ThemeProvider>
   );
 }

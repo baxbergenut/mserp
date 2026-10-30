@@ -1,3 +1,4 @@
+import { statusClass, displayStatus } from "@/app/lib/statusColors";
 import type { GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 
 export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], entries: GrossBoardEntry[] = []) {
@@ -30,21 +31,21 @@ export const entryForDispatcher = (entry: GrossBoardEntry, dispatcherId: string,
   : !driver || (driver.assignments?.length ? driver.assignments.some(a => a.date === entry.date && a.dispatcherId === dispatcherId) : driver.dispatcherId === dispatcherId);
 
 export const dayStatuses: { value: Exclude<GrossBoardDayStatus, "">; aliases: string[]; color: string }[] = [
-  { value: "SHOP", aliases: ["in shop", "repair", "maintenance"], color: "bg-amber-500/15 text-amber-300" },
-  { value: "HOME", aliases: ["at home", "home time", "hometime"], color: "bg-violet-500/15 text-violet-300" },
-  { value: "RESET", aliases: ["34 hour reset", "34 hr reset", "34 reset", "rest"], color: "bg-indigo-500/15 text-indigo-300" },
-  { value: "IN TRANSIT", aliases: ["transit", "intransit", "on the road"], color: "bg-blue-500/15 text-blue-300" },
-  { value: "REJECTED", aliases: ["reject", "refused"], color: "bg-rose-500/15 text-rose-300" },
-  { value: "LOAD CANCELLED", aliases: ["cancelled", "canceled", "load canceled", "cancelled load", "canceled load"], color: "bg-rose-500/15 text-rose-300" },
-  { value: "NO LOAD", aliases: ["no loads", "noload", "empty", "no load available"], color: "bg-zinc-500/15 text-zinc-300" },
-  { value: "STUCK", aliases: ["stranded"], color: "bg-orange-500/15 text-orange-300" },
-  { value: "LATE DEL", aliases: ["late delivery", "late del", "delayed delivery"], color: "bg-yellow-500/15 text-yellow-300" },
-  { value: "TRUCK ISSUE", aliases: ["truck issues", "breakdown", "broken down"], color: "bg-red-500/15 text-red-300" },
-  { value: "LEFT", aliases: ["driver left"], color: "bg-slate-500/15 text-slate-300" },
-  { value: "NEW DRIVER", aliases: ["new hire", "newdriver"], color: "bg-teal-500/15 text-teal-300" },
-  { value: "DEADHEAD", aliases: ["dead head", "deadheading"], color: "bg-cyan-500/15 text-cyan-300" },
-];
-const statusText = (text: string) => text.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+  { value: "SHOP", aliases: ["in shop", "repair", "maintenance"], color: "" },
+  { value: "HOME", aliases: ["at home", "home time", "hometime"], color: "" },
+  { value: "REST", aliases: ["rest"], color: "" },
+  { value: "ENROUTE", aliases: ["enroute", "en route"], color: "" },
+  { value: "REJECTED", aliases: ["reject", "refused"], color: "" },
+  { value: "LOAD CANCELLED", aliases: ["cancelled", "canceled", "load canceled", "cancelled load", "canceled load"], color: "" },
+  { value: "NO LOAD", aliases: ["no loads", "noload", "empty", "no load available"], color: "" },
+  { value: "STUCK", aliases: ["stranded"], color: "" },
+  { value: "LATE DEL", aliases: ["late delivery", "late del", "delayed delivery"], color: "" },
+  { value: "TRUCK ISSUE", aliases: ["truck issues", "breakdown", "broken down"], color: "" },
+  { value: "LEFT", aliases: ["driver left"], color: "" },
+  { value: "NEW DRIVER", aliases: ["new hire", "newdriver"], color: "" },
+  { value: "DEADHEAD", aliases: ["dead head", "deadheading"], color: "" },
+].map(status => ({ ...status, color: statusClass(status.value, "driver") })) as { value: Exclude<GrossBoardDayStatus, "">; aliases: string[]; color: string }[];
+const statusText = (text: string) => displayStatus(text).trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
 export const exactDayStatus = (text: string) => dayStatuses.find((status) =>
   [status.value, ...status.aliases].some((name) => statusText(name) === statusText(text)));
 export const suggestedDayStatuses = (text: string) => dayStatuses.filter((status) =>

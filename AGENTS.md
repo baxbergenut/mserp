@@ -661,8 +661,10 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
-  Driver status choices/order/colors follow Driver Board > TODAY!J4 (gid 1851742271),
-  separately from load/Gross Board day statuses. Migration 122 adds the sheet
+  Driver status choices originated in Driver Board > TODAY!J4 (gid 1851742271).
+  Migration 171 retires At PU/At DEL, HOME (YARD), and 34 RESET in favor of
+  Dispatched/Enroute, Home, and Rest. Shared company-wide status colors now
+  replace the sheet fills. See docs/STATUS_COLORS.md. Migration 122 adds the sheet
   choices; legacy saved statuses and undo history remain valid without inferred
   replacements, but are not offered for new selection. ACCIDENT is trimmed.
   Migration 118 stores a shared driver order per dispatcher (including Unassigned).
@@ -3023,3 +3025,17 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   assignments nor adds employee mismatch warnings. New views add no financial tables.
   Check TestClustieLoadAssignmentsDatabase, TestAssignmentAttributionDatabase,
   existing investor/dashboard/trip/board regressions and assignment-week E2E.
+
+## Shared status colors (171)
+
+- Settings > Status colors stores company-wide, versioned per-meaning hex overrides
+  with append-only actor receipts. Authenticated users read; access.manage edits.
+  Frontend statusColors.ts and StatusColorsProvider drive boards, directories,
+  profiles/history, payroll, Loads, dashboard charts, tasks, feedback and inventory.
+  The deploy helper pauses API/export writers for migration 171.
+  Personal themes adapt badge contrast without changing the saved hues. Driver
+  Ready is amber, truck Ready green, Deadhead red.
+- Current retired board labels consolidate with audits and preserve ETA/notes/load
+  state. Direct/legacy writes and undo normalize aliases. Gross Board offers
+  ENROUTE/REST; historical IN TRANSIT/RESET rows and finalized snapshots remain
+  intact and display current labels. See docs/STATUS_COLORS.md for validation.

@@ -46,10 +46,10 @@ async function setup(page) {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
-  const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];
+  const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'Health issue', 'NEW DRIVER', 'ACCIDENT'];
   const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
   expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
-  const colors = { READY: [0, 0, 0], REST: [217, 217, 217], COVERED: [255, 255, 0], DISPATCHED: [251, 188, 4], ENROUTE: [61, 133, 198], RESERVED: [183, 225, 205], VACATION: [224, 102, 102], HOME: [255, 0, 0], SHOP: [255, 153, 0], STOP: [153, 0, 0], 'HOME (YARD)': [255, 0, 0] };
+  const colors = { READY: "driver_ready", REST: "rest", COVERED: "covered", DISPATCHED: "dispatched", ENROUTE: "enroute", RESERVED: "reserved", VACATION: "vacation", HOME: "home", SHOP: "shop", STOP: "stop", DEADHEAD: "deadhead", "In the YARD": "yard", "Hold for Load": "hold_for_load", "Family issue": "family_issue", "Issue with PU/Del": "pickup_delivery_issue", "Health issue": "health_issue", "NEW DRIVER": "new_driver", ACCIDENT: "accident" };
   for (const value of sheetStatuses) {
     if(value === "Left") continue; // Termination has its own permission-gated workflow.
     // Existing progress behavior derives RESERVED from an actual next load.
@@ -62,8 +62,7 @@ try {
     if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
     const cell = status.locator('xpath=ancestor::td');
-    await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);
-    await expect(cell).toHaveCSS('color', ['READY', 'DISPATCHED', 'SHOP'].includes(value) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)');
+    await expect(cell).toHaveClass(new RegExp(`status-${colors[value]}(?:\\s|$)`));
   }
   await page.reload();
   await expect(status).toHaveValue('ACCIDENT');
@@ -148,5 +147,5 @@ try {
   });
   await expect.poll(() => mobile.locator('[data-scroll-key="driver-board"]').evaluate(e => e.scrollTop)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
-  console.log('Status Board layout passed: 23 sheet statuses/colors, save/reload/filter, legacy preservation, mutually exclusive persisted ETA, zero miles, legacy display, page/table wheel handoff, reverse scrolling, bottom containment, horizontal overflow, resize and touch.');
+  console.log('Status Board layout passed: 19 current statuses/shared colors, save/reload/filter, legacy preservation, mutually exclusive persisted ETA, zero miles, legacy display, page/table wheel handoff, reverse scrolling, bottom containment, horizontal overflow, resize and touch.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -25,7 +25,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const [pendingStatus, setPendingStatus] = useState<GrossBoardDayStatus>("");
   const [position, setPosition] = useState({ left: 0, top: 0, height: 320, width: 288 });
   const query = entry.loadNumber.trim();
-  const status = dayStatuses.find((item) => item.value === entry.dayStatus);
+  const status = exactDayStatus(entry.dayStatus);
   const confirmed = entry.loadRecordId !== null;
   const unmatched = !status && !confirmed && query !== "";
   const statusOptions = suggestedDayStatuses(browse || status ? "" : query);

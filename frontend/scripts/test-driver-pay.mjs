@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 
-const compile = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString("base64")}`;
+const statusColorsSource = readFileSync(new URL('../app/lib/statusColors.ts', import.meta.url), 'utf8');
+const statusColorsURL = 'data:text/javascript;base64,' + Buffer.from(ts.transpileModule(statusColorsSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString('base64');
+const compile = source => `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source.replaceAll('"@/app/lib/statusColors"', JSON.stringify(statusColorsURL)), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText).toString("base64")}`;
 const board = compile(readFileSync(new URL("../app/gross-board/board.ts", import.meta.url), "utf8"));
 const pay = readFileSync(new URL("../app/accounting/driver-pay/pay.ts", import.meta.url), "utf8").replace('"@/app/gross-board/board"', JSON.stringify(board));
 const { applyPayDetails, applyPaySave, costAmount, driverTotals, normalizedPayEdits, reconcilePaySave, validAdjustments, sourceAmountInput, validSourceAmount } = await import(compile(pay));

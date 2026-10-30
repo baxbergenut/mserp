@@ -1,6 +1,5 @@
 "use client";
 
-
 import dynamic from "next/dynamic";
 import { Fragment, memo, useContext, useMemo, useState } from "react";
 import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
@@ -67,7 +66,7 @@ export default function DriverBoardPage() {
  const [restrictionReason,setRestrictionReason]=useState("");
  const [terminating,setTerminating]=useState<Driver|null>(null);
   const [statusChoices,setStatusChoices]=useState(statuses);
-  useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
+  useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus).filter(s=>statuses.includes(s)))).catch(()=>{});return()=>c.abort();},[]);
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
   const [pickupEditor, setPickupEditor] = useState<{ id: string; name: string; planId: string; pickup: BoardStop; anchor: HTMLButtonElement } | null>(null);
   const [leaveEditor, setLeaveEditor] = useState<{ id: string; name: string; status: string; changingStatus: boolean } | null>(null);
@@ -168,7 +167,6 @@ export default function DriverBoardPage() {
     <div className="flex flex-wrap items-center gap-3">
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
-
       <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled || rowDrag.active || !board?.dispatcherOrderRevision} pinnedFirst="" />
       <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -247,7 +245,7 @@ export default function DriverBoardPage() {
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
                 <td className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
                   canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
-                  choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
+                  choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
