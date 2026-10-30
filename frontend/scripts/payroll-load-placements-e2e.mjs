@@ -71,6 +71,32 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  let report=await get(`/driver-pay?weekStart=${week}`);
  expect(report.drivers.find(d=>d.id===driver).loads[0].fee).toBe('650.00');
  const failed=await post('driver',{driverId:driver,weekStart:week,action:'add',loadNumber:'MISSED-LOAD'});expect(failed.status()).toBe(400);
+ // The reported sequence: add a native next-Monday load to the earlier week,
+ // finalize, reopen, remove the extra row, and recover its native placement.
+ sql(`SET search_path TO ${schema},public;
+ INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,raw_payload) VALUES(8804,'MONDAY-RESTORE','invoiced',1400,1400,351,'2026-10-26','{}');
+ INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES('${driver}','2026-10-26','MONDAY-RESTORE',8804,1400);`);
+ await page.getByLabel('Placement Investor, extra load number').fill('MONDAY-RESTORE');
+ await page.getByRole('button',{name:'Add to statement',exact:true}).click();
+ await expect(page.getByLabel('MONDAY-RESTORE, driver gross')).toHaveValue('1400.00');
+ report=await get(`/driver-pay?weekStart=${week}`);
+ let cycle=await page.request.post(`${base}/api/driver-pay/finalize`,{headers,data:{driverId:driver,weekStart:week,revision:report.revision,override:true}});
+ expect(cycle.ok(),await cycle.text()).toBe(true);
+ report=await get(`/driver-pay?weekStart=${week}`);
+ cycle=await page.request.post(`${base}/api/driver-pay/reopen`,{headers,data:{driverId:driver,weekStart:week,revision:report.revision,reason:'Restore native Monday placement'}});
+ expect(cycle.ok(),await cycle.text()).toBe(true);
+ await go('driver');
+ await page.getByRole('button',{name:'Remove MONDAY-RESTORE from statement',exact:true}).click();
+ await expect(page.getByLabel('MONDAY-RESTORE, driver gross')).toHaveCount(0);
+ for(const kind of ['driver','investor']){
+  const future=await get(`/${kind}-pay?weekStart=2026-10-26${kind==='investor'?`&truckId=${truck}`:''}`);
+  const native=future.drivers.flatMap(d=>d.loads).find(l=>l.loadNumber==='MONDAY-RESTORE');
+  expect(native?.date).toBe('2026-10-26');expect(native?.payrollSupplement??false).toBe(false);expect(native?.totalMiles).toBe('351.00');
+ }
+ await page.goto(`${base}/accounting/driver-pay?weekStart=2026-10-26&driverId=${driver}`);
+ await expect(page.getByRole('link',{name:'MONDAY-RESTORE',exact:true})).toBeVisible();
+ await go('investor');
+ report=await get(`/driver-pay?weekStart=${week}`);
  // Real finalization freezes the supplemental row; the open counterpart cannot remove it.
  let response=await page.request.post(`${base}/api/driver-pay/finalize`,{headers,data:{driverId:driver,weekStart:week,revision:report.revision}});
  expect(response.ok(),await response.text()).toBe(true);

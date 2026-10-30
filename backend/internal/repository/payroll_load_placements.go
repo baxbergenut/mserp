@@ -19,7 +19,12 @@ func payrollPlacementSQL() string {
  (SELECT min(l.id) FROM loads l WHERE lower(btrim(l.load_id))=lower(btrim(e.load_number)) HAVING count(*)=1))
  OR (e.load_record_id IS NULL AND p.driver_id=e.driver_id AND p.source_date=e.source_date AND p.source_slot=e.source_slot
  AND EXISTS(SELECT 1 FROM loads recognized WHERE recognized.id=p.load_record_id AND lower(btrim(recognized.load_id))=lower(btrim(e.load_number)))))
- AND (p.load_trip_id=coalesce(e.load_trip_id,0) OR (p.included AND (p.load_trip_id=0 OR e.load_trip_id IS NULL))))
+ AND (p.load_trip_id=coalesce(e.load_trip_id,0) OR (p.included AND (p.load_trip_id=0 OR e.load_trip_id IS NULL)))
+ AND (p.included OR p.week_start=date_trunc('week',e.service_date)::date
+ OR EXISTS(SELECT 1 FROM payroll_load_placement_history h WHERE h.action='remove'
+ AND h.after_value->>'load_record_id'=p.load_record_id::text
+ AND h.after_value->>'load_trip_id'=p.load_trip_id::text
+ AND h.after_value->>'week_start'=date_trunc('week',e.service_date)::date::text)))
  UNION ALL SELECT p.driver_id,p.week_start+6,p.slot,false,l.load_id,l.id,p.original_rate,p.driver_gross,p.miles,0,
  p.original_rate,p.miles,''::text,''::text,nullif(p.load_trip_id,0),p.source_date,p.source_slot,0,
  ''::text,p.slot,''::text,''::text,p.truck_id,true,p.version

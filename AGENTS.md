@@ -1682,7 +1682,11 @@ assignment lookup lists.
   driver/truck/trip allocations and reviewed driver gross are reused; ambiguous
   trips require explicit selection. Unplanned loads retain unknown driver gross
   for review in the extra row, never inferred from provider revenue. Non-delivered/
-  non-invoiced loads are flagged and may be excluded from payroll. These audited,
+  non-invoiced loads are flagged and may be excluded from the selected payroll week.
+  Removals never hide native placements in unrelated weeks; earlier removals remain
+  effective through later add/remove cycles using immutable history. Migration 178
+  indexes these week-specific removal reads without rewriting amounts or decisions.
+  These audited,
   versioned decisions never edit Gross Board or provider assignments. Driver and
   investor revenue/labor move together; exact load/trip identities, global frozen
   snapshot checks, database guards, and the financial lock prevent duplicate pay

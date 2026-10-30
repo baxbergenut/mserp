@@ -69,7 +69,11 @@ Fees, investor shares and hired labor recalculate through the ordinary calculato
 
 Loads whose status is neither delivered nor invoiced are flagged. **Remove from
 statement** excludes the load from payroll only; its Gross Board record remains
-unchanged. Extra rows can also be removed. Driver and Investor Pay use one shared
+unchanged. Removals apply only to the selected statement week. Removing an extra
+row from another week restores its ordinary native placement unless that native
+week was also explicitly excluded. Earlier week-specific removals remain effective
+through later add/remove cycles; immutable history supplies those decisions.
+Extra rows can also be removed. Driver and Investor Pay use one shared
 recognition decision so investor revenue and hired labor stay together. An
 excluded load can be added in a later week after it becomes delivered/invoiced.
 Removing the final load keeps the draft statement visible.

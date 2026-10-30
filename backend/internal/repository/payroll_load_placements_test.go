@@ -61,15 +61,22 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			body, mig := strings.ReplaceAll(string(initial), "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n")
+			exclusionIndex, e := os.ReadFile("../../sql/178_payroll_load_exclusion_weeks.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
+			indexSQL := strings.ReplaceAll(string(exclusionIndex), "\r\n", "\n")
 			if upgrade {
 				if strings.Count(body, mig) != 1 {
 					t.Fatal("migration missing from init")
 				}
 				body = strings.Replace(body, mig, "", 1)
+				body = strings.Replace(body, indexSQL, "", 1)
 			}
 			exec(body)
 			if upgrade {
 				exec(mig)
+				exec(indexSQL)
 			}
 			const driver = "a1000000-0000-0000-0000-000000000001"
 			const truck = "a2000000-0000-0000-0000-000000000001"
@@ -215,6 +222,72 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			if e = pay.PlacePayLoad(ctx, "investor", remove, "test"); e == nil {
 				t.Fatal("stale removal accepted")
 			}
+			// Removing an extra row in another week must not erase the native
+			// Monday allocation (the reported cross-week case).
+			next := week.AddDate(0, 0, 7)
+			exec(`INSERT INTO driver_pay_weeks(driver_id,week_start) VALUES($1,$2::date)`, driver, next.Format(time.DateOnly))
+			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,raw_payload) VALUES(8109,'MONDAY-RESTORE','invoiced',1000,1000,351,'2026-10-26','{}')`)
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($1,'2026-10-26','MONDAY-RESTORE',8109,1000)`, driver)
+			cross := PayLoadPlacementInput{DriverID: driver, WeekStart: week.Format(time.DateOnly), Action: "add", LoadNumber: "MONDAY-RESTORE"}
+			if e = pay.PlacePayLoad(ctx, "driver", cross, "test"); e != nil {
+				t.Fatal(e)
+			}
+			full, e := pay.Get(ctx, week)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = pay.Settle(ctx, week, driver, full.Revision, actor, "", false, true); e != nil {
+				t.Fatal(e)
+			}
+			if find(read("driver", next), "MONDAY-RESTORE") != nil {
+				t.Fatal("frozen previous-week load was also paid in its native week")
+			}
+			full, e = pay.Get(ctx, week)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = pay.Settle(ctx, week, driver, full.Revision, actor, "Return this load to its original Monday", true, false); e != nil {
+				t.Fatal(e)
+			}
+			moved := find(read("driver", week), "MONDAY-RESTORE")
+			cross.Action = "remove"
+			cross.LoadRecordID = 8109
+			cross.CommentKey = moved.CommentKey
+			cross.PlacementVersion = moved.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "driver", cross, "test"); e != nil {
+				t.Fatal(e)
+			}
+			for _, kind := range []string{"driver", "investor"} {
+				if find(read(kind, week), "MONDAY-RESTORE") != nil {
+					t.Fatal("extra row removal did not persist", kind)
+				}
+				l := find(read(kind, next), "MONDAY-RESTORE")
+				if l == nil || l.PayrollSupplement || l.Date != "2026-10-26" || l.TotalMiles != "351.00" {
+					t.Fatal("native Monday allocation hidden by another week's removal", kind, l)
+				}
+			}
+			// Preserve a prior explicit removal after adding/removing that same
+			// load in a later week; its original week must remain excluded.
+			exec(`UPDATE loads SET status='delivered' WHERE id=8102`)
+			later := PayLoadPlacementInput{DriverID: driver, WeekStart: next.Format(time.DateOnly), Action: "add", LoadNumber: "NOT-READY"}
+			if e = pay.PlacePayLoad(ctx, "driver", later, "test"); e != nil {
+				t.Fatal(e)
+			}
+			moved = find(read("driver", next), "NOT-READY")
+			later.Action = "remove"
+			later.LoadRecordID = 8102
+			later.CommentKey = moved.CommentKey
+			later.PlacementVersion = moved.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "driver", later, "test"); e != nil {
+				t.Fatal(e)
+			}
+			for _, kind := range []string{"driver", "investor"} {
+				for _, w := range []time.Time{week, next} {
+					if find(read(kind, w), "NOT-READY") != nil {
+						t.Fatal("earlier explicit removal lost after a later removal", kind, w)
+					}
+				}
+			}
 			add.LoadNumber = "UNPLANNED"
 			add.DriverID = truck
 			if e = pay.PlacePayLoad(ctx, "investor", add, "test"); e != nil {
@@ -284,7 +357,7 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			add.WeekStart = "2026-10-26"
 			add.LoadNumber = "OLD-DELIVERED"
 			// Add a saved row so that the future statement is visible without other work.
-			exec(`INSERT INTO driver_pay_weeks(driver_id,week_start) VALUES($1,'2026-10-26')`, driver)
+			exec(`INSERT INTO driver_pay_weeks(driver_id,week_start) VALUES($1,'2026-10-26') ON CONFLICT DO NOTHING`, driver)
 			if e = pay.PlacePayLoad(ctx, "driver", add, "test"); e == nil {
 				t.Fatal("finalized load added in another week")
 			}
