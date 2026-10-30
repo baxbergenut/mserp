@@ -43,10 +43,20 @@ try {
     const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash','Reimburse'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
     const errors = [];
     const expenseReads = []; const expensiveLookups=[];
+    const costReads = []; let costFailure = true; let payWrites = 0;
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
     page.on('pageerror', e => { errors.push(e.message); console.error(e); });
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
+      if (path.endsWith('/cost-transactions')) {
+        costReads.push(path);
+        const cost = new URL(request.url()).searchParams.get('cost');
+        expect(new URL(request.url()).searchParams.get('weekStart')).toBe(week);
+        if (cost === 'toll' && costFailure) { costFailure = false; return route.fulfill({status:500,json:{error:'Try loading tolls again'}}); }
+        const carry = driver.edits.costs?.[`${cost}Carry`] ?? '0.00';
+        const sourceTotal = driver[`${cost}Total`];
+        return route.fulfill({json:{sourceTotal,carry,due:driver.edits.costs?.[`${cost}Due`] ?? sourceTotal,transactions:carry !== '0.00' ? [{id:'old-def',transactionId:'old-relay',date:'2026-09-22',weekStart:'2026-09-21',description:'Pilot · DEF',location:'Dayton, OH',amount:'50.00',remaining:carry,carried:true}] : cost === 'fuel' ? [{id:'diesel',transactionId:'relay-1',date:week,weekStart:week,description:'Pilot · DIESEL',location:'Columbus, OH',amount:'30.00',carried:false},{id:'def',transactionId:'relay-2',date:week,weekStart:week,description:'Pilot · DEF',location:'Columbus, OH',amount:'10.00',carried:false}] : []}});
+      }
       if (request.url().includes('/api/lookups/')) expensiveLookups.push(path);
       if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
       if (path === '/expenses/reimbursement') {
@@ -70,6 +80,7 @@ try {
       if (path === '/expenses/form-choices') return route.fulfill({json:{options,drivers:[],trucks:[],owners:[]}});
       if (path === '/expenses') return route.fulfill({json:{items:[],total:0,page:1,pageSize:1,totalPages:1,options}});
       if (request.method() === 'PUT') {
+        payWrites++;
         const input = request.postDataJSON();
         expect(input.version).toBe(driver.edits.version);
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -94,6 +105,22 @@ try {
     await page.goto(`${base}/accounting/${investor ? 'investor' : 'driver'}-pay?weekStart=${week}&${investor ? 'truckId' : 'driverId'}=statement`);
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
+    expect(costReads).toEqual([]);
+    const writesBeforeDetails = payWrites;
+    await region.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
+    let costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
+    await expect(costsDialog.getByText('Pilot · DIESEL',{exact:true})).toBeVisible();
+    await expect(costsDialog.getByText('Pilot · DEF',{exact:true})).toBeVisible();
+    await expect(costsDialog.getByText('This week')).toContainText('$40.00');
+    await page.keyboard.press('Escape');
+    await expect(costsDialog).toHaveCount(0);
+    await region.getByRole('button',{name:'Grid Test, Toll transactions',exact:true}).click();
+    costsDialog=page.getByRole('dialog',{name:'Toll transactions',exact:true});
+    await expect(costsDialog.getByRole('alert')).toContainText('Try loading tolls again');
+    await costsDialog.getByRole('button',{name:'Try again',exact:true}).click();
+    await expect(costsDialog.getByText('No toll transactions for this statement.',{exact:true})).toBeVisible();
+    await costsDialog.getByRole('button',{name:'Close',exact:true}).last().click();
+    expect(payWrites).toBe(writesBeforeDetails);
     for (const label of ['Fuel', 'Toll']) {
       const row = region.getByRole('row').filter({ has: page.getByText(label, { exact: true }) });
       await expect(row.getByText('Left: $0.00', { exact: true })).toBeVisible();
@@ -183,10 +210,27 @@ try {
     await page.reload();
     const fuelRow = region.getByRole('row').filter({ has: page.getByText('Fuel', { exact: true }) });
     await expect(fuelRow.getByRole('textbox')).toHaveValue('-10.00');
+    await expect(fuelRow.getByText('+ carry',{exact:true})).toBeVisible();
+    await fuelRow.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
+    costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
+    await expect(costsDialog.getByText('Carried from 09/21',{exact:true})).toBeVisible();
+    await expect(costsDialog.getByText('$25.00',{exact:true})).toHaveCount(3);
+    await costsDialog.screenshot({path:join(tmpdir(),`payroll-cost-${investor ? 'investor' : 'driver'}.png`)});
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    await costsDialog.getByRole('button',{name:'Close',exact:true}).last().click();
+    await page.setViewportSize({width:1800,height:1000});
     await expect(fuelRow.getByText('Left: $15.00', { exact: true })).toBeVisible();
     driver.edits.fuelOverride = null;
     await page.reload();
     await expect(fuelRow.getByText('Left: $0.00', { exact: true })).toBeVisible();
+    driver.settlement={finalized:true,version:1,finalizedAt:'2026-10-01T00:00:00Z',finalizedBy:'Test',reason:''};
+    await page.reload();
+    await expect(fuelRow.getByRole('textbox')).toBeDisabled();
+    await fuelRow.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
+    costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
+    await expect(costsDialog.getByText('Carried from 09/21',{exact:true})).toBeVisible();
+    await costsDialog.getByRole('button',{name:'Close',exact:true}).last().click();
     expect(errors).toEqual([]); await page.close();
   }
   console.log('Driver and Investor Pay expense dates, editing, fee boundaries, refresh and view-only access passed.');

@@ -88,6 +88,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	costTransactions []PayCostTransaction
 	HomeWeek         bool                 `json:"homeWeek,omitempty"`
 	DayStatuses      []PayDayStatus       `json:"dayStatuses"`
 	Summary          *PayStatementSummary `json:"summary,omitempty"`

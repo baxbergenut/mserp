@@ -15,8 +15,8 @@ func readLegacyInvestorSources(ctx context.Context, tx pgx.Tx, result []paySourc
 	rows, err := tx.Query(ctx, `SELECT truck_id::text,owner_id::text,week_start::text,edits,report,finalized,
  EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'),
  EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll') FROM investor_pay_weeks w
-	WHERE accounting_live_date(w.week_start) AND ($1::uuid[] IS NULL OR w.owner_id=ANY($1::uuid[])) AND ((edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
-	OR (edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))  ) ORDER BY week_start,truck_id`, payrollOwnerIDs(ctx))
+	WHERE accounting_live_date(w.week_start) AND payroll_cost_in_scope(w.week_start,nullif($2,'')::date) AND ($1::uuid[] IS NULL OR w.owner_id=ANY($1::uuid[])) AND ((edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel'))
+	OR (edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))  ) ORDER BY week_start,truck_id`, payrollOwnerIDs(ctx), payrollContextWeek(ctx))
 	if err != nil {
 		return nil, err
 	}

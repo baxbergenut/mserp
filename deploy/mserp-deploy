@@ -37,17 +37,23 @@ accounting_cutover_migration=160_accounting_cutover.sql
 accounting_retirement_migration=161_retire_accounting_cutover.sql
 status_colors_migration=171_status_colors.sql
 status_palette_rollback_migration=172_restore_status_board_palette.sql
+payroll_cost_start_migration=173_payroll_cost_start.sql
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
-    local applied manager_removed accounting_installed
+    local applied manager_removed accounting_installed cost_start_installed cost_start_active
     # Detect the committed schema even if recording the migration ledger failed.
     applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
     manager_removed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='expenses' AND column_name='manager_verified')") || return 1
     [[ $manager_removed == f ]] || { [[ $manager_removed == t ]] && [[ -f $1/migrations/$manager_verification_migration ]]; } || return 1
     accounting_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.accounting_cutover') IS NOT NULL") || return 1
-    [[ $accounting_installed == f ]] || { [[ $accounting_installed == t ]] && [[ -f $1/migrations/$accounting_cutover_migration ]]; }
+    [[ $accounting_installed == f ]] || { [[ $accounting_installed == t ]] && [[ -f $1/migrations/$accounting_cutover_migration ]]; } || return 1
+    cost_start_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
+    [[ $cost_start_installed == f ]] && return 0
+    [[ $cost_start_installed == t ]] || return 1
+    cost_start_active=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_cost_start)") || return 1
+    [[ $cost_start_active == f ]] || { [[ $cost_start_active == t ]] && [[ -f $1/migrations/$payroll_cost_start_migration ]]; }
 }
 activate_release() {
     local target=$1

@@ -30,6 +30,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		}
 	}
 	actor := func(r *http.Request) string { s, _ := authSessionFromContext(r.Context()); return s.User.ID }
+	registerPayCostTransactions(r, "investor", pay, fail)
 	decode := func(w http.ResponseWriter, r *http.Request, v any) bool {
 		r.Body = http.MaxBytesReader(w, r.Body, 512*1024)
 		if err := decodeJSON(r, v); err != nil {

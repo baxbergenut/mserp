@@ -48,6 +48,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Fuel/Toll carry has an explicitly activated first-live-week receipt in
+  `payroll_cost_start` (migration 173). Earlier costs are excluded from later
+  carry only; historical reports, expenses and recurring deductions stay intact.
+  Transaction detail endpoints under Driver/Investor Pay share statement read
+  permissions, dated routing and a read-only oldest-first allocation of partial
+  collections. Carried rows show origin week and remaining amount; changed
+  evidence stays explicitly unitemized. Finalized amounts/JSON remain frozen.
+  See `docs/PAYROLL_FUEL_TOLL.md` before activation or changing attribution.
+
 - Accounting cutover was retired by migration 161. Its Settings page, draft,
   preview, activation and opening-correction APIs are removed. The migration
   refuses populated/activated cutovers, disables activation and removes cutoff

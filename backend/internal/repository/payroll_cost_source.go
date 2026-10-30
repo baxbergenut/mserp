@@ -57,5 +57,20 @@ func readDriverPayCostWeek(ctx context.Context, tx pgx.Tx, week time.Time) (Driv
 			report.Drivers[i].Loads = append(report.Drivers[i].Loads, l)
 		}
 	}
-	return report, rows.Err()
+	if err = rows.Err(); err != nil {
+		return report, err
+	}
+	rows.Close()
+	if payrollCostDetails(ctx) {
+		items, e := readNativeCostTransactions(ctx, tx, report.WeekStart)
+		if e != nil {
+			return report, e
+		}
+		for _, item := range items {
+			if i, ok := index[item.driverID]; ok && item.driverAttributed {
+				report.Drivers[i].costTransactions = append(report.Drivers[i].costTransactions, item)
+			}
+		}
+	}
+	return report, nil
 }

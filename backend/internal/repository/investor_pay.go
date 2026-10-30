@@ -345,6 +345,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			}
 		}
 		if c := costs[id]; c != nil {
+			g.card.costTransactions = c.transactions
 			g.card.FuelTotal = chargeMoney(c.fuel)
 			g.card.TollTotal = chargeMoney(c.toll)
 			if c.unlinkedFuel {

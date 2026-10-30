@@ -6,6 +6,7 @@ import (
 )
 
 type truckCostAllocation struct {
+	transactions []PayCostTransaction
 	fuel         int64
 	toll         int64
 	driverFuel   map[string]int64
@@ -90,7 +91,22 @@ func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[
 		c.toll += n
 		c.driverToll[driver] += n
 	}
-	return result, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if payrollCostDetails(ctx) {
+		items, e := readNativeCostTransactions(ctx, tx, week)
+		if e != nil {
+			return nil, e
+		}
+		for _, item := range items {
+			if item.truckID != "" {
+				ensure(item.truckID).transactions = append(ensure(item.truckID).transactions, item)
+			}
+		}
+	}
+	return result, nil
 }
 func routeTruckDriverCosts(report *DriverPayWeek, groups map[string]*truckPayGroup, costs map[string]*truckCostAllocation) {
 	for i := range report.Drivers {
@@ -98,6 +114,20 @@ func routeTruckDriverCosts(report *DriverPayWeek, groups map[string]*truckPayGro
 		fuel, _ := chargeCents(d.FuelTotal)
 		toll, _ := chargeCents(d.TollTotal)
 		oldFuel, oldToll := fuel, toll
+		{
+			kept := []PayCostTransaction{}
+			for _, item := range d.costTransactions {
+				if groups[item.truckID] == nil {
+					kept = append(kept, item)
+				}
+			}
+			for id, g := range groups {
+				if g.ownerOnly && g.ownerDriver == d.ID && costs[id] != nil {
+					kept = append(kept, costs[id].transactions...)
+				}
+			}
+			d.costTransactions = kept
+		}
 		for id, g := range groups {
 			c := costs[id]
 			if c == nil {

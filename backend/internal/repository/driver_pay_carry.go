@@ -65,10 +65,10 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	if memo != nil && memo.costsLoaded {
 		return memo.costs, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT driver_id::text,CASE WHEN week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket,
+	rows, err := tx.Query(ctx, `SELECT driver_id::text,CASE WHEN NOT $3::boolean AND week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket,
  sum(fuel_base)::text,sum(toll_base)::text,sum(fuel_amount)::text,sum(toll_amount)::text
- FROM driver_pay_cost_collections WHERE accounting_live_date(week_start) AND ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[]))
- GROUP BY driver_id,bucket ORDER BY bucket,driver_id`, payrollDriverIDs(ctx), payrollContextWeek(ctx))
+ FROM driver_pay_cost_collections WHERE accounting_live_date(week_start) AND payroll_cost_in_scope(week_start,nullif($2,'')::date) AND ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[]))
+ GROUP BY driver_id,bucket ORDER BY bucket,driver_id`, payrollDriverIDs(ctx), payrollContextWeek(ctx), payrollCostDetails(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	}
 	// Existing overrides predate the collection ledger. Resolve their actual
 	// routed source report (or frozen settlement), preserving historical amounts.
-	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text,s.report FROM driver_pay_weeks w LEFT JOIN payroll_settlements s ON s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized WHERE accounting_live_date(w.week_start) AND ($1::uuid[] IS NULL OR w.driver_id=ANY($1::uuid[])) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`, payrollDriverIDs(ctx))
+	rows, err = tx.Query(ctx, `SELECT w.driver_id::text,w.week_start::text,s.report FROM driver_pay_weeks w LEFT JOIN payroll_settlements s ON s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized WHERE accounting_live_date(w.week_start) AND payroll_cost_in_scope(w.week_start,nullif($2,'')::date) AND ($1::uuid[] IS NULL OR w.driver_id=ANY($1::uuid[])) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start) ORDER BY w.week_start,w.driver_id`, payrollDriverIDs(ctx), payrollContextWeek(ctx))
 	if err != nil {
 		return nil, err
 	}

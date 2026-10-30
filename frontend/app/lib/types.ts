@@ -1228,6 +1228,28 @@ export interface ExpenseDeduction {
 }
 export interface DriverPaySettings { layoverDailyAmount: string; version: number }
 export interface PaySourceCharge { source: string; ownerId: string; name: string; base: string; carry: string; due: string; amount: string; revision: string; saved: boolean }
+export interface PayCostTransaction {
+  id: string;
+  transactionId?: string;
+  date: string;
+  postedDate?: string;
+  weekStart: string;
+  description: string;
+  location: string;
+  driverName?: string;
+  truckUnit?: string;
+  amount: string;
+  remaining?: string;
+  carried: boolean;
+  balanceOnly?: boolean;
+}
+export interface PayCostTransactions {
+  transactions: PayCostTransaction[];
+  sourceTotal: string;
+  carry: string;
+  due: string;
+  notice?: string;
+}
 export interface DriverPayEdits {
   sourceCharges?: PaySourceCharge[];
   layoverExcludedDates?: string[];
