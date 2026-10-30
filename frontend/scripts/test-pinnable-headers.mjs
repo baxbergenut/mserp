@@ -55,15 +55,31 @@ try {
     await expect(table.locator('tbody tr').last()).toBeAttached();
     await page.getByRole('button', { name: 'Pin header cards and filters', exact: true }).click();
     await expect(header).toHaveAttribute('data-pinned-page-header', 'true');
+    // Measure from rest: checking only the final sticky position misses the
+    // initial slide through the shell's padding and the board handoff gap.
+    await main.evaluate(el => { el.scrollTop = 0; });
+    await expect(header).toHaveCSS('top', '24px');
+    const headerTop = await header.evaluate(el => el.getBoundingClientRect().top);
+    const tableTop = await table.locator('thead').evaluate(el => el.getBoundingClientRect().top);
     const area = path === '/driver-board' ? page.locator('[data-scroll-key="driver-board"]') : path === '/gross-board' ? page.locator('[data-scroll-key="gross-board"]') : main;
-    await area.hover(); await page.mouse.wheel(0, 1800);
+    await area.hover(); await page.mouse.wheel(0, 10);
     await expect.poll(() => area.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
-    await expect.poll(() => header.evaluate(el => Math.abs(el.getBoundingClientRect().top - el.closest('main').getBoundingClientRect().top))).toBeLessThan(2);
+    expect(await header.evaluate(el => el.getBoundingClientRect().top)).toBe(headerTop);
+    if (area !== main) {
+      expect(await main.evaluate(el => el.scrollTop)).toBe(0);
+      expect(await table.locator('thead').evaluate(el => el.getBoundingClientRect().top)).toBe(tableTop);
+    }
+    await page.mouse.wheel(0, 1800);
+    await expect.poll(() => area.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    expect(await header.evaluate(el => el.getBoundingClientRect().top)).toBe(headerTop);
     if (area !== main) {
       expect(await table.locator('thead').evaluate(el => el.getBoundingClientRect().top - el.closest('main').querySelector('[data-pinned-page-header]').getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(7);
       await area.evaluate(el => { el.scrollTop = el.scrollHeight; });
       await expect(table.locator('tbody tr').last()).toBeInViewport();
     }
+    await area.hover(); await page.mouse.wheel(0, -100000);
+    await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(0);
+    expect(await header.evaluate(el => el.getBoundingClientRect().top)).toBe(headerTop);
     if (path === '/gross-board' || path === '/accounting/driver-pay') await page.screenshot({ path: join(tmpdir(), `mserp-pinned-${path.split('/').at(-1)}.png`) });
     await page.reload();
     await expect(page.getByRole('button', { name: 'Unpin header cards and filters', exact: true })).toHaveAttribute('aria-pressed', 'true');

@@ -19,7 +19,7 @@ export function BoardScrollArea({ children, headerPinned }: { children: ReactNod
       frame = 0;
       const pinned = outerLimit > 0 && main.scrollTop >= outerLimit - 1;
       const bottomPadding = main.firstElementChild ? parseFloat(getComputedStyle(main.firstElementChild).paddingBottom) || 0 : 0;
-      area.style.maxHeight = `${Math.max(header.offsetHeight + 32, main.clientHeight - pinnedHeaderClearance(main) + area.clientTop - bottomPadding)}px`;
+      area.style.maxHeight = `${Math.max(header.offsetHeight + 32, main.clientHeight - pinnedHeaderClearance(main) + (headerPinned ? 0 : area.clientTop) - bottomPadding)}px`;
       area.style.setProperty("--board-header-clearance", `${header.offsetHeight + 8}px`);
       outerLimit = main.scrollHeight - main.clientHeight;
       if (pinned) main.scrollTop = outerLimit;

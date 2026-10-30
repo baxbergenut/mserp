@@ -6,7 +6,9 @@ import { Pin, PinOff } from "lucide-react";
 // Boards reserve this space above their independently scrolling table headers.
 export function pinnedHeaderClearance(main: HTMLElement) {
   const header = main.querySelector<HTMLElement>('[data-pinned-page-header="true"]');
-  return (header?.offsetHeight ?? 0) + 8;
+  if (!header) return 8;
+  const style = getComputedStyle(header);
+  return (parseFloat(style.top) || 0) + header.offsetHeight + (parseFloat(style.marginBottom) || 0);
 }
 
 export function PinnablePageHeader({ pinned, children }: { pinned: boolean; children: ReactNode }) {
@@ -15,13 +17,19 @@ export function PinnablePageHeader({ pinned, children }: { pinned: boolean; chil
     const header = ref.current, main = header?.closest("main");
     if (!header || !main) return;
     // Wrapped cards/filters must leave usable space for rows on small screens.
-    const resize = () => { header.style.maxHeight = pinned ? `${Math.floor(main.clientHeight / 2)}px` : ""; };
+    const resize = () => {
+      const inset = main.firstElementChild ? parseFloat(getComputedStyle(main.firstElementChild).paddingTop) || 0 : 0;
+      // Stick at the original page inset, with no initial slide toward navigation.
+      header.style.top = pinned ? `${inset}px` : "";
+      header.style.boxShadow = pinned ? `0 -${inset}px 0 var(--background)` : "";
+      header.style.maxHeight = pinned ? `${Math.floor(main.clientHeight / 2)}px` : "";
+    };
     const observer = new ResizeObserver(resize);
     observer.observe(main);
     resize();
     return () => observer.disconnect();
   }, [pinned]);
-  return <div ref={ref} data-pinned-page-header={pinned} className={`space-y-5 ${pinned ? "sticky top-0 z-40 overflow-y-auto bg-background pb-2" : ""}`}>{children}</div>;
+  return <div ref={ref} data-pinned-page-header={pinned} className={`space-y-5 ${pinned ? "sticky z-40 overflow-y-auto bg-background pb-2" : ""}`}>{children}</div>;
 }
 
 export function HeaderPinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
