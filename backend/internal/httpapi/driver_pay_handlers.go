@@ -131,7 +131,6 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		logger.Error("driver pay request failed", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "driver pay could not be loaded or saved")
 	}
-	registerDriverPaySettings(r, repo, fail)
 	registerPayCostTransactions(r, "driver", repo, fail)
 	r.Get("/drivers/{id}/pay-history", func(w http.ResponseWriter, r *http.Request) {
 		id, ok := pathID(w, r)

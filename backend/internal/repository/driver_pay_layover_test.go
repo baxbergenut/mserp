@@ -2,11 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,17 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func TestLayoverExclusions(t *testing.T) {
-	for _, dates := range [][]string{{"2026-10-04"}, {"2026-10-12"}, {"2026-10-05", "2026-10-05"}, {"bad"}} {
-		if validateLayoverExclusions("2026-10-05", dates) == nil {
-			t.Fatalf("accepted %v", dates)
-		}
-	}
-	if err := validateLayoverExclusions("2026-10-05", []string{"2026-10-05", "2026-10-11"}); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestDriverPayLayoverDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_DRIVER_PAY_TEST_DATABASE_URL")
@@ -113,8 +101,10 @@ func verifyDriverPayLayovers(t *testing.T, ctx context.Context, pool *pgxpool.Po
 			t.Fatal(err)
 		}
 	}
-	exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2026-10-05','SHOP'),($1,'2026-10-06','SHOP'),($1,'2026-10-07','HOME'),($1,'2026-10-04','SHOP'),($1,'2026-10-19','SHOP')`, driver)
-	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status,deleted) VALUES($1,'2026-10-05',1,'SHOP',false),($1,'2026-10-08',1,'SHOP',true)`, driver)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2026-10-05','SHOP'),($1,'2026-10-06','SHOP'),($1,'2026-10-07','HOME'),($1,'2026-10-19','SHOP')`, driver)
+	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status) VALUES($1,'2026-10-05',1,'SHOP')`, driver)
+	// A retained nonzero setting must never enable automatic additions.
+	exec(`UPDATE driver_pay_settings SET layover_daily_amount=125.25`)
 	repo := NewDriverPayRepository(pool)
 	week, _ := time.Parse(time.DateOnly, "2026-10-05")
 	read := func() DriverPayWeek {
@@ -126,95 +116,83 @@ func verifyDriverPayLayovers(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		return r
 	}
 	report := read()
-	if want := []PayDayStatus{{"2026-10-05", "SHOP"}, {"2026-10-06", "SHOP"}, {"2026-10-07", "HOME"}}; !reflect.DeepEqual(report.Drivers[0].DayStatuses, want) {
-		t.Fatalf("dated display statuses: got %+v, want %+v", report.Drivers[0].DayStatuses, want)
-	}
-	if len(report.Drivers) != 1 || len(report.Drivers[0].Loads) != 0 || len(report.Drivers[0].Layovers) != 2 || driverLayoverTotal(report.Drivers[0]) != 20000 {
-		t.Fatalf("distinct Shop-only days: %+v", report)
-	}
-	if total := PaginatePay(report, PayPageQuery{}).Pagination.Payable; total != "200.00" {
-		t.Fatal("bonus sign/total", total)
+	if len(report.Drivers) != 0 {
+		t.Fatalf("Shop-only inactive driver created a payable statement: %+v", report)
 	}
 	history, err := repo.History(ctx, driver, Pagination{Page: 1, PageSize: 10})
-	if err != nil || history.Total < 1 {
+	if err != nil || history.Total != 0 {
 		t.Fatal("Shop-only history", history, err)
 	}
 	var writes int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_pay_weeks`).Scan(&writes); err != nil || writes != 0 {
 		t.Fatal("reads wrote payroll", err)
 	}
-	settings, err := repo.Settings(ctx)
-	if err != nil || settings.LayoverDailyAmount != "100.00" {
-		t.Fatal(settings, err)
-	}
-	stale := settings
-	settings.LayoverDailyAmount = "125.25"
-	settings, err = repo.SaveSettings(ctx, settings, "")
-	if err != nil || driverLayoverTotal(read().Drivers[0]) != 25050 {
-		t.Fatal("configurable exact rate", err)
-	}
-	if _, err = repo.SaveSettings(ctx, stale, ""); !errors.Is(err, ErrDriverPayConflict) {
-		t.Fatal("stale settings accepted", err)
-	}
+	// Keep an ordinary manually edited statement, including legacy exclusion data.
+	exec(`INSERT INTO driver_pay_weeks(driver_id,week_start,adjustments,layover_excluded_dates) VALUES($1,'2026-10-05','[{"id":"manual","name":"Manual bonus","amount":"25.00"}]','{2026-10-05}')`, driver)
 	report = read()
+	if len(report.Drivers) != 1 || len(report.Drivers[0].Layovers) != 0 || driverLayoverTotal(report.Drivers[0]) != 0 {
+		t.Fatalf("open statement generated layovers: %+v", report)
+	}
+	if got := PaginatePay(report, PayPageQuery{}).Pagination.Payable; got != "25.00" {
+		t.Fatal("manual adjustment", got)
+	}
+	if len(report.Drivers[0].DayStatuses) != 3 {
+		t.Fatal("Shop/Home display metadata lost", report.Drivers[0].DayStatuses)
+	}
 	edits := report.Drivers[0].Edits
-	edits.LayoverExcludedDates = []string{"2026-10-05"}
-	saved, err := repo.Save(ctx, edits)
-	if err != nil {
-		t.Fatal("remove day", err)
-	}
-	if _, err = repo.Save(ctx, edits); !errors.Is(err, ErrDriverPayConflict) {
-		t.Fatal("stale removal accepted", err)
-	}
-	if driverLayoverTotal(read().Drivers[0]) != 12525 {
-		t.Fatal("removal not saved")
-	}
-	// Removal survives a legacy save, source removal/re-add, and a default change.
-	saved.LayoverExcludedDates = nil
-	saved.Notes = "legacy client note"
-	if saved, err = repo.Save(ctx, saved); err != nil {
+	edits.LayoverExcludedDates = []string{"2026-10-06"}
+	edits.Notes = "Ordinary note edit"
+	if _, err = repo.Save(ctx, edits); err != nil {
 		t.Fatal(err)
 	}
-	exec(`UPDATE gross_board_entries SET day_status='HOME' WHERE driver_id=$1 AND service_date='2026-10-05'`, driver)
-	exec(`UPDATE gross_board_entries SET day_status='SHOP' WHERE driver_id=$1 AND service_date='2026-10-05'`, driver)
-	if driverLayoverTotal(read().Drivers[0]) != 12525 {
-		t.Fatal("removed bonus resurrected")
+	var exclusions []string
+	if err = pool.QueryRow(ctx, `SELECT layover_excluded_dates FROM driver_pay_weeks WHERE driver_id=$1`, driver).Scan(&exclusions); err != nil || len(exclusions) != 1 || exclusions[0] != "2026-10-05" {
+		t.Fatal("retired exclusions mutated", exclusions, err)
 	}
-	next, err := repo.Get(ctx, week.AddDate(0, 0, 7))
+	// Simulate a pre-retirement finalized snapshot with one excluded historical day.
+	legacy := read().Drivers[0]
+	legacy.Layovers = []DriverPayLayover{{Date: "2026-10-05", Amount: "125.25"}, {Date: "2026-10-06", Amount: "125.25"}}
+	body, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,'2026-10-05',$2::jsonb)`, driver, string(body))
+	frozen := read()
+	if len(frozen.Drivers) != 1 || driverLayoverTotal(frozen.Drivers[0]) != 12525 {
+		t.Fatal("historical snapshot lost", frozen)
+	}
+	if got := PaginatePay(frozen, PayPageQuery{}).Pagination.Payable; got != "150.25" {
+		t.Fatal("historical total changed", got)
+	}
+	exec(`UPDATE driver_pay_settings SET layover_daily_amount=999`)
+	if driverLayoverTotal(read().Drivers[0]) != 12525 {
+		t.Fatal("retired rate changed historical amount")
+	}
+	var unchanged bool
+	if err = pool.QueryRow(ctx, `SELECT report=$2::jsonb FROM payroll_settlements WHERE driver_id=$1`, driver, string(body)).Scan(&unchanged); err != nil || !unchanged {
+		t.Fatal("historical snapshot rewritten", err)
+	}
+	if _, err = repo.Save(ctx, read().Drivers[0].Edits); err == nil {
+		t.Fatal("finalized statement editable")
+	}
+	reopened, err := repo.Settle(ctx, week, driver, read().Revision, "", "Review historical bonus", true, false)
+	if err != nil || len(reopened.Drivers) != 1 || len(reopened.Drivers[0].Layovers) != 0 {
+		t.Fatal("reopened statement regenerated layovers", reopened, err)
+	}
+	if got := PaginatePay(reopened, PayPageQuery{}).Pagination.Payable; got != "25.00" {
+		t.Fatal("reopened manual adjustment", got)
+	}
+	finalized, err := repo.Settle(ctx, week, driver, reopened.Revision, "", "", false, false)
+	if err != nil || len(finalized.Drivers[0].Layovers) != 0 {
+		t.Fatal("new finalization generated layovers", err)
+	}
+	next, err := repo.Get(ctx, week.AddDate(0, 0, 14))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range next.Drivers {
-		if len(d.Layovers) != 0 || driverLayoverTotal(d) != 0 {
-			t.Fatal("bonus carried to next week")
+		if len(d.Layovers) != 0 {
+			t.Fatal("later Shop day generated layovers")
 		}
-	}
-	later, err := repo.Get(ctx, week.AddDate(0, 0, 14))
-	if err != nil || len(later.Drivers) != 1 || driverLayoverTotal(later.Drivers[0]) != 12525 {
-		t.Fatal("later Shop day incorrectly suppressed", err)
-	}
-	report = read()
-	frozen, err := repo.Settle(ctx, week, driver, report.Revision, "", "", false, false)
-	if err != nil || driverLayoverTotal(frozen.Drivers[0]) != 12525 {
-		t.Fatal("finalize bonus", err)
-	}
-	settings.LayoverDailyAmount = "50.00"
-	settings, err = repo.SaveSettings(ctx, settings, "")
-	if err != nil || driverLayoverTotal(read().Drivers[0]) != 12525 {
-		t.Fatal("finalized amount changed", err)
-	}
-	if _, err = repo.Save(ctx, saved); err == nil {
-		t.Fatal("finalized removal editable")
-	}
-	reopened, err := repo.Settle(ctx, week, driver, read().Revision, "", "Review layover", true, false)
-	if err != nil || driverLayoverTotal(reopened.Drivers[0]) != 5000 {
-		t.Fatal("reopen lost removal or new rate", err)
-	}
-	settings.LayoverDailyAmount = "0"
-	if _, err = repo.SaveSettings(ctx, settings, ""); err != nil {
-		t.Fatal(err)
-	}
-	if driverLayoverTotal(read().Drivers[0]) != 0 {
-		t.Fatal("zero rate does not disable bonus")
 	}
 }

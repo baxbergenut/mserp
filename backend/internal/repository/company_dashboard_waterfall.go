@@ -189,7 +189,7 @@ func dashboardEarnings(report DriverPayWeek, investor bool, gross map[string]str
 			covered[id] = true
 			total += fee
 		}
-		// Explicit weekly adjustments and enabled layovers are earned in this week.
+		// Explicit weekly adjustments and legacy finalized layovers belong to this week.
 		for _, a := range d.Edits.Adjustments {
 			n, e := chargeCents(a.Amount)
 			if e != nil {

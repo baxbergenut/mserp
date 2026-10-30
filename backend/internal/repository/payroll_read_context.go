@@ -21,7 +21,7 @@ func payrollQueryPlans(ctx context.Context, tx pgx.Tx) error {
 }
 
 // Historical carry needs dated operating costs and routing, not installments,
-// personal expenses, escrow capacity, or layover calculations for the whole fleet.
+// personal expenses or escrow capacity calculations for the whole fleet.
 func payrollCostsOnly(ctx context.Context) bool {
 	v, _ := ctx.Value(payrollCostsOnlyKey{}).(bool)
 	return v

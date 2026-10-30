@@ -1744,18 +1744,14 @@ assignment lookup lists.
   Database tests use only disposable `MSERP_DRIVER_PAY_TEST_DATABASE_URL` and
   verify fresh schema and migrations 029-030 as `mserp_app`.
 
-- Shop layover bonuses are separate from deduction carry: migration 086 adds a
-  $100/day default, configurable under Settings > Driver Pay through
-  GET/PUT /settings/driver-pay (access.manage, optimistic version). Count distinct
-  nondeleted Gross Board SHOP dates in the selected Monday–Sunday week, including
-  Shop-only weeks; never use the persistent Status Board status. Positive layovers
-  stay on Driver Pay, including team statements (once per day), never Investor Pay.
-  driver_pay_weeks.layover_excluded_dates persists per-day removal; omitted fields
-  preserve prior exclusions. Removals autosave with payroll versions and support
-  page-session undo. No bonus or exclusion carries into another week. Rate changes
-  affect open statements; finalized JSON snapshots retain their amounts/removals.
-  TestDriverPayLayoverDatabase covers fresh/migrated schemas as mserp_app, and
-  node scripts/test-layover-views.mjs checks the settings/removal UI.
+- Automatic Shop layover bonuses are retired. SHOP dates are display metadata only;
+  open/reopened Driver Pay statements never generate a bonus. Settings > Driver Pay
+  and GET/PUT /settings/driver-pay are removed, along with per-day removal/undo.
+  Finalized JSON retains recorded bonuses/exclusions and totals; the UI shows those
+  historical rows read-only. Migration 086 tables/columns remain for schema and
+  rollback compatibility, but runtime code never reads the rate or edits exclusions.
+  TestDriverPayLayoverDatabase and scripts/test-layover-views.mjs cover retirement
+  and historical statement preservation.
 
 - Migration 053 makes reduced Driver Pay deductions carry forward. Fuel/Toll
   source totals remain separate from opening unpaid balances; collection snapshots
@@ -2545,7 +2541,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Full Monday–Sunday vacation weeks use dated availability history in New York
   through `payroll_vacations.go`. Gross Board and both payroll pages omit idle
-  vacation rows after routing/carry; actual loads, Shop layovers and frozen
+  vacation rows after routing/carry; actual loads and frozen
   statements remain accessible. Recurring truck phases and collection/carry
   suggestions pause, then resume on actual return without vacation accrual.
   Partial weeks retain fees. Available dated replacement/team operators keep

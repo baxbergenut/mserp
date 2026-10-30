@@ -224,7 +224,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  CASE WHEN $4::boolean THEN '' ELSE coalesce(w.notes,'') END,CASE WHEN $4::boolean THEN '{}'::jsonb ELSE coalesce(w.comments,'{}'::jsonb) END,coalesce(w.adjustments,'[]'::jsonb),coalesce(w.version,0),
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
- AND (btrim(e.load_number)<>'' OR e.day_status='SHOP')
+ AND btrim(e.load_number)<>''
  `+payrollResolvedLoad+`
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
@@ -359,13 +359,8 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 	if err != nil {
 		return result, err
 	}
-	layovers, err := driverPayLayovers(ctx, tx, result.WeekStart)
-	if err != nil {
-		return result, err
-	}
 	kept := []DriverPayDriver{}
 	for _, d := range result.Drivers {
-		d.Layovers = layovers[d.ID]
 		d.AutoCharges = append(credits[d.ID], scaleCharges[d.ID]...)
 		if d.AutoCharges == nil {
 			d.AutoCharges = []PayAutoCharge{}
@@ -378,7 +373,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if d.Edits.GeneratedCharges == nil {
 			d.Edits.GeneratedCharges = []ChargeOccurrence{}
 		}
-		if len(d.Layovers) > 0 || len(d.AutoCharges) > 0 || len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
+		if len(d.AutoCharges) > 0 || len(d.Loads) > 0 || d.Edits.Version > 0 || len(d.Edits.GeneratedCharges) > 0 || len(d.Edits.ExpenseDeductions) > 0 || (d.IsOwnerOperator && d.PayType == "gross_percentage" && (d.FuelTotal != "0" && d.FuelTotal != "0.00" || d.TollTotal != "0" && d.TollTotal != "0.00")) {
 			kept = append(kept, d)
 		}
 	}
@@ -446,9 +441,6 @@ func driverPayFee(kind, rate, basis string) string {
 }
 
 func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, actors ...string) (DriverPayEdits, error) {
-	if err := validateLayoverExclusions(edits.WeekStart, edits.LayoverExcludedDates); err != nil {
-		return edits, err
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return edits, err
@@ -484,13 +476,8 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	if err != nil {
 		return edits, err
 	}
-	// Older clients omit this field; omission must not resurrect removed bonuses.
-	if edits.LayoverExcludedDates == nil {
-		edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
-	}
-	if edits.LayoverExcludedDates == nil {
-		edits.LayoverExcludedDates = []string{}
-	}
+	// Retired exclusions are read-only compatibility data, including for old clients.
+	edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
 	defer db.Phase(ctx, "writes_and_commit")()
 	if err = savePaySources(ctx, tx, costDriver, &edits, "driver", actor); err != nil {
 		return edits, err
@@ -538,11 +525,11 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	var version int
 	if edits.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override,layover_excluded_dates)
- VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric,$8) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride, edits.LayoverExcludedDates).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override)
+ VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,layover_excluded_dates=$9,version=version+1,updated_at=now()
- WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride, edits.LayoverExcludedDates).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,version=version+1,updated_at=now()
+ WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict

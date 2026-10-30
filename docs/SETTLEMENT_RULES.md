@@ -109,7 +109,7 @@ without operators follows its recorded owner's vacation status.
 
 Gross Board, Driver Pay and Investor Pay omit idle full-vacation rows, including
 rows recreated by prior autosaves, installments, expenses or carried balances.
-Actual weekly loads, Shop layovers and finalized statements remain accessible;
+Actual weekly loads and finalized statements remain accessible;
 their presence does not restore recurring fees for a full vacation week.
 Historical vacation weeks remain exempt after return. Unknown legacy vacation
 starts apply from the current week, without inventing earlier leave dates.

@@ -1228,7 +1228,6 @@ export interface ExpenseDeduction {
   saved: boolean;
   apply?: boolean;
 }
-export interface DriverPaySettings { layoverDailyAmount: string; version: number }
 export interface PaySourceCharge { source: string; ownerId: string; name: string; base: string; carry: string; due: string; amount: string; revision: string; saved: boolean }
 export interface PayCostTransaction {
   id: string;
@@ -1254,6 +1253,7 @@ export interface PayCostTransactions {
 }
 export interface DriverPayEdits {
   sourceCharges?: PaySourceCharge[];
+  /** Read-only exclusions retained for legacy finalized statements. */
   layoverExcludedDates?: string[];
   costs?: { revision: string; fuelCarry: string; tollCarry: string; fuelDue: string; tollDue: string };
   expenseDeductions?: ExpenseDeduction[];
@@ -1326,6 +1326,7 @@ export interface DriverPayDriver {
   dayStatuses?: { date: string; status: Exclude<GrossBoardDayStatus, ""> }[];
   dispatchers?: { id: string; name: string }[];
   summary?: { loads: number; missingFees: number; review: number; fee: string; payable: string };
+  /** Recorded bonuses from legacy finalized statements only. */
   layovers?: { date: string; amount: string }[];
   employmentType?: EmploymentType;
   teamNotice?: string;

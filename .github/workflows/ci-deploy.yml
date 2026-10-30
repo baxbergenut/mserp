@@ -235,7 +235,7 @@ jobs:
         working-directory: frontend
         run: node scripts/test-prepass-views.mjs
 
-      - name: Verify expenses, load notes and layovers in Chromium
+      - name: Verify expenses, load notes and layover retirement in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend
         run: |

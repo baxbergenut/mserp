@@ -119,7 +119,7 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="absolute inset-0 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
         <tbody>{layovers.map(row => <tr key={`layover:${row.date}`}>
-          <td className={`${cell} text-zinc-300`}><div className="flex items-center justify-between gap-1"><span title={`Shop on ${row.date} · driver bonus`}>Layover · {shortDate(row.date)}</span><button type="button" disabled={disabled} aria-label={`${driver.fullName}, remove layover for ${row.date}`} title="Remove this day's layover from this week" onClick={() => edit(current => ({ ...current, layoverExcludedDates: [...(current.layoverExcludedDates ?? []), row.date] }))} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-300 disabled:opacity-40"><X className="h-4 w-4" /></button></div></td>
+          <td className={`${cell} text-zinc-300`}><span title={`Recorded bonus on ${row.date}`}>Layover · {shortDate(row.date)}</span></td>
           <td className={`${numeric} !border-r-0 text-emerald-300`}>+{amount(row.amount, true)}</td>
         </tr>)}{visibleCostRows.map(({ key, label }, index) => {
           const value = costAmount(driver, edits, key);

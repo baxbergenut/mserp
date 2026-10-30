@@ -383,8 +383,6 @@ export async function login(email: string, password: string): Promise<AuthSessio
 }
 
 export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
-export const fetchDriverPaySettings = () => apiRequest<import("./types").DriverPaySettings>("/settings/driver-pay");
-export const saveDriverPaySettings = (settings: import("./types").DriverPaySettings) => apiRequest<import("./types").DriverPaySettings>("/settings/driver-pay", { method: "PUT", body: JSON.stringify(settings) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
 export const saveTheme = (theme: string) => apiRequest<void>("/auth/theme", { method: "PUT", body: JSON.stringify({ theme }) });
 export const claimBirthday = () => apiRequest<{ celebrate: boolean; name?: string; countdownAt?: string; serverNow: string }>("/auth/birthday", { method: "POST" });

@@ -133,14 +133,7 @@ assert.equal(driverTotals(shopDriver, shopEdits).payable, 20000n);
 const removedLayover = { ...shopEdits, layoverExcludedDates: ['2026-09-28'] };
 assert.equal(driverTotals(shopDriver, removedLayover).payable, 10000n);
 assert.equal(driverTotals({ ...shopDriver, layovers: [] }, removedLayover).payable, 0n);
-const restoredLayover = restorePayEdit({ ...removedLayover, version: 3 }, { ...shopEdits, layoverExcludedDates: undefined }, removedLayover);
-assert.deepEqual(restoredLayover.layoverExcludedDates, []);
-assert.equal(restoredLayover.version, 3);
-assert.equal(driverTotals(shopDriver, restoredLayover).payable, 20000n);
-const queuedRemoval = reconcilePaySave({ driver: { ...removedLayover, layoverExcludedDates: ['2026-09-28', '2026-09-29'] } }, removedLayover, { ...removedLayover, version: 4 }).driver;
-assert.equal(queuedRemoval.version, 4);
-assert.equal(queuedRemoval.layoverExcludedDates.length, 2);
-console.log('Layover bonuses: positive per-day totals, persistent removal drafts, undo, and no carry.');
+console.log('Legacy finalized layover amounts and exclusions remain readable.');
 
 assert.equal(sourceAmountInput('250', '-400'), '-250');
 assert.equal(sourceAmountInput('+250', '-400'), '-250');

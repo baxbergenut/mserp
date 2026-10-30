@@ -85,7 +85,8 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
   assignments as context; those assignments never replace an unmatched source
   truck number automatically.
 - Driver/owner pay and investor pay reuse routed weekly payroll and its frozen
-  statements: load fees, enabled layovers and signed manual weekly adjustments.
+  statements: load fees, recorded historical layovers and signed manual weekly adjustments.
+  Open statements no longer generate automatic Shop layover bonuses.
   Investor shares deduct their hired-driver earnings so labor is counted once.
   Fuel/toll recoveries, expense recoveries, recurring/installment collections,
   escrow and carry are excluded. Owners/investors therefore cover their own
