@@ -2563,6 +2563,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Working start dates and paginated payroll
 
+- Migration 179 registers retired status-color tables so current schemas retain
+  compact payroll calculations and committed-input caches. Unknown tables still
+  force conservative fallback. TestPayrollCacheSchemaCoverageDatabase checks fresh
+  and incremental coverage as mserp_app. Payroll performance logs distinguish
+  summary/details, cache hits/misses/fallback and financial-lock wait.
+
 - Full Monday–Sunday vacation weeks use dated availability history in New York
   through `payroll_vacations.go`. Gross Board and both payroll pages omit idle
   vacation rows after routing/carry; actual loads and frozen
