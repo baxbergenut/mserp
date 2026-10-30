@@ -85,6 +85,11 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(costStart))
+				balance, e := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(balance))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;SET ROLE mserp_app`)
 			pay := NewDriverPayRepository(pool)
