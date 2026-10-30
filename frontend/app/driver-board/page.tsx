@@ -9,6 +9,7 @@ import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
 import type {Driver} from "@/app/lib/types";
 import {useEffect} from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } from "lucide-react";
+import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
@@ -86,6 +87,7 @@ export default function DriverBoardPage() {
     return view === "all" ? null : read<{id: string; dispatcherIds: string[]}[]>("savedViews", []).find(v => v.id === view)?.dispatcherIds ?? null;
   });
   const [search, setSearch] = useViewState("page:search", "");
+  const [headerPinned, setHeaderPinned] = useViewState("page:headerPinned", false);
   const [selectedStatuses, setSelectedStatuses] = useViewState<string[] | null>("page:statusChecks", () => {
     const legacy = readMemory<string>(scope + ":view:page:status", "all");
     return legacy === "all" ? null : [legacy];
@@ -159,13 +161,15 @@ export default function DriverBoardPage() {
   return <div className="space-y-5 animate-fade-in">
     <PageHeader><div><div className="flex items-center gap-3"><Truck className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Status Board</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : drivers.length + pendingDrivers.length}</span></div></div></PageHeader>
 
-    <div className="grid gap-3 sm:grid-cols-3">
+    <PinnablePageHeader pinned={headerPinned}>
+      <div className="grid gap-3 sm:grid-cols-3">
       <MetricCard loading={loading} compact label="Weekly total gross" value={board ? decimalDisplay(summary.original, true) : "—"} icon={Banknote} />
       <MetricCard loading={loading} compact label="Weekly driver gross" value={board ? decimalDisplay(summary.driver, true) : "—"} icon={Banknote} />
       <MetricCard loading={loading} compact label="Weekly miles" value={board ? decimalDisplay(summary.miles) : "—"} icon={Route} />
     </div>
 
     <div className="flex flex-wrap items-center gap-3">
+      <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
@@ -178,12 +182,14 @@ export default function DriverBoardPage() {
       {canEdit && board?.eld.configured && <button className={buttonClass} onClick={() => void refreshELD()} disabled={loading || saving || dirty || eldRefreshing} title={board.eld.lastSuccessAt ? `Telematics last refreshed ${locationTime(board.eld.lastSuccessAt)} NY` : "Refresh telematics locations"}><MapPin className="h-4 w-4" />{eldRefreshing ? "Refreshing…" : "Refresh locations"}</button>}
       <button className={buttonClass} disabled={loading} onClick={() => setHistory({ name: "Status Board history", ids: [] })}><History className="h-4 w-4" />History</button></div></div>
 
+    </PinnablePageHeader>
+
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}
     <span role="status" aria-live="polite" className="sr-only">{orderNotice}</span>
-    <StatusBoardScrollArea loading={loading}>
+    <StatusBoardScrollArea loading={loading} headerPinned={headerPinned}>
       <table {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
         const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");

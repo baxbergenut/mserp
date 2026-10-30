@@ -161,6 +161,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-dashboard-views.mjs
 
+      - name: Verify pinnable headers and Gross Board load search in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-pinnable-headers.mjs
+
       - name: Verify payroll extra loads in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend

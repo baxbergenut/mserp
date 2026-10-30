@@ -1,10 +1,11 @@
 "use client";
 
 import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { pinnedHeaderClearance } from "@/app/components/PinnablePageHeader";
 
 // Main scrolls only far enough to put the table 8px below navigation. A bounded
 // table viewport then owns the remaining scroll, with a native sticky header.
-export function BoardScrollArea({ children }: { children: ReactNode }) {
+export function BoardScrollArea({ children, headerPinned }: { children: ReactNode; headerPinned: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const area = ref.current;
@@ -18,7 +19,7 @@ export function BoardScrollArea({ children }: { children: ReactNode }) {
       frame = 0;
       const pinned = outerLimit > 0 && main.scrollTop >= outerLimit - 1;
       const bottomPadding = main.firstElementChild ? parseFloat(getComputedStyle(main.firstElementChild).paddingBottom) || 0 : 0;
-      area.style.maxHeight = `${Math.max(header.offsetHeight + 32, main.clientHeight - 8 + area.clientTop - bottomPadding)}px`;
+      area.style.maxHeight = `${Math.max(header.offsetHeight + 32, main.clientHeight - pinnedHeaderClearance(main) + area.clientTop - bottomPadding)}px`;
       area.style.setProperty("--board-header-clearance", `${header.offsetHeight + 8}px`);
       outerLimit = main.scrollHeight - main.clientHeight;
       if (pinned) main.scrollTop = outerLimit;
@@ -77,6 +78,8 @@ export function BoardScrollArea({ children }: { children: ReactNode }) {
     const observer = new ResizeObserver(schedule);
     observer.observe(area);
     observer.observe(main);
+    const pageHeader = main.querySelector("[data-pinned-page-header]");
+    if (pageHeader) observer.observe(pageHeader);
     if (main.firstElementChild) observer.observe(main.firstElementChild);
     main.addEventListener("scroll", schedule, { passive: true });
     main.addEventListener("wheel", wheel, { passive: false });
@@ -97,7 +100,7 @@ export function BoardScrollArea({ children }: { children: ReactNode }) {
       main.removeEventListener("animationend", schedule, true);
       window.removeEventListener("resize", schedule);
     };
-  }, []);
+  }, [headerPinned]);
 
   return <div ref={ref} data-scroll-key="gross-board" className="weekly-content-enter overflow-auto rounded-xl border border-zinc-800 [&_td]:scroll-mt-[var(--board-header-clearance)] [&_th]:scroll-mt-[var(--board-header-clearance)] [&_[data-grid-cell]]:scroll-mt-[var(--board-header-clearance)]"
     role="region" aria-label="Weekly gross board" tabIndex={0}>{children}</div>;

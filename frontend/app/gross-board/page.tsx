@@ -2,6 +2,7 @@
 
 
 import { usePermissions } from "@/app/lib/access";
+import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
@@ -47,6 +48,7 @@ export default function GrossBoardPage() {
   const [dispatcher, setDispatcher] = useViewState<string[] | null | string>("page:dispatcher", null, loadTarget || driverTarget ? null : undefined);
   const selectedDispatchers = useMemo(() => typeof dispatcher === "string" ? dispatcher === "all" ? null : [dispatcher] : dispatcher, [dispatcher]);
   const [search, setSearch] = useViewState("page:search", "", loadTarget || driverTarget ? "" : undefined);
+  const [headerPinned, setHeaderPinned] = useViewState("page:headerPinned", false);
   const previousHref = useBackHref();
   const markBack = useMarkBack();
   useEffect(() => {
@@ -163,7 +165,15 @@ export default function GrossBoardPage() {
   const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
   const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates, board?.entries ?? []), [board, dates]);
-  const drivers = useMemo(() => rows.filter((driver) => (!driverTarget || driver.id === driverTarget.driverId) && (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId)) && (!search.trim() || driver.fullName.toLowerCase().includes(search.trim().toLowerCase()))), [rows, selectedDispatchers, search, driverTarget]);
+  const drivers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return rows.filter(driver => (!driverTarget || driver.id === driverTarget.driverId)
+      && (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId))
+      && (!query || driver.fullName.toLowerCase().includes(query)
+        || (entryIndex.byDriver.get(driver.id) ?? []).some(entry => !entry.deleted && !entry.dayStatus
+          && driver.dates.includes(entry.date) && entryForDispatcher(entry, driver.dispatcherId, driver)
+          && entry.loadNumber.toLowerCase().includes(query))));
+  }, [rows, selectedDispatchers, search, driverTarget, entryIndex]);
   const dispatchers = useMemo(() => Array.from(new Map(rows.map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [rows]);
   const shownEntries = useMemo(() => {
     return Object.values(allEntries).filter(entry => drivers.some(driver => driver.id === entry.driverId && driver.dates.includes(entry.date) && entryForDispatcher(entry,driver.dispatcherId,driver)));
@@ -289,6 +299,7 @@ export default function GrossBoardPage() {
 
         </div></PageHeader>
 
+      <PinnablePageHeader pinned={headerPinned}>
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard loading={loading} compact label="Total gross" value={loading || !board ? "—" : decimalDisplay(summary.original, true)} icon={Banknote} />
         <MetricCard loading={loading} compact label="Total miles" value={loading || !board ? "—" : decimalDisplay(summary.miles)} icon={Route} />
@@ -296,6 +307,7 @@ export default function GrossBoardPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+      <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
         <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1">
           <button aria-label="Previous week" className={buttonClass} disabled={loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button>
           <span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100" title={`${week} to ${dates[6]}`}>{shortDate(week)} → {shortDate(dates[6])}</span>
@@ -303,7 +315,7 @@ export default function GrossBoardPage() {
         </div>
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
-        <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers…" /></div>
+        <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers or load numbers…" /></div>
         {driverTarget && <button className={buttonClass} onClick={() => { setDriverTarget(null); router.replace("/gross-board", { scroll: false }); }}>All drivers</button>}
         <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />
 
@@ -312,13 +324,15 @@ export default function GrossBoardPage() {
           <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{board?.managedInSheets ? "Managed in Sheets · read only" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
         </div></div></div>
 
+    </PinnablePageHeader>
+
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
       {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">Saving edits before leaving this week…{invalid || error ? " Resolve the highlighted issue to continue." : ""}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
-      {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea>
+      {loading ? <WeeklyTableSkeleton board /> : board && drivers.length === 0 ? <div className="rounded-xl border border-zinc-800 p-12 text-center text-sm text-zinc-500">No drivers match the selected filters.</div> : board && <BoardScrollArea headerPinned={headerPinned}>
         <table {...spreadsheetGridEvents} data-spreadsheet-grid data-gross-board-grid className="w-full table-fixed border-separate border-spacing-0 text-center text-xs" style={{ minWidth: minimumBoardWidth }}>
           <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width / minimumBoardWidth * 100}%` }} />)}</colgroup>
           <thead className="sticky top-0 z-30 bg-zinc-900 text-zinc-300">

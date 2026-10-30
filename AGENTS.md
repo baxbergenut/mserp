@@ -393,6 +393,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Frontend
 
+- Status Board, Gross Board, Driver Pay and Investor Pay share
+  `PinnablePageHeader`: Pin header keeps summary cards and controls visible,
+  remembered independently per account/page in the current browser session.
+  Board scroll areas reserve the measured pinned height; narrow screens cap the
+  header at half the available viewport and allow its controls to scroll.
+  Gross Board search matches driver names and all visible daily load-number slots,
+  respecting dated/transfer dispatcher attribution and excluding deleted/status rows.
+  Check `node scripts/test-pinnable-headers.mjs` after a `/api` build.
+
 - Loads keeps compact summary rows with Driver Pay-style expansion. Expanded rows
   show every imported pickup/delivery stop in source order with full address and
   explicit missing-address states. The Loads API projects an allowlisted `Stops`

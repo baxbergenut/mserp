@@ -83,7 +83,7 @@ try {
   await expect(choices.getByRole('checkbox', { name: 'Alpha', exact: true })).toBeChecked();
   await expect(choices.getByRole('checkbox', { name: 'Unassigned', exact: true })).toBeChecked();
   await page.keyboard.press('Escape');
-  const search = page.getByPlaceholder('Search drivers…');
+  const search = page.getByPlaceholder('Search drivers or load numbers…');
   await search.fill('Alice');
   await expect(rows).toHaveCount(1);
   await expect(page.getByText('Total gross', { exact: true }).first().locator('..').getByText('$2,200.00', { exact: true })).toBeVisible();
@@ -105,7 +105,7 @@ try {
   await bobMiles.click(); await page.keyboard.type('200'); await page.keyboard.press('Enter');
   await expect(page.getByLabel('Total gross RPM for Bob Layout', { exact: true })).toHaveText('$2.50');
   await expect.poll(() => entries.find(e => e.driverId === bobId).miles).toBe('200');
-  await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
 
   const main = page.getByRole('main');
   const pinDistance = () => area.locator('thead').evaluate(header => header.getBoundingClientRect().top - header.closest('main').getBoundingClientRect().top);
