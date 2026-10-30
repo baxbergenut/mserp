@@ -13,9 +13,12 @@ import (
 
 func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repository.DriverPayRepository, charges *repository.DriverChargeRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		var blocked *repository.PayrollFinalizationBlockedError
 		var invalid *repository.ChargeValidationError
 		var pg *pgconn.PgError
 		switch {
+		case errors.As(err, &blocked):
+			writeJSON(w, 400, map[string]string{"error": err.Error(), "code": "finalization_blocked"})
 		case errors.As(err, &invalid):
 			writeAPIError(w, 400, err.Error())
 		case errors.Is(err, repository.ErrDriverPayConflict) || errors.Is(err, repository.ErrChargeConflict):

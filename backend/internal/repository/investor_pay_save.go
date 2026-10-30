@@ -95,7 +95,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	empty := DriverPayWeek{}
 	override = override && !reopen
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
-		return empty, chargeInvalid("Future weeks cannot be finalized")
+		return empty, finalizationBlocked("Future weeks cannot be finalized")
 	}
 	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
 		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
@@ -134,7 +134,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		return empty, ErrDriverPayConflict
 	}
 	if !reopen && !override && len(report.Issues) > 0 {
-		return empty, chargeInvalid("Resolve unattributed loads before finalizing Investor Pay")
+		return empty, finalizationBlocked("Resolve unattributed loads before finalizing Investor Pay")
 	}
 	count := 0
 	for _, d := range report.Drivers {
@@ -158,11 +158,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 				return empty, err
 			}
 			if !override && len(d.Issues) > 0 {
-				return empty, chargeInvalid("Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
+				return empty, finalizationBlocked("Resolve %s / %s: %s", d.FullName, d.TruckUnit, strings.Join(d.Issues, "; "))
 			}
 			for _, l := range d.Loads {
 				if !override && (l.Fee == "" || len(l.Issues) > 0) {
-					return empty, chargeInvalid("Resolve loads needing review for truck %s", d.TruckUnit)
+					return empty, finalizationBlocked("Resolve loads needing review for truck %s", d.TruckUnit)
 				}
 			}
 			expenses := append([]ExpenseDeduction(nil), d.Edits.ExpenseDeductions...)

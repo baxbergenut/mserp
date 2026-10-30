@@ -26,12 +26,18 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     let finalized = true, total = 4, finalizer = 'Payroll Reviewer';
     let canFinalize = false, holdPreview = false, releasePreview;
+    let failure = null;
     const writes = [];
     const week = '2026-10-26';
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname.slice(4);
       if (path === `/${kind}-pay/finalize`) {
-        writes.push(route.request().postDataJSON());
+        const input = route.request().postDataJSON();
+        writes.push(input);
+        if (failure && !input.override) {
+          await route.fulfill({ status: failure.status, json: { error: failure.error, code: failure.code } });
+          return;
+        }
         finalized = true;
         await route.fulfill({ json: {} });
         return;
@@ -104,14 +110,47 @@ try {
       await expect.poll(() => typeof releasePreview).toBe('function');
       holdPreview = false;
       releasePreview();
-      const dialog = page.getByRole('dialog', { name: kind === 'investor' ? 'Finalize truck' : 'Finalize driver', exact: true });
-      await expect(dialog).toBeVisible();
-      expect(writes).toHaveLength(0);
-      await dialog.getByRole('button', { name: 'Finalize settlement', exact: true }).click();
-      await expect(dialog).toHaveCount(0);
       await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(finalize).toHaveCount(0);
       expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: false }]);
+
+      finalized = false;
+      failure = { status: 400, code: 'finalization_blocked', error: 'Resolve loads needing review' };
+      await page.reload();
+      await finalize.click();
+      const dialog = page.getByRole('dialog', { name: 'Finalization issues', exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByText(failure.error, { exact: true })).toBeVisible();
+      await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+      await page.screenshot({ path: join(artifacts, `${kind}-finalization-issues.png`), fullPage: true, animations: 'disabled' });
+      expect(writes).toHaveLength(2);
+      expect(writes.at(-1).override).toBe(false);
+      await dialog.getByRole('button', { name: 'Finalize anyway', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
+      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: true });
+
+      for (const blocked of [
+        { status: 409, code: 'conflict', error: 'Statement changed; reload' },
+        { status: 400, code: 'validation_failed', error: 'Collection limit exceeded' },
+        { status: 500, code: 'request_failed', error: 'Server unavailable' },
+      ]) {
+        finalized = false; failure = blocked;
+        await page.reload();
+        await finalize.click();
+        await expect(page.getByRole('alert').filter({ hasText: blocked.error })).toBeVisible();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Finalize anyway', exact: true })).toHaveCount(0);
+        expect(writes.at(-1).override).toBe(false);
+      }
+      failure = null;
+      total = 1;
+      await page.reload();
+      await page.getByRole('button', { name: 'Finalize week', exact: true }).click();
+      await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', reason: '', override: false });
     }
     finalized = true; total = 1; finalizer = '';
     await page.reload();

@@ -110,6 +110,11 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 
 func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverPayRepository, job *jobs.SyncLoadsJob) {
 	fail := func(w http.ResponseWriter, err error) {
+		var blocked *repository.PayrollFinalizationBlockedError
+		if errors.As(err, &blocked) {
+			writeJSON(w, 400, map[string]string{"error": err.Error(), "code": "finalization_blocked"})
+			return
+		}
 		var invalid *repository.ChargeValidationError
 		if errors.As(err, &invalid) {
 			writeAPIError(w, 400, err.Error())

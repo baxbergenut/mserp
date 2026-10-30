@@ -13,7 +13,7 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound } from "lucide-react";
-import { fetchDriverPay, fetchInvestorPay, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad } from "@/app/lib/api";
+import { APIError, fetchDriverPay, fetchInvestorPay, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek } from "@/app/lib/types";
 import { currentChargeWeek } from "../driver-charges/charges";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -46,7 +46,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
   const [expenseId, setExpenseId] = useState<string | null>(null);
-  const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean} | null>(null);
+  const [settlement, setSettlement] = useState<{driverId?: string; reopen: boolean; blockedIssue?: string} | null>(null);
+  const settlementPending = useRef(false);
   useEffect(() => {
     const timer = setTimeout(() => {
     if (initialWeek) setWeek(initialWeek);
@@ -234,15 +235,29 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }
   async function prepareSettlement(reopen: boolean, driverId?: string) {
  if(reopen ? !canReopen : !canFinalize)return;
-    if (dirty || saving || loading || refreshing) return;
-    setRefreshing(true); setError("");
+    if (dirty || saving || loading || refreshing || settlementPending.current) return;
+    settlementPending.current = true;
+    setRefreshing(true); setError(""); setMessage("");
     try {
-      // Autosave changes the revision. Preview the latest complete report before
-      // accepting a finalization, including changes by other accounting users.
+      // Get the current revision; finalization still validates under the financial lock.
       const current = await (investor ? fetchInvestorPay(week, driverFilter || undefined) : fetchDriverPay(week));
-      setSettlementReport(current); setSettlement({ driverId, reopen });
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to prepare settlement"); }
-    finally { setRefreshing(false); }
+      if (reopen) {
+        setSettlementReport(current); setSettlement({ driverId, reopen });
+        return;
+      }
+      try {
+        await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, "", false);
+      } catch (err) {
+        if (err instanceof APIError && err.code === "finalization_blocked") {
+          setSettlementReport(current); setSettlement({ driverId, reopen: false, blockedIssue: err.message });
+          return;
+        }
+        throw err;
+      }
+      undoStack.current = []; pendingUndo.current = false;
+      setReport(await fetchPay(week)); setMessage("Finalized");
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to finalize settlement"); }
+    finally { settlementPending.current = false; setRefreshing(false); }
   }
   async function acceptSource(load: DriverPayLoad, sourceDriverId: string, field: "originalRate" | "totalMiles") {
  if(!canEdit)return;

@@ -429,8 +429,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Check `node scripts/test-pinnable-headers.mjs` after a `/api` build.
 
 - Driver/Investor/Dispatcher Pay show Finalized by from recorded settlement actors.
-  Unfinalized Driver/Investor rows offer Finalize in that cell to authorized users,
-  using the existing confirmation and busy/save guards without expanding the row.
+  Unfinalized Driver/Investor rows offer one-click Finalize in that cell to authorized
+  users, preserving busy/save guards without expanding the row. Only a server
+  `finalization_blocked` review failure opens a compact issue dialog with explicit
+  Finalize anyway; no checkbox or normal confirmation is shown. Overrides retain
+  the reviewed revision and audit. Conflicts, permissions and collection errors
+  never offer a bypass. Reopening still asks for a reason.
   Unfinalized statements sort before finalized statements, before Driver/Investor
   pagination; each group retains its existing order. Reopening restores draft placement.
   Their third summary card shows week-wide finalization percentage and green progress;

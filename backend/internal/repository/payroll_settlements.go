@@ -29,6 +29,17 @@ type PayrollSettlementInput struct {
 	Reason    string `json:"reason"`
 	Override  bool   `json:"override"`
 }
+
+// Only these review checks can be bypassed by an explicit finalization override.
+// Conflicts, permissions, collection limits and other errors remain ordinary errors.
+type PayrollFinalizationBlockedError struct{ error }
+
+func (e *PayrollFinalizationBlockedError) Unwrap() error { return e.error }
+
+func finalizationBlocked(format string, args ...any) error {
+	return &PayrollFinalizationBlockedError{chargeInvalid(format, args...)}
+}
+
 type SettlementEvent struct {
 	Action    string          `json:"action"`
 	Version   int             `json:"version"`
@@ -114,7 +125,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	empty := DriverPayWeek{}
 	override = override && !reopen
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
-		return empty, chargeInvalid("Future weeks cannot be finalized")
+		return empty, finalizationBlocked("Future weeks cannot be finalized")
 	}
 	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
 		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
@@ -185,11 +196,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				return empty, err
 			}
 			if !override && len(d.Issues) > 0 {
-				return empty, chargeInvalid("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
+				return empty, finalizationBlocked("Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
 			}
 			for _, load := range d.Loads {
 				if !override && (load.Fee == "" || len(load.Issues) > 0) {
-					return empty, chargeInvalid("Resolve the loads needing review for %s before finalizing", d.FullName)
+					return empty, finalizationBlocked("Resolve the loads needing review for %s before finalizing", d.FullName)
 				}
 			}
 			deductions := append([]ExpenseDeduction(nil), d.Edits.ExpenseDeductions...)
