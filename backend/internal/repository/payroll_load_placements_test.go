@@ -251,6 +251,21 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			if l = find(read("driver", week), "SPLIT-CATCHUP"); l == nil || l.LoadTripID == nil || *l.LoadTripID != 101 || l.OriginalRate != "500" || l.Fee != "112.50" {
 				t.Fatal("wrong split allocation", l)
 			}
+			// A former solo operator now paired under another main driver cannot
+			// acquire a separate member paycheck through historical recognition.
+			const member = "a1000000-0000-0000-0000-000000000002"
+			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES($1,'Placement Partner','placement partner','cpm',0.75)`, member)
+			exec(`INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES($1,$2,'2026-10-19')`, driver, member)
+			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(8108,'FORMER-SOLO','delivered',100,100,10,'{}')`)
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($1,'2026-09-21','FORMER-SOLO',8108,90)`, member)
+			teamAdd := PayLoadPlacementInput{DriverID: driver, WeekStart: add.WeekStart, Action: "add", LoadNumber: "FORMER-SOLO"}
+			if e = pay.PlacePayLoad(ctx, "driver", teamAdd, "test"); e == nil || !strings.Contains(e.Error(), "team change") {
+				t.Fatal("team catch-up was not held for review", e)
+			}
+			var writes int
+			if e = pool.QueryRow(ctx, `SELECT count(*) FROM payroll_load_placements WHERE load_record_id=8108`).Scan(&writes); e != nil || writes != 0 {
+				t.Fatal("team review committed a payroll row", writes, e)
+			}
 			// Frozen counterparts block removal even when the selected driver view is open.
 			report := read("investor", week)
 			if _, e = pay.SettleInvestor(ctx, week, truck, report.Revision, actor, "", false, true); e != nil {

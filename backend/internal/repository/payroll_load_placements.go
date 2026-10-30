@@ -278,6 +278,15 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	if load.LoadTripID != nil {
 		trip = *load.LoadTripID
 	}
+	if in.Action == "add" {
+		var main string
+		if err = tx.QueryRow(ctx, `SELECT payroll_driver_at($1::uuid,$2::date)::text`, driver, in.WeekStart).Scan(&main); err != nil {
+			return err
+		}
+		if main != driver {
+			return chargeInvalid("Review this driver's team change before adding historical loads to this week")
+		}
+	}
 	// An unsplit legacy order may have competing native operators. A payroll
 	// decision must not silently remove another person's allocation.
 	var competing bool
