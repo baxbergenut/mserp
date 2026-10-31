@@ -1,0 +1,1666 @@
+{
+  "synthetic": true,
+  "method": "Local disposable PostgreSQL; repository timing excludes browser/network. Five sequential samples; 25 concurrent saves; 100 concurrent summaries with source updates. Includes authoritative parity for every statement.",
+  "results": {
+    "driver/cold": {
+      "diagnostics": {
+        "calls": 90,
+        "phases": {
+          "carry": 80.4543,
+          "carry_sources": 79.9138,
+          "cost_source": 12.1925,
+          "driver_calculation": 267.3401,
+          "selection": 12.5459,
+          "source": 94.6565,
+          "source_ledger": 0.8133,
+          "team_routing": 1.5392,
+          "truck_routing": 102.8913
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 3,
+            "ms": 1.0354
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0
+          },
+          "09e2fd5abe324570": {
+            "calls": 3,
+            "ms": 14.8183
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 3,
+            "ms": 11.9585
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 19.2476
+          },
+          "2141112148f0e882": {
+            "calls": 3,
+            "ms": 7.569
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 1.572
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 4,
+            "ms": 5.23
+          },
+          "2f9f226d9fc85936": {
+            "calls": 3,
+            "ms": 0.5042
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 3,
+            "ms": 13.8723
+          },
+          "318a496e82c47fa6": {
+            "calls": 6,
+            "ms": 3.1510999999999996
+          },
+          "3b9b80c12ec13b1d": {
+            "calls": 3,
+            "ms": 0.1431
+          },
+          "3d7e80799331e9af": {
+            "calls": 3,
+            "ms": 0.9249
+          },
+          "425d4573e0161637": {
+            "calls": 3,
+            "ms": 0.1412
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.2925
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 2.8037
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.5077
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5033
+          },
+          "590f95f0d1c97797": {
+            "calls": 3,
+            "ms": 5.5623000000000005
+          },
+          "65a76aad066fcd90": {
+            "calls": 3,
+            "ms": 0.4531
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 1.1527
+          },
+          "6d4e4413d375b1d5": {
+            "calls": 1,
+            "ms": 0.0366
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 12.4978
+          },
+          "72d262e0b8794ce7": {
+            "calls": 3,
+            "ms": 12.7997
+          },
+          "76a7e5814aab53c6": {
+            "calls": 1,
+            "ms": 0.0481
+          },
+          "79942122ae75fb9a": {
+            "calls": 3,
+            "ms": 19.0978
+          },
+          "79d02795e320972a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 1.7837
+          },
+          "7f4a765d42d2a5a9": {
+            "calls": 1,
+            "ms": 0.5032
+          },
+          "8db27fca699e330f": {
+            "calls": 3,
+            "ms": 0.5065
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.7033
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5073
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0.31
+          },
+          "b486ef1280c24660": {
+            "calls": 1,
+            "ms": 1.5622
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 85.4152
+          },
+          "c460eec86b361aab": {
+            "calls": 2,
+            "ms": 4.0959
+          },
+          "da2865b742d8e33a": {
+            "calls": 3,
+            "ms": 0.7072
+          },
+          "da295ee7e642d234": {
+            "calls": 3,
+            "ms": 0.9206
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.506
+          },
+          "e63fff34f224ed7e": {
+            "calls": 3,
+            "ms": 1.0104000000000002
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 3,
+            "ms": 1.0323
+          },
+          "fa32ade6b688c950": {
+            "calls": 2,
+            "ms": 7.0791
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 279.47,
+      "p95": 281.74,
+      "p99": 281.74,
+      "max": 281.74
+    },
+    "driver/warm": {
+      "diagnostics": {
+        "calls": 4,
+        "phases": {},
+        "queries": {
+          "79942122ae75fb9a": {
+            "calls": 1,
+            "ms": 5.53
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0.507
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 17.29,
+      "p95": 19.43,
+      "p99": 19.43,
+      "max": 19.43
+    },
+    "driver/changed": {
+      "diagnostics": {
+        "calls": 90,
+        "phases": {
+          "carry": 82.3401,
+          "carry_sources": 81.8032,
+          "cost_source": 12.226,
+          "driver_calculation": 273.2866,
+          "selection": 13.1737,
+          "source": 95.7552,
+          "source_ledger": 0.6623,
+          "team_routing": 1.9209,
+          "truck_routing": 105.039
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 3,
+            "ms": 0.5368
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.5227
+          },
+          "09e2fd5abe324570": {
+            "calls": 3,
+            "ms": 14.6442
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 3,
+            "ms": 22.8153
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 20.192
+          },
+          "2141112148f0e882": {
+            "calls": 3,
+            "ms": 5.9709
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 1.5601
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 4,
+            "ms": 4.0009
+          },
+          "2f9f226d9fc85936": {
+            "calls": 3,
+            "ms": 1.0409000000000002
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 3,
+            "ms": 6.1644
+          },
+          "318a496e82c47fa6": {
+            "calls": 6,
+            "ms": 3.9161999999999995
+          },
+          "3b9b80c12ec13b1d": {
+            "calls": 3,
+            "ms": 0.0346
+          },
+          "3d7e80799331e9af": {
+            "calls": 3,
+            "ms": 1.0903
+          },
+          "425d4573e0161637": {
+            "calls": 3,
+            "ms": 0
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.5089
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 2.9036
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.9227
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.3664
+          },
+          "590f95f0d1c97797": {
+            "calls": 3,
+            "ms": 3.0234000000000005
+          },
+          "65a76aad066fcd90": {
+            "calls": 3,
+            "ms": 0.6969
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 1.087
+          },
+          "6d4e4413d375b1d5": {
+            "calls": 1,
+            "ms": 0
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 13.025
+          },
+          "72d262e0b8794ce7": {
+            "calls": 3,
+            "ms": 17.156399999999998
+          },
+          "76a7e5814aab53c6": {
+            "calls": 1,
+            "ms": 0.1487
+          },
+          "79942122ae75fb9a": {
+            "calls": 3,
+            "ms": 15.0154
+          },
+          "79d02795e320972a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 2.5279
+          },
+          "7f4a765d42d2a5a9": {
+            "calls": 1,
+            "ms": 0.5091
+          },
+          "8db27fca699e330f": {
+            "calls": 3,
+            "ms": 0.691
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5066
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0.2959
+          },
+          "b486ef1280c24660": {
+            "calls": 1,
+            "ms": 0.5069
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 85.3307
+          },
+          "c460eec86b361aab": {
+            "calls": 2,
+            "ms": 4.3452
+          },
+          "da2865b742d8e33a": {
+            "calls": 3,
+            "ms": 1.011
+          },
+          "da295ee7e642d234": {
+            "calls": 3,
+            "ms": 4.3515
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.5912
+          },
+          "e63fff34f224ed7e": {
+            "calls": 3,
+            "ms": 0.3059
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 8.3149
+          },
+          "f91a587a7d1f437c": {
+            "calls": 3,
+            "ms": 1.9283000000000001
+          },
+          "fa32ade6b688c950": {
+            "calls": 2,
+            "ms": 7.086
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 284.06,
+      "p95": 292.1,
+      "p99": 292.1,
+      "max": 292.1
+    },
+    "driver/expand": {
+      "diagnostics": {
+        "calls": 48,
+        "phases": {
+          "carry": 0.542,
+          "carry_sources": 0.542,
+          "driver_calculation": 74.9504,
+          "selection": 14.0512,
+          "source": 15.6155,
+          "source_ledger": 0.9476,
+          "team_routing": 0.5033,
+          "truck_routing": 23.6119
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.7034
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 2.3311
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 7.7058
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0.5929
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 2.2644
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 0.5605
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 0.5332
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 1.7752
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 3.5597
+          },
+          "318a496e82c47fa6": {
+            "calls": 2,
+            "ms": 0.5316
+          },
+          "3b9b80c12ec13b1d": {
+            "calls": 1,
+            "ms": 0.0341
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.5036
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 0.6633
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.5035
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5036
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 0.549
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.3644
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 0
+          },
+          "6d4e4413d375b1d5": {
+            "calls": 1,
+            "ms": 0.0352
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 13.1449
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 2.5542
+          },
+          "76a7e5814aab53c6": {
+            "calls": 2,
+            "ms": 0.9063
+          },
+          "79942122ae75fb9a": {
+            "calls": 3,
+            "ms": 14.519400000000001
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 0.7517
+          },
+          "7f4a765d42d2a5a9": {
+            "calls": 1,
+            "ms": 0.5068
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.073
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5313
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0.444
+          },
+          "b486ef1280c24660": {
+            "calls": 1,
+            "ms": 1.723
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 10.0333
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0.5035
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.8867
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0
+          },
+          "e63fff34f224ed7e": {
+            "calls": 3,
+            "ms": 0
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 0.8756
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 81.78,
+      "p95": 82.96,
+      "p99": 82.96,
+      "max": 82.96
+    },
+    "driver/save": {
+      "diagnostics": {
+        "calls": 67,
+        "phases": {
+          "carry": 1.1068,
+          "carry_sources": 1.6111,
+          "driver_calculation": 56.0545,
+          "financial_lock_wait": 0.6317,
+          "save_calculation": 56.0545,
+          "selection": 18.9548,
+          "source": 14.9665,
+          "source_ledger": 1.1129,
+          "source_validation_write": 0,
+          "team_routing": 0.5244,
+          "truck_routing": 25.0139,
+          "writes_and_commit": 12.9503
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 1.4108
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.5038
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 3.0115
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 0.2493
+          },
+          "114e32192b617dac": {
+            "calls": 3,
+            "ms": 1.2336
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 2.4301
+          },
+          "1508d4be4a278b6a": {
+            "calls": 2,
+            "ms": 3.7476000000000003
+          },
+          "1cc4055daa79a500": {
+            "calls": 1,
+            "ms": 0.8349
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 0.5756
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 0.5039
+          },
+          "29b19cf59d1c8f29": {
+            "calls": 1,
+            "ms": 0.5085
+          },
+          "2c1a8097a83053d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 1.7559
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.319
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 11.6135
+          },
+          "318a496e82c47fa6": {
+            "calls": 2,
+            "ms": 1.0553
+          },
+          "3b9b80c12ec13b1d": {
+            "calls": 1,
+            "ms": 0.1043
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0.1808
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.3201
+          },
+          "4f85f2ebcf2ad750": {
+            "calls": 1,
+            "ms": 0
+          },
+          "50895e0950ef1de6": {
+            "calls": 3,
+            "ms": 2.3943
+          },
+          "5094f0399f79741d": {
+            "calls": 3,
+            "ms": 2.0987999999999998
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5039
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 1.2148
+          },
+          "5b03d5ebc60a19f6": {
+            "calls": 1,
+            "ms": 0
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.4997
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 0
+          },
+          "6d4e4413d375b1d5": {
+            "calls": 3,
+            "ms": 0.0985
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 12.8097
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 2.2425
+          },
+          "76a7e5814aab53c6": {
+            "calls": 2,
+            "ms": 6.1451
+          },
+          "79942122ae75fb9a": {
+            "calls": 2,
+            "ms": 1.0118
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 0.5792
+          },
+          "7f4a765d42d2a5a9": {
+            "calls": 3,
+            "ms": 1.5126
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.7033
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 1.4305
+          },
+          "ac83b2becba01746": {
+            "calls": 3,
+            "ms": 1.2838999999999998
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0.609
+          },
+          "b486ef1280c24660": {
+            "calls": 1,
+            "ms": 0.7819
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 10.4452
+          },
+          "ce5afefa58a2bb89": {
+            "calls": 1,
+            "ms": 1.974
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.5029
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.7199
+          },
+          "e63fff34f224ed7e": {
+            "calls": 2,
+            "ms": 1.1754
+          },
+          "eff25901702c3968": {
+            "calls": 1,
+            "ms": 0.5104
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 0.8056
+          },
+          "f9b2b76c9817610c": {
+            "calls": 1,
+            "ms": 0
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 83.47,
+      "p95": 91.26,
+      "p99": 91.26,
+      "max": 91.26
+    },
+    "driver/save5": {
+      "samples": 25,
+      "errors": 0,
+      "p50": 437.96,
+      "p95": 932,
+      "p99": 941.92,
+      "max": 941.92
+    },
+    "driver/summary5sync": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 13.71,
+      "p95": 257.01,
+      "p99": 294.04,
+      "max": 294.04
+    },
+    "investor/cold": {
+      "diagnostics": {
+        "calls": 43,
+        "phases": {
+          "investor_calculation": 181.4191,
+          "source": 94.8313,
+          "source_ledger": 0.5076,
+          "truck_routing": 57.0203
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.6296
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 11.6161
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 6.1694
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0.6507
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 13.0411
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 4.317
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 1.546
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 3.8258
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 2.74
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 1.1802
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.3512
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0
+          },
+          "4365e0a8b081dd05": {
+            "calls": 1,
+            "ms": 0.5312
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.2739
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 3.4863
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.699
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5076
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 2.293
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.0427
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 0.5359
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 9.6838
+          },
+          "79942122ae75fb9a": {
+            "calls": 2,
+            "ms": 7.0481
+          },
+          "79d02795e320972a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 0.5207
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.7388
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 0.5068
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5377
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 84.9499
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.2959
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 1.0787
+          },
+          "e63fff34f224ed7e": {
+            "calls": 2,
+            "ms": 1.5273
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.8489
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f7ff81eb7f8d5fe0": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 1.3837
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 193.34,
+      "p95": 196.09,
+      "p99": 196.09,
+      "max": 196.09
+    },
+    "investor/warm": {
+      "diagnostics": {
+        "calls": 4,
+        "phases": {},
+        "queries": {
+          "79942122ae75fb9a": {
+            "calls": 1,
+            "ms": 6.6921
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "e63fff34f224ed7e": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 17.15,
+      "p95": 17.45,
+      "p99": 17.45,
+      "max": 17.45
+    },
+    "investor/changed": {
+      "diagnostics": {
+        "calls": 43,
+        "phases": {
+          "investor_calculation": 186.1429,
+          "source": 96.3642,
+          "source_ledger": 2.1317,
+          "truck_routing": 58.0522
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.5379
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.5245
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 12.3258
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 7.0984
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0.7599
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 13.5599
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 4.188
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 0.5053
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 3.2119999999999997
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 1.1001
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 0.5105
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0.7609
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0
+          },
+          "4365e0a8b081dd05": {
+            "calls": 1,
+            "ms": 2.6519
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.2676
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 2.9233
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.9106
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5057
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 2.7229
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.882
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 1.3796
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 9.4943
+          },
+          "79942122ae75fb9a": {
+            "calls": 2,
+            "ms": 13.2007
+          },
+          "79d02795e320972a": {
+            "calls": 1,
+            "ms": 0
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 2.3184
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.2358
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0.5451
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 0.5052
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5082
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 1.626
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 86.0514
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0.5071
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.1866
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.5082
+          },
+          "e63fff34f224ed7e": {
+            "calls": 2,
+            "ms": 0
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.8994
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0.6557
+          },
+          "f7ff81eb7f8d5fe0": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 0.4619
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 196.35,
+      "p95": 204.57,
+      "p99": 204.57,
+      "max": 204.57
+    },
+    "investor/expand": {
+      "diagnostics": {
+        "calls": 47,
+        "phases": {
+          "investor_calculation": 56.146,
+          "selection": 16.0442,
+          "source": 15.0572,
+          "source_ledger": 0.9725,
+          "truck_routing": 24.5973
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 1.0923
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.5045
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 6.1215
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 0.5031
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0.5449
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 1.6798
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 0.5687
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 0.5367
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 1.395
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 8.3506
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 0.5319
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0
+          },
+          "4365e0a8b081dd05": {
+            "calls": 1,
+            "ms": 1.0289
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.3281
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 0.5204
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.5035
+          },
+          "54b9587b8c451a1e": {
+            "calls": 1,
+            "ms": 0.5092
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 1.2213
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.3836
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 0.8326
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 13.7459
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 2.091
+          },
+          "76a7e5814aab53c6": {
+            "calls": 2,
+            "ms": 2.5237
+          },
+          "79942122ae75fb9a": {
+            "calls": 3,
+            "ms": 11.9546
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 0.5816
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.7144
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 1.5291
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.7407
+          },
+          "b2757c8a22fa2989": {
+            "calls": 1,
+            "ms": 0.4633
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 10.027
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0.5031
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.5679
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.0711
+          },
+          "e63fff34f224ed7e": {
+            "calls": 3,
+            "ms": 1.3939
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f22b6b5d147fc4d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f7ff81eb7f8d5fe0": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 0.9232
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 84.2,
+      "p95": 84.48,
+      "p99": 84.48,
+      "max": 84.48
+    },
+    "investor/save": {
+      "diagnostics": {
+        "calls": 60,
+        "phases": {
+          "financial_lock_wait": 0,
+          "investor_calculation": 56.9429,
+          "save_calculation": 56.9429,
+          "selection": 16.0806,
+          "source": 15.8978,
+          "source_ledger": 2.3521,
+          "source_validation_write": 6.4773,
+          "truck_routing": 24.6316,
+          "writes_and_commit": 9.9361
+        },
+        "queries": {
+          "04cec8e17ba045f7": {
+            "calls": 1,
+            "ms": 0.0534
+          },
+          "08d504b28deea92b": {
+            "calls": 1,
+            "ms": 0.507
+          },
+          "09e2fd5abe324570": {
+            "calls": 1,
+            "ms": 4.0442
+          },
+          "0ee5b18f682d54f7": {
+            "calls": 1,
+            "ms": 0.743
+          },
+          "114e32192b617dac": {
+            "calls": 1,
+            "ms": 0.5317
+          },
+          "11c2844ccce99932": {
+            "calls": 1,
+            "ms": 1.5022
+          },
+          "2141112148f0e882": {
+            "calls": 1,
+            "ms": 0.691
+          },
+          "2398c717a7749fe2": {
+            "calls": 1,
+            "ms": 0.5081
+          },
+          "29b19cf59d1c8f29": {
+            "calls": 1,
+            "ms": 0
+          },
+          "2c1a8097a83053d7": {
+            "calls": 1,
+            "ms": 0
+          },
+          "2da15a3dd3c2a60c": {
+            "calls": 2,
+            "ms": 2.7566
+          },
+          "2f9f226d9fc85936": {
+            "calls": 1,
+            "ms": 0.4222
+          },
+          "308b2f0e68e4cebd": {
+            "calls": 1,
+            "ms": 8.1012
+          },
+          "318a496e82c47fa6": {
+            "calls": 1,
+            "ms": 0.5403
+          },
+          "352572c89c8b2893": {
+            "calls": 2,
+            "ms": 1.0173
+          },
+          "3d7e80799331e9af": {
+            "calls": 1,
+            "ms": 0
+          },
+          "425d4573e0161637": {
+            "calls": 1,
+            "ms": 0
+          },
+          "4365e0a8b081dd05": {
+            "calls": 1,
+            "ms": 1.752
+          },
+          "4ca60e5a14542665": {
+            "calls": 1,
+            "ms": 0.2898
+          },
+          "4f85f2ebcf2ad750": {
+            "calls": 1,
+            "ms": 0
+          },
+          "50895e0950ef1de6": {
+            "calls": 1,
+            "ms": 0.7137
+          },
+          "5094f0399f79741d": {
+            "calls": 1,
+            "ms": 0.5089
+          },
+          "54b9587b8c451a1e": {
+            "calls": 3,
+            "ms": 0.5442
+          },
+          "590f95f0d1c97797": {
+            "calls": 1,
+            "ms": 1.1205
+          },
+          "65a76aad066fcd90": {
+            "calls": 1,
+            "ms": 0.3756
+          },
+          "65b3fa43a434648f": {
+            "calls": 1,
+            "ms": 0
+          },
+          "6db491bce497de22": {
+            "calls": 1,
+            "ms": 1.4139
+          },
+          "6f36b78d2c78075d": {
+            "calls": 1,
+            "ms": 12.8199
+          },
+          "72d262e0b8794ce7": {
+            "calls": 1,
+            "ms": 4.9215
+          },
+          "76a7e5814aab53c6": {
+            "calls": 2,
+            "ms": 3.5871
+          },
+          "79942122ae75fb9a": {
+            "calls": 2,
+            "ms": 5.2895
+          },
+          "7ea49042fef2efb8": {
+            "calls": 1,
+            "ms": 0.5748
+          },
+          "83753e68c4b500db": {
+            "calls": 2,
+            "ms": 2.4182
+          },
+          "8db27fca699e330f": {
+            "calls": 1,
+            "ms": 0.7785
+          },
+          "9505cacb7c710ed1": {
+            "calls": 1,
+            "ms": 0
+          },
+          "aa8d15543c2e5bf9": {
+            "calls": 1,
+            "ms": 0.507
+          },
+          "ac83b2becba01746": {
+            "calls": 1,
+            "ms": 0.5398
+          },
+          "b2757c8a22fa2989": {
+            "calls": 3,
+            "ms": 1.6065
+          },
+          "b83b9486be4573f1": {
+            "calls": 1,
+            "ms": 10.1154
+          },
+          "be5f710a3c003f20": {
+            "calls": 3,
+            "ms": 2.2537000000000003
+          },
+          "da2865b742d8e33a": {
+            "calls": 1,
+            "ms": 0.5086
+          },
+          "da295ee7e642d234": {
+            "calls": 1,
+            "ms": 1.5217
+          },
+          "df44bafcecc8d936": {
+            "calls": 1,
+            "ms": 0.1046
+          },
+          "e63fff34f224ed7e": {
+            "calls": 2,
+            "ms": 1.8849
+          },
+          "e8020f812e8b8ac8": {
+            "calls": 1,
+            "ms": 0.9548
+          },
+          "f179c7a670308f62": {
+            "calls": 1,
+            "ms": 0.5497
+          },
+          "f7ff81eb7f8d5fe0": {
+            "calls": 1,
+            "ms": 0
+          },
+          "f91a587a7d1f437c": {
+            "calls": 1,
+            "ms": 0
+          }
+        }
+      },
+      "samples": 5,
+      "errors": 0,
+      "p50": 79.16,
+      "p95": 88.86,
+      "p99": 88.86,
+      "max": 88.86
+    },
+    "investor/save5": {
+      "samples": 25,
+      "errors": 0,
+      "p50": 406.33,
+      "p95": 431.64,
+      "p99": 432.14,
+      "max": 432.14
+    },
+    "investor/summary5sync": {
+      "samples": 100,
+      "errors": 0,
+      "p50": 23.17,
+      "p95": 200.19,
+      "p99": 205.54,
+      "max": 226
+    }
+  }
+}

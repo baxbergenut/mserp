@@ -144,11 +144,18 @@ func TestPayrollPerformance(t *testing.T) {
 		for _, kind := range []string{"driver", "investor"} {
 			var full DriverPayWeek
 			var e error
-			if kind == "driver" {
-				full, e = repo.Get(ctx, week)
-			} else {
-				full, e = repo.InvestorPay(ctx, week)
+			authority, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+			if err != nil {
+				t.Fatal(err)
 			}
+			authorityCtx := context.WithValue(ctx, payrollAuthoritativeKey{}, true)
+			if kind == "driver" {
+				full, e = readDriverPayWeek(authorityCtx, authority, week, "")
+			} else {
+				full, e = readInvestorPay(authorityCtx, authority, week)
+				full = investorPayView(full, "")
+			}
+			_ = authority.Rollback(ctx)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -298,6 +305,9 @@ func TestPayrollPerformance(t *testing.T) {
 							tracer.mu.Unlock()
 							tx, e := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 							if e != nil {
+								t.Fatal(e)
+							}
+							if e = payrollQueryPlans(ctx, tx); e != nil {
 								t.Fatal(e)
 							}
 							rows, e := tx.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) "+q.sql, q.args...)

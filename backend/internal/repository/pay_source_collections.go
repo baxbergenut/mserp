@@ -352,9 +352,16 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 		}
 		return nil
 	}
-	records, err := readPaySources(ctx, tx)
-	if err != nil {
-		return err
+	inputs, _ := ctx.Value(payrollFinalizeKey{}).(*payrollFinalizeInputs)
+	var records []paySourceRecord
+	var err error
+	if inputs != nil {
+		records = inputs.sources
+	} else {
+		records, err = readPaySources(ctx, tx)
+		if err != nil {
+			return err
+		}
 	}
 	supplied := map[string]PaySourceCharge{}
 	for _, row := range edits.SourceCharges {
@@ -431,8 +438,14 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 		// Frozen future statements predate this ledger too; do not create new debt
 		// behind a finalized collection or silently reroute a frozen historical row.
 		var closed bool
-		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks WHERE truck_id=$1 AND week_start>=$2::date AND finalized)
+		var checked bool
+		if inputs != nil {
+			closed, checked = inputs.closed[row.Source+"|"+truck]
+		}
+		if !checked {
+			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investor_pay_weeks WHERE truck_id=$1 AND week_start>=$2::date AND finalized)
    OR EXISTS(SELECT 1 FROM payroll_settlements p WHERE p.week_start>=$2::date AND p.finalized AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(p.report->'autoCharges','[]')) a WHERE a->>'source'=$3))`, truck, edits.WeekStart, row.Source).Scan(&closed)
+		}
 		if err != nil {
 			return err
 		}
@@ -469,6 +482,10 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 	}
 	if len(supplied) > 0 {
 		return chargeInvalid("This charge does not belong to this statement; reload payroll")
+	}
+	if inputs != nil {
+		edits.SourceCharges = result
+		return nil
 	}
 	records, err = readPaySources(ctx, tx)
 	if err != nil {

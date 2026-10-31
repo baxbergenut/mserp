@@ -85,25 +85,11 @@ func decoratePayAssignments(ctx context.Context, tx pgx.Tx, kind string, report 
 	if err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `WITH requested AS (
- SELECT driver,date,payroll_driver_at(driver,date) operator FROM jsonb_to_recordset($1::jsonb) AS r(driver uuid,date date)
- ) SELECT r.driver::text,r.date::text,coalesce(a.truck_id::text,''),coalesce(t.unit_number,''),
- coalesce(h.dispatcher_id::text,''),coalesce(p.full_name,h.dispatcher_name,'Unassigned'),
- CASE WHEN a.truck_id IS NULL THEN 'unassigned' ELSE driver_employment_type(r.driver,r.date) END
- FROM requested r LEFT JOIN LATERAL (
- SELECT min(a.truck_id::text)::uuid truck_id FROM truck_driver_assignments a WHERE a.driver_id=r.operator
- AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
- AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
- AND (a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at)
- HAVING count(DISTINCT a.truck_id)=1
- ) a ON true LEFT JOIN trucks t ON t.id=a.truck_id
- LEFT JOIN LATERAL (
- SELECT h.dispatcher_id,h.dispatcher_name FROM driver_dispatcher_assignments h WHERE h.driver_id=r.operator
- AND (NOT h.start_known OR h.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
- AND (h.unassigned_at IS NULL OR h.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
- AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
- ORDER BY h.assigned_at DESC LIMIT 1
- ) h ON true LEFT JOIN dispatchers p ON p.id=h.dispatcher_id`, string(body))
+	query := payrollDatedAssignmentsSQL
+	if full, _ := ctx.Value(payrollAuthoritativeKey{}).(bool); full {
+		query = payrollOriginalAssignmentsSQL
+	}
+	rows, err := tx.Query(ctx, query, string(body))
 	if err != nil {
 		return err
 	}
@@ -193,3 +179,59 @@ func payAssignmentLabel(values map[string]string) (string, string) {
 	}
 	return "", strings.Join(names, " / ")
 }
+
+// Resolve dated assignments once per driver/day. The original SQL functions are
+// retained below as an independent parity oracle, including their date boundaries.
+const payrollDatedAssignmentsSQL = `WITH requested AS MATERIALIZED (
+ SELECT r.driver,r.date,coalesce(t.main_driver_id,r.driver) operator
+ FROM jsonb_to_recordset($1::jsonb) r(driver uuid,date date)
+ LEFT JOIN driver_teams t ON t.team_driver_id=r.driver AND t.start_week<=r.date AND (t.end_week IS NULL OR r.date<t.end_week)
+), days AS MATERIALIZED (SELECT DISTINCT date FROM requested), operators AS MATERIALIZED (SELECT DISTINCT operator,date FROM requested),
+ ownership AS MATERIALIZED (
+ SELECT DISTINCT ON(d.date,h.truck_id) d.date,h.truck_id,h.owner_id FROM days d JOIN truck_ownership_history h
+ ON (NOT h.start_known OR h.assigned_at<((d.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>=((d.date+1)::timestamp AT TIME ZONE 'America/New_York')) ORDER BY d.date,h.truck_id,h.assigned_at DESC
+), employment AS MATERIALIZED (
+ SELECT DISTINCT ON(r.operator,r.date) r.operator,r.date,i.is_company,i.driver_id owner_driver
+ FROM operators r JOIN truck_driver_assignments a ON a.driver_id=r.operator
+ AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ JOIN ownership h ON h.truck_id=a.truck_id AND h.date=r.date JOIN investors i ON i.id=h.owner_id
+ ORDER BY r.operator,r.date,a.assigned_at DESC
+), assigned AS MATERIALIZED (
+ SELECT r.operator,r.date,min(a.truck_id::text)::uuid truck_id FROM operators r JOIN truck_driver_assignments a ON a.driver_id=r.operator
+ AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at)
+ GROUP BY r.operator,r.date HAVING count(DISTINCT a.truck_id)=1
+), dispatch AS MATERIALIZED (
+ SELECT DISTINCT ON(r.operator,r.date) r.operator,r.date,h.dispatcher_id,h.dispatcher_name FROM operators r JOIN driver_dispatcher_assignments h ON h.driver_id=r.operator
+ AND (NOT h.start_known OR h.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
+ ORDER BY r.operator,r.date,h.assigned_at DESC
+) SELECT r.driver::text,r.date::text,coalesce(a.truck_id::text,''),coalesce(t.unit_number,''),
+ coalesce(h.dispatcher_id::text,''),coalesce(p.full_name,h.dispatcher_name,'Unassigned'),
+ CASE WHEN a.truck_id IS NULL OR e.operator IS NULL THEN 'unassigned' WHEN e.is_company THEN 'company' WHEN e.owner_driver=r.driver THEN 'owner_operator' ELSE 'investor_driver' END
+ FROM requested r LEFT JOIN assigned a USING(operator,date) LEFT JOIN trucks t ON t.id=a.truck_id
+ LEFT JOIN dispatch h USING(operator,date) LEFT JOIN dispatchers p ON p.id=h.dispatcher_id LEFT JOIN employment e USING(operator,date)`
+
+const payrollOriginalAssignmentsSQL = `WITH requested AS (
+ SELECT driver,date,payroll_driver_at(driver,date) operator FROM jsonb_to_recordset($1::jsonb) AS r(driver uuid,date date)
+ ) SELECT r.driver::text,r.date::text,coalesce(a.truck_id::text,''),coalesce(t.unit_number,''),
+ coalesce(h.dispatcher_id::text,''),coalesce(p.full_name,h.dispatcher_name,'Unassigned'),
+ CASE WHEN a.truck_id IS NULL THEN 'unassigned' ELSE driver_employment_type(r.driver,r.date) END
+ FROM requested r LEFT JOIN LATERAL (
+ SELECT min(a.truck_id::text)::uuid truck_id FROM truck_driver_assignments a WHERE a.driver_id=r.operator
+ AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at)
+ HAVING count(DISTINCT a.truck_id)=1
+ ) a ON true LEFT JOIN trucks t ON t.id=a.truck_id
+ LEFT JOIN LATERAL (
+ SELECT h.dispatcher_id,h.dispatcher_name FROM driver_dispatcher_assignments h WHERE h.driver_id=r.operator
+ AND (NOT h.start_known OR h.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
+ ORDER BY h.assigned_at DESC LIMIT 1
+ ) h ON true LEFT JOIN dispatchers p ON p.id=h.dispatcher_id`

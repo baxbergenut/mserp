@@ -278,9 +278,16 @@ func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits
 		}
 	}
 	r := payCostRecord{d.ID, edits.WeekStart, chargeMoney(f), chargeMoney(t), chargeMoney(payrollCostAmount(edits.FuelOverride, fd, fuelCPM)), chargeMoney(payrollCostAmount(edits.TollOverride, td, tollCPM))}
-	records, err := readPayCostRecords(ctx, tx)
-	if err != nil {
-		return err
+	inputs, _ := ctx.Value(payrollFinalizeKey{}).(*payrollFinalizeInputs)
+	var records []payCostRecord
+	var err error
+	if inputs != nil {
+		records = inputs.costs
+	} else {
+		records, err = readPayCostRecords(ctx, tx)
+		if err != nil {
+			return err
+		}
 	}
 	unchanged := false
 	later := false

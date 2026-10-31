@@ -2587,6 +2587,25 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   entrypoint delegates to it. It permits only local synthetic payroll_perf schemas,
   records browser latency separately from aggregate refresh, and never benchmarks
   financial writes against production.
+  Browser timing starts at actual input dispatch and ends after the committed
+  visible state paints; automation setup time is reported separately. Run
+  `node scripts/test-payroll-timing.mjs` to verify those measurement boundaries.
+- Migration 181 excludes only `loads.synced_at` from update invalidation; all
+  other source columns and JSON still advance the committed payroll revision.
+  Its deployment also pauses writers, with the previous release retained for rollback.
+- Statement calculations follow dated assignments/ownership and outstanding
+  source balances, retaining current/future reservations and old unpaid debt.
+  Unknown revision dependencies fall back to the complete calculation. Trip
+  validation is materialized per distinct load; dated labels resolve as sets,
+  and read-phase evidence memos never survive financial writes. Custom query
+  plans use hash/merge joins for whole weeks and indexed loops for small selections.
+- Single reopening validates the displayed input revision under the financial
+  lock, reads the immutable target, and calculates live balances after the write.
+  Whole-week finalization shares validation only for distinct source principals;
+  shared principals retain sequential checks. Expense/payment triggers, per-row
+  audit records and atomic rollback remain active. Final snapshots use post-write
+  calculations/source revisions. Performance tests compare the original full
+  trip/assignment projection against summaries and every selected statement.
 
 - Full Monday–Sunday vacation weeks use dated availability history in New York
   through `payroll_vacations.go`. Gross Board and both payroll pages omit idle

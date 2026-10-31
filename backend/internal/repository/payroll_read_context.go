@@ -4,19 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
+	"mserp/internal/datatruck"
 )
 
 // Calculation inputs are reusable only inside one uninterrupted read phase of
 // the same transaction. Writers start a fresh phase after every mutation.
 type payrollReadKey struct{}
 type payrollCostsOnlyKey struct{}
+type payrollAuthoritativeKey struct{}
 
 // The same prepared query serves full weeks and tiny connected components.
 // PostgreSQL's generic plan severely underestimates full-week CTE row counts and
 // chooses repeated nested scans after a few statement reads. Plan using this
-// request's date/selection, scoped to this transaction only.
+// request's date/selection, scoped to this transaction only. Full-week CTE row
+// estimates can remain too small even with a custom plan: prefer hash/merge
+// joins there, while small components keep indexed nested-loop lookups. Disabled
+// loop paths receive large planner costs; disable JIT explicitly so those costs
+// cannot trigger expensive compilation in callers outside the application pool.
 func payrollQueryPlans(ctx context.Context, tx pgx.Tx) error {
-	_, err := tx.Exec(ctx, `SET LOCAL plan_cache_mode = force_custom_plan`)
+	loop := "off"
+	if ids := payrollDriverIDs(ctx); ids != nil && len(ids) <= 16 {
+		loop = "on"
+	}
+	_, err := tx.Exec(ctx, `SET LOCAL jit = off; SET LOCAL plan_cache_mode = force_custom_plan; SET LOCAL enable_nestloop = `+loop)
 	return err
 }
 
@@ -34,6 +44,7 @@ type payrollReadState struct {
 	trucks      []byte
 	costs       []payCostRecord
 	costsLoaded bool
+	loads       map[string]datatruck.Load
 }
 
 func payrollReadContext(ctx context.Context, tx pgx.Tx) context.Context {

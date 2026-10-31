@@ -176,17 +176,47 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
-	report, err := readDriverPayWeek(ctx, tx, week, "")
+	if driver != "" && strings.HasPrefix(revision, "inputs:") {
+		current := DriverPayWeek{WeekStart: week.Format(time.DateOnly)}
+		if err = setPayrollRevision(ctx, tx, "driver", &current); err != nil {
+			return empty, err
+		}
+		if current.Revision != revision {
+			return empty, ErrDriverPayConflict
+		}
+		ctx, err = selectPayrollContext(payrollWeekContext(ctx, current.WeekStart), tx, "driver", driver)
+		if err != nil {
+			return empty, err
+		}
+	}
+	var report DriverPayWeek
+	if reopen && driver != "" && strings.HasPrefix(revision, "inputs:") {
+		report, err = readPayrollReopenTarget(ctx, tx, "driver", week, driver, revision)
+	} else {
+		report, err = readDriverPayWeek(ctx, tx, week, "")
+	}
 	if err != nil {
 		return empty, err
 	}
 	if revision == "" || revision != report.Revision {
 		return empty, ErrDriverPayConflict
 	}
+	bulkExpenses := driver == "" && !reopen
+	if bulkExpenses {
+		ctx, err = preparePayrollFinalization(ctx, tx, "driver", report)
+		if err != nil {
+			return empty, err
+		}
+		if err = finalizePayrollExpenses(ctx, tx, "driver", report.WeekStart, actor, report.Drivers); err != nil {
+			return empty, err
+		}
+	}
 	selected := 0
 	selectedIDs := map[string]bool{}
 	var frozenResult *DriverPayWeek
 	pending := map[string][]string{}
+	var chargeInputs *ChargeData
+	var chargeLoads map[string]map[string]bool
 	for _, d := range report.Drivers {
 		if driver != "" && d.ID != driver {
 			continue
@@ -232,12 +262,17 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			for i := range deductions {
 				deductions[i].Apply = !deductions[i].Saved
 			}
-			if _, err = saveTeamExpenses(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
-				return empty, err
+			if !bulkExpenses {
+				if _, err = saveTeamExpenses(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
+					return empty, err
+				}
 			}
-			data, loads, e := chargeData(ctx, tx, "")
-			if e != nil {
-				return empty, e
+			if len(d.Edits.GeneratedCharges) > 0 && chargeInputs == nil {
+				data, loads, e := chargeData(ctx, tx, "")
+				if e != nil {
+					return empty, e
+				}
+				chargeInputs, chargeLoads = &data, loads
 			}
 			confirmed := []string{}
 			for _, row := range d.Edits.GeneratedCharges {
@@ -248,9 +283,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				if row.ConfirmedAt != nil {
 					continue
 				}
-				for i := range data.Schedules {
-					if data.Schedules[i].ID == row.ScheduleID {
-						if err = freezeChargesBefore(ctx, tx, &data.Schedules[i], report.WeekStart, loads[data.Schedules[i].DriverID]); err != nil {
+				for i := range chargeInputs.Schedules {
+					if chargeInputs.Schedules[i].ID == row.ScheduleID {
+						if err = freezeChargesBefore(ctx, tx, &chargeInputs.Schedules[i], report.WeekStart, chargeLoads[chargeInputs.Schedules[i].DriverID]); err != nil {
 							return empty, err
 						}
 					}
@@ -296,6 +331,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		if e != nil {
 			return empty, e
 		}
+		freezeBatch := &pgx.Batch{}
 		for _, d := range updated.Drivers {
 			confirmed, ok := pending[d.ID]
 			if !ok {
@@ -310,18 +346,17 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if e != nil {
 				return empty, e
 			}
-			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by,reason) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid,$6)
-   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=excluded.reason`, d.ID, report.WeekStart, body, confirmed, actor, reason); err != nil {
-				return empty, err
-			}
-			if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
- SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,$4,report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor, reason); err != nil {
-				return empty, err
-			}
+			freezeBatch.Queue(`INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by,reason) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid,$6)
+   ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=excluded.reason`, d.ID, report.WeekStart, body, confirmed, actor, reason)
+			freezeBatch.Queue(`INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
+ SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,$4,report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor, reason)
 			delete(pending, d.ID)
 		}
 		if len(pending) != 0 {
 			return empty, ErrDriverPayConflict
+		}
+		if err = tx.SendBatch(ctx, freezeBatch).Close(); err != nil {
+			return empty, err
 		}
 		frozenResult = &updated
 	}

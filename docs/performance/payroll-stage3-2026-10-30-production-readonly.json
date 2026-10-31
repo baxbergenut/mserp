@@ -1,0 +1,6259 @@
+{
+  "readOnly": true,
+  "week": "2026-10-26",
+  "host": "existing production server, one vCPU",
+  "method": "Bounded diagnostics, single connection, default_transaction_read_only=on, 25-second statement timeout. Stage 2 and candidate binaries read the live database; no financial or other data writes. Source revisions and CPU contention changed between samples. These are diagnostic samples, not percentiles or a controlled SLO comparison.",
+  "samples": [
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50273,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 874.507,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 11.410877,
+        "carry_sources": 10.671974,
+        "driver_calculation": 848.779136,
+        "source": 215.158089,
+        "source_ledger": 26.784083,
+        "team_routing": 10.63487,
+        "truck_routing": 197.394202
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 4.754803
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 3.752109
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 39.08979
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.513743
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.1827
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.951043
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 173.446123
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 23.295067
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 11.392923
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.652274
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 6.185835
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.175559
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 3.934037
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.084517
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.783072
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 329.343859
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 7.306414
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 3.297939
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 4.938986
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 11.5941
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 6.529913
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.324719
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.265903
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 6.862515
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 6.267672
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.35387
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 11.521152
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 42.267457
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 4.374465
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.155977
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 3.043789
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.47074
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 25.074404
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 20.219599
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 16.286757
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 21.543522
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.072767
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.630235
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.149449
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 2.292874
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.221212
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.73028
+        }
+      },
+      "sample": 1,
+      "sha256": "0cd6031c124569f76bcb95d99d7b0c43abc8f28fd98152638a6979bab6a104ae",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 935.145,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 7.764925,
+        "carry_sources": 5.812881,
+        "driver_calculation": 920.808135,
+        "source": 402.53829,
+        "source_ledger": 16.470071,
+        "team_routing": 12.120411,
+        "truck_routing": 282.887034
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.484066
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.149728
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 39.267985
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 1.366543
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 6.661218
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.291675
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 344.708088
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 23.295026999999997
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 12.558734
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 25.173892
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 10.420962
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 1.063135
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.947022
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 0.814264
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 1.129928
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 167.419652
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 7.082809
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.136042
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 7.801128
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 24.012841
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 3.746469
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 3.198757
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.398402
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 3.134188
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 3.24554
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 10.294475
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 8.184734
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 64.936849
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 2.53985
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.447557
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.562341
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 4.759944
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 41.476477
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 12.688614
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 6.744644
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 44.57703
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.650263
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 2.857025
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.031288
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 1.885516
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.018622
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.492722
+        }
+      },
+      "sample": 2,
+      "sha256": "c35ab6f2a8f577f8436a718a307b39a39a5a23940da8921f5c9c96019d86f715",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 4,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 18.55,
+      "page_bytes": 83562,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.690135
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.736759
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.16394
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.213506
+        }
+      },
+      "sample": 3,
+      "sha256": "c35ab6f2a8f577f8436a718a307b39a39a5a23940da8921f5c9c96019d86f715",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 45,
+      "gzip_bytes": 18124,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 758.369,
+      "page_bytes": 108316,
+      "phases_ms": {
+        "investor_calculation": 742.21607,
+        "source": 290.76926,
+        "source_ledger": 15.979983,
+        "truck_routing": 305.012055
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 3.932446
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.604081
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 52.219491
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 1.416048
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 9.142128
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 4.937367
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 217.885206
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 29.319103
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 13.240135
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 28.31909
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 2.650513
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.148904
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 2.035988
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.685541
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 14.926287
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 72.758942
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 2.928429
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 7.244983
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 33.281317
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 5.323937
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 4.662134
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.93205
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.332098
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 15.098693
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 12.721806
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 61.686636
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 2.33996
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.447461
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 4.763798
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 6.669853
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 38.36018
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 10.617005
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 41.627545
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.270197
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.661029
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.449044
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 2.13938
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 1.80034
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.251541
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.143312
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.514338
+        }
+      },
+      "sample": 1,
+      "sha256": "b7b84f6455846e9dddc7e17841386b69919e1bb71d4db2d34cf9c88c3d0ef2f3",
+      "summary_bytes": 23106,
+      "stage": 2
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 45,
+      "gzip_bytes": 18122,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 807.83,
+      "page_bytes": 108316,
+      "phases_ms": {
+        "investor_calculation": 796.437713,
+        "source": 368.19353,
+        "source_ledger": 8.280322,
+        "truck_routing": 303.250735
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.919732
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.026217
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 46.472276
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.234125
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 5.428593
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.115815
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 315.74056
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 20.383923
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 15.038029
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 32.424534
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 4.6627
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 1.991265
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.993324
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.207618
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 14.426973
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 67.19765
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 2.758264
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 8.486213
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 21.00252
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 0.879216
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 4.323281
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.646572
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.645282
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 12.502737
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 10.073971
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 57.242796
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 2.816474
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.517627
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 4.581807
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.565216
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 45.89537
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 7.377238
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 46.734463
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.666506
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 7.181521
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.746796
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 0.80488
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 1.348858
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.733646
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.46673
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.179835
+        }
+      },
+      "sample": 2,
+      "sha256": "92aa7127f678097f90032b25e19860461e92e3f617eafb01b9ef7b1b753fc2e9",
+      "summary_bytes": 23106,
+      "stage": 2
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 4,
+      "gzip_bytes": 18122,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 7.748,
+      "page_bytes": 108316,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.331395
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.354084
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.519315
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.370178
+        }
+      },
+      "sample": 3,
+      "sha256": "92aa7127f678097f90032b25e19860461e92e3f617eafb01b9ef7b1b753fc2e9",
+      "summary_bytes": 23106,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50272,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1177.482,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 15.592338,
+        "carry_sources": 14.387923,
+        "driver_calculation": 1134.712872,
+        "source": 420.088887,
+        "source_ledger": 25.495762,
+        "team_routing": 18.775478,
+        "truck_routing": 521.300286
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.827439
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 10.086324
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 81.210227
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 58.873485
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.881513
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 48.015704
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 14.826224
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 11.972908
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 27.039316
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 5.568153
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 68.679
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 7.210739
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 3.899553
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 3.843528
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.564832
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 13.522675
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 6.119822
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 4.50846
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 13.208698
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 7.697604
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 9.111106
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.81227
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 9.647405
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 9.056722
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 29.34334
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 19.772061
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 130.578792
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 5.27654
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 3.633988
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 4.076036
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.096137
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 17.766631
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 22.011787
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 383.624408
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 74.300091
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.23427
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.91424
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 4.034726
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.799641
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 3.998891
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.374009
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 3.025767
+        }
+      },
+      "sample": 1,
+      "sha256": "04e9b212cdbefefa0cdf5b6647e0ec4c5ad13e0e367253b21e62bc7d19803df1",
+      "summary_bytes": 23802,
+      "stage": 3
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1497.054,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 7.249251,
+        "carry_sources": 6.365531,
+        "driver_calculation": 1469.719469,
+        "source": 773.970746,
+        "source_ledger": 16.98612,
+        "team_routing": 18.839344,
+        "truck_routing": 534.241879
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.49042
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 9.657431
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 88.328558
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 79.397657
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 2.173321
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 42.493224
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 13.36146
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 9.316307
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 51.340543
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 17.22059
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 56.013542
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 17.130826
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 2.960719
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 3.152958
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 1.022233
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 10.698817
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.204071
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 15.867312
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 46.324979
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 8.445693
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 6.610052
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.52489
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 7.244482
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 4.996121
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 40.319161
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 17.090025999999998
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 109.503104
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.340554
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 0.655745
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 2.571372
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 8.114351
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 8.510697
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 23.529055
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 667.334916
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 60.282877
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.727331
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.610675
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 4.571001
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.913129
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 0.503759
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.883412
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.536699
+        }
+      },
+      "sample": 2,
+      "sha256": "0251417ebaae5ef1b7d3f5277fba0aee7e103323afa63737523255c4360d54a4",
+      "summary_bytes": 23802,
+      "stage": 3
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 4,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 33.225,
+      "page_bytes": 83562,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 10.883871
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.036922
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.172846
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.140974
+        }
+      },
+      "sample": 3,
+      "sha256": "0251417ebaae5ef1b7d3f5277fba0aee7e103323afa63737523255c4360d54a4",
+      "summary_bytes": 23802,
+      "stage": 3
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 45,
+      "gzip_bytes": 18122,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 1113.898,
+      "page_bytes": 108316,
+      "phases_ms": {
+        "investor_calculation": 1053.067994,
+        "source": 712.630001,
+        "source_ledger": 9.318887,
+        "truck_routing": 287.559149
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 2.358978
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.52521
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 55.287465
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 36.509922
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 3.146855
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 9.77029
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 10.904805
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.620772
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 21.766663
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 10.318554
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 27.412973
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 6.9721
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.245152
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 2.712383
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 8.055648
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 2.405325
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 10.162709
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 27.416253
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 3.307374
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 8.606773
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 2.269169
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.216482
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 15.656727
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 30.027710000000003
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 30.005492
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.736031
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.492325
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 3.010356
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 5.736402
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 5.983759
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 627.129923
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 64.443051
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 4.187538
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 2.208141
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 5.621144
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 7.656502
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 4.38486
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.823824
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 3.534127
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 0.765116
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.649784
+        }
+      },
+      "sample": 1,
+      "sha256": "8438dbdc6b44cc554f477b0ac8e89a7b93b3cec817f82c0cece67f6a3a083c77",
+      "summary_bytes": 23106,
+      "stage": 3
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 4,
+      "gzip_bytes": 18122,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 6.875,
+      "page_bytes": 108316,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.083265
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.292388
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.188905
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.233136
+        }
+      },
+      "sample": 2,
+      "sha256": "8438dbdc6b44cc554f477b0ac8e89a7b93b3cec817f82c0cece67f6a3a083c77",
+      "summary_bytes": 23106,
+      "stage": 3
+    },
+    {
+      "bytes": 106515,
+      "db_calls": 4,
+      "gzip_bytes": 18122,
+      "jit": "off",
+      "mode": "investor",
+      "ms": 7.08,
+      "page_bytes": 108316,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.950974
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.252903
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.230111
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.15155
+        }
+      },
+      "sample": 3,
+      "sha256": "8438dbdc6b44cc554f477b0ac8e89a7b93b3cec817f82c0cece67f6a3a083c77",
+      "summary_bytes": 23106,
+      "stage": 3
+    }
+  ],
+  "interleaved": [
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1123.869,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 16.098744,
+        "carry_sources": 15.365536,
+        "driver_calculation": 1098.227567,
+        "source": 240.8428,
+        "source_ledger": 24.29524,
+        "team_routing": 15.127229,
+        "truck_routing": 232.422213
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 4.610743
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.662968
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 29.397481
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.586227
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 3.940285
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.886019
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 179.261754
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 32.960486
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 16.092752
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 15.280861
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 7.786645999999999
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.251452
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.69374
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.426438
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.721396
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 500.56862
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 10.327621
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 3.906289
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 10.42972
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 14.660666
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 6.836585
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.244564
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.221098
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 11.257342
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 9.741715
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.841568
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 15.449078
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 80.019737
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 5.599282
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.47687
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 2.670921
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 8.657274
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 20.497332999999998
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 17.425847
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 23.250957
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 18.857437
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.262092
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.80954
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 4.152853
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 2.491576
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.279627
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.892823
+        }
+      },
+      "sample": 1,
+      "sha256": "6a06b0679feb9c1a8cc41a40b20c36269738250e6b849e076b7869cbe31d9696",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50271,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1596.83,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 9.728336,
+        "carry_sources": 8.900343,
+        "driver_calculation": 1537.069724,
+        "source": 932.630125,
+        "source_ledger": 20.41456,
+        "team_routing": 9.687938,
+        "truck_routing": 483.431847
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 2.645121
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 5.8628
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 80.734636
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 80.183396
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 4.256261
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 27.534398
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 25.918127
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.531594
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 46.205431
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 26.972769
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 53.116783
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 14.536078
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 2.090435
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 7.219893
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 3.068642
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 8.095992
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 2.818219
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 16.504541
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 53.675254
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 3.776214
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 7.875637
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 6.745135
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.162941
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 4.883886
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 24.593432
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 27.022892
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 69.794035
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 3.991054
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 2.60505
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 3.12138
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 11.556007
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 15.824137
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 16.314542
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 783.572024
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 61.108054
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 1.508514
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 3.336546
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 10.173182
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 4.738753
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 3.675502
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.595651
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.297427
+        }
+      },
+      "sample": 1,
+      "sha256": "1281fb522eb70814e3269f9828bb3d15478939dd5852d77e2ca152470d1e272d",
+      "summary_bytes": 23802,
+      "stage": 3
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50270,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 596.72,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 5.934222,
+        "carry_sources": 4.735979,
+        "driver_calculation": 561.483936,
+        "source": 232.976271,
+        "source_ledger": 9.342162,
+        "team_routing": 5.310772,
+        "truck_routing": 137.950197
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.739463
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.515102
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 19.217215
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.443719
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 5.198794
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 2.279681
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 198.233227
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 12.364503
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 6.010135
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 12.514786
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 4.716794999999999
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 1.027862
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.04632
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.275974
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.526007
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 142.977133
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.289496
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.086781
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 5.452215
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 11.409293
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 2.774258
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 3.02349
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.120393
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.696218
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 2.609005
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.513539
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 18.109127
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 27.826437
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 2.099389
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.360215
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.524286
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.937379
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 20.076106000000003
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 6.536022
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 6.440442
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 20.161532
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.726219
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.854183
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.277338
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 2.144245
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.261376
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.559093
+        }
+      },
+      "sample": 1,
+      "sha256": "d0784aeeb2d830a7d4e9c12eebb7490018d7d80b43af1ffdd3ca6c3fdde3a067",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50270,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 471.366,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 3.976995,
+        "carry_sources": 3.233345,
+        "driver_calculation": 450.45767,
+        "source": 249.793538,
+        "source_ledger": 10.154604,
+        "team_routing": 5.387403,
+        "truck_routing": 143.78158
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.924143
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.364875
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 21.790391999999997
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 19.788306
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.792848
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 13.397023
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.777435
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.567942
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 13.544146999999999
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 6.050414
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 12.984635
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 4.807174
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.753634
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.2972
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.671116
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.096845
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.249341
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 4.34821
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 14.535701
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 4.035549
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.387055
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.96829
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.518775
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 2.063517
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 8.444044
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 9.299386
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 29.283383
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.148319
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.464146
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.85188
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.774774
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 6.091078
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 5.728692
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 209.635032
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 20.156993
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.157228
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.848862
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.962334
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.071373
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 1.044681
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.276092
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.589729
+        }
+      },
+      "sample": 1,
+      "sha256": "d0784aeeb2d830a7d4e9c12eebb7490018d7d80b43af1ffdd3ca6c3fdde3a067",
+      "summary_bytes": 23802,
+      "stage": 3
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50270,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1465.143,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 14.108626,
+        "carry_sources": 13.182744,
+        "driver_calculation": 1439.104154,
+        "source": 247.693266,
+        "source_ledger": 16.127045,
+        "team_routing": 14.333029,
+        "truck_routing": 453.678366
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 2.255821
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 6.55253
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 69.514059
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.623325
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 14.322763
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.938328
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 212.820545
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 26.656046999999997
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 11.637197
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 45.006025
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 7.302742
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.183086
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 3.544961
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 5.228227
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.609232
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 600.567816
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 9.17485
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 5.749133
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.809923
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 12.196437
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.624666
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 8.633621
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.063783
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 18.629689
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 8.922366
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 20.85071
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 17.177656
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 106.709859
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 4.233785
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.670802
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 2.193911
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.265607
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 75.902874
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 14.471836
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 24.904451
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 52.96485
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.009585
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 7.905454
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.286031
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 4.026936
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.313215
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.530841
+        }
+      },
+      "sample": 1,
+      "sha256": "d0784aeeb2d830a7d4e9c12eebb7490018d7d80b43af1ffdd3ca6c3fdde3a067",
+      "summary_bytes": 23802,
+      "stage": 2
+    },
+    {
+      "bytes": 300822,
+      "db_calls": 47,
+      "gzip_bytes": 50270,
+      "jit": "off",
+      "mode": "driver",
+      "ms": 1213.249,
+      "page_bytes": 83562,
+      "phases_ms": {
+        "carry": 4.696001,
+        "carry_sources": 3.805132,
+        "driver_calculation": 1165.188853,
+        "source": 812.466716,
+        "source_ledger": 7.087989,
+        "team_routing": 6.776629,
+        "truck_routing": 286.461442
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 4.620129
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.815608
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 39.572958
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 45.844811
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 2.333372
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 13.300929
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 7.444603
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.345858
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 47.060684
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 16.000379
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 34.100725
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 13.483164
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.910702
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 3.312878
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.94177
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.765501
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 3.088701
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 19.117828
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 55.106126
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.27817
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 5.427771
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 3.905429
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 3.155779
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 2.339879
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 13.015986
+        },
+        "79942122ae75fb9a": {
+          "calls": 2,
+          "ms": 22.069215
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 54.906532
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.434681
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 2.396699
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.56954
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 12.803275
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 5.781137
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 7.614613
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 664.154219
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 30.558784
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 2.267415
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 3.629172
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 7.315038
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.039367
+        },
+        "e63fff34f224ed7e": {
+          "calls": 2,
+          "ms": 3.087937
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.299366
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.293249
+        }
+      },
+      "sample": 1,
+      "sha256": "292cc41cbf68d896d5136b1ddedd9f0f2ce6f416307f5cf67db48cfe7ef1955d",
+      "summary_bytes": 23802,
+      "stage": 3
+    }
+  ],
+  "focused": [
+    {
+      "bytes": 4703,
+      "db_calls": 36,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 160.111,
+      "page_bytes": 4986,
+      "phases_ms": {
+        "carry": 1.655318,
+        "carry_sources": 1.574004,
+        "driver_calculation": 135.374145,
+        "selection": 17.834915,
+        "source": 59.467912,
+        "source_ledger": 2.44311,
+        "team_routing": 1.209182,
+        "truck_routing": 51.535031
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.711818
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.16867
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 21.04862
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.325792
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 2.531444
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 38.269994
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 1,
+          "ms": 5.580185
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 1.36259
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.054931
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 3.473776
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 0.411447
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.246813
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.537192
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 4.107321
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 0.862007
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 2.433677
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 5.004842
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 0.963677
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.038265
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 1.956116
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 0.745943
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 17.660372
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.247798
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 0.817696
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.420479
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 1.87412
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 1,
+          "ms": 5.17728
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 1.465256
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 6.122446
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 11.754653
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.862236
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.633187
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.565925
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.174074
+        }
+      },
+      "sample": 1,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 2
+    },
+    {
+      "bytes": 4703,
+      "db_calls": 4,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 3.849,
+      "page_bytes": 4986,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.926649
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.229604
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.111277
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.190588
+        }
+      },
+      "sample": 2,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 2
+    },
+    {
+      "bytes": 4703,
+      "db_calls": 4,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 6.48,
+      "page_bytes": 4986,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.663537
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.274674
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.22739
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.897979
+        }
+      },
+      "sample": 3,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 2
+    },
+    {
+      "bytes": 4703,
+      "db_calls": 36,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 191.012,
+      "page_bytes": 4986,
+      "phases_ms": {
+        "carry": 2.189261,
+        "carry_sources": 2.107827,
+        "driver_calculation": 152.563416,
+        "selection": 30.514339,
+        "source": 63.734614,
+        "source_ledger": 3.139405,
+        "team_routing": 1.520733,
+        "truck_routing": 58.587538
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.855769
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.712542
+        },
+        "09e2fd5abe324570": {
+          "calls": 1,
+          "ms": 6.148385
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 24.222442
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.355607
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 4.83093
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 4.880733
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 1,
+          "ms": 6.735235
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 1.370881
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.38377
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 3.8828050000000003
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.263467
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.78964
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.194267
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 2.254483
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 3.957623
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.43544
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.203892
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.068794
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 0.957763
+        },
+        "6f36b78d2c78075d": {
+          "calls": 1,
+          "ms": 30.321274
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 6.258324
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.136227
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.384352
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 1.878913
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 1.68717
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 6.177048
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 41.692252
+        },
+        "bf307fc90559b8f4": {
+          "calls": 2,
+          "ms": 0.5248360000000001
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 14.295021
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.057853
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.787496
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.646237
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.192056
+        }
+      },
+      "sample": 1,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 3
+    },
+    {
+      "bytes": 4703,
+      "db_calls": 4,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 5.55,
+      "page_bytes": 4986,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 4.54919
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.228586
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.150115
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.215313
+        }
+      },
+      "sample": 2,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 3
+    },
+    {
+      "bytes": 4703,
+      "db_calls": 4,
+      "gzip_bytes": 1579,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 4.844,
+      "page_bytes": 4986,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.486265
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.37862
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.270249
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.357772
+        }
+      },
+      "sample": 3,
+      "sha256": "3d0f494c3f02f8209c9bf4c37b9e1c2a2f2fe0ce6739beca0206e027f7573fa7",
+      "summary_bytes": 1303,
+      "stage": 3
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 45,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 328.415,
+      "page_bytes": 5688,
+      "phases_ms": {
+        "investor_calculation": 303.528688,
+        "selection": 18.070619,
+        "source": 144.037637,
+        "source_ledger": 3.98349,
+        "truck_routing": 115.342154
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.921721
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.380088
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 20.22351
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.385122
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.149593
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 1.988256
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 110.230153
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 14.378258
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 4.002347
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 15.796763
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 2.366705
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 0.419528
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 2.109512
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.430355
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 7.927685
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 19.625452
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 0.852444
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 4.083538
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 7.704893
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.221275
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.389959
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.709462
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.177093
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 4.341961
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 17.65947
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.441447
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 23.583921
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 0.905775
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.38434
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 2.259117
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.662249
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 18.821792000000002
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 2.747699
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 10.003791
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.650313
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.272427
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.529918
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.434613
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.538025
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.171748
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 0.812596
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.738829
+        }
+      },
+      "sample": 1,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 2
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 4,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 3.921,
+      "page_bytes": 5688,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.938655
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.132765
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.106627
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.420124
+        }
+      },
+      "sample": 2,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 2
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 4,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 4.345,
+      "page_bytes": 5688,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.427637
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.199842
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.180752
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.172616
+        }
+      },
+      "sample": 3,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 2
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 45,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 332.332,
+      "page_bytes": 5688,
+      "phases_ms": {
+        "investor_calculation": 301.974748,
+        "selection": 23.243879,
+        "source": 151.888497,
+        "source_ledger": 5.423683,
+        "truck_routing": 111.720852
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.81349
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.657186
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 15.814638
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 17.014677
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.42327
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 8.80271
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.511608
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.564811
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 9.751253
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 3.072307
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.585287
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 4.243412
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 0.781955
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.408623
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 7.326401
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.155525
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.125015
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 8.497793
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.569611
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 4.667943
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.876399
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.288738
+        },
+        "6f36b78d2c78075d": {
+          "calls": 1,
+          "ms": 22.885606
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 5.949841
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.599526
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 24.823935
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.024272
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.340027
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 2.616356
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.647143
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 3.835213
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 124.0526
+        },
+        "bf307fc90559b8f4": {
+          "calls": 1,
+          "ms": 0.17168
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 11.468647
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.359141
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.212574
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.185646
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.948745
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.470568
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.649354
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.313956
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 0.900498
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.931115
+        }
+      },
+      "sample": 1,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 3
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 4,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 3.379,
+      "page_bytes": 5688,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.535195
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.173096
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.219401
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.163332
+        }
+      },
+      "sample": 2,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 3
+    },
+    {
+      "bytes": 5407,
+      "db_calls": 4,
+      "gzip_bytes": 1632,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 4.101,
+      "page_bytes": 5688,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.936478
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.617333
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.099244
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.114315
+        }
+      },
+      "sample": 3,
+      "sha256": "d41a6426471878f1340bba687e9cef3b8eec86841927bf3b9afb6cb2090340cc",
+      "summary_bytes": 1375,
+      "stage": 3
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 43,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 491.813,
+      "page_bytes": 23770,
+      "phases_ms": {
+        "carry": 3.650332,
+        "carry_sources": 2.964004,
+        "driver_calculation": 477.962862,
+        "source": 188.72913,
+        "source_ledger": 6.863986,
+        "team_routing": 5.850577,
+        "truck_routing": 134.205539
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.806518
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 19.37389
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.46784
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 3.202375
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.224585
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 159.64456
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 11.283871
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 5.197055
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.098335
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 3.870725
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.162845
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.576866
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.016755
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.486289
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 122.924758
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.709195
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.300046
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.992431
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 9.82121
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.568126
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.617147
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.707719
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 3.723676
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 1.662513
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.268528
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.600087
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 27.150844
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.283103
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.265864
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.416856
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.614101
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 19.539882
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 5.260274
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 24.511503
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.658869
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.165597
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.009611
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.880652
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.29228
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.523167
+        }
+      },
+      "sample": 1,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 2
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 4,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 8.097,
+      "page_bytes": 23770,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.72289
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.424763
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.187198
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.554084
+        }
+      },
+      "sample": 2,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 2
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 4,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 9.532,
+      "page_bytes": 23770,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.563635
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.483102
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.282682
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.2061
+        }
+      },
+      "sample": 3,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 2
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 43,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 428.022,
+      "page_bytes": 23770,
+      "phases_ms": {
+        "carry": 4.980267,
+        "carry_sources": 4.012674,
+        "driver_calculation": 411.115359,
+        "source": 221.731293,
+        "source_ledger": 12.458666,
+        "team_routing": 4.746795,
+        "truck_routing": 136.023639
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.89705
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 21.184793
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 21.677075
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.552727
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 17.450116
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 3.307606
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.395819
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 12.380935000000001
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 8.905635
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 12.565196
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 3.6192699999999998
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.938944
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.048764
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.561748
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.403391
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 0.984376
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.63447
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 13.54864
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 2.939057
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.277287
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.176787
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 3.084167
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 2.478209
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.554514
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 7.833457
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 24.891504
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.506293
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.278488
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.379639
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.754105
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 9.484972
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 186.499358
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 18.262656
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.376715
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.85186
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.367912
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.191265
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.904084
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.334154
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.59878
+        }
+      },
+      "sample": 1,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 3
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 4,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 4.904,
+      "page_bytes": 23770,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.525928
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.168179
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.318264
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.203913
+        }
+      },
+      "sample": 2,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 3
+    },
+    {
+      "bytes": 78235,
+      "db_calls": 4,
+      "gzip_bytes": 11941,
+      "jit": "off",
+      "mode": "driver-summary",
+      "ms": 7.722,
+      "page_bytes": 23770,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.619808
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.213514
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.565066
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.018493
+        }
+      },
+      "sample": 3,
+      "sha256": "69bf8816dfef31290f749e1c128a7e3e63ff7742966672de3ebc1b417e85a473",
+      "summary_bytes": 23770,
+      "stage": 3
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 41,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 1516.067,
+      "page_bytes": 23090,
+      "phases_ms": {
+        "investor_calculation": 1498.703101,
+        "source": 711.096942,
+        "source_ledger": 25.649284,
+        "truck_routing": 563.987833
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 3.249106
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 95.383072
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 3.176277
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 14.75364
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 11.047042
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 557.79231
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 83.19245900000001
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 25.219911
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 64.860173
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 11.121105
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.236687
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 5.399555
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 2.303485
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 146.722012
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 4.172568
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 21.5945
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 50.622484
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 6.600249
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 6.120057
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.868117
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.777829
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 23.364268
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 7.086238
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 148.24612
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 4.225663
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 2.646451
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 16.884741
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 8.50804
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 62.952479000000004
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 19.016836
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 54.162802
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 3.178332
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 8.29328
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 4.283437
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.908623
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.959514
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.370592
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 6.545047
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.588849
+        }
+      },
+      "sample": 1,
+      "sha256": "4f74d4899dcc9a73c065aece1c844aa31dd8b011a67e269592fe5ad1f5f30ec9",
+      "summary_bytes": 23090,
+      "stage": 2
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 41,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 940.926,
+      "page_bytes": 23090,
+      "phases_ms": {
+        "investor_calculation": 930.694216,
+        "source": 457.712719,
+        "source_ledger": 9.272954,
+        "truck_routing": 363.055236
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 2.19909
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 58.339059
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 2.175093
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 8.575277
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 5.142831
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 393.277105
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 28.192157
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 13.66653
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 34.750072
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 5.834746
+        },
+        "39345a47849a6a61": {
+          "calls": 1,
+          "ms": 0.142023
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 2.080802
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.182722
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 74.007826
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 3.232358
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 9.796697
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 22.236434
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.773977
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 4.549191
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.477588
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.484806
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 21.205763
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 7.591892
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 74.340852
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 0.438144
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.832783
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 5.068372
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 1.784748
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 56.886834
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 7.454036
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 50.210932
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.900568
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 4.30964
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.27404
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.171854
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.396828
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.37886
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.371805
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.193068
+        }
+      },
+      "sample": 2,
+      "sha256": "c67f2aea9d92e25c819da97e8fc3eac0df0d152c7166d1b5cbc456f66d1f3528",
+      "summary_bytes": 23090,
+      "stage": 2
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 4,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 23.572,
+      "page_bytes": 23090,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 9.25982
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 9.569545
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.241133
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 3.901129
+        }
+      },
+      "sample": 3,
+      "sha256": "c67f2aea9d92e25c819da97e8fc3eac0df0d152c7166d1b5cbc456f66d1f3528",
+      "summary_bytes": 23090,
+      "stage": 2
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 41,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 1649.731,
+      "page_bytes": 23090,
+      "phases_ms": {
+        "investor_calculation": 1580.790637,
+        "source": 910.723779,
+        "source_ledger": 16.221281,
+        "truck_routing": 570.732512
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 6.49563
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 110.09799100000001
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 52.664499
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 3.785203
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 33.449486
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 21.303151
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 12.002786
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 47.57277
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 16.672303
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 67.62967
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 5.259897
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 6.036628
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 1.635886
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 5.285657
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 28.072708
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 96.663309
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 3.401808
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 9.75841
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 2.059645
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.797732
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 39.461689
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 27.694079
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 115.265454
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 2.524509
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 3.794668
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 11.669535
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 18.610781
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 12.761864
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 716.426956
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 83.775339
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 2.311461
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.929299
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 7.525255
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 5.442167
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 3.923494
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 3.473308
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 6.235598
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.24429
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.651303
+        }
+      },
+      "sample": 1,
+      "sha256": "c67f2aea9d92e25c819da97e8fc3eac0df0d152c7166d1b5cbc456f66d1f3528",
+      "summary_bytes": 23090,
+      "stage": 3
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 41,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 1135.835,
+      "page_bytes": 23090,
+      "phases_ms": {
+        "investor_calculation": 1119.458449,
+        "source": 639.760769,
+        "source_ledger": 8.859504,
+        "truck_routing": 417.490576
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.46287
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 57.605239
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 73.0391
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 2.889053
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 17.609721
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 10.344669
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 6.601343
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 29.166305
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 16.956334
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 52.342308
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 8.057801
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 2.920234
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.284855
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 3.04557
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 13.548003
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 33.009491
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 0.912099
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 6.037468
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 3.106784
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 5.290915
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 22.894815
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 11.551105
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 91.29616
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 0.411381
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.340093
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 8.01194
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 4.164345
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 7.924857
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 557.058331
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 53.395171
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.262165
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 0.643813
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 2.885673
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 2.72335
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.159712
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 2.54033
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 4.000868
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.797259
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 2.182061
+        }
+      },
+      "sample": 2,
+      "sha256": "ade1aed5a2f3fdc478a12f24420ad976cfe0bb8c6d4b9f378bce3e690a3c819b",
+      "summary_bytes": 23090,
+      "stage": 3
+    },
+    {
+      "bytes": 21289,
+      "db_calls": 4,
+      "gzip_bytes": 4341,
+      "jit": "off",
+      "mode": "investor-summary",
+      "ms": 13.896,
+      "page_bytes": 23090,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 9.641692
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.228412
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.638513
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 2.688154
+        }
+      },
+      "sample": 3,
+      "sha256": "ade1aed5a2f3fdc478a12f24420ad976cfe0bb8c6d4b9f378bce3e690a3c819b",
+      "summary_bytes": 23090,
+      "stage": 3
+    }
+  ],
+  "historicalStatements": [
+    {
+      "bytes": 3975,
+      "db_calls": 47,
+      "gzip_bytes": 1403,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 547.951,
+      "page_bytes": 4256,
+      "phases_ms": {
+        "carry": 3.547686,
+        "carry_sources": 2.913244,
+        "driver_calculation": 520.259433,
+        "selection": 20.234182,
+        "source": 141.161254,
+        "source_ledger": 5.447788,
+        "team_routing": 6.037985,
+        "truck_routing": 145.993703
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.125368
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 3.8736
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 18.864957
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.539744
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 8.614852
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 2.26509
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 109.740249
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 9.921203
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 3.646152
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 11.235456
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 6.385337
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 0.534629
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.904262
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.674599
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.78656
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 186.22479
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.241648
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.181107
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.899026
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 8.845407
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.760208
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 5.943615
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.158166
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 4.81344
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 1.653491
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 10.468643
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 19.745838
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.824573
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 27.506745
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.236717
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.227752
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.470851
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.121459
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 32.093984
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 3.668678
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 14.494083
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 13.410088
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.642162
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 2.071704
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.906206
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.420751
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.243922
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.049125
+        }
+      },
+      "sample": 1,
+      "sha256": "73232dd7079888858d003fff088b5e25a73ee8d39eb54d85074993cffe2c18a2",
+      "summary_bytes": 1255,
+      "stage": 2
+    },
+    {
+      "bytes": 3975,
+      "db_calls": 47,
+      "gzip_bytes": 1402,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 1033.282,
+      "page_bytes": 4256,
+      "phases_ms": {
+        "carry": 9.144547,
+        "carry_sources": 8.535379,
+        "driver_calculation": 996.204829,
+        "selection": 23.17292,
+        "source": 360.681618,
+        "source_ledger": 8.630541,
+        "team_routing": 8.91443,
+        "truck_routing": 368.52366
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.806555
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.041238
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 72.642137
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.638101
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 10.222046
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 5.483895
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 262.310208
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 25.188379
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 10.657969
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 46.774033
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 16.449598
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 2.323064
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.701502
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 0.693616
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.342502
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 204.714902
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 5.2444
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 2.845212
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 10.253108
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 36.28181
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 2.294876
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 5.254112
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 3.670915
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 4.513125
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 5.371477
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 13.734707
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 21.125474
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 7.761094
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 79.630848
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 3.136855
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.39239
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.706047
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 8.133967
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 56.626448
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 6.311921
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 13.41526
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 46.374415
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 5.207369
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 3.279461
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 4.660246
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.942281
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 3.17982
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 3.827678
+        }
+      },
+      "sample": 2,
+      "sha256": "584d160cce1c9636fdca2bb4d80dac2d3d75aeb598d651b79ea533166fad526d",
+      "summary_bytes": 1255,
+      "stage": 2
+    },
+    {
+      "bytes": 3975,
+      "db_calls": 47,
+      "gzip_bytes": 1403,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 635.491,
+      "page_bytes": 4256,
+      "phases_ms": {
+        "carry": 2.86894,
+        "carry_sources": 2.394867,
+        "driver_calculation": 596.44731,
+        "selection": 20.823339,
+        "source": 281.281908,
+        "source_ledger": 4.440711,
+        "team_routing": 4.947706,
+        "truck_routing": 231.250314
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.94519
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 0.732515
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 54.224601
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 1.825798
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.362362
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.797881
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 225.308254
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 19.361543
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 7.420311
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 30.109861
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 6.718554
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 0.5289010000000001
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 0.763294
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.011972
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 1.054267
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 56.900421
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 2.827891
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 0.730315
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 7.696342
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 19.500136
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.460182
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.603916
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.3633
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 1.609659
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 1.45068
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 5.870443
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 20.358874
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 12.626647
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 33.367635
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 0.923509
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 0.500561
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.355454
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.484213
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 44.112223
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 2.953389
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 4.041216
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 34.227067
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 2.524136
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.256752
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.907261
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 2.752175
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 2.176982
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.849836
+        }
+      },
+      "sample": 3,
+      "sha256": "6afe3426e1608154b5e05063eded06d7da64aa456294d7e60da03130f50a8129",
+      "summary_bytes": 1255,
+      "stage": 2
+    },
+    {
+      "bytes": 3975,
+      "db_calls": 47,
+      "gzip_bytes": 1403,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 353.389,
+      "page_bytes": 4256,
+      "phases_ms": {
+        "carry": 4.122363,
+        "carry_sources": 3.694186,
+        "driver_calculation": 325.021848,
+        "selection": 21.834262,
+        "source": 146.1286,
+        "source_ledger": 5.676611,
+        "team_routing": 5.575743,
+        "truck_routing": 132.714532
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 0.924969
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.111581
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 22.07115
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 18.008875
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.410329
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 11.469177
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 4.299
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.937563
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 9.450507
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 3.277194
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 14.837881
+        },
+        "318a496e82c47fa6": {
+          "calls": 2,
+          "ms": 5.699540000000001
+        },
+        "3b9b80c12ec13b1d": {
+          "calls": 1,
+          "ms": 1.023684
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.674958
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.499506
+        },
+        "49a50578722d02b7": {
+          "calls": 1,
+          "ms": 3.655224
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 0.891026
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.101987
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 8.102204
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.393228
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 2.868522
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 0.727058
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.218169
+        },
+        "6d4e4413d375b1d5": {
+          "calls": 1,
+          "ms": 2.382256
+        },
+        "6f36b78d2c78075d": {
+          "calls": 1,
+          "ms": 21.389673
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 6.824193
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.268438
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 26.226242
+        },
+        "7f4a765d42d2a5a9": {
+          "calls": 1,
+          "ms": 1.293386
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.528682
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.340558
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.315482
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 4.22713
+        },
+        "b486ef1280c24660": {
+          "calls": 1,
+          "ms": 5.470516
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 119.32453
+        },
+        "bf307fc90559b8f4": {
+          "calls": 1,
+          "ms": 0.183834
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 19.320769
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.295635
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.186698
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 2.584983
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.776005
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.421238
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.147957
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 0.933485
+        }
+      },
+      "sample": 1,
+      "sha256": "6afe3426e1608154b5e05063eded06d7da64aa456294d7e60da03130f50a8129",
+      "summary_bytes": 1255,
+      "stage": 3
+    },
+    {
+      "bytes": 3975,
+      "db_calls": 4,
+      "gzip_bytes": 1403,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 3.419,
+      "page_bytes": 4256,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.604477
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.218909
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.151269
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.152714
+        }
+      },
+      "sample": 2,
+      "sha256": "6afe3426e1608154b5e05063eded06d7da64aa456294d7e60da03130f50a8129",
+      "summary_bytes": 1255,
+      "stage": 3
+    },
+    {
+      "bytes": 3975,
+      "db_calls": 4,
+      "gzip_bytes": 1403,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "driver-statement",
+      "ms": 3.751,
+      "page_bytes": 4256,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.09946
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.166542
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.07889
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.154714
+        }
+      },
+      "sample": 3,
+      "sha256": "6afe3426e1608154b5e05063eded06d7da64aa456294d7e60da03130f50a8129",
+      "summary_bytes": 1255,
+      "stage": 3
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 45,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 380.102,
+      "page_bytes": 6944,
+      "phases_ms": {
+        "investor_calculation": 358.12221,
+        "selection": 15.836351,
+        "source": 159.285906,
+        "source_ledger": 6.898868,
+        "truck_routing": 140.432828
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 2.038454
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 1.080768
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 19.026061
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.536785
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 5.430766
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.415908
+        },
+        "2a220d7e6d22984e": {
+          "calls": 1,
+          "ms": 127.339125
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 14.275587999999999
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 3.616806
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 12.778995
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 2.775774
+        },
+        "39345a47849a6a61": {
+          "calls": 2,
+          "ms": 0.423775
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 1.219055
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.662215
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 6.146517
+        },
+        "46e1906612468e5c": {
+          "calls": 1,
+          "ms": 26.399281
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.507626
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.459896
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 9.108444
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 2.123857
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 3.70692
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.0455
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.0646
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 7.118169
+        },
+        "73fc09b1a935d5b0": {
+          "calls": 1,
+          "ms": 15.460391
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 4.895153
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 34.913364
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.387983
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.245267
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 4.650947
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 2.775527
+        },
+        "b0b4a96e6b6a3f7d": {
+          "calls": 2,
+          "ms": 20.597175
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 4.72066
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 15.512465
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.748753
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 1.890654
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 0.904507
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.415673
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 1.011812
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.216392
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.847016
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.300661
+        }
+      },
+      "sample": 1,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 2
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 4,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 3.608,
+      "page_bytes": 6944,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.547844
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.202683
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.185481
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.282574
+        }
+      },
+      "sample": 2,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 2
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 4,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 5.576,
+      "page_bytes": 6944,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 2.981768
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.215727
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.126369
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 1.891504
+        }
+      },
+      "sample": 3,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 2
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 45,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 363.128,
+      "page_bytes": 6944,
+      "phases_ms": {
+        "investor_calculation": 335.009155,
+        "selection": 20.370287,
+        "source": 162.842145,
+        "source_ledger": 6.240935,
+        "truck_routing": 135.998515
+      },
+      "queries": {
+        "04cec8e17ba045f7": {
+          "calls": 1,
+          "ms": 1.477661
+        },
+        "08d504b28deea92b": {
+          "calls": 1,
+          "ms": 2.238866
+        },
+        "09e2fd5abe324570": {
+          "calls": 2,
+          "ms": 17.117221
+        },
+        "0ee5b18f682d54f7": {
+          "calls": 1,
+          "ms": 20.825142
+        },
+        "114e32192b617dac": {
+          "calls": 1,
+          "ms": 0.490714
+        },
+        "11c2844ccce99932": {
+          "calls": 1,
+          "ms": 7.809375
+        },
+        "2141112148f0e882": {
+          "calls": 1,
+          "ms": 5.415791
+        },
+        "2398c717a7749fe2": {
+          "calls": 1,
+          "ms": 3.118167
+        },
+        "2da15a3dd3c2a60c": {
+          "calls": 2,
+          "ms": 11.5033
+        },
+        "2f9f226d9fc85936": {
+          "calls": 1,
+          "ms": 4.713625
+        },
+        "308b2f0e68e4cebd": {
+          "calls": 1,
+          "ms": 15.843257
+        },
+        "318a496e82c47fa6": {
+          "calls": 1,
+          "ms": 2.876346
+        },
+        "3d7e80799331e9af": {
+          "calls": 1,
+          "ms": 2.480761
+        },
+        "425d4573e0161637": {
+          "calls": 1,
+          "ms": 0.810222
+        },
+        "4365e0a8b081dd05": {
+          "calls": 1,
+          "ms": 6.445921
+        },
+        "4ca60e5a14542665": {
+          "calls": 1,
+          "ms": 1.079155
+        },
+        "50895e0950ef1de6": {
+          "calls": 1,
+          "ms": 3.593201
+        },
+        "5094f0399f79741d": {
+          "calls": 1,
+          "ms": 10.789729
+        },
+        "54b9587b8c451a1e": {
+          "calls": 1,
+          "ms": 1.942609
+        },
+        "590f95f0d1c97797": {
+          "calls": 1,
+          "ms": 3.411584
+        },
+        "65a76aad066fcd90": {
+          "calls": 1,
+          "ms": 1.008653
+        },
+        "65b3fa43a434648f": {
+          "calls": 1,
+          "ms": 2.201531
+        },
+        "6f36b78d2c78075d": {
+          "calls": 1,
+          "ms": 19.902903
+        },
+        "72d262e0b8794ce7": {
+          "calls": 1,
+          "ms": 8.725984
+        },
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 5.344145
+        },
+        "7ea49042fef2efb8": {
+          "calls": 1,
+          "ms": 30.541607
+        },
+        "8db27fca699e330f": {
+          "calls": 1,
+          "ms": 1.912716
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 1.033457
+        },
+        "aa8d15543c2e5bf9": {
+          "calls": 1,
+          "ms": 2.77668
+        },
+        "ac83b2becba01746": {
+          "calls": 1,
+          "ms": 3.070691
+        },
+        "b2757c8a22fa2989": {
+          "calls": 1,
+          "ms": 4.277813
+        },
+        "b83b9486be4573f1": {
+          "calls": 1,
+          "ms": 129.914754
+        },
+        "bf307fc90559b8f4": {
+          "calls": 1,
+          "ms": 0.231926
+        },
+        "d33c1b9bbf4c1f52": {
+          "calls": 1,
+          "ms": 11.666517
+        },
+        "d9a766b2d0989a4a": {
+          "calls": 1,
+          "ms": 0.284552
+        },
+        "da2865b742d8e33a": {
+          "calls": 1,
+          "ms": 1.640627
+        },
+        "da295ee7e642d234": {
+          "calls": 1,
+          "ms": 3.00139
+        },
+        "df44bafcecc8d936": {
+          "calls": 1,
+          "ms": 1.109104
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.503798
+        },
+        "e8020f812e8b8ac8": {
+          "calls": 1,
+          "ms": 0.777583
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.182167
+        },
+        "f7ff81eb7f8d5fe0": {
+          "calls": 1,
+          "ms": 1.067891
+        },
+        "f91a587a7d1f437c": {
+          "calls": 1,
+          "ms": 1.042162
+        }
+      },
+      "sample": 1,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 3
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 4,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 4.849,
+      "page_bytes": 6944,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.805824
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.221925
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.139915
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.20045
+        }
+      },
+      "sample": 2,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 3
+    },
+    {
+      "bytes": 6659,
+      "db_calls": 4,
+      "gzip_bytes": 1989,
+      "historical_root": true,
+      "jit": "off",
+      "mode": "investor-statement",
+      "ms": 4.766,
+      "page_bytes": 6944,
+      "phases_ms": {},
+      "queries": {
+        "79942122ae75fb9a": {
+          "calls": 1,
+          "ms": 3.543714
+        },
+        "9505cacb7c710ed1": {
+          "calls": 1,
+          "ms": 0.267098
+        },
+        "e63fff34f224ed7e": {
+          "calls": 1,
+          "ms": 0.2402
+        },
+        "f22b6b5d147fc4d7": {
+          "calls": 1,
+          "ms": 0.194711
+        }
+      },
+      "sample": 3,
+      "sha256": "8aa8287125db8c59afab66371b01ad30b11749e6c51d02a8ade616c08e5755fc",
+      "summary_bytes": 1370,
+      "stage": 3
+    }
+  ]
+}

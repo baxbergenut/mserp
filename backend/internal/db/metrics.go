@@ -94,6 +94,8 @@ type queryMeasurement struct {
 type metricsKey struct{}
 type queryStartKey struct{}
 type acquireStartKey struct{}
+type batchStartKey struct{}
+type batchMeasurement struct{ last time.Time }
 
 func WithMetrics(ctx context.Context) (context.Context, *Metrics) {
 	m := &Metrics{}
@@ -101,6 +103,30 @@ func WithMetrics(ctx context.Context) (context.Context, *Metrics) {
 }
 
 type Tracer struct{}
+
+func (Tracer) TraceBatchStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBatchStartData) context.Context {
+	if ctx.Value(metricsKey{}) != nil {
+		return context.WithValue(ctx, batchStartKey{}, &batchMeasurement{time.Now()})
+	}
+	return ctx
+}
+func (Tracer) TraceBatchQuery(ctx context.Context, _ *pgx.Conn, data pgx.TraceBatchQueryData) {
+	if batch, ok := ctx.Value(batchStartKey{}).(*batchMeasurement); ok {
+		m := ctx.Value(metricsKey{}).(*Metrics)
+		m.Queries.Add(1)
+		q := queryMeasurement{start: batch.last}
+		if m.fingerprints != nil {
+			q.fingerprint = fmt.Sprintf("%x", sha256.Sum256([]byte(data.SQL)))[:16]
+		}
+		Tracer{}.TraceQueryEnd(context.WithValue(ctx, queryStartKey{}, q), nil, pgx.TraceQueryEndData{})
+		batch.last = time.Now()
+	}
+}
+func (Tracer) TraceBatchEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBatchEndData) {
+	if batch, ok := ctx.Value(batchStartKey{}).(*batchMeasurement); ok {
+		ctx.Value(metricsKey{}).(*Metrics).QueryNanos.Add(time.Since(batch.last).Nanoseconds())
+	}
+}
 
 func (Tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	if m, ok := ctx.Value(metricsKey{}).(*Metrics); ok {
