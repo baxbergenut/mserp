@@ -213,7 +213,7 @@ The existing global financial lock serializes simultaneous saves and must not
 be weakened to make a benchmark pass. Larger-history fixtures, five-user reads,
 and controlled scheduled-sync interference remain part of the release matrix.
 
-## Latest VPS stress results
+## October 13 VPS stress results (historical)
 
 Measured repository time in milliseconds, with 100 samples per action and 500
 for each five-user save run. All financial writes used the isolated synthetic
@@ -250,7 +250,7 @@ Production read-only diagnostic samples after deployment: Driver Pay cold
 revision, then 24 ms warm. These are three samples per page, not percentiles or
 browser measurements, and confirm why sync invalidation still needs work.
 
-Stage 2 introduces dedicated detail endpoints, per-statement LRU entries,
+Stage 2 is production release 74f6325 (PR 69). It introduces dedicated detail endpoints, per-statement LRU entries,
 compact committed mutation receipts, immediate single-statement reopen dialogs
 and one background aggregate refresh. Legacy weekly endpoints remain compatible.
 No financial rules or provider polling frequencies change.
@@ -269,6 +269,137 @@ An initial one-sample-per-action smoke run on the 176-driver local fixture with
 expansion was 500/366 ms, save 923/815 ms, finalize 1536/664 ms and reopen
 1439/1139 ms. Whole-week finalization was 4018/2807 ms and used 4044/1837
 queries including background refresh. These are diagnostic samples, not p95
-claims; the 300 ms target is **not met**. The complete dependency and bulk-action
-optimization remains required. See the preserved
+claims; the 300 ms target was **not met** at Stage 2. The dependency and bulk-action
+changes described below are Stage 3. See the preserved
 [smoke run](performance/payroll-stage2-2026-10-30-smoke.json).
+
+
+### Stage 3: calculation and bulk-action changes
+
+PR 70 scopes dependencies by the requested/source dates and retains historical
+unpaid balances, future reservations, saved destinations, teams and dated owners.
+Unprovable schema coverage still selects the conservative calculation. The
+176-driver fixture contains the historical 101-driver/88-truck component; parity
+checks compare every selected statement and compact summary with the original
+full-fleet source/assignment queries, including warnings and frozen receipts.
+
+Load matching, trip validation and dated attribution are materialized per load
+or requested driver/day. Source display hydration is omitted from summaries;
+its completeness warnings remain. Read-phase memos never span financial writes.
+Transaction-local planner settings avoid quadratic full-week joins and disable
+JIT compilation explicitly on application and test connections alike.
+
+Migration 181 ignores load UPDATEs only when every column except synced_at is
+unchanged. All other source fields, including the complete JSON payload and
+future columns, remain revision inputs. Commit/rollback and repeatable snapshot
+checks cover this boundary. Provider polling frequency is unchanged.
+
+Single finalization validates the displayed revision under the financial lock
+and calculates its complete dependency component. Single reopening reads the
+frozen target before its one post-write live calculation. Whole-week actions
+batch shared expense/source validation, ledger writes and frozen records, while
+retaining individual audits, collection limits and atomic rollback. Shared
+source principals retain conservative sequential validation. Mutation success
+is returned only after commit; no stale financial operation is automatically
+retried. Deployment preserves the previous compatible release for rollback.
+
+Local repository diagnostics (five samples per sequential action) show Driver /
+Investor cold reads at 282 / 196 ms p95, selected reads at 83 / 84 ms and saves at
+91 / 89 ms. Five concurrent saves remain serialized: 932 / 432 ms p95 over 25
+samples. These exclude network and UI time and are small diagnostic samples,
+not proof of the browser targets. The full query/phase results are preserved in
+[the repository artifact](performance/payroll-stage3-2026-10-30-repository.json).
+
+The browser harness now records actual input dispatch through a committed
+response and two animation frames of visible confirmation. Locator actionability
+and modal setup waits are recorded separately as automationMS. First expansion
+clears remembered open rows even when changing weeks. The timing-instrumentation
+test proves that an existing Saved label cannot complete a measurement before
+the delayed write response. Earlier automation-based timings are not directly
+comparable to these measurements. Query counts now include pgx batch statements;
+older results undercounted those statements.
+
+Validation: full local backend tests and vet; Linux CI backend tests, frontend
+lint/build and calculation/autosave checks; local Driver Pay, finalization,
+lazy-detail, expense, grid and HOME browser suites; browser timing instrumentation.
+Financial write tests and benchmarks use disposable local databases only.
+
+
+Bounded read-only production diagnostics use the existing one-vCPU server and
+three samples per mode. A driver selected for many historical assignments had
+635 ms cold on Stage 2 and 353 ms cold on the candidate with identical complete
+response hashes; the candidate's next two reads were 3.4 / 3.8 ms. The analogous
+investor statement was 380 / 363 ms cold, also with matching hashes. Ordinary
+small statements did not uniformly improve (one driver was 160 / 191 ms).
+Full-week reads varied from roughly 0.5 to 1.6 seconds as live source revisions
+and CPU contention changed. These limited diagnostics establish correctness and
+illustrate contention, not production p95 or a uniform speedup. The load-update
+migration was not yet installed during this comparison. See the preserved
+[read-only production evidence](performance/payroll-stage3-2026-10-30-production-readonly.json).
+
+Page preferences are restored from local browser memory/sessionStorage, without
+a state-fetch request. Restoring expanded rows also reads their statement data
+in the weekly snapshot and renders their contents; that work is included in the
+warm-page measurements. Scroll restoration retries while content arrives; its
+10-second stopping timer does not delay initial rendering. A full browser reload
+also includes session verification before mounting the payroll page. Exact view
+restoration and the financial revision boundary are retained.
+
+Run fixture preparation and other financial database tests separately from timing runs, even when schemas differ: the financial advisory lock is shared across schemas in the database. The harness reuses five authenticated sessions between weeks so login setup does not hit the application's login rate limit. Isolated save/concurrency modes support full-group reruns; excluded measurements remain in the artifact with their cause.
+
+
+### Completed browser matrix and acceptance limits
+
+The retained matrix has **1,890 measurements and no payroll action failures**:
+both pages, September 28 / October 19 / October 26, 20 routine observations,
+40 multiple-open observations, five whole-week observations and 100 five-user
+saves per page/week. All requests receive 175 ms additional delay. Five-user
+cases include 20 real source updates at 250 ms intervals. The workload runs on
+a local shared development machine, not the production VPS. p95 below is the
+range across the three weeks; p50/p95/p99, failures, request/query counts,
+payload bytes, write-only lock waits, and aggregate completion are in the
+[complete browser artifact](performance/payroll-stage3-2026-10-30-browser.json).
+Five bulk samples and 20 routine samples are limited evidence: their p99 is
+the observed maximum, not a precise population estimate.
+
+| Browser action | Driver p95 (ms) | Investor p95 (ms) | Target (ms) |
+| --- | ---: | ---: | ---: |
+| Cold page | 1,179–1,369 | 1,110–1,144 | <1,000 |
+| First expansion | 345–416 | 320–342 | <300 |
+| Cached expansion | 31 | 31 | <300 |
+| Individual save | 345–445 | 347–375 | <300 |
+| Individual finalization | 410–426 | 338–348 | <300 |
+| Reopening dialog | 76–78 | 76–78 | <300 |
+| Individual reopening | 381–398 | 366–407 | <300 |
+| Whole-week finalization | 933–1,135 | 718–1,147 | <2,000 |
+| Whole-week reopening | 861–996 | 828–1,066 | <2,000 |
+| Five concurrent users saving | 788–913 | 788–827 | <300 |
+
+Whole-week actions, cached expansion and immediate reopening dialogs meet their
+measured targets. **The routine 300 ms and cold-page one-second targets are not
+fully met.** All three implementation stages are delivered; performance-target
+acceptance remains open. The global financial lock remains intact, and receipts
+acknowledge completed commits. Background aggregate refresh is separately
+reported and is not hidden inside the confirmation timing. Remaining work must
+be assessed using normal production request telemetry, including session/page
+startup and measured CPU contention; these results do not justify weakening
+financial locks or changing provider frequency.
+
+A fresh Stage 2 run used the repaired timing harness on the same older-week
+fixture and delay. It has three samples per routine/bulk action, so the following
+median comparison is diagnostic. It is not a production-percentile claim. The
+[baseline artifact](performance/payroll-stage2-2026-10-30-baseline.json) includes
+its environment limits and the complete raw measurements.
+
+| Page / action | Stage 2 median (ms) | Stage 3 median (ms) |
+| --- | ---: | ---: |
+| Driver first expansion | 629 | 309 |
+| Driver save | 794 | 346 |
+| Driver finalization | 1,514 | 409 |
+| Driver reopening | 1,295 | 329 |
+| Driver whole-week finalization | 2,753 | 865 |
+| Investor first expansion | 475 | 304 |
+| Investor save | 511 | 330 |
+| Investor finalization | 611 | 345 |
+| Investor reopening | 895 | 328 |
+| Investor whole-week finalization | 3,125 | 759 |

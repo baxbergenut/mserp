@@ -24,11 +24,12 @@ func main() {
 	}
 }
 func run() error {
-	mode := flag.String("mode", "driver", "driver, investor, driver-history, investor-history, fuel, financial, board, gross")
+	mode := flag.String("mode", "driver", "driver, investor, driver-statement, investor-statement, driver-summary, investor-summary, driver-history, investor-history, fuel, financial, board, gross")
 	weekArg := flag.String("week", "2026-10-05", "Monday YYYY-MM-DD")
 	runs := flag.Int("runs", 2, "sequential samples (1-5)")
 	explain := flag.Bool("explain", false, "bounded read-only plan for the slowest query, with expressions removed")
 	jit := flag.String("jit", "off", "on or off")
+	historicalRoot := flag.Bool("historical-root", false, "select a statement with the most historical assignment relationships")
 	flag.Parse()
 	if *runs < 1 || *runs > 5 || (*jit != "on" && *jit != "off") {
 		return fmt.Errorf("invalid bounded options")
@@ -66,7 +67,25 @@ func run() error {
 	}
 	defer pool.Close()
 	pay := repository.NewDriverPayRepository(pool)
-	var driver, owner string
+	var driver, owner, truck string
+	if *mode == "driver-statement" {
+		query := `SELECT driver_id::text FROM gross_board_entries WHERE service_date >= $1::date AND service_date < $1::date+7 GROUP BY driver_id ORDER BY count(*) DESC,driver_id LIMIT 1`
+		if *historicalRoot {
+			query = `SELECT a.driver_id::text FROM truck_driver_assignments a WHERE EXISTS(SELECT 1 FROM gross_board_entries b WHERE b.driver_id=a.driver_id AND b.service_date >= $1::date AND b.service_date < $1::date+7) GROUP BY a.driver_id ORDER BY count(DISTINCT a.truck_id) DESC,a.driver_id LIMIT 1`
+		}
+		if e = pool.QueryRow(ctx, query, week).Scan(&driver); e != nil {
+			return e
+		}
+	}
+	if *mode == "investor-statement" {
+		query := `SELECT truck_id::text FROM truck_settlement_terms WHERE week_start <= $1::date GROUP BY truck_id ORDER BY count(*) DESC,truck_id LIMIT 1`
+		if *historicalRoot {
+			query = `SELECT a.truck_id::text FROM truck_driver_assignments a WHERE EXISTS(SELECT 1 FROM truck_settlement_terms t WHERE t.truck_id=a.truck_id AND t.week_start <= $1::date) GROUP BY a.truck_id ORDER BY count(DISTINCT a.driver_id) DESC,a.truck_id LIMIT 1`
+		}
+		if e = pool.QueryRow(ctx, query, week).Scan(&truck); e != nil {
+			return e
+		}
+	}
 	if *mode == "driver-history" {
 		if e = pool.QueryRow(ctx, `SELECT driver_id::text FROM gross_board_entries GROUP BY driver_id ORDER BY count(*) DESC,driver_id LIMIT 1`).Scan(&driver); e != nil {
 			return e
@@ -86,6 +105,14 @@ func run() error {
 			value, e = pay.Get(sampleCtx, week)
 		case "investor":
 			value, e = pay.InvestorPay(sampleCtx, week)
+		case "driver-statement":
+			value, e = pay.PayrollStatement(sampleCtx, "driver", week, driver)
+		case "investor-statement":
+			value, e = pay.PayrollStatement(sampleCtx, "investor", week, truck)
+		case "driver-summary":
+			value, e = pay.PayrollPreview(sampleCtx, "driver", week)
+		case "investor-summary":
+			value, e = pay.PayrollPreview(sampleCtx, "investor", week)
 		case "driver-history":
 			value, e = pay.History(sampleCtx, driver, repository.Pagination{Page: 1, PageSize: 10})
 		case "investor-history":
@@ -115,6 +142,7 @@ func run() error {
 		_, _ = z.Write(body)
 		_ = z.Close()
 		out := map[string]any{"mode": *mode, "sample": i + 1, "ms": float64(elapsed.Microseconds()) / 1000, "db_calls": metrics.Queries.Load(), "bytes": len(body), "gzip_bytes": compressed.Len(), "sha256": fmt.Sprintf("%x", sha256.Sum256(body)), "jit": *jit}
+		out["historical_root"] = *historicalRoot
 		out["phases_ms"], out["queries"] = metrics.Details()
 		if board, ok := value.(repository.DriverBoard); ok {
 			compact, err := json.Marshal(repository.CompactBoard(board))
