@@ -161,6 +161,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-dashboard-views.mjs
 
+      - name: Verify payroll browser timing instrumentation
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-payroll-timing.mjs
+
       - name: Verify pinnable headers and Gross Board load search in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend

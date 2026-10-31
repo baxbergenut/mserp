@@ -5,6 +5,7 @@ import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { dirname, join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
+import { installPayrollBrowserTiming } from './payroll-browser-timing.mjs';
 
 const accessFile = process.env.MSERP_REVIEW_ACCESS_FILE;
 const access = JSON.parse(await readFile(accessFile, 'utf8'));
@@ -28,6 +29,7 @@ const row = (p, d) => p.getByRole('button', { name: d.investorId ? `${d.fullName
 const detail = (p, d) => p.getByRole('region', { name: `${d.fullName} weekly loads`, exact: true });
 async function login(index) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }); contexts.push(context);
+  await context.addInitScript(installPayrollBrowserTiming);
   await context.route('**/api/**', async route => {
     if (route.request().url().includes('/events')) return route.continue();
     const response = await route.fetch();
@@ -64,13 +66,18 @@ async function settled(p) {
 async function measure(p, kind, week, action, fn, target = 300) {
   console.log(`Measuring ${kind}/${week}/${action}`);
   await settled(p);
+  const browserStart = await p.evaluate(action => { window.__payrollTiming.begin(action); return performance.now(); }, action);
   const start = performance.now(); let failure;
   try { await fn(); await paint(p); } catch (e) { failure = e.message; }
-  const visibleMS = performance.now() - start;
+  const automationMS = performance.now() - start;
+  const observed = await p.evaluate(() => ({ active: window.__payrollTiming.active, navigation: window.__payrollTiming.navigationVisible }));
+  const visibleMS = ['coldPage', 'warmPage'].includes(action) ? observed.navigation : observed.active?.visible - observed.active?.started;
+  if (!failure && (!Number.isFinite(visibleMS) || visibleMS <= 0 || (!['coldPage', 'warmPage'].includes(action) && observed.active?.visible === null))) failure = 'Browser did not observe the completed visible action';
+  const actionStart = start + (observed.active?.started == null ? 0 : observed.active.started - browserStart);
   await settled(p);
-  const requests = telemetry.get(p).records.filter(r => r.finished >= start).map(r => ({ ...r, completedMS: r.finished - start, finished: undefined }));
+  const requests = telemetry.get(p).records.filter(r => r.finished >= start).map(r => ({ ...r, completedMS: r.finished - actionStart, finished: undefined }));
   const refreshes = requests.filter(r => r.method === 'GET' && r.path === `/api/${kind}-pay`);
-  samples.push({ kind, week, action, target, visibleMS, failure, aggregateRefreshMS: refreshes.length ? Math.max(...refreshes.map(r=>r.completedMS)) : null, requests });
+  samples.push({ kind, week, action, target, visibleMS, automationMS, failure, aggregateRefreshMS: refreshes.length ? Math.max(...refreshes.map(r=>r.completedMS)) : null, requests });
   console.log(JSON.stringify({ kind, week, action, visibleMS: Math.round(visibleMS), requests: requests.length,
     serverMS: requests.map(r => ({ method: r.method, ms: r.appMS, queries: r.queries })), failure }));
   if (failure) throw Error(`${kind}/${week}/${action}: ${failure}`);
@@ -169,7 +176,7 @@ try {
     payloadBytes: rows.flatMap(r=>r.requests).reduce((s,r)=>s+r.bytes,0), lockWaitP95: percentile(rows.flatMap(r=>r.requests).map(r=>r.lockMS), .95),
     aggregateRefreshP95: percentile(rows.map(r=>r.aggregateRefreshMS).filter(v=>v!==null),.95),
   }]));
-  await writeFile(output, JSON.stringify({ synthetic: true, addedRoundTripMS: latency, runs, weeks, results, samples }, null, 2));
+  await writeFile(output, JSON.stringify({ synthetic: true, timing: 'actual input dispatch to committed visible state plus two animation frames; automation overhead recorded separately', addedRoundTripMS: latency, runs, weeks, results, samples }, null, 2));
   console.log(JSON.stringify({ output, results }));
   await Promise.all(contexts.map(c => c.close())); await browser.close();
 }

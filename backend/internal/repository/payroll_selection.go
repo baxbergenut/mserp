@@ -76,7 +76,7 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 		return ctx, nil
 	}
 	defer db.Phase(ctx, "selection")()
-	if _, err := tx.Exec(ctx, `SET LOCAL plan_cache_mode = force_custom_plan; SET LOCAL enable_nestloop = on`); err != nil {
+	if _, err := tx.Exec(ctx, `SET LOCAL jit = off; SET LOCAL plan_cache_mode = force_custom_plan; SET LOCAL enable_nestloop = on`); err != nil {
 		return ctx, err
 	}
 	week, _ := ctx.Value(payrollWeekKey{}).(string)

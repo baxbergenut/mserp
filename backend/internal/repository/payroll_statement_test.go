@@ -44,6 +44,16 @@ func TestPayrollStatementReceiptsDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err = tx.Exec(ctx, `SET LOCAL jit=on`); err != nil {
+			t.Fatal(err)
+		}
+		if err = payrollQueryPlans(ctx, tx); err != nil {
+			t.Fatal(err)
+		}
+		var jit string
+		if err = tx.QueryRow(ctx, `SHOW jit`).Scan(&jit); err != nil || jit != "off" {
+			t.Fatal("payroll planner settings depend on pool defaults", jit, err)
+		}
 		var first string
 		if err = tx.QueryRow(ctx, `SELECT md5('receipt-driver1')::uuid::text`).Scan(&first); err != nil {
 			t.Fatal(err)

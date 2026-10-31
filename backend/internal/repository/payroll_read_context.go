@@ -18,13 +18,15 @@ type payrollAuthoritativeKey struct{}
 // chooses repeated nested scans after a few statement reads. Plan using this
 // request's date/selection, scoped to this transaction only. Full-week CTE row
 // estimates can remain too small even with a custom plan: prefer hash/merge
-// joins there, while small components keep indexed nested-loop lookups.
+// joins there, while small components keep indexed nested-loop lookups. Disabled
+// loop paths receive large planner costs; disable JIT explicitly so those costs
+// cannot trigger expensive compilation in callers outside the application pool.
 func payrollQueryPlans(ctx context.Context, tx pgx.Tx) error {
 	loop := "off"
 	if ids := payrollDriverIDs(ctx); ids != nil && len(ids) <= 16 {
 		loop = "on"
 	}
-	_, err := tx.Exec(ctx, `SET LOCAL plan_cache_mode = force_custom_plan; SET LOCAL enable_nestloop = `+loop)
+	_, err := tx.Exec(ctx, `SET LOCAL jit = off; SET LOCAL plan_cache_mode = force_custom_plan; SET LOCAL enable_nestloop = `+loop)
 	return err
 }
 

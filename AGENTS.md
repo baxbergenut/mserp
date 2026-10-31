@@ -2587,6 +2587,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   entrypoint delegates to it. It permits only local synthetic payroll_perf schemas,
   records browser latency separately from aggregate refresh, and never benchmarks
   financial writes against production.
+  Browser timing starts at actual input dispatch and ends after the committed
+  visible state paints; automation setup time is reported separately. Run
+  `node scripts/test-payroll-timing.mjs` to verify those measurement boundaries.
 - Migration 181 excludes only `loads.synced_at` from update invalidation; all
   other source columns and JSON still advance the committed payroll revision.
   Its deployment also pauses writers, with the previous release retained for rollback.
