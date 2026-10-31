@@ -51,6 +51,8 @@ reverse a successful database migration. Database backups are intentionally
 retained for manual recovery.
 
 Migration 180 fills missing cache-revision trigger events on enrolled tables.
+Migration 181 ignores load updates that change only `synced_at`, comparing all
+other columns (including source JSON and later-added columns) for invalidation.
 Install the updated deployment helper first: it pauses API and expense-sheet
 writers during the DDL to avoid lock inversion. It changes no payroll values,
 and the preceding release remains compatible for rollback.

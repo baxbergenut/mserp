@@ -10,6 +10,24 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func TestBatchMetricsCountStatements(t *testing.T) {
+	ctx, m := WithQueryMetrics(context.Background())
+	ctx = Tracer{}.TraceBatchStart(ctx, nil, pgx.TraceBatchStartData{})
+	for range 2 {
+		Tracer{}.TraceBatchQuery(ctx, nil, pgx.TraceBatchQueryData{SQL: "SELECT private_financial_column WHERE secret=$1", Args: []any{"private-financial-value"}})
+	}
+	Tracer{}.TraceBatchEnd(ctx, nil, pgx.TraceBatchEndData{})
+	_, queries := m.Details()
+	if m.Queries.Load() != 2 || len(queries) != 1 {
+		t.Fatalf("batch statements disappeared from request metrics: %d %d", m.Queries.Load(), len(queries))
+	}
+	for key, q := range queries {
+		if len(key) != 16 || q.Calls != 2 {
+			t.Fatal("batch metrics must contain only bounded fingerprints and counts")
+		}
+	}
+}
+
 func TestQueryDiagnosticsAreBoundedAndExcludeValues(t *testing.T) {
 	ctx, m := WithQueryMetrics(context.Background())
 	for i := 0; i < 300; i++ {

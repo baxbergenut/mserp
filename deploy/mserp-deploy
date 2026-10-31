@@ -40,6 +40,7 @@ status_palette_rollback_migration=172_restore_status_board_palette.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
 expense_balance_migration=176_expense_balance_corrections.sql
 payroll_revision_migration=180_payroll_revision_triggers.sql
+payroll_load_revision_migration=181_payroll_load_revision.sql
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
@@ -177,11 +178,11 @@ for migration in "${migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
-    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" ]]; then
+    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" ]]; then
         # No old application may write between a contract cutover and activation.
         cutover_started=true
         systemctl stop mserp-api.service
-        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
+        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi

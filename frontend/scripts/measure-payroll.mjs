@@ -11,7 +11,9 @@ const access = JSON.parse(await readFile(accessFile, 'utf8'));
 const dsn = new URL(process.env.MSERP_REVIEW_TEST_DATABASE_URL);
 if (!['127.0.0.1', 'localhost'].includes(new URL(access.base).hostname) || !['127.0.0.1', 'localhost'].includes(dsn.hostname)
   || !dsn.pathname.endsWith('_test') || !/^payroll_perf_[0-9]+$/.test(access.schema)) throw Error('Local synthetic payroll fixture required');
-const weeks = (process.env.MSERP_PERF_WEEKS || '2026-10-26,2026-10-19,2026-09-28').split(',');
+// Measure old to new on a fresh fixture: reopening intentionally retains payment
+// reservations, so writing a later week first must block earlier corrections.
+const weeks = (process.env.MSERP_PERF_WEEKS || '2026-10-26,2026-10-19,2026-09-28').split(',').sort();
 if (weeks.some(w => !/^\d{4}-\d{2}-\d{2}$/.test(w))) throw Error('Invalid weeks');
 const runs = Number(process.env.MSERP_PERF_RUNS || 20), latency = Number(process.env.MSERP_PERF_BROWSER_LATENCY_MS ?? 175);
 const runTag = Date.now().toString(36);
@@ -69,6 +71,8 @@ async function measure(p, kind, week, action, fn, target = 300) {
   const requests = telemetry.get(p).records.filter(r => r.finished >= start).map(r => ({ ...r, completedMS: r.finished - start, finished: undefined }));
   const refreshes = requests.filter(r => r.method === 'GET' && r.path === `/api/${kind}-pay`);
   samples.push({ kind, week, action, target, visibleMS, failure, aggregateRefreshMS: refreshes.length ? Math.max(...refreshes.map(r=>r.completedMS)) : null, requests });
+  console.log(JSON.stringify({ kind, week, action, visibleMS: Math.round(visibleMS), requests: requests.length,
+    serverMS: requests.map(r => ({ method: r.method, ms: r.appMS, queries: r.queries })), failure }));
   if (failure) throw Error(`${kind}/${week}/${action}: ${failure}`);
 }
 async function expand(p, d) {

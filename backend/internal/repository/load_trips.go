@@ -28,9 +28,7 @@ type GrossBoardTrip struct {
 
 // Shared projection for board, payroll and dashboard. Missing/invalid allocations
 // never fall back to the full order.
-const loadTripSourceSQL = `
- LEFT JOIN LATERAL (
-  WITH trips AS (
+const loadTripValidationSQL = `WITH trips AS (
    SELECT v,
     CASE WHEN v->>'id' ~ '^[1-9][0-9]{0,8}$' THEN (v->>'id')::integer END id,
     CASE WHEN v->>'total_load_pay' ~ '^-?[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (v->>'total_load_pay')::numeric END gross,
@@ -64,7 +62,11 @@ const loadTripSourceSQL = `
       AND (SELECT sum((v->>'originalRate')::numeric) FROM jsonb_array_elements(saved->'allocations') v)=l.total_pay,false)
      ELSE coalesce(stats.valid,false) END valid
    FROM decision,stats
-  ) SELECT coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL AS split,
+  )`
+
+const loadTripSourceSQL = `
+ LEFT JOIN LATERAL (` + loadTripValidationSQL + `
+ SELECT coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL AS split,
    (coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL) AND (NOT checked.valid OR selected.id IS NULL) AS review,
    CASE WHEN coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL THEN CASE WHEN checked.valid THEN coalesce((allocation.v->>'originalRate')::numeric,selected.gross) END ELSE l.total_pay END original,
    CASE WHEN coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL THEN CASE WHEN checked.valid THEN selected.loaded+selected.empty END ELSE l.total_miles END miles,

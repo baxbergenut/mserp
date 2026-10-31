@@ -172,13 +172,13 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	defer db.Phase(ctx, "driver_calculation")()
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
-	if err := payrollQueryPlans(ctx, tx); err != nil {
-		return DriverPayWeek{}, err
-	}
 	var selectionErr error
 	ctx, selectionErr = selectPayrollContext(ctx, tx, "driver", driverID)
 	if selectionErr != nil {
 		return DriverPayWeek{}, selectionErr
+	}
+	if err := payrollQueryPlans(ctx, tx); err != nil {
+		return DriverPayWeek{}, err
 	}
 	ctx = payrollReadContext(ctx, tx)
 	result, err := readDriverPaySourceWeek(ctx, tx, week, "")
@@ -216,7 +216,11 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	defer db.Phase(ctx, "source")()
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
-	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+","+payrollEscrowCapacityCTE+payDriverEligibilitySQL+","+payrollEntriesCTE+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
+	entries, resolved := payrollEntriesCTE, payrollResolvedLoad
+	if full, _ := ctx.Value(payrollAuthoritativeKey{}).(bool); full {
+		entries, resolved = payrollLoadMatchCTE, payrollAuthoritativeResolvedLoad
+	}
+	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+","+payrollEscrowCapacityCTE+payDriverEligibilitySQL+","+entries+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
  d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
  coalesce(e.source_date::text,''),coalesce(e.source_slot,0),coalesce(e.dispatch_date,''),coalesce(e.dispatch_slot,0),coalesce(e.transfer_version,0),coalesce(e.credited_dispatcher_id,''),coalesce(e.credited_dispatcher_name,''),coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
@@ -229,7 +233,7 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  w.fuel_override::text,w.toll_override::text,coalesce(fuel.total,0)::text,coalesce(toll.total,0)::text,coalesce(w.layover_excluded_dates,'{}'::text[])
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
  AND btrim(e.load_number)<>''
- `+payrollResolvedLoad+`
+ `+resolved+`
  LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
@@ -269,31 +273,15 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		if l.LoadRecordID == nil {
 			l.Issues = append(l.Issues, "Load not matched — resolve in Gross Board")
 		}
-		if len(raw) > 0 {
-			var load datatruck.Load
-			if err := json.Unmarshal(raw, &load); err != nil {
-				return result, err
-			}
-			l.PickupLocation, l.DeliveryLocation = payLoadLocations(load.Stops)
-			if load.Trip != nil && !l.TripReview {
-				if l.LoadTripID != nil {
-					l.PickupDate = load.Trip.BeginDate
-					if load.Trip.Pickup != nil {
-						l.PickupLocation = strings.TrimSpace(load.Trip.Pickup.City + ", " + load.Trip.Pickup.State)
-					}
-					if load.Trip.Delivery != nil {
-						l.DeliveryLocation = strings.TrimSpace(load.Trip.Delivery.City + ", " + load.Trip.Delivery.State)
-					}
-				}
-				l.LoadedMiles = paySourceMiles(load.Trip.LoadedMiles)
-				l.DeadheadMiles = paySourceMiles(load.Trip.DeadheadMiles)
-			}
+		incomplete, e := hydratePayrollLoad(ctx, tx, &l, raw)
+		if e != nil {
+			return result, e
 		}
-		if l.LoadRecordID != nil && (l.PickupDate == "" || l.PickupLocation == "" || l.DeliveryLocation == "" || l.TotalMiles == "" || l.LoadedMiles == "" || l.DeadheadMiles == "") {
+		if l.LoadRecordID != nil && incomplete {
 			l.Issues = append(l.Issues, "Source details incomplete — refresh load details")
 		}
 		if payrollSummaryOnly(ctx) {
-			l.PickupLocation, l.DeliveryLocation, l.LoadedMiles, l.DeadheadMiles, l.SystemOriginalRate, l.SystemMiles = "", "", "", "", "", ""
+			l.SystemOriginalRate, l.SystemMiles = "", ""
 		}
 		basis := l.DriverGross
 		if d.PayType == "cpm" {

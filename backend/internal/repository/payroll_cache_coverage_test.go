@@ -108,4 +108,26 @@ func TestPayrollCacheSchemaCoverageDatabase(t *testing.T) {
 		exec(string(migration))
 		check(t)
 	})
+	t.Run("load_revision_upgrade", func(t *testing.T) {
+		exec(`DROP TRIGGER payroll_cache_update ON loads; DROP FUNCTION invalidate_payroll_load_cache();
+ CREATE TRIGGER payroll_cache_update AFTER UPDATE ON loads REFERENCING NEW TABLE AS changed_rows FOR EACH STATEMENT EXECUTE FUNCTION invalidate_payroll_cache();
+ INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(18199,'UPGRADE','delivered',1,1,1,'{}')`)
+		migration, err := os.ReadFile("../../sql/181_payroll_load_revision.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec(string(migration))
+		var before, after int64
+		if err = conn.QueryRow(ctx, `SELECT revision FROM payroll_cache_revisions WHERE table_name='loads'`).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		exec(`UPDATE loads SET synced_at=now() WHERE id=18199`)
+		if err = conn.QueryRow(ctx, `SELECT revision FROM payroll_cache_revisions WHERE table_name='loads'`).Scan(&after); err != nil {
+			t.Fatal(err)
+		}
+		if before != after {
+			t.Fatal("upgraded trigger invalidates timestamp-only sync")
+		}
+		check(t)
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,18 +26,50 @@ func TestPayrollStatementReceiptsDatabase(t *testing.T) {
    INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) SELECT md5('receipt-truck'||n)::uuid,md5('receipt-driver'||n)::uuid,'2026-01-01' FROM generate_series(1,3)n;
    INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) SELECT md5('receipt-truck'||n)::uuid,md5('receipt-owner'||n)::uuid,'2026-01-05',88 FROM generate_series(1,3)n;
    INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles) SELECT md5('receipt-driver'||n)::uuid,'2026-09-28','RECEIPT-'||n,1000,1200,400 FROM generate_series(1,3)n;`)
+		exec(`INSERT INTO expenses(id,category_id,category,expense_date,expense_type,amount,charge_driver_id,driver_id,covered_by)
+ SELECT md5('receipt-expense'||n)::uuid,(SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Other','2026-01-05','Old unpaid charge',200,md5('receipt-driver'||n)::uuid,md5('receipt-driver'||n)::uuid,'Driver' FROM generate_series(1,3)n;
+ INSERT INTO expense_payments(expense_id,week_start,amount) SELECT md5('receipt-expense'||n)::uuid,'2026-10-26',20 FROM generate_series(1,3)n;
+ INSERT INTO expenses(category_id,category,expense_date,expense_type,amount,driver_id,payment_type,covered_by)
+ SELECT (SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Other','2026-09-28','Reimbursement',12.25,md5('receipt-driver'||n)::uuid,'Reimburse','Company' FROM generate_series(1,3)n;
+ INSERT INTO expenses(category_id,category,expense_date,expense_type,amount,truck_id,owner_id,covered_by)
+ SELECT (SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Other','2026-01-05','Old truck balance',90,md5('receipt-truck'||n)::uuid,md5('receipt-owner'||n)::uuid,'Truck Owner' FROM generate_series(1,3)n;
+ INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,opening_paid)
+ SELECT md5('receipt-driver'||n)::uuid,'Receipt Driver '||n,'2026-01-05',2500,500 FROM generate_series(1,3)n;
+ DELETE FROM gross_board_entries WHERE driver_id=md5('receipt-driver3')::uuid;
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at,unassigned_at) VALUES(md5('receipt-truck1')::uuid,md5('receipt-driver3')::uuid,'2025-01-01','2025-08-01');
+ INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES(md5('receipt-driver2')::uuid,md5('receipt-driver3')::uuid,'2026-09-28');`)
 		pay := NewDriverPayRepository(pool)
 		week, _ := chargeWeek("2026-09-28")
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var first string
+		if err = tx.QueryRow(ctx, `SELECT md5('receipt-driver1')::uuid::text`).Scan(&first); err != nil {
+			t.Fatal(err)
+		}
+		scoped, err := selectPayrollContext(payrollWeekContext(ctx, "2026-09-28"), tx, "driver", first)
+		if err != nil || len(payrollDriverIDs(scoped)) != 1 {
+			t.Fatalf("retired assignment expanded unrelated drivers: %v %v", payrollDriverIDs(scoped), err)
+		}
+		_ = tx.Rollback(ctx)
 		for _, kind := range []string{"driver", "investor"} {
 			t.Run(kind, func(t *testing.T) {
 				full := func() DriverPayWeek {
 					t.Helper()
 					var v DriverPayWeek
 					var e error
+					tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer tx.Rollback(ctx)
+					authority := context.WithValue(ctx, payrollAuthoritativeKey{}, true)
 					if kind == "driver" {
-						v, e = pay.Get(ctx, week)
+						v, e = readDriverPayWeek(authority, tx, week, "")
 					} else {
-						v, e = pay.InvestorPay(ctx, week)
+						v, e = readInvestorPay(authority, tx, week)
+						v = investorPayView(v, "")
 					}
 					if e != nil {
 						t.Fatal(e)
@@ -102,6 +135,15 @@ func TestPayrollStatementReceiptsDatabase(t *testing.T) {
 				var blocked *PayrollFinalizationBlockedError
 				if !errors.As(e, &blocked) || blocked.Review == nil || blocked.Review.Revision != report.Revision || len(blocked.Review.Drivers) != 1 {
 					t.Fatal("structured review missing", e)
+				}
+				// Bulk validation may stage collection writes before a later blocking
+				// statement. The whole transaction, including audit rows, must roll back.
+				beforeBlocked := full().Revision
+				if _, e = settle(WithPayrollReceipt(ctx), week, "", beforeBlocked, actor, "", false, false); e == nil {
+					t.Fatal("bulk finalization bypassed unresolved evidence")
+				}
+				if full().Revision != beforeBlocked {
+					t.Fatal("blocked bulk finalization leaked writes or revisions")
 				}
 				receipt, e := settle(WithPayrollReceipt(ctx), week, target, report.Revision, actor, "", false, true)
 				if e != nil {

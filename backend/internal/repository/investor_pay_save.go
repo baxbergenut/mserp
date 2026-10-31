@@ -133,7 +133,25 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return empty, err
 	}
-	report, err := readInvestorPay(ctx, tx, week)
+	if truck != "" && strings.HasPrefix(revision, "inputs:") {
+		current := DriverPayWeek{WeekStart: week.Format(time.DateOnly)}
+		if err = setPayrollRevision(ctx, tx, "investor", &current); err != nil {
+			return empty, err
+		}
+		if current.Revision != revision {
+			return empty, ErrDriverPayConflict
+		}
+		ctx, err = selectPayrollContext(payrollWeekContext(ctx, current.WeekStart), tx, "truck", truck)
+		if err != nil {
+			return empty, err
+		}
+	}
+	var report DriverPayWeek
+	if reopen && truck != "" && strings.HasPrefix(revision, "inputs:") {
+		report, err = readPayrollReopenTarget(ctx, tx, "investor", week, truck, revision)
+	} else {
+		report, err = readInvestorPay(ctx, tx, week)
+	}
 	if err != nil {
 		return empty, err
 	}
@@ -143,6 +161,24 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if !reopen && !override && len(report.Issues) > 0 {
 		return empty, finalizationReview(report, truck, "Resolve unattributed loads before finalizing Investor Pay")
 	}
+	bulkExpenses := truck == "" && !reopen
+	if bulkExpenses {
+		ctx, err = preparePayrollFinalization(ctx, tx, "investor", report)
+		if err != nil {
+			return empty, err
+		}
+		if err = finalizePayrollExpenses(ctx, tx, "investor", report.WeekStart, actor, report.Drivers); err != nil {
+			return empty, err
+		}
+	}
+	var expenseInputs truckPayInputs
+	if bulkExpenses {
+		expenseInputs, err = readTruckPayExpenses(ctx, tx, report.WeekStart, truckPayInputs{})
+		if err != nil {
+			return empty, err
+		}
+	}
+	writeBatch := &pgx.Batch{}
 	count := 0
 	selectedIDs := map[string]bool{}
 	committed := DriverPayWeek{WeekStart: report.WeekStart, Issues: report.Issues, Notices: report.Notices, Drivers: []DriverPayDriver{}}
@@ -153,6 +189,26 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			return empty, err
 		}
 	}
+	queueFinal := func(d DriverPayDriver) (DriverPayDriver, error) {
+		d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: finalizedAt, FinalizedBy: username}
+		d.Edits.Version++
+		body, e := json.Marshal(d)
+		if e != nil {
+			return d, e
+		}
+		edits, e := json.Marshal(d.Edits)
+		if e != nil {
+			return d, e
+		}
+		writeBatch.Queue(`INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,report,finalized,finalized_at,finalized_by) VALUES($1,$2::date,$3,$4,$5,true,now(),$6) ON CONFLICT(truck_id,week_start) DO UPDATE SET owner_id=excluded.owner_id,edits=excluded.edits,report=excluded.report,finalized=true,version=investor_pay_weeks.version+1,finalized_at=now(),finalized_by=excluded.finalized_by`, d.ID, report.WeekStart, d.InvestorID, edits, body, actor)
+		detail, e := json.Marshal(map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d})
+		if e != nil {
+			return d, e
+		}
+		writeBatch.Queue(`INSERT INTO truck_settlement_events(truck_id,week_start,action,actor_id,details) VALUES($1,$2::date,'finalized',nullif($3,'')::uuid,$4)`, d.ID, report.WeekStart, actor, detail)
+		return d, nil
+	}
+	inputs, _ := ctx.Value(payrollFinalizeKey{}).(*payrollFinalizeInputs)
 	for _, d := range report.Drivers {
 		if (truck != "" && d.ID != truck) || (truck == "" && d.TruckInactive) {
 			continue
@@ -164,9 +220,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		count++
 		selectedIDs[d.ID] = true
 		if reopen {
-			if _, err = tx.Exec(ctx, `UPDATE investor_pay_weeks SET finalized=false,version=version+1 WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart); err != nil {
-				return empty, err
-			}
+			writeBatch.Queue(`UPDATE investor_pay_weeks SET finalized=false,version=version+1 WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart)
 		} else {
 			if err = savePaySources(ctx, tx, d, &d.Edits, "investor", actor); err != nil {
 				return empty, err
@@ -186,38 +240,69 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			for i := range expenses {
 				expenses[i].Apply = !expenses[i].Saved
 			}
-			if err = saveInvestorExpenses(ctx, tx, d, actor, expenses); err != nil {
-				return empty, err
+			if !bulkExpenses {
+				if err = saveInvestorExpenses(ctx, tx, d, actor, expenses); err != nil {
+					return empty, err
+				}
 			}
-			d.Edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, report.WeekStart, false)
-			if err != nil {
-				return empty, err
+			if bulkExpenses {
+				d.Edits.ExpenseDeductions = expenseInputs.deductions(d.ID, false)
+			} else {
+				d.Edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, report.WeekStart, false)
+				if err != nil {
+					return empty, err
+				}
 			}
-			d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: finalizedAt, FinalizedBy: username}
-			d.Edits.Version++
-			body, e := json.Marshal(d)
-			if e != nil {
-				return empty, e
+
+		}
+		if !reopen {
+			if inputs == nil {
+				d, err = queueFinal(d)
+				if err != nil {
+					return empty, err
+				}
+				// Shared principals retain sequential frozen-statement validation.
+				if err = tx.SendBatch(ctx, writeBatch).Close(); err != nil {
+					return empty, err
+				}
+				writeBatch = &pgx.Batch{}
 			}
-			edits, e := json.Marshal(d.Edits)
-			if e != nil {
-				return empty, e
-			}
-			if _, err = tx.Exec(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,report,finalized,finalized_at,finalized_by) VALUES($1,$2::date,$3,$4,$5,true,now(),$6) ON CONFLICT(truck_id,week_start) DO UPDATE SET owner_id=excluded.owner_id,edits=excluded.edits,report=excluded.report,finalized=true,version=investor_pay_weeks.version+1,finalized_at=now(),finalized_by=excluded.finalized_by`, d.ID, report.WeekStart, d.InvestorID, edits, body, actor); err != nil {
-				return empty, err
-			}
+			committed.Drivers = append(committed.Drivers, d)
+			continue
 		}
 		action := "finalized"
 		if reopen {
 			action = "reopened"
 		}
-		if err = truckAudit(ctx, tx, d.ID, report.WeekStart, action, actor, map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d}); err != nil {
-			return empty, err
+		detail, e := json.Marshal(map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d})
+		if e != nil {
+			return empty, e
 		}
+		writeBatch.Queue(`INSERT INTO truck_settlement_events(truck_id,week_start,action,actor_id,details) VALUES($1,$2::date,$3,nullif($4,'')::uuid,$5)`, d.ID, report.WeekStart, action, actor, detail)
 		committed.Drivers = append(committed.Drivers, d)
 	}
 	if count == 0 {
 		return empty, chargeInvalid("No eligible investor settlements selected")
+	}
+	if inputs != nil && !reopen {
+		records, e := readPaySources(ctx, tx)
+		if e != nil {
+			return empty, e
+		}
+		for i, d := range committed.Drivers {
+			for j, row := range d.Edits.SourceCharges {
+				d.Edits.SourceCharges[j] = projectPaySource(row.Source, row.OwnerID, row.Name, row.Base, report.WeekStart, records)
+			}
+			setInvestorSourceCosts(&d)
+			d, err = queueFinal(d)
+			if err != nil {
+				return empty, err
+			}
+			committed.Drivers[i] = d
+		}
+	}
+	if err = tx.SendBatch(ctx, writeBatch).Close(); err != nil {
+		return empty, err
 	}
 	if payrollReceiptRequested(ctx) && !reopen && strings.HasPrefix(report.Revision, "inputs:") {
 		if err = setPayrollRevision(ctx, tx, "investor", &committed); err != nil {
