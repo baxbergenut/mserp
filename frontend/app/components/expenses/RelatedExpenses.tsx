@@ -42,7 +42,7 @@ function HeaderFilter({ label, summary, children, onClear }: { label: string; su
       if (panel.current) { panel.current.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - 264))}px`; panel.current.style.top = `${rect.bottom + 4}px`; panel.current.style.maxHeight = `${Math.max(100, innerHeight - rect.bottom - 16)}px`; }
     }}>{label}<Filter className="h-3 w-3" /></button>
     {summary && <span className="block max-w-36 truncate text-[11px] font-normal text-blue-400" title={summary}>{summary}</span>}
-    <div id={id} ref={panel} popover="auto" role="group" aria-label={`${label} filter controls`} onToggle={event => setOpen(event.newState === "open")} className="fixed m-0 w-64 max-w-[calc(100vw-16px)] space-y-3 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-left text-xs font-normal text-zinc-300 shadow-xl">
+    <div id={id} ref={panel} popover="auto" role="group" aria-label={`${label} filter controls`} onToggle={event => setOpen(event.newState === "open")} className="fixed m-0 w-64 max-w-[calc(100vw-16px)] space-y-3 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-left text-xs font-normal text-zinc-300 ui-popover">
       {children}
       <div className="flex justify-between gap-2"><button type="button" className="text-blue-400" onClick={onClear}>Clear</button><button type="button" className="ui-button" popoverTarget={id} popoverTargetAction="hide">Done</button></div>
     </div>

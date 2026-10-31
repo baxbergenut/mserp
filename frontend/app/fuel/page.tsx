@@ -250,7 +250,7 @@ export default function FuelPage() {
         <button
           type="button"
           role="tab" aria-selected={activeTab === "overview"} onClick={() => setActiveTab("overview")}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
             activeTab === "overview"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
               : "text-zinc-500 hover:text-zinc-300"
@@ -261,7 +261,7 @@ export default function FuelPage() {
         <button
           type="button"
           role="tab" aria-selected={activeTab === "transactions"} onClick={() => setActiveTab("transactions")}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
             activeTab === "transactions"
               ? "bg-zinc-800 text-zinc-100 shadow-sm"
               : "text-zinc-500 hover:text-zinc-300"
@@ -269,7 +269,7 @@ export default function FuelPage() {
         >
           <List className="h-3.5 w-3.5" /> Transactions
         </button>
-        <button type="button" role="tab" aria-selected={activeTab === "drivers"} onClick={() => setActiveTab("drivers")} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${activeTab === "drivers" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}><Users className="h-3.5 w-3.5" />Drivers</button>
+        <button type="button" role="tab" aria-selected={activeTab === "drivers"} onClick={() => setActiveTab("drivers")} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${activeTab === "drivers" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}><Users className="h-3.5 w-3.5" />Drivers</button>
       </div>
 
       {activeTab === "overview" ? (
@@ -279,7 +279,7 @@ export default function FuelPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+          <div className="text-[11px] font-medium text-zinc-600">
             Displayed spend
           </div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-zinc-200">
@@ -287,7 +287,7 @@ export default function FuelPage() {
           </div>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+          <div className="text-[11px] font-medium text-zinc-600">
             Savings
           </div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-emerald-400">
@@ -295,7 +295,7 @@ export default function FuelPage() {
           </div>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+          <div className="text-[11px] font-medium text-zinc-600">
             Fuel + DEF volume
           </div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-zinc-200">

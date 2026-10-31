@@ -58,7 +58,7 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
         if (event.key === "Enter") { event.preventDefault(); choose(options[selected].loadNumber); }
       }}
       className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />
-    {open && createPortal(<div ref={menu} role="listbox" id={id} aria-label={`${label} suggestions`} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }} className="z-50 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-1 shadow-xl">
+    {open && createPortal(<div ref={menu} role="listbox" id={id} aria-label={`${label} suggestions`} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }} className="z-50 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-1 ui-popover">
       <div className="px-2 py-1.5 text-[10px] text-zinc-500">Gross Board · this driver · current week</div>
       {options.map((e, i) => <div key={e.loadNumber} id={`${id}-${i}`} role="option" aria-selected={i === selected} onMouseDown={event => event.preventDefault()} onClick={() => choose(e.loadNumber)} className={`flex cursor-pointer items-center justify-between gap-3 rounded px-2 py-2 text-xs text-zinc-200 hover:bg-zinc-800 ${i === selected ? "bg-blue-500/15" : ""}`}><span className="truncate">{e.loadNumber}</span><span className="shrink-0 text-zinc-500">{shortDate(e.date)}</span></div>)}
     </div>, document.body)}

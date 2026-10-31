@@ -67,11 +67,9 @@ try {
   const links = await nav.locator('a').evaluateAll(rows => rows.map(row => row.getAttribute('href')));
   expect(links.indexOf('/expenses')).toBe(links.indexOf('/tasks') + 1);
   const operatingCosts = page.getByRole('button', { name: /^Operating Costs/ });
-  await expect(operatingCosts.locator('span[aria-label]')).toHaveText('19');
+  await expect(operatingCosts.locator('span[aria-label]')).toHaveCount(0);
   await operatingCosts.click();
-  await expect(nav.getByRole('link', { name: /^Fuel/ }).locator('span[aria-label]')).toHaveText('2');
-  await expect(nav.getByRole('link', { name: /^Tolls/ }).locator('span[aria-label]')).toHaveText('14');
-  await expect(nav.getByRole('link', { name: /^Scale/ }).locator('span[aria-label]')).toHaveText('3');
+  for (const name of ['Fuel', 'Tolls', 'Scale']) await expect(nav.getByRole('link', { name, exact: true }).locator('span[aria-label]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add updater', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Roy (106)', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -102,7 +100,7 @@ try {
   expect(writes[1].body.version).toBe(1);
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await expect(nav.locator('a[title="HR"]')).toHaveAttribute('href', '/drivers');
-  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveText('19');
+  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
 
   permissions = ['updaters.read'];
@@ -121,7 +119,7 @@ try {
   await expect(page.getByRole('heading', { name: 'Access restricted', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open an available page' })).toHaveAttribute('href', '/updaters');
   await page.goto(`${origin}/login`);
-  await page.getByLabel('Email or existing username').fill('updater-viewer');
+  await page.getByLabel('Email', {exact:true}).fill('updater-viewer');
   await page.getByLabel('Password', { exact: true }).fill('fixture-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(`${origin}/updaters`);
@@ -147,14 +145,14 @@ try {
 
   permissions = ['tolls.read'];
   await page.goto(`${origin}/updaters`);
-  await expect(operatingCosts.locator('span[aria-label]')).toHaveText('14');
+  await expect(operatingCosts.locator('span[aria-label]')).toHaveCount(0);
   await operatingCosts.click();
   await expect(nav.getByRole('link', { name: /^Fuel/ })).toHaveCount(0);
   await expect(nav.getByRole('link', { name: /^Scale/ })).toHaveCount(0);
   await expect(nav.getByRole('link', { name: /^Tolls/ })).toBeVisible();
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await expect(nav.locator('a[title="Operating Costs"]')).toHaveAttribute('href', '/tolls');
-  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveText('14');
+  await expect(nav.locator('a[title="Operating Costs"] span[aria-label]')).toHaveCount(0);
   sidebarCounts = { ...sidebarCounts, tolls: 0 };
   await page.goto(`${origin}/updaters`);
   await expect(operatingCosts).toBeVisible();

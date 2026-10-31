@@ -84,7 +84,7 @@ export function useLoadNotes(entries: GrossBoardEntry[], disabled: boolean, onCh
     popup: open && (open.kind === "menu" || shown.length > 0) ? createPortal(
       <div ref={popup} data-grid-ignore role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Load notes" : "Load note"}
         style={{ top: open.top, left: open.left, width: "min(300px, calc(100vw - 16px))", maxHeight: `calc(100vh - ${open.top + 8}px)` }}
-        className={`mserp-ui fixed z-[100] overflow-y-auto text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-xl" : "space-y-1"}`}
+        className={`mserp-ui fixed z-[100] overflow-y-auto text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 ui-popover" : "space-y-1"}`}
         onMouseEnter={cancelClose} onMouseLeave={leave} onBlur={leave} onContextMenu={event => event.stopPropagation()}
         onKeyDown={event => {
           event.stopPropagation();

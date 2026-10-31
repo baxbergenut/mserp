@@ -27,19 +27,18 @@ export default function LoginPage() {
     finally { setSubmitting(false); }
   }
 
-  return <main className="relative flex min-h-full items-center justify-center overflow-hidden px-6 py-12">
-    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(59,130,246,0.12),transparent_38%)]" />
-    <div className="relative w-full max-w-sm animate-fade-in">
+  return <main className="mserp-ui flex min-h-full items-center justify-center px-6 py-12">
+    <div className="w-full max-w-sm">
       <div className="mb-8 text-center">
         <div className="flex justify-center"><BrandLogo className="w-56" /></div>
       </div>
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-zinc-800 bg-card p-6 shadow-2xl shadow-black/25">
-        <fieldset disabled={submitting} className="space-y-5 disabled:opacity-60">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-800 bg-card p-6">
+        <fieldset disabled={submitting} className="space-y-4 disabled:opacity-60">
           <input name="email" aria-label="Email" placeholder="Email" autoComplete="username" autoFocus required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className={controlClass} />
           <input name="password" aria-label="Password" placeholder="Password" type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={e => setPassword(e.target.value)} className={controlClass} />
         </fieldset>
         {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-300" role="alert">{error}</p>}
-        <button type="submit" disabled={submitting} className="flex h-11 w-full items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60">{submitting ? "Signing in…" : "Sign in"}</button>
+        <button type="submit" disabled={submitting} className="ui-button ui-button-primary h-11 w-full">{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
     </div>
   </main>;

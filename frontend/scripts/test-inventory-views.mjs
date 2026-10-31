@@ -55,6 +55,7 @@ const server = createServer(async (request, response) => {
       if (path === '/api/auth/session') return send({ user: { id: id(500), username: 'Fleet Reviewer', theme: 'default', permissions: trailerOnly ? ['trailers.read'] : ['inventory.read', 'trailers.read', 'tolls.read', ...(truckAccess ? ['trucks.read'] : []), ...(readOnly ? [] : ['inventory.manage', 'trailers.manage', 'inventory.import'])] }, csrfToken: 'fixture' });
       if (path === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0 });
       if (path === '/api/feedback/messages/count') return send({ count: 0 });
+      if (path === '/api/auth/birthday') return send({});
       if (path === '/api/tasks/count') return send({ count: 0 });
       if (path === '/api/maintenance/access') return send({ canView: false, canCreate: false });
       if (path === '/api/lookups/trucks') return send(trucks);

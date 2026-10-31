@@ -29,7 +29,7 @@ export function BoardFilter({ label, options, selected, onChange, onReorder, reo
         }
       }}>{selected === null ? `All ${plural.toLowerCase()}` : `${plural} (${selected.length})`}<ChevronDown className="h-3 w-3" /></button>
     <div id={id} ref={panel} popover="auto" role="group" aria-label={`${label} choices`} onToggle={event => setOpen(event.newState === "open")}
-      className="fixed m-0 w-60 max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-zinc-200 shadow-xl">
+      className="fixed m-0 w-60 max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-zinc-200 ui-popover">
       <div className="mb-1 flex justify-between border-b border-zinc-700 pb-2">
         <button className="rounded px-2 py-1 hover:bg-zinc-800" onClick={() => onChange(null)}>Select all</button>
         <button className="rounded px-2 py-1 hover:bg-zinc-800" onClick={() => onChange([])}>Clear all</button>

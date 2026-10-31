@@ -64,7 +64,7 @@ function ExpenseBalanceEditor({ id, onClose, onSaved }: { id: string; onClose: (
       const bounds = event.currentTarget.getBoundingClientRect();
       if (event.clientX < bounds.left || event.clientX > bounds.right) onClose();
     }}
-    className="mserp-ui fixed inset-0 m-0 ml-auto h-dvh max-h-none w-full max-w-lg border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-300 shadow-2xl backdrop:bg-black/50">
+    className="mserp-ui fixed inset-0 m-0 ml-auto h-dvh max-h-none w-full max-w-lg border-l border-zinc-800 bg-zinc-950 p-0 text-zinc-300 ui-popover backdrop:bg-black/50">
     <form className="flex h-full flex-col" onSubmit={event => { event.preventDefault(); void save(); }}>
       <header className="flex shrink-0 items-start gap-3 border-b border-zinc-800 p-5">
         <CircleDollarSign className="mt-0.5 h-5 w-5 text-zinc-500" />

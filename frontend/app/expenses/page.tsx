@@ -361,15 +361,15 @@ export default function ExpensesPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Filtered total</p>
+          <p className="text-[11px] font-medium text-zinc-600">Filtered total</p>
           <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-zinc-100">{formatMoney(summaryAmount)}</p>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Records</p>
+          <p className="text-[11px] font-medium text-zinc-600">Records</p>
           <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-zinc-100">{total.toLocaleString()}</p>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Needs date or amount</p>
+          <p className="text-[11px] font-medium text-zinc-600">Needs date or amount</p>
           <p className={`mt-1 font-mono text-xl font-semibold tabular-nums ${incompleteCount ? "text-amber-400" : "text-zinc-100"}`}>{incompleteCount.toLocaleString()}</p>
         </div>
       </div>

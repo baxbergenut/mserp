@@ -97,17 +97,16 @@ export function Sidebar() {
     <aside
       className={`
         flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-zinc-800/60 bg-sidebar-bg
-        transition-[width] duration-200 ease-in-out
         ${collapsed ? "w-16" : "w-60"}
       `}
     >
       {/* ── Brand ── */}
-      <div className="flex h-14 shrink-0 items-center overflow-hidden border-b border-zinc-800/40 px-4">
+      <div className="flex h-16 shrink-0 items-center overflow-hidden border-b border-zinc-800/40 px-4">
         <BrandLogo compact={collapsed} />
       </div>
 
       {/* ── Navigation ── */}
-      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2 *:shrink-0">
+      <nav aria-label="Main navigation" className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2 *:shrink-0">
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
@@ -131,15 +130,15 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={children[0].href}
-                  className={`group relative flex items-center justify-center rounded-lg py-2 text-[13px] font-medium transition-all duration-150 ${
+                  className={`group relative flex items-center justify-center rounded-lg py-1.5 text-[13px] font-medium transition-colors duration-150 ${
                     active
-                      ? "bg-accent/10 text-accent"
+                      ? "bg-card-hover text-accent"
                       : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                   }`}
                   title={item.label}
                   aria-label={badge?.label ?? item.label}
                 >
-                  <Icon className={`h-[18px] w-[18px] ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
+                  <Icon className={`h-4 w-4 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
                   <NavBadge badge={badge} collapsed />
                 </Link>
               );
@@ -152,7 +151,7 @@ export function Sidebar() {
                 <button
                   type="button"
                   onClick={() => setOpenGroups(groups => ({ ...groups, [item.href]: !groupExpanded }))}
-                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                  className={`group flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
                     active
                       ? "text-accent"
                       : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
@@ -160,7 +159,7 @@ export function Sidebar() {
                   aria-expanded={groupExpanded}
                   aria-label={badge?.label ?? item.label}
                 >
-                  <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
+                  <Icon className={`h-4 w-4 shrink-0 ${active ? "text-accent" : "text-zinc-500 group-hover:text-zinc-300"}`} />
                   <span className="flex-1 text-left">{item.label}</span>
                   <NavBadge badge={badge} />
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupExpanded ? "rotate-180" : ""}`} />
@@ -173,10 +172,11 @@ export function Sidebar() {
                       return (
                         <Link
                           key={child.href}
+                          aria-current={childActive ? "page" : undefined}
                           href={child.href}
-                          className={`group flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                          className={`group flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
                             childActive
-                              ? "bg-accent/10 text-accent"
+                              ? "bg-card-hover text-accent"
                               : "text-zinc-600 hover:bg-zinc-800/40 hover:text-zinc-300"
                           }`}
                         >
@@ -195,13 +195,14 @@ export function Sidebar() {
           return (
             <Link
               key={item.href}
+              aria-current={active ? "page" : undefined}
               href={item.href}
               className={`
-                group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium
-                transition-all duration-150
+                group relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium
+                transition-colors duration-150
                 ${
                   active
-                    ? "bg-accent/10 text-accent"
+                    ? "bg-card-hover text-accent"
                     : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                 }
                 ${collapsed ? "justify-center px-0" : ""}
@@ -209,7 +210,7 @@ export function Sidebar() {
               title={collapsed ? item.label : undefined}
             >
               <Icon
-                className={`h-[18px] w-[18px] shrink-0 ${
+                className={`h-4 w-4 shrink-0 ${
                   active
                     ? "text-accent"
                     : "text-zinc-500 group-hover:text-zinc-300"
@@ -226,17 +227,17 @@ export function Sidebar() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={`
-            flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px]
+            flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[13px]
             text-zinc-600 transition-colors hover:bg-zinc-800/40 hover:text-zinc-300
             ${collapsed ? "justify-center px-0" : ""}
           `}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <PanelLeftOpen className="h-[18px] w-[18px]" />
+            <PanelLeftOpen className="h-4 w-4" />
           ) : (
             <>
-              <PanelLeftClose className="h-[18px] w-[18px]" />
+              <PanelLeftClose className="h-4 w-4" />
               <span>Collapse</span>
             </>
           )}

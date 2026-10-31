@@ -138,7 +138,7 @@ export function DriverForm({
     <div className="space-y-6">
       {(section === "all" || section === "information") && <><section className="space-y-3">
         {section === "all" && <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-zinc-800/50 pb-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">Driver profile</h3>
+          <h3 className="text-[12px] font-semibold text-zinc-500">Driver profile</h3>
         </div>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {value.firstName === undefined && value.lastName === undefined && <p className="text-sm text-zinc-500 sm:col-span-2">Recorded name: <strong>{value.fullName}</strong>. Confirm the given and family names below when known. Other details can be saved without splitting the name.</p>}

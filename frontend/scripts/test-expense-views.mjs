@@ -50,6 +50,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
+    if (path.endsWith('/external-settlements')) return route.fulfill({ json: [] });
     if (route.request().method() === 'POST' && ['/expenses', '/expenses/bulk'].includes(path)) {
       writes.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: { id: 'created-' + writes.length } }); return;
     }
@@ -82,7 +83,7 @@ try {
       '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants, settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/maintenance/options': {vendors:[],types:[],programs:[]}, '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
-    await route.fulfill({ json: fixtures[path] ?? {} });
+    await route.fulfill({ json: path === '/expenses/form-choices' ? { options: fixtures['/expenses'].options, drivers, trucks, owners } : fixtures[path] ?? {} });
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/expenses`);
   await expect(page.getByRole('button', { name: 'Add entry', exact: true })).toBeVisible();
@@ -110,10 +111,10 @@ try {
   await expect(page.getByLabel('Who will cover')).toHaveValue('Truck Owner');
   await page.getByLabel('Expense date', { exact: true }).fill('2026-09-28');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Truck Owner');
-  await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver', 'Truck Owner · Truck Investor']);
+  await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver', 'Truck Owner · Truck Investor', 'Broker']);
   await page.getByLabel('Unit number', { exact: true }).selectOption('own-truck');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Driver');
-  await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver']);
+  await expect(page.getByLabel('Who will cover').locator('option')).toHaveText(['Company', 'Driver', 'Broker']);
   await page.getByRole('combobox', { name: 'Driver', exact: true }).selectOption('company-driver');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Company');
   await page.getByLabel('Unit number', { exact: true }).selectOption('investor-truck');

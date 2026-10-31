@@ -27,7 +27,7 @@ export function CommentButton({ label, value, disabled, onClick }: {
       <Icon className="h-3.5 w-3.5" />
     </button>
     {position && createPortal(<div id={id} role="tooltip" style={{ top: position.top, left: position.left }}
-      className={`pointer-events-none fixed z-[60] max-h-64 w-72 overflow-hidden whitespace-pre-wrap break-words rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-200 shadow-xl ${position.above ? "-translate-y-full" : ""}`}>
+      className={`pointer-events-none fixed z-[60] max-h-64 w-72 overflow-hidden whitespace-pre-wrap break-words rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-200 ui-popover ${position.above ? "-translate-y-full" : ""}`}>
       {value.trim() || "Add comment"}
     </div>, document.body)}
   </>;

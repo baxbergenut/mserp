@@ -35,18 +35,18 @@ export function MiniBarChart({
   return (
     <div className="w-full">
       {/* Tooltip */}
-      {hoveredIndex !== null && (
-        <div className="mb-2 text-right text-[12px] text-zinc-400 transition-opacity">
+      <div className="mb-2 min-h-5 text-right text-xs text-zinc-400" aria-live="polite">
+        {hoveredIndex !== null && <>
           <span className="font-medium text-zinc-200">
             {formatCompact(data[hoveredIndex].value)}
           </span>{" "}
           — {data[hoveredIndex].label}
-        </div>
-      )}
+        </>}
+      </div>
 
       {/* Bars */}
       <div
-        className="flex items-end gap-[3px]"
+        className="flex items-end gap-1"
         style={{ height }}
         onMouseLeave={() => setHoveredIndex(null)}
       >
@@ -60,10 +60,14 @@ export function MiniBarChart({
               className="group flex flex-1 cursor-pointer flex-col items-center"
               style={{ height: "100%" }}
               onMouseEnter={() => setHoveredIndex(i)}
+              tabIndex={0}
+              aria-label={`${d.label}: ${formatCompact(d.value)}`}
+              onFocus={() => setHoveredIndex(i)}
+              onBlur={() => setHoveredIndex(null)}
             >
               <div className="flex flex-1 w-full items-end">
                 <div
-                  className="w-full rounded-t transition-all duration-300"
+                  className="w-full rounded-t transition-opacity duration-150"
                   style={{
                     height: `${Math.max(pct, 2)}%`,
                     backgroundColor: barColor,
@@ -77,10 +81,10 @@ export function MiniBarChart({
       </div>
 
       {/* Labels */}
-      <div className="mt-1.5 flex gap-[3px]">
+      <div className="mt-2 flex gap-1">
         {data.map((d, i) => (
           <div key={i} className="flex-1 text-center">
-            <span className="text-[9px] leading-none text-zinc-600 truncate block">
+            <span className="block truncate text-xs text-zinc-500">
               {/* Show every Nth label to avoid crowding */}
               {data.length <= 14 || i % Math.ceil(data.length / 14) === 0
                 ? d.label

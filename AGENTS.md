@@ -2236,6 +2236,10 @@ assignment lookup lists.
   introductions, 32px ordinary rows/controls, 13px body text, 12px labels,
   16px icons (20px page icons), 16px card padding and 8px radii. The shell and
   shared modal portals use `.mserp-ui`; reuse ManagementUI and MetricCard.
+  Keep sentence-case labels, aligned tabular figures and quiet number-first
+  metrics. Reuse `.ui-input`, `.ui-button`, `.ui-popover`, `.ui-modal-panel` and
+  `.ui-keycap`; retain validation overrides, semantic status colors, personal
+  themes and reduced-motion behavior. See the October 31 polish direction there.
 - `docs/SETTLEMENT_RULES.md` records the customer-confirmed gross basis. Original
   minus driver gross is a dispatch rate-adjustment balance, not automatically
   anyone's earnings. Percentage driver/investor pay uses Gross Board driver

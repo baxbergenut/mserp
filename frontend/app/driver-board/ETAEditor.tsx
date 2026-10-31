@@ -57,7 +57,7 @@ export function ETAEditor({ name, value, anchor, onApply, onClose, automation, w
   }, [anchor, onClose]);
   const inputClass = "mt-1 block h-8 w-full min-w-0 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100 outline-none focus:border-blue-500 [color-scheme:dark]";
   const buttonClass = "rounded px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800";
-  return createPortal(<form ref={panel} role="dialog" aria-label={`${name} · ${heading}`} className="fixed z-50 max-h-[calc(100dvh-16px)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 shadow-xl" onKeyDown={event => {
+  return createPortal(<form ref={panel} role="dialog" aria-label={`${name} · ${heading}`} className="fixed z-50 max-h-[calc(100dvh-16px)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 ui-popover" onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
   }} onBlur={event => {
     if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) onClose();

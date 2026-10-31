@@ -27,7 +27,7 @@ export function RelayTaskCard({ task, drivers, disabled, onDecision }: {
           {task.latestTransaction && <p className="mt-1 text-xs">Latest: {new Date(task.latestTransaction).toLocaleDateString()}</p>}
         </div>
       </div>
-      {task.suggestions.length > 0 && <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">Suggested drivers</h3>}
+      {task.suggestions.length > 0 && <h3 className="mb-2 mt-5 text-xs font-semibold text-zinc-500">Suggested drivers</h3>}
       <div className="space-y-2">
         {task.suggestions.map((candidate) => (
           <div key={candidate.driverId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800/60 p-3">

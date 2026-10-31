@@ -1,11 +1,11 @@
 @import "tailwindcss";
+@import "./themes.css";
 
 /* The selected table cell is distinct from its active text editor. */
 .mserp-ui [data-spreadsheet-grid] :is(td, th, [data-grid-cell]):focus {
   outline: 2px solid var(--ui-focus);
   outline-offset: -2px;
 }
-@import "./themes.css";
 
 /* Reuse the original artwork's alpha for light lettering on dark surfaces.
    The clip preserves the full-color symbol and the blue dot over the i. */
@@ -23,6 +23,8 @@ html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-log
   --ui-icon-size: 16px;
   --ui-radius: 8px;
   --ui-card-padding: 16px;
+  --ui-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ui-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
   --background: #09090b;
   --foreground: #fafafa;
   --card: #111113;
@@ -41,24 +43,26 @@ html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-log
   --ui-link: #93c5fd;
   --ui-border-strong: #3f3f46;
   --ui-primary: #2563eb;
-  --ui-primary-hover: #3b82f6;
+  --ui-primary-hover: #1d4ed8;
 }
 
 /* MSERP UI contract. Unlayered rules deliberately unify legacy utility-based
    pages as well as new shared components. See docs/UI_DESIGN_SPECS.md. */
-.mserp-ui { font-size: var(--ui-font-size); line-height: 20px; color: var(--ui-text); }
+.mserp-ui { font-size: var(--ui-font-size); line-height: 20px; color: var(--ui-text); font-variant-numeric: tabular-nums; }
 .mserp-ui :where(h1) { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ui-heading); }
 .mserp-ui :where(h2, h3) { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--ui-heading); }
 .mserp-ui :where(.text-sm, .text-base):not(h1):not(h2):not(h3):not(.ui-metric-value) { font-size: var(--ui-font-size); }
 .mserp-ui :where(.text-xs, .text-\[10px\], .text-\[11px\]) { font-size: var(--ui-label-size); }
 .mserp-ui :where(.text-zinc-500, .text-zinc-600) { color: var(--muted); }
 .mserp-ui :where(.font-mono) { font-family: var(--font-sans), sans-serif; font-variant-numeric: tabular-nums; }
-.mserp-ui :where(svg.lucide) { width: var(--ui-icon-size); height: var(--ui-icon-size); flex-shrink: 0; }
+.mserp-ui :where(svg.lucide) { width: var(--ui-icon-size); height: var(--ui-icon-size); flex-shrink: 0; stroke-width: 1.5; }
 .mserp-ui [data-page-header] { min-height: 24px; }
 .mserp-ui [data-page-header] :where(div) { min-width: 0; gap: 12px; }
 .mserp-ui [data-page-header] h1 { font-size: 16px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; }
 .mserp-ui [data-page-header] svg.lucide { width: 20px; height: 20px; color: var(--muted); }
 .mserp-ui :where(button, input, select, textarea) { font-family: inherit; }
+.mserp-ui :where(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+.mserp-ui :where(button, a, input, select, textarea) { transition-timing-function: var(--ui-ease); }
 .mserp-ui :where(button, select, input:not([type=checkbox]):not([type=radio])) { font-size: var(--ui-font-size); }
 .mserp-ui :where(button.rounded-lg, button.rounded-md, button.ui-button, a.ui-button) {
   min-height: var(--ui-control-height); padding-block: 4px; border-radius: var(--ui-radius); line-height: 20px;
@@ -87,11 +91,21 @@ html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-log
 .ui-button:hover { background: var(--border-color); }
 .ui-button-primary { border-color: var(--ui-primary); background: var(--ui-primary); color: white; }
 .ui-button-primary:hover { background: var(--ui-primary-hover); }
+@layer components {
+  .ui-input { background: var(--background); color: var(--ui-text); border-color: var(--border-color); }
+  .ui-input:hover:not(:disabled) { border-color: var(--ui-border-strong); }
+  .ui-input:focus-visible { border-color: var(--ui-focus); }
+}
+.mserp-ui .bg-blue-600:hover { background-color: var(--ui-primary-hover); }
+.ui-popover { box-shadow: var(--ui-shadow); }
+.ui-modal-panel { box-shadow: var(--ui-shadow); }
+.ui-keycap { border: 1px solid var(--border-color); border-radius: 4px; padding: 0 4px; font-family: inherit; line-height: 20px; color: var(--muted); }
 .ui-metric { min-height: 80px; }
 .mserp-ui .theme-choice { padding: 0; }
 .mserp-ui .ui-metric-value { font-size: 20px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (pointer: coarse) {
   .mserp-ui :where(button.rounded-lg, button.rounded-md, .ui-button, [role=tab]) { min-height: 40px; }
+  .mserp-ui .ui-input { min-height: 40px; }
 }
 
 @theme inline {
@@ -179,20 +193,20 @@ body {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.35s ease-out both;
+  animation: fadeIn 180ms var(--ui-ease) both;
 }
 
 .animate-slide-in {
-  animation: slideInLeft 0.3s ease-out both;
+  animation: slideInLeft 180ms var(--ui-ease) both;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.3s ease-out both;
+  animation: scaleIn 180ms var(--ui-ease) both;
 }
 
 /* Stagger children */
 .stagger-children > * {
-  animation: fadeIn 0.35s ease-out both;
+  animation: fadeIn 180ms var(--ui-ease) both;
 }
 
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
@@ -223,3 +237,15 @@ body {
 .mserp-ui [role="tab"]:hover { color: var(--ui-text); background: var(--accent-dim); }
 .mserp-ui [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
 .mserp-ui .global-search-input:focus-visible { outline: none; }
+
+/* Respect the account's palette in floating UI, including body portals. */
+html:is([data-theme="solarized-light"], [data-theme="default-light"]) {
+  --ui-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+}
+
+/* Keep loading indicators, remove decorative entrances and layout motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in, .animate-slide-in, .animate-scale-in, .stagger-children > * { animation: none; }
+  .mserp-ui *, .mserp-ui *::before, .mserp-ui *::after { transition-duration: 0s !important; }
+  .mserp-ui .animate-pulse { animation: none; }
+}

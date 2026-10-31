@@ -232,7 +232,7 @@ try {
   expect(requested.filter(r => r.path.startsWith('/dashboard/')).length).toBe(dashboardReads);
   await page.goto(`${base}/`); await expect(page).toHaveURL(/\/gross-board$/);
   await page.goto(`${base}/login?next=/dashboard`);
-  await page.getByLabel('Email or existing username').fill('review@example.test');
+  await page.getByLabel('Email', {exact:true}).fill('review@example.test');
   await page.getByLabel('Password',{exact:true}).fill('synthetic-test-password');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await expect(page).toHaveURL(/\/gross-board$/);

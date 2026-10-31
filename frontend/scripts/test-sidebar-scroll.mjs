@@ -54,6 +54,8 @@ try {
     expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBe(0);
     expect(await page.locator('main').evaluate(el => el.scrollTop)).toBe(0);
     // The navigation must remain usable after collapsing into an icon rail.
+    // Compact rows can fit at 360px; keep exercising actual overflow.
+    await page.setViewportSize({ width, height: 280 });
     await collapse.click();
     await expect.poll(() => nav.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
     await nav.evaluate(el => { el.scrollTop = el.scrollHeight; });

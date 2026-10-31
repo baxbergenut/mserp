@@ -41,20 +41,20 @@ function SpendingChart({ points, color, horizontal = false }: {
         <CartesianGrid stroke="var(--border-color)" vertical={horizontal} horizontal={!horizontal} />
         {horizontal ? (
           <>
-            <XAxis type="number" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="label" width={100} tickFormatter={(value: string) => value.length > 15 ? `${value.slice(0, 14)}…` : value} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+            <XAxis type="number" tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 12 }} tickLine={false} axisLine={false} />
+            <YAxis type="category" dataKey="label" width={100} tickFormatter={(value: string) => value.length > 15 ? `${value.slice(0, 14)}…` : value} tick={{ fill: "var(--muted)", fontSize: 12 }} tickLine={false} axisLine={false} />
           </>
         ) : (
           <>
-            <XAxis dataKey="label" minTickGap={20} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} width={55} />
+            <XAxis dataKey="label" minTickGap={20} tick={{ fill: "var(--muted)", fontSize: 12 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={(value) => `$${compact.format(Number(value))}`} tick={{ fill: "var(--muted)", fontSize: 12 }} tickLine={false} axisLine={false} width={55} />
           </>
         )}
         <Tooltip cursor={{ fill: "#ffffff", fillOpacity: 0.025 }} content={({ active, payload }) => {
           const point = payload?.[0]?.payload as TollDashboardPoint | undefined;
           if (!active || !point) return null;
           return (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 text-[12px] shadow-xl">
+            <div className="rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 text-[12px] ui-popover">
               <div className="text-zinc-400">{point.label}</div>
               <div className="mt-1 font-mono font-medium text-zinc-100">{money.format(point.spend)}</div>
               <div className="mt-1 text-zinc-500">{point.transactionCount.toLocaleString()} transactions</div>
@@ -136,16 +136,16 @@ export function TollOverview({ refreshKey, actions }: { refreshKey: number; acti
             <TollSpendingMap dashboard={dashboard} />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <ChartCard title="Monthly toll spending">
-                <SpendingChart points={dashboard.monthly.map((point) => ({ ...point, label: periodLabel(point.label, true) }))} color="#3b82f6" />
+                <SpendingChart points={dashboard.monthly.map((point) => ({ ...point, label: periodLabel(point.label, true) }))} color="var(--accent)" />
               </ChartCard>
               <ChartCard title="Weekly toll spending">
-                <SpendingChart points={dashboard.weekly.map((point) => ({ ...point, label: periodLabel(point.label, false) }))} color="#a78bfa" />
+                <SpendingChart points={dashboard.weekly.map((point) => ({ ...point, label: periodLabel(point.label, false) }))} color="var(--accent)" />
               </ChartCard>
               <ChartCard title="Top toll agencies">
-                <SpendingChart points={[...dashboard.agencies].sort((a, b) => b.spend - a.spend)} color="#22d3ee" horizontal />
+                <SpendingChart points={[...dashboard.agencies].sort((a, b) => b.spend - a.spend)} color="var(--muted)" horizontal />
               </ChartCard>
               <ChartCard title="Top truck units">
-                <SpendingChart points={[...dashboard.trucks].sort((a, b) => b.spend - a.spend)} color="#3b82f6" horizontal />
+                <SpendingChart points={[...dashboard.trucks].sort((a, b) => b.spend - a.spend)} color="var(--accent)" horizontal />
               </ChartCard>
             </div>
             </>

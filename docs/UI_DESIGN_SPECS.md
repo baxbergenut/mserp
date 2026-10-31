@@ -1,6 +1,6 @@
 # MSERP UI design specifications
 
-Approved direction: October 8, 2026. This is the common contract for existing
+Approved direction: October 8, 2026; polish approved October 31, 2026. This is the common contract for existing
 and new MSERP screens. Keep the compact layout and original dark zinc/blue default.
 Settings > Appearance offers personal Solarized Light, Solarized Dark, Monokai,
 Monokai Dimmed, Dark Modern and Default Light alternatives adapted from VS Code's
@@ -36,8 +36,34 @@ primitives. Extend these before introducing another styling pattern.
 | Primary / ordinary text | `#f4f4f5` / `#d4d4d8` |
 | Secondary text | `#a1a1aa` |
 | Border / table header | `#27272a` / `#18181b` |
-| Primary action | Blue `#2563eb`; hover `#3b82f6` |
+| Primary action | Blue `#2563eb`; hover `#1d4ed8` for white-text contrast |
 | Keyboard focus | Visible 2px light-blue outline |
+
+The polish direction is precise, calm and practical, grounded in dispatch desks
+and financial ledgers. Operational statuses and real charts carry color; aligned
+units, dates and monetary columns are the recurring detail. Keep the existing
+brand, Geist Sans, personal palettes and full-width working layouts.
+
+- Navigation uses a consistent 8px icon gap, compact rows and a neutral selected
+  surface. Active destination links expose `aria-current`. Sidebar width changes
+  immediately so the working table does not animate through intermediate sizes.
+- Use sentence-case form/summary labels, plain record counts and number-first
+  metric cards. Decorative icon tiles are omitted; actual finalization progress
+  and status badges remain.
+- Shared controls use `.ui-input`, actions use `.ui-button`, floating panels use
+  `.ui-popover` or `.ui-modal-panel`, and shortcuts use `.ui-keycap`. These inherit
+  theme tokens. Input styling remains in the components layer so validation
+  utilities can override it. Lucide strokes are 1.5px.
+- Login uses the same scoped controls on a plain surface. Do not add a decorative
+  gradient, ambient glow or large card shadow.
+- Entrances use 180ms and `--ui-ease`. Reduced-motion preferences remove entrances,
+  pulse effects and transitions. Keep functional loading indicators. Charts do
+  not animate their layout or move when a tooltip appears.
+- Chart labels must remain readable, and related financial columns align right.
+  Data maps retain their meaningful continuous legends and operational colors.
+
+Polish process informed by [unslop](https://heydamir.design/unslop) by Damir
+Sokolovsky, licensed CC BY 4.0.
 
 Table heights are content minimums, not clipping rules. Wrapped content, expanded
 statements, multi-row headers, and row-spanning financial cells may grow.

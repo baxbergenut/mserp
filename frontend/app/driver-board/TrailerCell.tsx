@@ -54,7 +54,7 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
     {entry.trailerNumber.trim() && entry.trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}
     {open && createPortal(<div ref={popup} data-grid-ignore data-board-undo data-board-driver={entry.driverId} role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Trailer actions" : "Trailer note"}
       style={{ left: open.left, top: open.top, width: "min(300px, calc(100vw - 16px))" }}
-      className={`mserp-ui fixed z-[100] text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-xl" : ""}`}
+      className={`mserp-ui fixed z-[100] text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 ui-popover" : ""}`}
       onMouseEnter={cancel} onMouseLeave={leave} onBlur={leave} onContextMenu={event => event.stopPropagation()}
       onKeyDown={event => {
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") return;

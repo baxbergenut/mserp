@@ -194,7 +194,7 @@ export default function TollsPage() {
       <div className="flex w-fit max-w-full overflow-x-auto rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-0.5" aria-label="Toll views">
         {(["overview", "transactions", "trucks", "transponders", "attention"] as const).map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)} role="tab" aria-selected={fleetView === tab}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${(fleetView === tab) ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
+            className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${(fleetView === tab) ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
             {tab === "overview" ? <LayoutDashboard className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
             {tab === "overview" ? "Overview" : tab === "trucks" ? "Trucks" : tab === "transponders" ? "Transponders" : tab === "attention" ? "Needs attention" : "Transactions"}
           </button>
@@ -206,15 +206,15 @@ export default function TollsPage() {
       {loadError && <ErrorBanner message={loadError} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Displayed tolls</div>
+          <div className="text-[11px] font-medium text-zinc-600">Displayed tolls</div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-zinc-200">{formatMoney(displayedTotal)}</div>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Transactions</div>
+          <div className="text-[11px] font-medium text-zinc-600">Transactions</div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-zinc-200">{total.toLocaleString()}</div>
         </div>
         <div className="rounded-xl border border-zinc-800/60 bg-card px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">Trucks</div>
+          <div className="text-[11px] font-medium text-zinc-600">Trucks</div>
           <div className="mt-1 font-mono text-lg font-semibold tabular-nums text-zinc-200">{displayedTrucks.toLocaleString()}</div>
         </div>
       </div>

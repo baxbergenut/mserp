@@ -39,6 +39,7 @@ try {
   await page.goto(`${base}/settings`);
   await expect(page.getByRole('heading', { name: 'Color theme', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('tab', { name: 'Users', exact: true })).toHaveCount(0);
   expect(accessReads).toBe(0);
   const choices = [
@@ -84,9 +85,11 @@ try {
   await expect(page.getByRole('tab', { name: 'Appearance', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('heading', { name: 'Color theme', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Users', exact: true }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('button', { name: 'Add user', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.getByRole('dialog').locator('form').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)');
+  await expect(page.getByRole('dialog').locator('form')).toHaveCSS('animation-name', 'none');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   await page.setViewportSize({ width: 640, height: 900 });

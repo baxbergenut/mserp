@@ -15,7 +15,7 @@ export function RemainderMenu({ x, y, waived, onChange, onClose }: { x: number; 
     window.addEventListener("resize", onClose);
     return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", key); window.removeEventListener("resize", onClose); previous?.focus(); };
   }, [onClose]);
-  return createPortal(<div ref={ref} role="menu" aria-label="Recurring charge remainder" style={{ left: Math.max(8, Math.min(x, window.innerWidth - 288)), top: Math.max(8, Math.min(y, window.innerHeight - 108)) }} className="fixed z-[100] w-[280px] rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl" onKeyDown={event => {
+  return createPortal(<div ref={ref} role="menu" aria-label="Recurring charge remainder" style={{ left: Math.max(8, Math.min(x, window.innerWidth - 288)), top: Math.max(8, Math.min(y, window.innerHeight - 108)) }} className="fixed z-[100] w-[280px] rounded-lg border border-zinc-700 bg-zinc-900 p-1 ui-popover" onKeyDown={event => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const buttons = Array.from(ref.current?.querySelectorAll("button") ?? []); const at = buttons.indexOf(document.activeElement as HTMLButtonElement); buttons[(at + 1) % buttons.length]?.focus(); }
     if (event.key === "Tab") onClose();
   }}>

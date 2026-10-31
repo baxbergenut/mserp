@@ -22,7 +22,7 @@ import { PAGE_SIZE_OPTIONS } from "../../lib/pagination";
 import { PageHeader } from "../PageHeader";
 
 export const controlClass =
-  "w-full rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2 text-[13px] text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60";
+  "ui-input w-full rounded-lg border px-3 py-2 text-[13px] outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-60";
 
 function OverlayPortal({ children }: { children: ReactNode }) {
   if (typeof document === "undefined") return null;
@@ -53,7 +53,7 @@ export function ManagementHeader({
   const action = allowed && actionLabel && onAction ? <button
     type="button"
     onClick={onAction}
-    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+    className="ui-button ui-button-primary"
   >
     <ActionIcon className="h-4 w-4" />
     {actionLabel}
@@ -65,8 +65,8 @@ export function ManagementHeader({
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-zinc-500" />
           <h1 className="text-lg font-semibold text-zinc-100">{title}</h1>
-          {count !== undefined && <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">
-            {count}
+          {count !== undefined && <span className="text-xs tabular-nums text-zinc-500">
+            {count.toLocaleString("en-US")}
           </span>}
         </div>
 
@@ -90,6 +90,7 @@ export function ManagementSearch({
     <div className="relative w-full max-w-sm">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
       <input
+        aria-label={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -128,7 +129,7 @@ export function Modal({
 }) {
   return (
     <OverlayPortal>
-      <div className="mserp-ui fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm animate-fade-in">
+      <div className="mserp-ui fixed inset-0 z-50 overflow-y-auto bg-black/60 animate-fade-in">
         <div
           className="flex min-h-full items-start justify-center p-4 sm:items-center sm:p-8"
           role="dialog"
@@ -140,9 +141,9 @@ export function Modal({
         >
           <form
             onSubmit={onSubmit}
-            className={`flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-card shadow-2xl animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
+            className={`ui-modal-panel flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-card animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
           >
-            <div className="flex shrink-0 items-start justify-between border-b border-zinc-800/70 px-5 py-4">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-800 px-4 py-4">
               <div>
                 <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
                 {description && (
@@ -153,27 +154,27 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-md p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+                className="flex w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 overflow-y-auto px-5 py-5">{children}</div>
-            <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-800/70 px-5 py-3.5">
+            <div className="min-h-0 overflow-y-auto p-4">{children}</div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-zinc-800 px-4 py-3">
               {footerStart && <div className="mr-auto">{footerStart}</div>}
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-lg border border-zinc-800 px-3.5 py-2 text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800/60 hover:text-zinc-200 disabled:opacity-50"
+                className="ui-button transition-colors"
               >
                 {cancelLabel}
               </button>
               {!hideSubmit && <button
                 type="submit"
                 disabled={isSaving || submitDisabled}
-                className="inline-flex min-w-24 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
+                className="ui-button ui-button-primary min-w-24 transition-colors disabled:cursor-wait"
               >
                 {isSaving && <LoaderCircle className="h-4 w-4 animate-spin" />}
                 {submitLabel}
@@ -197,7 +198,7 @@ export function FormSection({
 }) {
   return (
     <section className="space-y-3">
-      {!hideTitle && <h3 className="border-b border-zinc-800/50 pb-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+      {!hideTitle && <h3 className="border-b border-zinc-800/50 pb-2 text-xs font-medium text-zinc-400">
         {title}
       </h3>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
@@ -217,7 +218,7 @@ export function Field({
   hint?: string;
 }) {
   return (
-    <label className={`space-y-1.5 ${wide ? "sm:col-span-2" : ""}`}>
+    <label className={`space-y-2 ${wide ? "sm:col-span-2" : ""}`}>
       <span className="text-[12px] font-medium text-zinc-400">{label}</span>
       {children}
       {hint && <span className="block text-[11px] text-zinc-600">{hint}</span>}
@@ -285,7 +286,7 @@ export function TablePagination({
     "inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 text-zinc-500 transition hover:border-zinc-700 hover:bg-zinc-800/60 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-zinc-800 disabled:hover:bg-transparent disabled:hover:text-zinc-500";
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-zinc-800/60 bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl border border-zinc-800/60 bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-[12px] text-zinc-500">
         Showing <span className="font-medium text-zinc-300">{firstItem.toLocaleString()}–{lastItem.toLocaleString()}</span> of{" "}
         <span className="font-medium text-zinc-300">{totalItems.toLocaleString()}</span>
@@ -418,8 +419,8 @@ export function ConfirmDialog({
 }) {
   return (
     <OverlayPortal>
-      <div className="mserp-ui fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-card p-5 shadow-2xl animate-scale-in">
+      <div className="mserp-ui fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4">
+        <div className="ui-modal-panel w-full max-w-md rounded-xl border border-zinc-800 bg-card p-4 animate-scale-in">
           <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
           <p className="mt-2 text-[13px] leading-5 text-zinc-500">{message}</p>
           <div className="mt-5 flex justify-end gap-2">

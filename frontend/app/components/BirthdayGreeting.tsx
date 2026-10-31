@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { claimBirthday } from "@/app/lib/api";
 
 function throwConfetti() {
@@ -108,7 +109,7 @@ export function BirthdayGreeting({ userId }: { userId: string }) {
     return () => { if (timeout) window.clearTimeout(timeout); document.querySelectorAll('[data-birthday-confetti]').forEach(layer => layer.remove()); };
   }, [name]);
 
-  return <>{countdown !== null && <div role="timer" aria-label="Birthday countdown" aria-live="assertive" className="fixed inset-0 z-[10002] flex items-center justify-center bg-black text-white"><span className="text-[min(35vw,16rem)] font-semibold tabular-nums">{countdown}</span></div>}{name !== null && <div role="status" className="fixed right-4 top-20 z-[10001] max-w-sm rounded-xl border border-accent/40 bg-zinc-900 p-5 shadow-xl">
-    <div className="flex items-start gap-4"><div><p className="text-lg font-semibold text-zinc-100">Happy birthday, {name}! 🎉</p><p className="mt-1 text-sm text-zinc-400">Wishing you a wonderful day from all of us at Clustie.</p></div><button type="button" aria-label="Dismiss birthday greeting" onClick={() => setName(null)} className="text-zinc-400 hover:text-zinc-100">✕</button></div>
+  return <>{countdown !== null && <div role="timer" aria-label="Birthday countdown" aria-live="assertive" className="fixed inset-0 z-[10002] flex items-center justify-center bg-black text-white"><span className="text-[min(35vw,16rem)] font-semibold tabular-nums">{countdown}</span></div>}{name !== null && <div role="status" className="fixed right-4 top-20 z-[10001] max-w-sm rounded-xl border border-accent/40 bg-zinc-900 p-5 ui-popover">
+    <div className="flex items-start gap-4"><div><p className="text-lg font-semibold text-zinc-100">Happy birthday, {name}</p><p className="mt-1 text-sm text-zinc-400">Wishing you a wonderful day from all of us at Clustie.</p></div><button type="button" aria-label="Dismiss birthday greeting" onClick={() => setName(null)} className="text-zinc-400 hover:text-zinc-100"><X aria-hidden="true" className="h-4 w-4" /></button></div>
   </div>}</>;
 }

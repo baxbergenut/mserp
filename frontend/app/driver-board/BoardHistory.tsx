@@ -90,7 +90,7 @@ export function BoardHistory({ driverIds, title, canUndo, waiting, onUndo, onClo
     finally { setBusy(false); }
   }
   return createPortal(<div className="fixed inset-0 z-50 flex justify-end bg-black/60" onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-    <section ref={panel} role="dialog" aria-modal="true" aria-label={title} className="flex h-dvh w-full max-w-xl flex-col border-l border-zinc-700 bg-zinc-950 shadow-2xl">
+    <section ref={panel} role="dialog" aria-modal="true" aria-label={title} className="flex h-dvh w-full max-w-xl flex-col border-l border-zinc-700 bg-zinc-950 ui-popover">
       <header className="flex items-center gap-3 border-b border-zinc-800 p-4">
         <History className="h-5 w-5 text-zinc-400" /><div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-zinc-100">{title}</h2><p className="text-xs text-zinc-500">Who changed each cell · New York time</p></div>
         {onLoads && <button className={buttonClass} disabled={busy} onClick={onLoads}>Loads</button>}

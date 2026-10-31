@@ -38,6 +38,7 @@ const server=createServer(async(req,res)=>{
    if(p==='/api/feedback/messages/count')return send({count:0});
    if(p==='/api/maintenance/access')return send({});
    if(p==='/api/tasks/events'){res.writeHead(200,{'Content-Type':'text/event-stream'});res.write(': fixture\n\n');return;}
+   if(p==='/api/auth/birthday')return send({});
    if(p==='/api/tasks/count')return send({count:1});
    if(p==='/api/tasks/users')return send([]);
    if(p==='/api/tasks')return send(pageOf([{id:'task-1',title:'Set up Browser Driver in WeighMyTruck',notes:'Review service setup',systemTaskKind:'weighmytruck_setup',serviceDriverId:'driver-1',status:'open',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),completedAt:null,assigneeName:'Test User'}]));

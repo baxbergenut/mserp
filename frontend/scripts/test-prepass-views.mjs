@@ -26,6 +26,7 @@ const server = createServer(async (req, res) => {
       if (p === '/api/sidebar-counts') return send({ fuel: 0, weighMyTruck: 0, tolls: 0, tollsFrom: '2026-09-01' });
       if (p === '/api/maintenance/access') return send({ canView: false, canCreate: false, canEdit: false, canDelete: false });
       if (p === '/api/tasks/count') return send({ count: 0 });
+      if (p === '/api/auth/birthday') return send({});
       if (p === '/api/feedback/messages/count') return send({ count: 0 });
       if (p === '/api/toll-dashboard') return send({ totals: { spend: 0, transactionCount: 0, truckCount: 0 }, monthly: [], weekly: [], trucks: [], states: [], agencies: [] });
       if (p === '/api/tolls') return send({ items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, summary: { amount: 0, trucks: 0 }, options: { units: [], agencies: [] } });

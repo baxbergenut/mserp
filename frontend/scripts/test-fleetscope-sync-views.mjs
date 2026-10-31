@@ -18,6 +18,7 @@ const server = createServer(async (req, res) => {
    if (p === '/api/auth/session') return send({ user: { id: 'user', username: 'Reviewer', theme: 'default', permissions: ['access.manage', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'fleetscope.read', 'fleetscope.manage', 'fleetscope.reconcile'] }, csrfToken: 'fixture' });
    if (p === '/api/settings/access') return send({ users: [], roles: [], permissions: [], expenseCategories: [] });
    if (p === '/api/sidebar-counts') return send({ fuel: 0, tolls: 0, weighMyTruck: 0 });
+   if (p === '/api/auth/birthday') return send({});
    if (p === '/api/tasks/count') return send({ count: 0 });
    if (p === '/api/fleetscope-sync' && req.method === 'GET') return send(data);
    if (req.method === 'GET') return send({});
@@ -44,7 +45,7 @@ try {
  // Fail unexpected network destinations; fixtures must not contact real services.
  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
  await page.goto(`http://127.0.0.1:${server.address().port}/settings`);
- await page.getByRole('button', { name: 'FleetScope', exact: true }).click();
+ await page.getByRole('tab', { name: 'FleetScope', exact: true }).click();
  await expect(page.getByRole('button', { name: 'Compare FleetScope' })).toBeDisabled();
  await expect(page.getByRole('cell', { name: 'Independent Owner investor owned', exact: true })).toBeVisible();
  assert.equal(writes.length, 0);

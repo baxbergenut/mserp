@@ -30,6 +30,7 @@ function Select({
 }) {
   return (
     <select
+      aria-label={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600"
@@ -86,6 +87,7 @@ export function FilterBar({
       <div className="flex items-center gap-1.5">
         <input
           type="date"
+          aria-label="Pickup from"
           value={filters.pickupFrom}
           onChange={(e) => set({ pickupFrom: e.target.value })}
           className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600"
@@ -93,6 +95,7 @@ export function FilterBar({
         <span className="text-[13px] text-zinc-700">→</span>
         <input
           type="date"
+          aria-label="Pickup to"
           value={filters.pickupTo}
           onChange={(e) => set({ pickupTo: e.target.value })}
           className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-400 outline-none transition-colors focus:border-zinc-600"

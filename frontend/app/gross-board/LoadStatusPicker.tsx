@@ -129,7 +129,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       {needsReview && <button type="button" aria-label={`Review rate and miles for ${label}`} title={entry.tripReviewReason || "Entered values differ from the system load"} onClick={onReview} className="absolute left-1 top-1.5 rounded text-red-400 hover:text-red-200"><AlertCircle className="h-5 w-5" /></button>}
     </div>
     {open && createPortal(<div ref={menu} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }}
-      className="z-[80] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left shadow-2xl"
+      className="z-[80] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left ui-popover"
       onMouseDown={(event) => event.preventDefault()}>
       <div className="px-2 py-2 text-[10px] text-zinc-400">{statusOptions.length ? "DAY STATUSES" : "LOADS"} <span className="float-right">↑ ↓ choose · Enter select</span></div>
       <ul id={id} role="listbox" aria-label="Loads and day statuses" className="grid grid-cols-2 gap-0.5">
