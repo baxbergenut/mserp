@@ -61,6 +61,10 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			sharedMigration, e := os.ReadFile("../../sql/185_payroll_shared_dependencies.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
 			identityMigration, e := os.ReadFile("../../sql/064_load_truck_identity.sql")
 			if e != nil {
 				t.Fatal(e)
@@ -70,6 +74,9 @@ func TestInvestorPayDatabase(t *testing.T) {
 			identityInit = strings.TrimSpace(strings.TrimSuffix(identityInit, "COMMIT;\n"))
 			sql := strings.ReplaceAll(string(init), "\r\n", "\n")
 			if mode == "migration" {
+				// The available-week trigger needs the statement table introduced
+				// by 041, and its registry entries follow the restored 160 registry.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(sharedMigration), "\r\n", "\n"), "", 1)
 				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
@@ -110,6 +117,11 @@ func TestInvestorPayDatabase(t *testing.T) {
 				applyTruckRecurringMigration(t, ctx, admin)
 			}
 			applyAccountingCutoverMigration(t, ctx, admin)
+			if mode == "migration" {
+				if _, err = admin.Exec(ctx, string(sharedMigration)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,gross_board_extra_entries,driver_pay_weeks,app_users,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {
 				t.Fatal(err)
 			}
