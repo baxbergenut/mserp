@@ -13,7 +13,14 @@ import (
 // weeks remain available through explicit on-demand preparation.
 func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error {
 	current := ChargeCurrentWeek()
-	_, err := r.pool.Exec(ctx, `WITH saved AS (
+	// Serialize retirement with source/financial publication. Immutable versions
+	// and receipts survive; only automatic empty pointers and future views retire.
+	tx, closeWrite, err := r.beginPayrollWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer closeWrite()
+	_, err = tx.Exec(ctx, `WITH saved AS (
  SELECT week_start FROM driver_pay_weeks UNION SELECT week_start FROM investor_pay_weeks
  UNION SELECT week_start FROM payroll_settlements
  UNION SELECT week_start FROM expense_payments
@@ -33,16 +40,24 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
  UNION SELECT posting_date FROM tolls
  UNION SELECT transaction_date FROM weighmytruck_transactions
  ), weeks AS (
- SELECT ($1::date+7*n)::date week_start,CASE WHEN n=0 THEN 90 ELSE 80-abs(n) END priority FROM generate_series(-8,2)n
+ SELECT ($1::date+7*n)::date week_start,CASE WHEN n=0 THEN 90 ELSE 80-abs(n) END priority FROM generate_series(-8,0)n
  UNION ALL SELECT week_start,60 FROM saved
  UNION ALL SELECT date_trunc('week',source_day)::date,10 FROM source_days WHERE source_day IS NOT NULL
  ), wanted AS MATERIALIZED (
- SELECT week_start,max(priority) priority FROM weeks GROUP BY week_start
- ), pruned AS (
- DELETE FROM payroll_projection_jobs j WHERE j.priority<=10 AND j.completed_generation=0
+ SELECT week_start,max(priority) priority FROM weeks WHERE week_start<=$1::date GROUP BY week_start
+ ), retired AS MATERIALIZED (
+ SELECT j.week_start FROM payroll_projection_jobs j WHERE j.week_start>$1::date OR (j.priority<=10
  AND (j.lease_until IS NULL OR j.lease_until<clock_timestamp())
+ AND (j.interactive_until IS NULL OR j.interactive_until<clock_timestamp())
  AND NOT EXISTS(SELECT 1 FROM wanted w WHERE w.week_start=j.week_start)
- AND NOT EXISTS(SELECT 1 FROM payroll_projection_weeks w WHERE w.week_start=j.week_start)
+ AND NOT EXISTS(SELECT 1 FROM payroll_statement_state s WHERE s.week_start=j.week_start))
+ UNION SELECT week_start FROM payroll_projection_weeks WHERE week_start>$1::date
+ ), retired_statements AS (
+ DELETE FROM payroll_statement_state WHERE week_start IN (SELECT week_start FROM retired)
+ ), retired_headers AS (
+ DELETE FROM payroll_projection_weeks WHERE week_start IN (SELECT week_start FROM retired)
+ ), pruned AS (
+ DELETE FROM payroll_projection_jobs WHERE week_start IN (SELECT week_start FROM retired)
  ) INSERT INTO payroll_projection_jobs(week_start,priority)
  SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, current)
 	if err != nil {
@@ -50,12 +65,15 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
 	}
 	// Calendar-dependent eligibility and code upgrades are real dependencies even
 	// when no source transaction has run. Only enqueue once while already pending.
-	_, err = r.pool.Exec(ctx, `UPDATE payroll_projection_jobs j SET requested_generation=j.requested_generation+1,impact_roots=NULL,
+	_, err = tx.Exec(ctx, `UPDATE payroll_projection_jobs j SET requested_generation=j.requested_generation+1,impact_roots=NULL,
  requested_at=clock_timestamp(),available_at=clock_timestamp()
  FROM payroll_projection_weeks w JOIN payroll_projection_generations g ON g.id=w.generation_id
  WHERE j.week_start=w.week_start AND j.requested_generation=j.completed_generation
  AND (g.calendar_week<>$1::date OR g.calculator_version<>$2 OR g.schema_version<>$3)`, current, payrollCalculatorVersion, payrollProjectionSchemaVersion)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // Exactly one worker loop per server. PostgreSQL leases also protect against

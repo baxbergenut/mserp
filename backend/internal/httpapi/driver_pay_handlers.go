@@ -22,7 +22,7 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 	}
 	// These are server-owned receipt fields, never editable input.
 	e.StatementRevision, e.CommittedStatement, e.AffectedStatements = "", nil, nil
-	week, err := grossBoardWeek(e.WeekStart)
+	week, err := availablePayrollWeek(e.WeekStart)
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		if !ok {
 			return
 		}
-		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -195,7 +195,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 				writeAPIError(w, 400, err.Error())
 				return
 			}
-			week, err := grossBoardWeek(input.WeekStart)
+			week, err := availablePayrollWeek(input.WeekStart)
 			if err != nil {
 				writeAPIError(w, 400, err.Error())
 				return
@@ -219,7 +219,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	}
 	registerPaySourceAcceptance(r, "/driver-pay", repo, fail)
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {
-		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -276,7 +276,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		week, err := grossBoardWeek(input.WeekStart)
+		week, err := availablePayrollWeek(input.WeekStart)
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return

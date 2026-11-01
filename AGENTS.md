@@ -49,7 +49,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 ### Backend
 
 - Persistent payroll is implemented with ordered rollout capabilities in
-  migrations 182/183 and repository `payroll_projection*.go`. See
+  migrations 182–184 and repository `payroll_projection*.go`. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
   capture inventory and validation. Backfill seeds actual source, saved/ledger and
   recent periods; calendar gaps prepare on demand. Never expand a remote source
@@ -58,8 +58,14 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   telemetry cache revisions remain. Financial truck terms and expenses stay captured.
   Install the updated deploy helper before 183; older releases cannot be restored
   after that classification change.
-  Seeding retires only unmaterialized automatic jobs without active leases;
-  explicit requests and retained versions survive. Operator commands must use
+  Migration 184 excludes Relay identity metadata/review and expense verification
+  audits; canonical fuel attribution and expense changes remain captured. Install
+  the matching deploy helper before 184; older binaries cannot resume afterward.
+  Payroll pages/API/preparation stop at the current New York calendar week. Future
+  source schedules and existing reservations stay authoritative but do not create
+  future statements. Seeding retires future derived pointers/jobs and unused empty
+  automatic historical pointers under the source gate; immutable versions, receipts,
+  financial records, explicit past requests and active historical leases survive. Operator commands must use
   the service environment and working directory; the protocol helper launches
   transient systemd units with both. Driver and Investor Pay expose individual
   finalization only; the Finalize week button was removed by request. Reopen week

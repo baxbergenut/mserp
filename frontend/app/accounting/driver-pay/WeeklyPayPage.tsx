@@ -39,11 +39,19 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const savePay = investor ? saveInvestorPay : saveDriverPay;
   const router = useRouter();
   const params = useSearchParams();
+  const [currentWeek, setCurrentWeek] = useState(() => currentChargeWeek());
+  useEffect(() => {
+    const update = () => setCurrentWeek(currentChargeWeek());
+    const timer = setInterval(update, 60_000);
+    window.addEventListener("focus", update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); };
+  }, []);
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
   const targetKey = investor && params.has("truckId") ? "truckId" : "driverId";
-  const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? requested : undefined;
-  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
+  const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? (requested > currentWeek ? currentWeek : requested) : undefined;
+  const [storedWeek, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
+  const week = storedWeek > currentWeek ? currentWeek : storedWeek;
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
   const [expenseId, setExpenseId] = useState<string | null>(null);
   const [expenseStatement, setExpenseStatement] = useState("");
@@ -393,14 +401,14 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     ...drivers.map(driver => ({ kind: "statement" as const, id: driver.id, name: driver.fullName, unit: driver.truckUnit, driver })),
     ...setupRequired.map(truck => ({ kind: "setup" as const, id: truck.truckId, name: truck.ownerName, unit: truck.truckUnit, truck })),
   ].sort((a, b) => Number(a.kind === "statement" && !!a.driver.settlement?.finalized) - Number(b.kind === "statement" && !!b.driver.settlement?.finalized) || (rowOrder.size ? (rowOrder.get(a.id) ?? 0) - (rowOrder.get(b.id) ?? 0) : a.name.localeCompare(b.name) || a.unit.localeCompare(b.unit, undefined, { numeric: true })));
-  const switchWeek = (next: string) => { if (next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
+  const switchWeek = (next: string) => { if (next <= currentChargeWeek() && next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
   return <div className="space-y-5 animate-fade-in">
     <PageHeader><div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">{investor ? "Investor pay" : "Driver pay"}</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : report?.pagination?.total ?? rows.length}</span></div></div></PageHeader>
     <PinnablePageHeader pinned={headerPinned}>
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Earned pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>
     <div className="flex flex-wrap items-center gap-3">
       <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
+      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= currentWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
       <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={payButtonClass} disabled={busy} onClick={() => switchWeek(currentChargeWeek())}>This week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
           <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>

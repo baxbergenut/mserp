@@ -11,6 +11,16 @@ import (
 	"mserp/internal/repository"
 )
 
+// Payroll statements become available when their New York calendar week starts.
+// Future schedules and source dates remain valid inputs for that later week.
+func availablePayrollWeek(raw string) (time.Time, error) {
+	week, err := grossBoardWeek(raw)
+	if err == nil && week.Format(time.DateOnly) > repository.ChargeCurrentWeek() {
+		return week, errors.New("Payroll weeks are available when the week starts")
+	}
+	return week, err
+}
+
 func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 	p, err := parsePagination(r)
 	q := r.URL.Query()
@@ -59,7 +69,7 @@ func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.Dri
 			writeAPIError(w, 400, "Invalid preparation request")
 			return
 		}
-		week, err := grossBoardWeek(input.WeekStart)
+		week, err := availablePayrollWeek(input.WeekStart)
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -71,7 +81,7 @@ func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.Dri
 		writeJSON(w, http.StatusAccepted, map[string]string{"state": "preparing"})
 	})
 	r.Get(path+"/settlement-preview", func(w http.ResponseWriter, r *http.Request) {
-		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -98,7 +108,7 @@ func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.Dri
 		if !ok {
 			return
 		}
-		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return

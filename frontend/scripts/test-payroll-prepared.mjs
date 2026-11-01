@@ -34,7 +34,7 @@ try {
     });
     page.on('pageerror',e=>errors.push(e.message));
     let state='preparing',generation=10,retries=0,commits=0,placements=0,retryRelease;
-    const requests=[],receipts=new Map();
+    const requests=[],receipts=new Map(),readWeeks=[];
     let driver={id,fullName:'Prepared Test',truckUnit:'P1',payType:'gross_percentage',payRate:'80',isOwnerOperator:true,
       dispatcherId:'',dispatcherName:'',fuelTotal:'0.00',tollTotal:'0.00',issues:[],statementRevision:revision(1),
       ...(kind==='investor'?{investorId:'owner',truckId:id}:{}),
@@ -71,6 +71,7 @@ try {
       }
       if(path===`/${kind}-pay/${id}/cost-transactions`){expect(url.searchParams.get('revision')).toBe(driver.statementRevision);return route.fulfill({json:{sourceTotal:'0.00',carry:'0.00',due:'0.00',transactions:[],preparation:{state:'ready'}}});}
       if(path===`/${kind}-pay`||path===`/${kind}-pay/statements/${id}`){
+        readWeeks.push(url.searchParams.get('weekStart'));
         if(path.includes('/statements/')){
           if(url.searchParams.has('revision'))expect(url.searchParams.get('revision')).toBe(driver.statementRevision);
           else expect(placements).toBe(1); // Explicit latest detail after committed source action.
@@ -121,6 +122,22 @@ try {
     await expect(page.getByRole('region',{name:'Prepared Test weekly loads'})).toContainText('PREPARED-2');
     await expect(page.getByLabel('Prepared Test, extra load number',{exact:true})).toHaveValue('');
     await comment.click();await expect(page.getByLabel('Comment',{exact:true})).toHaveValue('Typed while recovering');
+    // Future URLs and restored selections cannot request an unopened pay week.
+    await page.clock.setFixedTime(new Date('2026-11-01T12:00:00Z'));
+    readWeeks.length=0;
+    await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-11-09');
+    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+    await expect.poll(()=>readWeeks.length).toBeGreaterThan(0);
+    expect(readWeeks.every(w=>w<='2026-10-26')).toBe(true);
+    await page.goto(base+'/accounting/'+kind+'-pay');
+    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+    // Monday midnight in New York opens the next week without a new deployment.
+    await page.clock.setFixedTime(new Date('2026-11-02T05:01:00Z'));
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeEnabled();
+    await page.getByRole('button',{name:'Next week',exact:true}).click();
+    await expect.poll(()=>readWeeks.includes('2026-11-02')).toBe(true);
+    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
     expect(errors).toEqual([]);await page.close();
   }
   console.log('Prepared payroll: preparation, stale/failed values, retry, pinned details, lost response replay, typing during recovery and committed placement receipts passed on both pages.');

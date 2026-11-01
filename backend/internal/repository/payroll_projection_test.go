@@ -52,6 +52,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	operationalMigration, err := os.ReadFile("../../sql/184_payroll_operational_sources.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "incremental"} {
 		t.Run(mode, func(t *testing.T) {
 			name := fmt.Sprintf("payroll_projection_%d", time.Now().UnixNano())
@@ -71,9 +75,11 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 					t.Fatal("fresh schema does not contain the exact migration")
 				}
 				prior := strings.Replace(body, strings.ReplaceAll(string(telemetryMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, strings.ReplaceAll(string(operationalMigration), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
+				exec(string(operationalMigration))
 			} else {
 				exec(body)
 			}
@@ -343,8 +349,8 @@ func TestPayrollProjectionDatabase(t *testing.T) {
 			if err := repo.SeedPayrollPreparation(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if count(`SELECT count(*) FROM payroll_projection_jobs`) < 11 {
-				t.Fatal("recent/upcoming backfill missing")
+			if count(`SELECT count(*) FROM payroll_projection_jobs`) < 9 {
+				t.Fatal("recent/current backfill missing")
 			}
 			if count(`SELECT (SELECT count(*) FROM driver_pay_weeks)+(SELECT count(*) FROM investor_pay_weeks)+(SELECT count(*) FROM payroll_settlements)+(SELECT count(*) FROM expense_payments)+(SELECT count(*) FROM driver_escrow_payments)`) != 0 {
 				t.Fatal("preparation wrote canonical financial records")

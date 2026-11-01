@@ -105,7 +105,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 	})
 	registerPaySourceAcceptance(r, "/investor-pay", pay, fail)
 	r.Get("/investor-pay", func(w http.ResponseWriter, r *http.Request) {
-		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -202,7 +202,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			if !decode(w, r, &v) {
 				return
 			}
-			week, err := grossBoardWeek(v.WeekStart)
+			week, err := availablePayrollWeek(v.WeekStart)
 			if err != nil || v.DriverID != "" && !isUUID(v.DriverID) {
 				writeAPIError(w, 400, "Invalid week or truck")
 				return

@@ -253,7 +253,8 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 	rows, err = tx.Query(ctx, `SELECT periods.week_start,coalesce(CASE WHEN g.calendar_week=$2::date AND g.calculator_version=$3 AND g.schema_version=$4 THEN g.input_snapshot END,'')
  FROM (SELECT week_start FROM payroll_projection_weeks UNION SELECT nullif($1,'')::date WHERE $1<>'') periods
  LEFT JOIN payroll_projection_weeks w ON w.week_start=periods.week_start
- LEFT JOIN payroll_projection_generations g ON g.id=w.generation_id ORDER BY periods.week_start`, week, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion)
+ LEFT JOIN payroll_projection_generations g ON g.id=w.generation_id
+ WHERE periods.week_start<=$2::date ORDER BY periods.week_start`, week, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion)
 	if err != nil {
 		return nil, err
 	}

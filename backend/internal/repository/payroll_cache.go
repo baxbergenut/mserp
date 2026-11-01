@@ -55,6 +55,7 @@ var payrollUnrelatedTables = []string{
 	"fleetscope_sync_links", "fleetscope_sync_snapshots", "fleetscope_sync_operations", "fleetscope_sync_audit",
 	"datatruck_enrollments", "datatruck_enrollment_events", "datatruck_driver_updates", "datatruck_driver_update_events",
 	"relay_driver_rosters", "relay_driver_operations",
+	"relay_driver_links", "relay_identity_reviews", "expense_verifications",
 	"prepass_fleet_rosters", "prepass_fleet_operations", "prepass_fleet_links",
 }
 

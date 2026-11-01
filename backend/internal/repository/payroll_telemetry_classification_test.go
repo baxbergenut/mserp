@@ -11,6 +11,10 @@ import (
 func TestPayrollTelemetryClassificationDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
 		seedPayrollProjectionTest(t, ctx, pool)
+		if _, err := pool.Exec(ctx, `INSERT INTO expenses(id,category_id,category,expense_type,expense_date,amount)
+ SELECT '18200000-0000-0000-0000-000000009902',id,name,'Operational verification','2026-10-05',10 FROM expense_settings WHERE kind='category' AND name='Other'`); err != nil {
+			t.Fatal(err)
+		}
 		repo := NewDriverPayRepository(pool)
 		if err := repo.EnablePayrollShadow(ctx); err != nil {
 			t.Fatal(err)
@@ -41,13 +45,18 @@ func TestPayrollTelemetryClassificationDatabase(t *testing.T) {
 			`INSERT INTO maintenance_telemetry(truck_id,vin,mileage,reported_at) VALUES('18200000-0000-0000-0000-000000000002','TELEMETRY',100,now())`,
 			`UPDATE maintenance_telemetry SET mileage=200,checked_at=clock_timestamp(),reported_at=clock_timestamp()`,
 			`DELETE FROM maintenance_telemetry`,
+			`INSERT INTO relay_driver_links(id,relay_environment,relay_driver_id,driver_id) VALUES('18200000-0000-0000-0000-000000009903','production','operational-test','18200000-0000-0000-0000-000000000001')`,
+			`UPDATE relay_driver_links SET relay_email='changed@example.invalid',updated_at=clock_timestamp()`,
+			`INSERT INTO relay_identity_reviews(identity_id,driver_id,action) VALUES('18200000-0000-0000-0000-000000009903','18200000-0000-0000-0000-000000000001','link')`,
+			`INSERT INTO expense_verifications(expense_id,verifier_role) VALUES('18200000-0000-0000-0000-000000009902','accountant')`,
+			`UPDATE expense_verifications SET revoked_at=clock_timestamp()`,
 		} {
 			if _, err := pool.Exec(ctx, mutation); err != nil {
 				t.Fatal(err)
 			}
 			after, reportsAfter := read()
 			if before != after || !samePayrollProjection(reportsBefore, reportsAfter) {
-				t.Fatal("maintenance telemetry changed payroll inputs or financial reports")
+				t.Fatal("operational metadata changed payroll inputs or financial reports")
 			}
 		}
 		var events, revision int

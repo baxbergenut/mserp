@@ -162,6 +162,10 @@ func TestPayrollPerformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
+	if os.Getenv("MSERP_PAYROLL_NATIVE_SAVE_PROFILE") == "1" {
+		profilePayrollNativeSaves(t, ctx, pool)
+		return
+	}
 	if os.Getenv("MSERP_PAYROLL_KEEP_FIXTURE") == "1" {
 		t.Logf("retained synthetic schema=%s", schema)
 		return

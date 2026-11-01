@@ -12,7 +12,7 @@ import (
 	"mserp/internal/repository"
 )
 
-func TestPayrollFinalizationBlockedCode(t *testing.T) {
+func TestPayrollFutureFinalizationRejected(t *testing.T) {
 	current, err := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestPayrollFinalizationBlockedCode(t *testing.T) {
 				registerInvestorPayRoutes(r, slog.Default(), pay, nil)
 			}
 			for _, tc := range []struct{ action, extra, code string }{
-				{"finalize", "", "finalization_blocked"},
+				{"finalize", "", "validation_failed"},
 				{"finalize", `,"driverId":"invalid"`, "validation_failed"},
 				{"reopen", "", "validation_failed"},
 			} {

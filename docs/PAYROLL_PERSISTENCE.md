@@ -30,6 +30,46 @@ deploy helper first: it pauses all writers and refuses rollback to a release lac
 migration 183 once the classification changes, even if migration-ledger recording
 fails. Fresh/incremental tests check both report parity and financial invalidation.
 
+## November 1 save regression and calendar correction
+
+The first live rollout exposed synchronous native saves reconstructing hundreds of
+empty materialized periods. An expense edit reached 528 calculations/24 seconds;
+verification reached 638 calculations/75 seconds. A quiesced rollback to global
+protocol with all prepared gates and the worker off restored ordinary saves; live
+expense edits then completed in 201 ms and verification in 32–87 ms.
+
+Preparation now stops at the current New York calendar week. Both pay pages clamp
+future links/restored views, disable Next week at the current week, and unlock it
+at the next Monday boundary. Pay-page APIs reject future weeks, and the worker and
+command publication exclude them. Existing future schedules, payments/reservations
+and immutable history remain intact; they are not projected into a future pay page.
+
+Seeding takes the source gate and retires current pointers/jobs for future weeks
+and unused, empty, automatic historical calendar gaps. It preserves real source
+periods, saved/ledger periods, explicit past requests, active past leases and every
+immutable version/receipt. This repairs already-materialized backfill debris rather
+than merely preventing new debris. A fresh/incremental fixture retains hundreds of
+immutable generations while removing their unused current pointers, then verifies
+expense edits and verification publish exact current totals with two calculations.
+
+Migration 184 classifies Relay driver-link metadata, Relay review audits and expense
+verification audits as unrelated. Neither payroll calculator reads those tables;
+canonical fuel attribution and expense changes remain captured. The deploy helper
+quiesces writers and rejects rollback to binaries missing the new classification.
+Do not re-enable prepared gates until the corrected cohort has reconciled and
+expense-save behavior has been verified. Health checks alone are insufficient.
+
+The opt-in native-save diagnostic (`MSERP_PAYROLL_NATIVE_SAVE_PROFILE=1` with
+`MSERP_PAYROLL_PERF=1`) prepares 69 past/current periods on the synthetic
+176-driver/truck fixture with 6,000 expenses, 6,000 tolls and 11,449 fuel rows.
+The November 1 local run completed expense edit in 1.175 seconds and verification
+in 1.259 seconds (138 calculations each), then matched both prepared pay pages
+against full reference reports for the expense origin and current weeks. These are
+local diagnostic measurements, not production latency guarantees. Financial
+regressions passed apart from two old future-week expectations, which were updated
+and passed separately; browser preparation, lazy details and expense checks, lint,
+build, vet and Linux deployment compatibility checks passed.
+
 ## Implemented stages
 
 | Stage | Implementation | Release verification |
@@ -129,10 +169,10 @@ Initial shadow reconciliation exposed a retained expense dated year 0205. The
 source date, amount, allocations and carried balance remain unchanged. Automatic
 backfill now seeds actual source weeks, every saved/ledger period and recent weeks;
 it does not expand distant dates into every intervening calendar week. Other weeks
-prepare explicitly on demand. Startup removes only unmaterialized automatic jobs
-without active leases when they no longer belong to that seed set. Explicit requests,
-completed work and immutable versions remain. Fresh/incremental tests verify bounded
-work, historical/future coverage, leases and unchanged complete financial reports.
+prepare explicitly on demand. Startup retires unused empty automatic current pointers/jobs under the source gate,
+including completed backfill debris. Explicit past requests, active past leases and
+immutable versions remain. Future derived views/jobs retire until the week starts.
+Fresh/incremental tests preserve canonical future reservations and financial reports.
 
 Operator CLI calls must have the API service's environment precedence and working
 directory. The protocol helper uses transient systemd units with `/etc/mserp` and
@@ -405,7 +445,7 @@ notifications and polls at one second as a fallback, and warns about work older
 than 30 seconds. Current/recent/interactive work precedes historical work.
 
 Backfill seeds current week, previous eight weeks, next two, every saved/finalized
-week including future saved weeks, and history from the earliest relevant source.
+past/current saved week and actual source periods; future weeks wait for their calendar boundary.
 It rechecks the calendar and calculator version each minute. It never creates
 payments, deductions, collections or finalizations. Native commands publish all
 materialized dependent weeks in their financial transaction. Proven ledger and

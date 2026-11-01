@@ -140,6 +140,9 @@ func (r *DriverPayRepository) RequestPayrollPreparation(ctx context.Context, wee
 	if _, err := chargeWeek(week.Format(time.DateOnly)); err != nil {
 		return err
 	}
+	if week.Format(time.DateOnly) > ChargeCurrentWeek() {
+		return chargeInvalid("Payroll weeks are available when the week starts")
+	}
 	_, err := r.pool.Exec(ctx, `INSERT INTO payroll_projection_jobs(week_start,priority) VALUES($1,100)
  ON CONFLICT(week_start) DO UPDATE SET priority=greatest(payroll_projection_jobs.priority,100),
  impact_roots=CASE WHEN $2 THEN NULL ELSE payroll_projection_jobs.impact_roots END,
@@ -217,10 +220,10 @@ func (r *DriverPayRepository) claimPayrollProjection(ctx context.Context) (payro
 	var job payrollProjectionJob
 	err := r.pool.QueryRow(ctx, `WITH candidate AS (
  SELECT week_start FROM payroll_projection_jobs WHERE requested_generation>completed_generation
- AND available_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
+ AND week_start<=$1::date AND available_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
  ORDER BY greatest(priority,CASE WHEN interactive_until>clock_timestamp() THEN 110 ELSE 0 END) DESC,available_at,week_start DESC LIMIT 1 FOR UPDATE SKIP LOCKED
  ) UPDATE payroll_projection_jobs j SET lease_token=gen_random_uuid(),lease_until=clock_timestamp()+interval '2 minutes',attempts=attempts+1
- FROM candidate c WHERE j.week_start=c.week_start RETURNING j.week_start,j.requested_generation,j.lease_token::text,j.impact_roots`).Scan(&job.Week, &job.Generation, &job.Token, &job.Roots)
+ FROM candidate c WHERE j.week_start=c.week_start RETURNING j.week_start,j.requested_generation,j.lease_token::text,j.impact_roots`, ChargeCurrentWeek()).Scan(&job.Week, &job.Generation, &job.Token, &job.Roots)
 	return job, err
 }
 
