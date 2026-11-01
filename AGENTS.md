@@ -49,11 +49,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 ### Backend
 
 - Persistent payroll is implemented with ordered rollout capabilities in
-  migration 182 and repository `payroll_projection*.go`. See
+  migrations 182/183 and repository `payroll_projection*.go`. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
   capture inventory and validation. Backfill seeds actual source, saved/ledger and
   recent periods; calendar gaps prepare on demand. Never expand a remote source
   date into every intervening week or change its date/balance to reduce work.
+  Migration 183 excludes maintenance telemetry from payroll source capture; ordinary
+  telemetry cache revisions remain. Financial truck terms and expenses stay captured.
+  Install the updated deploy helper before 183; older releases cannot be restored
+  after that classification change.
   Seeding retires only unmaterialized automatic jobs without active leases;
   explicit requests and retained versions survive. Operator commands must use
   the service environment and working directory; the protocol helper launches

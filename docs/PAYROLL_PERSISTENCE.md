@@ -19,6 +19,17 @@ retains combined validation, ordering, individual audits and all-or-nothing roll
 Benchmarks prepare finalized fixtures through that API outside timing, then measure
 the actual Reopen week workflow.
 
+
+Migration 183 classifies `maintenance_telemetry` as unrelated to payroll and removes
+only its payroll capture/protocol triggers. Ordinary cache revisions and telemetry
+records remain. Neither calculator reads this table; truck ownership/terms and
+expenses remain financial sources. This prevents periodic odometer refreshes from
+invalidating every prepared week. The migration requeues retained periods without
+changing immutable history or canonical financial records. Install the updated
+deploy helper first: it pauses all writers and refuses rollback to a release lacking
+migration 183 once the classification changes, even if migration-ledger recording
+fails. Fresh/incremental tests check both report parity and financial invalidation.
+
 ## Implemented stages
 
 | Stage | Implementation | Release verification |

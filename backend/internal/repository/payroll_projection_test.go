@@ -48,6 +48,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	telemetryMigration, err := os.ReadFile("../../sql/183_payroll_telemetry_classification.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "incremental"} {
 		t.Run(mode, func(t *testing.T) {
 			name := fmt.Sprintf("payroll_projection_%d", time.Now().UnixNano())
@@ -66,8 +70,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				if !strings.Contains(body, upgrade) {
 					t.Fatal("fresh schema does not contain the exact migration")
 				}
-				exec(strings.Replace(body, upgrade, "", 1))
+				prior := strings.Replace(body, strings.ReplaceAll(string(telemetryMigration), "\r\n", "\n"), "", 1)
+				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
+				exec(string(telemetryMigration))
 			} else {
 				exec(body)
 			}

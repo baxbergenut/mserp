@@ -8,6 +8,7 @@ accounting_cutover_migration=160_accounting_cutover.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
 expense_balance_migration=176_expense_balance_corrections.sql
 payroll_projection_migration=182_payroll_projections.sql
+payroll_telemetry_migration=183_payroll_telemetry_classification.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -28,6 +29,7 @@ runuser() {
     if [[ $* == *"FROM public.expense_balance_corrections"* ]]; then result=$mock_balance_active; fi
     if [[ $* == *"to_regclass('public.payroll_projection_control')"* ]]; then result=$mock_projection_installed; fi
     if [[ $* == *"FROM public.payroll_projection_control"* ]]; then result=$mock_projection_active; fi
+    if [[ $* == *"FROM public.payroll_projection_sources"* ]]; then result=$mock_telemetry_excluded; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -39,6 +41,7 @@ mock_balance_installed=f
 mock_balance_active=f
 mock_projection_installed=f
 mock_projection_active=f
+mock_telemetry_excluded=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -109,4 +112,14 @@ mock_projection_active=error
 if compatible_release "$test_root/new"; then echo 'Payroll status failure allowed rollback' >&2; exit 1; fi
 mock_projection_installed=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown payroll schema allowed rollback' >&2; exit 1; fi
+mock_projection_installed=t
+mock_projection_active=t
+mock_telemetry_excluded=t
+if compatible_release "$test_root/new"; then echo 'Telemetry exclusion allowed an old payroll binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$payroll_telemetry_migration"
+compatible_release "$test_root/new"
+mock_telemetry_excluded=error
+if compatible_release "$test_root/new"; then echo 'Telemetry classification failure allowed rollback' >&2; exit 1; fi
+mock_telemetry_excluded=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown telemetry classification allowed rollback' >&2; exit 1; fi
 echo 'Permission, expense verification, accounting, Fuel/Toll, balance and payroll compatibility checks passed'
