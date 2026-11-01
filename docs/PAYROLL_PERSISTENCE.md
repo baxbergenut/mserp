@@ -49,6 +49,15 @@ fails. Fresh/incremental tests check both report parity and financial invalidati
 
 ## November 1 save regression and calendar correction
 
+An open updating page could repeatedly abort preparation with SQLSTATE 40001:
+ordinary polling issued an identical job UPDATE, and priority renewal changed the
+same row every five seconds. The worker then could not lock that row at publication
+under its repeatable-read snapshot. Ordinary requests now insert missing jobs only;
+explicit retries still supersede work. Priority renewal skips active leases. A
+deterministic regression holds a worker snapshot across stale-page polls and an
+expired interest hint, then verifies its final row lock succeeds. Financial source
+changes and explicit retries retain their revision fences.
+
 After reactivation, live expense verification still took 6.3 seconds and an expense
 edit took 7.9 seconds. Verification updated the parent expense's financial revision;
 publication also repeatedly hashed/snapshotted a shared map of 5,596 resource keys.

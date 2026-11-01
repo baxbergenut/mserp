@@ -23,6 +23,7 @@ The backup helper requires a PostgreSQL client with zstd support (verified on th
 production PostgreSQL 16 client). The deploy job allows 45 minutes for a complete
 backup, migration and activation. Never remove the last valid backup merely to
 make space: verify any relocated copy by SHA-256 and `pg_restore --list` first.
+Deployment SSH sends keepalives during the otherwise quiet database backup.
 
 Migration 185 requires the matching helper before release. It pauses all payroll
 writers while installing shared dependency maps and the optional retired-week

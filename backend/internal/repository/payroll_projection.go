@@ -158,17 +158,20 @@ func (r *DriverPayRepository) RequestPayrollPreparation(ctx context.Context, wee
  last_error=CASE WHEN $2 THEN '' ELSE payroll_projection_jobs.last_error END,
  available_at=CASE WHEN $2 THEN clock_timestamp() ELSE payroll_projection_jobs.available_at END,
  requested_at=CASE WHEN $2 AND payroll_projection_jobs.requested_generation=payroll_projection_jobs.completed_generation
- THEN clock_timestamp() ELSE payroll_projection_jobs.requested_at END`, week, retry)
+ THEN clock_timestamp() ELSE payroll_projection_jobs.requested_at END
+ WHERE $2`, week, retry)
 	return err
 }
 
 // Keep visible weeks ahead of routine current-week/history work when a source
 // commit arrives. The lease expires after navigation; polling renews it at most
-// once per five seconds. This hint never requests another generation or changes
+// once per five seconds, and never rewrites a job while a worker holds its lease.
+// This hint never requests another generation or changes
 // financial data, and the read's freshness result still comes from its snapshot.
 func (r *DriverPayRepository) prioritizePayrollWeek(ctx context.Context, week time.Time) error {
 	_, err := r.pool.Exec(ctx, `UPDATE payroll_projection_jobs SET interactive_until=clock_timestamp()+interval '10 seconds'
- WHERE week_start=$1 AND (interactive_until IS NULL OR interactive_until<clock_timestamp()+interval '5 seconds')`, week)
+ WHERE week_start=$1 AND (lease_until IS NULL OR lease_until<clock_timestamp())
+ AND (interactive_until IS NULL OR interactive_until<clock_timestamp()+interval '5 seconds')`, week)
 	return err
 }
 

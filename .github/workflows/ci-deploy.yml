@@ -325,6 +325,8 @@ jobs:
             -o IdentitiesOnly=yes
             -o StrictHostKeyChecking=yes
             -o ConnectTimeout=15
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=10
           )
           scp "${ssh_options[@]}" "$archive" \
             "${DEPLOY_USER}@${DEPLOY_HOST}:/var/lib/mserp-deploy/incoming/${GITHUB_SHA}.tar.gz"

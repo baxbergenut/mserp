@@ -92,8 +92,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   missing evidence still conflicts. Prepared pages receive commit-only invalidation
   hints, with authorized snapshot reads and polling recovery. Current HTTP reads
   lease interactive preparation priority for ten seconds without advancing jobs;
-  priority expires after navigation. Investor inputs retain separate dated scopes
-  in post-write batches. Financial epochs must be reread
+  priority expires after navigation.
+  Ordinary preparation requests must not rewrite existing jobs, even with identical
+  values. Interactive priority renewal skips leased jobs: either write can invalidate
+  the worker's repeatable-read snapshot and make an open page starve preparation.
+  Investor inputs retain separate dated scopes in post-write batches. Financial epochs must be reread
   after writes. Schema/protocol changes require quiesced writers.
   `PAYROLL_PROJECTION_MODE` defaults to `off`;
   `shadow` runs durable derived preparation. `PAYROLL_PREPARED_READS=true` opts
