@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -128,6 +129,43 @@ func TestExpenseMaintenanceDatabase(t *testing.T) {
 				t.Fatal("PM program missing", got)
 			}
 			maintenance := NewMaintenanceRepository(pool)
+			t.Run("date-only odometer chronology", func(t *testing.T) {
+				readingTruck := scalar("INSERT INTO trucks(unit_number,active) VALUES('SAME-DAY',true) RETURNING id::text")
+				for _, tc := range []struct {
+					name, date string
+					miles      int
+					conflict   bool
+				}{
+					{"first", "2026-10-22", 100000, false},
+					{"same day higher", "2026-10-22", 100100, false},
+					{"same day lower", "2026-10-22", 99950, false},
+					{"same day equal", "2026-10-22", 100000, false},
+					{"earlier day valid", "2026-10-21", 99900, false},
+					{"later day valid", "2026-10-23", 100300, false},
+					{"earlier day conflicts", "2026-10-21", 100001, true},
+					{"later day conflicts", "2026-10-23", 99999, true},
+				} {
+					t.Run(tc.name, func(t *testing.T) {
+						candidate := input
+						candidate.TruckID = &readingTruck
+						candidate.ExpenseDate, _ = time.Parse(time.DateOnly, tc.date)
+						wash := "Truck wash"
+						candidate.ExpenseType = &wash
+						candidate.Maintenance = &ExpenseMaintenance{Odometer: &tc.miles}
+						entry, err := repo.CreateExpense(ctx, candidate)
+						if tc.conflict {
+							if !errors.Is(err, ErrMaintenanceInvalid) {
+								t.Fatalf("expected chronology rejection, got %v", err)
+							}
+						} else if err != nil || entry.Maintenance == nil || entry.Maintenance.Odometer == nil || *entry.Maintenance.Odometer != tc.miles {
+							t.Fatalf("save reading %d on %s: %+v, %v", tc.miles, tc.date, entry.Maintenance, err)
+						}
+					})
+				}
+				if got := scalar(`SELECT count(*)::text FROM expenses WHERE truck_id=$1`, readingTruck); got != "6" {
+					t.Fatal("rejected expense was not rolled back", got)
+				}
+			})
 			if members, err := maintenance.ProgramTrucks(ctx, OilChangeProgramID, truck); err != nil || len(members) != 0 {
 				t.Fatal("expense must not enroll an excluded truck", members, err)
 			}

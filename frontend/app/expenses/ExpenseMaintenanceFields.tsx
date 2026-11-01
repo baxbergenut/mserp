@@ -18,6 +18,7 @@ export function ExpenseMaintenanceFields({ value, onChange }: { value: ExpenseIn
   const details = value.maintenance ?? emptyDetails;
   const latest = useRef({ value, onChange });
   const automatic = useRef<{ truckId: string; date: string; mileage: number } | null>(null);
+  const manual = useRef<{ truckId: string | null; date: string } | null>(null);
   useEffect(() => { latest.current = { value, onChange }; });
   const name = value.expenseType.trim().toLowerCase();
   const isOilChange = name === "oil change" || name === "pm service" || types.some(type => (type.code === "preventive" || type.code === "oil") && type.name.trim().toLowerCase() === name);
@@ -29,6 +30,8 @@ export function ExpenseMaintenanceFields({ value, onChange }: { value: ExpenseIn
     return () => { active = false; };
   }, []);
   useEffect(() => {
+    // An explicit clear means unknown, not another request for telemetry.
+    if (manual.current && (manual.current.truckId !== value.truckId || manual.current.date !== value.expenseDate)) manual.current = null;
     const prior = automatic.current;
     if (prior && (prior.truckId !== value.truckId || prior.date !== value.expenseDate)) {
       automatic.current = null;
@@ -38,13 +41,13 @@ export function ExpenseMaintenanceFields({ value, onChange }: { value: ExpenseIn
         return;
       }
     }
-    if (value.updatedAt || !value.truckId || value.expenseDate !== today() || details.odometer != null) return;
+    if (manual.current || value.updatedAt || !value.truckId || value.expenseDate !== today() || details.odometer != null) return;
     const controller = new AbortController();
     const truckId = value.truckId, date = value.expenseDate;
     fetchMaintenanceOdometer(truckId, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       const current = latest.current;
-      if (current.value.truckId !== truckId || current.value.expenseDate !== date || date !== today() || current.value.updatedAt || current.value.maintenance?.odometer != null) return;
+      if (manual.current || current.value.truckId !== truckId || current.value.expenseDate !== date || date !== today() || current.value.updatedAt || current.value.maintenance?.odometer != null) return;
       setReadingHint({ truckId, date, text: result.reading ? `${result.reading.source === "samsara" ? "Samsara" : result.reading.source === "manual" ? "Manual" : "Five ELD"} · ${new Date(result.reading.reportedAt).toLocaleString()}` : result.message });
       if (result.reading) {
         automatic.current = { truckId, date, mileage: result.reading.mileage };
@@ -56,7 +59,7 @@ export function ExpenseMaintenanceFields({ value, onChange }: { value: ExpenseIn
   const hint = readingHint?.truckId === value.truckId && readingHint.date === value.expenseDate ? readingHint.text : "";
   return <FormSection title="Maintenance details">
     <Field label="Odometer">
-      <input aria-label="Odometer" type="number" min="0" max="2000000000" step="1" placeholder="Unknown" value={details.odometer ?? ""} onChange={event => { automatic.current = null; setReadingHint(null); set({ odometer: event.target.value === "" ? null : Number(event.target.value) }); }} className={controlClass} />
+      <input aria-label="Odometer" type="number" min="0" max="2000000000" step="1" placeholder="Unknown" value={details.odometer ?? ""} onChange={event => { manual.current = { truckId: value.truckId, date: value.expenseDate }; automatic.current = null; setReadingHint(null); set({ odometer: event.target.value === "" ? null : Number(event.target.value) }); }} className={controlClass} />
       {hint && <p role="status" className="mt-1 text-xs text-zinc-400">{hint}</p>}
     </Field>
     {isOilChange && <Field label="Oil type">

@@ -55,7 +55,8 @@ type MaintenanceDue struct {
 
 func checkMaintenanceReading(ctx context.Context, tx pgx.Tx, truck string, date time.Time, miles int, record, id string) error {
 	var conflict bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM maintenance_odometer_readings WHERE truck_id=$1 AND active AND ($4='' OR record_id IS DISTINCT FROM NULLIF($4,'')::uuid) AND id IS DISTINCT FROM NULLIF($5,'')::uuid AND ((reading_date<=$2 AND mileage>$3) OR (reading_date>=$2 AND mileage<$3)))`, truck, date, miles, record, id).Scan(&conflict)
+	// Date-only evidence cannot order readings within the same day.
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM maintenance_odometer_readings WHERE truck_id=$1 AND active AND ($4='' OR record_id IS DISTINCT FROM NULLIF($4,'')::uuid) AND id IS DISTINCT FROM NULLIF($5,'')::uuid AND ((reading_date<$2 AND mileage>$3) OR (reading_date>$2 AND mileage<$3)))`, truck, date, miles, record, id).Scan(&conflict)
 	if err != nil {
 		return err
 	}

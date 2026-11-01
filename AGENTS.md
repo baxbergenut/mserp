@@ -970,6 +970,9 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   tracking records. Old maintenance invoice/workflow writes return 410; new expenses
   use /expenses. Background odometer selection, chronology, program baselines and
   reminder workers keep their existing boundaries. See docs/MAINTENANCE.md.
+  Date-only odometer chronology permits different readings on the same date;
+  only earlier/later dates constrain mileage. Explicitly clearing an expense
+  odometer keeps it unknown instead of fetching telemetry again for that truck/date.
   Verify TestExpenseMaintenanceDatabase (fresh/migration), TestMaintenanceDatabase,
   and frontend/scripts/test-maintenance-expenses-e2e.mjs against review-local.
 - `frontend/app/expenses/`: Expenses directory with name/category rows, amount-hover

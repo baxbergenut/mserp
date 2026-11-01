@@ -356,6 +356,41 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(maintenanceWrites[0].maintenance.vendorAddress).toBe('Updated shop address');
   expect(maintenanceWrites[0]).not.toHaveProperty('costBreakdown');
+  // Clearing telemetry must survive unrelated edits and a rejected save retry.
+  let odometerReads = 0;
+  await page.route('**/api/maintenance/odometer?*', async route => {
+    odometerReads++;
+    await route.fulfill({json:{reading:{mileage:500100,source:'samsara',reportedAt:new Date().toISOString()},message:''}});
+  });
+  await page.getByRole('button',{name:'Add entry',exact:true}).click();
+  await page.getByLabel('Category',{exact:true}).selectOption('maintenance');
+  await page.getByLabel('Expense type',{exact:true}).selectOption('Truck wash');
+  const today = new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  await page.getByLabel('Expense date',{exact:true}).fill(today);
+  await page.getByLabel('Unit number',{exact:true}).selectOption('investor-truck');
+  await page.getByLabel('Amount',{exact:true}).fill('25.00');
+  const odometer = page.getByLabel('Odometer',{exact:true});
+  await expect(odometer).toHaveValue('500100');
+  const attempts=[];
+  await page.route('**/api/expenses', async route => {
+    if(route.request().method()!=='POST') return route.fallback();
+    const input=route.request().postDataJSON(); attempts.push(input);
+    return input.maintenance.odometer == null
+      ? route.fulfill({status:201,json:{id:'blank-odometer'}})
+      : route.fulfill({status:400,json:{error:'invalid maintenance record: odometer conflicts with a dated reading; review or correct the existing reading first'}});
+  });
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  await expect(page.getByRole('dialog').getByText(/odometer conflicts with a dated reading/)).toBeVisible();
+  const readsBeforeClear=odometerReads;
+  await odometer.fill('');
+  await page.getByLabel('Description',{exact:true}).fill('Truck wash without a confirmed odometer');
+  // Give any accidental refetch time to finish before retrying.
+  await page.waitForTimeout(300);
+  await expect(odometer).toHaveValue('');
+  expect(odometerReads).toBe(readsBeforeClear);
+  await page.getByRole('button',{name:'Create entry',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(attempts.map(input=>input.maintenance.odometer)).toEqual([500100,null]);
   expect(errors).toEqual([]);
   console.log('Expense browser checks passed: ownership, AI entry, layout, verification attribution, Ctrl+Z and cancellation permissions.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
