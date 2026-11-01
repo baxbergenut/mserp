@@ -57,12 +57,13 @@ type payrollConfigurationState struct {
 
 type payrollPublicationReadKey struct{}
 type payrollPublicationReadState struct {
-	tx                pgx.Tx
-	configurations    map[string]*payrollConfigurationState
-	resourceLinks     map[string]map[string][]string
-	scale             map[string]payrollScaleWeek
-	truckInputs       map[string]truckPayInputs
-	driverEligibility map[string]map[string]payrollDriverEligibility
+	tx                  pgx.Tx
+	configurations      map[string]*payrollConfigurationState
+	resourceLinks       map[string]map[string][]string
+	dependencySnapshots map[string]json.RawMessage
+	scale               map[string]payrollScaleWeek
+	truckInputs         map[string]truckPayInputs
+	driverEligibility   map[string]map[string]payrollDriverEligibility
 }
 
 // Start only after all canonical writes. Configuration queries read every phase

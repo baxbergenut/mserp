@@ -65,6 +65,10 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			verificationMigration, e := os.ReadFile("../../sql/186_expense_verification_metadata.sql")
+			if e != nil {
+				t.Fatal(e)
+			}
 			identityMigration, e := os.ReadFile("../../sql/064_load_truck_identity.sql")
 			if e != nil {
 				t.Fatal(e)
@@ -77,6 +81,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 				// The available-week trigger needs the statement table introduced
 				// by 041, and its registry entries follow the restored 160 registry.
 				sql = strings.Replace(sql, strings.ReplaceAll(string(sharedMigration), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(verificationMigration), "\r\n", "\n"), "", 1)
 				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
@@ -119,6 +124,9 @@ func TestInvestorPayDatabase(t *testing.T) {
 			applyAccountingCutoverMigration(t, ctx, admin)
 			if mode == "migration" {
 				if _, err = admin.Exec(ctx, string(sharedMigration)); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = admin.Exec(ctx, string(verificationMigration)); err != nil {
 					t.Fatal(err)
 				}
 			}

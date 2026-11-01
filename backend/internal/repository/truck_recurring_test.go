@@ -65,6 +65,10 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 	if e != nil {
 		t.Fatal(e)
 	}
+	verificationMigration, e := os.ReadFile("../../sql/186_expense_verification_metadata.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("truck_recurring_%d", time.Now().UnixNano())
@@ -92,6 +96,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				prior = strings.Replace(prior, strings.ReplaceAll(string(telemetryMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(operationalMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sharedMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, strings.ReplaceAll(string(verificationMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
 				exec(withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, prior)))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
@@ -134,6 +139,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				exec(string(telemetryMigration))
 				exec(string(operationalMigration))
 				exec(string(sharedMigration))
+				exec(string(verificationMigration))
 			}
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()

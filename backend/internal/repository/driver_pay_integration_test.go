@@ -72,6 +72,10 @@ func TestDriverPayDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			verificationMigration, err := os.ReadFile("../../sql/186_expense_verification_metadata.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if mode == "migration" {
 				// The legacy fixture removes the ledgers on which 182's exact
 				// buckets depend. Install capture only after restoring those ledgers
@@ -80,6 +84,7 @@ func TestDriverPayDatabase(t *testing.T) {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(telemetryMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(operationalMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(sharedMigration), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(verificationMigration), "\r\n", "\n"), "", 1)
 				loadRevisionMigration, err := os.ReadFile("../../sql/181_payroll_load_revision.sql")
 				if err != nil {
 					t.Fatal(err)
@@ -238,7 +243,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
-				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql"} {
+				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

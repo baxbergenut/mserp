@@ -30,6 +30,11 @@ boundary, and rejects rollback to binaries lacking migration 185. Installation
 alone deletes no saved statements; see the quiesced retirement command in
 [Persistent payroll](../docs/PAYROLL_PERSISTENCE.md).
 
+Migration 186 likewise requires its matching helper before release. It quiesces
+API/export/portal writers while installing the exact expense-verification metadata
+exception, and refuses older binaries whose payroll coverage checks cannot recognize
+the new trigger. All financial edits continue to publish synchronously.
+
 Production is served at `https://clustie.io`. The apex A record points to
 `137.184.102.22`; `www` is a CNAME for `clustie.io`, managed with Namecheap DNS.
 Nginx redirects HTTP and `https://www.clustie.io` to the canonical HTTPS URL.

@@ -80,7 +80,9 @@ const payrollProjectionFenceSQL = `WITH tables AS MATERIALIZED (
  AND (required.op NOT IN (8,16) OR g.tgoldtable='previous_rows'))
  OR NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid
  WHERE g.tgrelid=t.oid
- AND p.proname IN ('invalidate_payroll_cache','invalidate_payroll_load_cache')
+ AND (p.proname IN ('invalidate_payroll_cache','invalidate_payroll_load_cache') OR
+ (t.tablename='expenses' AND required.op=16 AND p.proname='invalidate_payroll_expense_cache'
+ AND p.pronamespace=t.namespace AND g.tgoldtable='previous_rows' AND g.tgnewtable='changed_rows'))
  AND g.tgenabled IN ('O','A') AND g.tgtype=required.op)))))
  UNION SELECT 'protocol guards: '||t.tablename FROM tables t JOIN payroll_projection_sources s ON s.table_name=t.tablename
  WHERE s.classification IN ('financial','display') AND (SELECT protocol_mode<>'global' FROM payroll_projection_control WHERE singleton)
@@ -595,8 +597,13 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 	}
 	batch := &pgx.Batch{}
 	var resourceKeys map[string][]string
+	var resourceDependencies map[string]json.RawMessage
 	if resourceProtocol {
 		resourceKeys, err = payrollPublicationResources(ctx, tx, week.Format(time.DateOnly), reports)
+		if err != nil {
+			return err
+		}
+		resourceDependencies, err = payrollPublicationDependencies(ctx, tx, week.Format(time.DateOnly), resourceKeys)
 		if err != nil {
 			return err
 		}
@@ -608,7 +615,12 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 	}
 	for i, kind := range []string{"driver", "investor"} {
 		for _, d := range reports[i].Drivers {
-			resources := resourceKeys[kind+":"+d.ID]
+			resources := resourceDependencies[kind+":"+d.ID]
+			if !resourceProtocol {
+				resources = json.RawMessage(`{}`)
+			} else if len(resources) == 0 {
+				return ErrPayrollResourceChanged
+			}
 			evidence := map[string]PayCostTransactions{}
 			for _, cost := range []string{"fuel", "toll"} {
 				value, e := preparedCostEvidence(ctx, tx, kind, d.ID, week.Format(time.DateOnly), cost, d)
@@ -644,7 +656,7 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 			}
 			batch.Queue(`WITH inserted AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
- VALUES($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,payroll_pack_resource_snapshot($13::text[],'statement:'||$2||':'||$3::text||':'||$4::date::text)) RETURNING id,kind,statement_id,week_start)
+ VALUES($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) RETURNING id,kind,statement_id,week_start)
  INSERT INTO payroll_statement_state(kind,statement_id,week_start,version_id) SELECT kind,statement_id,week_start,id FROM inserted`,
 				generation, kind, d.ID, week, body, short, fee, payable, finalized, d.Edits.Version, settlementVersion, evidenceBody, resources)
 		}

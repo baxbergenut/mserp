@@ -11,6 +11,7 @@ payroll_projection_migration=182_payroll_projections.sql
 payroll_telemetry_migration=183_payroll_telemetry_classification.sql
 payroll_operational_migration=184_payroll_operational_sources.sql
 payroll_shared_migration=185_payroll_shared_dependencies.sql
+expense_verification_migration=186_expense_verification_metadata.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -34,6 +35,7 @@ runuser() {
     if [[ $* == *"FROM public.payroll_projection_sources"* ]]; then result=$mock_telemetry_excluded; fi
     if [[ $* == *"table_name='relay_driver_links'"* ]]; then result=$mock_operational_excluded; fi
     if [[ $* == *"to_regclass('public.payroll_resource_dependency_sets')"* ]]; then result=$mock_shared_dependencies; fi
+    if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -48,6 +50,7 @@ mock_projection_active=f
 mock_telemetry_excluded=f
 mock_operational_excluded=f
 mock_shared_dependencies=f
+mock_verification_metadata=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -146,4 +149,13 @@ mock_shared_dependencies=error
 if compatible_release "$test_root/new"; then echo 'Shared dependency schema failure allowed rollback' >&2; exit 1; fi
 mock_shared_dependencies=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown shared dependency schema allowed rollback' >&2; exit 1; fi
+mock_shared_dependencies=t
+mock_verification_metadata=t
+if compatible_release "$test_root/new"; then echo 'Verification metadata allowed an old payroll binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$expense_verification_migration"
+compatible_release "$test_root/new"
+mock_verification_metadata=error
+if compatible_release "$test_root/new"; then echo 'Verification metadata schema failure allowed rollback' >&2; exit 1; fi
+mock_verification_metadata=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown verification metadata schema allowed rollback' >&2; exit 1; fi
 echo 'Permission, expense verification, accounting, Fuel/Toll, balance and payroll compatibility checks passed'

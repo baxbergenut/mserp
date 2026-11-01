@@ -49,7 +49,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 ### Backend
 
 - Persistent payroll is implemented with ordered rollout capabilities in
-  migrations 182–184 and repository `payroll_projection*.go`. See
+  migrations 182–186 and repository `payroll_projection*.go`. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
   capture inventory and validation. Backfill seeds actual source, saved/ledger and
   recent periods; calendar gaps prepare on demand. Never expand a remote source
@@ -61,6 +61,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Migration 184 excludes Relay identity metadata/review and expense verification
   audits; canonical fuel attribution and expense changes remain captured. Install
   the matching deploy helper before 184; older binaries cannot resume afterward.
+  Migration 186 makes exact accounting-verification transitions metadata-only:
+  retain expense-row/version checks and audit receipts, but do not advance financial
+  revisions or acquire the payroll gate. Its transaction marker rejects every other
+  expense mutation. Financial edits still publish all affected statements atomically.
+  Publication snapshots each exact shared dependency set once per post-write phase,
+  preserving local statement revisions and cross-period resource fences. Install the
+  matching deploy helper before 186; it quiesces writers and fences older binaries.
   Payroll pages/API/preparation stop at the current New York calendar week. Future
   source schedules and existing reservations stay authoritative but do not create
   future statements. Seeding retires future derived pointers/jobs and unused empty

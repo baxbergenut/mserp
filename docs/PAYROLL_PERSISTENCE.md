@@ -49,6 +49,34 @@ fails. Fresh/incremental tests check both report parity and financial invalidati
 
 ## November 1 save regression and calendar correction
 
+After reactivation, live expense verification still took 6.3 seconds and an expense
+edit took 7.9 seconds. Verification updated the parent expense's financial revision;
+publication also repeatedly hashed/snapshotted a shared map of 5,596 resource keys.
+Migration 186 excludes only an exact `accounting_verified`/`updated_at` transition
+from financial revisions, source capture and cache invalidation. Verification uses
+the expense row and existing optimistic version/audit checks without the payroll
+gate. The database rejects financial edits, collection touches and deletes under
+the verification marker; ordinary financial writes retain their original guards.
+Install the corresponding deploy helper before this quiesced migration.
+
+Financial publication now snapshots each exact shared key set once in the same
+transaction's post-write read phase. Each statement retains its own current revision,
+including when other statements are genuine legacy cost dependencies. No financial
+work is deferred after success. Tests verify lock independence for verification,
+rejected marker misuse, unchanged financial revisions, shared dependency expansion,
+independent payroll commands and full report parity after expense writes.
+
+The corrected native-save fixture joins current principals through real invoice
+relationships and includes 5,672 keys in its largest component. The earlier sparse
+fixture did not represent this cost. Its two-week local run measured a 2.815-second
+financial edit and 6 ms verification, with full parity on both pages and weeks.
+These are bounded diagnostic measurements, not production latency guarantees.
+On the production host's isolated synthetic database, the same fixture changed
+expense edit from 21.223 to 5.087 seconds and verification from 19.574 seconds to
+13 ms. Both before/after runs passed full prepared/reference parity. Each action
+was measured once per build; this establishes a reproduced bottleneck, not a tail
+latency estimate. Production records were not used for write benchmarks.
+
 The first live rollout exposed synchronous native saves reconstructing hundreds of
 empty materialized periods. An expense edit reached 528 calculations/24 seconds;
 verification reached 638 calculations/75 seconds. A quiesced rollback to global

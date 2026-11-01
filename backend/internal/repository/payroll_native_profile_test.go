@@ -46,7 +46,14 @@ func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.
 	// two-week diagnostic also exercises shared dependency storage.
 	if _, err = pool.Exec(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,covered_by)
  SELECT id,name,'Shared native profile',$1::date,1,$2::uuid,'Company'
- FROM expense_settings CROSS JOIN generate_series(1,180) WHERE kind='category' AND name='Other'`, date, driver); err != nil {
+ FROM expense_settings CROSS JOIN generate_series(1,5000) WHERE kind='category' AND name='Other'`, date, driver); err != nil {
+		t.Fatal(err)
+	}
+	// Cross-principal invoices connect the current retained weeks as in the
+	// production component. Historical assignments alone leave them independent.
+	if _, err = pool.Exec(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,truck_id,covered_by)
+ SELECT id,name,'Connected native profile',$1::date,1,md5('driver'||n)::uuid,md5('truck'||(n+1))::uuid,'Company'
+ FROM expense_settings CROSS JOIN generate_series(1,140)n WHERE kind='category' AND name='Other'`, date); err != nil {
 		t.Fatal(err)
 	}
 	pay := NewDriverPayRepository(pool)
@@ -84,6 +91,14 @@ func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.
 		t.Fatal(err)
 	}
 	t.Logf("shared dependencies: packed=%d stored=%d expanded=%d shared=%d bytes", packed, inlineBytes, expandedBytes, sharedBytes)
+	var largest int
+	if err = pool.QueryRow(ctx, `SELECT coalesce(max((SELECT count(*) FROM jsonb_object_keys(dependencies))),0) FROM payroll_resource_dependency_sets`).Scan(&largest); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("largest connected dependency map: %d keys", largest)
+	if largest < 5000 {
+		t.Fatal("fixture did not reproduce a dense current component", largest)
+	}
 	if packed == 0 || inlineBytes+sharedBytes >= expandedBytes/2 {
 		t.Fatal("large fixture did not substantially share revision metadata")
 	}

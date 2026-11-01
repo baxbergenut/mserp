@@ -21,7 +21,7 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	if role != "accountant" || (!actor.Administrator && !HasPermission(actor, "expenses.accounting.verify")) {
 		return Expense{}, ErrExpenseVerificationForbidden
 	}
-	tx, err := beginPayrollMutation(ctx, r.pool)
+	tx, err := r.beginVerification(ctx)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -43,14 +43,14 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	if err != nil {
 		return Expense{}, err
 	}
-	if err = commitPayrollMutation(ctx, tx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
 }
 
 func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID, verificationID string, actor AuthUser) (Expense, error) {
-	tx, err := beginPayrollMutation(ctx, r.pool)
+	tx, err := r.beginVerification(ctx)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -82,8 +82,22 @@ func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID,
 	if err != nil {
 		return Expense{}, err
 	}
-	if err = commitPayrollMutation(ctx, tx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
+}
+
+func (r *ExpenseRepository) beginVerification(ctx context.Context) (pgx.Tx, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Migration 186 enforces the exact allowed columns on every updated row.
+	// Verification keeps its expense-row/version fence without the payroll gate.
+	if _, err = tx.Exec(ctx, `SET LOCAL mserp.payroll.expense_verification = 'on'`); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
 }
